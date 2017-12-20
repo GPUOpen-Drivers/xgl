@@ -1,0 +1,87 @@
+#version 450
+
+layout(local_size_x = 64) in;
+
+layout (push_constant) uniform QueryParam
+{
+    uvec4 queryParam;
+};
+
+// 64-bit source timestamp buffer uav
+layout (set = 0, binding = 0, rg32ui) uniform uimageBuffer uav0;
+
+// destination buffer uav
+layout (set = 0, binding = 1, std430) buffer UAV1
+{
+    uint data[];
+} uav1;
+
+void main()
+{
+    // check if thread ID is in copy range.
+    if (gl_GlobalInvocationID.x < queryParam.x)
+    {
+        uvec4 r0;
+        uvec4 r1;
+        uvec4 r2;
+        uvec4 r3;
+
+        // compute timestamp 64-bit element offset from thread_id + start_query
+        r0.x = gl_GlobalInvocationID.x + queryParam.w;
+
+        // 64-bit read of timestamp counter
+        r1.xy = imageLoad(uav0, int(r0.x)).xy;
+
+        // determine if 64-bit results are required
+        r2.x = queryParam.y & 1;
+
+        // determine if availability needs to be written
+        r2.y = queryParam.y & 2;
+
+        // compute start of destination query result array
+        r3.x = gl_GlobalInvocationID.x * queryParam.z;
+
+        // determine if counter is non-zero and produce a 0/1 availability value (note that
+        // we could also just output any non-zero value for available, but we are being "pretty" here)
+        r1.z = r1.x | r1.y;
+        if (r1.z != 0)
+        {
+            r1.z = 1;  // 64-bit low word
+        }
+        r1.w = 0; // 64-bit high word
+
+        // if results are requested in 64-bit
+        if (r2.x != 0)
+        {
+            // write counter value only if result is available to first element
+            if (r1.z != 0)
+            {
+                uav1.data[r3.x / 4] = r1.x;
+                uav1.data[r3.x / 4 + 1] = r1.y;
+            }
+
+            // write availability if it needs to be written to second element
+            if (r2.y != 0)
+            {
+                r3.y = r3.x + 8;
+                uav1.data[r3.y / 4] = r1.z;
+                uav1.data[r3.y / 4 + 1] = r1.w;
+            }
+        }
+        else // results are requested in 32-bit
+        {
+            // write counter value only if result is available to first element
+            if (r1.z != 0)
+            {
+                uav1.data[r3.x / 4] = r1.x;
+            }
+
+            // write availability if it needs to be written to second element
+            if (r2.y != 0)
+            {
+                r3.y = r3.x + 4;
+                uav1.data[r3.y / 4] = r1.z;
+            }
+        }
+    }
+}

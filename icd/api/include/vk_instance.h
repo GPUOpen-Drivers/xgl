@@ -1,0 +1,338 @@
+/*
+ *******************************************************************************
+ *
+ * Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+ * THE SOFTWARE.
+ ******************************************************************************/
+
+/**
+ ***********************************************************************************************************************
+ * @file  vk_instance.h
+ * @brief Instance class for Vulkan.
+ ***********************************************************************************************************************
+ */
+
+#ifndef __VK_INSTANCE_H__
+#define __VK_INSTANCE_H__
+
+#pragma once
+
+#include "include/khronos/vulkan.h"
+#ifdef ICD_BUILD_APPPROFILE
+#include "include/app_profile.h"
+#endif
+#include "include/vk_alloccb.h"
+#include "include/vk_dispatch.h"
+#include "include/vk_utils.h"
+#include "include/vk_extensions.h"
+
+#include "palDeveloperHooks.h"
+#include "palLib.h"
+#include "palScreen.h"
+#include "palSysMemory.h"
+
+namespace Pal
+{
+class IPlatform;
+}
+
+namespace vk
+{
+
+// Forward declare classes used in this file.
+class DevModeMgr;
+class DispatchableInstance;
+class DisplayManager;
+class PhysicalDeviceManager;
+struct RuntimeSettings;
+class VirtualStackMgr;
+
+// =====================================================================================================================
+// Represents the per-Vulkan instance data as seen by the applicaton.
+class Instance
+{
+public:
+    typedef VkInstance ApiType;
+
+    // Maximum number of DispatchTableEntry arrays that an instance can report.  Generally there is only 1, but
+    // sometimes it may be necessary to shadow subsets of Vulkan entry points to customize behavior.  See
+    // vk::entry::GetProcAddr() and Instance::GetDispatchTables() for where this is used.
+    static constexpr uint32_t MaxDispatchTables = 2;
+
+    // Instances are a special type of objects, they are dispatchable but don't have the loader header as other
+    // dispatchable object types.
+    static Instance* ObjectFromHandle(VkInstance instance)
+    {
+        return reinterpret_cast<Instance*>(instance);
+    }
+
+    struct Properties
+    {
+        uint32_t  supportNonSwapChainPresents :  1;     // Tells whether the platform support present without swap chain
+        uint32_t  supportExplicitPresentMode  :  1;     // Tells whether the platform support client to specific the
+                                                        // present mode.
+        uint32_t  reserved                    : 30;
+    };
+
+    static VkResult Create(
+        const VkInstanceCreateInfo*  pCreateInfo,
+        const VkAllocationCallbacks* pAllocCb,
+        VkInstance*                  pInstance);
+
+    VkResult Init(
+        const VkApplicationInfo* pAppInfo);
+
+    VkResult Destroy(void);
+
+    VkResult EnumeratePhysicalDevices(
+        uint32_t*         pPhysicalDeviceCount,
+        VkPhysicalDevice* pPhysicalDevices);
+
+    template<typename T>
+    VkResult EnumeratePhysicalDeviceGroups(
+        uint32_t*       pPhysicalDeviceGroupCount,
+        T*              pPhysicalDeviceGroupProperties);
+
+    void PhysicalDevicesChanged();
+
+    VK_INLINE void* AllocMem(
+        size_t                  size,
+        size_t                  alignment,
+        VkSystemAllocationScope allocType);
+
+    VK_INLINE void* AllocMem(
+        size_t                  size,
+        VkSystemAllocationScope allocType);
+
+    VK_INLINE void FreeMem(void* pMem);
+
+    VK_INLINE VirtualStackMgr* StackMgr()
+        { return m_pVirtualStackMgr; }
+
+    VK_INLINE PalAllocator* Allocator()
+        { return &m_palAllocator; }
+
+    VK_INLINE PalAllocator* GetPrivateAllocator()
+        { return &m_privateAllocator; }
+
+    VK_INLINE VkAllocationCallbacks* GetAllocCallbacks()
+        { return &m_allocCallbacks; }
+
+    VK_FORCEINLINE Pal::IPlatform* PalPlatform() const
+        { return m_pPalPlatform; }
+
+    VK_FORCEINLINE const Properties& GetProperties() const
+        { return m_properties; }
+
+    static VkResult EnumerateExtensionProperties(
+        const char*                 pLayerName,
+        uint32_t*                   pPropertyCount,
+        VkExtensionProperties*      pProperties);
+
+    VK_INLINE uint32_t GetAPIVersion() const
+        { return m_apiVersion; }
+
+    static const InstanceExtensions::Supported& GetSupportedExtensions();
+
+    bool IsDeviceExtensionAvailable(DeviceExtensions::ExtensionId id) const;
+
+    VK_INLINE bool IsExtensionSupported(InstanceExtensions::ExtensionId id) const
+        { return GetSupportedExtensions().IsExtensionSupported(id); }
+
+    VK_INLINE bool IsExtensionEnabled(InstanceExtensions::ExtensionId id) const
+        { return m_enabledExtensions.IsExtensionEnabled(id); }
+
+    Pal::IScreen* FindScreen(
+        Pal::IDevice*           pDevice,
+        Pal::OsWindowHandle     windowHandle,
+        Pal::OsDisplayHandle    monitorHandle) const;
+
+    uint32_t GetDispatchTables(const DispatchTableEntry* pTables[MaxDispatchTables]) const;
+
+    void EnableTracingSupport();
+
+    VK_INLINE bool IsTracingSupportEnabled() const
+        { return m_flags.sqttSupport; }
+
+    VK_INLINE bool IsNullGpuModeEnabled() const
+        { return m_flags.nullGpuMode; }
+
+    DevModeMgr* GetDevModeMgr()
+        { return m_pDevModeMgr; }
+
+    VkResult LoadAndCommitSettings(
+        uint32_t         deviceCount,
+        Pal::IDevice**   ppDevices,
+        RuntimeSettings* pSettings
+#ifdef ICD_BUILD_APPPROFILE
+        ,
+        AppProfile*      pAppProfiles
+#endif
+        );
+
+    VkResult QueryApplicationProfile(RuntimeSettings* pRuntimeSettings = nullptr);
+
+private:
+    Instance(
+        const VkAllocationCallbacks*        pAllocCb,
+        uint32_t                            apiVersion,
+        const InstanceExtensions::Enabled&  enabledExtensions
+#ifdef ICD_BUILD_APPPROFILE
+        ,
+        AppProfile                          preInitProfile
+#endif
+        );
+
+    bool DetermineNullGpuSupport(Pal::NullGpuId* pNullGpuId) const;
+
+    void DevModeEarlyInitialize();
+    void DevModeLateInitialize();
+
+    VkResult EnumerateScreens();
+
+    static void PAL_STDCALL PalDeveloperCallback(
+        void*                        pPrivateData,
+        const Pal::uint32            deviceIndex,
+        Pal::Developer::CallbackType type,
+        void*                        pCbData);
+
+    Pal::IPlatform*                     m_pPalPlatform;             // Pal Platform object.
+    VkAllocationCallbacks               m_allocCallbacks;
+
+    Properties                          m_properties;               // Properties of the instance
+
+    PalAllocator                        m_palAllocator;             // Standard allocator that uses app callbacks.
+    PalAllocator                        m_privateAllocator;         // Private allocator (mainly for developer mode).
+    VirtualStackMgr*                    m_pVirtualStackMgr;         // Virtual stack manager
+    PhysicalDeviceManager*              m_pPhysicalDeviceManager;   // Physical device manager
+    const uint32_t                      m_apiVersion;               // Requested Vulkan API version
+    const InstanceExtensions::Enabled   m_enabledExtensions;        // Enabled instance extensions
+
+    union
+    {
+        struct
+        {
+            uint32_t sqttSupport        : 1;  // True if SQTT thread trace annotation markers are enabled
+            uint32_t nullGpuMode        : 1;  // True if the instance is running in null gpu mode (fake gpus for shader
+                                              // compilation
+            uint32_t reserved           : 30;
+        };
+        uint32_t u32All;
+    } m_flags;
+
+#ifdef ICD_BUILD_APPPROFILE
+    // The application profile that's been detected from the application name or other pattern
+    // detection.  Nobody should use this value for anything because it may be overridden by
+    // panel setting.  Instead, use the value tracked by the PhysicalDevice.
+    AppProfile                          m_preInitAppProfile;
+#endif
+
+    uint32_t      m_screenCount;
+    Pal::IScreen* m_pScreens[Pal::MaxScreens];
+    void*         m_pScreenStorage;
+
+    DevModeMgr*   m_pDevModeMgr; // GPUOpen Developer Mode manager.
+#ifdef ICD_BUILD_APPPROFILE
+    ChillSettings m_chillSettings; // Dynamic chill settings structure
+#endif
+
+#ifdef PAL_ENABLE_PRINTS_ASSERTS
+    mutable uint32_t m_dispatchTableQueryCount;
+#endif
+};
+
+// =====================================================================================================================
+// Allocate mem using allocator callbacks.
+void* Instance::AllocMem(
+    size_t                  size,
+    size_t                  alignment,
+    VkSystemAllocationScope allocType)
+{
+    VK_ASSERT(size > 0);
+
+    return m_allocCallbacks.pfnAllocation(m_allocCallbacks.pUserData,
+                                     size,
+                                     alignment,
+                                     allocType);
+}
+
+// =====================================================================================================================
+// Allocate mem using allocator callbacks (default alignment)
+void* Instance::AllocMem(
+    size_t                  size,
+    VkSystemAllocationScope allocType)
+{
+    return AllocMem(size, VK_DEFAULT_MEM_ALIGN, allocType);
+}
+
+// =====================================================================================================================
+// Free memory using allocator callbacks.
+void Instance::FreeMem(
+    void* pMem)
+{
+    if (pMem != nullptr)
+    {
+        m_allocCallbacks.pfnFree(m_allocCallbacks.pUserData, pMem);
+    }
+}
+
+namespace entry
+{
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
+    const VkInstanceCreateInfo*                 pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkInstance*                                 pInstance);
+
+// =====================================================================================================================
+
+VKAPI_ATTR void VKAPI_CALL vkDestroyInstance(
+    VkInstance                                  instance,
+    const VkAllocationCallbacks*                pAllocator);
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceCount,
+    VkPhysicalDevice*                           pPhysicalDevices);
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(
+    const char*                                 pLayerName,
+    uint32_t*                                   pPropertyCount,
+    VkExtensionProperties*                      pProperties);
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(
+    uint32_t*                                   pPropertyCount,
+    VkLayerProperties*                          pProperties);
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHX(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupPropertiesKHX*         pPhysicalDeviceGroupProperties);
+
+} // namespace entry
+
+} // namespace vk
+
+#endif /* __VK_INSTANCE_H__ */

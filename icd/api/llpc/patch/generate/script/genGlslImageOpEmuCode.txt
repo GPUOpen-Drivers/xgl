@@ -1,0 +1,133 @@
+# Configuration to generate LLVM IR implementation for all SPIR-V image instructions
+# Supported configuration tokens:   (All tokens must follow this order)
+# 1.  One of:                                           (mandatory)
+#       sample
+#       fetch
+#       gather
+#       querylod
+#       read
+#       write
+#       atomic.exchange
+#       atomic.compExchange
+#       atomic.iincrement
+#       atomic.idecrement
+#       atomic.iadd
+#       atomic.isub
+#       atomic.smin
+#       atomic.umin
+#       atomic.smax
+#       atomic.umax
+#       atomic.and
+#       atomic.or
+#       atomic.xor
+# 2.  Dimension string                                  (mandatory, see below)
+# 3.  proj                                              (optional)
+# 4.  dref                                              (optional)
+# 5.  bias                                              (optional)
+# 6.  lod or lod|lodz                                   (optional)
+#         lod|lodz means lz optimization is enabled for this function, besides normal lod version, an additional
+#         lodz version will also be generated, which leverages hardware lz instructions.
+# 7.  grad                                              (optional)
+# 8.  constoffset                                       (optional)
+# 9.  offset                                            (optional)
+# 10. constoffsets                                      (optional)
+# 11. sample                                            (optional)
+# 12. minlod                                            (optional)
+# 13. fmaskbased                                        (optional)
+# 14. fmaskonly                                         (optional)
+# Dimension string: All supported dimensions are packed in a dimension string, as a configuration token.
+# Dimension string format:
+# Dim1D|2D|3D|1DArray|2DArray|Cube|CubeArray|Rect|Buffer|SubpassData
+# e.g.
+# llpc.image.sample.Dim1D|2D|3D|Rect.proj.dref.bias.constoffset
+
+# Sampling instructions
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Rect|Cube|CubeArray
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Rect|Cube|CubeArray.dref
+llpc.image.sample.Dim1D|2D|3D|Rect.proj
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.dref
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Cube|CubeArray.lod|lodz
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Cube|CubeArray.bias
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Cube|CubeArray.dref.lod|lodz
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Cube.dref.bias
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.lod|lodz
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.bias
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.dref.lod|lodz
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.dref.bias
+
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Rect|Cube|CubeArray.grad
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Rect|Cube.dref.grad
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.grad
+llpc.image.sample.Dim1D|2D|3D.proj.dref.grad
+
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Rect.constoffset
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Rect.dref.constoffset
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.constoffset
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.dref.constoffset
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray.lod|lodz.constoffset
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray.bias.constoffset
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray.dref.lod|lodz.constoffset
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray.dref.bias.constoffset
+llpc.image.sample.Dim1D|2D|3D.proj.lod|lodz.constoffset
+llpc.image.sample.Dim1D|2D|3D.proj.bias.constoffset
+llpc.image.sample.Dim1D|2D|3D.proj.dref.lod|lodz.constoffset
+llpc.image.sample.Dim1D|2D|3D.proj.dref.bias.constoffset
+
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Rect.grad.constoffset
+llpc.image.sample.Dim1D|2D|3D|1DArray|2DArray|Rect.dref.grad.constoffset
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.grad.constoffset
+llpc.image.sample.Dim1D|2D|3D|Rect.proj.dref.grad.constoffset
+
+# Fetch instructions
+llpc.image.fetch.Dim1D|2D|3D|1DArray|2DArray.lod
+llpc.image.fetch.DimRect|Buffer
+llpc.image.fetch.Dim1D|2D|3D|1DArray|2DArray.lod.constoffset
+llpc.image.fetch.DimRect.constoffset
+llpc.image.fetch.Dim2D|2DArray.sample
+llpc.image.fetch.Dim2D|2DArray.sample.fmaskbased
+llpc.image.fetch.Dim2D|2DArray.sample.fmaskonly
+
+# Gather instructions
+llpc.image.gather.Dim2D|2DArray|Cube|CubeArray|Rect
+llpc.image.gather.Dim2D|2DArray|Cube|CubeArray|Rect.dref
+llpc.image.gather.Dim2D|2DArray|Rect.constoffset
+llpc.image.gather.Dim2D|2DArray|Rect.dref.constoffset
+llpc.image.gather.Dim2D|2DArray|Rect.offset
+llpc.image.gather.Dim2D|2DArray|Rect.dref.offset
+llpc.image.gather.Dim2D|2DArray|Rect.constoffsets
+llpc.image.gather.Dim2D|2DArray|Rect.dref.constoffsets
+
+# Image read and write instructions
+llpc.image.read.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray|SubpassData
+llpc.image.read.Dim2D|2DArray|SubpassData.sample
+llpc.image.read.DimSubpassData.sample.fmaskbased
+llpc.image.read.Dim1D|2D|3D|Cube|1DArray|2DArray|CubeArray.lod
+llpc.image.write.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.write.Dim2D|2DArray.sample
+llpc.image.write.Dim1D|2D|3D|Cube|1DArray|2DArray|CubeArray.lod
+
+# Image querylod instruction
+llpc.image.querylod.Dim1D|2D|3D|Cube
+
+# Image atomic instruction
+llpc.image.atomic.exchange.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.exchange.Dim2D|2DArray.sample
+llpc.image.atomic.compexchange.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.compexchange.Dim2D|2DArray.sample
+llpc.image.atomic.iadd.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.iadd.Dim2D|2DArray.sample
+llpc.image.atomic.smin.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.smin.Dim2D|2DArray.sample
+llpc.image.atomic.umin.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.umin.Dim2D|2DArray.sample
+llpc.image.atomic.smax.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.smax.Dim2D|2DArray.sample
+llpc.image.atomic.umax.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.umax.Dim2D|2DArray.sample
+llpc.image.atomic.and.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.and.Dim2D|2DArray.sample
+llpc.image.atomic.or.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.or.Dim2D|2DArray.sample
+llpc.image.atomic.xor.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray
+llpc.image.atomic.xor.Dim2D|2DArray.sample
+

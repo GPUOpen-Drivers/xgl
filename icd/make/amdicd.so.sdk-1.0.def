@@ -1,0 +1,15 @@
+{
+global:
+    vk_icdGetInstanceProcAddr;
+    vk_icdGetPhysicalDeviceProcAddr;
+    vk_icdNegotiateLoaderICDInterfaceVersion;
+    vkGetInstanceProcAddr;
+    vkGetDeviceProcAddr;
+    vkCreateInstance;
+    vkDestroyInstance;
+    vkEnumeratePhysicalDevices;
+    vkEnumerateInstanceExtensionProperties;
+    vkEnumerateInstanceLayerProperties;
+local:
+    *;
+};
