@@ -135,7 +135,7 @@ public:
     VK_INLINE bool GetVkTypeIndexFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndex) const
     {
         VK_ASSERT(heapIndex < Pal::GpuHeapCount);
-        VK_ASSERT(pVkIndex != NULL);
+        VK_ASSERT(pVkIndex != nullptr);
         *pVkIndex = m_memoryPalHeapToVkIndex[static_cast<uint32_t>(heapIndex)];
         if (*pVkIndex >= Pal::GpuHeapCount)
         {
