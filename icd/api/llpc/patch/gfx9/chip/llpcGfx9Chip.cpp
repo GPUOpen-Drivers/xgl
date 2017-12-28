@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  llpcGfx9Chip.cpp
@@ -37,6 +37,240 @@ namespace Llpc
 
 namespace Gfx9
 {
+#include "gfx9_plus_merged_enum.h"
+#include "gfx9_plus_merged_mask.h"
+#include "gfx9_plus_merged_offset.h"
+#include "gfx9_plus_merged_shift.h"
+
+// =====================================================================================================================
+// Initializer
+void VsRegConfig::Init()
+{
+    INIT_REG(SPI_SHADER_PGM_RSRC1_VS);
+    INIT_REG(SPI_SHADER_PGM_RSRC2_VS);
+    INIT_REG(SPI_SHADER_POS_FORMAT);
+    INIT_REG(SPI_VS_OUT_CONFIG);
+    INIT_REG(PA_CL_VS_OUT_CNTL);
+    INIT_REG(PA_CL_CLIP_CNTL);
+    INIT_REG(PA_CL_VTE_CNTL);
+    INIT_REG(PA_SU_VTX_CNTL);
+    INIT_REG(VGT_PRIMITIVEID_EN);
+    //INIT_REG(VGT_STRMOUT_CONFIG);
+    INIT_REG(VGT_STRMOUT_BUFFER_CONFIG);
+    INIT_REG(VGT_STRMOUT_VTX_STRIDE_0);
+    INIT_REG(VGT_STRMOUT_VTX_STRIDE_1);
+    INIT_REG(VGT_STRMOUT_VTX_STRIDE_2);
+    INIT_REG(VGT_STRMOUT_VTX_STRIDE_3);
+    INIT_REG(VGT_REUSE_OFF);
+    INIT_REG(VGT_VERTEX_REUSE_BLOCK_CNTL);
+    INIT_REG(VS_SCRATCH_SIZE);
+    INIT_REG(VS_NUM_USED_VGPRS);
+    INIT_REG(VS_NUM_USED_SGPRS);
+    INIT_REG(USES_VIEWPORT_ARRAY_INDEX);
+}
+
+// =====================================================================================================================
+// Initializer
+void LsHsRegConfig::Init()
+{
+    INIT_REG(SPI_SHADER_PGM_RSRC1_HS);
+    INIT_REG(SPI_SHADER_PGM_RSRC2_HS);
+    INIT_REG(HS_SCRATCH_SIZE);
+    INIT_REG(HS_NUM_USED_VGPRS);
+    INIT_REG(HS_NUM_USED_SGPRS);
+    INIT_REG(VGT_LS_HS_CONFIG);
+    INIT_REG(VGT_HOS_MIN_TESS_LEVEL);
+    INIT_REG(VGT_HOS_MAX_TESS_LEVEL);
+    INIT_REG(VGT_TF_PARAM);
+}
+
+// =====================================================================================================================
+// Initializer
+void EsGsRegConfig::Init()
+{
+    INIT_REG(SPI_SHADER_PGM_RSRC1_GS);
+    INIT_REG(SPI_SHADER_PGM_RSRC2_GS);
+    INIT_REG(GS_SCRATCH_SIZE);
+    INIT_REG(GS_NUM_USED_VGPRS);
+    INIT_REG(GS_NUM_USED_SGPRS);
+    INIT_REG(VGT_GS_MAX_VERT_OUT);
+    INIT_REG(VGT_GS_ONCHIP_CNTL);
+    INIT_REG(VGT_ES_PER_GS);
+    INIT_REG(VGT_GS_VERT_ITEMSIZE);
+    INIT_REG(VGT_GS_INSTANCE_CNT);
+    INIT_REG(VGT_GS_PER_VS);
+    INIT_REG(VGT_GS_OUT_PRIM_TYPE);
+    INIT_REG(VGT_GSVS_RING_ITEMSIZE);
+    INIT_REG(VGT_GS_PER_ES);
+    INIT_REG(VGT_GS_VERT_ITEMSIZE_1);
+    INIT_REG(VGT_GS_VERT_ITEMSIZE_2);
+    INIT_REG(VGT_GS_VERT_ITEMSIZE_3);
+    INIT_REG(VGT_GSVS_RING_OFFSET_1);
+    INIT_REG(VGT_GSVS_RING_OFFSET_2);
+    INIT_REG(VGT_GSVS_RING_OFFSET_3);
+    INIT_REG(VGT_GS_MODE);
+    INIT_REG(VGT_ESGS_RING_ITEMSIZE);
+}
+
+// =====================================================================================================================
+// Initializer
+void PsRegConfig::Init()
+{
+    INIT_REG(SPI_SHADER_PGM_RSRC1_PS);
+    INIT_REG(SPI_SHADER_PGM_RSRC2_PS);
+    INIT_REG(SPI_SHADER_Z_FORMAT);
+    INIT_REG(SPI_SHADER_COL_FORMAT);
+    INIT_REG(SPI_BARYC_CNTL);
+    INIT_REG(SPI_PS_IN_CONTROL);
+    INIT_REG(SPI_PS_INPUT_ENA);
+    INIT_REG(SPI_PS_INPUT_ADDR);
+    INIT_REG(SPI_INTERP_CONTROL_0);
+    INIT_REG(PA_SC_MODE_CNTL_1);
+    INIT_REG(DB_SHADER_CONTROL);
+    INIT_REG(CB_SHADER_MASK);
+    INIT_REG(PS_USES_UAVS);
+    INIT_REG(PS_SCRATCH_SIZE);
+    INIT_REG(PS_NUM_USED_VGPRS);
+    INIT_REG(PS_NUM_USED_SGPRS);
+    INIT_REG(PS_RUNS_AT_SAMPLE_RATE);
+    INIT_REG(PA_SC_AA_CONFIG);
+    INIT_REG(PA_SC_SHADER_CONTROL);
+    INIT_REG(PA_SC_CONSERVATIVE_RASTERIZATION_CNTL);
+}
+
+// =====================================================================================================================
+// Initializer
+void PipelineRegConfig::Init()
+{
+    INIT_REG(USER_DATA_LIMIT);
+    INIT_REG(SPILL_THRESHOLD);
+    INIT_REG(PIPELINE_HASH_LO);
+    INIT_REG(PIPELINE_HASH_HI);
+    INIT_REG(API_HW_SHADER_MAPPING_LO);
+    INIT_REG(API_HW_SHADER_MAPPING_HI);
+    SET_REG(this, SPILL_THRESHOLD, UINT32_MAX);
+}
+
+// =====================================================================================================================
+// Initializer
+void PipelineVsFsRegConfig::Init()
+{
+    m_vsRegs.Init();
+    m_psRegs.Init();
+    PipelineRegConfig::Init();
+
+    INIT_REG(VGT_SHADER_STAGES_EN);
+    INIT_REG(API_VS_HASH_LO);
+    INIT_REG(API_VS_HASH_HI);
+    INIT_REG(API_PS_HASH_LO);
+    INIT_REG(API_PS_HASH_HI);
+    INIT_REG(INDIRECT_TABLE_ENTRY);
+    INIT_REG_GFX9(IA_MULTI_VGT_PARAM);
+
+    m_dynRegCount = 0;
+}
+
+// =====================================================================================================================
+// Initializer
+void PipelineVsTsFsRegConfig::Init()
+{
+    m_lsHsRegs.Init();
+    m_vsRegs.Init();
+    m_psRegs.Init();
+    PipelineRegConfig::Init();
+
+    INIT_REG(VGT_SHADER_STAGES_EN);
+    INIT_REG(API_VS_HASH_LO);
+    INIT_REG(API_VS_HASH_HI);
+    INIT_REG(API_HS_HASH_LO);
+    INIT_REG(API_HS_HASH_HI);
+    INIT_REG(API_DS_HASH_LO);
+    INIT_REG(API_DS_HASH_HI);
+    INIT_REG(API_PS_HASH_LO);
+    INIT_REG(API_PS_HASH_HI);
+    INIT_REG(INDIRECT_TABLE_ENTRY);
+    INIT_REG_GFX9(IA_MULTI_VGT_PARAM);
+
+    m_dynRegCount = 0;
+}
+
+// =====================================================================================================================
+// Initializer
+void PipelineVsGsFsRegConfig::Init()
+{
+    m_esGsRegs.Init();
+    m_vsRegs.Init();
+    m_psRegs.Init();
+    PipelineRegConfig::Init();
+
+    INIT_REG(VGT_SHADER_STAGES_EN);
+    INIT_REG(API_VS_HASH_LO);
+    INIT_REG(API_VS_HASH_HI);
+    INIT_REG(API_GS_HASH_LO);
+    INIT_REG(API_GS_HASH_HI);
+    INIT_REG(API_PS_HASH_LO);
+    INIT_REG(API_PS_HASH_HI);
+    INIT_REG(INDIRECT_TABLE_ENTRY);
+    INIT_REG_GFX9(IA_MULTI_VGT_PARAM);
+
+    SET_REG(this, SPILL_THRESHOLD, UINT32_MAX);
+
+    m_dynRegCount = 0;
+}
+
+// =====================================================================================================================
+// Initializer
+void PipelineVsTsGsFsRegConfig::Init()
+{
+    m_lsHsRegs.Init();
+    m_esGsRegs.Init();
+    m_psRegs.Init();
+    m_vsRegs.Init();
+    PipelineRegConfig::Init();
+
+    INIT_REG(VGT_SHADER_STAGES_EN);
+    INIT_REG(API_VS_HASH_LO);
+    INIT_REG(API_VS_HASH_HI);
+    INIT_REG(API_HS_HASH_LO);
+    INIT_REG(API_HS_HASH_HI);
+    INIT_REG(API_DS_HASH_LO);
+    INIT_REG(API_DS_HASH_HI);
+    INIT_REG(API_GS_HASH_LO);
+    INIT_REG(API_GS_HASH_HI);
+    INIT_REG(API_PS_HASH_LO);
+    INIT_REG(API_PS_HASH_HI);
+    INIT_REG(INDIRECT_TABLE_ENTRY);
+    INIT_REG_GFX9(IA_MULTI_VGT_PARAM);
+
+    m_dynRegCount = 0;
+}
+
+// =====================================================================================================================
+// Initializer
+void CsRegConfig::Init()
+{
+    INIT_REG(COMPUTE_PGM_RSRC1);
+    INIT_REG(COMPUTE_PGM_RSRC2);
+    INIT_REG(COMPUTE_NUM_THREAD_X);
+    INIT_REG(COMPUTE_NUM_THREAD_Y);
+    INIT_REG(COMPUTE_NUM_THREAD_Z);
+    INIT_REG(CS_SCRATCH_SIZE);
+    INIT_REG(CS_NUM_USED_VGPRS);
+    INIT_REG(CS_NUM_USED_SGPRS);
+}
+
+// =====================================================================================================================
+// Initializer
+void PipelineCsRegConfig::Init()
+{
+    m_csRegs.Init();
+    PipelineRegConfig::Init();
+
+    INIT_REG(API_CS_HASH_LO);
+    INIT_REG(API_CS_HASH_HI);
+
+    m_dynRegCount = 0;
+}
 
 // =====================================================================================================================
 // Adds entries to register name map.

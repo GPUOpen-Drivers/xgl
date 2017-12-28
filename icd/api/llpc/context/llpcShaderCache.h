@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  @file llpcShaderCache.h
@@ -87,6 +87,7 @@ struct ShaderCacheAuxCreateInfo
 {
     ShaderCacheMode        shaderCacheMode;    // Mode of shader cache
     GfxIpVersion           gfxIp;              // Graphics IP version info
+    Md5::Hash              hash;               // Hash code of compilation options
     const char*            pCacheFilePath;     // root directory of cache file
     const char*            pExecutableName;    // Name of executable file
 };
@@ -106,7 +107,7 @@ struct BuildUniqueId
     uint8_t buildDate[DateLength];     // Build date
     uint8_t buildTime[TimeLength];     // Build time
     GfxIpVersion gfxIp;                // Graphics IP version info
-    uint32_t     descTablePtrHigh;     // Descriptor table pointer high part
+    Md5::Hash    hash;                 // Hash code of compilation options
 };
 
 // This the header for the shader cache data when the cache is serialized/written to disk
@@ -152,6 +153,8 @@ public:
     Result RetrieveShader(CacheEntryHandle   hEntry,
                           void**             ppBlob,
                           size_t*            pSize);
+
+    bool IsCompatible(const ShaderCacheCreateInfo* pCreateInfo, const ShaderCacheAuxCreateInfo* pAuxCreateInfo);
 
 private:
     LLPC_DISALLOW_COPY_AND_ASSIGN(ShaderCache);
@@ -208,6 +211,7 @@ private:
     ShaderCacheGetValue      m_pfnGetValueFunc;   // GetValue function used to query an external cache for shader data
     ShaderCacheStoreValue    m_pfnStoreValueFunc; // StoreValue function used to store shader data in an external cache
     GfxIpVersion             m_gfxIp;             // Graphics IP version info
+    Md5::Hash                m_hash;              // Hash code of compilation options
 };
 
 } // Llpc

@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  llpcCompiler.h
@@ -35,7 +35,7 @@
 #include "llpcElf.h"
 #include "llpcInternal.h"
 #include "llpcMd5.h"
-#include "llpcShaderCache.h"
+#include "llpcShaderCacheManager.h"
 
 namespace Llpc
 {
@@ -85,7 +85,7 @@ struct GpuProperty
 class Compiler: public ICompiler
 {
 public:
-    Compiler(const char* pClient, GfxIpVersion gfxIp);
+    Compiler(GfxIpVersion gfxIp, uint32_t optionCount, const char*const* pOptions);
     ~Compiler();
 
     virtual void VKAPI_CALL Destroy();
@@ -122,6 +122,7 @@ private:
 
     Md5::Hash GenerateHashForGraphicsPipeline(const GraphicsPipelineBuildInfo* pPipeline) const;
     Md5::Hash GenerateHashForComputePipeline(const ComputePipelineBuildInfo* pPipeline) const;
+    Md5::Hash GenerateHashForCompileOptions(uint32_t optionCount, const char*const* pOptions) const;
 
     void UpdateHashForPipelineShaderInfo(ShaderStage               shaderStage,
                                          const PipelineShaderInfo* pShaderInfo,
@@ -148,12 +149,17 @@ private:
     Result OptimizeSpirv(const BinaryData* pSpirvBinIn, BinaryData* pSpirvBinOut) const;
     void CleanOptimizedSpirv(BinaryData* pSpirvBin) const;
 
+    static Md5::Hash BuildArgHash(uint32_t optionCount, const char*const* options);
+    static bool NeedDebugOut(uint32_t optionCount, const char*const* options);
+
     // -----------------------------------------------------------------------------------------------------------------
 
     const char*const    m_pClientName;      // Name of the client who calls LLPC
     GfxIpVersion        m_gfxIp;            // Graphics IP version info
+    Md5::Hash           m_optionHash;       // Hash code of compilation options
     static uint32_t     m_instanceCount;    // The count of compiler instance
-    ShaderCache         m_shaderCache;      // Shader cache
+    static uint32_t     m_outRedirectCount; // The count of output redirect
+    ShaderCachePtr      m_shaderCache;      // Shader cache
     GpuProperty         m_gpuProperty;      // GPU property
     llvm::sys::Mutex    m_contextPoolMutex; // Mutex for context pool access
     std::vector<Context*> m_contextPool;    // Context pool

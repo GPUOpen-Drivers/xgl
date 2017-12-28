@@ -1,26 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 
 #include "include/vk_buffer.h"
 #include "include/vk_cmdbuffer.h"
@@ -1358,7 +1359,6 @@ void CmdBuffer::BindDescriptorSets(
                 // NOTE: We currently have to supply patched SRDs directly in used data registers. If we'll have proper
                 // support for dynamic descriptors in SC then we'll only need to write the dynamic offsets directly.
                 DescriptorSet::PatchedDynamicDataFromHandle(
-                    m_pDevice,
                     pDescriptorSets[i],
                     &(m_state.perGpuState[DefaultDeviceIndex].
                         setBindingData[static_cast<uint32_t>(bindPoint)][setLayoutInfo.dynDescDataRegOffset]),
@@ -1378,7 +1378,7 @@ void CmdBuffer::BindDescriptorSets(
                     DescriptorSet::UserDataPtrValueFromHandle(
                         pDescriptorSets[i],
                         deviceIdx,
-                        &(m_state.perGpuState[DefaultDeviceIndex].
+                        &(m_state.perGpuState[deviceIdx].
                             setBindingData[static_cast<uint32_t>(bindPoint)][setLayoutInfo.setPtrRegOffset]));
 
                     deviceIdx++;
@@ -2751,18 +2751,20 @@ void CmdBuffer::FlushBarriers(
     uint32_t                       postTransitionCount)
 {
     pBarrier->transitionCount = mainTransitionCount;
-    pBarrier->pTransitions = pTransitions;
+    pBarrier->pTransitions    = pTransitions;
+
     PalCmdBarrier(pBarrier, pTransitions, pTransitionImages);
 
     if (postTransitionCount > 0)
     {
         Pal::BarrierInfo postBarrier = {};
+
+        postBarrier.reason             = pBarrier->reason;
         postBarrier.waitPoint          = pBarrier->waitPoint;
         postBarrier.pipePointWaitCount = pBarrier->pipePointWaitCount;
         postBarrier.pPipePoints        = pBarrier->pPipePoints;
-
-        postBarrier.transitionCount = postTransitionCount;
-        postBarrier.pTransitions    = pTransitions + postTransitionStartIdx;
+        postBarrier.transitionCount    = postTransitionCount;
+        postBarrier.pTransitions       = pTransitions + postTransitionStartIdx;
 
         PalCmdBarrier(&postBarrier,
                       pTransitions      + postTransitionStartIdx,
@@ -3118,6 +3120,7 @@ void CmdBuffer::WaitEvents(
     VK_IGNORE(srcStageMask);
 
     barrier.flags.u32All          = 0;
+    barrier.reason                = RgpBarrierExternalCmdWaitEvents;
     barrier.waitPoint             = VkToPalWaitPipePoint(dstStageMask);
     barrier.gpuEventWaitCount     = eventCount;
     barrier.ppGpuEvents           = ppGpuEvents;
@@ -3157,15 +3160,16 @@ void CmdBuffer::PipelineBarrier(
 
     // Tell PAL to wait at a specific point until the given set of pipeline events has been signaled (this version
     // does not use GpuEvent objects).
+    barrier.reason       = RgpBarrierExternalCmdPipelineBarrier;
     barrier.flags.u32All = 0;
-    barrier.waitPoint = VkToPalWaitPipePoint(destStageMask);
+    barrier.waitPoint    = VkToPalWaitPipePoint(destStageMask);
 
     // Collect signal pipe points.
     Pal::HwPipePoint pipePoints[MaxHwPipePoints];
 
-    barrier.pipePointWaitCount = VkToPalSrcPipePoints(srcStageMask, pipePoints);
-    barrier.pPipePoints = pipePoints;
-    barrier.pSplitBarrierGpuEvent = nullptr;
+    barrier.pipePointWaitCount      = VkToPalSrcPipePoints(srcStageMask, pipePoints);
+    barrier.pPipePoints             = pipePoints;
+    barrier.pSplitBarrierGpuEvent   = nullptr;
 
     ExecuteBarriers(virtStackFrame,
                     memBarrierCount,
@@ -3260,17 +3264,18 @@ void CmdBuffer::ResetQueryPool(
 
             static const Pal::BarrierInfo Barrier =
             {
-                flags,          // flags
-                Pal::HwPipeTop, // waitPoint
-                1,              // pipePointWaitCount
-                &pipePoint,     // pPipePoints
-                0,              // gpuEventCount
-                nullptr,        // ppGpuEvents
-                0,              // rangeCheckedTargetWaitCount
-                nullptr,        // ppTargets
-                1,              // transitionCount
-                &Transition,    // pTransitions
-                nullptr         // pSplitBarrierGpuEvent
+                flags,                                  // flags
+                Pal::HwPipeTop,                         // waitPoint
+                1,                                      // pipePointWaitCount
+                &pipePoint,                             // pPipePoints
+                0,                                      // gpuEventCount
+                nullptr,                                // ppGpuEvents
+                0,                                      // rangeCheckedTargetWaitCount
+                nullptr,                                // ppTargets
+                1,                                      // transitionCount
+                &Transition,                            // pTransitions
+                nullptr,                                // pSplitBarrierGpuEvent
+                RgpBarrierInternalPreResetQueryPoolSync // reason
             };
 
             PalCmdBarrier(Barrier);
@@ -3298,16 +3303,18 @@ void CmdBuffer::ResetQueryPool(
 
             static const Pal::BarrierInfo Barrier =
             {
-                flags,          // flags
-                Pal::HwPipeTop, // waitPoint
-                1,              // pipePointWaitCount
-                &pipePoint,     // pPipePoints
-                0,              // gpuEventCount
-                nullptr,        // ppGpuEvents
-                0,              // rangeCheckedTargetWaitCount
-                nullptr,        // ppTargets
-                1,              // transitionCount
-                &Transition     // pTransitions
+                flags,                                   // flags
+                Pal::HwPipeTop,                          // waitPoint
+                1,                                       // pipePointWaitCount
+                &pipePoint,                              // pPipePoints
+                0,                                       // gpuEventCount
+                nullptr,                                 // ppGpuEvents
+                0,                                       // rangeCheckedTargetWaitCount
+                nullptr,                                 // ppTargets
+                1,                                       // transitionCount
+                &Transition,                             // pTransitions
+                nullptr,                                 // pSplitBarrierGpuEvent
+                RgpBarrierInternalPostResetQueryPoolSync // reason
             };
 
             PalCmdBarrier(Barrier);
@@ -3322,6 +3329,11 @@ void CmdBuffer::ResetQueryPool(
 void CmdBuffer::PalCmdBarrier(
     const Pal::BarrierInfo& info)
 {
+    // If you trip this assert, you've forgotten to populate a value for this field.  You should use one of the
+    // RgpBarrierReason enum values from sqtt_rgp_annotations.h.  Preferably you should add a new one as described
+    // in the header, but temporarily you may use the generic "unknown" reason so as not to block your main code change.
+    VK_ASSERT(info.reason != 0);
+
 #if PAL_ENABLE_PRINTS_ASSERTS
     for (uint32_t i = 0; i < info.transitionCount; ++i)
     {
@@ -3349,6 +3361,11 @@ void CmdBuffer::PalCmdBarrier(
     Pal::BarrierTransition* const pTransitions,
     const Image** const           pTransitionImages)
 {
+    // If you trip this assert, you've forgot to populate a value for this field.  You should use one of the
+    // RgpBarrierReason enum values from sqtt_rgp_annotations.h.  Preferably you should add a new one as described
+    // in the header, but temporarily you may use the generic "unknown" reason so as not to block you.
+    VK_ASSERT(pInfo->reason != 0);
+
     const Pal::IGpuEvent** ppOriginalGpuEvents = pInfo->ppGpuEvents;
 
     utils::IterateMask deviceGroup(m_palDeviceMask);
@@ -3466,17 +3483,18 @@ void CmdBuffer::CopyQueryPoolResults(
 
             static const Pal::BarrierInfo TimestampWriteWaitIdle =
             {
-                PalBarrierFlags,  // flags
-                Pal::HwPipePreCs, // waitPoint
-                1,                // pipePointWaitCount
-                &pipePoint,       // pPipePoints
-                0,                // gpuEventWaitCount
-                nullptr,          // ppGpuEvents
-                0,                // rangeCheckedTargetWaitCount
-                nullptr,          // ppTargets
-                1,                // transitionCount
-                &transition,      // pTransitions
-                nullptr           // pSplitBarrierGpuEvent
+                PalBarrierFlags,                                // flags
+                Pal::HwPipePreCs,                               // waitPoint
+                1,                                              // pipePointWaitCount
+                &pipePoint,                                     // pPipePoints
+                0,                                              // gpuEventWaitCount
+                nullptr,                                        // ppGpuEvents
+                0,                                              // rangeCheckedTargetWaitCount
+                nullptr,                                        // ppTargets
+                1,                                              // transitionCount
+                &transition,                                    // pTransitions
+                nullptr,                                        // pSplitBarrierGpuEvent
+                RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
             };
 
             PalCmdBarrier(TimestampWriteWaitIdle);
@@ -4001,6 +4019,7 @@ void CmdBuffer::RPSyncPoint(
 
     Pal::BarrierInfo barrier = {};
 
+    barrier.reason    = RgpBarrierExternalRenderPassSync;
     barrier.waitPoint = Pal::HwPipeBottom;
 
     // Get the PAL wait point for the barrier based on the subpass dependency
@@ -4948,6 +4967,7 @@ void CmdBuffer::DbgCmdBarrier(bool preCmd)
 
     Pal::BarrierInfo barrier = {};
 
+    barrier.reason    = RgpBarrierUnknownReason; // This code is debug-only code.
     barrier.waitPoint = waitPoint;
 
     if (waitPoint != Pal::HwPipeTop || signalPoint != Pal::HwPipeTop)

@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2015-2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2015-2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
 ***********************************************************************************************************************
 * @file  sqtt_rgp_annotations.h
@@ -509,29 +509,30 @@ union RgpSqttMarkerPresent
 constexpr uint32_t RgpSqttMarkerPresentWordCount = 1;
 
 // Table 15: RgpSqttBarrierReason - Value for the reason field of an RGP barrier start marker originating from the
-// Vulkan client (does not include PAL-defined values)
-enum class RgpSqttBarrierReason : uint32_t
+// Vulkan client (does not include PAL-defined values).
+//
+// *!* Changes to this enum list must be matched by editing the official RGP SQTT Instrumentation Specification as *!*
+// *!* well as a bump to RgpSqttInstrumentationApiVersion (a generic "unknown" enum value is provided that can     *!*
+// *!* be used temporarily).                                                                                       *!*
+enum RgpBarrierReason : uint32_t
 {
-    Invalid                         = 0x00000000,  // Dummy value (should never be used)
+    // Generic "Unknown" reason.  Use this temporarily if you need to add a new Pal::CmdBarrier() call in the driver
+    // but do not have time to update the RGP SQTT spec.  Please do not abuse.
+    RgpBarrierUnknownReason                       = 0xFFFFFFFF,
 
     // External app-generated barrier reasons, i.e. API synchronization commands
     // Range of valid values: [0x00000001 ... 0x7FFFFFFF]
+    RgpBarrierExternalCmdPipelineBarrier          = 0x00000001,  // vkCmdPipelineBarrier
+    RgpBarrierExternalRenderPassSync              = 0x00000002,  // Renderpass subpass-related synchronization
+    RgpBarrierExternalCmdWaitEvents               = 0x00000003,  // vkCmdWaitEvents
 
-    ExternalCmdPipelineBarrier      = 0x00000001,  // vkCmdPipelineBarrier
-    ExternalRenderPassSync          = 0x00000002,  // Renderpass subpass-related synchronization
-    ExternalCmdWaitEvents           = 0x00000003,  // vkCmdWaitEvents
-
-    // Internal barrier reasons, i.e. implicit synchronization inserted by the driver
+    // Internal barrier reasons, i.e. implicit synchronization inserted by the Vulkan driver
     // Range of valid values: [0xC0000000 ... 0xFFFFFFFE]
-
-    InternalPreResetQueryPool       = 0xC0000000,  // vkCmdResetQueryPool: Pre-reset barrier
-    InternalPostResetQueryPool      = 0xC0000001,  // vkCmdResetQueryPool: Post-reset barrier
-    InternalGpuEventRecycle         = 0xC0000002,  // Event manager needs to recycle some event event memory
-    InternalPreCopyQueryPoolResults = 0xC0000003,  // vkCmdCopyQueryPoolResults: Pre-copy barrier
-
-    // Generic "Unknown" reason (always marked internal)
-
-    InternalUnknown                 = 0xFFFFFFFF
+    RgpBarrierInternalBase                        = 0xC0000000,
+    RgpBarrierInternalPreResetQueryPoolSync       = RgpBarrierInternalBase + 0,
+    RgpBarrierInternalPostResetQueryPoolSync      = RgpBarrierInternalBase + 1,
+    RgpBarrierInternalGpuEventRecycleStall        = RgpBarrierInternalBase + 2,
+    RgpBarrierInternalPreCopyQueryPoolResultsSync = RgpBarrierInternalBase + 3
 };
 
 };

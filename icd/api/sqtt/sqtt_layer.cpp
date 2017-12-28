@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  sqtt_layer.cpp
@@ -379,27 +379,15 @@ void SqttCmdBufferState::WriteBarrierStartMarker(
 
         marker.identifier = RgpSqttMarkerIdentifierBarrierStart;
         marker.cbId       = m_cbId.u32All;
+        marker.dword02    = data.reason;
 
-        // This code that checks the entry point to decipher the barrier reason is temporary code prior to PAL
-        // interface version v360 where this value comes straight from the callback field (though it must be provided
-        // to PAL from other parts of the driver)
-        if (m_currentEntryPoint == RgpSqttMarkerGeneralApiType::CmdPipelineBarrier)
+        // The barrier reason should never be 0.  It indicates somebody is not giving a correct reason before
+        // calling Pal::CmdBarrier().
+        if (marker.dword02 == 0)
         {
-            marker.dword02 = static_cast<uint32_t>(RgpSqttBarrierReason::ExternalCmdPipelineBarrier);
-        }
-        else if (m_currentEntryPoint == RgpSqttMarkerGeneralApiType::CmdBeginRenderPass ||
-                 m_currentEntryPoint == RgpSqttMarkerGeneralApiType::CmdNextSubpass ||
-                 m_currentEntryPoint == RgpSqttMarkerGeneralApiType::CmdEndRenderPass)
-        {
-            marker.dword02 = static_cast<uint32_t>(RgpSqttBarrierReason::ExternalRenderPassSync);
-        }
-        else if (m_currentEntryPoint == RgpSqttMarkerGeneralApiType::CmdWaitEvents)
-        {
-            marker.dword02 = static_cast<uint32_t>(RgpSqttBarrierReason::ExternalCmdWaitEvents);
-        }
-        else
-        {
-            marker.dword02 = static_cast<uint32_t>(RgpSqttBarrierReason::InternalUnknown);
+            VK_NEVER_CALLED();
+
+            marker.dword02 = RgpBarrierUnknownReason;
         }
 
         WriteMarker(&marker, sizeof(marker));

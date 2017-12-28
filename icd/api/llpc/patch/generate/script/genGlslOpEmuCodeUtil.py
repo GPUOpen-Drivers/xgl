@@ -1,35 +1,36 @@
 ##
- ###############################################################################
+ #######################################################################################################################
  #
- # Copyright (c) 2017 Advanced Micro Devices, Inc. All rights reserved.
+ #  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
  #
- # Permission is hereby granted, free of charge, to any person obtaining a copy
- # of this software and associated documentation files (the "Software"), to deal
- # in the Software without restriction, including without limitation the rights
- # to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- # copies of the Software, and to permit persons to whom the Software is
- # furnished to do so, subject to the following conditions:
+ #  Permission is hereby granted, free of charge, to any person obtaining a copy
+ #  of this software and associated documentation files (the "Software"), to deal
+ #  in the Software without restriction, including without limitation the rights
+ #  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ #  copies of the Software, and to permit persons to whom the Software is
+ #  furnished to do so, subject to the following conditions:
  #
- # The above copyright notice and this permission notice shall be included in
- # all copies or substantial portions of the Software.
+ #  The above copyright notice and this permission notice shall be included in all
+ #  copies or substantial portions of the Software.
  #
- # THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- # IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- # FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- # AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- # LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- # THE SOFTWARE.
- ##############################################################################/
-
+ #  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ #  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ #  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ #  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ #  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ #  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ #  SOFTWARE.
+ #
+ #######################################################################################################################
 
 #**********************************************************************************************************************
 # @file  genGlslopEmuCodeUtil.py
 # @brief LLPC python script file: contains definitions and utilities used in other python script files.
 #**********************************************************************************************************************
 
-BASIC_TYPES = ["float", "double", "int", "i32", "i64", "i1"]
-TYPE_PREFIX_TO_BASIC = {"f":"float", "d":"double", "u":"i32", "i":"i32", "b":"i1"}
+BASIC_TYPES = ["half", "float", "double", "i1","i16", "i32", "int", "i64"]
+TYPE_PREFIX_TO_BASIC = {"f":"float", "d":"double", "u":"i32", "i":"i32", "b":"i1", "f16":"half", "u16":"i16", "i16":"i16", "i64":"i64", "u64":"i64"}
+TYPES_MANGLE = {"half":"Dh", "float":"f", "double":"d", "i1":"b","i16":"s", "i32":"i", "i64":"l"}
 LINE_END = "\n"
 LINE_TAB = "    "
 
@@ -58,9 +59,9 @@ class Scalar(object):
     def __ne__(self, other):
         return not self.__eq__(other)
     def isFloatType(self):
-        return self.compType == "float" or self.compType == "double"
+        return self.compType == "float" or self.compType == "double" or self.compType == "half"
     def getMangle(self):
-        return self.compType[0]
+        return TYPES_MANGLE[self.compType]
 
 class Vector(object):
     def __init__(self, compType, compCount):

@@ -1990,6 +1990,8 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
       }
       return mapValue(BV, V);
       }
+    default:
+      break;
     }
   }
 
@@ -2623,6 +2625,7 @@ SPIRVToLLVM::transSPIRVBuiltinFromInst(SPIRVInstruction *BI, BasicBlock *BB) {
     case AccessQualifierReadOnly: Suffix = "_read"; break;
     case AccessQualifierWriteOnly: Suffix = "_write"; break;
     case AccessQualifierReadWrite: Suffix = "_read_write"; break;
+    default: break;
     }
   }
 

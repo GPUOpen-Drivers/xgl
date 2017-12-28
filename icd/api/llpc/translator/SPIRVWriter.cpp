@@ -848,8 +848,8 @@ LLVMToSPIRV::transLifetimeIntrinsicInst(Op OC, IntrinsicInst *II, SPIRVBasicBloc
   auto Op1 = II->getOperand(1);
 
   if (auto AI = dyn_cast<AllocaInst>(Op1)) {
-    assert(!Size ||
-      M->getDataLayout().getTypeSizeInBits(AI->getAllocatedType()) == Size * 8 &&
+    assert((!Size ||
+      M->getDataLayout().getTypeSizeInBits(AI->getAllocatedType()) == Size * 8) &&
       "Size of the argument should match the allocated memory");
     return BM->addLifetimeInst(OC, transValue(Op1, BB), Size, BB);
   }

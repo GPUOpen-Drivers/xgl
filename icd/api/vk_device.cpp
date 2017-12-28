@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  vk_device.cpp
@@ -228,6 +228,10 @@ VkResult Device::Create(
 {
     Pal::Result palResult = Pal::Result::Success;
     uint32_t queueCounts[Queue::MaxQueueFamilies] = {};
+
+    // VK_QUEUE_GLOBAL_PRIORITY_MEDIUM is the default value.
+    VkQueueGlobalPriorityEXT queuePriority[Queue::MaxQueueFamilies] = { VK_QUEUE_GLOBAL_PRIORITY_MEDIUM };
+
     VkResult vkResult = VK_SUCCESS;
     void*    pMemory  = nullptr;
     union
@@ -327,6 +331,27 @@ VkResult Device::Create(
                                                                                          pQueueInfo->queueFamilyIndex);
                     queueCounts[pQueueInfo->queueFamilyIndex] = pQueueInfo->queueCount;
                     totalQueues += pQueueInfo->queueCount;
+
+                    // handle global priority
+                    union
+                    {
+                        const VkStructHeader*                           pSubHeader;
+                        const VkDeviceQueueGlobalPriorityCreateInfoEXT* pPriorityInfo;
+                    };
+                    for (pSubHeader = reinterpret_cast<const VkStructHeader*>(pQueueInfo->pNext);
+                         pSubHeader != nullptr;
+                         pSubHeader = pSubHeader->pNext)
+                    {
+                        switch (pSubHeader->sType)
+                        {
+                            case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT:
+                                queuePriority[pQueueInfo->queueFamilyIndex] = pPriorityInfo->globalPriority;
+                                break;
+                            default:
+                                // Skip any unknown extension structures
+                                break;
+                        }
+                    }
                 }
                 break;
 
@@ -459,7 +484,9 @@ VkResult Device::Create(
                             queueCreateInfo.queueType     = palQueueType;
                             queueCreateInfo.engineType    = palEngineType;
                             queueCreateInfo.engineIndex   = queueIndex;
-
+#if VK_IS_PAL_VERSION_AT_LEAST(364,0)
+                            queueCreateInfo.priority = VkToPalGlobalPriority(queuePriority[queueFamilyIndex]);
+#endif
                             palResult = pPalDevices[deviceIdx]->CreateQueue(queueCreateInfo,
                                                                 pPalQueueMemory + palQueueMemoryOffset,
                                                                 &pPalQueues[deviceIdx]);

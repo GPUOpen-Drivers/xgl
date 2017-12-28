@@ -994,9 +994,9 @@ protected:
     assert(isCmpOpCode(OpCode) && "Invalid op code for cmp inst");
     assert((resTy->isTypeBool() || resTy->isTypeInt()) &&
         "Invalid type for compare instruction");
-    assert((op1Ty == op2Ty ||
-            op1Ty->isTypeInt(op1Ty->getBitWidth()) &&
-            op2Ty->isTypeInt(op1Ty->getBitWidth())) &&
+    assert(((op1Ty == op2Ty) ||
+            (op1Ty->isTypeInt(op1Ty->getBitWidth()) &&
+            op2Ty->isTypeInt(op1Ty->getBitWidth()))) &&
             "Inconsistent types");
   }
 };

@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  vk_descriptor_set.h
@@ -56,7 +56,8 @@ union DescriptorSetFlags
     struct
     {
         uint32_t fmaskBasedMsaaReadEnabled: 1;  // Cached value of associated RuntimeSetting.
-        uint32_t reserved                 : 31;
+        uint32_t robustBufferAccess       : 1;  // Cached value of whether robust buffer access is used
+        uint32_t reserved                 : 30;
     };
     uint32_t u32All;
 };
@@ -126,6 +127,9 @@ public:
     const VK_INLINE bool FmaskBasedMsaaReadEnabled() const
         { return m_flags.fmaskBasedMsaaReadEnabled; }
 
+    const VK_INLINE bool RobustBufferAccess() const
+        { return m_flags.robustBufferAccess; }
+
     const DescriptorSetLayout* Layout() const
         { return m_pLayout; }
 
@@ -152,7 +156,6 @@ public:
     VK_INLINE static void UserDataPtrValueFromHandle(VkDescriptorSet set, uint32_t deviceIdx, uint32_t* pUserData);
 
     VK_INLINE static void PatchedDynamicDataFromHandle(
-        Device*         pDevice,
         VkDescriptorSet set,
         uint32_t*       pUserData,
         const uint32_t* pDynamicOffsets,
@@ -256,18 +259,17 @@ void DescriptorSet::UserDataPtrValueFromHandle(
 // white-box fashion. Probably would be better if we'd have a PAL function to do the patching of the dynamic offset,
 // but this is expected to be temporary anyways until we'll have proper support for dynamic descriptors in SC.
 void DescriptorSet::PatchedDynamicDataFromHandle(
-    Device*         pDevice,
     VkDescriptorSet set,
     uint32_t*       pUserData,
     const uint32_t* pDynamicOffsets,
     uint32_t        numDynamicDescriptors)
 {
     // This code expects 4 DW SRDs whose first 48 bits is the base address.
-    VK_ASSERT(pDevice->GetProperties().descriptorSizes.bufferView == (4 * sizeof(uint32_t)));
 
+    DescriptorSet* pSet  = StateFromHandle(set);
     uint64_t* pDstQwords = reinterpret_cast<uint64_t*>(pUserData);
-    uint64_t* pSrcQwords = reinterpret_cast<uint64_t*>(StateFromHandle(set)->DynamicDescriptorData());
-    const uint32_t dynDataNumQwords = pDevice->GetEnabledFeatures().robustBufferAccess ? 2 : 1;
+    uint64_t* pSrcQwords = reinterpret_cast<uint64_t*>(pSet->DynamicDescriptorData());
+    const uint32_t dynDataNumQwords = pSet->RobustBufferAccess() ? 2 : 1;
     for (uint32_t i = 0; i < numDynamicDescriptors; ++i)
     {
         const uint64_t baseAddressMask = 0x0000FFFFFFFFFFFFull;
@@ -281,7 +283,7 @@ void DescriptorSet::PatchedDynamicDataFromHandle(
 
         pDstQwords[i * dynDataNumQwords] = hiBits | baseAddress;
 
-        if (pDevice->GetEnabledFeatures().robustBufferAccess)
+        if (pSet->RobustBufferAccess())
         {
             pDstQwords[i * dynDataNumQwords + 1] = pSrcQwords[i * dynDataNumQwords + 1];
         }

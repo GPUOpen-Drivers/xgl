@@ -1,6 +1,18 @@
-project(LLPC C)
+##
+ #######################################################################################################################
+ #
+ #  Trade secret of Advanced Micro Devices, Inc.
+ #  Copyright (c) 2017, Advanced Micro Devices, Inc., (unpublished)
+ #
+ #  All rights reserved. This notice is intended as a precaution against inadvertent publication and does not imply
+ #  publication or any waiver of confidentiality. The year included in the foregoing notice is the year of creation of
+ #  the work.
+ #
+ #######################################################################################################################
 
-### Create BIL Library ############################################################################################
+project(LLPC C CXX)
+
+### Create LLPC Library ################################################################################################
 add_library(llpc STATIC "")
 add_dependencies(llpc LLVMCore)
 
@@ -8,54 +20,36 @@ add_dependencies(llpc LLVMCore)
 # None
 
 ### Compiler Options ###################################################################################################
-if(WIN32)
-    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-        # CMAKE-TODO: These are /W4 (level 4) warnings
-        # Review what is acceptable and what is not.
-        # target_compile_options(llpc PRIVATE
-        #     /wd4063 # case 'X' is not a valid value for switch of enum 'Y'
-        #     /wd4127 # conditional expression is constant
-        # )
-
-        target_compile_options(llpc
-            PRIVATE # Warnings in interface and src
-                /wd4005 # 'DEBUG' : macro redefinition ??? Defined in toolchain ??? importedllvmincludellvm/Support/Debug.h
-                /wd4018 # '<' : signed/unsigned mismatch
-                /wd4100 # unreferenced formal parameter
-                /wd4127 # conditional expression is constant
-                /wd4141 # 'inline' : used more than once
-                /wd4146 # unary minus operator applied to unsigned type, result still unsigned
-                /wd4189 # local variable is initialized but not referenced
-                /wd4201 # nonstandard extension used : nameless struct/union
-                /wd4244 # 'X' : conversion from 'Y' to 'Z', possible loss of data
-                /wd4245 # 'X' : conversion from 'Y' to 'Z', signed/unsigned mismatch
-                /wd4291 # no matching operator delete found; memory will not be freed if initialization throws an exception
-                /wd4267 # 'return' : conversion from 'size_t' to 'unsigned int', possible loss of data
-                /wd4389 # '==' : signed/unsigned mismatch
-                /wd4505 # unreferenced local function has been removed
-                /wd4510 # default constructor could not be generated
-                /wd4512 # assignment operator could not be generated
-                /wd4610 # struct 'X' can never be instantiated - user defined constructor required
-                /wd4624 # destructor could not be generated because a base class destructor is inaccessible or deleted
-                /wd4702 # unreachable code
-                /wd4706 # assignment within conditional expression
-                /wd4800 # forcing value to bool 'true' or 'false' (performance warning)
-        )
-
-        target_compile_definitions(llpc PRIVATE _SCL_SECURE_NO_WARNINGS)
-        target_compile_definitions(llpc PRIVATE _CRT_SECURE_NO_WARNINGS)
-
-        message(STATUS "Configured ${PROJECT_NAME} compiler options for MSVC.")
-    else()
-        message(FATAL_ERROR "Using unknown compiler")
-    endif()
-elseif(UNIX)
+if(UNIX)
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         # SEE: https://gcc.gnu.org/onlinedocs/gcc-6.2.0/gcc/Option-Summary.html#Option-Summary
         # for a list of all options and documentation.
         #target_compile_options(llpc PRIVATE option)
-        target_compile_options(llpc PRIVATE -Wno-unused-parameter -Wno-shift-negative-value -Wno-type-limits -Wno-error=switch -fno-strict-aliasing -Wno-error=sign-compare -Wno-error=parentheses -Wno-error=maybe-uninitialized -Wno-error=delete-non-virtual-dtor -Wno-sign-compare -Wno-error)
-        target_compile_options(llpc PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-unused -Wno-unused-parameter -Wno-ignored-qualifiers -Wno-missing-field-initializers -std=c++0x -fno-rtti -fPIC>)
+        target_compile_options(llpc PRIVATE
+            -Wno-unused-parameter
+            -Wno-type-limits
+            -Wno-switch
+            -Wno-parentheses
+            -Wno-maybe-uninitialized
+            -Wno-delete-non-virtual-dtor
+            -Wno-sign-compare
+            -Wno-delete-incomplete
+        )
+
+        target_compile_options(llpc PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
+            -Wno-unused
+            -Wno-ignored-qualifiers
+            -Wno-missing-field-initializers
+            -Wno-invalid-offsetof           # offsetof within non-standard-layout type 'x' is undefined
+        >)
+
+        target_compile_options(llpc PRIVATE -fno-strict-aliasing)
+
+        target_compile_options(llpc PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
+            -std=c++0x
+            -fno-rtti
+            -fPIC
+        >)
 
         message(STATUS "Configured ${PROJECT_NAME} compiler options for GCC.")
     elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -82,19 +76,12 @@ target_compile_definitions(llpc PRIVATE ${TARGET_ARCHITECTURE_ENDIANESS}ENDIAN_C
 target_compile_definitions(llpc PRIVATE _SPIRV_LLVM_API)
 target_compile_definitions(llpc PRIVATE LLPC_BUILD_GFX9)
 
-if(WIN32)
-    target_compile_definitions(llpc PRIVATE
-        NOMINMAX    # windows.h defines min/max which conflicts with the use of std::min / max
-        UNICODE     # CMAKE-TODO: What is this used for?
-        _UNICODE
-    )
-endif()
-
 target_include_directories(llpc
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include
     PRIVATE
         ${PROJECT_SOURCE_DIR}/context
+        ${PROJECT_SOURCE_DIR}/imported/metrohash/src
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/lower
         ${PROJECT_SOURCE_DIR}/patch
@@ -115,12 +102,8 @@ target_include_directories(llpc
 
 # CMAKE-TODO: Figure out a better way to do this.
 target_include_directories(llpc PRIVATE ${PROJECT_SOURCE_DIR}/../include/khronos)
-if(WIN32)
-    target_compile_definitions(llpc PRIVATE VK_USE_PLATFORM_WIN32_KHR)
-    target_compile_definitions(llpc PRIVATE SDK_1_0)
-endif()
 
-# context
+# llpc/context
 target_sources(llpc PRIVATE
     context/llpcCompiler.cpp
     context/llpcContext.cpp
@@ -129,6 +112,23 @@ target_sources(llpc PRIVATE
     context/llpcShaderCache.cpp
     context/llpcCopyShader.cpp
     context/llpcPipelineContext.cpp
+    context/llpcShaderCacheManager.cpp
+)
+
+# llpc/imported/llvm/opt
+target_sources(llpc PRIVATE
+    imported/llvm/opt/AnalysisWrappers.cpp
+    imported/llvm/opt/GraphPrinters.cpp
+    imported/llvm/opt/NewPMDriver.cpp
+    imported/llvm/opt/opt.cpp
+    imported/llvm/opt/PassPrinters.cpp
+    imported/llvm/opt/PrintSCC.cpp
+)
+
+# llpc/imported/metrohash/src
+target_sources(llpc PRIVATE
+    imported/metrohash/src/metrohash128.cpp
+    imported/metrohash/src/metrohash64.cpp
 )
 
 # llpc/lower
@@ -136,6 +136,7 @@ target_sources(llpc PRIVATE
     lower/llpcSpirvLower.cpp
     lower/llpcSpirvLowerAccessChain.cpp
     lower/llpcSpirvLowerAggregateLoadStore.cpp
+    lower/llpcSpirvLowerAlgebraTransform.cpp
     lower/llpcSpirvLowerBufferOp.cpp
     lower/llpcSpirvLowerConstImmediateStore.cpp
     lower/llpcSpirvLowerDynIndex.cpp
@@ -218,24 +219,12 @@ target_sources(llpc PRIVATE
     util/llpcPassNonNativeFuncRemove.cpp
 )
 
-# llpc/imported/llvm/opt
-target_sources(llpc PRIVATE
-    imported/llvm/opt/AnalysisWrappers.cpp
-    imported/llvm/opt/GraphPrinters.cpp
-    imported/llvm/opt/NewPMDriver.cpp
-    imported/llvm/opt/opt.cpp
-    imported/llvm/opt/PassPrinters.cpp
-    imported/llvm/opt/PrintSCC.cpp
-)
-
 ### LLPC Auto-generated Files ##########################################################################################
 set(OP_EMU_LIB_GEN_DIR ${PROJECT_SOURCE_DIR}/patch/generate)
 set(GEN_GLSL_OP_EMU_LIB_SCRIPT ${OP_EMU_LIB_GEN_DIR}/script/genGlslEmuLib.py)
 
 if(UNIX)
     set(BUILD_OS lnx)
-elseif(WIN32)
-    set(BUILD_OS win)
 endif()
 
 set(GEN_GLSL_EMU_LIB_DEPS
@@ -303,6 +292,7 @@ PUBLIC
     ${PROJECT_SOURCE_DIR}/include
 PRIVATE
     ${PROJECT_SOURCE_DIR}/context
+    ${PROJECT_SOURCE_DIR}/imported/spirv
     ${PROJECT_SOURCE_DIR}/include
     ${PROJECT_SOURCE_DIR}/lower
     ${PROJECT_SOURCE_DIR}/patch
@@ -313,7 +303,6 @@ PRIVATE
     ${PROJECT_SOURCE_DIR}/translator/libSPIRV
     ${PROJECT_SOURCE_DIR}/translator/Mangler
     ${PROJECT_SOURCE_DIR}/util
-    ${PROJECT_SOURCE_DIR}/imported/spirv
     ${XGL_PAL_PATH}/src/core/hw/gfxip/gfx6/chip
     ${XGL_PAL_PATH}/src/core/hw/gfxip/gfx9/chip
     ${XGL_PAL_PATH}/inc/core
@@ -324,17 +313,20 @@ PRIVATE
 target_include_directories(amdllpc PRIVATE ${PROJECT_SOURCE_DIR}/../include/khronos)
 
 if(UNIX)
-if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-    target_compile_options(amdllpc PRIVATE -Wno-unused-parameter -Wno-shift-negative-value -Wno-type-limits -Wno-error=switch -fno-strict-aliasing -Wno-error=sign-compare -Wno-error=parentheses -Wno-error=maybe-uninitialized -Wno-error=delete-non-virtual-dtor -Wno-sign-compare -Wno-error)
-    target_compile_options(amdllpc PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-unused -Wno-unused-parameter -Wno-ignored-qualifiers -Wno-missing-field-initializers -std=c++0x -fno-rtti>)
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        target_compile_options(amdllpc PRIVATE -fno-strict-aliasing)
+        target_compile_options(amdllpc PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-std=c++0x -fno-rtti>)
 
-    message(STATUS "Configured ${PROJECT_NAME} compiler options for GCC.")
-elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
-    #message(STATUS "Configured compiler options for Clang.")
-    message(WARNING "Clang is untested.")
-else()
-    message(FATAL_ERROR "Using unknown compiler.")
-endif()
+        target_compile_options(amdllpc PRIVATE -Wno-unused-parameter -Wno-shift-negative-value -Wno-type-limits -Wno-error=switch -Wno-error=sign-compare -Wno-error=parentheses -Wno-error=maybe-uninitialized -Wno-error=delete-non-virtual-dtor -Wno-sign-compare -Wno-error)
+        target_compile_options(amdllpc PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-unused -Wno-unused-parameter -Wno-ignored-qualifiers -Wno-missing-field-initializers>)
+
+        message(STATUS "Configured ${PROJECT_NAME} compiler options for GCC.")
+    elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+        #message(STATUS "Configured compiler options for Clang.")
+        message(WARNING "Clang is untested.")
+    else()
+        message(FATAL_ERROR "Using unknown compiler.")
+    endif()
 endif()
 
 target_link_libraries(amdllpc PRIVATE llpc dl stdc++)

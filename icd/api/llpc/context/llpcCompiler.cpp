@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  llpcCompiler.cpp
@@ -145,6 +145,18 @@ opt<bool> EnableSpirvOpt("enable-spirv-opt", desc("Enable optimization for SPIR-
 // -auto-layout-desc
 extern opt<bool> AutoLayoutDesc;
 
+// -enable-outs: enable general message output (to stdout or external file).
+extern opt<bool> EnableOuts;
+
+// -enable-errs: enable error message output (to stderr or external file).
+extern opt<bool> EnableErrs;
+
+// -log-file-dbgs: name of the file to log info from dbg()
+extern opt<std::string> LogFileDbgs;
+
+// -log-file-outs: name of the file to log info from LLPC_OUTS() and LLPC_ERRS()
+extern opt<std::string> LogFileOuts;
+
 } // cl
 
 } // llvm
@@ -171,6 +183,7 @@ static const uint8_t GlslNullFsEmuLib[]=
 static ManagedStatic<sys::Mutex> s_compilerMutex;
 
 uint32_t Compiler::m_instanceCount = 0;
+uint32_t Compiler::m_outRedirectCount = 0;
 
 // =====================================================================================================================
 // Handler for LLVM fatal error.
@@ -222,7 +235,7 @@ Result VKAPI_CALL ICompiler::Create(
 
     if (result == Result::Success)
     {
-        *ppCompiler = new Compiler(pClient, gfxIp);
+        *ppCompiler = new Compiler(gfxIp, optionCount, options);
         LLPC_ASSERT(*ppCompiler != nullptr);
     }
     else
@@ -244,16 +257,21 @@ bool VKAPI_CALL ICompiler::IsVertexFormatSupported(
 
 // =====================================================================================================================
 Compiler::Compiler(
-    const char*       pClient,      // [in] Name of the client who calls LLPC
-    GfxIpVersion      gfxIp)        // Graphics IP version info
+    GfxIpVersion      gfxIp,        // Graphics IP version info
+    uint32_t          optionCount,  // Count of compilation-option strings
+    const char*const* pOptions)      // [in] An array of compilation-option strings
     :
-    m_pClientName(pClient),
+    m_pClientName(pOptions[0]),
     m_gfxIp(gfxIp)
 {
+    m_optionHash = GenerateHashForCompileOptions(optionCount, pOptions);
+    if (m_outRedirectCount == 0)
+    {
+        RedirectLogOutput(false, optionCount, pOptions);
+    }
+
     if (m_instanceCount == 0)
     {
-        RedirectLogOutput(false);
-
         // Initialize map table of register names
         if (EnableOuts() || cl::EnablePipelineDump)
         {
@@ -289,6 +307,7 @@ Compiler::Compiler(
     uint32_t shaderCacheMode = cl::ShaderCacheMode;
     auxCreateInfo.shaderCacheMode = static_cast<ShaderCacheMode>(shaderCacheMode);
     auxCreateInfo.gfxIp           = m_gfxIp;
+    auxCreateInfo.hash            = m_optionHash;
     auxCreateInfo.pExecutableName = cl::ExecutableName.c_str();
     auxCreateInfo.pCacheFilePath  = getenv("AMD_SHADER_DISK_CACHE_PATH");
     if (auxCreateInfo.pCacheFilePath == nullptr)
@@ -300,9 +319,11 @@ Compiler::Compiler(
 #endif
     }
 
-    m_shaderCache.Init(&createInfo, &auxCreateInfo);
+    m_shaderCache = ShaderCacheManager::GetShaderCacheManager()->GetShaderCacheObject(&createInfo, &auxCreateInfo);
+
     InitGpuProperty();
     ++m_instanceCount;
+    ++m_outRedirectCount;
 
     // Create one context at initialization time
     auto pContext = AcquireContext();
@@ -324,6 +345,18 @@ Compiler::~Compiler()
         m_contextPool.clear();
     }
 
+    // Restore default output
+    {
+        MutexGuard lock(*s_compilerMutex);
+        -- m_outRedirectCount;
+        if (m_outRedirectCount == 0)
+        {
+            RedirectLogOutput(true, 0, nullptr);
+        }
+
+        ShaderCacheManager::GetShaderCacheManager()->ReleaseShaderCacheObject(m_shaderCache);
+    }
+
     if (strcmp(m_pClientName, VkIcdName) == 0)
     {
         // NOTE: Skip subsequent cleanup work for Vulkan ICD. The work will be done by system itself
@@ -336,7 +369,6 @@ Compiler::~Compiler()
         -- m_instanceCount;
         if (m_instanceCount == 0)
         {
-            RedirectLogOutput(true);
             shutdown = true;
         }
     }
@@ -456,7 +488,7 @@ Result Compiler::BuildGraphicsPipeline(
     if (cl::ShaderReplaceMode != ShaderReplaceDisable)
     {
         char pipelineHash[64];
-        int32_t length = snprintf(pipelineHash, 64, "0x%016llX", Md5::Compact64(&hash));
+        int32_t length = snprintf(pipelineHash, 64, "0x%016" PRIX64, Md5::Compact64(&hash));
         LLPC_ASSERT(length >= 0);
 
         bool hashMatch = true;
@@ -488,7 +520,7 @@ Result Compiler::BuildGraphicsPipeline(
                         const_cast<PipelineShaderInfo*>(shaderInfo[stage])->pModuleData = pModuleData;
 
                         char shaderHash[64] = {};
-                        int32_t length = snprintf(shaderHash, 64, "0x%016llX", Md5::Compact64(&restoreModuleData[stage]->hash));
+                        int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, Md5::Compact64(&restoreModuleData[stage]->hash));
                         LLPC_ASSERT(length >= 0);
                         LLPC_OUTS("// Shader replacement for shader: " << shaderHash << ", in pipeline: " << pipelineHash << "\n");
                     }
@@ -509,7 +541,7 @@ Result Compiler::BuildGraphicsPipeline(
     {
         LLPC_OUTS("===============================================================================\n");
         LLPC_OUTS("// LLPC calculated hash results (graphics pipline)\n");
-        LLPC_OUTS("PIPE : " << format("0x%016llX", Md5::Compact64(&hash)) << "\n");
+        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, Md5::Compact64(&hash)) << "\n");
         for (uint32_t stage = 0; stage < ShaderStageGfxCount; ++stage)
         {
             const ShaderModuleData* pModuleData =
@@ -517,7 +549,7 @@ Result Compiler::BuildGraphicsPipeline(
             if (pModuleData != nullptr)
             {
                 LLPC_OUTS(format("%-4s : ", GetShaderStageAbbreviation(static_cast<ShaderStage>(stage), true)) <<
-                          format("0x%016llX", Md5::Compact64(&pModuleData->hash)) << "\n");
+                          format("0x%016" PRIX64, Md5::Compact64(&pModuleData->hash)) << "\n");
             }
         }
         LLPC_OUTS("\n");
@@ -537,10 +569,10 @@ Result Compiler::BuildGraphicsPipeline(
     ShaderEntryState cacheEntryState = ShaderEntryState::New;
     ShaderCache* pShaderCache = (pPipelineInfo->pShaderCache != nullptr) ?
                                     static_cast<ShaderCache*>(pPipelineInfo->pShaderCache) :
-                                    &m_shaderCache;
+                                    m_shaderCache.get();
     if (cl::ShaderCacheMode == ShaderCacheForceInternalCacheOnDisk)
     {
-        pShaderCache = &m_shaderCache;
+        pShaderCache = m_shaderCache.get();
     }
 
     if (result == Result::Success)
@@ -981,7 +1013,7 @@ Result Compiler::BuildComputePipeline(
     if (cl::ShaderReplaceMode != ShaderReplaceDisable)
     {
         char pipelineHash[64];
-        int32_t length = snprintf(pipelineHash, 64, "0x%016llX", Md5::Compact64(&hash));
+        int32_t length = snprintf(pipelineHash, 64, "0x%016" PRIX64, Md5::Compact64(&hash));
         LLPC_ASSERT(length >= 0);
 
         bool hashMatch = true;
@@ -1010,7 +1042,7 @@ Result Compiler::BuildComputePipeline(
                     const_cast<PipelineShaderInfo*>(&pPipelineInfo->cs)->pModuleData = pModuleData;
 
                     char shaderHash[64];
-                    int32_t length = snprintf(shaderHash, 64, "0x%016llX", Md5::Compact64(&pRestoreModuleData->hash));
+                    int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, Md5::Compact64(&pRestoreModuleData->hash));
                     LLPC_ASSERT(length >= 0);
                     LLPC_OUTS("// Shader replacement for shader: " << shaderHash << ", in pipeline: " << pipelineHash << "\n");
                 }
@@ -1031,9 +1063,9 @@ Result Compiler::BuildComputePipeline(
         const ShaderModuleData* pModuleData = reinterpret_cast<const ShaderModuleData*>(pPipelineInfo->cs.pModuleData);
         LLPC_OUTS("===============================================================================\n");
         LLPC_OUTS("// LLPC calculated hash results (compute pipline)\n");
-        LLPC_OUTS("PIPE : " << format("0x%016llX", Md5::Compact64(&hash)) << "\n");
+        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, Md5::Compact64(&hash)) << "\n");
         LLPC_OUTS(format("%-4s : ", GetShaderStageAbbreviation(ShaderStageCompute, true)) <<
-                  format("0x%016llX", Md5::Compact64(&pModuleData->hash)) << "\n");
+                  format("0x%016" PRIX64, Md5::Compact64(&pModuleData->hash)) << "\n");
         LLPC_OUTS("\n");
     }
 
@@ -1050,10 +1082,10 @@ Result Compiler::BuildComputePipeline(
     ShaderEntryState cacheEntryState = ShaderEntryState::New;
     ShaderCache* pShaderCache = (pPipelineInfo->pShaderCache != nullptr) ?
                                     static_cast<ShaderCache*>(pPipelineInfo->pShaderCache) :
-                                    &m_shaderCache;
+                                    m_shaderCache.get();
     if (cl::ShaderCacheMode == ShaderCacheForceInternalCacheOnDisk)
     {
-        pShaderCache = &m_shaderCache;
+        pShaderCache = m_shaderCache.get();
     }
 
     if (result == Result::Success)
@@ -1312,7 +1344,7 @@ Result Compiler::ReplaceShader(
 {
     uint64_t shaderHash = Md5::Compact64(&pOrigModuleData->hash);
     char fileName[64];
-    int32_t length = snprintf(fileName, 64, "Shader_0x%016llX_replace.spv", shaderHash);
+    int32_t length = snprintf(fileName, 64, "Shader_0x%016" PRIX64 "_replace.spv", shaderHash);
     LLPC_ASSERT(length >= 0);
     std::string replaceFileName = cl::ShaderReplaceDir;
     replaceFileName += "/";
@@ -1680,6 +1712,67 @@ void Compiler::UpdateHashForResourceMappingNode(
 }
 
 // =====================================================================================================================
+// Builds MD5 hash code from compilation-options
+Md5::Hash Compiler::GenerateHashForCompileOptions(
+    uint32_t          optionCount,    // Count of compilation-option strings
+    const char*const* pOptions         // [in] An array of compilation-option strings
+    ) const
+{
+    // Options which needn't affect compilation results
+    static StringRef IgnoredOptions[] =
+    {
+        cl::PipelineDumpDir.ArgStr,
+        cl::EnablePipelineDump.ArgStr,
+        cl::DisableWipFeatures.ArgStr,
+        cl::EnableTimeProfiler.ArgStr,
+        cl::ShaderCacheMode.ArgStr,
+        cl::ShaderReplaceMode.ArgStr,
+        cl::ShaderReplaceDir.ArgStr,
+        cl::ShaderReplacePipelineHashes.ArgStr,
+        cl::EnablePipelineDump.ArgStr,
+        cl::EnableOuts.ArgStr,
+        cl::EnableErrs.ArgStr,
+        cl::LogFileDbgs.ArgStr,
+        cl::LogFileOuts.ArgStr,
+    };
+
+    std::set<StringRef> effectingOptions;
+    // Build effecting options
+    for (uint32_t i = 1; i < optionCount; ++i)
+    {
+        StringRef option = pOptions[i];
+        bool ignore = false;
+        for (uint32_t j = 0; j < sizeof(IgnoredOptions) / sizeof(IgnoredOptions[0]); ++j)
+        {
+            if (option.startswith(IgnoredOptions[j]))
+            {
+                ignore = true;
+                break;
+            }
+        }
+
+        if (ignore == false)
+        {
+            effectingOptions.insert(option);
+        }
+    }
+
+    Md5::Context checksumCtx = {};
+    Md5::Hash    hash       = {};
+
+    Md5::Init(&checksumCtx);
+    // Build hash code from effecting options
+    for (auto option : effectingOptions)
+    {
+        Md5::Update(&checksumCtx, option.data(), option.size());
+    }
+
+    Md5::Final(&checksumCtx, &hash);
+
+    return hash;
+}
+
+// =====================================================================================================================
 // Checks whether fields in pipeline shader info are valid.
 Result Compiler::ValidatePipelineShaderInfo(
     ShaderStage               shaderStage,    // Shader stage
@@ -1795,6 +1888,7 @@ Result Compiler::CreateShaderCache(
     ShaderCacheAuxCreateInfo auxCreateInfo = {};
     auxCreateInfo.shaderCacheMode = ShaderCacheMode::ShaderCacheEnableRuntime;
     auxCreateInfo.gfxIp           = m_gfxIp;
+    auxCreateInfo.hash            = m_optionHash;
 
     ShaderCache* pShaderCache = new ShaderCache();
 
@@ -1928,7 +2022,7 @@ void Compiler::DumpTimeProfilingResult(
     int64_t fre = {};
     fre = GetPerfFrequency();
     char shaderHash[64] = {};
-    int32_t length = snprintf(shaderHash, 64, "0x%016llX", Md5::Compact64(pHash));
+    int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, Md5::Compact64(pHash));
     // NOTE: To get correct profile result, we have to disable general info output, so we have to output time profile
     // result to LLPC_ERRS
     LLPC_ERRS("Time Profiling Results(General): "

@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  llpcPatchDescriptorLoad.cpp
@@ -266,7 +266,7 @@ void PatchDescriptorLoad::visitCallInst(
                         SqBufRsrcWord2 sqBufRsrcWord2 = {};
                         SqBufRsrcWord3 sqBufRsrcWord3 = {};
 
-                        sqBufRsrcWord1.bits.BASE_ADDRESS_HI = UINT32_MAX;
+                        sqBufRsrcWord1.bits.BASE_ADDRESS_HI = UINT16_MAX;
                         sqBufRsrcWord2.bits.NUM_RECORDS = (m_pContext->GetGfxIpVersion().major == 6) ?
                                                           UINT16_MAX :
                                                           UINT32_MAX;
@@ -373,7 +373,7 @@ void PatchDescriptorLoad::visitCallInst(
                     SqBufRsrcWord2 sqBufRsrcWord2 = {};
                     SqBufRsrcWord3 sqBufRsrcWord3 = {};
 
-                    sqBufRsrcWord1.bits.BASE_ADDRESS_HI = UINT32_MAX;
+                    sqBufRsrcWord1.bits.BASE_ADDRESS_HI = UINT16_MAX;
                     sqBufRsrcWord2.bits.NUM_RECORDS = UINT32_MAX;
 
                     sqBufRsrcWord3.bits.DST_SEL_X = BUF_DST_SEL_X;

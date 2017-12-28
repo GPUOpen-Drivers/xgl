@@ -1,0 +1,12 @@
+# Operators
+genI64Type smod genI64Type x genI64Type y : llpc.mod.i64 #0
+
+# Common Functions
+genI64Type sabs genI64Type x : llpc.sabs.i64 #0
+genI64Type ssign genI64Type x : llpc.ssign.i64 #0
+genI64Type smin genI64Type x genI64Type y : llpc.sminnum.i64 #0
+genU64Type umin genU64Type x genU64Type y : llpc.uminnum.i64 #0
+genI64Type smax genI64Type x genI64Type y : llpc.smaxnum.i64 #0
+genI64Type umax genI64Type x genI64Type y : llpc.umaxnum.i64 #0
+genI64Type sclamp genI64Type x genI64Type minVal genI64Type maxVal : llpc.sclamp.i64 #0
+genU64Type uclamp genU64Type x genU64Type minVal genU64Type maxVal : llpc.uclamp.i64 #0

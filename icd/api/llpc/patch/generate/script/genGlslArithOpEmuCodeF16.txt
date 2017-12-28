@@ -1,0 +1,47 @@
+# Operators
+genF16Type fdiv genF16Type y genF16Type x : llpc.fdiv.f16 #0
+
+# Angle and Trigonometry Functions
+genF16Type sin genF16Type angle : llvm.sin.f16
+genF16Type cos genF16Type angle : llvm.cos.f16
+genF16Type tan genF16Type angle : llpc.tan.f16
+genF16Type asin genF16Type x : llpc.asin.f16
+genF16Type acos genF16Type x : llpc.acos.f16
+genF16Type atan genF16Type x : llpc.atan.f16
+genF16Type atan2 genF16Type y genF16Type x  : llpc.atan2.f16
+genF16Type sinh genF16Type x : llpc.sinh.f16
+genF16Type cosh genF16Type x : llpc.cosh.f16
+genF16Type tanh genF16Type x : llpc.tanh.f16
+genF16Type asinh genF16Type x : llpc.asinh.f16
+genF16Type acosh genF16Type x : llpc.acosh.f16
+genF16Type atanh genF16Type x : llpc.atanh.f16
+
+# Exponential Functions
+genF16Type pow genF16Type x genF16Type y : llpc.pow.f16
+genF16Type exp genF16Type x : llpc.exp.f16
+genF16Type log genF16Type x : llpc.log.f16
+genF16Type exp2 genF16Type x : llvm.exp2.f16
+genF16Type log2 genF16Type x : llvm.log2.f16
+genF16Type sqrt genF16Type x : llvm.sqrt.f16 #0
+genF16Type inverseSqrt genF16Type x : llpc.inverseSqrt.f16 #0
+
+# Common Functions
+genF16Type fabs genF16Type x : llvm.fabs.f16 #0
+genF16Type fsign genF16Type x : llpc.fsign.f16 #0
+genF16Type floor genF16Type x : llvm.floor.f16 #0
+genF16Type trunc genF16Type x : llvm.trunc.f16 #0
+genF16Type round genF16Type x : llpc.round.f16 #0
+genF16Type roundEven genF16Type x : llvm.rint.f16 #0
+genF16Type ceil genF16Type x : llvm.ceil.f16 #0
+genF16Type fract genF16Type x : llpc.fract.f16 #0
+genF16Type fmod genF16Type x genF16Type y : llpc.mod.f16 #0
+genF16Type fmin genF16Type x genF16Type y : llvm.minnum.f16 #0
+genF16Type fmax genF16Type x genF16Type y : llvm.maxnum.f16 #0
+genF16Type fclamp genF16Type x genF16Type minVal genF16Type maxVal : llpc.fclamp.f16 #0
+genF16Type fmix genF16Type x genF16Type y genF16Type a : llpc.fmix.f16 #0
+genF16Type step genF16Type edge genF16Type x : llpc.step.f16 #0
+genF16Type smoothStep genF16Type edge0 genF16Type edge1 genF16Type x : llpc.smoothStep.f16 #0
+genBType isinf genF16Type value : llpc.isinf.f16 #0
+genBType isnan genF16Type value : llpc.isnan.f16 #0
+genF16Type fma genF16Type a genF16Type b genF16Type c : llvm.fma.f16 #0
+genF16Type ldexp genF16Type x genIType exp : llvm.amdgcn.ldexp.f16 #1

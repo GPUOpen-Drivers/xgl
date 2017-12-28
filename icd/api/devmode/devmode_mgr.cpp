@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  devmode_mgr.cpp
@@ -248,13 +248,13 @@ void DevModeMgr::PrePresent(const Queue* pQueue)
 
     if ((pRGPServer != nullptr) && pRGPServer->TracesEnabled())
     {
-        // If there's currently a trace running, submit the trace-end command buffer
-        if (m_trace.status == TraceStatus::Running)
-        {
-            Device* pPresentDevice = pQueue->VkDevice();
+        Device* pPresentDevice = pQueue->VkDevice();
 
-            // Only act if this present is coming from the same device that started the trace
-            if (m_trace.pDevice == pPresentDevice)
+        // Only act if this present is coming from the same device that started the trace
+        if (m_trace.pDevice == pPresentDevice)
+        {
+            // If there's currently a trace running, submit the trace-end command buffer
+            if (m_trace.status == TraceStatus::Running)
             {
                 Util::MutexAuto traceLock(&m_traceMutex);
 
@@ -270,6 +270,17 @@ void DevModeMgr::PrePresent(const Queue* pQueue)
                         }
                     }
                 }
+            }
+
+            if (IsQueueTimingActive(pPresentDevice))
+            {
+                // Call TimedQueuePresent() to insert commands that collect GPU timestamp.
+                Pal::IQueue* pPalQueue = pQueue->PalQueue();
+
+                // Currently nothing in the PresentInfo struct is used for inserting a timed present marker.
+                GpuUtil::TimedQueuePresentInfo timedPresentInfo = {};
+                Pal::Result result = m_trace.pGpaSession->TimedQueuePresent(pPalQueue, timedPresentInfo);
+                VK_ASSERT(result == Pal::Result::Success);
             }
         }
     }
@@ -1361,9 +1372,12 @@ Pal::Result DevModeMgr::InitTraceQueueFamilyResources(
                 const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
                 Pal::BarrierInfo barrierInfo = {};
 
-                barrierInfo.waitPoint = Pal::HwPipeTop;
-                barrierInfo.pipePointWaitCount = 1;
-                barrierInfo.pPipePoints = &pipePoint;
+                // This code by definition does not execute during SQ thread tracing so this barrier doesn't need to be
+                // identified.
+                barrierInfo.reason              = RgpBarrierUnknownReason;
+                barrierInfo.waitPoint           = Pal::HwPipeTop;
+                barrierInfo.pipePointWaitCount  = 1;
+                barrierInfo.pPipePoints         = &pipePoint;
 
                 pTraceFlushCmdBuf->CmdBarrier(barrierInfo);
             }

@@ -1,0 +1,12 @@
+# Operators
+genI16Type smod genI16Type x genI16Type y : llpc.mod.i16 #0
+
+# Common Functions
+genI16Type sabs genI16Type x : llpc.sabs.i16 #0
+genI16Type ssign genI16Type x : llpc.ssign.i16 #0
+genI16Type smin genI16Type x genI16Type y : llpc.sminnum.i16 #0
+genU16Type umin genU16Type x genU16Type y : llpc.uminnum.i16 #0
+genI16Type smax genI16Type x genI16Type y : llpc.smaxnum.i16 #0
+genI16Type umax genI16Type x genI16Type y : llpc.umaxnum.i16 #0
+genI16Type sclamp genI16Type x genI16Type minVal genI16Type maxVal : llpc.sclamp.i16 #0
+genU16Type uclamp genU16Type x genU16Type minVal genU16Type maxVal : llpc.uclamp.i16 #0

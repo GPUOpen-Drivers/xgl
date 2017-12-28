@@ -483,7 +483,7 @@ enum Spir2SamplerKind {
   CLK_FILTER_LINEAR           = 0x0020,
 };
 
-enum SPIRVImageOpKind : uint32_t {
+enum SPIRVImageOpKind {
   ImageOpSample,
   ImageOpFetch,
   ImageOpGather,
@@ -554,7 +554,7 @@ typedef SPIRVMap<Op, std::string, ImageQueryOpKindNameMapId> SPIRVImageQueryOpKi
 
 union SPIRVImageOpInfo {
   struct {
-    SPIRVImageOpKind OpKind               : 5;  // Kind of image operation
+    SPIRVImageOpKind OpKind               : 6;  // Kind of image operation
     uint32_t         OperMask             : 3;  // Index of image operand mask
     uint32_t         OperDref             : 3;  // Index of Dref operand
     uint32_t         HasProj              : 1;  // Whether project is present
@@ -565,7 +565,7 @@ union SPIRVImageOpInfo {
                                                 // operand (valid for
                                                 // CompareExchange)
 
-    uint32_t         Unused   : 13;
+    uint32_t         Unused   : 12;
   };
   uint32_t           U32All;
 };
@@ -1282,12 +1282,12 @@ struct ShaderBlockDecorate {
 /// Metadata for image emulation call.
 union ShaderImageCallMetadata {
   struct {
-    SPIRVImageOpKind  OpKind        : 5;  // Kind of image operation
+    SPIRVImageOpKind  OpKind        : 6;  // Kind of image operation
     uint32_t          Dim           : 3;  // Image dimension
     uint32_t          Arrayed       : 1;  // Whether image is arrayed
     uint32_t          Multisampled  : 1;  // Whether image is multisampled
 
-    uint32_t          Unused        : 15;
+    uint32_t          Unused        : 14;
   };
   uint32_t U32All;
 };

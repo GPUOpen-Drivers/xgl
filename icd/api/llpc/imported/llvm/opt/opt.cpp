@@ -22,7 +22,11 @@
 #include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/Analysis/TargetTransformInfo.h"
 #include "llvm/Bitcode/BitcodeWriterPass.h"
+#ifdef LLVM_SOURCE_PROMOTION
+#include "llvm/CodeGen/CommandFlags.def"
+#else
 #include "llvm/CodeGen/CommandFlags.h"
+#endif
 #include "llvm/CodeGen/TargetPassConfig.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfo.h"

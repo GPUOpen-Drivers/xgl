@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
  /**
  ***********************************************************************************************************************
  @file llpcShaderCache.cpp
@@ -30,6 +30,7 @@
 */
 #define DEBUG_TYPE "llpc-shader-cache"
 
+#include <string.h>
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/FileSystem.h"
 
@@ -307,6 +308,7 @@ Result ShaderCache::Init(
         m_pfnGetValueFunc   = pCreateInfo->pfnGetValueFunc;
         m_pfnStoreValueFunc = pCreateInfo->pfnStoreValueFunc;
         m_gfxIp             = pAuxCreateInfo->gfxIp;
+        m_hash              = pAuxCreateInfo->hash;
 
         LockCacheMap(false);
 
@@ -939,7 +941,7 @@ Result ShaderCache::ValidateAndLoadHeader(
         (memcmp(pHeader->buildId.buildDate, buildId.buildDate, sizeof(buildId.buildDate)) == 0) &&
         (memcmp(pHeader->buildId.buildTime, buildId.buildTime, sizeof(buildId.buildTime)) == 0) &&
         (memcmp(&pHeader->buildId.gfxIp, &buildId.gfxIp, sizeof(buildId.gfxIp)) == 0) &&
-        (pHeader->buildId.descTablePtrHigh == buildId.descTablePtrHigh))
+        (memcmp(&pHeader->buildId.hash, &buildId.hash, sizeof(buildId.hash)) == 0))
     {
         // The header appears valid so copy the header data to the runtime cache
         m_totalShaders  = pHeader->shaderCount;
@@ -981,7 +983,21 @@ void ShaderCache::GetBuildTime(
     memcpy(&pBuildId->buildDate, __DATE__, std::min(strlen(__DATE__), sizeof(pBuildId->buildDate)));
     memcpy(&pBuildId->buildTime, __TIME__, std::min(strlen(__TIME__), sizeof(pBuildId->buildTime)));
     memcpy(&pBuildId->gfxIp, &m_gfxIp, sizeof(m_gfxIp));
-    pBuildId->descTablePtrHigh = cl::DescTablePtrHigh;
+    memcpy(&pBuildId->hash, &m_hash, sizeof(m_hash));
+}
+
+// =====================================================================================================================
+// Check if the shader cache creation info is compatible
+bool ShaderCache::IsCompatible(
+    const ShaderCacheCreateInfo*    pCreateInfo,    // [in] Shader cache create info
+    const ShaderCacheAuxCreateInfo* pAuxCreateInfo) // [in] Shader cache auxiliary info (static fields)
+{
+    // Check hash first
+    bool isCompatible = (memcmp(&(pAuxCreateInfo->hash), &m_hash, sizeof(m_hash)) == 0);
+
+    return isCompatible && (m_gfxIp.major == pAuxCreateInfo->gfxIp.major) &&
+        (m_gfxIp.minor == pAuxCreateInfo->gfxIp.minor) &&
+        (m_gfxIp.stepping == pAuxCreateInfo->gfxIp.stepping);
 }
 
 } // Llpc

@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  llpcPatchEntryPointMutate.cpp
@@ -46,6 +46,28 @@
 
 using namespace llvm;
 using namespace Llpc;
+
+namespace llvm
+{
+
+namespace cl
+{
+
+// -vgpr-limit: maximum VGPR limit for this shader
+static opt<uint32_t> VgprLimit("vgpr-limit", desc("Maximum VGPR limit for this shader"), init(0));
+
+// -sgpr-limit: maximum SGPR limit for this shader
+static opt<uint32_t> SgprLimit("sgpr-limit", desc("Maximum SGPR limit for this shader"), init(0));
+
+// -waves-per-eu: the range of waves per EU for this shader
+static opt<std::string> WavesPerEu("waves-per-eu",
+                                   desc("The range of waves per EU for this shader"),
+                                   value_desc("minVal,maxVal"),
+                                   init(""));
+
+} // cl
+
+} // llvm
 
 namespace Llpc
 {
@@ -101,6 +123,7 @@ bool PatchEntryPointMutate::runOnModule(
     CloneFunctionInto(pEntryPoint, pOrigEntryPoint, valueMap, false, retInsts);
 
     // Set Attributes on cloned function here as some are overwritten during CloneFunctionInto otherwise
+    AttrBuilder builder;
     if (m_shaderStage == ShaderStageFragment)
     {
         auto& builtInUsage = m_pContext->GetShaderResourceUsage(ShaderStageFragment)->builtInUsage.fs;
@@ -122,12 +145,26 @@ bool PatchEntryPointMutate::runOnModule(
         spiPsInputAddr.ANCILLARY_ENA        = builtInUsage.sampleId;
         spiPsInputAddr.SAMPLE_COVERAGE_ENA  = builtInUsage.sampleMaskIn;
 
-        AttrBuilder builder;
         builder.addAttribute("InitialPSInputAddr", std::to_string(spiPsInputAddr.u32All));
-
-        AttributeList::AttrIndex attribIdx = AttributeList::AttrIndex(AttributeList::FunctionIndex);
-        pEntryPoint->addAttributes(attribIdx, builder);
     }
+
+    if (cl::VgprLimit != 0)
+    {
+        builder.addAttribute("amdgpu-num-vgpr", std::to_string(cl::VgprLimit));
+    }
+
+    if (cl::SgprLimit != 0)
+    {
+        builder.addAttribute("amdgpu-num-sgpr", std::to_string(cl::SgprLimit));
+    }
+
+    if (cl::WavesPerEu.empty() == false)
+    {
+        builder.addAttribute("amdgpu-waves-per-eu", cl::WavesPerEu);
+    }
+
+    AttributeList::AttrIndex attribIdx = AttributeList::AttrIndex(AttributeList::FunctionIndex);
+    pEntryPoint->addAttributes(attribIdx, builder);
 
     // Update attributes of new entry-point
     for (auto pArg = pEntryPoint->arg_begin(), pEnd = pEntryPoint->arg_end(); pArg != pEnd; ++pArg)

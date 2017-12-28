@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  llpcPassNonNativeFuncRemove.cpp
@@ -85,9 +85,10 @@ bool PassNonNativeFuncRemove::runOnModule(
     // Collect non-native functions
     for (auto pFunc = module.begin(), pEnd = module.end(); pFunc != pEnd; ++pFunc)
     {
-        auto funcName = pFunc->getName();
         if (pFunc->isDeclaration())
         {
+            auto funcName = pFunc->getName();
+
             // TODO: "llvm.fabs." is to pass CTS dEQP-VK.ssbo.layout.single_basic_type.std430/std140.row_major_lowp_mat4.
             // we should it once the bug in LLVM back-end is fixed.
             if (funcName.startswith("llpc.") ||
@@ -106,13 +107,13 @@ bool PassNonNativeFuncRemove::runOnModule(
 
         if (cl::DisableLLVMPatch == false)
         {
-            if (funcName.startswith("_Z14unpackHalf2x16i"))
+            if (pFunc->getName().startswith("_Z14unpackHalf2x16i"))
             {
                 nonNativeFuncs.insert(&*pFunc);
             }
         }
 
-        if (funcName.startswith("_Z") && funcName.find("Atomic") != StringRef::npos)
+        if (pFunc->getName().startswith("_Z") && (pFunc->getName().find("Atomic") != StringRef::npos))
         {
             nonNativeFuncs.insert(&*pFunc);
         }

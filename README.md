@@ -19,4 +19,5 @@ Both SPIR-V translator and Lower are machine independent.
 XGL contains code written by third parties:
 * SPIRV-LLVM translator is distributed under the terms of University of Illinois/NCSA Open Source License. See icd/api/llpc/translator/LICENSE.TXT.  
 * LLVM opt is distributed under the terms of University of Illinois/NCSA Open Source License. See icd/api/llpc/imported/llvm/opt/LICENSE.TXT.
-* SPIRV-Tools is distributed under the terms of Apache License version 2.0. See /icd/api/llpc/translator/hex_float.h and bitutils.h.
+* SPIRV-Tools is distributed under the terms of Apache License version 2.0. See icd/api/llpc/translator/hex_float.h and bitutils.h.
+* Metrohash is distributed under the terms of MIT License. See icd/api/llpc/imported/metrohash/metrohash-license.

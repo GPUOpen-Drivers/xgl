@@ -1,3 +1,15 @@
+##
+ #######################################################################################################################
+ #
+ #  Trade secret of Advanced Micro Devices, Inc.
+ #  Copyright (c) 2017, Advanced Micro Devices, Inc., (unpublished)
+ #
+ #  All rights reserved. This notice is intended as a precaution against inadvertent publication and does not imply
+ #  publication or any waiver of confidentiality. The year included in the foregoing notice is the year of creation of
+ #  the work.
+ #
+ #######################################################################################################################
+
 cmake_minimum_required(VERSION 3.5)
 project(XGL VERSION 1 LANGUAGES C CXX)
 
@@ -11,7 +23,6 @@ option(VK_INTERNAL_DEVELOPER "Build Internal Developer Build?" OFF)
 
 option(ICD_OPEN_SOURCE "Build open source Vulkan?" ON)
 option(ICD_BUILD_LLPC "Build LLPC?" ON)
-option(ICD_BUILD_SCPC "Build SCPC?" OFF)
 
 option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 option(ICD_BUILD_SPVONLY "Build SPV Only?" OFF)
@@ -23,63 +34,11 @@ endif()
 
 option(USE_NEXT_SDK "Use next SDK?" OFF)
 
-option(ICD_BUILD_GFX9 "GFX9 Support?" ON)
-
 option(ICD_BUILD_VIDEO "Build Video Support?" OFF)
-
-# get multithreaded libc  (/MTd)
-#set(MULTI_THREAD_LIBC 1)
-
-# if(ICD_OS_BUILD)
-#     if(${ICD_OS_BUILD} EQUAL w8)
-#         # win_commondefs still generates softice symbols for 32-bit builds by default
-#         set(DEBUG_NO_NMSYM 1)
-#         set(DEBUG_NO_MAPSYM 1)
-#     endif()
-
-#     if(${ICD_OS_BUILD} EQUAL w864a)
-#         set(DEBUG_NO_MAPSYM 1)
-#     endif()
-
-#     if(${ICD_OS_BUILD} EQUAL wNow)
-#         # win_commondefs still generates softice symbols for 32-bit builds by default
-#         set(DEBUG_NO_NMSYM 1)
-#         set(DEBUG_NO_MAPSYM 1)
-#     endif()
-
-#     if(${ICD_OS_BUILD} EQUAL wNow64a)
-#         set(DEBUG_NO_MAPSYM 1)
-#     endif()
-
-#     if(${ICD_OS_BUILD} EQUAL wNxt)
-#         # win_commondefs still generates softice symbols for 32-bit builds by default
-#         set(DEBUG_NO_NMSYM 1)
-#         set(DEBUG_NO_MAPSYM 1)
-#     endif()
-
-#     if(${ICD_OS_BUILD} EQUAL wNxt64a)
-#         set(DEBUG_NO_MAPSYM 1)
-#         set(ICD_COMPILE_TYPE 64a)
-#     endif()
-
-#     if(${ICD_OS_BUILD} EQUAL lnx)
-#         set(DEBUG_NO_NMSYM 1)
-#         set(DEBUG_NO_MAPSYM 1)
-#     endif()
-
-#     if(${ICD_OS_BUILD} EQUAL lnx64a)
-#         set(DEBUG_NO_NMSYM 1)
-#         set(DEBUG_NO_MAPSYM 1)
-#     endif()
-
-#     set(ICD_BUILD_ROOT ${ICD_DEPTH}/build/${ICD_OS_BUILD})
-# endif()
 
 option(ICD_GPUOPEN_DEVMODE_BUILD "Build ${PROJECT_NAME} with GPU Open Developer Mode driver support?" ON)
 
 option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})
-
-cmake_dependent_option(ICD_ANALYSIS_WARNINGS_AS_ERRORS "Warnings as errors?" ON "WIN32" OFF)
 
 # Option Overrides #################################################################################
 # These are options that override XGL subproject options.  As these overrides are managed and force
@@ -114,24 +73,17 @@ endif()
 
 # PAL
 set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/icd/imported/pal CACHE PATH "Specify the path to the PAL project.")
-set(PAL_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_PAL_CLIENT_MAJOR_VERSION} CACHE STRING "XGL override." FORCE)
+set(PAL_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_PAL_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(PAL_CLIENT "VULKAN" CACHE STRING "${PROJECT_NAME} override." FORCE)
 
 set(PAL_DEVELOPER_BUILD ${VK_INTERNAL_DEVELOPER} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 if(ICD_BUILD_SPVONLY)
     set(PAL_ENABLE_PRINTS_ASSERTS ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 endif()
+
 set(PAL_MEMTRACK ${ICD_MEMTRACK} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GPUOPEN ${ICD_GPUOPEN_DEVMODE_BUILD} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_VIDEO ${ICD_BUILD_VIDEO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-
-set(XGL_SC_PATH ${PROJECT_SOURCE_DIR}/icd/imported/sc CACHE PATH "Specify the path to the SC project.")
-set(PAL_SC_PATH ${XGL_SC_PATH} CACHE PATH "${PROJECT_NAME} override." FORCE)
-set(PAL_BUILD_GFX9 ${ICD_BUILD_GFX9} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-
-# SC
-set(SC_CLIENT_INTERFACE_MAJOR_VERSION ${SC_CLIENT_MAJOR_VERSION} CACHE STRING "XGL override." FORCE)
-set(SC_DUMP_SHADERS ${ICD_BUILD_SPVONLY} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 # LLVM
 set(XGL_LLVM_SRC_PATH ${PROJECT_SOURCE_DIR}/icd/imported/llvm CACHE PATH "Specify the path to the LLVM.")
@@ -139,10 +91,7 @@ set(XGL_LLVM_SRC_PATH ${PROJECT_SOURCE_DIR}/icd/imported/llvm CACHE PATH "Specif
 ### Generator Dependencies #############################################################################################
 find_package(PythonInterp 3)
 if(NOT PYTHONINTERP_FOUND)
-    if(WIN32)
-        set(PYTHON_EXECUTABLE ${XGL_PAL_PATH}/tools/python33/python.exe)
-        message(STATUS "Using the Python found at ${PYTHON_EXECUTABLE} instead.")
-    else()
+    if(UNIX)
         message(FATAL_ERROR "Python 3 is needed to generate some source files.")
     endif()
 endif()
@@ -150,10 +99,7 @@ set(PYTHON_CMD ${PYTHON_EXECUTABLE})
 
 find_package(Perl 5)
 if(NOT PERL_FOUND)
-    if(WIN32 AND DEFINED GLOBAL_ROOT_DK_DIR)
-        set(PERL_EXECUTABLE ${GLOBAL_ROOT_DK_DIR}/perl/5.16.1/bin/Perl.exe)
-        message(STATUS "Using the Perl found at ${PERL_EXECUTABLE} instead.")
-    else()
+    if(UNIX)
         message(FATAL_ERROR "Perl 5 is needed to generate some source files.")
     endif()
 endif()

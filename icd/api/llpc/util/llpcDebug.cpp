@@ -1,27 +1,27 @@
 /*
- *******************************************************************************
+ ***********************************************************************************************************************
  *
- * Copyright (c) 2017 Advanced Micro Devices, Inc. All rights reserved.
+ *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to deal
- * in the Software without restriction, including without limitation the rights
- * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
- * copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
  *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
  *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.  IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
- * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
- * THE SOFTWARE.
- ******************************************************************************/
-
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
+ *
+ **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
  * @file  llpcDebug.cpp
@@ -54,28 +54,28 @@ namespace cl
 {
 
 // -enable-outs: enable general message output (to stdout or external file).
-static opt<bool> EnableOuts(
+opt<bool> EnableOuts(
     "enable-outs",
     desc("Enable general message output (to stdout or external file) (default: true)"),
     init(true));
 
 // -enable-errs: enable error message output (to stderr or external file).
-static opt<bool> EnableErrs(
+opt<bool> EnableErrs(
     "enable-errs",
     desc("Enable error message output (to stdout or external file) (default: true)"),
     init(true));
 
 // -log-file-dbgs: name of the file to log info from dbg()
-static opt<std::string> LogFileDbgs("log-file-dbgs",
-                                    desc("Name of the file to log info from dbgs()"),
-                                    value_desc("filename"),
-                                    init("llpcLog.txt"));
+opt<std::string> LogFileDbgs("log-file-dbgs",
+                             desc("Name of the file to log info from dbgs()"),
+                             value_desc("filename"),
+                             init("llpcLog.txt"));
 
 // -log-file-outs: name of the file to log info from LLPC_OUTS() and LLPC_ERRS()
-static opt<std::string> LogFileOuts("log-file-outs",
-                                    desc("Name of the file to log info from LLPC_OUTS() and LLPC_ERRS()"),
-                                    value_desc("filename"),
-                                    init(""));
+opt<std::string> LogFileOuts("log-file-outs",
+                             desc("Name of the file to log info from LLPC_OUTS() and LLPC_ERRS()"),
+                             value_desc("filename"),
+                             init(""));
 
 } // cl
 
@@ -112,8 +112,8 @@ bool EnableErrs()
 // =====================================================================================================================
 // Translates enum "ResourceMappingNodeType" to string and output to ostream.
 raw_ostream& operator<<(
-    raw_ostream&                       out,   // [out] Output stream
-    enum class ResourceMappingNodeType type)  // Resource map node type
+    raw_ostream&            out,   // [out] Output stream
+    ResourceMappingNodeType type)  // Resource map node type
 {
     const char* pString = nullptr;
     switch (type)
@@ -680,7 +680,7 @@ std::string GetSpirvBinaryFileName(
 {
     uint64_t hashCode64 = Md5::Compact64(pHash);
     char     fileName[64] = {};
-    auto     length = snprintf(fileName, 64, "Shader_0x%016llX.spv", hashCode64);
+    auto     length = snprintf(fileName, 64, "Shader_0x%016" PRIX64 ".spv", hashCode64);
     return std::string(fileName);
 }
 
@@ -695,7 +695,7 @@ std::string GetPipelineInfoFileName(
     char            fileName[64] = {};
     if (pComputePipelineInfo != nullptr)
     {
-        auto length = snprintf(fileName, 64, "PipelineCs_0x%016llX", hashCode64);
+        auto length = snprintf(fileName, 64, "PipelineCs_0x%016" PRIX64, hashCode64);
     }
     else
     {
@@ -718,7 +718,7 @@ std::string GetPipelineInfoFileName(
             pFileNamePrefix = "PipelineVsFs";
         }
 
-        auto length = snprintf(fileName, 64, "%s_0x%016llX", pFileNamePrefix, hashCode64);
+        auto length = snprintf(fileName, 64, "%s_0x%016" PRIX64, pFileNamePrefix, hashCode64);
     }
 
     return std::string(fileName);
@@ -1072,7 +1072,9 @@ void DumpGraphicsPipelineInfo(
 // can restore the output on all platform, which is very useful when app crashes or hits an assert.
 // CAUTION: The behavior isn't changed if app outputs logs to STDOUT or STDERR directly.
 void RedirectLogOutput(
-    bool restoreToDefault)   // Restore the default behavior of outs() and errs() if it is true
+    bool              restoreToDefault,   // Restore the default behavior of outs() and errs() if it is true
+    uint32_t          optionCount,        // Count of compilation-option strings
+    const char*const* pOptions)            // [in] An array of compilation-option strings
 {
     static raw_fd_ostream* pDbgFile = nullptr;
     static raw_fd_ostream* pOutFile = nullptr;
@@ -1099,18 +1101,33 @@ void RedirectLogOutput(
     else
     {
         // Redirect errs() for dbgs()
-        if (::llvm::DebugFlag && cl::LogFileDbgs.empty() == false)
+        if (cl::LogFileDbgs.empty() == false)
         {
-            std::error_code errCode;
-
-            static raw_fd_ostream dbgFile(cl::LogFileDbgs.c_str(), errCode, sys::fs::F_Text);
-            assert(!errCode);
-            if (pDbgFile == nullptr)
+            // NOTE: Checks whether errs() is needed in compiliation
+            // Until now, option -debug, -debug-only and -print-* need use debug output
+            bool needDebugOut = ::llvm::DebugFlag;
+            for (uint32_t i = 1; (needDebugOut == false) && (i < optionCount); ++i)
             {
-                dbgFile.SetUnbuffered();
-                memcpy(dbgFileBak, &errs(), sizeof(raw_fd_ostream));
-                memcpy(&errs(), &dbgFile, sizeof(raw_fd_ostream));
-                pDbgFile = &dbgFile;
+                StringRef option = pOptions[i];
+                if (option.startswith("-debug") || option.startswith("-print"))
+                {
+                    needDebugOut = true;
+                }
+            }
+
+            if (needDebugOut)
+            {
+                std::error_code errCode;
+
+                static raw_fd_ostream dbgFile(cl::LogFileDbgs.c_str(), errCode, sys::fs::F_Text);
+                assert(!errCode);
+                if (pDbgFile == nullptr)
+                {
+                    dbgFile.SetUnbuffered();
+                    memcpy(dbgFileBak, &errs(), sizeof(raw_fd_ostream));
+                    memcpy(&errs(), &dbgFile, sizeof(raw_fd_ostream));
+                    pDbgFile = &dbgFile;
+                }
             }
         }
 
