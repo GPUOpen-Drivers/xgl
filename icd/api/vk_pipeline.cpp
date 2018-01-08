@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -249,33 +249,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
                 }
 
                 result = VK_SUCCESS;
-            }
-        }
-        else if (infoType == VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD)
-        {
-            if (pBuffer == nullptr)
-            {
-                Pal::Result palResult = pPalPipeline->GetShaderDisassembly(shaderType, nullptr, pBufferSize);
-
-                if ((palResult == Pal::Result::Success) ||
-                    (palResult == Pal::Result::ErrorInvalidMemorySize))
-                {
-                    // PAL returns "ErrorInvalidMemorySize" even when just querying the size - it's safe to ignore.
-                    result = VK_SUCCESS;
-                }
-            }
-            else
-            {
-                Pal::Result palResult = pPalPipeline->GetShaderDisassembly(shaderType, pBuffer, pBufferSize);
-
-                if (palResult == Pal::Result::Success)
-                {
-                    result = VK_SUCCESS;
-                }
-                else if (palResult == Pal::Result::ErrorInvalidMemorySize)
-                {
-                    result = VK_INCOMPLETE;
-                }
             }
         }
         else if (infoType == VK_SHADER_INFO_TYPE_BINARY_AMD)

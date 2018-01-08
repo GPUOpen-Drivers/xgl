@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -174,6 +174,7 @@ CmdBuffer::CmdBuffer(
     m_vbMgr(pDevice),
     m_is2ndLvl(false),
     m_isRecording(false),
+    m_needResetState(true),
     m_pSqttState(nullptr),
     m_renderPassInstance(pDevice->VkInstance()->Allocator())
 {
@@ -796,8 +797,15 @@ VkResult CmdBuffer::Begin(
 {
     VK_ASSERT(!m_isRecording);
 
-    // Beginning a command buffer implicitly resets its state.
-    ResetState();
+    // Beginning a command buffer implicitly resets its state if it is not reset before.
+    if (m_needResetState)
+    {
+        ResetState();
+    }
+    else
+    {
+        m_needResetState = true;
+    }
 
     Pal::CmdBufferBuildInfo   cmdInfo = { 0 };
     Pal::CmdBufferBuildFlags& palFlags = cmdInfo.flags;
@@ -823,9 +831,24 @@ VkResult CmdBuffer::Begin(
         {
             // Convert Vulkan flags to PAL flags.
         case VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO:
-            palFlags.optimizeGpuSmallBatch = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
             palFlags.optimizeOneTimeSubmit = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) ? 1 : 0;
             palFlags.optimizeExclusiveSubmit = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ? 0 : 1;
+
+            switch (m_pDevice->GetRuntimeSettings().optimizeCmdbufMode)
+            {
+            case EnableOptimizeForRenderPassContinue:
+                palFlags.optimizeGpuSmallBatch = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
+                break;
+            case EnableOptimizeCmdbuf:
+                palFlags.optimizeGpuSmallBatch = 1;
+                break;
+            case DisableOptimizeCmdbuf:
+                palFlags.optimizeGpuSmallBatch = 0;
+                break;
+            default:
+                palFlags.optimizeGpuSmallBatch = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
+                break;
+            }
 
             if (pInfo->pInheritanceInfo != nullptr)
             {
@@ -1059,6 +1082,8 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
     VkResult result = VK_SUCCESS;
 
     ResetState();
+
+    m_needResetState = false;
 
     const bool releaseResources = ((flags & VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) != 0);
 

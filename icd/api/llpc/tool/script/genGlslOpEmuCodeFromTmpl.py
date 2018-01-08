@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -22,11 +22,6 @@
  #  SOFTWARE.
  #
  #######################################################################################################################
-
-#**********************************************************************************************************************
-# @file  genGlslOpEmuCodeFromTmpl.py
-# @brief LLPC python script file: generates LLVM-IR from template file to emulate GLSL operations.
-#**********************************************************************************************************************
 
 import os
 import sys

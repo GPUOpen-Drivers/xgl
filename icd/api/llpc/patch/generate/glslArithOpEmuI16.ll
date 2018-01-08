@@ -68,44 +68,235 @@ define i16 @llpc.sminnum.i16(i16 %x, i16 %y) #0
     ret i16 %2
 }
 
-; GLSL: uint16_t min(uint16_t, uint16_t)
-define i16 @llpc.uminnum.i16(i16 %x, i16 %y) #0
+; GLSL: int16_t min(int16_t, int16_t)
+define spir_func i16 @_Z4sminss(
+    i16 %x, i16 %y) #0
 {
-    %1 = icmp ult i16 %y, %x
-    %2 = select i1 %1, i16 %y, i16 %x
-    ret i16 %2
+    %cmp = icmp sle i16 %x, %y
+    %val = select i1 %cmp, i16 %x, i16 %y
+    ret i16 %val
+}
+
+; GLSL: i16vec2 min(i16vec2, i16vec2)
+define spir_func <2 x i16> @_Z4sminDv2_sDv2_s(
+    <2 x i16> %x, <2 x i16> %y) #0
+{
+    %cmp = icmp sle <2 x i16> %x, %y
+    %val = select <2 x i1> %cmp, <2 x i16> %x, <2 x i16> %y
+
+    ret <2 x i16> %val
+}
+
+; GLSL: i16vec3 min(i16vec3, i16vec3)
+define spir_func <3 x i16> @_Z4sminDv3_sDv3_s(
+    <3 x i16> %x, <3 x i16> %y) #0
+{
+    %cmp = icmp sle <3 x i16> %x, %y
+    %val = select <3 x i1> %cmp, <3 x i16> %x, <3 x i16> %y
+
+    ret <3 x i16> %val
+}
+
+; GLSL: i16vec4 min(i16vec4, i16vec4)
+define spir_func <4 x i16> @_Z4sminDv4_sDv4_s(
+    <4 x i16> %x, <4 x i16> %y) #0
+{
+    %cmp = icmp sle <4 x i16> %x, %y
+    %val = select <4 x i1> %cmp, <4 x i16> %x, <4 x i16> %y
+
+    ret <4 x i16> %val
+}
+
+; GLSL: uint16_t min(uint16_t, uint16_t)
+define spir_func i16 @_Z4uminss(
+    i16 %x, i16 %y) #0
+{
+    %cmp = icmp ule i16 %x, %y
+    %val = select i1 %cmp, i16 %x, i16 %y
+
+    ret i16 %val
+}
+
+; GLSL: u16vec2 min(u16vec2, u16vec2)
+define spir_func <2 x i16> @_Z4uminDv2_sDv2_s(
+    <2 x i16> %x, <2 x i16> %y) #0
+{
+    %cmp = icmp ule <2 x i16> %x, %y
+    %val = select <2 x i1> %cmp, <2 x i16> %x, <2 x i16> %y
+
+    ret <2 x i16> %val
+}
+
+; GLSL: u16vec3 min(u16vec3, u16vec3)
+define spir_func <3 x i16> @_Z4uminDv3_sDv3_s(
+    <3 x i16> %x, <3 x i16> %y) #0
+{
+    %cmp = icmp ule <3 x i16> %x, %y
+    %val = select <3 x i1> %cmp, <3 x i16> %x, <3 x i16> %y
+
+    ret <3 x i16> %val
+}
+
+; GLSL: u16vec4 min(u16vec4, u16vec4)
+define spir_func <4 x i16> @_Z4uminDv4_sDv4_s(
+    <4 x i16> %x, <4 x i16> %y) #0
+{
+    %cmp = icmp ule <4 x i16> %x, %y
+    %val = select <4 x i1> %cmp, <4 x i16> %x, <4 x i16> %y
+
+    ret <4 x i16> %val
 }
 
 ; GLSL: int16_t max(int16_t, int16_t)
-define i16 @llpc.smaxnum.i16(i16 %x, i16 %y) #0
+define spir_func i16 @_Z4smaxss(
+    i16 %x, i16 %y) #0
 {
-    %1 = icmp slt i16 %x, %y
-    %2 = select i1 %1, i16 %y, i16 %x
-    ret i16 %2
+    %cmp = icmp sge i16 %x, %y
+    %val = select i1 %cmp, i16 %x, i16 %y
+    ret i16 %val
 }
+
+; GLSL: i16vec2 max(i16vec2, i16vec2)
+define spir_func <2 x i16> @_Z4smaxDv2_sDv2_s(
+    <2 x i16> %x, <2 x i16> %y) #0
+{
+    %cmp = icmp sge <2 x i16> %x, %y
+    %val = select <2 x i1> %cmp, <2 x i16> %x, <2 x i16> %y
+
+    ret <2 x i16> %val
+}
+
+; GLSL: i16vec3 max(i16vec3, i16vec3)
+define spir_func <3 x i16> @_Z4smaxDv3_sDv3_s(
+    <3 x i16> %x, <3 x i16> %y) #0
+{
+    %cmp = icmp sge <3 x i16> %x, %y
+    %val = select <3 x i1> %cmp, <3 x i16> %x, <3 x i16> %y
+
+    ret <3 x i16> %val
+}
+
+; GLSL: i16vec4 max(i16vec4, i16vec4)
+define spir_func <4 x i16> @_Z4smaxDv4_sDv4_s(
+    <4 x i16> %x, <4 x i16> %y) #0
+{
+    %cmp = icmp sge <4 x i16> %x, %y
+    %val = select <4 x i1> %cmp, <4 x i16> %x, <4 x i16> %y
+
+    ret <4 x i16> %val
+}
+
 
 ; GLSL: uint16_t max(uint16_t, uint16_t)
-define i16 @llpc.umaxnum.i16(i16 %x, i16 %y) #0
+define spir_func i16 @_Z4umaxss(
+    i16 %x, i16 %y) #0
 {
-    %1 = icmp ult i16 %x, %y
-    %2 = select i1 %1, i16 %y, i16 %x
-    ret i16 %2
+    %cmp = icmp uge i16 %x, %y
+    %val = select i1 %cmp, i16 %x, i16 %y
+
+    ret i16 %val
 }
 
-; GLSL: int16_t clamp(int16_t, int16_t, int16_t)
-define i16 @llpc.sclamp.i16(i16 %x, i16 %minVal, i16 %maxVal) #0
+; GLSL: u16vec2 max(u16vec2, u16vec2)
+define spir_func <2 x i16> @_Z4umaxDv2_sDv2_s(
+    <2 x i16> %x, <2 x i16> %y) #0
 {
-    %1 = call i16 @llpc.smaxnum.i16(i16 %x, i16 %minVal)
-    %2 = call i16 @llpc.sminnum.i16(i16 %1, i16 %maxVal)
-    ret i16 %2
+    %cmp = icmp uge <2 x i16> %x, %y
+    %val = select <2 x i1> %cmp, <2 x i16> %x, <2 x i16> %y
+
+    ret <2 x i16> %val
+}
+
+; GLSL: u16vec3 max(u16vec3, u16vec3)
+define spir_func <3 x i16> @_Z4umaxDv3_sDv3_s(
+    <3 x i16> %x, <3 x i16> %y) #0
+{
+    %cmp = icmp uge <3 x i16> %x, %y
+    %val = select <3 x i1> %cmp, <3 x i16> %x, <3 x i16> %y
+
+    ret <3 x i16> %val
+}
+
+; GLSL: u16vec4 max(u16vec4, u16vec4)
+define spir_func <4 x i16> @_Z4umaxDv4_sDv4_s(
+    <4 x i16> %x, <4 x i16> %y) #0
+{
+    %cmp = icmp uge <4 x i16> %x, %y
+    %val = select <4 x i1> %cmp, <4 x i16> %x, <4 x i16> %y
+
+    ret <4 x i16> %val
 }
 
 ; GLSL: uint16_t clamp(uint16_t, uint16_t, uint16_t)
-define i16 @llpc.uclamp.i16(i16 %x, i16 %minVal, i16 %maxVal) #0
+define spir_func i16 @_Z6uclampsss(
+    i16 %x, i16 %minVal, i16 %maxVal) #0
 {
-    %1 = call i16 @llpc.umaxnum.i16(i16 %x, i16 %minVal)
-    %2 = call i16 @llpc.uminnum.i16(i16 %1, i16 %maxVal)
+    %1 = call i16 @_Z4umaxss(i16 %x, i16 %minVal)
+    %2 = call i16 @_Z4uminss(i16 %1, i16 %maxVal)
     ret i16 %2
+}
+
+; GLSL: u16vec2 clamp(u16vec2, u16vec2, u16vec2)
+define spir_func <2 x i16> @_Z6uclampDv2_sDv2_sDv2_s(
+    <2 x i16> %x, <2 x i16> %minVal, <2 x i16> %maxVal) #0
+{
+    %1 = call <2 x i16> @_Z4umaxDv2_sDv2_s(<2 x i16> %x, <2 x i16> %minVal)
+    %2 = call <2 x i16> @_Z4uminDv2_sDv2_s(<2 x i16> %1, <2 x i16> %maxVal)
+    ret <2 x i16> %2
+}
+
+; GLSL: u16vec3 clamp(u16vec3, u16vec3, u16vec3)
+define spir_func <3 x i16> @_Z6uclampDv3_sDv3_sDv3_s(
+    <3 x i16> %x, <3 x i16> %minVal, <3 x i16> %maxVal) #0
+{
+    %1 = call <3 x i16> @_Z4umaxDv3_sDv3_s(<3 x i16> %x, <3 x i16> %minVal)
+    %2 = call <3 x i16> @_Z4uminDv3_sDv3_s(<3 x i16> %1, <3 x i16> %maxVal)
+    ret <3 x i16> %2
+}
+
+; GLSL: u16vec4 clamp(u16vec4, u16vec4, u16vec4)
+define spir_func <4 x i16> @_Z6uclampDv4_sDv4_sDv4_s(
+    <4 x i16> %x, <4 x i16> %minVal, <4 x i16> %maxVal) #0
+{
+    %1 = call <4 x i16> @_Z4umaxDv4_sDv4_s(<4 x i16> %x, <4 x i16> %minVal)
+    %2 = call <4 x i16> @_Z4uminDv4_sDv4_s(<4 x i16> %1, <4 x i16> %maxVal)
+    ret <4 x i16> %2
+}
+
+; GLSL: int16_t clamp(int16_t, int16_t, int16_t)
+define spir_func i16 @_Z6sclampsss(
+    i16 %x, i16 %minVal, i16 %maxVal) #0
+{
+    %1 = call i16 @_Z4smaxss(i16 %x, i16 %minVal)
+    %2 = call i16 @_Z4sminss(i16 %1, i16 %maxVal)
+    ret i16 %2
+}
+
+; GLSL: i16vec2 clamp(i16vec2, i16vec2, i16vec2)
+define spir_func <2 x i16> @_Z6sclampDv2_sDv2_sDv2_s(
+    <2 x i16> %x, <2 x i16> %minVal, <2 x i16> %maxVal) #0
+{
+    %1 = call <2 x i16> @_Z4smaxDv2_sDv2_s(<2 x i16> %x, <2 x i16> %minVal)
+    %2 = call <2 x i16> @_Z4sminDv2_sDv2_s(<2 x i16> %1, <2 x i16> %maxVal)
+    ret <2 x i16> %2
+}
+
+; GLSL: i16vec3 clamp(i16vec3, i16vec3, i16vec3)
+define spir_func <3 x i16> @_Z6sclampDv3_sDv3_sDv3_s(
+    <3 x i16> %x, <3 x i16> %minVal, <3 x i16> %maxVal) #0
+{
+    %1 = call <3 x i16> @_Z4smaxDv3_sDv3_s(<3 x i16> %x, <3 x i16> %minVal)
+    %2 = call <3 x i16> @_Z4sminDv3_sDv3_s(<3 x i16> %1, <3 x i16> %maxVal)
+    ret <3 x i16> %2
+}
+
+; GLSL: i16vec4 clamp(i16vec4, i16vec4, i16vec4)
+define spir_func <4 x i16> @_Z6sclampDv4_sDv4_sDv4_s(
+    <4 x i16> %x, <4 x i16> %minVal, <4 x i16> %maxVal) #0
+{
+    %1 = call <4 x i16> @_Z4smaxDv4_sDv4_s(<4 x i16> %x, <4 x i16> %minVal)
+    %2 = call <4 x i16> @_Z4sminDv4_sDv4_s(<4 x i16> %1, <4 x i16> %maxVal)
+    ret <4 x i16> %2
 }
 
 ; half ldexp()  =>  llvm.amdgcn.ldexp.f16

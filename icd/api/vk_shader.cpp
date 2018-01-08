@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +31,7 @@
 #include "palGpuMemoryBindable.h"
 #include "palPipeline.h"
 #include "palShader.h"
-#include "palMd5.h"
+#include "palMetroHash.h"
 
 #include "llpc.h"
 
@@ -63,16 +63,16 @@ void* VKAPI_CALL AllocateShaderOutput(
 }
 
 // =====================================================================================================================
-// Concatenates an MD5 hash to two 64-bit uints.
-VK_INLINE void Md5HashTo128Bit(
-    const Util::Md5::Hash& hash,
-    uint64_t*              pLower,
-    uint64_t*              pUpper)
+// Concatenates a MetroHash::Hash to two 64-bit uints.
+VK_INLINE void MetroHashTo128Bit(
+    const Util::MetroHash::Hash& hash,
+    uint64_t*                    pLower,
+    uint64_t*                    pUpper)
 {
-    *pLower = static_cast<uint64_t>(hash.hashValue[0]) |
-              static_cast<uint64_t>(hash.hashValue[1]) << 32;
-    *pUpper = static_cast<uint64_t>(hash.hashValue[2]) |
-              static_cast<uint64_t>(hash.hashValue[3]) << 32;
+    *pLower = static_cast<uint64_t>(hash.dwords[0]) |
+              static_cast<uint64_t>(hash.dwords[1]) << 32;
+    *pUpper = static_cast<uint64_t>(hash.dwords[2]) |
+              static_cast<uint64_t>(hash.dwords[3]) << 32;
 }
 
 // =====================================================================================================================
@@ -89,12 +89,13 @@ Pal::ShaderHash ShaderModule::GetCodeHash(
 
         if (entryLength > 0)
         {
-            Util::Md5::Hash entryHash = Util::Md5::GenerateHashFromBuffer(pEntryPoint, entryLength);
+            Util::MetroHash::Hash entryHash = {};
+            Util::MetroHash128::Hash(reinterpret_cast<const uint8_t*>(pEntryPoint), entryLength, entryHash.bytes);
 
             uint64_t entryLower;
             uint64_t entryUpper;
 
-            Md5HashTo128Bit(entryHash, &entryLower, &entryUpper);
+            MetroHashTo128Bit(entryHash, &entryLower, &entryUpper);
 
             hash.lower ^= entryLower;
             hash.upper ^= entryUpper;
@@ -112,11 +113,12 @@ ShaderModule::ShaderModule(
     m_codeSize = codeSize;
     m_pCode    = pCode;
 
-    // Calculate a 128-bit MD5 hash from the SPIRV code.  This is used by profile-guided compilation
+    // Calculate a 128-bit hash from the SPIRV code.  This is used by profile-guided compilation
     // parameter tuning.
-    Util::Md5::Hash codeHash = Util::Md5::GenerateHashFromBuffer(pCode, codeSize);
+    Util::MetroHash::Hash codeHash = {};
+    Util::MetroHash128::Hash(static_cast<const uint8_t*>(pCode), codeSize, codeHash.bytes);
 
-    Md5HashTo128Bit(codeHash, &m_codeHash.lower, &m_codeHash.upper);
+    MetroHashTo128Bit(codeHash, &m_codeHash.lower, &m_codeHash.upper);
 
     m_pLlpcShaderMemory = nullptr;
 

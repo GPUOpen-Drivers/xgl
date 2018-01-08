@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -52,7 +52,7 @@ namespace Gfx9
 Result ConfigBuilder::BuildPipelineVsFsRegConfig(
     Context*            pContext,         // [in] LLPC context
     const ElfDataEntry* pDataEntries,     // [in] ELF data entries
-    void**              ppConfig,         // [out] Register configuration for VS-FS pipeline
+    uint8_t**           ppConfig,         // [out] Register configuration for VS-FS pipeline
     size_t*             pConfigSize)      // [out] Size of register configuration
 {
     Result result = Result::Success;
@@ -62,7 +62,8 @@ Result ConfigBuilder::BuildPipelineVsFsRegConfig(
 
     uint64_t hash64 = 0;
 
-    PipelineVsFsRegConfig* pConfig = new PipelineVsFsRegConfig();
+    uint8_t* pAllocBuf = new uint8_t[sizeof(PipelineVsFsRegConfig)];
+    PipelineVsFsRegConfig* pConfig = reinterpret_cast<PipelineVsFsRegConfig*>(pAllocBuf);
     pConfig->Init();
 
     BuildApiHwShaderMapping(Util::Abi::HwShaderVs,
@@ -116,9 +117,7 @@ Result ConfigBuilder::BuildPipelineVsFsRegConfig(
         primGroupSize = Pow2Align(primGroupSize, 2);
     }
 
-    iaMultiVgtParam.bits.PRIMGROUP_SIZE     = primGroupSize - 1;
-    iaMultiVgtParam.bits.PARTIAL_VS_WAVE_ON = false;
-    iaMultiVgtParam.bits.SWITCH_ON_EOP      = false;
+    iaMultiVgtParam.bits.PRIMGROUP_SIZE = primGroupSize - 1;
 
     SET_REG(pConfig, IA_MULTI_VGT_PARAM, iaMultiVgtParam.u32All);
 
@@ -127,7 +126,7 @@ Result ConfigBuilder::BuildPipelineVsFsRegConfig(
     SET_REG(pConfig, PIPELINE_HASH_HI, static_cast<uint32_t>(hash64 >> 32));
 
     LLPC_ASSERT((ppConfig != nullptr) && (pConfigSize != nullptr));
-    *ppConfig = pConfig;
+    *ppConfig = pAllocBuf;
     *pConfigSize = pConfig->GetRegCount() * sizeof(Util::Abi::PalMetadataNoteEntry);
 
     return result;
@@ -138,7 +137,7 @@ Result ConfigBuilder::BuildPipelineVsFsRegConfig(
 Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
     Context*            pContext,         // [in] LLPC context
     const ElfDataEntry* pDataEntries,     // [in] ELF data entries
-    void**              ppConfig,         // [out] Register configuration for VS-TS-FS pipeline
+    uint8_t**           ppConfig,         // [out] Register configuration for VS-TS-FS pipeline
     size_t*             pConfigSize)      // [out] Size of register configuration
 {
     Result result = Result::Success;
@@ -147,7 +146,8 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
 
     uint64_t hash64 = 0;
 
-    PipelineVsTsFsRegConfig* pConfig = new PipelineVsTsFsRegConfig();
+    uint8_t* pAllocBuf = new uint8_t[sizeof(PipelineVsTsFsRegConfig)];
+    PipelineVsTsFsRegConfig* pConfig = reinterpret_cast<PipelineVsTsFsRegConfig*>(pAllocBuf);
     pConfig->Init();
 
     BuildApiHwShaderMapping(Util::Abi::HwShaderHs,
@@ -223,8 +223,8 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
 
     if (vsBuiltInUsage.primitiveId || tcsBuiltInUsage.primitiveId)
     {
-        iaMultiVgtParam.bits.PARTIAL_VS_WAVE_ON = true;
-        iaMultiVgtParam.bits.SWITCH_ON_EOP = true;
+        iaMultiVgtParam.bits.PARTIAL_ES_WAVE_ON = true;
+        iaMultiVgtParam.bits.SWITCH_ON_EOI = true;
     }
 
     SET_REG(pConfig, IA_MULTI_VGT_PARAM, iaMultiVgtParam.u32All);
@@ -234,7 +234,7 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
     SET_REG(pConfig, PIPELINE_HASH_HI, static_cast<uint32_t>(hash64 >> 32));
 
     LLPC_ASSERT((ppConfig != nullptr) && (pConfigSize != nullptr));
-    *ppConfig = pConfig;
+    *ppConfig = pAllocBuf;
     *pConfigSize = pConfig->GetRegCount() * sizeof(Util::Abi::PalMetadataNoteEntry);
 
     return result;
@@ -245,7 +245,7 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
 Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
     Context*            pContext,         // [in] LLPC context
     const ElfDataEntry* pDataEntries,     // [in] ELF data entries
-    void**              ppConfig,         // [out] Register configuration for VS-GS-FS pipeline
+    uint8_t**           ppConfig,         // [out] Register configuration for VS-GS-FS pipeline
     size_t*             pConfigSize)      // [out] Size of register configuration
 {
     Result result = Result::Success;
@@ -254,7 +254,8 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
 
     uint64_t hash64 = 0;
 
-    PipelineVsGsFsRegConfig* pConfig = new PipelineVsGsFsRegConfig();
+    uint8_t* pAllocBuf = new uint8_t[sizeof(PipelineVsGsFsRegConfig)];
+    PipelineVsGsFsRegConfig* pConfig = reinterpret_cast<PipelineVsGsFsRegConfig*>(pAllocBuf);
     pConfig->Init();
 
     BuildApiHwShaderMapping(Util::Abi::HwShaderGs,
@@ -322,9 +323,7 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
     regIA_MULTI_VGT_PARAM iaMultiVgtParam = {};
 
     const uint32_t primGroupSize = 128;
-    iaMultiVgtParam.bits.PRIMGROUP_SIZE     = primGroupSize - 1;
-    iaMultiVgtParam.bits.PARTIAL_VS_WAVE_ON = false;
-    iaMultiVgtParam.bits.SWITCH_ON_EOP      = false;
+    iaMultiVgtParam.bits.PRIMGROUP_SIZE = primGroupSize - 1;
 
     SET_REG(pConfig, IA_MULTI_VGT_PARAM, iaMultiVgtParam.u32All);
 
@@ -333,7 +332,7 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
     SET_REG(pConfig, PIPELINE_HASH_HI, static_cast<uint32_t>(hash64 >> 32));
 
     LLPC_ASSERT((ppConfig != nullptr) && (pConfigSize != nullptr));
-    *ppConfig = pConfig;
+    *ppConfig = pAllocBuf;
     *pConfigSize = pConfig->GetRegCount() * sizeof(Util::Abi::PalMetadataNoteEntry);
 
     return result;
@@ -344,7 +343,7 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
 Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
     Context*            pContext,         // [in] LLPC context
     const ElfDataEntry* pDataEntries,     // [in] ELF data entries
-    void**              ppConfig,         // [out] Register configuration for VS-TS-GS-FS pipeline
+    uint8_t**           ppConfig,         // [out] Register configuration for VS-TS-GS-FS pipeline
     size_t*             pConfigSize)      // [out] Size of register configuration
 {
     Result result = Result::Success;
@@ -354,7 +353,8 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
 
     uint64_t hash64 = 0;
 
-    PipelineVsTsGsFsRegConfig* pConfig = new PipelineVsTsGsFsRegConfig();
+    uint8_t* pAllocBuf = new uint8_t[sizeof(PipelineVsTsGsFsRegConfig)];
+    PipelineVsTsGsFsRegConfig* pConfig = reinterpret_cast<PipelineVsTsGsFsRegConfig*>(pAllocBuf);
     pConfig->Init();
 
     BuildApiHwShaderMapping(Util::Abi::HwShaderHs,
@@ -452,8 +452,8 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
 
     if (vsBuiltInUsage.primitiveId || tcsBuiltInUsage.primitiveId || gsBuiltInUsage.primitiveId)
     {
-        iaMultiVgtParam.bits.PARTIAL_VS_WAVE_ON = true;
-        iaMultiVgtParam.bits.SWITCH_ON_EOP = true;
+        iaMultiVgtParam.bits.PARTIAL_ES_WAVE_ON = true;
+        iaMultiVgtParam.bits.SWITCH_ON_EOI = true;
     }
 
     SET_REG(pConfig, IA_MULTI_VGT_PARAM, iaMultiVgtParam.u32All);
@@ -466,7 +466,7 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
     SET_REG(pConfig, PIPELINE_HASH_HI, static_cast<uint32_t>(hash64 >> 32));
 
     LLPC_ASSERT((ppConfig != nullptr) && (pConfigSize != nullptr));
-    *ppConfig = pConfig;
+    *ppConfig = pAllocBuf;
     *pConfigSize = pConfig->GetRegCount() * sizeof(Util::Abi::PalMetadataNoteEntry);
 
     return result;
@@ -477,7 +477,7 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
 Result ConfigBuilder::BuildPipelineCsRegConfig(
     Context*            pContext,        // [in] LLPC context
     const ElfDataEntry* pDataEntry,      // [in] ELF data entry
-    void**              ppConfig,        // [out] Register configuration for compute pipeline
+    uint8_t**           ppConfig,        // [out] Register configuration for compute pipeline
     size_t*             pConfigSize)     // [out] Size of register configuration
 {
     Result result = Result::Success;
@@ -487,7 +487,8 @@ Result ConfigBuilder::BuildPipelineCsRegConfig(
 
     uint64_t hash64 = 0;
 
-    PipelineCsRegConfig* pConfig = new PipelineCsRegConfig();
+    uint8_t* pAllocBuf = new uint8_t[sizeof(PipelineCsRegConfig)];
+    PipelineCsRegConfig* pConfig = reinterpret_cast<PipelineCsRegConfig*>(pAllocBuf);
     pConfig->Init();
 
     BuildApiHwShaderMapping(0,
@@ -509,7 +510,7 @@ Result ConfigBuilder::BuildPipelineCsRegConfig(
     SET_REG(pConfig, PIPELINE_HASH_HI, static_cast<uint32_t>(hash64 >> 32));
 
     LLPC_ASSERT((ppConfig != nullptr) && (pConfigSize != nullptr));
-    *ppConfig = pConfig;
+    *ppConfig = pAllocBuf;
     *pConfigSize = pConfig->GetRegCount() * sizeof(Util::Abi::PalMetadataNoteEntry);
 
     return result;
@@ -708,8 +709,6 @@ Result ConfigBuilder::BuildVsRegConfig(
     }
 
     SET_REG_FIELD(&pConfig->m_vsRegs, VGT_REUSE_OFF, REUSE_OFF, disableVertexReuse);
-
-    SET_REG_FIELD(&pConfig->m_vsRegs, VGT_VERTEX_REUSE_BLOCK_CNTL, VTX_REUSE_DEPTH, 14);
 
     if (usePointSize || useLayer || useViewportIndex)
     {
@@ -1660,6 +1659,20 @@ void ConfigBuilder::SetupVgtTfParam(
     {
         topology = OUTPUT_TRIANGLE_CCW;
     }
+
+    auto pPipelineInfo = static_cast<const GraphicsPipelineBuildInfo*>(pContext->GetPipelineBuildInfo());
+    if (pPipelineInfo->iaState.switchWinding)
+    {
+        if (topology == OUTPUT_TRIANGLE_CW)
+        {
+            topology = OUTPUT_TRIANGLE_CCW;
+        }
+        else if (topology == OUTPUT_TRIANGLE_CCW)
+        {
+            topology = OUTPUT_TRIANGLE_CW;
+        }
+    }
+
     LLPC_ASSERT(topology != InvalidValue);
 
     SET_REG_FIELD(pConfig, VGT_TF_PARAM, TYPE, primType);
@@ -1696,7 +1709,6 @@ uint32_t ConfigBuilder::GetScratchByteSize(
     constexpr uint32_t WaveSizeGranularityShift = 8;
     constexpr uint32_t WavefrontSize = 64;
     return (regVal << WaveSizeGranularityShift) / WavefrontSize * sizeof(uint32_t);
-;
 }
 
 // =====================================================================================================================

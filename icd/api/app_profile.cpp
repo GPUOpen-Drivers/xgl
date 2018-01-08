@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,7 @@
 #include "include/app_profile.h"
 #include "include/vk_utils.h"
 
-#include "palMd5.h"
+#include "palMetroHash.h"
 
 #include <cctype>
 #include <memory>
@@ -62,15 +62,12 @@ enum AppProfilePatternType
     PatternCount
 };
 
-// This is a pattern entry.  It is a pair of type and test MD5 hash.  The string of the given type
-// is hashed and compared against the MD5 value.  If the values are equal, this entry matches.
+// This is a pattern entry.  It is a pair of type and test hash.  The string of the given type
+// is hashed and compared against the hash value.  If the values are equal, this entry matches.
 struct AppProfilePatternEntry
 {
     AppProfilePatternType type;  // Type of pattern to match against
-    uint32_t              hash0; // Words 0-3 of MD5 hash to compare against
-    uint32_t              hash1;
-    uint32_t              hash2;
-    uint32_t              hash3;
+    Util::MetroHash::Hash hash;  // Hash to compare against.
 };
 
 // This is a pattern that maps to a profile.  It is a list of entries to compare against.  If all entries
@@ -85,75 +82,91 @@ constexpr AppProfilePatternEntry AppEngineSource2 =
 {
     // EngineName = "source2"
     PatternEngineNameLower,
-    0x9654e927,
-    0xf86feb28,
-    0xb5ec39b8,
-    0x7644d6ec
+    {
+        0x7ab30c77,
+        0x3f603512,
+        0xbe34d271,
+        0xfc40cf20
+    }
 };
 
 constexpr AppProfilePatternEntry AppNameDota2 =
 {
     PatternAppNameLower,
-    0xcd456249,
-    0xed5e0ab3,
-    0x0680516b,
-    0x8ae11f31
+    {
+        0x80aaf27a,
+        0xe2d3cd31,
+        0x5fe27752,
+        0x7880fdC3
+    }
 };
 
 constexpr AppProfilePatternEntry AppExeTalos =
 {
     PatternExeNameLower,
-    0xfde3cef2,
-    0x43dbaa74,
-    0xf29613c9,
-    0xe8f3bc06
+    {
+        0x504fef42,
+        0xf0d60534,
+        0x33071fed,
+        0x39a48e4f
+    }
 };
 
 constexpr AppProfilePatternEntry AppEngineFeral3D =
 {
     // EngineName = "Feral3D"
     PatternEngineNameLower,
-    0x0915d6eb,
-    0x7a8d18b2,
-    0x60ec1e51,
-    0x4461153a
+    {
+        0xe9c4f9dc,
+        0xfae7df93,
+        0xb3e6e510,
+        0x676f0316
+    }
 };
 
 constexpr AppProfilePatternEntry AppNameMadMax =
 {
     PatternAppNameLower,
-    0xec2d5750,
-    0x2224b771,
-    0x48dbb724,
-    0xf5e66887
+    {
+        0xf391f787,
+        0xeae60a98,
+        0xe4dbdcb1,
+        0x50a98283
+    }
 };
 
 constexpr AppProfilePatternEntry AppNameF1_2017 =
 {
     PatternAppNameLower,
-    0xf1d377d6,
-    0x2a8ea2e3,
-    0xdcea047e,
-    0x717bc02a
+    {
+        0xba2f412d,
+        0x3e1ce9ac,
+        0x1cec693d,
+        0x6486d38f
+    }
 };
 
 constexpr AppProfilePatternEntry AppNameSeriousSamFusion =
 {
     PatternAppNameLower,
-    0xffa9ae54,
-    0xb8d3d366,
-    0x1075c71f,
-    0x8a1da3ca
+    {
+        0xebeb9757,
+        0x684a5d11,
+        0x4e554320,
+        0x83a10d51
+    }
 };
 
 constexpr AppProfilePatternEntry AppEngineSedp =
 {
     // EngineName = "sedp class"
     PatternEngineNameLower,
-    0x8f84c013,
-    0x76c6d473,
-    0x876ff29b,
-    0xbc7337eb
+    {
+        0x9cea05df,
+        0xe04c1e34,
+        0xe16c559f,
+        0xe3415737
+    }
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -235,19 +248,20 @@ char* StringToLower(const char* pString, size_t strLength)
 }
 
 // =====================================================================================================================
-// Returns true if the given string's MD5 hash matches the given entry's MD5 hash.
+// Returns true if the given string's hash matches the given entry's hash.
 static bool StringHashMatches(
     const char*                   pString,
     size_t                        strSize,
     const AppProfilePatternEntry& entry)
 {
-    // Generate MD5 from app hash
-    Util::Md5::Hash hash = Util::Md5::GenerateHashFromBuffer(pString, strSize);
+    // Generate hash from app
+    Util::MetroHash::Hash hash = {};
+    Util::MetroHash128::Hash(reinterpret_cast<const uint8_t*>(pString), strSize, hash.bytes);
 
-    return (hash.hashValue[0] == entry.hash0 &&
-            hash.hashValue[1] == entry.hash1 &&
-            hash.hashValue[2] == entry.hash2 &&
-            hash.hashValue[3] == entry.hash3);
+    return (hash.dwords[0] == entry.hash.dwords[0] &&
+            hash.dwords[1] == entry.hash.dwords[1] &&
+            hash.dwords[2] == entry.hash.dwords[2] &&
+            hash.dwords[3] == entry.hash.dwords[3]);
 }
 
 // =====================================================================================================================
@@ -257,19 +271,16 @@ static bool StringHashMatches(
 AppProfile ScanApplicationProfile(
     const VkInstanceCreateInfo& instanceInfo)
 {
-    // You can uncomment these if you need to add new MD5 hashes for specific strings (which is
+    // You can uncomment these if you need to add new hashes for specific strings (which is
     // hopefully never).  DON'T LEAVE THIS UNCOMMENTED:
     //
-    // Util::Md5::Hash testHash = Util::Md5::GenerateHashFromBuffer(pTestPattern, strlen(pTestPattern));
+    // Util::MetroHash::Hash hash = {};
+    // Util::MetroHash128::Hash(pTestPattern, strlen(pTestPattern), hash.bytes);
 
     AppProfile profile = AppProfile::Default;
 
-    // NOTE: This function is deliberately using malloc/free directly, rather than application callbacks, for
-    // private memory so that the app can't (at least easily) detect we are messing around with the app name
-    // strings, etc.
-
     // Generate hashes for all of the tested pattern entries
-    Util::Md5::Hash hashes[PatternCount] = {};
+    Util::MetroHash::Hash hashes[PatternCount] = {};
     bool valid[PatternCount] = {};
 
     if (instanceInfo.pApplicationInfo != nullptr)
@@ -279,14 +290,16 @@ AppProfile ScanApplicationProfile(
             const char* pAppName = instanceInfo.pApplicationInfo->pApplicationName;
             size_t appNameLength = strlen(pAppName);
 
-            hashes[PatternAppName] = Util::Md5::GenerateHashFromBuffer(pAppName, appNameLength);
+            Util::MetroHash128::Hash(
+                reinterpret_cast<const uint8_t*>(pAppName), appNameLength, hashes[PatternAppName].bytes);
             valid[PatternAppName] = true;
 
             char* pAppNameLower = StringToLower(pAppName, appNameLength);
 
             if (pAppNameLower != nullptr)
             {
-                hashes[PatternAppNameLower] = Util::Md5::GenerateHashFromBuffer(pAppNameLower, appNameLength);
+                Util::MetroHash128::Hash(
+                    reinterpret_cast<const uint8_t*>(pAppNameLower), appNameLength, hashes[PatternAppNameLower].bytes);
                 valid[PatternAppNameLower]  = true;
 
                 free(pAppNameLower);
@@ -298,14 +311,16 @@ AppProfile ScanApplicationProfile(
             const char* pEngineName = instanceInfo.pApplicationInfo->pEngineName;
             size_t engineNameLength = strlen(pEngineName);
 
-            hashes[PatternEngineName] = Util::Md5::GenerateHashFromBuffer(pEngineName, engineNameLength);
+            Util::MetroHash128::Hash(
+                reinterpret_cast<const uint8_t*>(pEngineName), engineNameLength, hashes[PatternEngineName].bytes);
             valid[PatternEngineName] = true;
 
             char* pEngineNameLower = StringToLower(pEngineName, engineNameLength);
 
             if (pEngineNameLower != nullptr)
             {
-                hashes[PatternEngineNameLower] = Util::Md5::GenerateHashFromBuffer(pEngineNameLower, engineNameLength);
+                Util::MetroHash128::Hash(
+                    reinterpret_cast<const uint8_t*>(pEngineNameLower), engineNameLength, hashes[PatternEngineNameLower].bytes);
                 valid[PatternEngineNameLower]  = true;
 
                 free(pEngineNameLower);
@@ -318,14 +333,16 @@ AppProfile ScanApplicationProfile(
 
     if (pExeName != nullptr)
     {
-        hashes[PatternExeName] = Util::Md5::GenerateHashFromBuffer(pExeName, exeNameLength);
+        Util::MetroHash128::Hash(
+            reinterpret_cast<const uint8_t*>(pExeName), exeNameLength, hashes[PatternExeName].bytes);
         valid[PatternExeName]  = true;
 
         char* pExeNameLower = StringToLower(pExeName, exeNameLength);
 
         if (pExeNameLower != nullptr)
         {
-            hashes[PatternExeNameLower] = Util::Md5::GenerateHashFromBuffer(pExeNameLower, exeNameLength);
+            Util::MetroHash128::Hash(
+                reinterpret_cast<const uint8_t*>(pExeNameLower), exeNameLength, hashes[PatternExeNameLower].bytes);
             valid[PatternExeNameLower]  = true;
 
             free(pExeNameLower);
@@ -358,10 +375,10 @@ AppProfile ScanApplicationProfile(
             // If there is a hash for this pattern type available and it matches the tested hash, then
             // keep going.  Otherwise, this pattern doesn't match.
             if ((valid[entry.type] == false) ||
-                (hashes[entry.type].hashValue[0] != entry.hash0) ||
-                (hashes[entry.type].hashValue[1] != entry.hash1) ||
-                (hashes[entry.type].hashValue[2] != entry.hash2) ||
-                (hashes[entry.type].hashValue[3] != entry.hash3))
+                (hashes[entry.type].dwords[0] != entry.hash.dwords[0]) ||
+                (hashes[entry.type].dwords[1] != entry.hash.dwords[1]) ||
+                (hashes[entry.type].dwords[2] != entry.hash.dwords[2]) ||
+                (hashes[entry.type].dwords[3] != entry.hash.dwords[3]))
             {
                 patternMatches = false;
             }

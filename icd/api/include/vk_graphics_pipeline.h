@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -40,6 +40,8 @@
 #include "palDepthStencilState.h"
 #include "palMsaaState.h"
 #include "palPipeline.h"
+
+#include "llpc.h"
 
 namespace vk
 {
@@ -208,7 +210,7 @@ public:
         Pal::DepthStencilStateCreateInfo ds;
         const PipelineLayout*            pLayout;
         void*                            pShaderMem;
-        Pal::IShader*                    pPalShaders[MaxPalDevices][ShaderGfxStageCount];
+        Llpc::GraphicsPipelineBuildInfo  pipelineLlpc;
         uint32_t                         sampleCoverage;
     };
 

@@ -573,20 +573,152 @@ define spir_func <4 x half> @_Z4modfDv4_DhPDv4_Dh(
     ret <4 x half> %16
 }
 
+; GLSL: float16_t mix(float16_t, float16_t, float16_t)
+define spir_func half @_Z4fmixDhDhDh(
+    half %x, half %y, half %a) #0
+{
+    %1 = fsub half %y, %x
+    %2 = tail call half @llvm.fmuladd.f16(half %1, half %a, half %x)
+
+    ret half %2
+}
+
+; GLSL: f16vec2 mix(f16vec2, f16vec2, f16vec2)
+define spir_func <2 x half> @_Z4fmixDv2_DhDv2_DhDv2_Dh(
+    <2 x half> %x, <2 x half> %y, <2 x half> %a) #0
+{
+    %1 = fsub <2 x half> %y, %x
+    %2 = tail call <2 x half> @llvm.fmuladd.v2f16(<2 x half> %1, <2 x half> %a, <2 x half> %x)
+
+    ret <2 x half> %2
+}
+
+; GLSL: f16vec3 mix(f16vec3, f16vec3, f16vec3)
+define spir_func <3 x half> @_Z4fmixDv3_DhDv3_DhDv3_Dh(
+    <3 x half> %x, <3 x half> %y, <3 x half> %a) #0
+{
+    %1 = fsub <3 x half> %y, %x
+    %2 = tail call <3 x half> @llvm.fmuladd.v3f16(<3 x half> %1, <3 x half> %a, <3 x half> %x)
+
+    ret <3 x half> %2
+}
+
+; GLSL: f16vec4 mix(f16vec4, f16vec4, f16vec4)
+define spir_func <4 x half> @_Z4fmixDv4_DhDv4_DhDv4_Dh(
+    <4 x half> %x, <4 x half> %y, <4 x half> %a) #0
+{
+    %1 = fsub <4 x half> %y, %x
+    %2 = tail call <4 x half> @llvm.fmuladd.v4f16(<4 x half> %1, <4 x half> %a, <4 x half> %x)
+
+    ret <4 x half> %2
+}
+
+; GLSL: float16_t min(float16_t, float16_t)
+define spir_func half @_Z4fminDhDh(
+    half %x, half %y) #0
+{
+    %1 = call half @llvm.minnum.f16(half %x, half %y)
+
+    ret half %1
+}
+
+; GLSL: f16vec2 min(f16vec2, f16vec2)
+define spir_func <2 x half> @_Z4fminDv2_DhDv2_Dh(
+    <2 x half> %x, <2 x half> %y) #0
+{
+    %1 = call <2 x half> @llvm.minnum.v2f16(<2 x half> %x, <2 x half> %y)
+
+    ret <2 x half> %1
+}
+
+; GLSL: f16vec3 min(f16vec3, f16vec3)
+define spir_func <3 x half> @_Z4fminDv3_DhDv3_Dh(
+    <3 x half> %x, <3 x half> %y) #0
+{
+    %1 = call <3 x half> @llvm.minnum.v3f16(<3 x half> %x, <3 x half> %y)
+
+    ret <3 x half> %1
+}
+
+; GLSL: f16vec4 min(f16vec4, f16vec4)
+define spir_func <4 x half> @_Z4fminDv4_DhDv4_Dh(
+    <4 x half> %x, <4 x half> %y) #0
+{
+    %1 = call <4 x half> @llvm.minnum.v4f16(<4 x half> %x, <4 x half> %y)
+
+    ret <4 x half> %1
+}
+
+; GLSL: float16_t max(float16_t, float16_t)
+define spir_func half @_Z4fmaxDhDh(
+    half %x, half %y) #0
+{
+    %1 = call half @llvm.maxnum.f16(half %x, half %y)
+
+    ret half %1
+}
+
+; GLSL: f16vec2 max(f16vec2, f16vec2)
+define spir_func <2 x half> @_Z4fmaxDv2_DhDv2_Dh(
+    <2 x half> %x, <2 x half> %y) #0
+{
+    %1 = call <2 x half> @llvm.maxnum.v2f16(<2 x half> %x, <2 x half> %y)
+
+    ret <2 x half> %1
+}
+
+; GLSL: f16vec3 max(f16vec3, f16vec3)
+define spir_func <3 x half> @_Z4fmaxDv3_DhDv3_Dh(
+    <3 x half> %x, <3 x half> %y) #0
+{
+    %1 = call <3 x half> @llvm.maxnum.v3f16(<3 x half> %x, <3 x half> %y)
+
+    ret <3 x half> %1
+}
+
+; GLSL: f16vec4 max(f16vec4, f16vec4)
+define spir_func <4 x half> @_Z4fmaxDv4_DhDv4_Dh(
+    <4 x half> %x, <4 x half> %y) #0
+{
+    %1 = call <4 x half> @llvm.maxnum.v4f16(<4 x half> %x, <4 x half> %y)
+    ret <4 x half> %1
+}
+
 ; GLSL: float16_t clamp(float16_t, float16_t ,float16_t)
-define half @llpc.fclamp.f16(half %x, half %minVal, half %maxVal) #0
+define half @_Z6fclampDhDhDh(half %x, half %minVal, half %maxVal) #0
 {
     %1 = call half @llvm.amdgcn.fmed3.f16(half %x, half %minVal, half %maxVal)
     ret half %1
 }
 
-; GLSL: float16_t mix(float16_t, float16_t, float16_t)
-define half @llpc.fmix.f16(half %x, half %y, half %a) #0
+; GLSL: f16vec2 clamp(f16vec2, f16vec2 ,f16vec2)
+define spir_func <2 x half> @_Z6fclampDv2_DhDv2_DhDv2_Dh(
+    <2 x half> %x, <2 x half> %minVal, <2 x half> %maxVal) #0
 {
-    %1 = fsub half %y, %x
-    %2 = fmul half %1, %a
-    %3 = fadd half %2, %x
-    ret half %3
+    %1 = call <2 x half> @llvm.maxnum.v2f16(<2 x half> %x, <2 x half> %minVal)
+    %2 = call <2 x half> @llvm.minnum.v2f16(<2 x half> %1, <2 x half> %maxVal)
+
+    ret <2 x half> %2
+}
+
+; GLSL: f16vec3 clamp(f16vec3, f16vec3 ,f16vec3)
+define spir_func <3 x half> @_Z6fclampDv3_DhDv3_DhDv3_Dh(
+    <3 x half> %x, <3 x half> %minVal, <3 x half> %maxVal) #0
+{
+    %1 = call <3 x half> @llvm.maxnum.v3f16(<3 x half> %x, <3 x half> %minVal)
+    %2 = call <3 x half> @llvm.minnum.v3f16(<3 x half> %1, <3 x half> %maxVal)
+
+    ret <3 x half> %2
+}
+
+; GLSL: f16vec4 clamp(f16vec4, f16vec4 ,f16vec4)
+define spir_func <4 x half> @_Z6fclampDv4_DhDv4_DhDv4_Dh(
+    <4 x half> %x, <4 x half> %minVal, <4 x half> %maxVal) #0
+{
+    %1 = call <4 x half> @llvm.maxnum.v4f16(<4 x half> %x, <4 x half> %minVal)
+    %2 = call <4 x half> @llvm.minnum.v4f16(<4 x half> %1, <4 x half> %maxVal)
+
+    ret <4 x half> %2
 }
 
 ; GLSL: float16_t step(float16_t, float16_t)
@@ -604,7 +736,7 @@ define half @llpc.smoothStep.f16(half %edge0, half %edge1, half %x) #0
     %2 = fsub half %edge1, %edge0
     %3 = fdiv half 1.0, %2
     %4 = fmul half %1, %3
-    %5 = call half @llpc.fclamp.f16(half %4, half 0.0, half 1.0)
+    %5 = call half @llvm.amdgcn.fmed3.f16(half %4, half 0.0, half 1.0)
     %6 = fmul half %5, %5
     %7 = fmul half -2.0, %5
     %8 = fadd half 3.0, %7
@@ -626,6 +758,42 @@ define i1 @llpc.isnan.f16(half %x) #0
     ; 0x001: signaling NaN, 0x002: quiet NaN
     %1 = call i1 @llvm.amdgcn.class.f16(half %x, i32 3)
     ret i1 %1
+}
+
+; GLSL: float16_t fma(float16_t, float16_t, float16_t)
+define spir_func half @_Z3fmaDhDhDh(
+    half %a, half %b, half %c) #0
+{
+    %1 = tail call half @llvm.fmuladd.f16(half %a, half %b, half %c)
+
+    ret half %1
+}
+
+; GLSL: f16vec2 fma(f16vec2, f16vec2, f16vec2)
+define spir_func <2 x half> @_Z3fmaDv2_DhDv2_DhDv2_Dh(
+    <2 x half> %a, <2 x half> %b, <2 x half> %c) #0
+{
+    %1 = tail call <2 x half> @llvm.fmuladd.v2f16(<2 x half> %a, <2 x half> %b, <2 x half> %c)
+
+    ret <2 x half>  %1
+}
+
+; GLSL: f16vec3 fma(f16vec3, f16vec3, f16vec3)
+define spir_func <3 x half> @_Z3fmaDv3_DhDv3_DhDv3_Dh(
+    <3 x half> %a, <3 x half> %b, <3 x half> %c) #0
+{
+    %1 = tail call <3 x half> @llvm.fmuladd.v3f16(<3 x half> %a, <3 x half> %b, <3 x half> %c)
+
+    ret <3 x half>  %1
+}
+
+; GLSL: f16vec4 fma(f16vec4, f16vec4, f16vec4)
+define spir_func <4 x half> @_Z3fmaDv4_DhDv4_DhDv4_Dh(
+    <4 x half> %a, <4 x half> %b, <4 x half> %c) #0
+{
+    %1 = tail call <4 x half> @llvm.fmuladd.v4f16(<4 x half> %a, <4 x half> %b, <4 x half> %c)
+
+    ret <4 x half> %1
 }
 
 ; =====================================================================================================================
@@ -1352,8 +1520,22 @@ declare half @llvm.exp2.f16(half) #0
 declare half @llvm.log2.f16(half) #0
 declare half @llvm.sin.f16(half) #0
 declare half @llvm.cos.f16(half) #0
+
 declare half @llvm.minnum.f16(half, half) #0
+declare <2 x half> @llvm.minnum.v2f16(<2 x half>, <2 x half>) #0
+declare <3 x half> @llvm.minnum.v3f16(<3 x half>, <3 x half>) #0
+declare <4 x half> @llvm.minnum.v4f16(<4 x half>, <4 x half>) #0
+
 declare half @llvm.maxnum.f16(half, half) #0
+declare <2 x half> @llvm.maxnum.v2f16(<2 x half>, <2 x half>) #0
+declare <3 x half> @llvm.maxnum.v3f16(<3 x half>, <3 x half>) #0
+declare <4 x half> @llvm.maxnum.v4f16(<4 x half>, <4 x half>) #0
+
+declare half @llvm.fmuladd.f16(half, half, half) #0
+declare <2 x half> @llvm.fmuladd.v2f16(<2 x half>, <2 x half>, <2 x half>) #0
+declare <3 x half> @llvm.fmuladd.v3f16(<3 x half>, <3 x half>, <3 x half>) #0
+declare <4 x half> @llvm.fmuladd.v4f16(<4 x half>, <4 x half>, <4 x half>) #0
+
 declare i1 @llvm.amdgcn.class.f16(half, i32) #1
 declare half @llvm.amdgcn.fract.f16(half) #1
 declare half @llvm.amdgcn.fmed3.f16(half %x, half %minVal, half %maxVal) #1

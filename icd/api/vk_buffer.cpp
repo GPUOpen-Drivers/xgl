@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -221,7 +221,7 @@ VkResult Buffer::Create(
 
     bufferFlags.u32All = 0;
 
-    if ((palResult == Pal::Result::Success) && (isSparse == false))
+    if (palResult == Pal::Result::Success)
     {
         const VkExternalMemoryBufferCreateInfoKHR* pExternalInfo =
             static_cast<const VkExternalMemoryBufferCreateInfoKHR*>(pCreateInfo->pNext);
@@ -229,7 +229,8 @@ VkResult Buffer::Create(
             (pExternalInfo->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR))
         {
             VkExternalMemoryPropertiesKHR externalMemoryProperties = {};
-            pDevice->VkPhysicalDevice()->GetBufferExternalMemoryProperties(
+            pDevice->VkPhysicalDevice()->GetExternalMemoryProperties(
+                isSparse,
                 static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExternalInfo->handleTypes),
                 &externalMemoryProperties);
 
@@ -238,7 +239,11 @@ VkResult Buffer::Create(
                 bufferFlags.dedicatedRequired = true;
             }
 
-            bufferFlags.externallyShareable = true;
+            if (externalMemoryProperties.externalMemoryFeatures & (VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR |
+                                                                   VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR))
+            {
+                bufferFlags.externallyShareable = true;
+            }
         }
     }
 

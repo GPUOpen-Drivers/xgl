@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -149,7 +149,6 @@ struct VsRegConfig
     DEF_REG(VGT_STRMOUT_VTX_STRIDE_2);  // Always zero for LLPC
     DEF_REG(VGT_STRMOUT_VTX_STRIDE_3);  // Always zero for LLPC
     DEF_REG(VGT_REUSE_OFF);
-    DEF_REG(VGT_VERTEX_REUSE_BLOCK_CNTL);
     DEF_REG(VS_SCRATCH_SIZE);
     DEF_REG(VS_NUM_USED_VGPRS);
     DEF_REG(VS_NUM_USED_SGPRS);

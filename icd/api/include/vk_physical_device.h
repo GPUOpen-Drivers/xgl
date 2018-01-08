@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -217,16 +217,8 @@ public:
         uint32_t*           pDeviceNodeMask,
         VkBool32*           pDeviceLUIDValid) const;
 
-    VkResult GetBufferExternalMemoryProperties(
-        VkExternalMemoryHandleTypeFlagBitsKHR   handleType,
-        VkExternalMemoryPropertiesKHR*          pExternalMemoryProperties) const;
-
-    VkResult GetImageExternalMemoryProperties(
-        VkFormat                                format,
-        VkImageType                             type,
-        VkImageTiling                           tiling,
-        VkImageUsageFlags                       usage,
-        VkImageCreateFlags                      flags,
+    VkResult GetExternalMemoryProperties(
+        bool                                    isSparse,
         VkExternalMemoryHandleTypeFlagBitsKHR   handleType,
         VkExternalMemoryPropertiesKHR*          pExternalMemoryProperties) const;
 

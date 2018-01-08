@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -48,27 +48,27 @@ class ConfigBuilder
 public:
     static Result BuildPipelineVsFsRegConfig(Context*            pContext,
                                              const ElfDataEntry* pDataEntries,
-                                             void**              ppConfig,
+                                             uint8_t**           ppConfig,
                                              size_t*             pConfigSize);
 
     static Result BuildPipelineVsTsFsRegConfig(Context*            pContext,
                                                const ElfDataEntry* pDataEntries,
-                                               void**              ppConfig,
+                                               uint8_t**           ppConfig,
                                                size_t*             pConfigSize);
 
     static Result BuildPipelineVsGsFsRegConfig(Context*            pContext,
                                                const ElfDataEntry* pDataEntries,
-                                               void**              ppConfig,
+                                               uint8_t**           ppConfig,
                                                size_t*             pConfigSize);
 
     static Result BuildPipelineVsTsGsFsRegConfig(Context*            pContext,
                                                  const ElfDataEntry* pDataEntries,
-                                                 void**              ppConfig,
+                                                 uint8_t**           ppConfig,
                                                  size_t*             pConfigSize);
 
     static Result BuildPipelineCsRegConfig(Context*            pContext,
                                            const ElfDataEntry* pDataEntry,
-                                           void**              ppConfig,
+                                           uint8_t**              ppConfig,
                                            size_t*             pConfigSize);
 
 private:

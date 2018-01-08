@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -60,6 +60,7 @@
 #ifdef LLPC_BUILD_GFX9
 #include "llpcShaderMerger.h"
 #endif
+#include "llpcPipelineDumper.h"
 #include "llpcSpirvLower.h"
 #include "llpcVertexFetch.h"
 
@@ -436,11 +437,16 @@ Result Compiler::BuildShaderModule(
 
         pModuleData->binType = binType;
         pModuleData->binCode.codeSize = pShaderInfo->shaderBin.codeSize;
-        pModuleData->hash = Md5::GenerateHashFromBuffer(pShaderInfo->shaderBin.pCode, pShaderInfo->shaderBin.codeSize);
+        memset(&pModuleData->hash, 0, sizeof(pModuleData->hash));
+        MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pShaderInfo->shaderBin.pCode),
+                          pShaderInfo->shaderBin.codeSize,
+                          pModuleData->hash.bytes);
 
         if (cl::EnablePipelineDump)
         {
-            DumpSpirvBinary(cl::PipelineDumpDir.c_str(), &pShaderInfo->shaderBin, &pModuleData->hash);
+            PipelineDumper::DumpSpirvBinary(cl::PipelineDumpDir.c_str(),
+                                          &pShaderInfo->shaderBin,
+                                          &pModuleData->hash);
         }
 
         void* pCode = VoidPtrInc(pAllocBuf, sizeof(ShaderModuleData));
@@ -479,7 +485,7 @@ Result Compiler::BuildGraphicsPipeline(
         result = ValidatePipelineShaderInfo(static_cast<ShaderStage>(i), shaderInfo[i]);
     }
 
-    Md5::Hash hash = {};
+    MetroHash::Hash hash = {};
     hash = GenerateHashForGraphicsPipeline(pPipelineInfo);
 
     // Do shader replacement if it's enabled
@@ -488,7 +494,7 @@ Result Compiler::BuildGraphicsPipeline(
     if (cl::ShaderReplaceMode != ShaderReplaceDisable)
     {
         char pipelineHash[64];
-        int32_t length = snprintf(pipelineHash, 64, "0x%016" PRIX64, Md5::Compact64(&hash));
+        int32_t length = snprintf(pipelineHash, 64, "0x%016" PRIX64, MetroHash::Compact64(&hash));
         LLPC_ASSERT(length >= 0);
 
         bool hashMatch = true;
@@ -520,9 +526,13 @@ Result Compiler::BuildGraphicsPipeline(
                         const_cast<PipelineShaderInfo*>(shaderInfo[stage])->pModuleData = pModuleData;
 
                         char shaderHash[64] = {};
-                        int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, Md5::Compact64(&restoreModuleData[stage]->hash));
+                        int32_t length = snprintf(shaderHash,
+                                                  64,
+                                                  "0x%016" PRIX64,
+                                                  MetroHash::Compact64(&restoreModuleData[stage]->hash));
                         LLPC_ASSERT(length >= 0);
-                        LLPC_OUTS("// Shader replacement for shader: " << shaderHash << ", in pipeline: " << pipelineHash << "\n");
+                        LLPC_OUTS("// Shader replacement for shader: " << shaderHash
+                                  << ", in pipeline: " << pipelineHash << "\n");
                     }
                 }
             }
@@ -541,7 +551,7 @@ Result Compiler::BuildGraphicsPipeline(
     {
         LLPC_OUTS("===============================================================================\n");
         LLPC_OUTS("// LLPC calculated hash results (graphics pipline)\n");
-        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, Md5::Compact64(&hash)) << "\n");
+        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, MetroHash::Compact64(&hash)) << "\n");
         for (uint32_t stage = 0; stage < ShaderStageGfxCount; ++stage)
         {
             const ShaderModuleData* pModuleData =
@@ -549,21 +559,17 @@ Result Compiler::BuildGraphicsPipeline(
             if (pModuleData != nullptr)
             {
                 LLPC_OUTS(format("%-4s : ", GetShaderStageAbbreviation(static_cast<ShaderStage>(stage), true)) <<
-                          format("0x%016" PRIX64, Md5::Compact64(&pModuleData->hash)) << "\n");
+                          format("0x%016" PRIX64, MetroHash::Compact64(&pModuleData->hash)) << "\n");
             }
         }
         LLPC_OUTS("\n");
     }
 
-    raw_fd_ostream* pPipelineDumpFile = nullptr;
+    std::ofstream* pPipelineDumperFile = nullptr;
 
     if ((result == Result::Success) && cl::EnablePipelineDump)
     {
-        pPipelineDumpFile = CreatePipelineDumpFile(cl::PipelineDumpDir.c_str(), nullptr, pPipelineInfo, &hash);
-        if (pPipelineDumpFile != nullptr)
-        {
-            DumpGraphicsPipelineInfo(pPipelineDumpFile, pPipelineInfo);
-        }
+        pPipelineDumperFile = PipelineDumper::BeginPipelineDump(cl::PipelineDumpDir.c_str(), nullptr, pPipelineInfo, &hash);
     }
 
     ShaderEntryState cacheEntryState = ShaderEntryState::New;
@@ -624,7 +630,7 @@ Result Compiler::BuildGraphicsPipeline(
                 ((stage == ShaderStageTessControl) || (stage == ShaderStageTessEval) || (stage == ShaderStageGeometry)))
             {
                 result = Result::Unsupported;
-                LLPC_ERRS("Unsupported shader stage.\n")
+                LLPC_ERRS("Unsupported shader stage.\n");
                 continue;
             }
 
@@ -958,16 +964,16 @@ Result Compiler::BuildGraphicsPipeline(
         pPipelineOut->pipelineBin.pCode = pCode;
     }
 
-    if (pPipelineDumpFile != nullptr)
+    if (pPipelineDumperFile != nullptr)
     {
         if (result == Result::Success)
         {
-            DumpPipelineBinary(pPipelineDumpFile,
-                               m_gfxIp,
-                               &pPipelineOut->pipelineBin);
+            PipelineDumper::DumpPipelineBinary(pPipelineDumperFile,
+                                             m_gfxIp,
+                                             &pPipelineOut->pipelineBin);
         }
 
-        DestroyPipelineDumpFile(pPipelineDumpFile);
+        PipelineDumper::EndPipelineDump(pPipelineDumperFile);
     }
 
     // Free shader replacement allocations and restore original shader module
@@ -1004,7 +1010,7 @@ Result Compiler::BuildComputePipeline(
 
     Result result = ValidatePipelineShaderInfo(ShaderStageCompute, &pPipelineInfo->cs);
 
-    Md5::Hash hash = {};
+    MetroHash::Hash hash = {};
     hash = GenerateHashForComputePipeline(pPipelineInfo);
 
     // Do shader replacement if it's enabled
@@ -1013,7 +1019,7 @@ Result Compiler::BuildComputePipeline(
     if (cl::ShaderReplaceMode != ShaderReplaceDisable)
     {
         char pipelineHash[64];
-        int32_t length = snprintf(pipelineHash, 64, "0x%016" PRIX64, Md5::Compact64(&hash));
+        int32_t length = snprintf(pipelineHash, 64, "0x%016" PRIX64, MetroHash::Compact64(&hash));
         LLPC_ASSERT(length >= 0);
 
         bool hashMatch = true;
@@ -1042,9 +1048,10 @@ Result Compiler::BuildComputePipeline(
                     const_cast<PipelineShaderInfo*>(&pPipelineInfo->cs)->pModuleData = pModuleData;
 
                     char shaderHash[64];
-                    int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, Md5::Compact64(&pRestoreModuleData->hash));
+                    int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, MetroHash::Compact64(&pRestoreModuleData->hash));
                     LLPC_ASSERT(length >= 0);
-                    LLPC_OUTS("// Shader replacement for shader: " << shaderHash << ", in pipeline: " << pipelineHash << "\n");
+                    LLPC_OUTS("// Shader replacement for shader: " << shaderHash
+                               << ", in pipeline: " << pipelineHash << "\n");
                 }
             }
 
@@ -1063,20 +1070,16 @@ Result Compiler::BuildComputePipeline(
         const ShaderModuleData* pModuleData = reinterpret_cast<const ShaderModuleData*>(pPipelineInfo->cs.pModuleData);
         LLPC_OUTS("===============================================================================\n");
         LLPC_OUTS("// LLPC calculated hash results (compute pipline)\n");
-        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, Md5::Compact64(&hash)) << "\n");
+        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, MetroHash::Compact64(&hash)) << "\n");
         LLPC_OUTS(format("%-4s : ", GetShaderStageAbbreviation(ShaderStageCompute, true)) <<
-                  format("0x%016" PRIX64, Md5::Compact64(&pModuleData->hash)) << "\n");
+                  format("0x%016" PRIX64, MetroHash::Compact64(&pModuleData->hash)) << "\n");
         LLPC_OUTS("\n");
     }
 
-    raw_fd_ostream* pPipelineDumpFile = nullptr;
+    std::ofstream* pPipelineDumperFile = nullptr;
     if ((result == Result::Success) && cl::EnablePipelineDump)
     {
-        pPipelineDumpFile = CreatePipelineDumpFile(cl::PipelineDumpDir.c_str(), pPipelineInfo, nullptr, &hash);
-        if (pPipelineDumpFile != nullptr)
-        {
-            DumpComputePipelineInfo(pPipelineDumpFile, pPipelineInfo);
-        }
+        pPipelineDumperFile = PipelineDumper::BeginPipelineDump(cl::PipelineDumpDir.c_str(), pPipelineInfo, nullptr, &hash);
     }
 
     ShaderEntryState cacheEntryState = ShaderEntryState::New;
@@ -1305,16 +1308,16 @@ Result Compiler::BuildComputePipeline(
         pPipelineOut->pipelineBin.pCode = pCode;
     }
 
-    if (pPipelineDumpFile != nullptr)
+    if (pPipelineDumperFile != nullptr)
     {
         if (result == Result::Success)
         {
-            DumpPipelineBinary(pPipelineDumpFile,
-                                m_gfxIp,
-                                &pPipelineOut->pipelineBin);
+            PipelineDumper::DumpPipelineBinary(pPipelineDumperFile,
+                                             m_gfxIp,
+                                             &pPipelineOut->pipelineBin);
         }
 
-        DestroyPipelineDumpFile(pPipelineDumpFile);
+        PipelineDumper::EndPipelineDump(pPipelineDumperFile);
     }
 
     // Free shader replacement allocations and restore original shader module
@@ -1342,7 +1345,8 @@ Result Compiler::ReplaceShader(
     ShaderModuleData**          ppModuleData        // [out] Resuling shader module after shader replacement
     ) const
 {
-    uint64_t shaderHash = Md5::Compact64(&pOrigModuleData->hash);
+    uint64_t shaderHash = MetroHash::Compact64(&pOrigModuleData->hash);
+
     char fileName[64];
     int32_t length = snprintf(fileName, 64, "Shader_0x%016" PRIX64 "_replace.spv", shaderHash);
     LLPC_ASSERT(length >= 0);
@@ -1369,7 +1373,8 @@ Result Compiler::ReplaceShader(
             pModuleData->binType = pOrigModuleData->binType;
             pModuleData->binCode.codeSize = binSize;
             pModuleData->binCode.pCode = pShaderBin;
-            pModuleData->hash = Md5::GenerateHashFromBuffer(pShaderBin, binSize);
+            memset(&pModuleData->hash, 0, sizeof(pModuleData->hash));
+            MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pShaderBin), binSize, pModuleData->hash.bytes);
 
             *ppModuleData = pModuleData;
 
@@ -1499,8 +1504,8 @@ uint64_t Compiler::GetGraphicsPipelineHash(
     const GraphicsPipelineBuildInfo* pPipelineInfo  // [in] Info to build a graphics pipeline
     ) const
 {
-    Md5::Hash hash = GenerateHashForGraphicsPipeline(pPipelineInfo);
-    return Md5::Compact64(&hash);
+    MetroHash::Hash hash = GenerateHashForGraphicsPipeline(pPipelineInfo);
+    return MetroHash::Compact64(&hash);
 }
 
 // =====================================================================================================================
@@ -1509,142 +1514,139 @@ uint64_t Compiler::GetComputePipelineHash(
     const ComputePipelineBuildInfo* pPipelineInfo  // [in] Info to build a compute pipeline
     ) const
 {
-    Md5::Hash hash = GenerateHashForComputePipeline(pPipelineInfo);
-    return Md5::Compact64(&hash);
+    MetroHash::Hash hash = GenerateHashForComputePipeline(pPipelineInfo);
+    return MetroHash::Compact64(&hash);
 }
 
 // =====================================================================================================================
-// Builds MD5 hash code from graphics pipline build info.
-Md5::Hash Compiler::GenerateHashForGraphicsPipeline(
+// Builds hash code from graphics pipline build info.
+MetroHash::Hash Compiler::GenerateHashForGraphicsPipeline(
     const GraphicsPipelineBuildInfo* pPipeline  // [in] Info to build a graphics pipeline
     ) const
 {
-    Md5::Context checksumCtx = {};
-    Md5::Hash    hash        = {};
+    MetroHash64 hasher;
 
-    Md5::Init(&checksumCtx);
-
-    UpdateHashForPipelineShaderInfo(ShaderStageVertex, &pPipeline->vs, &checksumCtx);
-    UpdateHashForPipelineShaderInfo(ShaderStageTessControl, &pPipeline->tcs, &checksumCtx);
-    UpdateHashForPipelineShaderInfo(ShaderStageTessEval, &pPipeline->tes, &checksumCtx);
-    UpdateHashForPipelineShaderInfo(ShaderStageGeometry, &pPipeline->gs, &checksumCtx);
-    UpdateHashForPipelineShaderInfo(ShaderStageFragment, &pPipeline->fs, &checksumCtx);
+    UpdateHashForPipelineShaderInfo(ShaderStageVertex, &pPipeline->vs, &hasher);
+    UpdateHashForPipelineShaderInfo(ShaderStageTessControl, &pPipeline->tcs, &hasher);
+    UpdateHashForPipelineShaderInfo(ShaderStageTessEval, &pPipeline->tes, &hasher);
+    UpdateHashForPipelineShaderInfo(ShaderStageGeometry, &pPipeline->gs, &hasher);
+    UpdateHashForPipelineShaderInfo(ShaderStageFragment, &pPipeline->fs, &hasher);
 
     if ((pPipeline->pVertexInput != nullptr) && (pPipeline->pVertexInput->vertexBindingDescriptionCount > 0))
     {
         auto pVertexInput = pPipeline->pVertexInput;
-        Md5::Update(&checksumCtx, pVertexInput->vertexBindingDescriptionCount);
-        Md5::Update(&checksumCtx,
-                    pVertexInput->pVertexBindingDescriptions,
-                    sizeof(VkVertexInputBindingDescription) * pVertexInput->vertexBindingDescriptionCount);
-        Md5::Update(&checksumCtx, pVertexInput->vertexAttributeDescriptionCount);
-        Md5::Update(&checksumCtx,
-                    pVertexInput->pVertexAttributeDescriptions,
-                    sizeof(VkVertexInputAttributeDescription) * pVertexInput->vertexAttributeDescriptionCount);
+        hasher.Update(pVertexInput->vertexBindingDescriptionCount);
+        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexBindingDescriptions),
+                      sizeof(VkVertexInputBindingDescription) * pVertexInput->vertexBindingDescriptionCount);
+        hasher.Update(pVertexInput->vertexAttributeDescriptionCount);
+        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexAttributeDescriptions),
+                      sizeof(VkVertexInputAttributeDescription) * pVertexInput->vertexAttributeDescriptionCount);
     }
+
     auto pIaState = &pPipeline->iaState;
-    Md5::Update(&checksumCtx, pIaState->topology);
-    Md5::Update(&checksumCtx, pIaState->patchControlPoints);
-    Md5::Update(&checksumCtx, pIaState->deviceIndex);
-    Md5::Update(&checksumCtx, pIaState->disableVertexReuse);
+    hasher.Update(pIaState->topology);
+    hasher.Update(pIaState->patchControlPoints);
+    hasher.Update(pIaState->deviceIndex);
+    hasher.Update(pIaState->disableVertexReuse);
+    if (pIaState->switchWinding)
+    {
+        hasher.Update(pIaState->switchWinding);
+    }
 
     auto pVpState = &pPipeline->vpState;
-    Md5::Update(&checksumCtx, pVpState->depthClipEnable);
+    hasher.Update(pVpState->depthClipEnable);
 
     auto pRsState = &pPipeline->rsState;
-    Md5::Update(&checksumCtx, pRsState->rasterizerDiscardEnable);
+    hasher.Update(pRsState->rasterizerDiscardEnable);
     if (pRsState->perSampleShading)
     {
-        Md5::Update(&checksumCtx, pRsState->perSampleShading);
+        hasher.Update(pRsState->perSampleShading);
     }
-    Md5::Update(&checksumCtx, pRsState->numSamples);
-    Md5::Update(&checksumCtx, pRsState->samplePatternIdx);
-    Md5::Update(&checksumCtx, pRsState->usrClipPlaneMask);
+    hasher.Update(pRsState->numSamples);
+    hasher.Update(pRsState->samplePatternIdx);
+    hasher.Update(pRsState->usrClipPlaneMask);
 
     auto pCbState = &pPipeline->cbState;
-    Md5::Update(&checksumCtx, pCbState->alphaToCoverageEnable);
-    Md5::Update(&checksumCtx, pCbState->dualSourceBlendEnable);
+    hasher.Update(pCbState->alphaToCoverageEnable);
+    hasher.Update(pCbState->dualSourceBlendEnable);
     for (uint32_t i = 0; i < MaxColorTargets; ++i)
     {
         if (pCbState->target[i].format != VK_FORMAT_UNDEFINED)
         {
-            Md5::Update(&checksumCtx, pCbState->target[i].format);
-            Md5::Update(&checksumCtx, pCbState->target[i].blendEnable);
-            Md5::Update(&checksumCtx, pCbState->target[i].blendSrcAlphaToColor);
+            hasher.Update(pCbState->target[i].format);
+            hasher.Update(pCbState->target[i].blendEnable);
+            hasher.Update(pCbState->target[i].blendSrcAlphaToColor);
         }
     }
 
-    Md5::Final(&checksumCtx, &hash);
+    MetroHash::Hash hash = {};
+    hasher.Finalize(hash.bytes);
 
     return hash;
 }
 
 // =====================================================================================================================
-// Builds MD5 hash code from compute pipline build info.
-Md5::Hash Compiler::GenerateHashForComputePipeline(
+// Builds hash code from compute pipline build info.
+MetroHash::Hash Compiler::GenerateHashForComputePipeline(
     const ComputePipelineBuildInfo* pPipeline   // [in] Info to build a compute pipeline
     ) const
 {
-    Md5::Context checksumCtx = {};
-    Md5::Hash    hash       = {};
+    MetroHash64 hasher;
 
-    Md5::Init(&checksumCtx);
+    UpdateHashForPipelineShaderInfo(ShaderStageCompute, &pPipeline->cs, &hasher);
 
-    UpdateHashForPipelineShaderInfo(ShaderStageCompute, &pPipeline->cs, &checksumCtx);
-
-    Md5::Final(&checksumCtx, &hash);
+    MetroHash::Hash hash = {};
+    hasher.Finalize(hash.bytes);
 
     return hash;
 }
 
 // =====================================================================================================================
-// Updates MD5 hash code context for pipeline shader stage.
+// Updates hash code context for pipeline shader stage.
 void Compiler::UpdateHashForPipelineShaderInfo(
     ShaderStage               stage,           // shader stage
     const PipelineShaderInfo* pShaderInfo,     // [in] Shader info in specified shader stage
-    Md5::Context*             pChecksumCtx     // [in,out] MD5 hash code context
+    MetroHash64*              pHasher          // [in,out] Haher to generate hash code
     ) const
 {
     if (pShaderInfo->pModuleData)
     {
         const ShaderModuleData* pModuleData = reinterpret_cast<const ShaderModuleData*>(pShaderInfo->pModuleData);
-        Md5::Update(pChecksumCtx, stage);
-        Md5::Update(pChecksumCtx, pModuleData->hash);
+        pHasher->Update(stage);
+        pHasher->Update(pModuleData->hash);
 
         if (pShaderInfo->pEntryTarget)
         {
             size_t entryNameLen = strlen(pShaderInfo->pEntryTarget);
-            Md5::Update(pChecksumCtx, pShaderInfo->pEntryTarget, entryNameLen);
+            pHasher->Update(reinterpret_cast<const uint8_t*>(pShaderInfo->pEntryTarget), entryNameLen);
         }
 
         if ((pShaderInfo->pSpecializatonInfo) && (pShaderInfo->pSpecializatonInfo->mapEntryCount > 0))
         {
             auto pSpecializatonInfo = pShaderInfo->pSpecializatonInfo;
-            Md5::Update(pChecksumCtx, pSpecializatonInfo->mapEntryCount);
-            Md5::Update(pChecksumCtx,
-                        pSpecializatonInfo->pMapEntries,
-                        sizeof(VkSpecializationMapEntry) * pSpecializatonInfo->mapEntryCount);
-            Md5::Update(pChecksumCtx, pSpecializatonInfo->dataSize);
-            Md5::Update(pChecksumCtx, pSpecializatonInfo->pData, pSpecializatonInfo->dataSize);
+            pHasher->Update(pSpecializatonInfo->mapEntryCount);
+            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pMapEntries),
+                            sizeof(VkSpecializationMapEntry) * pSpecializatonInfo->mapEntryCount);
+            pHasher->Update(pSpecializatonInfo->dataSize);
+            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pData), pSpecializatonInfo->dataSize);
         }
 
         if (pShaderInfo->descriptorRangeValueCount > 0)
         {
-            Md5::Update(pChecksumCtx, pShaderInfo->descriptorRangeValueCount);
+            pHasher->Update(pShaderInfo->descriptorRangeValueCount);
             for (uint32_t i = 0; i < pShaderInfo->descriptorRangeValueCount; ++i)
             {
                 auto pDescriptorRangeValue = &pShaderInfo->pDescriptorRangeValues[i];
-                Md5::Update(pChecksumCtx, pDescriptorRangeValue->type);
-                Md5::Update(pChecksumCtx, pDescriptorRangeValue->set);
-                Md5::Update(pChecksumCtx, pDescriptorRangeValue->binding);
-                Md5::Update(pChecksumCtx, pDescriptorRangeValue->arraySize);
+                pHasher->Update(pDescriptorRangeValue->type);
+                pHasher->Update(pDescriptorRangeValue->set);
+                pHasher->Update(pDescriptorRangeValue->binding);
+                pHasher->Update(pDescriptorRangeValue->arraySize);
 
                 // TODO: We should query descriptor size from patch
                 const uint32_t DescriptorSize = 16;
                 LLPC_ASSERT(pDescriptorRangeValue->type == ResourceMappingNodeType::DescriptorSampler);
-                Md5::Update(pChecksumCtx,
-                            pDescriptorRangeValue->pValue,
-                            pDescriptorRangeValue->arraySize * DescriptorSize);
+                pHasher->Update(reinterpret_cast<const uint8_t*>(pDescriptorRangeValue->pValue),
+                                pDescriptorRangeValue->arraySize * DescriptorSize);
             }
         }
 
@@ -1653,24 +1655,24 @@ void Compiler::UpdateHashForPipelineShaderInfo(
             for (uint32_t i = 0; i < pShaderInfo->userDataNodeCount; ++i)
             {
                 auto pUserDataNode = &pShaderInfo->pUserDataNodes[i];
-                UpdateHashForResourceMappingNode(pUserDataNode, pChecksumCtx);
+                UpdateHashForResourceMappingNode(pUserDataNode, pHasher);
             }
         }
     }
 }
 
 // =====================================================================================================================
-// Updates MD5 hash code context for resource mapping node.
+// Updates hash code context for resource mapping node.
 //
 // NOTE: This function will be called recusively if node's type is "DescriptorTableVaPtr"
 void Compiler::UpdateHashForResourceMappingNode(
     const ResourceMappingNode* pUserDataNode,    // [in] Resource mapping node
-    Md5::Context*              pChecksumCtx      // [in,out] MD5 hash code context
+    MetroHash64*               pHasher           // [in,out] Haher to generate hash code
     ) const
 {
-    Md5::Update(pChecksumCtx, pUserDataNode->type);
-    Md5::Update(pChecksumCtx, pUserDataNode->sizeInDwords);
-    Md5::Update(pChecksumCtx, pUserDataNode->offsetInDwords);
+    pHasher->Update(pUserDataNode->type);
+    pHasher->Update(pUserDataNode->sizeInDwords);
+    pHasher->Update(pUserDataNode->offsetInDwords);
 
     switch (pUserDataNode->type)
     {
@@ -1682,20 +1684,20 @@ void Compiler::UpdateHashForResourceMappingNode(
     case ResourceMappingNodeType::DescriptorFmask:
     case ResourceMappingNodeType::DescriptorBufferCompact:
         {
-            Md5::Update(pChecksumCtx, pUserDataNode->srdRange);
+            pHasher->Update(pUserDataNode->srdRange);
             break;
         }
     case ResourceMappingNodeType::DescriptorTableVaPtr:
         {
             for (uint32_t i = 0; i < pUserDataNode->tablePtr.nodeCount; ++i)
             {
-                UpdateHashForResourceMappingNode(&pUserDataNode->tablePtr.pNext[i],pChecksumCtx);
+                UpdateHashForResourceMappingNode(&pUserDataNode->tablePtr.pNext[i], pHasher);
             }
             break;
         }
     case ResourceMappingNodeType::IndirectUserDataVaPtr:
         {
-            Md5::Update(pChecksumCtx, pUserDataNode->userDataPtr);
+            pHasher->Update(pUserDataNode->userDataPtr);
             break;
         }
     case ResourceMappingNodeType::PushConst:
@@ -1712,8 +1714,8 @@ void Compiler::UpdateHashForResourceMappingNode(
 }
 
 // =====================================================================================================================
-// Builds MD5 hash code from compilation-options
-Md5::Hash Compiler::GenerateHashForCompileOptions(
+// Builds hash code from compilation-options
+MetroHash::Hash Compiler::GenerateHashForCompileOptions(
     uint32_t          optionCount,    // Count of compilation-option strings
     const char*const* pOptions         // [in] An array of compilation-option strings
     ) const
@@ -1757,17 +1759,16 @@ Md5::Hash Compiler::GenerateHashForCompileOptions(
         }
     }
 
-    Md5::Context checksumCtx = {};
-    Md5::Hash    hash       = {};
+    MetroHash64 hasher;
 
-    Md5::Init(&checksumCtx);
     // Build hash code from effecting options
     for (auto option : effectingOptions)
     {
-        Md5::Update(&checksumCtx, option.data(), option.size());
+        hasher.Update(reinterpret_cast<const uint8_t*>(option.data()), option.size());
     }
 
-    Md5::Final(&checksumCtx, &hash);
+    MetroHash::Hash hash = {};
+    hasher.Finalize(hash.bytes);
 
     return hash;
 }
@@ -2017,24 +2018,26 @@ void Compiler::ReleaseContext(
 // =====================================================================================================================
 // Dumps the result of time profile.
 void Compiler::DumpTimeProfilingResult(
-    const Md5::Hash* pHash)   // [in] Pipeline hash
+    const MetroHash::Hash* pHash)   // [in] Pipeline hash
 {
-    int64_t fre = {};
-    fre = GetPerfFrequency();
+    int64_t freq = {};
+    freq = GetPerfFrequency();
+
     char shaderHash[64] = {};
-    int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, Md5::Compact64(pHash));
+    int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, MetroHash::Compact64(pHash));
+
     // NOTE: To get correct profile result, we have to disable general info output, so we have to output time profile
     // result to LLPC_ERRS
     LLPC_ERRS("Time Profiling Results(General): "
               << "Hash = " << shaderHash << ", "
-              << "Translate = " << float(g_timeProfileResult.translateTime) / fre << ", "
-              << "SPIR-V Lower = " << float(g_timeProfileResult.lowerTime) / fre << ", "
-              << "LLVM Patch = " << float(g_timeProfileResult.patchTime) / fre << ", "
-              << "Code Generation = " << float(g_timeProfileResult.codeGenTime) / fre << "\n");
+              << "Translate = " << float(g_timeProfileResult.translateTime) / freq << ", "
+              << "SPIR-V Lower = " << float(g_timeProfileResult.lowerTime) / freq << ", "
+              << "LLVM Patch = " << float(g_timeProfileResult.patchTime) / freq << ", "
+              << "Code Generation = " << float(g_timeProfileResult.codeGenTime) / freq << "\n");
 
     LLPC_ERRS("Time Profiling Results(Special): "
-              << "SPIR-V Lower (Optimization) = " << float(g_timeProfileResult.lowerOptTime) / fre << ", "
-              << "LLVM Patch (Lib Link) = " << float(g_timeProfileResult.patchLinkTime) / fre << "\n");
+              << "SPIR-V Lower (Optimization) = " << float(g_timeProfileResult.lowerOptTime) / freq << ", "
+              << "LLVM Patch (Lib Link) = " << float(g_timeProfileResult.patchLinkTime) / freq << "\n");
 }
 
 // =====================================================================================================================
@@ -2044,11 +2047,10 @@ void Compiler::DumpGraphicsPipeline(
     ) const
 {
     auto hash = GenerateHashForGraphicsPipeline(pPipelineInfo);
-    auto pPipelineDumpFile = CreatePipelineDumpFile(cl::PipelineDumpDir.c_str(), nullptr, pPipelineInfo, &hash);
-    if (pPipelineDumpFile != nullptr)
+    auto pPipelineDumperFile = PipelineDumper::BeginPipelineDump(cl::PipelineDumpDir.c_str(), nullptr, pPipelineInfo, &hash);
+    if (pPipelineDumperFile != nullptr)
     {
-        DumpGraphicsPipelineInfo(pPipelineDumpFile, pPipelineInfo);
-        DestroyPipelineDumpFile(pPipelineDumpFile);
+        PipelineDumper::EndPipelineDump(pPipelineDumperFile);
     }
 }
 
@@ -2059,11 +2061,10 @@ void Compiler::DumpComputePipeline(
     ) const
 {
     auto hash = GenerateHashForComputePipeline(pPipelineInfo);
-    auto pPipelineDumpFile = CreatePipelineDumpFile(cl::PipelineDumpDir.c_str(), pPipelineInfo, nullptr, &hash);
-    if (pPipelineDumpFile != nullptr)
+    auto pPipelineDumperFile = PipelineDumper::BeginPipelineDump(cl::PipelineDumpDir.c_str(), pPipelineInfo, nullptr, &hash);
+    if (pPipelineDumperFile != nullptr)
     {
-        DumpComputePipelineInfo(pPipelineDumpFile, pPipelineInfo);
-        DestroyPipelineDumpFile(pPipelineDumpFile);
+        PipelineDumper::EndPipelineDump(pPipelineDumperFile);
     }
 }
 

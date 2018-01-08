@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -847,6 +847,7 @@ private:
     StencilOpsCombiner            m_stencilCombiner; // Manages internal stencil combined state
     bool                          m_is2ndLvl;        // is this command buffer secondary or primary
     bool                          m_isRecording;
+    bool                          m_needResetState;
 
     SqttCmdBufferState*           m_pSqttState; // Per-cmdbuf state for handling SQ thread-tracing annotations
 

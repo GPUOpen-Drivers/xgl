@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -50,7 +50,6 @@ VkResult ComputePipeline::ConvertComputePipelineInfo(
     const VkComputePipelineCreateInfo*      pIn,
     Pal::ComputePipelineCreateInfo*         pOutInfo,
     ImmedInfo*                              pImmedInfo,
-    Pal::IShader**                          ppPalShaders,
     void**                                  ppTempBuffer,
     void**                                  ppTempShaderBuffer,
     size_t*                                 pPipelineBinarySize,
@@ -67,9 +66,6 @@ VkResult ComputePipeline::ConvertComputePipelineInfo(
     void*                     pPatchMemory[MaxPalDevices] = {};
     size_t                    pipelineBinarySize = 0;
     const void*               pPipelineBinary    = nullptr;
-#ifdef ICD_BUILD_APPPROFILE
-    PipelineOptimizerKey pipelineProfileKey = {};
-#endif
 
     VkResult result = VK_SUCCESS;
     *ppTempBuffer   = nullptr;
@@ -81,15 +77,6 @@ VkResult ComputePipeline::ConvertComputePipelineInfo(
         case VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO:
             {
                 const ShaderModule* pShader = ShaderModule::ObjectFromHandle(pPipelineInfo->stage.module);
-
-#ifdef ICD_BUILD_APPPROFILE
-                // Populate the pipeline profile key.  The hash used by the profile is different from the default
-                // internal hash in that it only depends on the SPIRV code + entry point.  This is to reduce the
-                // chance that internal changes to our hash calculation logic drop us off pipeline profiles.
-                pipelineProfileKey.shaders[ShaderStageCompute].codeHash = pShader->GetCodeHash(
-                    pPipelineInfo->stage.pName);
-                pipelineProfileKey.shaders[ShaderStageCompute].codeSize = pShader->GetCodeSize();
-#endif
 
                 bool buildLlpcPipeline = false;
                 bool enableLlpc = false;
@@ -205,14 +192,6 @@ VkResult ComputePipeline::ConvertComputePipelineInfo(
         }
     }
 
-#if ICD_BUILD_APPPROFILE
-    // Override pipeline creation parameters based on pipeline profile
-    pDevice->GetShaderOptimizer()->OverrideComputePipelineCreateInfo(
-        pipelineProfileKey,
-        pOutInfo,
-        nullptr);
-#endif
-
     if (result == VK_SUCCESS)
     {
         *pPipelineBinarySize = pipelineBinarySize;
@@ -290,8 +269,6 @@ VkResult ComputePipeline::Create(
     // Setup PAL create info from Vulkan inputs
     Pal::ComputePipelineCreateInfo palCreateInfo              = {};
     ImmedInfo                      immedInfo                  = {};
-    Pal::ShaderCreateInfo          palShaderCreateInfo        = {};
-    Pal::IShader*                  pPalShaders[MaxPalDevices] = {};
     void*                          pTempBuffer                = nullptr;
     void*                          pTempShaderBuffer          = nullptr;
     size_t                         pipelineBinarySize         = 0;
@@ -305,7 +282,6 @@ VkResult ComputePipeline::Create(
         pCreateInfo,
         &palCreateInfo,
         &immedInfo,
-        pPalShaders,
         &pTempBuffer,
         &pTempShaderBuffer,
         &pipelineBinarySize,
@@ -348,16 +324,6 @@ VkResult ComputePipeline::Create(
             ((deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success));
             deviceIdx++)
         {
-            if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCacheType() == PipelineCacheTypePal))
-            {
-                palCreateInfo.pShaderCache = pPipelineCache->GetShaderCache(deviceIdx).pPalShaderCache;
-            }
-
-            if (pPalShaders[deviceIdx] != nullptr)
-            {
-                palCreateInfo.cs.pShader = pPalShaders[deviceIdx];
-            }
-
             pDevice->PalDevice(deviceIdx)->CreateComputePipeline(
                 palCreateInfo,
                 Util::VoidPtrInc(pPalMem, deviceIdx * pipelineSize),
@@ -415,11 +381,6 @@ VkResult ComputePipeline::Create(
     }
 
     // Destroy PAL shader object and temp memory
-    if (palCreateInfo.cs.pShader != nullptr)
-    {
-        palCreateInfo.cs.pShader->Destroy();
-    }
-
     if (pTempBuffer != nullptr)
     {
         pDevice->VkInstance()->FreeMem(pTempBuffer);

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1228,7 +1228,6 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInGlobalInvocationId:
                     m_pResUsage->builtInUsage.cs.workgroupId = true;
                     m_pResUsage->builtInUsage.cs.localInvocationId = true;
-                    m_pResUsage->builtInUsage.cs.numWorkgroups = true;
                     break;
                 case BuiltInLocalInvocationIndex:
                     m_pResUsage->builtInUsage.cs.workgroupId = true;

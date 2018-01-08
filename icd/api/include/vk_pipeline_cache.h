@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -28,13 +28,6 @@
 #include "include/vk_utils.h"
 #include "include/vk_defines.h"
 #include "include/vk_dispatch.h"
-
-namespace Pal
-{
-
-class IShaderCache;
-
-}
 
 namespace Llpc
 {
@@ -75,7 +68,6 @@ struct PipelineCachePrivateHeaderData
 // Unified shader cache interface
 union IShaderCachePtr
 {
-    Pal::IShaderCache*  pPalShaderCache;  // Pointer to PAL shader cache object
     Llpc::IShaderCache* pLlpcShaderCache; // Pointer to LLPC shader cache object
 };
 

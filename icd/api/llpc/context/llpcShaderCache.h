@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -40,7 +40,7 @@
 #include "llpcDebug.h"
 #include "llpcFile.h"
 #include "llpcInternal.h"
-#include "llpcMd5.h"
+#include "llpcMetroHash.h"
 
 namespace Llpc
 {
@@ -48,7 +48,7 @@ namespace Llpc
 // Header data that is stored with each shader in the cache.
 struct ShaderHeader
 {
-    ShaderHash  key;    // Compacted MD5 Hash key used to identify shaders
+    ShaderHash  key;    // Compacted hash key used to identify shaders
     uint64_t    crc;    // CRC of the shader cache entry, used to detect data corruption.
     size_t      size;   // Total size of the shader data in the storage file
 };
@@ -87,7 +87,7 @@ struct ShaderCacheAuxCreateInfo
 {
     ShaderCacheMode        shaderCacheMode;    // Mode of shader cache
     GfxIpVersion           gfxIp;              // Graphics IP version info
-    Md5::Hash              hash;               // Hash code of compilation options
+    MetroHash::Hash        hash;               // Hash code of compilation options
     const char*            pCacheFilePath;     // root directory of cache file
     const char*            pExecutableName;    // Name of executable file
 };
@@ -107,7 +107,7 @@ struct BuildUniqueId
     uint8_t buildDate[DateLength];     // Build date
     uint8_t buildTime[TimeLength];     // Build time
     GfxIpVersion gfxIp;                // Graphics IP version info
-    Md5::Hash    hash;                 // Hash code of compilation options
+    MetroHash::Hash hash;              // Hash code of compilation options
 };
 
 // This the header for the shader cache data when the cache is serialized/written to disk
@@ -140,7 +140,7 @@ public:
 
     virtual Result Merge(uint32_t srcCacheCount, const IShaderCache** ppSrcCaches);
 
-    ShaderEntryState FindShader(Md5::Hash         hash,
+    ShaderEntryState FindShader(MetroHash::Hash   hash,
                                 bool              allocateOnMiss,
                                 CacheEntryHandle* phEntry);
 
@@ -207,11 +207,11 @@ private:
     uint32_t                 m_serializedSize;      // Serialized byte size of whole shader cache
     std::mutex               m_conditionMutex;      // Mutex that will be used with the condition variable
     std::condition_variable  m_conditionVariable;   // Condition variable that will be used to wait compile finish
-    const void*              m_pClientData;       // Client data that will be used by function GetValue and StoreValue
-    ShaderCacheGetValue      m_pfnGetValueFunc;   // GetValue function used to query an external cache for shader data
-    ShaderCacheStoreValue    m_pfnStoreValueFunc; // StoreValue function used to store shader data in an external cache
-    GfxIpVersion             m_gfxIp;             // Graphics IP version info
-    Md5::Hash                m_hash;              // Hash code of compilation options
+    const void*              m_pClientData;         // Client data that will be used by function GetValue and StoreValue
+    ShaderCacheGetValue      m_pfnGetValueFunc;     // GetValue function used to query an external cache for shader data
+    ShaderCacheStoreValue    m_pfnStoreValueFunc;   // StoreValue function used to store shader data in an external cache
+    GfxIpVersion             m_gfxIp;               // Graphics IP version info
+    MetroHash::Hash          m_hash;                // Hash code of compilation options
 };
 
 } // Llpc

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -43,7 +43,7 @@
 #include "llpcDebug.h"
 #include "llpcInternal.h"
 #include "llpcIntrinsDefs.h"
-#include "llpcMd5.h"
+#include "llpcMetroHash.h"
 
 namespace Llpc
 {
@@ -559,7 +559,7 @@ struct InterfaceData
 class PipelineContext
 {
 public:
-    PipelineContext(GfxIpVersion gfxIp, const GpuProperty* pGpuProp, Md5::Hash* pHash);
+    PipelineContext(GfxIpVersion gfxIp, const GpuProperty* pGpuProp, MetroHash::Hash* pHash);
     virtual ~PipelineContext() {}
 
     // Gets resource usage of the specified shader stage
@@ -620,7 +620,7 @@ public:
     void AutoLayoutDescriptor(ShaderStage shaderStage);
 
     // Gets pipeline hash code
-    uint64_t GetPiplineHashCode() const { return Md5::Compact64(&m_hash); }
+    uint64_t GetPiplineHashCode() const { return MetroHash::Compact64(&m_hash); }
     virtual uint64_t GetShaderHashCode(ShaderStage stage) const = 0;
 
 protected:
@@ -642,12 +642,12 @@ protected:
 
     void UpdateShaderHashForPipelineShaderInfo(ShaderStage               stage,
                                                const PipelineShaderInfo* pShaderInfo,
-                                               Md5::Context*             pChecksumCtx) const;
+                                               MetroHash64*              pHasher) const;
 
     // -----------------------------------------------------------------------------------------------------------------
 
     GfxIpVersion        m_gfxIp;         // Graphics IP version info
-    Md5::Hash           m_hash;          // Pipeline hash code
+    MetroHash::Hash     m_hash;          // Pipeline hash code
     const GpuProperty*  m_pGpuProperty;  // GPU Property
 
 private:

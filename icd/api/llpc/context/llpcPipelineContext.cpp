@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -60,7 +60,7 @@ namespace Llpc
 PipelineContext::PipelineContext(
     GfxIpVersion        gfxIp,     // Graphics IP version info
     const GpuProperty*  pGpuProp,  // [in] GPU property
-    Md5::Hash*          pHash)     // [in] Pipeline hash code
+    MetroHash::Hash*    pHash)     // [in] Pipeline hash code
     :
     m_gfxIp(gfxIp),
     m_hash(*pHash),
@@ -377,32 +377,31 @@ uint32_t PipelineContext::GetResourceMapNodeSize(
 }
 
 // =====================================================================================================================
-// Updates MD5 hash code context from pipeline shader info for shader hash code.
+// Updates hash code context from pipeline shader info for shader hash code.
 void PipelineContext::UpdateShaderHashForPipelineShaderInfo(
     ShaderStage               stage,           // Shader stage
     const PipelineShaderInfo* pShaderInfo,     // [in] Shader info in specified shader stage
-    Md5::Context*             pChecksumCtx     // [in,out] MD5 hash code context
+    MetroHash64*              pHasher          // [in,out] Haher to generate hash code
     ) const
 {
     const ShaderModuleData* pModuleData = reinterpret_cast<const ShaderModuleData*>(pShaderInfo->pModuleData);
-    Md5::Update(pChecksumCtx, stage);
-    Md5::Update(pChecksumCtx, pModuleData->hash);
+    pHasher->Update(stage);
+    pHasher->Update(pModuleData->hash);
 
     if (pShaderInfo->pEntryTarget)
     {
         size_t entryNameLen = strlen(pShaderInfo->pEntryTarget);
-        Md5::Update(pChecksumCtx, pShaderInfo->pEntryTarget, entryNameLen);
+        pHasher->Update(reinterpret_cast<const uint8_t*>(pShaderInfo->pEntryTarget), entryNameLen);
     }
 
     if ((pShaderInfo->pSpecializatonInfo) && (pShaderInfo->pSpecializatonInfo->mapEntryCount > 0))
     {
         auto pSpecializatonInfo = pShaderInfo->pSpecializatonInfo;
-        Md5::Update(pChecksumCtx, pSpecializatonInfo->mapEntryCount);
-        Md5::Update(pChecksumCtx,
-                    pSpecializatonInfo->pMapEntries,
-                    sizeof(VkSpecializationMapEntry) * pSpecializatonInfo->mapEntryCount);
-        Md5::Update(pChecksumCtx, pSpecializatonInfo->dataSize);
-        Md5::Update(pChecksumCtx, pSpecializatonInfo->pData, pSpecializatonInfo->dataSize);
+        pHasher->Update(pSpecializatonInfo->mapEntryCount);
+        pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pMapEntries),
+                        sizeof(VkSpecializationMapEntry) * pSpecializatonInfo->mapEntryCount);
+        pHasher->Update(pSpecializatonInfo->dataSize);
+        pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pData), pSpecializatonInfo->dataSize);
     }
 }
 

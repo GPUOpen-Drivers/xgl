@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -93,15 +93,17 @@ public:
     uint32_t GetSupportedInputCoherMask() const
         { return m_inputCacheMask; }
 
-    bool IsSparse() const
-        { return (m_flags & SparseEnablingFlags) != 0; }
-
-    bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
-private:
     // We have to treat the buffer sparse if any of these flags are set
     static const VkBufferCreateFlags SparseEnablingFlags =
         VK_BUFFER_CREATE_SPARSE_BINDING_BIT |
         VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT;
+
+    bool IsSparse() const
+        { return (m_flags & SparseEnablingFlags) != 0; }
+
+    bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
+
+private:
 
     union BufferFlags
     {

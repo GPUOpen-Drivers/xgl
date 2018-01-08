@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -456,11 +456,11 @@ Result CodeGenManager::FinalizeElf(
             CreateSectionFromDataEntry(AmdGpuDisasmName, disasmSectionSize, elfInCount, disasmData.data(), writer);
             CreateSectionFromDataEntry(AmdGpuCsdataName, csdataSectionSize, elfInCount, csdataData.data(), writer);
 
-            void* pConfig = nullptr;
+            uint8_t* pConfig = nullptr;
             size_t configSize = 0;
             result = BuildGraphicsPipelineRegConfig(pContext, configData.data(), &pConfig, &configSize);
             writer.AddNote(Util::Abi::PipelineAbiNoteType::PalMetadata, configSize, pConfig);
-            delete pConfig;
+            delete[] pConfig;
         }
     }
     else
@@ -561,11 +561,11 @@ Result CodeGenManager::FinalizeElf(
                 CreateSectionFromDataEntry(AmdGpuDisasmName, disasmData.size, 1, &disasmData, writer);
                 CreateSectionFromDataEntry(AmdGpuCsdataName, csdataData.size, 1, &csdataData, writer);
 
-                void* pConfig = nullptr;
+                uint8_t* pConfig = nullptr;
                 size_t configSize = 0;
                 result = BuildComputePipelineRegConfig(pContext, &configData, &pConfig, &configSize);
                 writer.AddNote(Util::Abi::PipelineAbiNoteType::PalMetadata, configSize, pConfig);
-                delete pConfig;
+                delete[] pConfig;
             }
         }
         else
@@ -588,7 +588,7 @@ Result CodeGenManager::FinalizeElf(
 Result CodeGenManager::BuildGraphicsPipelineRegConfig(
     Context*            pContext,       // [in] LLPC context
     const ElfDataEntry* pDataEntries,   // [in] ELF data entries
-    void**              ppConfig,       // [out] Register configuration for VS-FS pipeline
+    uint8_t**           ppConfig,       // [out] Register configuration for VS-FS pipeline
     size_t*             pConfigSize)    // [out] Size of register configuration
 {
     Result result = Result::Success;
@@ -675,7 +675,7 @@ Result CodeGenManager::BuildGraphicsPipelineRegConfig(
 Result CodeGenManager::BuildComputePipelineRegConfig(
     Context*            pContext,     // [in] LLPC context
     const ElfDataEntry* pDataEntry,   // [in] ELF data entry
-    void**              ppConfig,     // [out] Register configuration for compute pipeline
+    uint8_t**           ppConfig,     // [out] Register configuration for compute pipeline
     size_t*             pConfigSize)  // [out] Size of register configuration
 {
     Result result = Result::Success;

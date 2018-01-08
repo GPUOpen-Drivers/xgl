@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -38,7 +38,7 @@
 #include "renderpass/renderpass_logger.h"
 
 #include "palVectorImpl.h"
-#include "palMd5.h"
+#include "palMetroHash.h"
 
 namespace vk
 {
@@ -137,67 +137,56 @@ static void ConvertRenderPassCreateInfo(
     pInfo->hash = GenerateRenderPassHash(pIn);
 }
 
-#define RPHashStructField(x) \
-    Util::Md5::Update( \
-        pContext, \
-        reinterpret_cast<const uint8_t*>(&x), \
-        sizeof(x));
-
 // =====================================================================================================================
 static void GenerateHashFromSubPassDesc(
-    Util::Md5::Context*         pContext,
+    Util::MetroHash64*          pHasher,
     const VkSubpassDescription& desc)
 {
     uint32_t inputCount    = desc.inputAttachmentCount;
     uint32_t colorCount    = desc.colorAttachmentCount;
     uint32_t preserveCount = desc.preserveAttachmentCount;
 
-    RPHashStructField(desc.flags);
-    RPHashStructField(desc.pipelineBindPoint);
-    RPHashStructField(desc.inputAttachmentCount);
-    RPHashStructField(desc.colorAttachmentCount);
-    RPHashStructField(desc.preserveAttachmentCount);
+    pHasher->Update(desc.flags);
+    pHasher->Update(desc.pipelineBindPoint);
+    pHasher->Update(desc.inputAttachmentCount);
+    pHasher->Update(desc.colorAttachmentCount);
+    pHasher->Update(desc.preserveAttachmentCount);
 
     if (inputCount > 0)
     {
-        Util::Md5::Update(
-            pContext,
+        pHasher->Update(
             reinterpret_cast<const uint8_t*>(desc.pInputAttachments),
-            inputCount * sizeof(desc.pInputAttachments[0]));
+            static_cast<uint64_t>(inputCount * sizeof(desc.pInputAttachments[0])));
     }
     if (colorCount > 0)
     {
-        Util::Md5::Update(
-            pContext,
+        pHasher->Update(
             reinterpret_cast<const uint8_t*>(desc.pColorAttachments),
-            colorCount * sizeof(desc.pColorAttachments[0]));
+            static_cast<uint64_t>(colorCount * sizeof(desc.pColorAttachments[0])));
     }
     if (preserveCount > 0)
     {
-        Util::Md5::Update(
-            pContext,
+        pHasher->Update(
             reinterpret_cast<const uint8_t*>(desc.pPreserveAttachments),
-            preserveCount * sizeof(desc.pPreserveAttachments[0]));
+            static_cast<uint64_t>(preserveCount * sizeof(desc.pPreserveAttachments[0])));
     }
     if ((desc.pResolveAttachments != nullptr) && (colorCount > 0))
     {
-        Util::Md5::Update(
-            pContext,
+        pHasher->Update(
             reinterpret_cast<const uint8_t*>(desc.pResolveAttachments),
-            colorCount * sizeof(desc.pResolveAttachments[0]));
+            static_cast<uint64_t>(colorCount * sizeof(desc.pResolveAttachments[0])));
     }
     if (desc.pDepthStencilAttachment != nullptr)
     {
-        Util::Md5::Update(
-            pContext,
+        pHasher->Update(
             reinterpret_cast<const uint8_t*>(desc.pDepthStencilAttachment),
-            sizeof(desc.pDepthStencilAttachment[0]));
+            static_cast<uint64_t>(sizeof(desc.pDepthStencilAttachment[0])));
     }
 }
 
 // =====================================================================================================================
 void GenerateHashFromCreateInfo(
-    Util::Md5::Context*           pContext,
+    Util::MetroHash64*            pHasher,
     const VkRenderPassCreateInfo& info)
 {
     VkRenderPassCreateInfo copy = info;
@@ -206,22 +195,24 @@ void GenerateHashFromCreateInfo(
     copy.pSubpasses    = nullptr;
     copy.pDependencies = nullptr;
 
-    Util::Md5::Update(
-        pContext,
-        reinterpret_cast<const uint8_t*>(&copy),
-        sizeof(copy));
-    Util::Md5::Update(
-        pContext,
-        reinterpret_cast<const uint8_t*>(info.pAttachments),
-        info.attachmentCount * sizeof(VkAttachmentDescription));
-    Util::Md5::Update(
-        pContext,
-        reinterpret_cast<const uint8_t*>(info.pDependencies),
-        info.dependencyCount * sizeof(VkSubpassDependency));
+    pHasher->Update(copy);
+    if (info.attachmentCount > 0)
+    {
+        pHasher->Update(
+            reinterpret_cast<const uint8_t*>(info.pAttachments),
+            static_cast<uint64_t>(info.attachmentCount * sizeof(VkAttachmentDescription)));
+    }
+
+    if (info.dependencyCount > 0)
+    {
+        pHasher->Update(
+            reinterpret_cast<const uint8_t*>(info.pDependencies),
+            static_cast<uint64_t>(info.dependencyCount * sizeof(VkSubpassDependency)));
+    }
 
     for (uint32_t i = 0; i < info.subpassCount; ++i)
     {
-        GenerateHashFromSubPassDesc(pContext, info.pSubpasses[i]);
+        GenerateHashFromSubPassDesc(pHasher, info.pSubpasses[i]);
     }
 }
 
@@ -234,17 +225,14 @@ uint64_t GenerateRenderPassHash(
         return 0;
     }
 
-    Util::Md5::Context context = {};
+    Util::MetroHash64 hasher;
 
-    Util::Md5::Init(&context);
+    GenerateHashFromCreateInfo(&hasher, *pIn);
 
-    GenerateHashFromCreateInfo(&context, *pIn);
+    uint64_t hash;
+    hasher.Finalize(reinterpret_cast<uint8_t* const>(&hash));
 
-    Util::Md5::Hash hash = {};
-
-    Util::Md5::Final(&context, &hash);
-
-    return Util::Md5::Compact64(&hash);
+    return hash;
 }
 
 // =====================================================================================================================

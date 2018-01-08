@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -155,7 +155,7 @@ void VertBufBindingMgr::BindVertexBuffers(
                 // a final partial element. Rounding down matches our current behavior for buffer views.
                 if (pBinding->view.stride > 1)
                 {
-                    pBinding->view.range = Util::RoundUpToMultiple(pBinding->size, pBinding->view.stride);
+                    pBinding->view.range = Util::RoundDownToMultiple(pBinding->size, pBinding->view.stride);
                 }
                 else
                 {
@@ -221,7 +221,7 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
                     // for a final partial element. Rounding down matches our current behavior for buffer views.
                     if (pBinding->view.stride > 1)
                     {
-                        pBinding->view.range = Util::RoundUpToMultiple(pBinding->size, pBinding->view.stride);
+                        pBinding->view.range = Util::RoundDownToMultiple(pBinding->size, pBinding->view.stride);
                     }
                     else
                     {

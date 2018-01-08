@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -22,56 +22,6 @@
  #  SOFTWARE.
  #
  #######################################################################################################################
-
-#**********************************************************************************************************************
-# @file  genGlslImageOpEmuCode.py
-# @brief LLPC python script file: generates LLVM-IR to emulate GLSL image operations.
-#**********************************************************************************************************************
-
-#
-# Takes input: genGlslImageOpEmuCode.txt (List of all available image functions)
-# Generates  : g_glslImageOpEmu.ll (LLVM-IR to emulate GLSL image operations).
-#
-# Example by case:
-# Part1: Generates function prototype
-# define <4 x float> @llpc.sample.f32.2D.bias(i32 %samplerSet, i32 %samplerBinding, i32 %samplerIndex,
-#                                         i32 %resourceSet, i32 %resourceBinding, i32 %resourceIndex,
-#                                         <2 x float> %coord,
-#                                         float %bias) #0
-# {
-#     # Part2: Generates loading of sampler and resource descriptor
-#     %resource = call <8 x i32> @llpc.descriptor.load.resource(i32 %resourceDescSet,
-#                                                               i32 %resourceBinding,
-#                                                               i32 %resourceIdx)
-#     %sampler = call <4 x i32> @llpc.descriptor.load.sampler(i32 %samplerDescSet,
-#                                                             i32 %samplerBinding,
-#                                                             i32 %samplerIdx)
-#
-#     # Part3: Generates extraction of coordinate component
-#     %1 = extractelement <2 x float> %coord, i32 0
-#     %2 = extractelement <2 x float> %coord, i32 1
-#
-#     # Part4: Generates casting to i32 type which is required by LLVM image intrinsic function
-#     %3 = bitcast float %1 to i32
-#     %4 = bitcast float %2 to i32
-#     %5 = bitcast float %bias to i32
-#
-#     # Part5: Generates call to LLVM intrinsic function
-#     %6 = insertelement <4 x i32> undef, i32 %5, i32 0
-#     %7 = insertelement <4 x i32> %6, i32 %3, i32 1
-#     %8 = insertelement <4 x i32> %7, i32 %4, i32 2
-#     %9 = call <4 x float> @llvm.amdgcn.image.sample.b.v4f32.v4f32.v8i32(<4 x float> %8,
-#                                                                         <8 x i32> %resource,
-#                                                                         <4 x i32> %sampler,
-#                                                                         i32 15,
-#                                                                         i1 0,
-#                                                                         i1 0,
-#                                                                         i1 0,
-#                                                                         i1 0,
-#                                                                         i1 0)
-#     ret <4 x float> %9
-# }
-#
 
 import os
 import sys

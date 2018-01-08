@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -551,12 +551,13 @@ VkResult Image::Create(
     // Convert input create info
     Pal::ImageCreateInfo palCreateInfo  = {};
     uint32_t concurrentQueueFlags    = 0;
+    Pal::PresentableImageCreateInfo presentImageCreateInfo = {};
 
     const VkImageCreateInfo*  pImageCreateInfo = nullptr;
 
-    // Allocate system memory for objects
     const uint32_t numDevices = pDevice->NumPalDevices();
-    VkResult result = VkResult::VK_SUCCESS;
+    const bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
+    VkResult       result     = VkResult::VK_SUCCESS;
 
     union
     {
@@ -588,12 +589,8 @@ VkResult Image::Create(
             palCreateInfo.flags.invariant = 1;
 
             VkExternalMemoryPropertiesKHR externalMemoryProperties = {};
-            pDevice->VkPhysicalDevice()->GetImageExternalMemoryProperties(
-                pImageCreateInfo->format,
-                pImageCreateInfo->imageType,
-                pImageCreateInfo->tiling,
-                pImageCreateInfo->usage,
-                pImageCreateInfo->flags,
+            pDevice->VkPhysicalDevice()->GetExternalMemoryProperties(
+                isSparse,
                 static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExternalMemoryImageCreateInfoKHR->handleTypes),
                 &externalMemoryProperties);
 
@@ -602,7 +599,11 @@ VkResult Image::Create(
                 imageFlags.dedicatedRequired = true;
             }
 
-            imageFlags.externallyShareable = true;
+            if (externalMemoryProperties.externalMemoryFeatures & (VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR |
+                                                                   VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR))
+            {
+                imageFlags.externallyShareable = true;
+            }
 
             break;
         }
@@ -630,6 +631,25 @@ VkResult Image::Create(
     // If flags contains VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT_KHR, imageType must be VK_IMAGE_TYPE_3D
     VK_ASSERT(((pImageCreateInfo->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT_KHR) == 0) ||
                (pImageCreateInfo->imageType == VK_IMAGE_TYPE_3D));
+
+    if (imageFlags.androidPresentable)
+    {
+        VkDeviceMemory    pDeviceMemory = {};
+        result = Image::CreatePresentableImage(
+            pDevice,
+            &presentImageCreateInfo,
+            pAllocator,
+            pCreateInfo->usage,
+            Pal::PresentMode::Windowed,
+            pImage,
+            pCreateInfo->format,
+            pCreateInfo->sharingMode,
+            concurrentQueueFlags,
+            &pDeviceMemory);
+        Image* pTempImage = Image::ObjectFromHandle(*pImage);
+        pTempImage->m_pMemory = Memory::ObjectFromHandle(pDeviceMemory);
+        return result;
+    }
 
     // Calculate required system memory size
     const size_t apiSize   = sizeof(Image);
@@ -696,8 +716,6 @@ VkResult Image::Create(
     //       pMemory, as the value returned by GetGpuMemorySize() depends on memCreateInfo.size,
     //       which means we need a working PAL Image instance before we can find out how much memory
     //       we actually need to allocate for the mem object.
-    const bool isSparse = (pImageCreateInfo->flags & SparseEnablingFlags) != 0;
-
     Pal::IGpuMemory* pSparseMemory[MaxPalDevices]  = {};
     Pal::GpuMemoryCreateInfo sparseMemCreateInfo   = {};
     VkExtent3D sparseTileSize                      = {};
@@ -972,9 +990,7 @@ VkResult Image::Destroy(
         }
     }
 
-    const bool isSparse = (m_flags & SparseEnablingFlags) != 0;
-
-    if (isSparse)
+    if (IsSparse())
     {
         // Free the system memory allocated by InitSparseVirtualMemory
         pAllocator->pfnFree(pAllocator->pUserData, m_pPalMemory[0]);
@@ -1475,7 +1491,7 @@ Pal::ImageLayout Image::GetLayoutFromUsage(
 VkResult Image::GetMemoryRequirements(
     VkMemoryRequirements* pReqs)
 {
-    const bool                 isSparse           = (m_flags & SparseEnablingFlags) != 0;
+    const bool                 isSparse           = IsSparse();
     Pal::GpuMemoryRequirements palReqs            = {};
     const auto                 virtualGranularity = m_pDevice->GetProperties().virtualMemAllocGranularity;
 

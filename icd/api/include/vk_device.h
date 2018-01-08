@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -287,11 +287,6 @@ public:
     VK_FORCEINLINE InternalMemMgr* MemMgr()
         { return &m_internalMemMgr; }
 
-#ifdef ICD_BUILD_APPPROFILE
-    VK_FORCEINLINE ShaderOptimizer* GetShaderOptimizer()
-        { return &m_shaderOptimizer; }
-#endif
-
     VK_FORCEINLINE bool IsMultiGpu() const
         { return m_palDeviceCount > 1; }
 
@@ -523,9 +518,6 @@ protected:
     uint8_t*                            m_pPalQueueMemory;
 
     InternalMemMgr                      m_internalMemMgr;
-#ifdef ICD_BUILD_APPPROFILE
-    ShaderOptimizer                     m_shaderOptimizer;
-#endif
     RenderStateCache                    m_renderStateCache;
 
     VirtualStackAllocator*              m_pStackAllocator;

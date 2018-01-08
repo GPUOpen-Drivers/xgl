@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -66,7 +66,7 @@ GraphicsContext::GraphicsContext(
     GfxIpVersion                     gfxIp,         // Graphics Ip version info
     const GpuProperty*               pGpuProp,      // GPU Property
     const GraphicsPipelineBuildInfo* pPipelineInfo, // [in] Graphics pipeline build info
-    Md5::Hash*                       pHash)         // [in] Pipeline hash code
+    MetroHash::Hash*                 pHash)         // [in] Pipeline hash code
     :
     PipelineContext(gfxIp, pGpuProp, pHash),
     m_pPipelineInfo(pPipelineInfo),
@@ -289,17 +289,14 @@ uint64_t GraphicsContext::GetShaderHashCode(
 
     if (pShaderInfo->pModuleData != nullptr)
     {
-        Md5::Context checksumCtx = {};
-        Md5::Hash    hash  = {};
+        MetroHash64 hasher;
 
-        Md5::Init(&checksumCtx);
-
-        UpdateShaderHashForPipelineShaderInfo(shaderStage, pShaderInfo, &checksumCtx);
-        Md5::Update(&checksumCtx, m_pPipelineInfo->iaState.deviceIndex);
+        UpdateShaderHashForPipelineShaderInfo(shaderStage, pShaderInfo, &hasher);
+        hasher.Update(m_pPipelineInfo->iaState.deviceIndex);
 
         if (shaderStage == ShaderStageTessControl)
         {
-            Md5::Update(&checksumCtx, m_pPipelineInfo->iaState.patchControlPoints);
+            hasher.Update(m_pPipelineInfo->iaState.patchControlPoints);
         }
         else if ((shaderStage == ShaderStageVertex) &&
                  (m_pPipelineInfo->pVertexInput != nullptr) &&
@@ -307,26 +304,25 @@ uint64_t GraphicsContext::GetShaderHashCode(
                  (m_pPipelineInfo->pVertexInput->vertexAttributeDescriptionCount > 0))
         {
             auto pVertexInput = m_pPipelineInfo->pVertexInput;
-            Md5::Update(&checksumCtx, pVertexInput->vertexBindingDescriptionCount);
-            Md5::Update(&checksumCtx,
-                        pVertexInput->pVertexBindingDescriptions,
-                        sizeof(VkVertexInputBindingDescription) * pVertexInput->vertexBindingDescriptionCount);
-            Md5::Update(&checksumCtx, pVertexInput->vertexAttributeDescriptionCount);
-            Md5::Update(&checksumCtx,
-                        pVertexInput->pVertexAttributeDescriptions,
-                        sizeof(VkVertexInputAttributeDescription) * pVertexInput->vertexAttributeDescriptionCount);
+            hasher.Update(pVertexInput->vertexBindingDescriptionCount);
+            hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexBindingDescriptions),
+                          sizeof(VkVertexInputBindingDescription) * pVertexInput->vertexBindingDescriptionCount);
+            hasher.Update(pVertexInput->vertexAttributeDescriptionCount);
+            hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexAttributeDescriptions),
+                          sizeof(VkVertexInputAttributeDescription) * pVertexInput->vertexAttributeDescriptionCount);
         }
         else if (shaderStage == ShaderStageFragment)
         {
             if (m_pPipelineInfo->rsState.perSampleShading)
             {
-                Md5::Update(&checksumCtx, m_pPipelineInfo->rsState.perSampleShading);
+                hasher.Update(m_pPipelineInfo->rsState.perSampleShading);
             }
         }
 
-        Md5::Final(&checksumCtx, &hash);
+        MetroHash::Hash hash = {};
+        hasher.Finalize(hash.bytes);
 
-        shaderHash = Md5::Compact64(&hash);
+        shaderHash = MetroHash::Compact64(&hash);
     }
 
     return shaderHash;

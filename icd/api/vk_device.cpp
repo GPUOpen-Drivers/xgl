@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -175,9 +175,6 @@ Device::Device(
     m_supportedBarrierQueues(0),
     m_pPalQueueMemory(nullptr),
     m_internalMemMgr(this, pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
-#ifdef ICD_BUILD_APPPROFILE
-    m_shaderOptimizer(this, pPhysicalDevices[DefaultDeviceIndex]),
-#endif
     m_renderStateCache(this),
     m_pStackAllocator(nullptr),
     m_enabledExtensions(enabledExtensions),
@@ -213,9 +210,6 @@ Device::Device(
         InitLlpcCompiler(i);
     }
 
-#if ICD_BUILD_APPPROFILE
-    m_shaderOptimizer.Init();
-#endif
 }
 
 // =====================================================================================================================
@@ -484,9 +478,8 @@ VkResult Device::Create(
                             queueCreateInfo.queueType     = palQueueType;
                             queueCreateInfo.engineType    = palEngineType;
                             queueCreateInfo.engineIndex   = queueIndex;
-#if VK_IS_PAL_VERSION_AT_LEAST(364,0)
-                            queueCreateInfo.priority = VkToPalGlobalPriority(queuePriority[queueFamilyIndex]);
-#endif
+                            queueCreateInfo.priority      = VkToPalGlobalPriority(queuePriority[queueFamilyIndex]);
+
                             palResult = pPalDevices[deviceIdx]->CreateQueue(queueCreateInfo,
                                                                 pPalQueueMemory + palQueueMemoryOffset,
                                                                 &pPalQueues[deviceIdx]);

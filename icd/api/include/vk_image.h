@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -182,6 +182,11 @@ public:
         return m_pSwapChain;
     }
 
+    // We have to treat the image sparse if any of these flags are set
+    static const VkImageCreateFlags SparseEnablingFlags =
+        VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
+        VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
+
     bool IsSparse() const
         { return (m_flags & SparseEnablingFlags) != 0; }
 
@@ -224,11 +229,6 @@ public:
 
     bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
 private:
-    // We have to treat the image sparse if any of these flags are set
-    static const VkImageCreateFlags SparseEnablingFlags =
-        VK_IMAGE_CREATE_SPARSE_BINDING_BIT |
-        VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
-
     // SwapChain object needs to be able to instantiate API image objects for presentable images
     friend class SwapChain;
 
@@ -244,7 +244,8 @@ private:
             uint32_t externallyShareable    : 1;  // True if the backing memory of this image may be shared externally.
             uint32_t boundToExternalMemory  : 1;  // If true, indicates the image is bound to an external memory, and
                                                   //  the m_pPalMemory is a pointer to an external Pal image.
-            uint32_t reserved               : 27;
+            uint32_t androidPresentable     : 1;  // True if this image is created as Android presentable image.
+            uint32_t reserved               : 26;
         };
         uint32_t     u32All;
     };

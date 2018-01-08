@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -30,8 +30,6 @@
 #include "include/vk_object.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_pipeline_cache.h"
-
-#include "palShaderCache.h"
 #include "palAutoBuffer.h"
 #include "llpc.h"
 
@@ -64,7 +62,6 @@ PipelineCache::~PipelineCache()
         }
         else
         {
-            m_pShaderCaches[i].pPalShaderCache->Destroy();
         }
     }
 }
@@ -91,12 +88,6 @@ VkResult PipelineCache::Create(
     }
     else
     {
-        for (uint32_t i = 0; i < numPalDevices; i++)
-        {
-            const Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
-            pipelineCacheSize[i] = pPalDevice->GetShaderCacheSize();
-            palSize += pipelineCacheSize[i];
-        }
     }
 
     bool useInitialData = false;
@@ -194,45 +185,6 @@ VkResult PipelineCache::Create(
         }
         else
         {
-            Pal::ShaderCacheCreateInfo createInfo = {};
-            createInfo.expectedEntries = const_cast<Device*>(pDevice)->GetPipelineCacheExpectedEntryCount();
-            size_t palOffset = sizeof(PipelineCache);
-            for (uint32_t i = 0; i < numPalDevices; i++)
-            {
-                const Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
-
-                if (useInitialData)
-                {
-                    createInfo.pInitialData    = pBlobs[i];
-                    createInfo.initialDataSize = static_cast<size_t>(pPrivateDataHeader->blobSize[i]);
-                }
-
-                Pal::Result palResult = pPalDevice->CreateShaderCache(
-                    createInfo,
-                    Util::VoidPtrInc(pMemory, palOffset),
-                    &shaderCaches[i].pPalShaderCache);
-
-                if (palResult != Pal::Result::Success)
-                {
-                    result = PalToVkResult(palResult);
-                    break;
-                }
-
-                // Move to next PAL object
-                palOffset += pipelineCacheSize[i];
-            }
-
-            // Something went wrong with creating the PAL object. Free memory
-            if (result != VK_SUCCESS)
-            {
-                for (uint32_t i = 0; i < numPalDevices; i++)
-                {
-                    if (shaderCaches[i].pPalShaderCache != nullptr)
-                    {
-                        shaderCaches[i].pPalShaderCache->Destroy();
-                    }
-                }
-            }
         }
 
         if (result == VK_SUCCESS)
@@ -302,8 +254,6 @@ VkResult PipelineCache::GetData(
         }
         else
         {
-            auto palResult = m_pShaderCaches[i].pPalShaderCache->Serialize(nullptr, &blobSize);
-            VK_ASSERT(palResult == Pal::Result::Success);
         }
         headerData.blobSize[i] = blobSize;
         allBlobSize += blobSize;
@@ -335,13 +285,8 @@ VkResult PipelineCache::GetData(
             }
             else
             {
-                auto palResult = m_pShaderCaches[i].pPalShaderCache->Serialize(pBlob, &blobSize);
-                if (palResult != Pal::Result::Success)
-                {
-                    result = PalToVkResult(palResult);
-                    break;
-                }
             }
+
             pBlob = Util::VoidPtrInc(pBlob, blobSize);
         }
     }
@@ -371,19 +316,6 @@ VkResult PipelineCache::Merge(
     VkResult result = VK_SUCCESS;
     for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); i++)
     {
-        if (GetPipelineCacheType() == PipelineCacheTypePal)
-        {
-            auto palResult = m_pShaderCaches[i].pPalShaderCache->Merge(
-                srcCacheCount,
-                const_cast<const Pal::IShaderCache **>(&shaderCaches[i * srcCacheCount].pPalShaderCache));
-
-            if (palResult != Pal::Result::Success)
-            {
-                result = PalToVkResult(palResult);
-                break;
-            }
-        }
-        else
         {
             auto llpcResult = m_pShaderCaches[i].pLlpcShaderCache->Merge(
                 srcCacheCount,

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -76,3 +76,4 @@ const char VK_KHR_get_memory_requirements2_name[] = "VK_KHR_get_memory_requireme
 const char VK_AMD_shader_fragment_mask_name[] = "VK_AMD_shader_fragment_mask";
 const char VK_EXT_sample_locations_name[] = "VK_EXT_sample_locations";
 const char VK_KHR_win32_keyed_mutex_name[] = "VK_KHR_win32_keyed_mutex";
+const char VK_EXT_global_priority_name[] = "VK_EXT_global_priority";

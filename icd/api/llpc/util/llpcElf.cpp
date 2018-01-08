@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -244,7 +244,8 @@ void ElfWriter<Elf>::AddNote(
 
     static_assert(sizeof(note.hdr.name) == sizeof(Util::Abi::AmdGpuVendorName), "");
     static_assert(sizeof(note.hdr) % 4 == 0, "");
-    LLPC_ASSERT(descSize % 4 == 0);
+    //LLPC_ASSERT(descSize % 4 == 0);
+    descSize = (descSize + 3) / 4 * 4;
 
     // Fill the note's header
     note.hdr.nameSize = sizeof(Util::Abi::AmdGpuVendorName);

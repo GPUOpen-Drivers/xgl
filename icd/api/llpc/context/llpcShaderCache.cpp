@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -444,7 +444,7 @@ void ShaderCache::ResetCacheFile()
 //    Compiling   - if an entry was created and must be compiled/populated by the caller
 //    Unavailable - if an unrecoverable error was encountered
 ShaderEntryState ShaderCache::FindShader(
-    Md5::Hash         hash,                    // Hash code of shader
+    MetroHash::Hash   hash,                    // Hash code of shader
     bool              allocateOnMiss,          // Whether allocate a new entry for new hash
     CacheEntryHandle* phEntry)                 // [out] Handle of shader cache entry
 {
@@ -463,7 +463,7 @@ ShaderEntryState ShaderCache::FindShader(
 
     bool readOnlyLock = (allocateOnMiss == false);
     LockCacheMap(readOnlyLock);
-    ShaderHash hashKey = Md5::Compact64(&hash);
+    ShaderHash hashKey = MetroHash::Compact64(&hash);
     auto indexMap = m_shaderIndexMap.find(hashKey);
     if (indexMap != m_shaderIndexMap.end())
     {

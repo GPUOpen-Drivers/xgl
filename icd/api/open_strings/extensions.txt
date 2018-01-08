@@ -56,3 +56,4 @@ VK_KHR_get_memory_requirements2
 VK_AMD_shader_fragment_mask
 VK_EXT_sample_locations
 VK_KHR_win32_keyed_mutex
+VK_EXT_global_priority

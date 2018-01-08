@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -22,11 +22,6 @@
  #  SOFTWARE.
  #
  #######################################################################################################################
-
-#**********************************************************************************************************************
-# @file  genGlslopEmuCodeUtil.py
-# @brief LLPC python script file: contains definitions and utilities used in other python script files.
-#**********************************************************************************************************************
 
 BASIC_TYPES = ["half", "float", "double", "i1","i16", "i32", "int", "i64"]
 TYPE_PREFIX_TO_BASIC = {"f":"float", "d":"double", "u":"i32", "i":"i32", "b":"i1", "f16":"half", "u16":"i16", "i16":"i16", "i64":"i64", "u64":"i64"}

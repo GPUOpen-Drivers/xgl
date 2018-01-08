@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -74,11 +74,17 @@ static void OverrideProfiledSettings(
         pSettings->optImgMaskToApplyShaderReadUsageForTransferSrc = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
 
-    if (appProfile == AppProfile::SeriousSamFusion)
+    if ((appProfile == AppProfile::SeriousSamFusion) ||
+        (appProfile == AppProfile::MadMax))
     {
         pSettings->preciseAnisoMode = DisablePreciseAnisoAll;
         pSettings->useAnisoThreshold   = true;
         pSettings->anisoThreshold      = 1.0f;
+    }
+
+    if (appProfile == AppProfile::MadMax)
+    {
+        pSettings->optimizeCmdbufMode = DisableOptimizeCmdbuf;
     }
 
 }

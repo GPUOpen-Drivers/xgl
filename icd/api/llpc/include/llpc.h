@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -40,7 +40,7 @@
 namespace Llpc
 {
 
-static const uint32_t  Version = 3;
+static const uint32_t  Version = 4;
 static const uint32_t  MaxColorTargets = 8;
 static const char      VkIcdName[]     = "amdvlk";
 
@@ -233,6 +233,7 @@ struct GraphicsPipelineBuildInfo
                                                  ///  "patch")
         uint32_t             deviceIndex;        ///< Device index for device group
         bool                 disableVertexReuse; ///< Disable reusing vertex shader output for indexed draws
+        bool                 switchWinding ;     ///< Whether to reverse vertex ordering for tessellation
     } iaState;                                   ///< Input-assembly state
 
     struct

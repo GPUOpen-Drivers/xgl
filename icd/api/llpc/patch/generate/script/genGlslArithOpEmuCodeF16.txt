@@ -35,13 +35,8 @@ genF16Type roundEven genF16Type x : llvm.rint.f16 #0
 genF16Type ceil genF16Type x : llvm.ceil.f16 #0
 genF16Type fract genF16Type x : llpc.fract.f16 #0
 genF16Type fmod genF16Type x genF16Type y : llpc.mod.f16 #0
-genF16Type fmin genF16Type x genF16Type y : llvm.minnum.f16 #0
-genF16Type fmax genF16Type x genF16Type y : llvm.maxnum.f16 #0
-genF16Type fclamp genF16Type x genF16Type minVal genF16Type maxVal : llpc.fclamp.f16 #0
-genF16Type fmix genF16Type x genF16Type y genF16Type a : llpc.fmix.f16 #0
 genF16Type step genF16Type edge genF16Type x : llpc.step.f16 #0
 genF16Type smoothStep genF16Type edge0 genF16Type edge1 genF16Type x : llpc.smoothStep.f16 #0
 genBType isinf genF16Type value : llpc.isinf.f16 #0
 genBType isnan genF16Type value : llpc.isnan.f16 #0
-genF16Type fma genF16Type a genF16Type b genF16Type c : llvm.fma.f16 #0
 genF16Type ldexp genF16Type x genIType exp : llvm.amdgcn.ldexp.f16 #1

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -34,7 +34,7 @@
 #include "llpcDebug.h"
 #include "llpcElf.h"
 #include "llpcInternal.h"
-#include "llpcMd5.h"
+#include "llpcMetroHash.h"
 #include "llpcShaderCacheManager.h"
 
 namespace Llpc
@@ -59,7 +59,7 @@ struct ShaderModuleData
 {
     BinaryType      binType;    // Shader binary type
     BinaryData      binCode;    // Shader binary data
-    Md5::Hash       hash;       // Shader hash code
+    MetroHash::Hash hash;       // Shader hash code
 };
 
 // Represents the properties of GPU device.
@@ -120,16 +120,16 @@ private:
                                 llvm::LLVMContext*           pContext,
                                 llvm::Module**               ppModule) const;
 
-    Md5::Hash GenerateHashForGraphicsPipeline(const GraphicsPipelineBuildInfo* pPipeline) const;
-    Md5::Hash GenerateHashForComputePipeline(const ComputePipelineBuildInfo* pPipeline) const;
-    Md5::Hash GenerateHashForCompileOptions(uint32_t optionCount, const char*const* pOptions) const;
+    MetroHash::Hash GenerateHashForGraphicsPipeline(const GraphicsPipelineBuildInfo* pPipeline) const;
+    MetroHash::Hash GenerateHashForComputePipeline(const ComputePipelineBuildInfo* pPipeline) const;
+    MetroHash::Hash GenerateHashForCompileOptions(uint32_t optionCount, const char*const* pOptions) const;
 
     void UpdateHashForPipelineShaderInfo(ShaderStage               shaderStage,
                                          const PipelineShaderInfo* pShaderInfo,
-                                         Md5::Context*             pMd5Context) const;
+                                         MetroHash64*              pHasher) const;
 
     void UpdateHashForResourceMappingNode(const ResourceMappingNode* pUserDataNode,
-                                          Md5::Context*              pMd5Context) const;
+                                          MetroHash64*               pHasher) const;
 
     Result ValidatePipelineShaderInfo(ShaderStage shaderStage, const PipelineShaderInfo* pShaderInfo) const;
 
@@ -139,24 +139,19 @@ private:
     Result ReplaceShader(const ShaderModuleData* pOrigModuleData, ShaderModuleData** ppModuleData) const;
 
     void InitGpuProperty();
-    void DumpTimeProfilingResult(const Md5::Hash* pHash);
+    void DumpTimeProfilingResult(const MetroHash::Hash* pHash);
 
     Context* AcquireContext();
     void ReleaseContext(Context* pContext);
 
-    void DumpTimeProfileResult();
-
     Result OptimizeSpirv(const BinaryData* pSpirvBinIn, BinaryData* pSpirvBinOut) const;
     void CleanOptimizedSpirv(BinaryData* pSpirvBin) const;
-
-    static Md5::Hash BuildArgHash(uint32_t optionCount, const char*const* options);
-    static bool NeedDebugOut(uint32_t optionCount, const char*const* options);
 
     // -----------------------------------------------------------------------------------------------------------------
 
     const char*const    m_pClientName;      // Name of the client who calls LLPC
     GfxIpVersion        m_gfxIp;            // Graphics IP version info
-    Md5::Hash           m_optionHash;       // Hash code of compilation options
+    MetroHash::Hash     m_optionHash;       // Hash code of compilation options
     static uint32_t     m_instanceCount;    // The count of compiler instance
     static uint32_t     m_outRedirectCount; // The count of output redirect
     ShaderCachePtr      m_shaderCache;      // Shader cache

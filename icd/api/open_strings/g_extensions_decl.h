@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -128,3 +128,5 @@ extern const char VK_EXT_sample_locations_name[];
 static const char* VK_EXT_SAMPLE_LOCATIONS_name = VK_EXT_sample_locations_name;
 extern const char VK_KHR_win32_keyed_mutex_name[];
 static const char* VK_KHR_WIN32_KEYED_MUTEX_name = VK_KHR_win32_keyed_mutex_name;
+extern const char VK_EXT_global_priority_name[];
+static const char* VK_EXT_GLOBAL_PRIORITY_name = VK_EXT_global_priority_name;

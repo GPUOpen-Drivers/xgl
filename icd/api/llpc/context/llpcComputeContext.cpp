@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -40,7 +40,7 @@ ComputeContext::ComputeContext(
     GfxIpVersion                    gfxIp,         // Graphics Ip version info
     const GpuProperty*              pGpuProp,      // [in] GPU Property
     const ComputePipelineBuildInfo* pPipelineInfo, // [in] Compute pipeline build info
-    Md5::Hash*                      pHash)         // [in] Pipeline hash code
+    MetroHash::Hash*                pHash)         // [in] Pipeline hash code
     :
     PipelineContext(gfxIp, pGpuProp, pHash),
     m_pPipelineInfo(pPipelineInfo)
@@ -95,17 +95,15 @@ uint64_t ComputeContext::GetShaderHashCode(
     auto pShaderInfo = GetPipelineShaderInfo(stage);
     LLPC_ASSERT(pShaderInfo != nullptr);
 
-    Md5::Context checksumCtx = {};
-    Md5::Hash    hash       = {};
+    MetroHash64 hasher;
 
-    Md5::Init(&checksumCtx);
+    UpdateShaderHashForPipelineShaderInfo(ShaderStageCompute, pShaderInfo, &hasher);
+    hasher.Update(m_pPipelineInfo->deviceIndex);
 
-    UpdateShaderHashForPipelineShaderInfo(ShaderStageCompute, pShaderInfo, &checksumCtx);
-    Md5::Update(&checksumCtx, m_pPipelineInfo->deviceIndex);
+    MetroHash::Hash hash = {};
+    hasher.Finalize(hash.bytes);
 
-    Md5::Final(&checksumCtx, &hash);
-
-    return Md5::Compact64(&hash);
+    return MetroHash::Compact64(&hash);
 }
 
 } // Llpc

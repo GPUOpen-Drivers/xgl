@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -43,8 +43,8 @@ struct Hash
 {
     union
     {
-        uint8_t  bytes[16]; // Output hash in bytes.
         uint32_t dwords[4]; // Output hash in dwords.
+        uint8_t  bytes[16]; // Output hash in bytes.
     };
 };
 

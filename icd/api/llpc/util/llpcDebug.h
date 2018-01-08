@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -72,7 +72,7 @@ struct GfxIpVersion;
 
 template<class Elf> class ElfReader;
 
-namespace Md5 { struct Hash; };
+namespace MetroHash { struct Hash; };
 
 // Gets the value of option "enable-outs"
 bool EnableOuts();
@@ -80,43 +80,10 @@ bool EnableOuts();
 // Gets the value of option "enable-errs"
 bool EnableErrs();
 
-// Creates a file to dump graphics/compute pipeline info.
-llvm::raw_fd_ostream* CreatePipelineDumpFile(
-    const char*                      pDumpDir,
-    const ComputePipelineBuildInfo*  pComputePipelineInfo,
-    const GraphicsPipelineBuildInfo* pGraphicsPipelineInfo,
-    const Md5::Hash*                 pHash);
-
-// Destroys the file used for dumping graphics/compute pipeline info.
-void DestroyPipelineDumpFile(
-    llvm::raw_fd_ostream* pDumpFile);
-
-// Dumps SPIRV shader binary to extenal file
-void DumpSpirvBinary(
-    const char*                     pDumpDir,
-    const BinaryData*               pSpirvBin,
-    Md5::Hash*                      pHash);
-
-// Dumps compute pipeline info to extenal file
-void DumpComputePipelineInfo(
-    llvm::raw_fd_ostream*           pDumpFile,
-    const ComputePipelineBuildInfo* pPipelineInfo);
-
-// Dumps graphics pipeline info to extenal file
-void DumpGraphicsPipelineInfo(
-    llvm::raw_fd_ostream*            pDumpFile,
-    const GraphicsPipelineBuildInfo* pPipelineInfo);
-
-// Disassembles pipeline binary and dumps it to pipeline info file
-void DumpPipelineBinary(
-    llvm::raw_fd_ostream*            pDumpFile,
-    GfxIpVersion                     gfxIp,
-    const BinaryData*                pPipelineBin);
-
 // Dumps ELF package to out stream
-template<class Elf>
-llvm::raw_ostream& operator<<(
-    llvm::raw_ostream& out,
+template<class Ostream, class Elf>
+Ostream& operator<<(
+    Ostream& out,
     ElfReader<Elf>&    reader);
 
 // Redirects the output of logs, It affects the behavior of llvm::outs(), dbgs() and errs().

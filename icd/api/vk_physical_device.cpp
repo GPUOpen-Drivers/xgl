@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -37,6 +37,7 @@
 #include "include/vk_physical_device_manager.h"
 #include "include/vk_display.h"
 #include "include/vk_display_manager.h"
+#include "include/vk_image.h"
 #include "include/vk_instance.h"
 #include "include/vk_utils.h"
 #include "include/vk_conv.h"
@@ -2394,6 +2395,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_GET_MEMORY_REQUIREMENTS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE1));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE2));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
@@ -2432,13 +2434,11 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPA_INTERFACE));
 
-#if VK_IS_PAL_VERSION_AT_LEAST(364,0)
     if ((pPhysicalDevice == nullptr) ||
         (pPhysicalDevice->PalProperties().osProperties.supportQueuePriority))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_GLOBAL_PRIORITY));
     }
-#endif
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE));
     // TODO: Add this extension if the related implementation of Linux is done.
@@ -2668,7 +2668,8 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
 }
 
 // =====================================================================================================================
-VkResult PhysicalDevice::GetBufferExternalMemoryProperties(
+VkResult PhysicalDevice::GetExternalMemoryProperties(
+    bool                                    isSparse,
     VkExternalMemoryHandleTypeFlagBitsKHR   handleType,
     VkExternalMemoryPropertiesKHR*          pExternalMemoryProperties
 ) const
@@ -2680,47 +2681,7 @@ VkResult PhysicalDevice::GetBufferExternalMemoryProperties(
     pExternalMemoryProperties->exportFromImportedHandleTypes = handleType;
     pExternalMemoryProperties->externalMemoryFeatures        = 0;
 
-    if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_MEMORY_FD))
-    {
-        if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR))
-        {
-            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR |
-                                                                VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR     |
-                                                                VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR;
-        }
-    }
-
-    if (pExternalMemoryProperties->externalMemoryFeatures == 0)
-    {
-        // The handle type is not supported.
-        pExternalMemoryProperties->compatibleHandleTypes         = 0;
-        pExternalMemoryProperties->exportFromImportedHandleTypes = 0;
-
-        result = VK_ERROR_FORMAT_NOT_SUPPORTED;
-    }
-
-    return result;
-}
-
-// =====================================================================================================================
-VkResult PhysicalDevice::GetImageExternalMemoryProperties(
-    VkFormat                                format,
-    VkImageType                             type,
-    VkImageTiling                           tiling,
-    VkImageUsageFlags                       usage,
-    VkImageCreateFlags                      flags,
-    VkExternalMemoryHandleTypeFlagBitsKHR   handleType,
-    VkExternalMemoryPropertiesKHR*          pExternalMemoryProperties
-) const
-{
-    VkResult result = VK_SUCCESS;
-
-    // For windows, kmt and NT are mutually exclusive. You can only enable one type at creation time.
-    pExternalMemoryProperties->compatibleHandleTypes         = handleType;
-    pExternalMemoryProperties->exportFromImportedHandleTypes = handleType;
-    pExternalMemoryProperties->externalMemoryFeatures        = 0;
-
-    if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_MEMORY_FD))
+    if (isSparse == false)
     {
         if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR))
         {
@@ -2858,12 +2819,8 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
 
             if (pExternalImageProperties)
             {
-                result = GetImageExternalMemoryProperties(
-                             pImageFormatInfo->format,
-                             pImageFormatInfo->type,
-                             pImageFormatInfo->tiling,
-                             pImageFormatInfo->usage,
-                             pImageFormatInfo->flags,
+                result = GetExternalMemoryProperties(
+                             ((pImageFormatInfo->flags & Image::SparseEnablingFlags) != 0),
                              pExternalImageFormatInfo->handleType,
                              &pExternalImageProperties->externalMemoryProperties);
             }
@@ -3022,8 +2979,9 @@ void PhysicalDevice::GetExternalBufferProperties(
 {
     VK_ASSERT(pExternalBufferInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO_KHR);
 
-    VkExternalMemoryPropertiesKHR* pExternalMemoryProperties = &pExternalBufferProperties->externalMemoryProperties;
-    GetBufferExternalMemoryProperties(pExternalBufferInfo->handleType, pExternalMemoryProperties);
+    GetExternalMemoryProperties(((pExternalBufferInfo->flags & Buffer::SparseEnablingFlags) != 0),
+                                pExternalBufferInfo->handleType,
+                                &pExternalBufferProperties->externalMemoryProperties);
 }
 
 // =====================================================================================================================

@@ -370,7 +370,7 @@ bool InitSpvGen()
 #define spvValidateSpirv                 g_pfnspvValidateSpirv
 #define spvOptimizeSpirv                 g_pfnspvOptimizeSpirv
 #define spvFreeBuffer                    g_pfnspvFreeBuffer
-#define spvGetVersion                    g_pfnspvGetVerion
+#define spvGetVersion                    g_pfnspvGetVersion
 #define vfxParseFile                     g_pfnvfxParseFile
 #define vfxCloseDoc                      g_pfnvfxCloseDoc
 #define vfxGetRenderDoc                  g_pfnvfxGetRenderDoc

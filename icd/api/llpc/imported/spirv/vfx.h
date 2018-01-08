@@ -499,6 +499,7 @@ struct DrawState
     uint32_t              firstIndex;                               // First index in draw index
     uint32_t              vertexOffset;                             // Vertex offset in draw index
     VkPrimitiveTopology   topology;                                 // Primitive topology
+    uint32_t              patchControlPoints;                       // Patch control points
     IUFValue              dispatch;                                 // Dispatch dimension
     uint32_t              width;                                    // Window width
     uint32_t              height;                                   // Window height
@@ -528,15 +529,24 @@ struct GraphicsPipelineState
 {
     VkPrimitiveTopology  topology;            // Primitive type
     uint32_t    patchControlPoints;           // Patch control points
+    uint32_t    deviceIndex;                  // Device index for device group
     uint32_t    disableVertexReuse;           // Disable reusing vertex shader output for indexed draws
     uint32_t    depthClipEnable;              // Enable clipping based on Z coordinate
     uint32_t    rasterizerDiscardEnable;      // Kill all rasterized pixels
+    uint32_t    perSampleShading;             // Enable per sample shading
     uint32_t    numSamples;                   // Number of coverage samples used when rendering with this pipeline
     uint32_t    samplePatternIdx;             // Index into the currently bound MSAA sample pattern table
     uint32_t    usrClipPlaneMask;             // Mask to indicate the enabled user defined clip planes
     uint32_t    alphaToCoverageEnable;        // Enable alpha to coverage
     uint32_t    dualSourceBlendEnable;        // Blend state bound at draw time will use a dual source blend mode
+    uint32_t    switchWinding;                // reverse the TCS declared output primitive vertex order
     ColorBuffer colorBuffer[MaxColorTargets]; // Color target state.
+};
+
+// Represents ComputePipelineState section.
+struct ComputePipelineState
+{
+    uint32_t    deviceIndex;                  // Device index for device group
 };
 #endif
 

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -62,7 +62,6 @@ void VsRegConfig::Init()
     INIT_REG(VGT_STRMOUT_VTX_STRIDE_2);
     INIT_REG(VGT_STRMOUT_VTX_STRIDE_3);
     INIT_REG(VGT_REUSE_OFF);
-    INIT_REG(VGT_VERTEX_REUSE_BLOCK_CNTL);
     INIT_REG(VS_SCRATCH_SIZE);
     INIT_REG(VS_NUM_USED_VGPRS);
     INIT_REG(VS_NUM_USED_SGPRS);
@@ -360,7 +359,6 @@ void InitRegisterNameMap(
     ADD_REG_MAP(VGT_GS_PER_ES);
 
     ADD_REG_MAP(VGT_SHADER_STAGES_EN);
-    ADD_REG_MAP(VGT_VERTEX_REUSE_BLOCK_CNTL);
     ADD_REG_MAP(VGT_STRMOUT_CONFIG);
     ADD_REG_MAP(VGT_STRMOUT_BUFFER_CONFIG);
     ADD_REG_MAP(VGT_STRMOUT_VTX_STRIDE_0);
