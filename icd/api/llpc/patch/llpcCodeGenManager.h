@@ -66,8 +66,6 @@ class CodeGenManager
 public:
     static Result GenerateCode(llvm::Module* pModule, llvm::raw_pwrite_stream& outStream, std::string& errMsg);
 
-    static Result FinalizeElf(Context* pContext, const ElfPackage* pElfIns, uint32_t elfInCount, ElfPackage* pElfOut);
-
 private:
     LLPC_DISALLOW_DEFAULT_CTOR(CodeGenManager);
     LLPC_DISALLOW_COPY_AND_ASSIGN(CodeGenManager);
@@ -76,21 +74,15 @@ private:
 
     static void FatalErrorHandler(void* userData, const std::string& reason, bool gen_crash_diag);
 
+    static Result AddAbiMetadata(Context* pContext, llvm::Module* pModule);
+
     static Result BuildGraphicsPipelineRegConfig(Context*            pContext,
-                                                 const ElfDataEntry* pDataEntries,
                                                  uint8_t**           ppConfig,
                                                  size_t*             pConfigSize);
 
     static Result BuildComputePipelineRegConfig(Context*            pContext,
-                                                const ElfDataEntry* pDataEntry,
                                                 uint8_t**           ppConfig,
                                                 size_t*             pConfigSize);
-
-    static void CreateSectionFromDataEntry(const char*         pSectionName,
-                                           uint32_t            sectionSize,
-                                           uint32_t            dataEntryCount,
-                                           const ElfDataEntry* pDataEntries,
-                                           ElfWriter<Elf64>&   writer);
 };
 
 } // Llpc

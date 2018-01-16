@@ -32,15 +32,17 @@
 
 #include "llvm/Support/Mutex.h"
 #include "llvm/Support/raw_ostream.h"
+
 #include <fstream>
 
 #include "llpc.h"
 #include "llpcDebug.h"
+#include "llpcElf.h"
 #include "llpcPipelineDumper.h"
 #include "llpcMetroHash.h"
 #include "llpcGfx6Chip.h"
 #include "llpcGfx9Chip.h"
-#include "llpcCompiler.h"
+#include "llpcUtil.h"
 
 using namespace llvm;
 
@@ -51,12 +53,102 @@ namespace Llpc
 std::ostream& operator<<(std::ostream& out, VkVertexInputRate  inputRate);
 std::ostream& operator<<(std::ostream& out, VkFormat           format);
 std::ostream& operator<<(std::ostream& out, VkPrimitiveTopology topology);
-std::ostream& operator<<(std::ostream& out, enum class ResourceMappingNodeType type);
+std::ostream& operator<<(std::ostream& out, ResourceMappingNodeType type);
+
 template std::ostream& operator<<(std::ostream& out, ElfReader<Elf64>& reader);
 template raw_ostream& operator<<(raw_ostream& out, ElfReader<Elf64>& reader);
 
+// =====================================================================================================================
+// Represents LLVM based mutex.
+class Mutex
+{
+public:
+    Mutex()
+    {
+    }
+
+    void Lock()
+    {
+        m_mutex.lock();
+    }
+
+    void Unlock()
+    {
+        m_mutex.unlock();
+    }
+private:
+    llvm::sys::Mutex m_mutex;
+};
+
 // Mutex for pipeline dump
-static ManagedStatic<sys::Mutex> s_dumpMutex;
+static Mutex s_dumpMutex;
+
+// =====================================================================================================================
+// Dumps SPIR-V shader binary to extenal file.
+void VKAPI_CALL IPipelineDumper::DumpSpirvBinary(
+    const char*                     pDumpDir,   // [in] Directory of pipeline dump
+    const BinaryData*               pSpirvBin)  // [in] SPIR-V binary
+{
+    MetroHash::Hash hash = {};
+    MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pSpirvBin->pCode),
+                      pSpirvBin->codeSize,
+                      hash.bytes);
+    PipelineDumper::DumpSpirvBinary(pDumpDir, pSpirvBin, &hash);
+}
+
+// =====================================================================================================================
+// Begins to dump graphics/compute pipeline info.
+void* VKAPI_CALL IPipelineDumper::BeginPipelineDump(
+    const char*                      pDumpDir,              // [in] Directory of pipeline dump
+    const ComputePipelineBuildInfo*  pComputePipelineInfo,  // [in] Info of the compute pipeline to be built
+    const GraphicsPipelineBuildInfo* pGraphicsPipelineInfo) // [in] Info of the graphics pipeline to be built
+{
+    MetroHash::Hash hash = {};
+    if (pComputePipelineInfo != nullptr)
+    {
+        hash = PipelineDumper::GenerateHashForComputePipeline(pComputePipelineInfo);
+    }
+    else
+    {
+        LLPC_ASSERT(pGraphicsPipelineInfo != nullptr);
+        hash = PipelineDumper::GenerateHashForGraphicsPipeline(pGraphicsPipelineInfo);
+    }
+    return PipelineDumper::BeginPipelineDump(pDumpDir, pComputePipelineInfo, pGraphicsPipelineInfo, &hash);
+}
+
+// =====================================================================================================================
+// Ends to dump graphics/compute pipeline info.
+void VKAPI_CALL IPipelineDumper::EndPipelineDump(
+    void* pDumpFile)  // [in] The handle of pipeline dump file
+{
+    PipelineDumper::EndPipelineDump(reinterpret_cast<std::ofstream*>(pDumpFile));
+}
+
+// =====================================================================================================================
+// Disassembles pipeline binary and dumps it to pipeline info file.
+void VKAPI_CALL IPipelineDumper::DumpPipelineBinary(
+    void*                    pDumpFile,    // [in] The handle of pipeline dump file
+    GfxIpVersion             gfxIp,        // Graphics IP version info
+    const BinaryData*        pPipelineBin) // [in] Pipeline binary (ELF)
+{
+    PipelineDumper::DumpPipelineBinary(reinterpret_cast<std::ofstream*>(pDumpFile), gfxIp, pPipelineBin);
+}
+
+// =====================================================================================================================
+// Calculates graphics pipeline hash code.
+uint64_t VKAPI_CALL IPipelineDumper::GetGraphicsPipelineHash(
+    const GraphicsPipelineBuildInfo* pPipelineInfo) // [in] Info to build this graphics pipeline
+{
+    return PipelineDumper::GetGraphicsPipelineHash(pPipelineInfo);
+}
+
+// =====================================================================================================================
+// Calculates compute pipeline hash code.
+uint64_t VKAPI_CALL IPipelineDumper::GetComputePipelineHash(
+    const ComputePipelineBuildInfo* pPipelineInfo) // [in] Info to build this compute pipeline
+{
+    return PipelineDumper::GetComputePipelineHash(pPipelineInfo);
+}
 
 // =====================================================================================================================
 // Gets the file name of SPIR-V binary according the specified shader hash.
@@ -117,21 +209,19 @@ std::ofstream* PipelineDumper::BeginPipelineDump(
     const GraphicsPipelineBuildInfo* pGraphicsPipelineInfo,  // [in] Info of the graphics pipeline to be built
     const MetroHash::Hash*           pHash)                  // [in] Pipeline hash code
 {
-    std::error_code errCode;
-
     std::string dumpFileName = pDumpDir;
     dumpFileName += "/";
     dumpFileName += GetPipelineInfoFileName(pComputePipelineInfo, pGraphicsPipelineInfo, pHash);
     dumpFileName += ".pipe";
 
     // Open dump file
-    s_dumpMutex->lock();
+    s_dumpMutex.Lock();
     auto pDumpFile = new std::ofstream(dumpFileName.c_str());
     if (pDumpFile->bad())
     {
         delete pDumpFile;
         pDumpFile = nullptr;
-        s_dumpMutex->unlock();
+        s_dumpMutex.Unlock();
     }
 
     // Dump pipeline input info
@@ -153,7 +243,7 @@ void PipelineDumper::EndPipelineDump(
     std::ofstream* pDumpFile) // [in] Dump file
 {
     delete pDumpFile;
-    s_dumpMutex->unlock();
+    s_dumpMutex.Unlock();
 }
 
 // =====================================================================================================================
@@ -216,11 +306,12 @@ void PipelineDumper::DumpPipelineShaderInfo(
     const PipelineShaderInfo* pShaderInfo, // [in] Shader info of specified shader stage
     std::ostream&             dumpFile)    // [out] dump file
 {
-    const ShaderModuleData* pModuleData = reinterpret_cast<const ShaderModuleData*>(pShaderInfo->pModuleData);
+    const ShaderModuleDataHeader* pModuleData = reinterpret_cast<const ShaderModuleDataHeader*>(pShaderInfo->pModuleData);
+    auto pModuleHash = reinterpret_cast<const MetroHash::Hash*>(&pModuleData->hash[0]);
 
     // Output shader binary file
     dumpFile << "[" << GetShaderStageAbbreviation(stage) << "SpvFile]\n";
-    dumpFile << "fileName = " << GetSpirvBinaryFileName(&pModuleData->hash) << "\n\n";
+    dumpFile << "fileName = " << GetSpirvBinaryFileName(pModuleHash) << "\n\n";
 
     dumpFile << "[" << GetShaderStageAbbreviation(stage) << "Info]\n";
     // Output entry point
@@ -304,8 +395,6 @@ void PipelineDumper::DumpSpirvBinary(
     const BinaryData*               pSpirvBin,    // [in] SPIR-V binary
     MetroHash::Hash*                pHash)        // [in] Pipeline hash code
 {
-    std::error_code errCode = {};
-
     std::string pathName = pDumpDir;
     pathName += "/";
     pathName += GetSpirvBinaryFileName(pHash);
@@ -461,6 +550,221 @@ void PipelineDumper::DumpGraphicsPipelineInfo(
     DumpGraphicsStateInfo(pPipelineInfo, *pDumpFile);
 
     pDumpFile->flush();
+}
+
+// =====================================================================================================================
+// Gets hash code from graphics pipline build info.
+uint64_t PipelineDumper::GetGraphicsPipelineHash(
+    const GraphicsPipelineBuildInfo* pPipelineInfo  // [in] Info to build a graphics pipeline
+    )
+{
+    MetroHash::Hash hash = GenerateHashForGraphicsPipeline(pPipelineInfo);
+    return MetroHash::Compact64(&hash);
+}
+
+// =====================================================================================================================
+// Gets hash code from graphics pipline build info.
+uint64_t PipelineDumper::GetComputePipelineHash(
+    const ComputePipelineBuildInfo* pPipelineInfo  // [in] Info to build a compute pipeline
+    )
+{
+    MetroHash::Hash hash = GenerateHashForComputePipeline(pPipelineInfo);
+    return MetroHash::Compact64(&hash);
+}
+
+// =====================================================================================================================
+// Builds hash code from graphics pipline build info.
+MetroHash::Hash PipelineDumper::GenerateHashForGraphicsPipeline(
+    const GraphicsPipelineBuildInfo* pPipeline  // [in] Info to build a graphics pipeline
+    )
+{
+    MetroHash64 hasher;
+
+    UpdateHashForPipelineShaderInfo(ShaderStageVertex, &pPipeline->vs, &hasher);
+    UpdateHashForPipelineShaderInfo(ShaderStageTessControl, &pPipeline->tcs, &hasher);
+    UpdateHashForPipelineShaderInfo(ShaderStageTessEval, &pPipeline->tes, &hasher);
+    UpdateHashForPipelineShaderInfo(ShaderStageGeometry, &pPipeline->gs, &hasher);
+    UpdateHashForPipelineShaderInfo(ShaderStageFragment, &pPipeline->fs, &hasher);
+
+    if ((pPipeline->pVertexInput != nullptr) && (pPipeline->pVertexInput->vertexBindingDescriptionCount > 0))
+    {
+        auto pVertexInput = pPipeline->pVertexInput;
+        hasher.Update(pVertexInput->vertexBindingDescriptionCount);
+        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexBindingDescriptions),
+                      sizeof(VkVertexInputBindingDescription) * pVertexInput->vertexBindingDescriptionCount);
+        hasher.Update(pVertexInput->vertexAttributeDescriptionCount);
+        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexAttributeDescriptions),
+                      sizeof(VkVertexInputAttributeDescription) * pVertexInput->vertexAttributeDescriptionCount);
+    }
+
+    auto pIaState = &pPipeline->iaState;
+    hasher.Update(pIaState->topology);
+    hasher.Update(pIaState->patchControlPoints);
+    hasher.Update(pIaState->deviceIndex);
+    hasher.Update(pIaState->disableVertexReuse);
+    if (pIaState->switchWinding)
+    {
+        hasher.Update(pIaState->switchWinding);
+    }
+
+    auto pVpState = &pPipeline->vpState;
+    hasher.Update(pVpState->depthClipEnable);
+
+    auto pRsState = &pPipeline->rsState;
+    hasher.Update(pRsState->rasterizerDiscardEnable);
+    if (pRsState->perSampleShading)
+    {
+        hasher.Update(pRsState->perSampleShading);
+    }
+    hasher.Update(pRsState->numSamples);
+    hasher.Update(pRsState->samplePatternIdx);
+    hasher.Update(pRsState->usrClipPlaneMask);
+
+    auto pCbState = &pPipeline->cbState;
+    hasher.Update(pCbState->alphaToCoverageEnable);
+    hasher.Update(pCbState->dualSourceBlendEnable);
+    for (uint32_t i = 0; i < MaxColorTargets; ++i)
+    {
+        if (pCbState->target[i].format != VK_FORMAT_UNDEFINED)
+        {
+            hasher.Update(pCbState->target[i].format);
+            hasher.Update(pCbState->target[i].blendEnable);
+            hasher.Update(pCbState->target[i].blendSrcAlphaToColor);
+        }
+    }
+
+    MetroHash::Hash hash = {};
+    hasher.Finalize(hash.bytes);
+
+    return hash;
+}
+
+// =====================================================================================================================
+// Builds hash code from compute pipline build info.
+MetroHash::Hash PipelineDumper::GenerateHashForComputePipeline(
+    const ComputePipelineBuildInfo* pPipeline   // [in] Info to build a compute pipeline
+    )
+{
+    MetroHash64 hasher;
+
+    UpdateHashForPipelineShaderInfo(ShaderStageCompute, &pPipeline->cs, &hasher);
+
+    MetroHash::Hash hash = {};
+    hasher.Finalize(hash.bytes);
+
+    return hash;
+}
+
+// =====================================================================================================================
+// Updates hash code context for pipeline shader stage.
+void PipelineDumper::UpdateHashForPipelineShaderInfo(
+    ShaderStage               stage,           // shader stage
+    const PipelineShaderInfo* pShaderInfo,     // [in] Shader info in specified shader stage
+    MetroHash64*              pHasher          // [in,out] Haher to generate hash code
+    )
+{
+    if (pShaderInfo->pModuleData)
+    {
+        const ShaderModuleDataHeader* pModuleData = reinterpret_cast<const ShaderModuleDataHeader*>(pShaderInfo->pModuleData);
+        pHasher->Update(stage);
+        pHasher->Update(pModuleData->hash);
+
+        if (pShaderInfo->pEntryTarget)
+        {
+            size_t entryNameLen = strlen(pShaderInfo->pEntryTarget);
+            pHasher->Update(reinterpret_cast<const uint8_t*>(pShaderInfo->pEntryTarget), entryNameLen);
+        }
+
+        if ((pShaderInfo->pSpecializatonInfo) && (pShaderInfo->pSpecializatonInfo->mapEntryCount > 0))
+        {
+            auto pSpecializatonInfo = pShaderInfo->pSpecializatonInfo;
+            pHasher->Update(pSpecializatonInfo->mapEntryCount);
+            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pMapEntries),
+                            sizeof(VkSpecializationMapEntry) * pSpecializatonInfo->mapEntryCount);
+            pHasher->Update(pSpecializatonInfo->dataSize);
+            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pData), pSpecializatonInfo->dataSize);
+        }
+
+        if (pShaderInfo->descriptorRangeValueCount > 0)
+        {
+            pHasher->Update(pShaderInfo->descriptorRangeValueCount);
+            for (uint32_t i = 0; i < pShaderInfo->descriptorRangeValueCount; ++i)
+            {
+                auto pDescriptorRangeValue = &pShaderInfo->pDescriptorRangeValues[i];
+                pHasher->Update(pDescriptorRangeValue->type);
+                pHasher->Update(pDescriptorRangeValue->set);
+                pHasher->Update(pDescriptorRangeValue->binding);
+                pHasher->Update(pDescriptorRangeValue->arraySize);
+
+                // TODO: We should query descriptor size from patch
+                const uint32_t DescriptorSize = 16;
+                LLPC_ASSERT(pDescriptorRangeValue->type == ResourceMappingNodeType::DescriptorSampler);
+                pHasher->Update(reinterpret_cast<const uint8_t*>(pDescriptorRangeValue->pValue),
+                                pDescriptorRangeValue->arraySize * DescriptorSize);
+            }
+        }
+
+        if (pShaderInfo->userDataNodeCount > 0)
+        {
+            for (uint32_t i = 0; i < pShaderInfo->userDataNodeCount; ++i)
+            {
+                auto pUserDataNode = &pShaderInfo->pUserDataNodes[i];
+                UpdateHashForResourceMappingNode(pUserDataNode, pHasher);
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+// Updates hash code context for resource mapping node.
+//
+// NOTE: This function will be called recusively if node's type is "DescriptorTableVaPtr"
+void PipelineDumper::UpdateHashForResourceMappingNode(
+    const ResourceMappingNode* pUserDataNode,    // [in] Resource mapping node
+    MetroHash64*               pHasher           // [in,out] Haher to generate hash code
+    )
+{
+    pHasher->Update(pUserDataNode->type);
+    pHasher->Update(pUserDataNode->sizeInDwords);
+    pHasher->Update(pUserDataNode->offsetInDwords);
+
+    switch (pUserDataNode->type)
+    {
+    case ResourceMappingNodeType::DescriptorResource:
+    case ResourceMappingNodeType::DescriptorSampler:
+    case ResourceMappingNodeType::DescriptorCombinedTexture:
+    case ResourceMappingNodeType::DescriptorTexelBuffer:
+    case ResourceMappingNodeType::DescriptorBuffer:
+    case ResourceMappingNodeType::DescriptorFmask:
+    case ResourceMappingNodeType::DescriptorBufferCompact:
+        {
+            pHasher->Update(pUserDataNode->srdRange);
+            break;
+        }
+    case ResourceMappingNodeType::DescriptorTableVaPtr:
+        {
+            for (uint32_t i = 0; i < pUserDataNode->tablePtr.nodeCount; ++i)
+            {
+                UpdateHashForResourceMappingNode(&pUserDataNode->tablePtr.pNext[i], pHasher);
+            }
+            break;
+        }
+    case ResourceMappingNodeType::IndirectUserDataVaPtr:
+        {
+            pHasher->Update(pUserDataNode->userDataPtr);
+            break;
+        }
+    case ResourceMappingNodeType::PushConst:
+        {
+            // Do nothing for push constant
+            break;
+        }
+    default:
+        {
+            LLPC_NEVER_CALLED();
+            break;
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -657,7 +961,7 @@ OStream& operator<<(
         else if (strncmp(pSection->pName, AmdGpuConfigName, sizeof(AmdGpuConfigName) - 1) == 0)
         {
             // Output .AMDGPU.config section
-            const uint32_t configCount = pSection->secHead.sh_size / sizeof(uint32_t) / 2;
+            const uint32_t configCount = static_cast<uint32_t>(pSection->secHead.sh_size / sizeof(uint32_t) / 2);
             const uint32_t* pConfig = reinterpret_cast<const uint32_t*>(pSection->pData);
             out << pSection->pName << " (" << configCount << " registers)\n";
 
@@ -695,11 +999,11 @@ OStream& operator<<(
             {
                 if (symIdx < symbols.size())
                 {
-                    endPos = symbols[symIdx].value;
+                    endPos = static_cast<uint32_t>(symbols[symIdx].value);
                 }
                 else
                 {
-                    endPos = pSection->secHead.sh_size;
+                    endPos = static_cast<uint32_t>(pSection->secHead.sh_size);
                 }
 
                 OutputText(pSection->pData, startPos, endPos, out);
@@ -728,11 +1032,11 @@ OStream& operator<<(
             {
                 if (symIdx < symbols.size())
                 {
-                    endPos = symbols[symIdx].value;
+                    endPos = static_cast<uint32_t>(symbols[symIdx].value);
                 }
                 else
                 {
-                    endPos = pSection->secHead.sh_size;
+                    endPos = static_cast<uint32_t>(pSection->secHead.sh_size);
                 }
 
                 OutputBinary(pSection->pData, startPos, endPos, out);
@@ -781,8 +1085,8 @@ std::ostream& operator<<(
 // =====================================================================================================================
 // Translates enum "ResourceMappingNodeType" to string and output to ostream.
 std::ostream& operator<<(
-    std::ostream&                       out,   // [out] Output stream
-    enum class ResourceMappingNodeType type)  // Resource map node type
+    std::ostream&           out,   // [out] Output stream
+    ResourceMappingNodeType type)  // Resource map node type
 {
     const char* pString = nullptr;
     switch (type)

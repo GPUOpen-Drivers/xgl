@@ -51,7 +51,6 @@ namespace Gfx9
 // Builds register configuration for graphics pipeline (VS-FS).
 Result ConfigBuilder::BuildPipelineVsFsRegConfig(
     Context*            pContext,         // [in] LLPC context
-    const ElfDataEntry* pDataEntries,     // [in] ELF data entries
     uint8_t**           ppConfig,         // [out] Register configuration for VS-FS pipeline
     size_t*             pConfigSize)      // [out] Size of register configuration
 {
@@ -78,9 +77,7 @@ Result ConfigBuilder::BuildPipelineVsFsRegConfig(
 
     if (stageMask & ShaderStageToMask(ShaderStageVertex))
     {
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
-        result = BuildVsRegConfig<PipelineVsFsRegConfig>(pContext, &dataEntry, ShaderStageVertex, pConfig);
+        result = BuildVsRegConfig<PipelineVsFsRegConfig>(pContext, ShaderStageVertex, pConfig);
 
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, VS_EN, VS_STAGE_REAL);
 
@@ -97,9 +94,7 @@ Result ConfigBuilder::BuildPipelineVsFsRegConfig(
 
     if ((result == Result::Success) && (stageMask & ShaderStageToMask(ShaderStageFragment)))
     {
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
-        result = BuildPsRegConfig<PipelineVsFsRegConfig>(pContext, &dataEntry, ShaderStageFragment, pConfig);
+        result = BuildPsRegConfig<PipelineVsFsRegConfig>(pContext, ShaderStageFragment, pConfig);
 
         hash64 = pContext->GetShaderHashCode(ShaderStageFragment);
         SET_REG(pConfig, API_PS_HASH_LO, static_cast<uint32_t>(hash64));
@@ -136,7 +131,6 @@ Result ConfigBuilder::BuildPipelineVsFsRegConfig(
 // Builds register configuration for graphics pipeline (VS-TS-FS).
 Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
     Context*            pContext,         // [in] LLPC context
-    const ElfDataEntry* pDataEntries,     // [in] ELF data entries
     uint8_t**           ppConfig,         // [out] Register configuration for VS-TS-FS pipeline
     size_t*             pConfigSize)      // [out] Size of register configuration
 {
@@ -165,10 +159,7 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
         const bool hasVs  = ((stageMask & ShaderStageToMask(ShaderStageVertex)) != 0);
         const bool hasTcs = ((stageMask & ShaderStageToMask(ShaderStageTessControl)) != 0);
 
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
         result = BuildLsHsRegConfig<PipelineVsTsFsRegConfig>(pContext,
-                                                             &dataEntry,
                                                              hasVs ? ShaderStageVertex : ShaderStageInvalid,
                                                              hasTcs ? ShaderStageTessControl : ShaderStageInvalid,
                                                              pConfig);
@@ -193,9 +184,7 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
 
     if ((result == Result::Success) && (stageMask & ShaderStageToMask(ShaderStageTessEval)))
     {
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
-        result = BuildVsRegConfig<PipelineVsTsFsRegConfig>(pContext, &dataEntry, ShaderStageTessEval, pConfig);
+        result = BuildVsRegConfig<PipelineVsTsFsRegConfig>(pContext, ShaderStageTessEval, pConfig);
 
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, VS_EN, VS_STAGE_DS);
 
@@ -206,9 +195,7 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
 
     if ((result == Result::Success) && (stageMask & ShaderStageToMask(ShaderStageFragment)))
     {
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
-        result = BuildPsRegConfig<PipelineVsTsFsRegConfig>(pContext, &dataEntry, ShaderStageFragment, pConfig);
+        result = BuildPsRegConfig<PipelineVsTsFsRegConfig>(pContext, ShaderStageFragment, pConfig);
 
         hash64 = pContext->GetShaderHashCode(ShaderStageFragment);
         SET_REG(pConfig, API_PS_HASH_LO, static_cast<uint32_t>(hash64));
@@ -244,7 +231,6 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
 // Builds register configuration for graphics pipeline (VS-GS-FS).
 Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
     Context*            pContext,         // [in] LLPC context
-    const ElfDataEntry* pDataEntries,     // [in] ELF data entries
     uint8_t**           ppConfig,         // [out] Register configuration for VS-GS-FS pipeline
     size_t*             pConfigSize)      // [out] Size of register configuration
 {
@@ -273,10 +259,7 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
         const bool hasVs = ((stageMask & ShaderStageToMask(ShaderStageVertex)) != 0);
         const bool hasGs = ((stageMask & ShaderStageToMask(ShaderStageGeometry)) != 0);
 
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
         result = BuildEsGsRegConfig<PipelineVsGsFsRegConfig>(pContext,
-                                                             &dataEntry,
                                                              hasVs ? ShaderStageVertex : ShaderStageInvalid,
                                                              hasGs ? ShaderStageGeometry : ShaderStageInvalid,
                                                              pConfig);
@@ -301,9 +284,7 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
 
     if ((result == Result::Success) && (stageMask & ShaderStageToMask(ShaderStageFragment)))
     {
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
-        result = BuildPsRegConfig<PipelineVsGsFsRegConfig>(pContext, &dataEntry, ShaderStageFragment, pConfig);
+        result = BuildPsRegConfig<PipelineVsGsFsRegConfig>(pContext, ShaderStageFragment, pConfig);
 
         hash64 = pContext->GetShaderHashCode(ShaderStageFragment);
         SET_REG(pConfig, API_PS_HASH_LO, static_cast<uint32_t>(hash64));
@@ -312,9 +293,7 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
 
     if ((result == Result::Success) && (stageMask & ShaderStageToMask(ShaderStageCopyShader)))
     {
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
-        result = BuildVsRegConfig<PipelineVsGsFsRegConfig>(pContext, &dataEntry, ShaderStageCopyShader, pConfig);
+        result = BuildVsRegConfig<PipelineVsGsFsRegConfig>(pContext, ShaderStageCopyShader, pConfig);
 
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, VS_EN, VS_STAGE_COPY_SHADER);
     }
@@ -342,7 +321,6 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
 // Builds register configuration for graphics pipeline (VS-TS-GS-FS).
 Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
     Context*            pContext,         // [in] LLPC context
-    const ElfDataEntry* pDataEntries,     // [in] ELF data entries
     uint8_t**           ppConfig,         // [out] Register configuration for VS-TS-GS-FS pipeline
     size_t*             pConfigSize)      // [out] Size of register configuration
 {
@@ -372,10 +350,7 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
         const bool hasVs  = ((stageMask & ShaderStageToMask(ShaderStageVertex)) != 0);
         const bool hasTcs = ((stageMask & ShaderStageToMask(ShaderStageTessControl)) != 0);
 
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
         result = BuildLsHsRegConfig<PipelineVsTsGsFsRegConfig>(pContext,
-                                                               &dataEntry,
                                                                hasVs ? ShaderStageVertex : ShaderStageInvalid,
                                                                hasTcs ? ShaderStageTessControl : ShaderStageInvalid,
                                                                pConfig);
@@ -403,10 +378,7 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
         const bool hasTes = ((stageMask & ShaderStageToMask(ShaderStageTessEval)) != 0);
         const bool hasGs  = ((stageMask & ShaderStageToMask(ShaderStageGeometry)) != 0);
 
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
         result = BuildEsGsRegConfig<PipelineVsTsGsFsRegConfig>(pContext,
-                                                               &dataEntry,
                                                                hasTes ? ShaderStageTessEval : ShaderStageInvalid,
                                                                hasGs ? ShaderStageGeometry : ShaderStageInvalid,
                                                                pConfig);
@@ -425,9 +397,7 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
 
     if ((result == Result::Success) && (stageMask & ShaderStageToMask(ShaderStageFragment)))
     {
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
-        result = BuildPsRegConfig<PipelineVsTsGsFsRegConfig>(pContext, &dataEntry, ShaderStageFragment, pConfig);
+        result = BuildPsRegConfig<PipelineVsTsGsFsRegConfig>(pContext, ShaderStageFragment, pConfig);
 
         hash64 = pContext->GetShaderHashCode(ShaderStageFragment);
         SET_REG(pConfig, API_PS_HASH_LO, static_cast<uint32_t>(hash64));
@@ -436,9 +406,7 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
 
     if ((result == Result::Success) && (stageMask & ShaderStageToMask(ShaderStageCopyShader)))
     {
-        const auto& dataEntry = pDataEntries[dataEntryIdx++];
-        LLPC_ASSERT(dataEntry.size > 0);
-        result = BuildVsRegConfig<PipelineVsTsGsFsRegConfig>(pContext, &dataEntry, ShaderStageCopyShader, pConfig);
+        result = BuildVsRegConfig<PipelineVsTsGsFsRegConfig>(pContext, ShaderStageCopyShader, pConfig);
 
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, VS_EN, VS_STAGE_COPY_SHADER);
     }
@@ -476,7 +444,6 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
 // Builds register configuration for compute pipeline.
 Result ConfigBuilder::BuildPipelineCsRegConfig(
     Context*            pContext,        // [in] LLPC context
-    const ElfDataEntry* pDataEntry,      // [in] ELF data entry
     uint8_t**           ppConfig,        // [out] Register configuration for compute pipeline
     size_t*             pConfigSize)     // [out] Size of register configuration
 {
@@ -498,8 +465,7 @@ Result ConfigBuilder::BuildPipelineCsRegConfig(
                             0,
                             Util::Abi::HwShaderCs,
                             pConfig);
-    LLPC_ASSERT(pDataEntry->size > 0);
-    result = BuildCsRegConfig(pContext, pDataEntry, ShaderStageCompute, pConfig);
+    result = BuildCsRegConfig(pContext, ShaderStageCompute, pConfig);
 
     hash64 = pContext->GetShaderHashCode(ShaderStageCompute);
     SET_REG(pConfig, API_CS_HASH_LO, static_cast<uint32_t>(hash64));
@@ -521,7 +487,6 @@ Result ConfigBuilder::BuildPipelineCsRegConfig(
 template <typename T>
 Result ConfigBuilder::BuildVsRegConfig(
     Context*            pContext,       // [in] LLPC context
-    const ElfDataEntry* pDataEntry,     // [in] ELF data entry
     ShaderStage         shaderStage,    // Current shader stage (from API side)
     T*                  pConfig)        // [out] Register configuration for vertex-shader-specific pipeline
 {
@@ -538,43 +503,8 @@ Result ConfigBuilder::BuildVsRegConfig(
     const auto pResUsage = pContext->GetShaderResourceUsage(shaderStage);
     const auto& builtInUsage = pResUsage->builtInUsage;
 
-    regSPI_TMPRING_SIZE spiTmpRingSize = {};
-
-    uint32_t dataSize = pDataEntry->size;
-    const uint32_t* pData = reinterpret_cast<const uint32_t*>(pDataEntry->pData);
-
-    for (uint32_t i = 0; i < dataSize / sizeof(uint32_t); i += 2)
-    {
-        const uint32_t regId  = pData[i];
-        const uint32_t regVal = pData[i + 1];
-
-        switch (regId)
-        {
-        CASE_SET_REG(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, regVal)
-        CASE_SET_REG(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, regVal)
-            break;
-        case mmSPI_TMPRING_SIZE * 4:
-            spiTmpRingSize.u32All = regVal;
-            break;
-        case mmSPILLED_SGPRS * 4:
-        case mmSPILLED_VGPRS * 4:
-            break;
-        default:
-            LLPC_NEVER_CALLED();
-            break;
-        }
-    }
-
     SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, DX10_CLAMP, true);  // Follow PAL setting
-
-    uint32_t numUsedVgprs = GetUsedVgprCount(GET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPRS));
-    uint32_t numUsedSgprs = GetUsedSgprCount(GET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, SGPRS));
-    uint32_t scratchSize  = GetScratchByteSize(spiTmpRingSize.bits.WAVESIZE);
-
-    SET_REG(&pConfig->m_vsRegs, VS_NUM_USED_VGPRS, numUsedVgprs);
-    SET_REG(&pConfig->m_vsRegs, VS_NUM_USED_SGPRS, numUsedSgprs);
-    SET_REG(&pConfig->m_vsRegs, VS_SCRATCH_SIZE, scratchSize);
 
     if (gfxIp.major == 9)
     {
@@ -794,7 +724,6 @@ Result ConfigBuilder::BuildVsRegConfig(
 template <typename T>
 Result ConfigBuilder::BuildLsHsRegConfig(
     Context*            pContext,       // [in] LLPC context
-    const ElfDataEntry* pDataEntry,     // [in] ELF data entry
     ShaderStage         shaderStage1,   // Current first shader stage (from API side)
     ShaderStage         shaderStage2,   // Current second shader stage (from API side)
     T*                  pConfig)        // [out] Register configuration for local-hull-shader-specific pipeline
@@ -808,38 +737,6 @@ Result ConfigBuilder::BuildLsHsRegConfig(
 
     const auto& vsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageVertex)->builtInUsage.vs;
     const auto& tcsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessControl)->builtInUsage.tcs;
-
-    regSPI_TMPRING_SIZE spiTmpRingSize = {};
-
-    const uint32_t* pData = reinterpret_cast<const uint32_t*>(pDataEntry->pData);
-    for (uint32_t i = 0; i < pDataEntry->size / sizeof(uint32_t); i += 2)
-    {
-        const uint32_t regId = pData[i];
-        const uint32_t regVal = pData[i + 1];
-
-        switch (regId)
-        {
-        CASE_SET_REG(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC1_HS, regVal)
-        CASE_SET_REG(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC2_HS, regVal)
-             break;
-        case mmSPI_TMPRING_SIZE * 4:
-            spiTmpRingSize.u32All = regVal;
-            break;
-        case mmSPILLED_SGPRS * 4:
-        case mmSPILLED_VGPRS * 4:
-            break;
-        default:
-            LLPC_NEVER_CALLED();
-            break;
-        }
-    }
-    uint32_t numUsedVgprs = GetUsedVgprCount(GET_REG_FIELD(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC1_HS, VGPRS));
-    uint32_t numUsedSgprs = GetUsedSgprCount(GET_REG_FIELD(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC1_HS, SGPRS));
-    uint32_t scratchSize = GetScratchByteSize(spiTmpRingSize.bits.WAVESIZE);
-
-    SET_REG(&pConfig->m_lsHsRegs, HS_NUM_USED_VGPRS, numUsedVgprs);
-    SET_REG(&pConfig->m_lsHsRegs, HS_NUM_USED_SGPRS, numUsedSgprs);
-    SET_REG(&pConfig->m_lsHsRegs, HS_SCRATCH_SIZE, scratchSize);
 
     SET_REG_FIELD(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC1_HS, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC1_HS, DX10_CLAMP, true); // Follow PAL setting
@@ -939,7 +836,6 @@ Result ConfigBuilder::BuildLsHsRegConfig(
 template <typename T>
 Result ConfigBuilder::BuildEsGsRegConfig(
     Context*            pContext,       // [in] LLPC context
-    const ElfDataEntry* pDataEntry,     // [in] ELF data entry
     ShaderStage         shaderStage1,   // Current first shader stage (from API side)
     ShaderStage         shaderStage2,   // Current second shader stage (from API side)
     T*                  pConfig)        // [out] Register configuration for embedded-geometry-shader-specific pipeline
@@ -968,48 +864,8 @@ Result ConfigBuilder::BuildEsGsRegConfig(
     const auto& gsBuiltInUsage = pGsResUsage->builtInUsage.gs;
     const auto& gsInOutUsage   = pGsResUsage->inOutUsage;
 
-    regSPI_TMPRING_SIZE spiTmpRingSize = {};
-
-    uint32_t dataSize = pDataEntry->size;
-    const uint32_t* pData = reinterpret_cast<const uint32_t*>(pDataEntry->pData);
-
-    for (uint32_t i = 0; i < dataSize / sizeof(uint32_t); i += 2)
-    {
-        const uint32_t regId  = pData[i];
-        const uint32_t regVal = pData[i + 1];
-
-        switch (regId)
-        {
-        CASE_SET_REG(&pConfig->m_esGsRegs, SPI_SHADER_PGM_RSRC1_GS, regVal)
-        CASE_SET_REG(&pConfig->m_esGsRegs, SPI_SHADER_PGM_RSRC2_GS, regVal)
-            break;
-        case mmSPI_TMPRING_SIZE * 4:
-            // TODO: Support non-zero reg values
-            spiTmpRingSize.u32All = regVal;
-            if (regVal != 0)
-            {
-                result = Result::Unsupported;
-            }
-            break;
-        case mmSPILLED_SGPRS * 4:
-        case mmSPILLED_VGPRS * 4:
-            break;
-        default:
-            LLPC_NEVER_CALLED();
-            break;
-        }
-    }
-
     SET_REG_FIELD(&pConfig->m_esGsRegs, SPI_SHADER_PGM_RSRC1_GS, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_esGsRegs, SPI_SHADER_PGM_RSRC1_GS, DX10_CLAMP, true); // Follow PAL setting
-
-    uint32_t numUsedVgprs = GetUsedVgprCount(GET_REG_FIELD(&pConfig->m_esGsRegs, SPI_SHADER_PGM_RSRC1_GS, VGPRS));
-    uint32_t numUsedSgprs = GetUsedSgprCount(GET_REG_FIELD(&pConfig->m_esGsRegs, SPI_SHADER_PGM_RSRC1_GS, SGPRS));
-    uint32_t scratchSize  = GetScratchByteSize(spiTmpRingSize.bits.WAVESIZE);
-
-    SET_REG(&pConfig->m_esGsRegs, GS_NUM_USED_VGPRS, numUsedVgprs);
-    SET_REG(&pConfig->m_esGsRegs, GS_NUM_USED_SGPRS, numUsedSgprs);
-    SET_REG(&pConfig->m_esGsRegs, GS_SCRATCH_SIZE, scratchSize);
 
     const auto& pVsIntfData = pContext->GetShaderInterfaceData(ShaderStageVertex);
     const auto& pTesIntfData = pContext->GetShaderInterfaceData(ShaderStageTessEval);
@@ -1155,7 +1011,9 @@ Result ConfigBuilder::BuildEsGsRegConfig(
     SET_REG_FIELD(&pConfig->m_esGsRegs, VGT_ESGS_RING_ITEMSIZE, ITEMSIZE, esGsRingItemSize);
 
     // NOTE: After user data nodes are merged together, VS/TES and GS are ought to have the same user data
-    // configuration.
+    // configuration except the usages of vertex buffer table, base vertex and base instance in VS. In this sense,
+    // when VS/TES is present, we use it as input shader to build user data register settings. If VS/TES is absent,
+    // choose GS as the input shader.
     ShaderStage shaderStage = ShaderStageInvalid;
     if ((shaderStage1 == ShaderStageVertex) || (shaderStage1 == ShaderStageTessEval))
     {
@@ -1180,7 +1038,6 @@ Result ConfigBuilder::BuildEsGsRegConfig(
 template <typename T>
 Result ConfigBuilder::BuildPsRegConfig(
     Context*            pContext,       // [in] LLPC context
-    const ElfDataEntry* pDataEntry,     // [in] ELF data entry
     ShaderStage         shaderStage,    // Current shader stage (from API side)
     T*                  pConfig)        // [out] Register configuration for pixel-shader-specific pipeline
 {
@@ -1198,35 +1055,6 @@ Result ConfigBuilder::BuildPsRegConfig(
     const auto pResUsage = pContext->GetShaderResourceUsage(shaderStage);
     const auto& builtInUsage = pResUsage->builtInUsage.fs;
 
-    regSPI_TMPRING_SIZE spiTmpRingSize = {};
-
-    uint32_t dataSize = pDataEntry->size;
-    const uint32_t* pData = reinterpret_cast<const uint32_t*>(pDataEntry->pData);
-
-    for (uint32_t i = 0; i < dataSize / sizeof(uint32_t); i += 2)
-    {
-        const uint32_t regId  = pData[i];
-        const uint32_t regVal = pData[i + 1];
-
-        switch (regId)
-        {
-        CASE_SET_REG(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, regVal)
-        CASE_SET_REG(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC2_PS, regVal)
-        CASE_SET_REG(&pConfig->m_psRegs, SPI_PS_INPUT_ENA, regVal)
-        CASE_SET_REG(&pConfig->m_psRegs, SPI_PS_INPUT_ADDR, regVal)
-            break;
-        case mmSPI_TMPRING_SIZE * 4:
-            spiTmpRingSize.u32All = regVal;
-            break;
-        case mmSPILLED_SGPRS * 4:
-        case mmSPILLED_VGPRS * 4:
-            break;
-        default:
-            LLPC_NEVER_CALLED();
-            break;
-        }
-    }
-
     SET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, DX10_CLAMP, true);  // Follow PAL setting
     if (gfxIp.major == 9)
@@ -1238,13 +1066,6 @@ Result ConfigBuilder::BuildPsRegConfig(
         LLPC_NOT_IMPLEMENTED();
     }
 
-    uint32_t numUsedVgprs = GetUsedVgprCount(GET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, VGPRS));
-    uint32_t numUsedSgprs = GetUsedSgprCount(GET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, SGPRS));
-    uint32_t scratchSize  = GetScratchByteSize(spiTmpRingSize.bits.WAVESIZE);
-
-    SET_REG(&pConfig->m_psRegs, PS_NUM_USED_VGPRS, numUsedVgprs);
-    SET_REG(&pConfig->m_psRegs, PS_NUM_USED_SGPRS, numUsedSgprs);
-    SET_REG(&pConfig->m_psRegs, PS_SCRATCH_SIZE, scratchSize);
     SET_REG(&pConfig->m_psRegs, PS_RUNS_AT_SAMPLE_RATE, builtInUsage.runAtSampleRate);
 
     SET_REG_FIELD(&pConfig->m_psRegs, SPI_BARYC_CNTL, FRONT_FACE_ALL_BITS, true);
@@ -1379,27 +1200,6 @@ Result ConfigBuilder::BuildPsRegConfig(
         SET_REG_FIELD(&pConfig->m_psRegs, SPI_INTERP_CONTROL_0, PNT_SPRITE_OVRD_W, SPI_PNT_SPRITE_SEL_1);
     }
 
-    // NOTE: This is a hardware limitation. Hardware will hang if none of the interpolation mode bits is
-    // set. LLVM backend compiler partially work around this issue when none of the interpolation mode bits
-    // of SPI_PS_INPUT_ADDR is set. However, the interpolation mode bits of SPI_PS_INPUT_ENA still could be
-    // all unset. In the future, when optimization is well done, the register values of SPI_PS_INPUT_ADDR
-    // and SPI_PS_INPUT_ENA should be identical
-    static const uint32_t InterpModeMask = 0x7F;
-
-    regSPI_PS_INPUT_ADDR spiPsInputAddr = {};
-    spiPsInputAddr.u32All = GET_REG(&pConfig->m_psRegs, SPI_PS_INPUT_ADDR);
-    LLPC_ASSERT((spiPsInputAddr.u32All & InterpModeMask) != 0);
-
-    regSPI_PS_INPUT_ENA spiPsInputEna = {};
-    spiPsInputEna.u32All = GET_REG(&pConfig->m_psRegs, SPI_PS_INPUT_ENA);
-    if ((spiPsInputEna.u32All & InterpModeMask) == 0)
-    {
-        // Always enable PERSP_SAMPLE_ENA if none of those interpolation mode bits is set
-        spiPsInputEna.bits.PERSP_SAMPLE_ENA = true;
-        SET_REG_FIELD(&pConfig->m_psRegs, SPI_PS_INPUT_ENA, PERSP_SAMPLE_ENA, true);
-    }
-    LLPC_ASSERT((spiPsInputEna.u32All & InterpModeMask) != 0);
-
     SET_REG(&pConfig->m_psRegs, PS_USES_UAVS, static_cast<uint32_t>(pResUsage->imageWrite));
 
     SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_AA_CONFIG, COVERAGE_TO_SHADER_SELECT, INPUT_COVERAGE);
@@ -1430,7 +1230,6 @@ Result ConfigBuilder::BuildPsRegConfig(
 // Builds register configuration for compute shader.
 Result ConfigBuilder::BuildCsRegConfig(
     Context*             pContext,      // [in] LLPC context
-    const ElfDataEntry*  pDataEntry,    // [in] ELF data entry
     ShaderStage          shaderStage,   // Current shader stage (from API side)
     PipelineCsRegConfig* pConfig)       // [out] Register configuration for compute pipeline
 {
@@ -1443,44 +1242,8 @@ Result ConfigBuilder::BuildCsRegConfig(
     const auto pResUsage = pContext->GetShaderResourceUsage(shaderStage);
     const auto& builtInUsage = pResUsage->builtInUsage.cs;
 
-    uint32_t dataSize = pDataEntry[0].size;
-    const uint32_t* pData =  reinterpret_cast<const uint32_t*>(pDataEntry[0].pData);
-
-    regCOMPUTE_TMPRING_SIZE computeTmpRingSize = {};
-
-    // Set registers based on ELF section data
-    for (uint32_t i = 0; i < dataSize / sizeof(uint32_t); i += 2)
-    {
-        const uint32_t regId  = pData[i];
-        const uint32_t regVal = pData[i + 1];
-
-        switch (regId)
-        {
-        CASE_SET_REG(&pConfig->m_csRegs, COMPUTE_PGM_RSRC1, regVal)
-        CASE_SET_REG(&pConfig->m_csRegs, COMPUTE_PGM_RSRC2, regVal)
-            break;
-        case mmSPILLED_SGPRS * 4:
-        case mmSPILLED_VGPRS * 4:
-            break;
-        case mmCOMPUTE_TMPRING_SIZE * 4:
-            computeTmpRingSize.u32All = regVal;
-            break;
-        default:
-            LLPC_NEVER_CALLED();
-            break;
-        }
-    }
-
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC1, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC1, DX10_CLAMP, true);  // Follow PAL setting
-
-    uint32_t numUsedVgprs = GetUsedVgprCount(GET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC1, VGPRS));
-    uint32_t numUsedSgprs = GetUsedSgprCount(GET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC1, SGPRS));
-    uint32_t scratchSize  = GetScratchByteSize(computeTmpRingSize.bits.WAVESIZE);
-
-    SET_REG(&pConfig->m_csRegs, CS_NUM_USED_VGPRS, numUsedVgprs);
-    SET_REG(&pConfig->m_csRegs, CS_NUM_USED_SGPRS, numUsedSgprs);
-    SET_REG(&pConfig->m_csRegs, CS_SCRATCH_SIZE, scratchSize);
 
     // Set registers based on shader interface data
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC2, USER_SGPR, pIntfData->userDataCount);
@@ -1685,33 +1448,6 @@ void ConfigBuilder::SetupVgtTfParam(
     }
 }
 
-// =====================================================================================================================
-// Gets the count of used VGPRs from register field PGM_RSRC1.VGPR.
-uint32_t ConfigBuilder::GetUsedVgprCount(
-    uint32_t regVal)  // Register field value of PGM_RSRC1.VGPR
-{
-    return (regVal + 1) * 4;
-}
-
-// =====================================================================================================================
-// Gets the count of used VGPRs from register field PGM_RSRC1.SGPR.
-uint32_t ConfigBuilder::GetUsedSgprCount(
-    uint32_t regVal)  // Register field value of PGM_RSRC1.SGPR
-{
-    return (regVal + 1) * 8;
-}
-
-// =====================================================================================================================
-// Gets the BYTE size of scratch buffer per thread
-uint32_t ConfigBuilder::GetScratchByteSize(
-    uint32_t regVal) // Register field value of TMPRING_SIZE.WAVESIZE
-{
-    constexpr uint32_t WaveSizeGranularityShift = 8;
-    constexpr uint32_t WavefrontSize = 64;
-    return (regVal << WaveSizeGranularityShift) / WavefrontSize * sizeof(uint32_t);
-}
-
-// =====================================================================================================================
 // Builds metadata API_HW_SHADER_MAPPING_HI/LO.
 void ConfigBuilder::BuildApiHwShaderMapping(
     uint32_t           vsHwShader,    // Hardware shader mapping for vertex shader

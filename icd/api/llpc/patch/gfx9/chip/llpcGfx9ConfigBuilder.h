@@ -47,27 +47,22 @@ class ConfigBuilder
 {
 public:
     static Result BuildPipelineVsFsRegConfig(Context*            pContext,
-                                             const ElfDataEntry* pDataEntries,
                                              uint8_t**           ppConfig,
                                              size_t*             pConfigSize);
 
     static Result BuildPipelineVsTsFsRegConfig(Context*            pContext,
-                                               const ElfDataEntry* pDataEntries,
                                                uint8_t**           ppConfig,
                                                size_t*             pConfigSize);
 
     static Result BuildPipelineVsGsFsRegConfig(Context*            pContext,
-                                               const ElfDataEntry* pDataEntries,
                                                uint8_t**           ppConfig,
                                                size_t*             pConfigSize);
 
     static Result BuildPipelineVsTsGsFsRegConfig(Context*            pContext,
-                                                 const ElfDataEntry* pDataEntries,
                                                  uint8_t**           ppConfig,
                                                  size_t*             pConfigSize);
 
     static Result BuildPipelineCsRegConfig(Context*            pContext,
-                                           const ElfDataEntry* pDataEntry,
                                            uint8_t**           ppConfig,
                                            size_t*             pConfigSize);
 
@@ -77,32 +72,27 @@ private:
 
     template <typename T>
     static Result BuildVsRegConfig(Context*            pContext,
-                                   const ElfDataEntry* pDataEntry,
                                    ShaderStage         shaderStage,
                                    T*                  pConfig);
 
     template <typename T>
     static Result BuildLsHsRegConfig(Context*            pContext,
-                                     const ElfDataEntry* pDataEntry,
                                      ShaderStage         shaderStage1,
                                      ShaderStage         shaderStage2,
                                      T*                  pConfig);
 
     template <typename T>
     static Result BuildEsGsRegConfig(Context*            pContext,
-                                     const ElfDataEntry* pDataEntry,
                                      ShaderStage         shaderStage1,
                                      ShaderStage         shaderStage2,
                                      T*                  pConfig);
 
     template <typename T>
     static Result BuildPsRegConfig(Context*            pContext,
-                                   const ElfDataEntry* pDataEntry,
                                    ShaderStage         shaderStage,
                                    T*                  pConfig);
 
     static Result BuildCsRegConfig(Context*             pContext,
-                                   const ElfDataEntry*  pDataEntry,
                                    ShaderStage          shaderStage,
                                    PipelineCsRegConfig* pConfig);
 
@@ -113,10 +103,6 @@ private:
                                       T*          pConfig);
 
     static void SetupVgtTfParam(Context* pContext, LsHsRegConfig* pConfig);
-
-    static uint32_t GetUsedVgprCount(uint32_t regVal);
-    static uint32_t GetUsedSgprCount(uint32_t regVal);
-    static uint32_t GetScratchByteSize(uint32_t regVal);
 
     static void BuildApiHwShaderMapping(uint32_t           vsHwShader,
                                         uint32_t           tcsHwShader,

@@ -36,7 +36,6 @@
 
 #include "palPipeline.h"
 #include "palShader.h"
-
 #include "llpc.h"
 
 namespace vk
@@ -79,7 +78,6 @@ VkResult ComputePipeline::ConvertComputePipelineInfo(
                 const ShaderModule* pShader = ShaderModule::ObjectFromHandle(pPipelineInfo->stage.module);
 
                 bool buildLlpcPipeline = false;
-                bool enableLlpc = false;
                 Llpc::ComputePipelineBuildInfo pipelineBuildInfo = {};
                 Llpc::ComputePipelineBuildOut  pipelineOut = {};
                 {
@@ -94,13 +92,9 @@ VkResult ComputePipeline::ConvertComputePipelineInfo(
                         pipelineBuildInfo.pInstance      = pDevice->VkPhysicalDevice()->VkInstance();
                         pipelineBuildInfo.pfnOutputAlloc = AllocateShaderOutput;
                         pipelineBuildInfo.pUserData      = ppTempShaderBuffer;
-                        if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCacheType() == PipelineCacheTypeLlpc))
-                        {
-                            pipelineBuildInfo.pShaderCache = pPipelineCache->GetShaderCache(DefaultDeviceIndex).pLlpcShaderCache;
-                        }
                         auto pShaderInfo = &pipelineBuildInfo.cs;
 
-                        pShaderInfo->pModuleData         = pShader->GetLlpcShaderData();
+                        pShaderInfo->pModuleData         = pShader->GetShaderData(true);
                         pShaderInfo->pSpecializatonInfo  = pPipelineInfo->stage.pSpecializationInfo;
                         pShaderInfo->pEntryTarget        = pPipelineInfo->stage.pName;
 
@@ -141,12 +135,19 @@ VkResult ComputePipeline::ConvertComputePipelineInfo(
                 }
 
                 uint64_t pipeHash = 0;
+
+                bool enableLlpc = false;
                 enableLlpc = true;
 
                 if (result == VK_SUCCESS)
                 {
                     if (enableLlpc)
                     {
+                        if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCacheType() == PipelineCacheTypeLlpc))
+                        {
+                            pipelineBuildInfo.pShaderCache = pPipelineCache->GetShaderCache(DefaultDeviceIndex).pLlpcShaderCache;
+                        }
+
                         auto llpcResult = pDevice->GetCompiler()->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut);
                         if (llpcResult != Llpc::Result::Success)
                         {
@@ -155,10 +156,12 @@ VkResult ComputePipeline::ConvertComputePipelineInfo(
                             }
                         }
                     }
-                    else if (settings.enablePipelineDump)
+                    else
+                    if (settings.enablePipelineDump)
                     {
                         // LLPC isn't enabled but pipeline dump is required, call LLPC dump interface explicitly
-                        pDevice->GetCompiler()->DumpComputePipeline(&pipelineBuildInfo);
+                        void* pHandle = Llpc::IPipelineDumper::BeginPipelineDump(settings.pipelineDumpDir, &pipelineBuildInfo, nullptr);
+                        Llpc::IPipelineDumper::EndPipelineDump(pHandle);
                     }
                 }
 

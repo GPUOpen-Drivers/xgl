@@ -345,7 +345,9 @@ VkResult Queue::Submit(
                     pFence->SetActiveDevice(deviceIdx);
                 }
 
-                if ((palSubmitInfo.cmdBufferCount > 0) || (palSubmitInfo.pFence != nullptr))
+                if ((palSubmitInfo.cmdBufferCount > 0) ||
+                    (palSubmitInfo.pFence != nullptr)  ||
+                    (submitInfo.waitSemaphoreCount > 0))
                 {
                     Pal::Result palResult = Pal::Result::Success;
 

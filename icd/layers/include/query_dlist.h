@@ -38,6 +38,8 @@ namespace vk
 #define VENDOR_ID_AMD   0x1022
 #define VENDOR_ID_ATI   0x1002
 
+extern void QueryPrimaryDeviceInfo(unsigned int* pVendorId, unsigned int* pDeviceId);
+
 extern void QueryDlistForApplication(bool* pIsHybridGraphics, bool* pRunOnDiscreteGpu);
 
 }

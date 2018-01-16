@@ -31,7 +31,7 @@ target triple = "spir64-unknown-unknown"
 ; }
 ;
 
-define amdgpu_ps void @main() #0 !spirv.ExecutionModel !5
+define dllexport void @main() #0 !spirv.ExecutionModel !5
 {
 .entry:
     %0 = tail call float @llpc.input.import.generic.f32(i32 0, i32 0, i32 1) #0

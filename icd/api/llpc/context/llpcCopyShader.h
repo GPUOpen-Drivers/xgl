@@ -45,13 +45,13 @@ class CopyShader
 public:
     CopyShader(Context* pContext);
 
-    Result Run(ElfPackage* pShaderElf);
+    Result Run(llvm::Module** ppModule);
 
 private:
     LLPC_DISALLOW_DEFAULT_CTOR(CopyShader);
     LLPC_DISALLOW_COPY_AND_ASSIGN(CopyShader);
 
-    Result LoadLibrary(std::unique_ptr<llvm::Module>& pModule);
+    Result LoadLibrary(llvm::Module*& pModule);
     void ExportOutput();
     Result DoPatch();
 

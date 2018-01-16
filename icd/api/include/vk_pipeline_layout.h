@@ -153,6 +153,7 @@ public:
         const VkPipelineVertexInputStateCreateInfo* pVertexInput,
         Llpc::PipelineShaderInfo*                   pShaderInfo,
         VbBindingInfo*                              pVbInfo) const;
+
     static VkResult Create(
         const Device*                       pDevice,
         const VkPipelineLayoutCreateInfo*   pCreateInfo,

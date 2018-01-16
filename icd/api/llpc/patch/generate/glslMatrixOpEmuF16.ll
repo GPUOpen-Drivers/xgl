@@ -10,15 +10,15 @@
 ;**********************************************************************************************************************
 
 ;**********************************************************************************************************************
-;* @file  g_glslMatrixOpEmuF16.ll
-;* @brief LLPC LLVM-IR file: contains emulation codes for GLSL matrix operations (float16_t).
+;* @file  glslMatrixOpEmuF16.ll
+;* @brief LLPC LLVM-IR file: contains emulation codes for GLSL matrix operations (float16).
 ;**********************************************************************************************************************
 
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024"
 target triple = "spir64-unknown-unknown"
 
 ; GLSL: f16mat2 = outerProduct(f16vec2, f16vec2)
-define spir_func [2 x <2 x half>] @_Z12OuterProductDv2_f16Dv2_f16(
+define spir_func [2 x <2 x half>] @_Z12OuterProductDv2_DhDv2_Dh(
     <2 x half> %c, <2 x half> %r) #0
 {
     %m = alloca [2 x <2 x half>]
@@ -50,7 +50,7 @@ define spir_func [2 x <2 x half>] @_Z12OuterProductDv2_f16Dv2_f16(
 }
 
 ; GLSL: f16mat3 = outerProduct(f16vec3, f16vec3)
-define spir_func [3 x <3 x half>] @_Z12OuterProductDv3_f16Dv3_f16(
+define spir_func [3 x <3 x half>] @_Z12OuterProductDv3_DhDv3_Dh(
     <3 x half> %c, <3 x half> %r) #0
 {
     %m = alloca [3 x <3 x half>]
@@ -101,7 +101,7 @@ define spir_func [3 x <3 x half>] @_Z12OuterProductDv3_f16Dv3_f16(
 }
 
 ; GLSL: f16mat4 = outerProduct(f16vec4, f16vec4)
-define spir_func [4 x <4 x half>] @_Z12OuterProductDv4_f16Dv4_f16(
+define spir_func [4 x <4 x half>] @_Z12OuterProductDv4_DhDv4_Dh(
     <4 x half> %c, <4 x half> %r) #0
 {
     %m = alloca [4 x <4 x half>]
@@ -177,7 +177,7 @@ define spir_func [4 x <4 x half>] @_Z12OuterProductDv4_f16Dv4_f16(
 }
 
 ; GLSL: f16mat2x3 = outerProduct(f16vec3, f16vec2)
-define spir_func [2 x <3 x half>] @_Z12OuterProductDv3_f16Dv2_f16(
+define spir_func [2 x <3 x half>] @_Z12OuterProductDv3_DhDv2_Dh(
     <3 x half> %c, <2 x half> %r) #0
 {
     %m = alloca [2 x <3 x half>]
@@ -216,7 +216,7 @@ define spir_func [2 x <3 x half>] @_Z12OuterProductDv3_f16Dv2_f16(
 }
 
 ; GLSL: f16mat3x2 = outerProduct(f16vec2, f16vec3)
-define spir_func [3 x <2 x half>] @_Z12OuterProductDv2_f16Dv3_f16(
+define spir_func [3 x <2 x half>] @_Z12OuterProductDv2_DhDv3_Dh(
     <2 x half> %c, <3 x half> %r) #0
 {
     %m = alloca [3 x <2 x half>]
@@ -257,7 +257,7 @@ define spir_func [3 x <2 x half>] @_Z12OuterProductDv2_f16Dv3_f16(
 }
 
 ; GLSL: f16mat2x4 = outerProduct(f16vec4, f16vec2)
-define spir_func [2 x <4 x half>] @_Z12OuterProductDv4_f16Dv2_f16(
+define spir_func [2 x <4 x half>] @_Z12OuterProductDv4_DhDv2_Dh(
     <4 x half> %c, <2 x half> %r) #0
 {
     %m = alloca [2 x <4 x half>]
@@ -303,7 +303,7 @@ define spir_func [2 x <4 x half>] @_Z12OuterProductDv4_f16Dv2_f16(
 }
 
 ; GLSL: f16mat4x2 = outerProduct(f16vec2, f16vec4)
-define spir_func [4 x <2 x half>] @_Z12OuterProductDv2_f16Dv4_f16(
+define spir_func [4 x <2 x half>] @_Z12OuterProductDv2_DhDv4_Dh(
     <2 x half> %c, <4 x half> %r) #0
 {
     %m = alloca [4 x <2 x half>]
@@ -353,7 +353,7 @@ define spir_func [4 x <2 x half>] @_Z12OuterProductDv2_f16Dv4_f16(
 }
 
 ; GLSL: f16mat3x4 = outerProduct(f16vec4, f16vec3)
-define spir_func [3 x <4 x half>] @_Z12OuterProductDv4_f16Dv3_f16(
+define spir_func [3 x <4 x half>] @_Z12OuterProductDv4_DhDv3_Dh(
     <4 x half> %c, <3 x half> %r) #0
 {
     %m = alloca [3 x <4 x half>]
@@ -414,7 +414,7 @@ define spir_func [3 x <4 x half>] @_Z12OuterProductDv4_f16Dv3_f16(
 }
 
 ; GLSL: f16mat4x3 = outerProduct(f16vec3, f16vec4)
-define spir_func [4 x <3 x half>] @_Z12OuterProductDv3_f16Dv4_f16(
+define spir_func [4 x <3 x half>] @_Z12OuterProductDv3_DhDv4_Dh(
     <3 x half> %c, <4 x half> %r) #0
 {
     %m = alloca [4 x <3 x half>]
@@ -477,7 +477,7 @@ define spir_func [4 x <3 x half>] @_Z12OuterProductDv3_f16Dv4_f16(
 }
 
 ; GLSL: f16mat2 = transpose(f16mat2)
-define spir_func [2 x <2 x half>] @_Z9TransposeDv2_Dv2_f16(
+define spir_func [2 x <2 x half>] @_Z9TransposeDv2_Dv2_Dh(
     [2 x <2 x half>] %m) #0
 {
     %nm = alloca [2 x <2 x half>]
@@ -506,7 +506,7 @@ define spir_func [2 x <2 x half>] @_Z9TransposeDv2_Dv2_f16(
 }
 
 ; GLSL: f16mat3 = transpose(f16mat3)
-define spir_func [3 x <3 x half>] @_Z9TransposeDv3_Dv3_f16(
+define spir_func [3 x <3 x half>] @_Z9TransposeDv3_Dv3_Dh(
     [3 x <3 x half>] %m) #0
 {
     %nm = alloca [3 x <3 x half>]
@@ -554,7 +554,7 @@ define spir_func [3 x <3 x half>] @_Z9TransposeDv3_Dv3_f16(
 }
 
 ; GLSL: f16mat4 = transpose(f16mat4)
-define spir_func [4 x <4 x half>] @_Z9TransposeDv4_Dv4_f16(
+define spir_func [4 x <4 x half>] @_Z9TransposeDv4_Dv4_Dh(
     [4 x <4 x half>] %m) #0
 {
     %nm = alloca [4 x <4 x half>]
@@ -627,7 +627,7 @@ define spir_func [4 x <4 x half>] @_Z9TransposeDv4_Dv4_f16(
 }
 
 ; GLSL: f16mat2x3 = transpose(f16mat3x2)
-define spir_func [2 x <3 x half>] @_Z9TransposeDv3_Dv2_f16(
+define spir_func [2 x <3 x half>] @_Z9TransposeDv3_Dv2_Dh(
     [3 x <2 x half>] %m) #0
 {
     %nm = alloca [2 x <3 x half>]
@@ -664,7 +664,7 @@ define spir_func [2 x <3 x half>] @_Z9TransposeDv3_Dv2_f16(
 }
 
 ; GLSL: f16mat3x2 = transpose(f16mat2x3)
-define spir_func [3 x <2 x half>] @_Z9TransposeDv2_Dv3_f16(
+define spir_func [3 x <2 x half>] @_Z9TransposeDv2_Dv3_Dh(
     [2 x <3 x half>] %m) #0
 {
     %nm = alloca [3 x <2 x half>]
@@ -701,7 +701,7 @@ define spir_func [3 x <2 x half>] @_Z9TransposeDv2_Dv3_f16(
 }
 
 ; GLSL: f16mat2x4 = transpose(f16mat4x2)
-define spir_func [2 x <4 x half>] @_Z9TransposeDv4_Dv2_f16(
+define spir_func [2 x <4 x half>] @_Z9TransposeDv4_Dv2_Dh(
     [4 x <2 x half>] %m) #0
 {
     %nm = alloca [2 x <4 x half>]
@@ -746,7 +746,7 @@ define spir_func [2 x <4 x half>] @_Z9TransposeDv4_Dv2_f16(
 }
 
 ; GLSL: f16mat4x2 = transpose(f16mat2x4)
-define spir_func [4 x <2 x half>] @_Z9TransposeDv2_Dv4_f16(
+define spir_func [4 x <2 x half>] @_Z9TransposeDv2_Dv4_Dh(
     [2 x <4 x half>] %m) #0
 {
     %nm = alloca [4 x <2 x half>]
@@ -791,7 +791,7 @@ define spir_func [4 x <2 x half>] @_Z9TransposeDv2_Dv4_f16(
 }
 
 ; GLSL: f16mat3x4 = transpose(f16mat4x3)
-define spir_func [3 x <4 x half>] @_Z9TransposeDv4_Dv3_f16(
+define spir_func [3 x <4 x half>] @_Z9TransposeDv4_Dv3_Dh(
     [4 x <3 x half>] %m) #0
 {
     %nm = alloca [3 x <4 x half>]
@@ -850,7 +850,7 @@ define spir_func [3 x <4 x half>] @_Z9TransposeDv4_Dv3_f16(
 }
 
 ; GLSL: f16mat4x3 = transpose(f16mat3x4)
-define spir_func [4 x <3 x half>] @_Z9TransposeDv3_Dv4_f16(
+define spir_func [4 x <3 x half>] @_Z9TransposeDv3_Dv4_Dh(
     [3 x <4 x half>] %m) #0
 {
     %nm = alloca [4 x <3 x half>]
@@ -909,7 +909,7 @@ define spir_func [4 x <3 x half>] @_Z9TransposeDv3_Dv4_f16(
 }
 
 ; GLSL: f16mat2 = f16mat2 * float16_t
-define spir_func [2 x <2 x half>] @_Z17MatrixTimesScalarDv2_Dv2_f16f16(
+define spir_func [2 x <2 x half>] @_Z17MatrixTimesScalarDv2_Dv2_DhDh(
     [2 x <2 x half>] %m, half %s) #0
 {
     %nm = alloca [2 x <2 x half>]
@@ -943,7 +943,7 @@ define spir_func [2 x <2 x half>] @_Z17MatrixTimesScalarDv2_Dv2_f16f16(
 }
 
 ; GLSL: f16mat3 = f16mat3 * float16_t
-define spir_func [3 x <3 x half>] @_Z17MatrixTimesScalarDv3_Dv3_f16f16(
+define spir_func [3 x <3 x half>] @_Z17MatrixTimesScalarDv3_Dv3_DhDh(
     [3 x <3 x half>] %m, half %s) #0
 {
     %nm = alloca [3 x <3 x half>]
@@ -1001,7 +1001,7 @@ define spir_func [3 x <3 x half>] @_Z17MatrixTimesScalarDv3_Dv3_f16f16(
 }
 
 ; GLSL: f16mat4 = f16mat4 * float16_t
-define spir_func [4 x <4 x half>] @_Z17MatrixTimesScalarDv4_Dv4_f16f16(
+define spir_func [4 x <4 x half>] @_Z17MatrixTimesScalarDv4_Dv4_DhDh(
     [4 x <4 x half>] %m, half %s) #0
 {
     %nm = alloca [4 x <4 x half>]
@@ -1091,7 +1091,7 @@ define spir_func [4 x <4 x half>] @_Z17MatrixTimesScalarDv4_Dv4_f16f16(
 }
 
 ; GLSL: f16mat3x2 = f16mat3x2 * float16_t
-define spir_func [3 x <2 x half>] @_Z17MatrixTimesScalarDv3_Dv2_f16f16(
+define spir_func [3 x <2 x half>] @_Z17MatrixTimesScalarDv3_Dv2_DhDh(
     [3 x <2 x half>] %m, half %s) #0
 {
     %nm = alloca [3 x <2 x half>]
@@ -1137,7 +1137,7 @@ define spir_func [3 x <2 x half>] @_Z17MatrixTimesScalarDv3_Dv2_f16f16(
 }
 
 ; GLSL: f16mat2x3 = f16mat2x3 * float16_t
-define spir_func [2 x <3 x half>] @_Z17MatrixTimesScalarDv2_Dv3_f16f16(
+define spir_func [2 x <3 x half>] @_Z17MatrixTimesScalarDv2_Dv3_DhDh(
     [2 x <3 x half>] %m, half %s) #0
 {
     %nm = alloca [2 x <3 x half>]
@@ -1179,7 +1179,7 @@ define spir_func [2 x <3 x half>] @_Z17MatrixTimesScalarDv2_Dv3_f16f16(
 }
 
 ; GLSL: f16mat4x2 = f16mat4x2 * float16_t
-define spir_func [4 x <2 x half>] @_Z17MatrixTimesScalarDv4_Dv2_f16f16(
+define spir_func [4 x <2 x half>] @_Z17MatrixTimesScalarDv4_Dv2_DhDh(
     [4 x <2 x half>] %m, half %s) #0
 {
     %nm = alloca [4 x <2 x half>]
@@ -1237,7 +1237,7 @@ define spir_func [4 x <2 x half>] @_Z17MatrixTimesScalarDv4_Dv2_f16f16(
 }
 
 ; GLSL: f16mat2x4 = f16mat2x4 * float16_t
-define spir_func [2 x <4 x half>] @_Z17MatrixTimesScalarDv2_Dv4_f16f16(
+define spir_func [2 x <4 x half>] @_Z17MatrixTimesScalarDv2_Dv4_DhDh(
     [2 x <4 x half>] %m, half %s) #0
 {
     %nm = alloca [2 x <4 x half>]
@@ -1287,7 +1287,7 @@ define spir_func [2 x <4 x half>] @_Z17MatrixTimesScalarDv2_Dv4_f16f16(
 }
 
 ; GLSL: f16mat4x3 = f16mat4x3 * float16_t
-define spir_func [4 x <3 x half>] @_Z17MatrixTimesScalarDv4_Dv3_f16f16(
+define spir_func [4 x <3 x half>] @_Z17MatrixTimesScalarDv4_Dv3_DhDh(
     [4 x <3 x half>] %m, half %s) #0
 {
     %nm = alloca [4 x <3 x half>]
@@ -1361,7 +1361,7 @@ define spir_func [4 x <3 x half>] @_Z17MatrixTimesScalarDv4_Dv3_f16f16(
 }
 
 ; GLSL: f16mat3x4 = f16mat3x4 * float16_t
-define spir_func [3 x <4 x half>] @_Z17MatrixTimesScalarDv3_Dv4_f16f16(
+define spir_func [3 x <4 x half>] @_Z17MatrixTimesScalarDv3_Dv4_DhDh(
     [3 x <4 x half>] %m, half %s) #0
 {
     %nm = alloca [3 x <4 x half>]
@@ -1431,7 +1431,7 @@ define spir_func [3 x <4 x half>] @_Z17MatrixTimesScalarDv3_Dv4_f16f16(
 }
 
 ; GLSL: f16vec2 = f16vec2 * f16mat2
-define spir_func <2 x half> @_Z17VectorTimesMatrixDv2_f16Dv2_Dv2_f16(
+define spir_func <2 x half> @_Z17VectorTimesMatrixDv2_DhDv2_Dv2_Dh(
     <2 x half> %c, [2 x <2 x half>] %m) #0
 {
     %nv = alloca <2 x half>
@@ -1439,10 +1439,10 @@ define spir_func <2 x half> @_Z17VectorTimesMatrixDv2_f16Dv2_Dv2_f16(
     %nvp1 = getelementptr inbounds <2 x half>, <2 x half>* %nv, i32 0, i32 1
 
     %m0v = extractvalue [2 x <2 x half>] %m, 0
-    %1 = call half @_Z3dotDv2_f16Dv2_f16(<2 x half> %m0v, <2 x half> %c)
+    %1 = call half @_Z3dotDv2_DhDv2_Dh(<2 x half> %m0v, <2 x half> %c)
     store half %1, half* %nvp0
     %m1v = extractvalue [2 x <2 x half>] %m, 1
-    %2 = call half @_Z3dotDv2_f16Dv2_f16(<2 x half> %m1v, <2 x half> %c)
+    %2 = call half @_Z3dotDv2_DhDv2_Dh(<2 x half> %m1v, <2 x half> %c)
     store half %2, half* %nvp1
 
     %3 = load <2 x half>, <2 x half>* %nv
@@ -1451,7 +1451,7 @@ define spir_func <2 x half> @_Z17VectorTimesMatrixDv2_f16Dv2_Dv2_f16(
 }
 
 ; GLSL: f16vec3 = f16vec3 * f16mat3
-define spir_func <3 x half> @_Z17VectorTimesMatrixDv3_f16Dv3_Dv3_f16(
+define spir_func <3 x half> @_Z17VectorTimesMatrixDv3_DhDv3_Dv3_Dh(
     <3 x half> %c, [3 x <3 x half>] %m) #0
 {
     %nv = alloca <3 x half>
@@ -1460,13 +1460,13 @@ define spir_func <3 x half> @_Z17VectorTimesMatrixDv3_f16Dv3_Dv3_f16(
     %nvp2 = getelementptr inbounds <3 x half>, <3 x half>* %nv, i32 0, i32 2
 
     %m0v = extractvalue [3 x <3 x half>] %m, 0
-    %1 = call half @_Z3dotDv3_f16Dv3_f16(<3 x half> %m0v, <3 x half> %c)
+    %1 = call half @_Z3dotDv3_DhDv3_Dh(<3 x half> %m0v, <3 x half> %c)
     store half %1, half* %nvp0
     %m1v = extractvalue [3 x <3 x half>] %m, 1
-    %2 = call half @_Z3dotDv3_f16Dv3_f16(<3 x half> %m1v, <3 x half> %c)
+    %2 = call half @_Z3dotDv3_DhDv3_Dh(<3 x half> %m1v, <3 x half> %c)
     store half %2, half* %nvp1
     %m2v = extractvalue [3 x <3 x half>] %m, 2
-    %3 = call half @_Z3dotDv3_f16Dv3_f16(<3 x half> %m2v, <3 x half> %c)
+    %3 = call half @_Z3dotDv3_DhDv3_Dh(<3 x half> %m2v, <3 x half> %c)
     store half %3, half* %nvp2
 
     %4 = load <3 x half>, <3 x half>* %nv
@@ -1475,7 +1475,7 @@ define spir_func <3 x half> @_Z17VectorTimesMatrixDv3_f16Dv3_Dv3_f16(
 }
 
 ; GLSL: f16vec4 = f16vec4 * f16mat4
-define spir_func <4 x half> @_Z17VectorTimesMatrixDv4_f16Dv4_Dv4_f16(
+define spir_func <4 x half> @_Z17VectorTimesMatrixDv4_DhDv4_Dv4_Dh(
     <4 x half> %c, [4 x <4 x half>] %m) #0
 {
     %nv = alloca <4 x half>
@@ -1485,16 +1485,16 @@ define spir_func <4 x half> @_Z17VectorTimesMatrixDv4_f16Dv4_Dv4_f16(
     %nvp3 = getelementptr inbounds <4 x half>, <4 x half>* %nv, i32 0, i32 3
 
     %m0v = extractvalue [4 x <4 x half>] %m, 0
-    %1 = call half @_Z3dotDv4_f16Dv4_f16(<4 x half> %m0v, <4 x half> %c)
+    %1 = call half @_Z3dotDv4_DhDv4_Dh(<4 x half> %m0v, <4 x half> %c)
     store half %1, half* %nvp0
     %m1v = extractvalue [4 x <4 x half>] %m, 1
-    %2 = call half @_Z3dotDv4_f16Dv4_f16(<4 x half> %m1v, <4 x half> %c)
+    %2 = call half @_Z3dotDv4_DhDv4_Dh(<4 x half> %m1v, <4 x half> %c)
     store half %2, half* %nvp1
     %m2v = extractvalue [4 x <4 x half>] %m, 2
-    %3 = call half @_Z3dotDv4_f16Dv4_f16(<4 x half> %m2v, <4 x half> %c)
+    %3 = call half @_Z3dotDv4_DhDv4_Dh(<4 x half> %m2v, <4 x half> %c)
     store half %3, half* %nvp2
     %m3v = extractvalue [4 x <4 x half>] %m, 3
-    %4 = call half @_Z3dotDv4_f16Dv4_f16(<4 x half> %m3v, <4 x half> %c)
+    %4 = call half @_Z3dotDv4_DhDv4_Dh(<4 x half> %m3v, <4 x half> %c)
     store half %4, half* %nvp3
 
     %5 = load <4 x half>, <4 x half>* %nv
@@ -1503,7 +1503,7 @@ define spir_func <4 x half> @_Z17VectorTimesMatrixDv4_f16Dv4_Dv4_f16(
 }
 
 ; GLSL: f16vec3 = f16vec2 * f16mat3x2
-define spir_func <3 x half> @_Z17VectorTimesMatrixDv2_f16Dv3_Dv2_f16(
+define spir_func <3 x half> @_Z17VectorTimesMatrixDv2_DhDv3_Dv2_Dh(
     <2 x half> %c, [3 x <2 x half>] %m) #0
 {
     %nv = alloca <3 x half>
@@ -1512,13 +1512,13 @@ define spir_func <3 x half> @_Z17VectorTimesMatrixDv2_f16Dv3_Dv2_f16(
     %nvp2 = getelementptr inbounds <3 x half>, <3 x half>* %nv, i32 0, i32 2
 
     %m0v = extractvalue [3 x <2 x half>] %m, 0
-    %1 = call half @_Z3dotDv2_f16Dv2_f16(<2 x half> %m0v, <2 x half> %c)
+    %1 = call half @_Z3dotDv2_DhDv2_Dh(<2 x half> %m0v, <2 x half> %c)
     store half %1, half* %nvp0
     %m1v = extractvalue [3 x <2 x half>] %m, 1
-    %2 = call half @_Z3dotDv2_f16Dv2_f16(<2 x half> %m1v, <2 x half> %c)
+    %2 = call half @_Z3dotDv2_DhDv2_Dh(<2 x half> %m1v, <2 x half> %c)
     store half %2, half* %nvp1
     %m2v = extractvalue [3 x <2 x half>] %m, 2
-    %3 = call half @_Z3dotDv2_f16Dv2_f16(<2 x half> %m2v, <2 x half> %c)
+    %3 = call half @_Z3dotDv2_DhDv2_Dh(<2 x half> %m2v, <2 x half> %c)
     store half %3, half* %nvp2
 
     %4 = load <3 x half>, <3 x half>* %nv
@@ -1527,7 +1527,7 @@ define spir_func <3 x half> @_Z17VectorTimesMatrixDv2_f16Dv3_Dv2_f16(
 }
 
 ; GLSL: f16vec4 = f16vec2 * f16mat4x2
-define spir_func <4 x half> @_Z17VectorTimesMatrixDv2_f16Dv4_Dv2_f16(
+define spir_func <4 x half> @_Z17VectorTimesMatrixDv2_DhDv4_Dv2_Dh(
     <2 x half> %c, [4 x <2 x half>] %m) #0
 {
     %nv = alloca <4 x half>
@@ -1537,16 +1537,16 @@ define spir_func <4 x half> @_Z17VectorTimesMatrixDv2_f16Dv4_Dv2_f16(
     %nvp3 = getelementptr inbounds <4 x half>, <4 x half>* %nv, i32 0, i32 3
 
     %m0v = extractvalue [4 x <2 x half>] %m, 0
-    %1 = call half @_Z3dotDv2_f16Dv2_f16(<2 x half> %m0v, <2 x half> %c)
+    %1 = call half @_Z3dotDv2_DhDv2_Dh(<2 x half> %m0v, <2 x half> %c)
     store half %1, half* %nvp0
     %m1v = extractvalue [4 x <2 x half>] %m, 1
-    %2 = call half @_Z3dotDv2_f16Dv2_f16(<2 x half> %m1v, <2 x half> %c)
+    %2 = call half @_Z3dotDv2_DhDv2_Dh(<2 x half> %m1v, <2 x half> %c)
     store half %2, half* %nvp1
     %m2v = extractvalue [4 x <2 x half>] %m, 2
-    %3 = call half @_Z3dotDv2_f16Dv2_f16(<2 x half> %m2v, <2 x half> %c)
+    %3 = call half @_Z3dotDv2_DhDv2_Dh(<2 x half> %m2v, <2 x half> %c)
     store half %3, half* %nvp2
     %m3v = extractvalue [4 x <2 x half>] %m, 3
-    %4 = call half @_Z3dotDv2_f16Dv2_f16(<2 x half> %m3v, <2 x half> %c)
+    %4 = call half @_Z3dotDv2_DhDv2_Dh(<2 x half> %m3v, <2 x half> %c)
     store half %4, half* %nvp3
 
     %5 = load <4 x half>, <4 x half>* %nv
@@ -1555,7 +1555,7 @@ define spir_func <4 x half> @_Z17VectorTimesMatrixDv2_f16Dv4_Dv2_f16(
 }
 
 ; GLSL: f16vec2 = f16vec3 * f16mat2x3
-define spir_func <2 x half> @_Z17VectorTimesMatrixDv3_f16Dv2_Dv3_f16(
+define spir_func <2 x half> @_Z17VectorTimesMatrixDv3_DhDv2_Dv3_Dh(
     <3 x half> %c, [2 x <3 x half>] %m) #0
 {
     %nv = alloca <2 x half>
@@ -1563,10 +1563,10 @@ define spir_func <2 x half> @_Z17VectorTimesMatrixDv3_f16Dv2_Dv3_f16(
     %nvp1 = getelementptr inbounds <2 x half>, <2 x half>* %nv, i32 0, i32 1
 
     %m0v = extractvalue [2 x <3 x half>] %m, 0
-    %1 = call half @_Z3dotDv3_f16Dv3_f16(<3 x half> %m0v, <3 x half> %c)
+    %1 = call half @_Z3dotDv3_DhDv3_Dh(<3 x half> %m0v, <3 x half> %c)
     store half %1, half* %nvp0
     %m1v = extractvalue [2 x <3 x half>] %m, 1
-    %2 = call half @_Z3dotDv3_f16Dv3_f16(<3 x half> %m1v, <3 x half> %c)
+    %2 = call half @_Z3dotDv3_DhDv3_Dh(<3 x half> %m1v, <3 x half> %c)
     store half %2, half* %nvp1
 
     %3 = load <2 x half>, <2 x half>* %nv
@@ -1575,7 +1575,7 @@ define spir_func <2 x half> @_Z17VectorTimesMatrixDv3_f16Dv2_Dv3_f16(
 }
 
 ; GLSL: f16vec4 = f16vec3 * f16mat4x3
-define spir_func <4 x half> @_Z17VectorTimesMatrixDv3_f16Dv4_Dv3_f16(
+define spir_func <4 x half> @_Z17VectorTimesMatrixDv3_DhDv4_Dv3_Dh(
     <3 x half> %c, [4 x <3 x half>] %m) #0
 {
     %nv = alloca <4 x half>
@@ -1585,16 +1585,16 @@ define spir_func <4 x half> @_Z17VectorTimesMatrixDv3_f16Dv4_Dv3_f16(
     %nvp3 = getelementptr inbounds <4 x half>, <4 x half>* %nv, i32 0, i32 3
 
     %m0v = extractvalue [4 x <3 x half>] %m, 0
-    %1 = call half @_Z3dotDv3_f16Dv3_f16(<3 x half> %m0v, <3 x half> %c)
+    %1 = call half @_Z3dotDv3_DhDv3_Dh(<3 x half> %m0v, <3 x half> %c)
     store half %1, half* %nvp0
     %m1v = extractvalue [4 x <3 x half>] %m, 1
-    %2 = call half @_Z3dotDv3_f16Dv3_f16(<3 x half> %m1v, <3 x half> %c)
+    %2 = call half @_Z3dotDv3_DhDv3_Dh(<3 x half> %m1v, <3 x half> %c)
     store half %2, half* %nvp1
     %m2v = extractvalue [4 x <3 x half>] %m, 2
-    %3 = call half @_Z3dotDv3_f16Dv3_f16(<3 x half> %m2v, <3 x half> %c)
+    %3 = call half @_Z3dotDv3_DhDv3_Dh(<3 x half> %m2v, <3 x half> %c)
     store half %3, half* %nvp2
     %m3v = extractvalue [4 x <3 x half>] %m, 3
-    %4 = call half @_Z3dotDv3_f16Dv3_f16(<3 x half> %m3v, <3 x half> %c)
+    %4 = call half @_Z3dotDv3_DhDv3_Dh(<3 x half> %m3v, <3 x half> %c)
     store half %4, half* %nvp3
 
     %5 = load <4 x half>, <4 x half>* %nv
@@ -1603,7 +1603,7 @@ define spir_func <4 x half> @_Z17VectorTimesMatrixDv3_f16Dv4_Dv3_f16(
 }
 
 ; GLSL: f16vec2 = f16vec4 * f16mat2x4
-define spir_func <2 x half> @_Z17VectorTimesMatrixDv4_f16Dv2_Dv4_f16(
+define spir_func <2 x half> @_Z17VectorTimesMatrixDv4_DhDv2_Dv4_Dh(
     <4 x half> %c, [2 x <4 x half>] %m) #0
 {
     %nv = alloca <2 x half>
@@ -1611,10 +1611,10 @@ define spir_func <2 x half> @_Z17VectorTimesMatrixDv4_f16Dv2_Dv4_f16(
     %nvp1 = getelementptr inbounds <2 x half>, <2 x half>* %nv, i32 0, i32 1
 
     %m0v = extractvalue [2 x <4 x half>] %m, 0
-    %1 = call half @_Z3dotDv4_f16Dv4_f16(<4 x half> %m0v, <4 x half> %c)
+    %1 = call half @_Z3dotDv4_DhDv4_Dh(<4 x half> %m0v, <4 x half> %c)
     store half %1, half* %nvp0
     %m1v = extractvalue [2 x <4 x half>] %m, 1
-    %2 = call half @_Z3dotDv4_f16Dv4_f16(<4 x half> %m1v, <4 x half> %c)
+    %2 = call half @_Z3dotDv4_DhDv4_Dh(<4 x half> %m1v, <4 x half> %c)
     store half %2, half* %nvp1
 
     %3 = load <2 x half>, <2 x half>* %nv
@@ -1623,7 +1623,7 @@ define spir_func <2 x half> @_Z17VectorTimesMatrixDv4_f16Dv2_Dv4_f16(
 }
 
 ; GLSL: f16vec3 = f16vec4 * f16mat3x4
-define spir_func <3 x half> @_Z17VectorTimesMatrixDv4_f16Dv3_Dv4_f16(
+define spir_func <3 x half> @_Z17VectorTimesMatrixDv4_DhDv3_Dv4_Dh(
     <4 x half> %c, [3 x <4 x half>] %m) #0
 {
     %nv = alloca <3 x half>
@@ -1632,13 +1632,13 @@ define spir_func <3 x half> @_Z17VectorTimesMatrixDv4_f16Dv3_Dv4_f16(
     %nvp2 = getelementptr inbounds <3 x half>, <3 x half>* %nv, i32 0, i32 2
 
     %m0v = extractvalue [3 x <4 x half>] %m, 0
-    %1 = call half @_Z3dotDv4_f16Dv4_f16(<4 x half> %m0v, <4 x half> %c)
+    %1 = call half @_Z3dotDv4_DhDv4_Dh(<4 x half> %m0v, <4 x half> %c)
     store half %1, half* %nvp0
     %m1v = extractvalue [3 x <4 x half>] %m, 1
-    %2 = call half @_Z3dotDv4_f16Dv4_f16(<4 x half> %m1v, <4 x half> %c)
+    %2 = call half @_Z3dotDv4_DhDv4_Dh(<4 x half> %m1v, <4 x half> %c)
     store half %2, half* %nvp1
     %m2v = extractvalue [3 x <4 x half>] %m, 2
-    %3 = call half @_Z3dotDv4_f16Dv4_f16(<4 x half> %m2v, <4 x half> %c)
+    %3 = call half @_Z3dotDv4_DhDv4_Dh(<4 x half> %m2v, <4 x half> %c)
     store half %3, half* %nvp2
 
     %4 = load <3 x half>, <3 x half>* %nv
@@ -1647,7 +1647,7 @@ define spir_func <3 x half> @_Z17VectorTimesMatrixDv4_f16Dv3_Dv4_f16(
 }
 
 ; GLSL: f16vec2 = f16mat2 * f16vec2
-define spir_func <2 x half> @_Z17MatrixTimesVectorDv2_Dv2_f16Dv2_f16(
+define spir_func <2 x half> @_Z17MatrixTimesVectorDv2_Dv2_DhDv2_Dh(
     [2 x <2 x half>] %m, <2 x half> %r) #0
 {
     %m0v = extractvalue [2 x <2 x half>] %m, 0
@@ -1663,7 +1663,7 @@ define spir_func <2 x half> @_Z17MatrixTimesVectorDv2_Dv2_f16Dv2_f16(
 }
 
 ; GLSL: f16vec3 = f16mat3 * f16vec3
-define spir_func <3 x half> @_Z17MatrixTimesVectorDv3_Dv3_f16Dv3_f16(
+define spir_func <3 x half> @_Z17MatrixTimesVectorDv3_Dv3_DhDv3_Dh(
     [3 x <3 x half>] %m, <3 x half> %r) #0
 {
     %m0v = extractvalue [3 x <3 x half>] %m, 0
@@ -1683,7 +1683,7 @@ define spir_func <3 x half> @_Z17MatrixTimesVectorDv3_Dv3_f16Dv3_f16(
 }
 
 ; GLSL: f16vec4 = f16mat4 * f16vec4
-define spir_func <4 x half> @_Z17MatrixTimesVectorDv4_Dv4_f16Dv4_f16(
+define spir_func <4 x half> @_Z17MatrixTimesVectorDv4_Dv4_DhDv4_Dh(
     [4 x <4 x half>] %m, <4 x half> %r) #0
 {
     %m0v = extractvalue [4 x <4 x half>] %m, 0
@@ -1707,7 +1707,7 @@ define spir_func <4 x half> @_Z17MatrixTimesVectorDv4_Dv4_f16Dv4_f16(
 }
 
 ; GLSL: f16vec2 = f16mat3x2 * f16vec3
-define spir_func <2 x half> @_Z17MatrixTimesVectorDv3_Dv2_f16Dv3_f16(
+define spir_func <2 x half> @_Z17MatrixTimesVectorDv3_Dv2_DhDv3_Dh(
     [3 x <2 x half>] %m, <3 x half> %r) #0
 {
     %m0v = extractvalue [3 x <2 x half>] %m, 0
@@ -1727,7 +1727,7 @@ define spir_func <2 x half> @_Z17MatrixTimesVectorDv3_Dv2_f16Dv3_f16(
 }
 
 ; GLSL: f16vec3 = f16mat2x3 * f16vec2
-define spir_func <3 x half> @_Z17MatrixTimesVectorDv2_Dv3_f16Dv2_f16(
+define spir_func <3 x half> @_Z17MatrixTimesVectorDv2_Dv3_DhDv2_Dh(
     [2 x <3 x half>] %m, <2 x half> %r) #0
 {
     %m0v = extractvalue [2 x <3 x half>] %m, 0
@@ -1743,7 +1743,7 @@ define spir_func <3 x half> @_Z17MatrixTimesVectorDv2_Dv3_f16Dv2_f16(
 }
 
 ; GLSL: f16vec2 = f16mat4x2 * f16vec4
-define spir_func <2 x half> @_Z17MatrixTimesVectorDv4_Dv2_f16Dv4_f16(
+define spir_func <2 x half> @_Z17MatrixTimesVectorDv4_Dv2_DhDv4_Dh(
     [4 x <2 x half>] %m, <4 x half> %r) #0
 {
     %m0v = extractvalue [4 x <2 x half>] %m, 0
@@ -1767,7 +1767,7 @@ define spir_func <2 x half> @_Z17MatrixTimesVectorDv4_Dv2_f16Dv4_f16(
 }
 
 ; GLSL: f16vec4 = f16mat2x4 * f16vec2
-define spir_func <4 x half> @_Z17MatrixTimesVectorDv2_Dv4_f16Dv2_f16(
+define spir_func <4 x half> @_Z17MatrixTimesVectorDv2_Dv4_DhDv2_Dh(
     [2 x <4 x half>] %m, <2 x half> %r) #0
 {
     %m0v = extractvalue [2 x <4 x half>] %m, 0
@@ -1783,7 +1783,7 @@ define spir_func <4 x half> @_Z17MatrixTimesVectorDv2_Dv4_f16Dv2_f16(
 }
 
 ; GLSL: f16vec3 = f16mat4x3 * f16vec4
-define spir_func <3 x half> @_Z17MatrixTimesVectorDv4_Dv3_f16Dv4_f16(
+define spir_func <3 x half> @_Z17MatrixTimesVectorDv4_Dv3_DhDv4_Dh(
     [4 x <3 x half>] %m, <4 x half> %r) #0
 {
     %m0v = extractvalue [4 x <3 x half>] %m, 0
@@ -1807,7 +1807,7 @@ define spir_func <3 x half> @_Z17MatrixTimesVectorDv4_Dv3_f16Dv4_f16(
 }
 
 ; GLSL: f16vec4 = f16mat3x4 * f16vec3
-define spir_func <4 x half> @_Z17MatrixTimesVectorDv3_Dv4_f16Dv3_f16(
+define spir_func <4 x half> @_Z17MatrixTimesVectorDv3_Dv4_DhDv3_Dh(
     [3 x <4 x half>] %m, <3 x half> %r) #0
 {
     %m0v = extractvalue [3 x <4 x half>] %m, 0
@@ -1827,7 +1827,7 @@ define spir_func <4 x half> @_Z17MatrixTimesVectorDv3_Dv4_f16Dv3_f16(
 }
 
 ; GLSL: f16mat2 = f16mat2 * f16mat2
-define spir_func [2 x <2 x half>] @_Z17MatrixTimesMatrixDv2_Dv2_f16Dv2_Dv2_f16(
+define spir_func [2 x <2 x half>] @_Z17MatrixTimesMatrixDv2_Dv2_DhDv2_Dv2_Dh(
     [2 x <2 x half>] %m, [2 x <2 x half>] %rm) #0
 {
     %nm = alloca [2 x <2 x half>]
@@ -1862,7 +1862,7 @@ define spir_func [2 x <2 x half>] @_Z17MatrixTimesMatrixDv2_Dv2_f16Dv2_Dv2_f16(
 }
 
 ; GLSL: f16mat3x2 = f16mat2 * f16mat3x2
-define spir_func [3 x <2 x half>] @_Z17MatrixTimesMatrixDv2_Dv2_f16Dv3_Dv2_f16(
+define spir_func [3 x <2 x half>] @_Z17MatrixTimesMatrixDv2_Dv2_DhDv3_Dv2_Dh(
     [2 x <2 x half>] %m, [3 x <2 x half>] %rm) #0
 {
     %nm = alloca [3 x <2 x half>]
@@ -1908,7 +1908,7 @@ define spir_func [3 x <2 x half>] @_Z17MatrixTimesMatrixDv2_Dv2_f16Dv3_Dv2_f16(
 }
 
 ; GLSL: f16mat4x2 = f16mat2 * f16mat4x2
-define spir_func [4 x <2 x half>] @_Z17MatrixTimesMatrixDv2_Dv2_f16Dv4_Dv2_f16(
+define spir_func [4 x <2 x half>] @_Z17MatrixTimesMatrixDv2_Dv2_DhDv4_Dv2_Dh(
     [2 x <2 x half>] %m, [4 x <2 x half>] %rm) #0
 {
     %nm = alloca [4 x <2 x half>]
@@ -1965,7 +1965,7 @@ define spir_func [4 x <2 x half>] @_Z17MatrixTimesMatrixDv2_Dv2_f16Dv4_Dv2_f16(
 }
 
 ; GLSL: f16mat3 = f16mat3 * f16mat3
-define spir_func [3 x <3 x half>] @_Z17MatrixTimesMatrixDv3_Dv3_f16Dv3_Dv3_f16(
+define spir_func [3 x <3 x half>] @_Z17MatrixTimesMatrixDv3_Dv3_DhDv3_Dv3_Dh(
     [3 x <3 x half>] %m, [3 x <3 x half>] %rm) #0
 {
     %nm = alloca [3 x <3 x half>]
@@ -2024,7 +2024,7 @@ define spir_func [3 x <3 x half>] @_Z17MatrixTimesMatrixDv3_Dv3_f16Dv3_Dv3_f16(
 }
 
 ; GLSL: f16mat2x3 = f16mat3 * f16mat2x3
-define spir_func [2 x <3 x half>] @_Z17MatrixTimesMatrixDv3_Dv3_f16Dv2_Dv3_f16(
+define spir_func [2 x <3 x half>] @_Z17MatrixTimesMatrixDv3_Dv3_DhDv2_Dv3_Dh(
     [3 x <3 x half>] %m, [2 x <3 x half>] %rm) #0
 {
     %nm = alloca [2 x <3 x half>]
@@ -2068,7 +2068,7 @@ define spir_func [2 x <3 x half>] @_Z17MatrixTimesMatrixDv3_Dv3_f16Dv2_Dv3_f16(
 }
 
 ; GLSL: f16mat4x3 = f16mat3 * f16mat4x3
-define spir_func [4 x <3 x half>] @_Z17MatrixTimesMatrixDv3_Dv3_f16Dv4_Dv3_f16(
+define spir_func [4 x <3 x half>] @_Z17MatrixTimesMatrixDv3_Dv3_DhDv4_Dv3_Dh(
     [3 x <3 x half>] %m, [4 x <3 x half>] %rm) #0
 {
     %nm = alloca [4 x <3 x half>]
@@ -2142,7 +2142,7 @@ define spir_func [4 x <3 x half>] @_Z17MatrixTimesMatrixDv3_Dv3_f16Dv4_Dv3_f16(
 }
 
 ; GLSL: f16mat4 = f16mat4 * f16mat4
-define spir_func [4 x <4 x half>] @_Z17MatrixTimesMatrixDv4_Dv4_f16Dv4_Dv4_f16(
+define spir_func [4 x <4 x half>] @_Z17MatrixTimesMatrixDv4_Dv4_DhDv4_Dv4_Dh(
     [4 x <4 x half>] %m, [4 x <4 x half>] %rm) #0
 {
     %nm = alloca [4 x <4 x half>]
@@ -2233,7 +2233,7 @@ define spir_func [4 x <4 x half>] @_Z17MatrixTimesMatrixDv4_Dv4_f16Dv4_Dv4_f16(
 }
 
 ; GLSL: f16mat2x4 = f16mat4 * f16mat2x4
-define spir_func [2 x <4 x half>] @_Z17MatrixTimesMatrixDv4_Dv4_f16Dv2_Dv4_f16(
+define spir_func [2 x <4 x half>] @_Z17MatrixTimesMatrixDv4_Dv4_DhDv2_Dv4_Dh(
     [4 x <4 x half>] %m, [2 x <4 x half>] %rm) #0
 {
     %nm = alloca [2 x <4 x half>]
@@ -2286,7 +2286,7 @@ define spir_func [2 x <4 x half>] @_Z17MatrixTimesMatrixDv4_Dv4_f16Dv2_Dv4_f16(
 }
 
 ; GLSL: f16mat3x4 = f16mat4 * f16mat3x4
-define spir_func [3 x <4 x half>] @_Z17MatrixTimesMatrixDv4_Dv4_f16Dv3_Dv4_f16(
+define spir_func [3 x <4 x half>] @_Z17MatrixTimesMatrixDv4_Dv4_DhDv3_Dv4_Dh(
     [4 x <4 x half>] %m, [3 x <4 x half>] %rm) #0
 {
     %nm = alloca [3 x <4 x half>]
@@ -2358,7 +2358,7 @@ define spir_func [3 x <4 x half>] @_Z17MatrixTimesMatrixDv4_Dv4_f16Dv3_Dv4_f16(
 }
 
 ; GLSL: f16mat2 = f16mat3x2 * f16mat2x3
-define spir_func [2 x <2 x half>] @_Z17MatrixTimesMatrixDv3_Dv2_f16Dv2_Dv3_f16(
+define spir_func [2 x <2 x half>] @_Z17MatrixTimesMatrixDv3_Dv2_DhDv2_Dv3_Dh(
     [3 x <2 x half>] %m, [2 x <3 x half>] %rm) #0
 {
     %nm = alloca [2 x <2 x half>]
@@ -2402,7 +2402,7 @@ define spir_func [2 x <2 x half>] @_Z17MatrixTimesMatrixDv3_Dv2_f16Dv2_Dv3_f16(
 }
 
 ; GLSL: f16mat3x2 = f16mat3x2 * f16mat3
-define spir_func [3 x <2 x half>] @_Z17MatrixTimesMatrixDv3_Dv2_f16Dv3_Dv3_f16(
+define spir_func [3 x <2 x half>] @_Z17MatrixTimesMatrixDv3_Dv2_DhDv3_Dv3_Dh(
     [3 x <2 x half>] %m, [3 x <3 x half>] %rm) #0
 {
     %nm = alloca [3 x <2 x half>]
@@ -2461,7 +2461,7 @@ define spir_func [3 x <2 x half>] @_Z17MatrixTimesMatrixDv3_Dv2_f16Dv3_Dv3_f16(
 }
 
 ; GLSL: f16mat4x2 = f16mat3x2 * f16mat4x3
-define spir_func [4 x <2 x half>] @_Z17MatrixTimesMatrixDv3_Dv2_f16Dv4_Dv3_f16(
+define spir_func [4 x <2 x half>] @_Z17MatrixTimesMatrixDv3_Dv2_DhDv4_Dv3_Dh(
     [3 x <2 x half>] %m, [4 x <3 x half>] %rm) #0
 {
     %nm = alloca [4 x <2 x half>]
@@ -2535,7 +2535,7 @@ define spir_func [4 x <2 x half>] @_Z17MatrixTimesMatrixDv3_Dv2_f16Dv4_Dv3_f16(
 }
 
 ; GLSL: f16mat2x3 = f16mat2x3 * f16mat2
-define spir_func [2 x <3 x half>] @_Z17MatrixTimesMatrixDv2_Dv3_f16Dv2_Dv2_f16(
+define spir_func [2 x <3 x half>] @_Z17MatrixTimesMatrixDv2_Dv3_DhDv2_Dv2_Dh(
     [2 x <3 x half>] %m, [2 x <2 x half>] %rm) #0
 {
     %nm = alloca [2 x <3 x half>]
@@ -2570,7 +2570,7 @@ define spir_func [2 x <3 x half>] @_Z17MatrixTimesMatrixDv2_Dv3_f16Dv2_Dv2_f16(
 }
 
 ; GLSL: f16mat3 = f16mat2x3 * f16mat3x2
-define spir_func [3 x <3 x half>] @_Z17MatrixTimesMatrixDv2_Dv3_f16Dv3_Dv2_f16(
+define spir_func [3 x <3 x half>] @_Z17MatrixTimesMatrixDv2_Dv3_DhDv3_Dv2_Dh(
     [2 x <3 x half>] %m, [3 x <2 x half>] %rm) #0
 {
     %nm = alloca [3 x <3 x half>]
@@ -2616,7 +2616,7 @@ define spir_func [3 x <3 x half>] @_Z17MatrixTimesMatrixDv2_Dv3_f16Dv3_Dv2_f16(
 }
 
 ; GLSL: f16mat4x3 = f16mat2x3 * f16mat4x2
-define spir_func [4 x <3 x half>] @_Z17MatrixTimesMatrixDv2_Dv3_f16Dv4_Dv2_f16(
+define spir_func [4 x <3 x half>] @_Z17MatrixTimesMatrixDv2_Dv3_DhDv4_Dv2_Dh(
     [2 x <3 x half>] %m, [4 x <2 x half>] %rm) #0
 {
     %nm = alloca [4 x <3 x half>]
@@ -2673,7 +2673,7 @@ define spir_func [4 x <3 x half>] @_Z17MatrixTimesMatrixDv2_Dv3_f16Dv4_Dv2_f16(
 }
 
 ; GLSL: f16mat2 = f16mat4x2 * f16mat2x4
-define spir_func [2 x <2 x half>] @_Z17MatrixTimesMatrixDv4_Dv2_f16Dv2_Dv4_f16(
+define spir_func [2 x <2 x half>] @_Z17MatrixTimesMatrixDv4_Dv2_DhDv2_Dv4_Dh(
     [4 x <2 x half>] %m, [2 x <4 x half>] %rm) #0
 {
     %nm = alloca [2 x <2 x half>]
@@ -2726,7 +2726,7 @@ define spir_func [2 x <2 x half>] @_Z17MatrixTimesMatrixDv4_Dv2_f16Dv2_Dv4_f16(
 }
 
 ; GLSL: f16mat3x2 = f16mat4x2 * f16mat3x4
-define spir_func [3 x <2 x half>] @_Z17MatrixTimesMatrixDv4_Dv2_f16Dv3_Dv4_f16(
+define spir_func [3 x <2 x half>] @_Z17MatrixTimesMatrixDv4_Dv2_DhDv3_Dv4_Dh(
     [4 x <2 x half>] %m, [3 x <4 x half>] %rm) #0
 {
     %nm = alloca [3 x <2 x half>]
@@ -2798,7 +2798,7 @@ define spir_func [3 x <2 x half>] @_Z17MatrixTimesMatrixDv4_Dv2_f16Dv3_Dv4_f16(
 }
 
 ; GLSL: f16mat4x2 = f16mat4x2 * f16mat4
-define spir_func [4 x <2 x half>] @_Z17MatrixTimesMatrixDv4_Dv2_f16Dv4_Dv4_f16(
+define spir_func [4 x <2 x half>] @_Z17MatrixTimesMatrixDv4_Dv2_DhDv4_Dv4_Dh(
     [4 x <2 x half>] %m, [4 x <4 x half>] %rm) #0
 {
     %nm = alloca [4 x <2 x half>]
@@ -2889,7 +2889,7 @@ define spir_func [4 x <2 x half>] @_Z17MatrixTimesMatrixDv4_Dv2_f16Dv4_Dv4_f16(
 }
 
 ; GLSL: f16mat2x4 = f16mat2x4 * f16mat2
-define spir_func [2 x <4 x half>] @_Z17MatrixTimesMatrixDv2_Dv4_f16Dv2_Dv2_f16(
+define spir_func [2 x <4 x half>] @_Z17MatrixTimesMatrixDv2_Dv4_DhDv2_Dv2_Dh(
     [2 x <4 x half>] %m, [2 x <2 x half>] %rm) #0
 {
     %nm = alloca [2 x <4 x half>]
@@ -2924,7 +2924,7 @@ define spir_func [2 x <4 x half>] @_Z17MatrixTimesMatrixDv2_Dv4_f16Dv2_Dv2_f16(
 }
 
 ; GLSL: f16mat3x4 = f16mat2x4 * f16mat3x2
-define spir_func [3 x <4 x half>] @_Z17MatrixTimesMatrixDv2_Dv4_f16Dv3_Dv2_f16(
+define spir_func [3 x <4 x half>] @_Z17MatrixTimesMatrixDv2_Dv4_DhDv3_Dv2_Dh(
     [2 x <4 x half>] %m, [3 x <2 x half>] %rm) #0
 {
     %nm = alloca [3 x <4 x half>]
@@ -2970,7 +2970,7 @@ define spir_func [3 x <4 x half>] @_Z17MatrixTimesMatrixDv2_Dv4_f16Dv3_Dv2_f16(
 }
 
 ; GLSL: f16mat4 = f16mat2x4 * f16mat4x2
-define spir_func [4 x <4 x half>] @_Z17MatrixTimesMatrixDv2_Dv4_f16Dv4_Dv2_f16(
+define spir_func [4 x <4 x half>] @_Z17MatrixTimesMatrixDv2_Dv4_DhDv4_Dv2_Dh(
     [2 x <4 x half>] %m, [4 x <2 x half>] %rm) #0
 {
     %nm = alloca [4 x <4 x half>]
@@ -3027,7 +3027,7 @@ define spir_func [4 x <4 x half>] @_Z17MatrixTimesMatrixDv2_Dv4_f16Dv4_Dv2_f16(
 }
 
 ; GLSL: f16mat2x3 = f16mat4x3 * f16mat2x4
-define spir_func [2 x <3 x half>] @_Z17MatrixTimesMatrixDv4_Dv3_f16Dv2_Dv4_f16(
+define spir_func [2 x <3 x half>] @_Z17MatrixTimesMatrixDv4_Dv3_DhDv2_Dv4_Dh(
     [4 x <3 x half>] %m, [2 x <4 x half>] %rm) #0
 {
     %nm = alloca [2 x <3 x half>]
@@ -3080,7 +3080,7 @@ define spir_func [2 x <3 x half>] @_Z17MatrixTimesMatrixDv4_Dv3_f16Dv2_Dv4_f16(
 }
 
 ; GLSL: f16mat3 = f16mat4x3 * f16mat3x4
-define spir_func [3 x <3 x half>] @_Z17MatrixTimesMatrixDv4_Dv3_f16Dv3_Dv4_f16(
+define spir_func [3 x <3 x half>] @_Z17MatrixTimesMatrixDv4_Dv3_DhDv3_Dv4_Dh(
     [4 x <3 x half>] %m, [3 x <4 x half>] %rm) #0
 {
     %nm = alloca [3 x <3 x half>]
@@ -3152,7 +3152,7 @@ define spir_func [3 x <3 x half>] @_Z17MatrixTimesMatrixDv4_Dv3_f16Dv3_Dv4_f16(
 }
 
 ; GLSL: f16mat4x3 = f16mat4x3 * f16mat4
-define spir_func [4 x <3 x half>] @_Z17MatrixTimesMatrixDv4_Dv3_f16Dv4_Dv4_f16(
+define spir_func [4 x <3 x half>] @_Z17MatrixTimesMatrixDv4_Dv3_DhDv4_Dv4_Dh(
     [4 x <3 x half>] %m, [4 x <4 x half>] %rm) #0
 {
     %nm = alloca [4 x <3 x half>]
@@ -3243,7 +3243,7 @@ define spir_func [4 x <3 x half>] @_Z17MatrixTimesMatrixDv4_Dv3_f16Dv4_Dv4_f16(
 }
 
 ; GLSL: f16mat2x4 = f16mat3x4 * f16mat2x3
-define spir_func [2 x <4 x half>] @_Z17MatrixTimesMatrixDv3_Dv4_f16Dv2_Dv3_f16(
+define spir_func [2 x <4 x half>] @_Z17MatrixTimesMatrixDv3_Dv4_DhDv2_Dv3_Dh(
     [3 x <4 x half>] %m, [2 x <3 x half>] %rm) #0
 {
     %nm = alloca [2 x <4 x half>]
@@ -3287,7 +3287,7 @@ define spir_func [2 x <4 x half>] @_Z17MatrixTimesMatrixDv3_Dv4_f16Dv2_Dv3_f16(
 }
 
 ; GLSL: f16mat3x4 = f16mat3x4 * f16mat3
-define spir_func [3 x <4 x half>] @_Z17MatrixTimesMatrixDv3_Dv4_f16Dv3_Dv3_f16(
+define spir_func [3 x <4 x half>] @_Z17MatrixTimesMatrixDv3_Dv4_DhDv3_Dv3_Dh(
     [3 x <4 x half>] %m, [3 x <3 x half>] %rm) #0
 {
     %nm = alloca [3 x <4 x half>]
@@ -3346,7 +3346,7 @@ define spir_func [3 x <4 x half>] @_Z17MatrixTimesMatrixDv3_Dv4_f16Dv3_Dv3_f16(
 }
 
 ; GLSL: f16mat4 = f16mat3x4 * f16mat4x3
-define spir_func [4 x <4 x half>] @_Z17MatrixTimesMatrixDv3_Dv4_f16Dv4_Dv3_f16(
+define spir_func [4 x <4 x half>] @_Z17MatrixTimesMatrixDv3_Dv4_DhDv4_Dv3_Dh(
     [3 x <4 x half>] %m, [4 x <3 x half>] %rm) #0
 {
     %nm = alloca [4 x <4 x half>]
@@ -3510,7 +3510,7 @@ define spir_func half @llpc.determinant4.f16(
 }
 
 ; GLSL: half = determinant(f16mat2)
-define spir_func half @_Z11determinantDv2_Dv2_f16(
+define spir_func half @_Z11determinantDv2_Dv2_Dh(
     [2 x <2 x half>] %m) #0
 {
     %m0v = extractvalue [2 x <2 x half>] %m, 0
@@ -3526,7 +3526,7 @@ define spir_func half @_Z11determinantDv2_Dv2_f16(
 }
 
 ; GLSL: half = determinant(f16mat3)
-define spir_func half @_Z11determinantDv3_Dv3_f16(
+define spir_func half @_Z11determinantDv3_Dv3_Dh(
     [3 x <3 x half>] %m) #0
 {
     %m0v = extractvalue [3 x <3 x half>] %m, 0
@@ -3552,7 +3552,7 @@ define spir_func half @_Z11determinantDv3_Dv3_f16(
 }
 
 ; GLSL: half = determinant(f16mat4)
-define spir_func half @_Z11determinantDv4_Dv4_f16(
+define spir_func half @_Z11determinantDv4_Dv4_Dh(
     [4 x <4 x half>] %m) #0
 {
     %m0v = extractvalue [4 x <4 x half>] %m, 0
@@ -3616,7 +3616,7 @@ define spir_func half @llpc.dot4.f16(
 }
 
 ; GLSL: f16mat2 = inverse(f16mat2)
-define spir_func [2 x <2 x half>] @_Z13f16matrixInverseDv2_Dv2_f16(
+define spir_func [2 x <2 x half>] @_Z13matrixInverseDv2_Dv2_Dh(
     [2 x <2 x half>] %m) #0
 {
     ; [ x0   x1 ]                    [  y1 -x1 ]
@@ -3648,7 +3648,7 @@ define spir_func [2 x <2 x half>] @_Z13f16matrixInverseDv2_Dv2_f16(
 }
 
 ; GLSL: f16mat3 = inverse(f16mat3)
-define spir_func [3 x <3 x half>] @_Z13f16matrixInverseDv3_Dv3_f16(
+define spir_func [3 x <3 x half>] @_Z13matrixInverseDv3_Dv3_Dh(
     [3 x <3 x half>] %m) #0
 {
     ; [ x0   x1   x2 ]                   [ Adj(x0) Adj(x1) Adj(x2) ] T
@@ -3728,7 +3728,7 @@ define spir_func [3 x <3 x half>] @_Z13f16matrixInverseDv3_Dv3_f16(
 }
 
 ; GLSL: f16mat4 = inverse(f16mat4)
-define spir_func [4 x <4 x half>] @_Z13f16matrixInverseDv4_Dv4_f16(
+define spir_func [4 x <4 x half>] @_Z13matrixInverseDv4_Dv4_Dh(
     [4 x <4 x half>] %m) #0
 {
     ; [ x0   x1   x2   x3 ]                   [ Adj(x0) Adj(x1) Adj(x2) Adj(x3) ] T
@@ -3890,8 +3890,8 @@ define spir_func [4 x <4 x half>] @_Z13f16matrixInverseDv4_Dv4_f16(
     ret [4 x <4 x half>] %m3
 }
 
-declare spir_func half @_Z3dotDv2_f16Dv2_f16(<2 x half> , <2 x half>) #0
-declare spir_func half @_Z3dotDv3_f16Dv3_f16(<3 x half> , <3 x half>) #0
-declare spir_func half @_Z3dotDv4_f16Dv4_f16(<4 x half> , <4 x half>) #0
+declare spir_func half @_Z3dotDv2_DhDv2_Dh(<2 x half> , <2 x half>) #0
+declare spir_func half @_Z3dotDv3_DhDv3_Dh(<3 x half> , <3 x half>) #0
+declare spir_func half @_Z3dotDv4_DhDv4_Dh(<4 x half> , <4 x half>) #0
 
 attributes #0 = { nounwind }

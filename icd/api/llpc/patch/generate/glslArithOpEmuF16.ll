@@ -687,8 +687,10 @@ define spir_func <4 x half> @_Z4fmaxDv4_DhDv4_Dh(
 ; GLSL: float16_t clamp(float16_t, float16_t ,float16_t)
 define half @_Z6fclampDhDhDh(half %x, half %minVal, half %maxVal) #0
 {
-    %1 = call half @llvm.amdgcn.fmed3.f16(half %x, half %minVal, half %maxVal)
-    ret half %1
+    %1 = call half @llvm.maxnum.f16(half %x, half %minVal)
+    %2 = call half @llvm.minnum.f16(half %1, half %maxVal)
+
+    ret half %2
 }
 
 ; GLSL: f16vec2 clamp(f16vec2, f16vec2 ,f16vec2)

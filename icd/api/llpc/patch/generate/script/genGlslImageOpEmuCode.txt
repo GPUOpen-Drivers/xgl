@@ -80,7 +80,7 @@ llpc.image.sample.Dim1D|2D|3D|Rect.proj.dref.grad.constoffset
 
 # Fetch instructions
 llpc.image.fetch.Dim1D|2D|3D|1DArray|2DArray.lod
-llpc.image.fetch.DimRect|Buffer
+llpc.image.fetch.Dim1D|2D|3D|1DArray|2DArray|Rect|Buffer
 llpc.image.fetch.Dim1D|2D|3D|1DArray|2DArray.lod.constoffset
 llpc.image.fetch.DimRect.constoffset
 llpc.image.fetch.Dim2D|2DArray.sample

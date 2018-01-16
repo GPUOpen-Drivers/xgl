@@ -40,8 +40,8 @@
 #include "llpcCopyShader.h"
 #include "llpcDebug.h"
 #include "llpcInternal.h"
+#include "llpcPassDeadFuncRemove.h"
 #include "llpcPatch.h"
-#include "llpcPatchDeadFuncRemove.h"
 #include "llpcPatchDescriptorLoad.h"
 #include "llpcPatchInOutImportExport.h"
 
@@ -68,14 +68,14 @@ CopyShader::CopyShader(
 }
 
 // =====================================================================================================================
-// Executes copy shader generation and outputs its GPU ISA codes.
+// Executes copy shader generation and outputs its LLVM module.
 Result CopyShader::Run(
-    ElfPackage* pShaderElf) // [out] Output ELF package for this copy shader
+    Module** ppModule)  // [out] Output module for this copy shader
 {
     Result result = Result::Success;
+    Module *pModule = nullptr;
 
     // Load LLVM external library (copy shader skeleton)
-    std::unique_ptr<Module> pModule;
     result = LoadLibrary(pModule);
     auto pInsertPos = &*m_pEntryPoint->begin()->getFirstInsertionPt();
 
@@ -107,17 +107,13 @@ Result CopyShader::Run(
         result = DoPatch();
     }
 
-    // Generates GPU ISA codes
-    if (result == Result::Success)
+    if (result != Result::Success)
     {
-        raw_svector_ostream elfStream(*pShaderElf);
-        std::string errMsg;
-        result = CodeGenManager::GenerateCode(m_pModule, elfStream, errMsg);
-        if (result != Result::Success)
-        {
-            LLPC_ERRS("Fails to generate GPU ISA codes (copy shader): " << errMsg << "\n");
-        }
+        delete pModule;
+        pModule = nullptr;
     }
+
+    *ppModule = pModule;
 
     return result;
 }
@@ -125,7 +121,7 @@ Result CopyShader::Run(
 // =====================================================================================================================
 // Loads LLVM external library for copy shader (the skeleton).
 Result CopyShader::LoadLibrary(
-    std::unique_ptr<Module>& pModule)   // [out] Copy shader module
+    Module*& pModule)   // [in,out] Copy shader module
 {
     Result result = Result::Success;
 
@@ -152,8 +148,8 @@ Result CopyShader::LoadLibrary(
 
     if (result == Result::Success)
     {
-        pModule = std::move(*moduleOrErr);
-        m_pModule = pModule.get();
+        pModule = moduleOrErr->release();
+        m_pModule = pModule;
         m_pEntryPoint = GetEntryPoint(m_pModule);
     }
 
@@ -341,7 +337,7 @@ Result CopyShader::DoPatch()
     passMgr.add(createFunctionInliningPass(InlineThreshold));
 
     // Remove dead functions after function inlining
-    passMgr.add(PatchDeadFuncRemove::Create());
+    passMgr.add(PassDeadFuncRemove::Create());
 
     // Patch input import and output export operations
     passMgr.add(PatchInOutImportExport::Create());

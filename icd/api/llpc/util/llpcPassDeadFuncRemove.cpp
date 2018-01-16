@@ -74,13 +74,7 @@ bool PassDeadFuncRemove::runOnModule(
             auto callConv = pCurrFunc->getCallingConv();
 
             // Ignore entry points
-            if ((callConv == CallingConv::AMDGPU_LS) ||
-                (callConv == CallingConv::AMDGPU_HS) ||
-                (callConv == CallingConv::AMDGPU_ES) ||
-                (callConv == CallingConv::AMDGPU_GS) ||
-                (callConv == CallingConv::AMDGPU_VS) ||
-                (callConv == CallingConv::AMDGPU_PS) ||
-                (callConv == CallingConv::AMDGPU_CS))
+            if (pCurrFunc->getDLLStorageClass() == GlobalValue::DLLExportStorageClass)
             {
                 continue;
             }

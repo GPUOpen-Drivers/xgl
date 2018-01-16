@@ -118,7 +118,7 @@ void SpirvLowerImageOp::visitCallInst(
     }
 
     // Skip image lowering operations except entry-points
-    if (callInst.getParent()->getParent()->getCallingConv() == CallingConv::SPIR_FUNC)
+    if (callInst.getParent()->getParent()->getDLLStorageClass() != GlobalValue::DLLExportStorageClass)
     {
         return;
     }

@@ -1691,7 +1691,7 @@ ExportFormat FragColorExport::ComputeExportFormat(
     bool waCbNoLt16BitIntClamp = false;
     if ((gfxIp.major == 6) || (gfxIp.major == 7))
     {
-        // NOTE: Gfx6 and part of gfx7 hardware, the CB does not properly clamp its input if the shader
+        // NOTE: GFX6 and part of GFX7 hardware, the CB does not properly clamp its input if the shader
         // export format is "UINT16" or "SINT16" and the CB format is less than 16 bits per channel.
         waCbNoLt16BitIntClamp = false;
     }
@@ -1707,9 +1707,9 @@ ExportFormat FragColorExport::ComputeExportFormat(
         expFmt = EXP_FORMAT_ZERO;
     }
     else if ((compSetting == CompSetting::OneCompRed) &&
-        (alphaExport == false)                   &&
-        (isSrgb == false)                        &&
-        ((gfx8RbPlusEnable == false) || (maxCompBitCount == 32)))
+             (alphaExport == false)                   &&
+             (isSrgb == false)                        &&
+             ((gfx8RbPlusEnable == false) || (maxCompBitCount == 32)))
     {
         // NOTE: When Rb+ is enabled, "R8 UNORM" and "R16 UNORM" shouldn't use "EXP_FORMAT_32_R", instead
         // "EXP_FORMAT_FP16_ABGR" and "EXP_FORMAT_UNORM16_ABGR" should be used for 2X exporting performance.

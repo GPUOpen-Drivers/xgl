@@ -691,8 +691,8 @@ VkResult GraphicsPipeline::BuildPatchedShaders(
         }
     }
 
-    bool enableLlpc = false;
     bool buildLlpcPipeline = false;
+    bool enableLlpc = false;
 
     if (result == VK_SUCCESS)
     {
@@ -716,12 +716,6 @@ VkResult GraphicsPipeline::BuildPatchedShaders(
             pInfo->pipelineLlpc.pInstance      = pDevice->VkPhysicalDevice()->VkInstance();
             pInfo->pipelineLlpc.pfnOutputAlloc = AllocateShaderOutput;
             pInfo->pipelineLlpc.pUserData      = ppTempShaderBuffer;
-
-            if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCacheType() == PipelineCacheTypeLlpc))
-            {
-                pInfo->pipelineLlpc.pShaderCache = pPipelineCache->GetShaderCache(DefaultDeviceIndex).pLlpcShaderCache;
-            }
-
             pInfo->pipelineLlpc.pVertexInput   = pVertexInput;
 
             pInfo->pipelineLlpc.iaState.topology           = topology;
@@ -735,7 +729,7 @@ VkResult GraphicsPipeline::BuildPatchedShaders(
                 auto shaderStage = ShaderFlagBitToStage(pStage->stage);
                 auto pShaderInfo = shaderInfos[shaderStage];
 
-                pShaderInfo->pModuleData         = pShader->GetLlpcShaderData();
+                pShaderInfo->pModuleData         = pShader->GetShaderData(true);
                 pShaderInfo->pSpecializatonInfo  = pStage->pSpecializationInfo;
                 pShaderInfo->pEntryTarget        = pStage->pName;
 
@@ -762,6 +756,10 @@ VkResult GraphicsPipeline::BuildPatchedShaders(
         {
             if (enableLlpc)
             {
+                if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCacheType() == PipelineCacheTypeLlpc))
+                {
+                    pInfo->pipelineLlpc.pShaderCache = pPipelineCache->GetShaderCache(DefaultDeviceIndex).pLlpcShaderCache;
+                }
                 Llpc::Result llpcResult = pDevice->GetCompiler()->BuildGraphicsPipeline(&pInfo->pipelineLlpc, &piplineOut);
                 if (llpcResult != Llpc::Result::Success)
                 {
@@ -770,10 +768,12 @@ VkResult GraphicsPipeline::BuildPatchedShaders(
                     }
                 }
             }
-            else if (settings.enablePipelineDump)
+            else
+            if (settings.enablePipelineDump)
             {
                 // LLPC isn't enabled but pipeline dump is required, call LLPC dump interface explicitly
-                pDevice->GetCompiler()->DumpGraphicsPipeline(&pInfo->pipelineLlpc);
+                void* pHandle = Llpc::IPipelineDumper::BeginPipelineDump(settings.pipelineDumpDir, nullptr, &pInfo->pipelineLlpc);
+                Llpc::IPipelineDumper::EndPipelineDump(pHandle);
             }
 
             if (enableLlpc)

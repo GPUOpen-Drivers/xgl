@@ -1,12 +1,25 @@
 /*
  ***********************************************************************************************************************
  *
- *  Trade secret of Advanced Micro Devices, Inc.
- *  Copyright (c) 2015, Advanced Micro Devices, Inc., (unpublished)
+ *  Copyright (c) 2015-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
- *  All rights reserved. This notice is intended as a precaution against inadvertent publication and does not imply
- *  publication or any waiver of confidentiality. The year included in the foregoing notice is the year of creation of
- *  the work.
+ *  Permission is hereby granted, free of charge, to any person obtaining a copy
+ *  of this software and associated documentation files (the "Software"), to deal
+ *  in the Software without restriction, including without limitation the rights
+ *  to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ *  copies of the Software, and to permit persons to whom the Software is
+ *  furnished to do so, subject to the following conditions:
+ *
+ *  The above copyright notice and this permission notice shall be included in all
+ *  copies or substantial portions of the Software.
+ *
+ *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ *  IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ *  FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ *  AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ *  LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ *  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ *  SOFTWARE.
  *
  **********************************************************************************************************************/
 /**
@@ -21,17 +34,8 @@
 #define SPVGEN_REVISION 4
 
 #ifndef SH_IMPORT_EXPORT
-    #ifdef _WIN32
-        #define SPVAPI __cdecl
-        #ifdef SH_EXPORTING
-            #define SH_IMPORT_EXPORT __declspec(dllexport)
-        #else
-            #define SH_IMPORT_EXPORT __declspec(dllimport)
-        #endif
-    #else
         #define SH_IMPORT_EXPORT
         #define SPVAPI
-    #endif
 #endif
 
 enum SpvGenVersion
@@ -261,7 +265,6 @@ DECL_EXPORT_FUNC(vfxPrintDoc);
 #define DEFI_EXPORT_FUNC(func) \
   PFN_##func g_pfn##func = nullptr
 
-
 DEFI_EXPORT_FUNC(spvCompileAndLinkProgramFromFile);
 DEFI_EXPORT_FUNC(spvCompileAndLinkProgram);
 DEFI_EXPORT_FUNC(spvDestroyProgram);
@@ -278,29 +281,7 @@ DEFI_EXPORT_FUNC(vfxGetRenderDoc);
 DEFI_EXPORT_FUNC(vfxGetPipelineDoc);
 DEFI_EXPORT_FUNC(vfxPrintDoc);
 
-
 // SPIR-V generator Windows implementation
-#ifdef _WIN32
-
-#include <windows.h>
-// SPIR-V generator Windows DLL name
-#ifdef UNICODE
-static const wchar_t* SpvGeneratorName = L"spvgen.dll";
-#else
-static const char* SpvGeneratorName = "spvgen.dll";
-#endif
-
-#define INITFUNC(func) \
-  g_pfn##func = reinterpret_cast<PFN_##func>(GetProcAddress(hModule, #func));\
-  if (g_pfn##func == NULL)\
-  {\
-      success = false;\
-  }
-
-#define INIT_OPT_FUNC(func) \
-  g_pfn##func = reinterpret_cast<PFN_##func>(GetProcAddress(hModule, #func));
-
-#else
 
 #include <dlfcn.h>
 #include <stdio.h>
@@ -316,18 +297,12 @@ static const char* SpvGeneratorName = "spvgen.so";
 #define INIT_OPT_FUNC(func) \
   g_pfn##func = reinterpret_cast<PFN_##func>(dlsym(hModule, #func));
 
-#endif // _WIN32
-
 // =====================================================================================================================
 // Initialize SPIR-V generator entry-points
 bool InitSpvGen()
 {
     bool success = true;
-#ifdef _WIN32
-    HMODULE hModule = LoadLibrary(SpvGeneratorName);
-#else
     void* hModule = dlopen(SpvGeneratorName, RTLD_GLOBAL | RTLD_NOW);
-#endif
 
     if (hModule != NULL)
     {
@@ -349,9 +324,7 @@ bool InitSpvGen()
     }
     else
     {
-#ifndef _WIN32
         fprintf(stderr, "Failed: %s\n", dlerror());
-#endif
         success = false;
     }
     return success;
@@ -378,5 +351,4 @@ bool InitSpvGen()
 #define vfxPrintDoc                      g_pfnvfxPrintDoc
 
 #endif
-
 

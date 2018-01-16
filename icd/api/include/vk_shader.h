@@ -66,7 +66,12 @@ public:
 
     Pal::ShaderHash GetCodeHash(const char* pEntryPoint) const;
 
-    const void* GetLlpcShaderData() const { return m_llpcConvertOut.pModuleData; }
+    const void* GetShaderData(bool isLlpc) const
+    {
+        // If both SCPC and LLPC build are defined, select module by input flag
+        // Otherwise, the input flag is ignored.
+        return m_llpcConvertOut.pModuleData;
+    }
 
 protected:
     VkResult Init(const Device* pDevice);

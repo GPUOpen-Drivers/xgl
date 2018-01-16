@@ -32,6 +32,7 @@
 
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Linker/Linker.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/ManagedStatic.h"
@@ -437,16 +438,18 @@ Result Compiler::BuildShaderModule(
 
         pModuleData->binType = binType;
         pModuleData->binCode.codeSize = pShaderInfo->shaderBin.codeSize;
-        memset(&pModuleData->hash, 0, sizeof(pModuleData->hash));
+        MetroHash::Hash hash = {};
         MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pShaderInfo->shaderBin.pCode),
                           pShaderInfo->shaderBin.codeSize,
-                          pModuleData->hash.bytes);
+                          hash.bytes);
+        static_assert(sizeof(pModuleData->hash) == sizeof(hash), "Unexpected value!");
 
+        memcpy(pModuleData->hash, hash.dwords, sizeof(hash));
         if (cl::EnablePipelineDump)
         {
             PipelineDumper::DumpSpirvBinary(cl::PipelineDumpDir.c_str(),
                                           &pShaderInfo->shaderBin,
-                                          &pModuleData->hash);
+                                          &hash);
         }
 
         void* pCode = VoidPtrInc(pAllocBuf, sizeof(ShaderModuleData));
@@ -467,7 +470,7 @@ Result Compiler::BuildGraphicsPipeline(
 {
     Result           result  = Result::Success;
     CacheEntryHandle hEntry  = nullptr;
-    void*            pElf    = nullptr;
+    const void*      pElf    = nullptr;
     size_t           elfSize = 0;
     ElfPackage       pipelineElf;
 
@@ -486,7 +489,7 @@ Result Compiler::BuildGraphicsPipeline(
     }
 
     MetroHash::Hash hash = {};
-    hash = GenerateHashForGraphicsPipeline(pPipelineInfo);
+    hash = PipelineDumper::GenerateHashForGraphicsPipeline(pPipelineInfo);
 
     // Do shader replacement if it's enabled
     bool ShaderReplaced = false;
@@ -526,10 +529,11 @@ Result Compiler::BuildGraphicsPipeline(
                         const_cast<PipelineShaderInfo*>(shaderInfo[stage])->pModuleData = pModuleData;
 
                         char shaderHash[64] = {};
+                        auto pHash = reinterpret_cast<const MetroHash::Hash*>(&restoreModuleData[stage]->hash[0]);
                         int32_t length = snprintf(shaderHash,
                                                   64,
                                                   "0x%016" PRIX64,
-                                                  MetroHash::Compact64(&restoreModuleData[stage]->hash));
+                                                  MetroHash::Compact64(pHash));
                         LLPC_ASSERT(length >= 0);
                         LLPC_OUTS("// Shader replacement for shader: " << shaderHash
                                   << ", in pipeline: " << pipelineHash << "\n");
@@ -540,7 +544,7 @@ Result Compiler::BuildGraphicsPipeline(
             if (ShaderReplaced)
             {
                 // Update pipeline hash after shader replacement
-                hash = GenerateHashForGraphicsPipeline(pPipelineInfo);
+                hash = PipelineDumper::GenerateHashForGraphicsPipeline(pPipelineInfo);
             }
         }
     }
@@ -556,10 +560,11 @@ Result Compiler::BuildGraphicsPipeline(
         {
             const ShaderModuleData* pModuleData =
                 reinterpret_cast<const ShaderModuleData*>(shaderInfo[stage]->pModuleData);
+            auto pHash = reinterpret_cast<const MetroHash::Hash*>(&pModuleData->hash[0]);
             if (pModuleData != nullptr)
             {
                 LLPC_OUTS(format("%-4s : ", GetShaderStageAbbreviation(static_cast<ShaderStage>(stage), true)) <<
-                          format("0x%016" PRIX64, MetroHash::Compact64(&pModuleData->hash)) << "\n");
+                          format("0x%016" PRIX64, MetroHash::Compact64(pHash)) << "\n");
             }
         }
         LLPC_OUTS("\n");
@@ -611,7 +616,7 @@ Result Compiler::BuildGraphicsPipeline(
 
         BinaryType binType = BinaryType::Unknown;
 
-        Module* modules[ShaderStageGfxCount] = {};
+        Module* modules[ShaderStageCountInternal] = {};
         std::unique_ptr<Module> bitcodes[ShaderStageGfxCount];
 
         Context* pContext = AcquireContext();
@@ -655,8 +660,7 @@ Result Compiler::BuildGraphicsPipeline(
                 // Skip lower and patch phase if input is LLVM IR
                 skipLower = true;
                 skipPatch = true;
-                bitcodes[stage] = pContext->LoadLibary(&pModuleData->binCode);
-                pModule = bitcodes[stage].get();
+                pModule = pContext->LoadLibary(&pModuleData->binCode).release();
             }
             else
             {
@@ -706,14 +710,14 @@ Result Compiler::BuildGraphicsPipeline(
         }
 
         // Build null fragment shader if necessary
-        std::unique_ptr<Module> pNullFsModule;
         if ((result == Result::Success) && (cl::AutoLayoutDesc == false) && (modules[ShaderStageFragment] == nullptr))
         {
             TimeProfiler timeProfiler(&g_timeProfileResult.lowerTime);
+            std::unique_ptr<Module> pNullFsModule;
             result = BuildNullFs(pContext, pNullFsModule);
             if (result == Result::Success)
             {
-                modules[ShaderStageFragment] = pNullFsModule.get();
+                modules[ShaderStageFragment] = pNullFsModule.release();
             }
             else
             {
@@ -853,80 +857,64 @@ Result Compiler::BuildGraphicsPipeline(
         }
 #endif
 
-        // Generate GPU ISA codes
-        std::vector<ElfPackage> shaderElfs;
-        for (uint32_t stage = 0; (stage < ShaderStageGfxCount) && (result == Result::Success); ++stage)
-        {
-            Module* pModule = modules[stage];
-            if (pModule == nullptr)
-            {
-                continue;
-            }
-
-            ElfPackage shaderElf;
-            raw_svector_ostream elfStream(shaderElf);
-            std::string errMsg;
-
-            TimeProfiler timeProfiler(&g_timeProfileResult.codeGenTime);
-            result = CodeGenManager::GenerateCode(pModule, elfStream, errMsg);
-            if (result != Result::Success)
-            {
-                LLPC_ERRS("Fails to generate GPU ISA codes (" <<
-                          GetShaderStageName(static_cast<ShaderStage>(stage)) << " shader) :" <<
-                          errMsg << "\n");
-            }
-            else
-            {
-                shaderElfs.push_back(shaderElf);
-            }
-        }
-
         // Build copy shader if necessary (has geometry shader)
         if ((result == Result::Success) && (modules[ShaderStageGeometry] != nullptr))
         {
-            ElfPackage shaderElf;
-
             TimeProfiler timeProfiler(&g_timeProfileResult.codeGenTime);
-            result = BuildCopyShader(pContext, &shaderElf);
+            result = BuildCopyShader(pContext, &modules[ShaderStageCopyShader]);
             if (result != Result::Success)
             {
-                LLPC_ERRS("Fails to build a LLVM module and generate GPU ISA codes for copy shader\n");
-            }
-            else
-            {
-                shaderElfs.push_back(shaderElf);
+                LLPC_ERRS("Fails to build a LLVM module for copy shader\n");
             }
         }
 
-        // Clean up modules
-        if (pNullFsModule != nullptr)
+        // Create an empty module then link each shader module into it.
+        auto pPipelineModule = new Module("llpcPipeline", *pContext);
         {
-            modules[ShaderStageFragment] = nullptr;
+            Linker linker(*pPipelineModule);
+            for (int32_t stage = ShaderStageCountInternal - 1; (stage >= 0) && (result == Result::Success); --stage)
+            {
+                Module* pShaderModule = modules[stage];
+                if (pShaderModule == nullptr)
+                {
+                    continue;
+                }
+                // NOTE: We use unique_ptr here. The shader module will be destroyed after it is
+                // linked into pipeline module.
+                if (linker.linkInModule(std::unique_ptr<Module>(pShaderModule)))
+                {
+                    LLPC_ERRS("Fails to link shader module into pipeline module (" <<
+                              GetShaderStageName(static_cast<ShaderStage>(stage)) << " shader)\n");
+                    result = Result::ErrorInvalidShader;
+                }
+            }
         }
 
-        for (uint32_t stage = 0; stage < ShaderStageGfxCount; ++stage)
-        {
-            if (bitcodes[stage] != nullptr)
-            {
-                LLPC_ASSERT(bitcodes[stage].get() == modules[stage]);
-                modules[stage] = nullptr;
-                bitcodes[stage] = nullptr;
-            }
-            else
-            {
-                delete modules[stage];
-                modules[stage] = nullptr;
-            }
-        }
-
-        // Fill pipeline building output
         if (result == Result::Success)
         {
+            LLPC_OUTS("===============================================================================\n");
+            LLPC_OUTS("// LLPC linking results\n");
+            LLPC_OUTS(*pPipelineModule);
+            LLPC_OUTS("\n");
+
+            // Generate GPU ISA codes.
+            raw_svector_ostream elfStream(pipelineElf);
+            std::string errMsg;
             TimeProfiler timeProfiler(&g_timeProfileResult.codeGenTime);
-            result = CodeGenManager::FinalizeElf(pContext, shaderElfs.data(), shaderElfs.size(), &pipelineElf);
-            elfSize = pipelineElf.size();
-            pElf = pipelineElf.data();
+            result = CodeGenManager::GenerateCode(pPipelineModule, elfStream, errMsg);
+            if (result != Result::Success)
+            {
+                LLPC_ERRS("Fails to generate GPU ISA codes :" <<
+                          errMsg << "\n");
+            }
+            if (result == Result::Success)
+            {
+                elfSize = pipelineElf.size();
+                pElf = pipelineElf.data();
+            }
         }
+        delete pPipelineModule;
+        pPipelineModule = nullptr;
 
         if ((ShaderReplaced == false) && (hEntry != nullptr))
         {
@@ -1003,15 +991,15 @@ Result Compiler::BuildComputePipeline(
     const ComputePipelineBuildInfo* pPipelineInfo,  // [in] Info to build this compute pipeline
     ComputePipelineBuildOut*        pPipelineOut)   // [out] Output of building this compute pipeline
 {
-    CacheEntryHandle hEntry = nullptr;
-    void*            pElf    = nullptr;
-    size_t           elfSize = 0;
+    CacheEntryHandle hEntry    = nullptr;
+    const void*      pElf      = nullptr;
+    size_t           elfSize   = 0;
     ElfPackage       pipelineElf;
 
     Result result = ValidatePipelineShaderInfo(ShaderStageCompute, &pPipelineInfo->cs);
 
     MetroHash::Hash hash = {};
-    hash = GenerateHashForComputePipeline(pPipelineInfo);
+    hash = PipelineDumper::GenerateHashForComputePipeline(pPipelineInfo);
 
     // Do shader replacement if it's enabled
     bool ShaderReplaced = false;
@@ -1048,7 +1036,8 @@ Result Compiler::BuildComputePipeline(
                     const_cast<PipelineShaderInfo*>(&pPipelineInfo->cs)->pModuleData = pModuleData;
 
                     char shaderHash[64];
-                    int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, MetroHash::Compact64(&pRestoreModuleData->hash));
+                    auto pHash = reinterpret_cast<const MetroHash::Hash*>(&pRestoreModuleData->hash[0]);
+                    int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, MetroHash::Compact64(pHash));
                     LLPC_ASSERT(length >= 0);
                     LLPC_OUTS("// Shader replacement for shader: " << shaderHash
                                << ", in pipeline: " << pipelineHash << "\n");
@@ -1058,7 +1047,7 @@ Result Compiler::BuildComputePipeline(
             if (ShaderReplaced)
             {
                 // Update pipeline hash after shader replacement
-                hash = GenerateHashForComputePipeline(pPipelineInfo);
+                hash = PipelineDumper::GenerateHashForComputePipeline(pPipelineInfo);
             }
         }
     }
@@ -1068,11 +1057,12 @@ Result Compiler::BuildComputePipeline(
     if ((result == Result::Success) && EnableOuts())
     {
         const ShaderModuleData* pModuleData = reinterpret_cast<const ShaderModuleData*>(pPipelineInfo->cs.pModuleData);
+        auto pModuleHash = reinterpret_cast<const MetroHash::Hash*>(&pModuleData->hash[0]);
         LLPC_OUTS("===============================================================================\n");
         LLPC_OUTS("// LLPC calculated hash results (compute pipline)\n");
         LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, MetroHash::Compact64(&hash)) << "\n");
         LLPC_OUTS(format("%-4s : ", GetShaderStageAbbreviation(ShaderStageCompute, true)) <<
-                  format("0x%016" PRIX64, MetroHash::Compact64(&pModuleData->hash)) << "\n");
+                  format("0x%016" PRIX64, MetroHash::Compact64(pModuleHash)) << "\n");
         LLPC_OUTS("\n");
     }
 
@@ -1195,7 +1185,6 @@ Result Compiler::BuildComputePipeline(
         }
 
         // Do LLVM module pacthing and generate GPU ISA codes
-        ElfPackage shaderElf;
         if (result == Result::Success)
         {
             LLPC_ASSERT(pModule != nullptr);
@@ -1240,7 +1229,7 @@ Result Compiler::BuildComputePipeline(
             if (result == Result::Success)
             {
                 TimeProfiler timeProfiler(&g_timeProfileResult.codeGenTime);
-                raw_svector_ostream elfStream(shaderElf);
+                raw_svector_ostream elfStream(pipelineElf);
                 std::string errMsg;
                 result = CodeGenManager::GenerateCode(pModule, elfStream, errMsg);
                 if (result != Result::Success)
@@ -1248,6 +1237,12 @@ Result Compiler::BuildComputePipeline(
                     LLPC_ERRS("Fails to generate GPU ISA codes (" <<
                               GetShaderStageName(ShaderStageCompute) << " shader) : " << errMsg << "\n");
                 }
+            }
+
+            if (result == Result::Success)
+            {
+                elfSize = pipelineElf.size();
+                pElf = pipelineElf.data();
             }
         }
 
@@ -1261,15 +1256,6 @@ Result Compiler::BuildComputePipeline(
         {
             delete pModule;
             pModule = nullptr;
-        }
-
-        // Fill pipeline building output
-        if (result == Result::Success)
-        {
-            TimeProfiler timeProfiler(&g_timeProfileResult.codeGenTime);
-            result = CodeGenManager::FinalizeElf(pContext, &shaderElf, 1, &pipelineElf);
-            pElf = pipelineElf.data();
-            elfSize = pipelineElf.size();
         }
 
         if ((ShaderReplaced == false) && (hEntry != nullptr))
@@ -1345,7 +1331,8 @@ Result Compiler::ReplaceShader(
     ShaderModuleData**          ppModuleData        // [out] Resuling shader module after shader replacement
     ) const
 {
-    uint64_t shaderHash = MetroHash::Compact64(&pOrigModuleData->hash);
+    auto pModuleHash = reinterpret_cast<const MetroHash::Hash*>(&pOrigModuleData->hash[0]);
+    uint64_t shaderHash = MetroHash::Compact64(pModuleHash);
 
     char fileName[64];
     int32_t length = snprintf(fileName, 64, "Shader_0x%016" PRIX64 "_replace.spv", shaderHash);
@@ -1373,8 +1360,9 @@ Result Compiler::ReplaceShader(
             pModuleData->binType = pOrigModuleData->binType;
             pModuleData->binCode.codeSize = binSize;
             pModuleData->binCode.pCode = pShaderBin;
-            memset(&pModuleData->hash, 0, sizeof(pModuleData->hash));
-            MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pShaderBin), binSize, pModuleData->hash.bytes);
+            MetroHash::Hash hash = {};
+            MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pShaderBin), binSize, hash.bytes);
+            memcpy(&pModuleData->hash, &hash, sizeof(hash));
 
             *ppModuleData = pModuleData;
 
@@ -1496,221 +1484,6 @@ void Compiler::CleanOptimizedSpirv(
         spvFreeBuffer(const_cast<void*>(pSpirvBin->pCode));
     }
 #endif
-}
-
-// =====================================================================================================================
-// Gets hash code from graphics pipline build info.
-uint64_t Compiler::GetGraphicsPipelineHash(
-    const GraphicsPipelineBuildInfo* pPipelineInfo  // [in] Info to build a graphics pipeline
-    ) const
-{
-    MetroHash::Hash hash = GenerateHashForGraphicsPipeline(pPipelineInfo);
-    return MetroHash::Compact64(&hash);
-}
-
-// =====================================================================================================================
-// Gets hash code from graphics pipline build info.
-uint64_t Compiler::GetComputePipelineHash(
-    const ComputePipelineBuildInfo* pPipelineInfo  // [in] Info to build a compute pipeline
-    ) const
-{
-    MetroHash::Hash hash = GenerateHashForComputePipeline(pPipelineInfo);
-    return MetroHash::Compact64(&hash);
-}
-
-// =====================================================================================================================
-// Builds hash code from graphics pipline build info.
-MetroHash::Hash Compiler::GenerateHashForGraphicsPipeline(
-    const GraphicsPipelineBuildInfo* pPipeline  // [in] Info to build a graphics pipeline
-    ) const
-{
-    MetroHash64 hasher;
-
-    UpdateHashForPipelineShaderInfo(ShaderStageVertex, &pPipeline->vs, &hasher);
-    UpdateHashForPipelineShaderInfo(ShaderStageTessControl, &pPipeline->tcs, &hasher);
-    UpdateHashForPipelineShaderInfo(ShaderStageTessEval, &pPipeline->tes, &hasher);
-    UpdateHashForPipelineShaderInfo(ShaderStageGeometry, &pPipeline->gs, &hasher);
-    UpdateHashForPipelineShaderInfo(ShaderStageFragment, &pPipeline->fs, &hasher);
-
-    if ((pPipeline->pVertexInput != nullptr) && (pPipeline->pVertexInput->vertexBindingDescriptionCount > 0))
-    {
-        auto pVertexInput = pPipeline->pVertexInput;
-        hasher.Update(pVertexInput->vertexBindingDescriptionCount);
-        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexBindingDescriptions),
-                      sizeof(VkVertexInputBindingDescription) * pVertexInput->vertexBindingDescriptionCount);
-        hasher.Update(pVertexInput->vertexAttributeDescriptionCount);
-        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexAttributeDescriptions),
-                      sizeof(VkVertexInputAttributeDescription) * pVertexInput->vertexAttributeDescriptionCount);
-    }
-
-    auto pIaState = &pPipeline->iaState;
-    hasher.Update(pIaState->topology);
-    hasher.Update(pIaState->patchControlPoints);
-    hasher.Update(pIaState->deviceIndex);
-    hasher.Update(pIaState->disableVertexReuse);
-    if (pIaState->switchWinding)
-    {
-        hasher.Update(pIaState->switchWinding);
-    }
-
-    auto pVpState = &pPipeline->vpState;
-    hasher.Update(pVpState->depthClipEnable);
-
-    auto pRsState = &pPipeline->rsState;
-    hasher.Update(pRsState->rasterizerDiscardEnable);
-    if (pRsState->perSampleShading)
-    {
-        hasher.Update(pRsState->perSampleShading);
-    }
-    hasher.Update(pRsState->numSamples);
-    hasher.Update(pRsState->samplePatternIdx);
-    hasher.Update(pRsState->usrClipPlaneMask);
-
-    auto pCbState = &pPipeline->cbState;
-    hasher.Update(pCbState->alphaToCoverageEnable);
-    hasher.Update(pCbState->dualSourceBlendEnable);
-    for (uint32_t i = 0; i < MaxColorTargets; ++i)
-    {
-        if (pCbState->target[i].format != VK_FORMAT_UNDEFINED)
-        {
-            hasher.Update(pCbState->target[i].format);
-            hasher.Update(pCbState->target[i].blendEnable);
-            hasher.Update(pCbState->target[i].blendSrcAlphaToColor);
-        }
-    }
-
-    MetroHash::Hash hash = {};
-    hasher.Finalize(hash.bytes);
-
-    return hash;
-}
-
-// =====================================================================================================================
-// Builds hash code from compute pipline build info.
-MetroHash::Hash Compiler::GenerateHashForComputePipeline(
-    const ComputePipelineBuildInfo* pPipeline   // [in] Info to build a compute pipeline
-    ) const
-{
-    MetroHash64 hasher;
-
-    UpdateHashForPipelineShaderInfo(ShaderStageCompute, &pPipeline->cs, &hasher);
-
-    MetroHash::Hash hash = {};
-    hasher.Finalize(hash.bytes);
-
-    return hash;
-}
-
-// =====================================================================================================================
-// Updates hash code context for pipeline shader stage.
-void Compiler::UpdateHashForPipelineShaderInfo(
-    ShaderStage               stage,           // shader stage
-    const PipelineShaderInfo* pShaderInfo,     // [in] Shader info in specified shader stage
-    MetroHash64*              pHasher          // [in,out] Haher to generate hash code
-    ) const
-{
-    if (pShaderInfo->pModuleData)
-    {
-        const ShaderModuleData* pModuleData = reinterpret_cast<const ShaderModuleData*>(pShaderInfo->pModuleData);
-        pHasher->Update(stage);
-        pHasher->Update(pModuleData->hash);
-
-        if (pShaderInfo->pEntryTarget)
-        {
-            size_t entryNameLen = strlen(pShaderInfo->pEntryTarget);
-            pHasher->Update(reinterpret_cast<const uint8_t*>(pShaderInfo->pEntryTarget), entryNameLen);
-        }
-
-        if ((pShaderInfo->pSpecializatonInfo) && (pShaderInfo->pSpecializatonInfo->mapEntryCount > 0))
-        {
-            auto pSpecializatonInfo = pShaderInfo->pSpecializatonInfo;
-            pHasher->Update(pSpecializatonInfo->mapEntryCount);
-            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pMapEntries),
-                            sizeof(VkSpecializationMapEntry) * pSpecializatonInfo->mapEntryCount);
-            pHasher->Update(pSpecializatonInfo->dataSize);
-            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pData), pSpecializatonInfo->dataSize);
-        }
-
-        if (pShaderInfo->descriptorRangeValueCount > 0)
-        {
-            pHasher->Update(pShaderInfo->descriptorRangeValueCount);
-            for (uint32_t i = 0; i < pShaderInfo->descriptorRangeValueCount; ++i)
-            {
-                auto pDescriptorRangeValue = &pShaderInfo->pDescriptorRangeValues[i];
-                pHasher->Update(pDescriptorRangeValue->type);
-                pHasher->Update(pDescriptorRangeValue->set);
-                pHasher->Update(pDescriptorRangeValue->binding);
-                pHasher->Update(pDescriptorRangeValue->arraySize);
-
-                // TODO: We should query descriptor size from patch
-                const uint32_t DescriptorSize = 16;
-                LLPC_ASSERT(pDescriptorRangeValue->type == ResourceMappingNodeType::DescriptorSampler);
-                pHasher->Update(reinterpret_cast<const uint8_t*>(pDescriptorRangeValue->pValue),
-                                pDescriptorRangeValue->arraySize * DescriptorSize);
-            }
-        }
-
-        if (pShaderInfo->userDataNodeCount > 0)
-        {
-            for (uint32_t i = 0; i < pShaderInfo->userDataNodeCount; ++i)
-            {
-                auto pUserDataNode = &pShaderInfo->pUserDataNodes[i];
-                UpdateHashForResourceMappingNode(pUserDataNode, pHasher);
-            }
-        }
-    }
-}
-
-// =====================================================================================================================
-// Updates hash code context for resource mapping node.
-//
-// NOTE: This function will be called recusively if node's type is "DescriptorTableVaPtr"
-void Compiler::UpdateHashForResourceMappingNode(
-    const ResourceMappingNode* pUserDataNode,    // [in] Resource mapping node
-    MetroHash64*               pHasher           // [in,out] Haher to generate hash code
-    ) const
-{
-    pHasher->Update(pUserDataNode->type);
-    pHasher->Update(pUserDataNode->sizeInDwords);
-    pHasher->Update(pUserDataNode->offsetInDwords);
-
-    switch (pUserDataNode->type)
-    {
-    case ResourceMappingNodeType::DescriptorResource:
-    case ResourceMappingNodeType::DescriptorSampler:
-    case ResourceMappingNodeType::DescriptorCombinedTexture:
-    case ResourceMappingNodeType::DescriptorTexelBuffer:
-    case ResourceMappingNodeType::DescriptorBuffer:
-    case ResourceMappingNodeType::DescriptorFmask:
-    case ResourceMappingNodeType::DescriptorBufferCompact:
-        {
-            pHasher->Update(pUserDataNode->srdRange);
-            break;
-        }
-    case ResourceMappingNodeType::DescriptorTableVaPtr:
-        {
-            for (uint32_t i = 0; i < pUserDataNode->tablePtr.nodeCount; ++i)
-            {
-                UpdateHashForResourceMappingNode(&pUserDataNode->tablePtr.pNext[i], pHasher);
-            }
-            break;
-        }
-    case ResourceMappingNodeType::IndirectUserDataVaPtr:
-        {
-            pHasher->Update(pUserDataNode->userDataPtr);
-            break;
-        }
-    case ResourceMappingNodeType::PushConst:
-        {
-            // Do nothing for push constant
-            break;
-        }
-    default:
-        {
-            LLPC_NEVER_CALLED();
-            break;
-        }
-    }
 }
 
 // =====================================================================================================================
@@ -1870,12 +1643,12 @@ Result Compiler::BuildNullFs(
 // =====================================================================================================================
 // Builds LLVM module for copy shader and generates GPU ISA codes accordingly.
 Result Compiler::BuildCopyShader(
-    Context*         pContext,      // [in] LLPC context
-    ElfPackage*      pCopyShaderElf // [out] ELF package for copy shader
+    Context*         pContext,            // [in] LLPC context
+    Module**         ppCopyShaderModule   // [out] LLVM module for copy shader
     ) const
 {
     CopyShader copyShader(pContext);
-    return copyShader.Run(pCopyShaderElf);
+    return copyShader.Run(ppCopyShaderModule);
 }
 
 // =====================================================================================================================
@@ -2038,34 +1811,6 @@ void Compiler::DumpTimeProfilingResult(
     LLPC_ERRS("Time Profiling Results(Special): "
               << "SPIR-V Lower (Optimization) = " << float(g_timeProfileResult.lowerOptTime) / freq << ", "
               << "LLVM Patch (Lib Link) = " << float(g_timeProfileResult.patchLinkTime) / freq << "\n");
-}
-
-// =====================================================================================================================
-// Dumps graphics pipeline.
-void Compiler::DumpGraphicsPipeline(
-    const GraphicsPipelineBuildInfo* pPipelineInfo // [in] Info to build this graphics pipeline
-    ) const
-{
-    auto hash = GenerateHashForGraphicsPipeline(pPipelineInfo);
-    auto pPipelineDumperFile = PipelineDumper::BeginPipelineDump(cl::PipelineDumpDir.c_str(), nullptr, pPipelineInfo, &hash);
-    if (pPipelineDumperFile != nullptr)
-    {
-        PipelineDumper::EndPipelineDump(pPipelineDumperFile);
-    }
-}
-
-// =====================================================================================================================
-// Dumps compute pipeline.
-void Compiler::DumpComputePipeline(
-    const ComputePipelineBuildInfo* pPipelineInfo // [in] Info to build this compute pipeline
-    ) const
-{
-    auto hash = GenerateHashForComputePipeline(pPipelineInfo);
-    auto pPipelineDumperFile = PipelineDumper::BeginPipelineDump(cl::PipelineDumpDir.c_str(), pPipelineInfo, nullptr, &hash);
-    if (pPipelineDumperFile != nullptr)
-    {
-        PipelineDumper::EndPipelineDump(pPipelineDumperFile);
-    }
 }
 
 } // Llpc

@@ -136,6 +136,12 @@ struct ShaderModuleBuildInfo
     BinaryData           shaderBin;         ///< Shader binary data (SPIR-V binary)
 };
 
+/// Represents the header part of LLPC shader module data, should be identical to Bil::BilModuleMetadataHeader
+struct ShaderModuleDataHeader
+{
+    uint32_t hash[4];       // Shader hash code
+};
+
 /// Represents output of building a shader module.
 struct ShaderModuleBuildOut
 {
@@ -354,6 +360,58 @@ protected:
 };
 
 // =====================================================================================================================
+/// Represents the interfaces of a pipeline dumper.
+class IPipelineDumper
+{
+public:
+    /// Dumps SPIR-V shader binary to extenal file.
+    ///
+    /// @param [in]  pDumpDir     Directory of pipeline dump
+    /// @param [in]  pSpirvBin    SPIR-V binary
+    static void VKAPI_CALL DumpSpirvBinary(const char*                     pDumpDir,
+                                           const BinaryData*               pSpirvBin);
+
+    /// Begins to dump graphics/compute pipeline info.
+    ///
+    /// @param [in]  pDumpDir               Directory of pipeline dump
+    /// @param [in]  pComputePipelineInfo   Info of the compute pipeline to be built
+    /// @param [in]  pGraphicsPipelineInfo  Info of the graphics pipeline to be built
+    ///
+    /// @returns The handle of pipeline dump file
+    static void* VKAPI_CALL BeginPipelineDump(const char*                      pDumpDir,
+                                              const ComputePipelineBuildInfo*  pComputePipelineInfo,
+                                              const GraphicsPipelineBuildInfo* pGraphicsPipelineInfo);
+
+    /// Ends to dump graphics/compute pipeline info.
+    ///
+    /// @param  [in]  pDumpFile         The handle of pipeline dump file
+    static void VKAPI_CALL EndPipelineDump(void* pDumpFile);
+
+    /// Disassembles pipeline binary and dumps it to pipeline info file.
+    ///
+    /// @param [in]  pDumpFile        The handle of pipeline dump file
+    /// @param [in]  gfxIp            Graphics IP version info
+    /// @param [in]  pPipelineBin     Pipeline binary (ELF)
+    static void VKAPI_CALL DumpPipelineBinary(void*                    pDumpFile,
+                                              GfxIpVersion             gfxIp,
+                                              const BinaryData*        pPipelineBin);
+
+    /// Calculates graphics pipeline hash code.
+    ///
+    /// @param [in]  pPipelineInfo  Info to build this graphics pipeline
+    ///
+    /// @returns Hash code associated this graphics pipeline.
+    static uint64_t VKAPI_CALL GetGraphicsPipelineHash(const GraphicsPipelineBuildInfo* pPipelineInfo);
+
+    /// Calculates compute pipeline hash code.
+    ///
+    /// @param [in]  pPipelineInfo  Info to build this compute pipeline
+    ///
+    /// @returns Hash code associated this compute pipeline.
+    static uint64_t VKAPI_CALL GetComputePipelineHash(const ComputePipelineBuildInfo* pPipelineInfo);
+};
+
+// =====================================================================================================================
 /// Represents the interfaces of a pipeline compiler.
 class ICompiler
 {
@@ -407,20 +465,6 @@ public:
     virtual Result BuildComputePipeline(const ComputePipelineBuildInfo* pPipelineInfo,
                                         ComputePipelineBuildOut*        pPipelineOut) = 0;
 
-    /// Calculates graphics pipeline hash code.
-    ///
-    /// @param [in]  pPipelineInfo  Info to build this graphics pipeline
-    ///
-    /// @returns Hash code associated this graphics pipeline.
-    virtual uint64_t GetGraphicsPipelineHash(const GraphicsPipelineBuildInfo* pPipelineInfo) const = 0;
-
-    /// Calculates compute pipeline hash code.
-    ///
-    /// @param [in]  pPipelineInfo  Info to build this compute pipeline
-    ///
-    /// @returns Hash code associated this compute pipeline.
-    virtual uint64_t GetComputePipelineHash(const ComputePipelineBuildInfo* pPipelineInfo) const = 0;
-
     /// Creates a shader cache object with the requested properties.
     ///
     /// @param [in]  pCreateInfo    Create info of the shader cache.
@@ -430,16 +474,6 @@ public:
     virtual Result CreateShaderCache(
         const ShaderCacheCreateInfo* pCreateInfo,
         IShaderCache**               ppShaderCache) = 0;
-
-    /// Dumps graphics pipeline.
-    ///
-    /// @param [in]  pPipelineInfo  Info to build this graphics pipeline
-    virtual void DumpGraphicsPipeline(const GraphicsPipelineBuildInfo* pPipelineInfo) const = 0;
-
-    /// Dumps compute pipeline.
-    ///
-    /// @param [in]  pPipelineInfo  Info to build this compute pipeline
-    virtual void DumpComputePipeline(const ComputePipelineBuildInfo* pPipelineInfo) const = 0;
 
 protected:
     ICompiler() {}

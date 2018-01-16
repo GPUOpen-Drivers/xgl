@@ -40,7 +40,6 @@
 #include "palDepthStencilState.h"
 #include "palMsaaState.h"
 #include "palPipeline.h"
-
 #include "llpc.h"
 
 namespace vk

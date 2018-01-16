@@ -188,7 +188,6 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
     pPipelineInfo->tempStageSize = (pPipelineInfo->numPalRsrcMapNodes * sizeof(Llpc::ResourceMappingNode));
 
-    // Add the size for static samplers
     pPipelineInfo->tempStageSize += (pPipelineInfo->numPalDescRangeValueNodes * sizeof(Llpc::DescriptorRangeValue));
 
     // Calculate scratch buffer size for building pipeline mappings for all shader stages based on this layout

@@ -108,12 +108,9 @@ bool PatchEntryPointMutate::runOnModule(
 
     Function* pOrigEntryPoint = GetEntryPoint(m_pModule);
 
-    // NOTE: Make a copy of the function name since the string will be deleted
-    // after destruction of the original function.
-    std::string entryName = pOrigEntryPoint->getName();
     Function* pEntryPoint = Function::Create(pEntryPointTy,
                                              GlobalValue::ExternalLinkage,
-                                             entryName,
+                                             "main",
                                              m_pModule);
     pEntryPoint->setCallingConv(pOrigEntryPoint->getCallingConv());
     pEntryPoint->addFnAttr(Attribute::NoUnwind);
@@ -626,7 +623,63 @@ bool PatchEntryPointMutate::runOnModule(
     // Remove original entry-point
     pOrigEntryPoint->dropAllReferences();
     pOrigEntryPoint->eraseFromParent();
-    pEntryPoint->setName(entryName); // Reset the name of new entry-point, it is changed by LLVM function clone
+
+    // Set calling convention for appropriate hardware shader stage. Also remove the dllexport that
+    // we were using to identify the entrypoint.
+    auto callingConv = CallingConv::AMDGPU_CS;
+    switch (m_shaderStage)
+    {
+    case ShaderStageVertex:
+        callingConv = m_hasTes ?
+                          CallingConv::AMDGPU_LS :
+                          (m_hasGs ? CallingConv::AMDGPU_ES : CallingConv::AMDGPU_VS);
+        break;
+    case ShaderStageTessControl:
+        callingConv = CallingConv::AMDGPU_HS;
+        break;
+    case ShaderStageTessEval:
+        callingConv = m_hasGs ? CallingConv::AMDGPU_ES : CallingConv::AMDGPU_VS;
+        break;
+    case ShaderStageGeometry:
+        callingConv = CallingConv::AMDGPU_GS;
+        break;
+    case ShaderStageFragment:
+        callingConv = CallingConv::AMDGPU_PS;
+        break;
+    default:
+        break;
+    }
+    pEntryPoint->setCallingConv(callingConv);
+    pEntryPoint->setDLLStorageClass(GlobalValue::DefaultStorageClass);
+    // Set the entry name required by PAL ABI
+    auto entryStage = Util::Abi::PipelineSymbolType::CsMainEntry;
+    switch (callingConv)
+    {
+    case CallingConv::AMDGPU_PS:
+        entryStage = Util::Abi::PipelineSymbolType::PsMainEntry;
+        break;
+    case CallingConv::AMDGPU_VS:
+        entryStage = Util::Abi::PipelineSymbolType::VsMainEntry;
+        break;
+    case CallingConv::AMDGPU_GS:
+        entryStage = Util::Abi::PipelineSymbolType::GsMainEntry;
+        break;
+    case CallingConv::AMDGPU_ES:
+        entryStage = Util::Abi::PipelineSymbolType::EsMainEntry;
+        break;
+    case CallingConv::AMDGPU_HS:
+        entryStage = Util::Abi::PipelineSymbolType::HsMainEntry;
+        break;
+    case CallingConv::AMDGPU_LS:
+        entryStage = Util::Abi::PipelineSymbolType::LsMainEntry;
+        break;
+    default:
+        break;
+    }
+
+    const char* pMainEntryName = Util::Abi::PipelineAbiSymbolNameStrings[(uint32_t)entryStage];
+    pEntryPoint->setName(pMainEntryName);
+    pEntryPoint->setDLLStorageClass(GlobalValue::DLLExportStorageClass);
 
     // NOTE: Set function attribute for hard-coded high part of the GIT address. Use 0xFFFFFFFF (-1)
     // as don't-care value to mean not set (use s_getpc instead). Current hardware only allows 16
@@ -651,15 +704,62 @@ bool PatchEntryPointMutate::runOnModule(
 // =====================================================================================================================
 // Checks whether the specified resource mapping node is active.
 bool PatchEntryPointMutate::IsResourceMappingNodeActive(
-    const ResourceMappingNode* pNode     // [in] Resource mapping node
+    const ResourceMappingNode* pNode        // [in] Resource mapping node
     ) const
 {
     bool active = false;
-    auto pResUsage = m_pContext->GetShaderResourceUsage(m_shaderStage);
+
+    const ResourceUsage* pResUsage1 = m_pContext->GetShaderResourceUsage(m_shaderStage);
+    const ResourceUsage* pResUsage2 = nullptr;
+
+    const auto gfxIp = m_pContext->GetGfxIpVersion();
+    if (gfxIp.major >= 9)
+    {
+        // NOTE: For LS-HS/ES-GS merged shader, resource mapping nodes of the two shader stages are merged as a whole.
+        // So we have to check activeness of both shader stages at the same time. Here, we determine the second shader
+       // stage and get its resource usage accordingly.
+        uint32_t stageMask = m_pContext->GetShaderStageMask();
+        const bool hasTs = ((stageMask & (ShaderStageToMask(ShaderStageTessControl) |
+                                            ShaderStageToMask(ShaderStageTessEval))) != 0);
+        const bool hasGs = ((stageMask & ShaderStageToMask(ShaderStageGeometry)) != 0);
+
+        if (hasTs || hasGs)
+        {
+            const auto shaderStage1 = m_shaderStage;
+            auto shaderStage2 = ShaderStageInvalid;
+
+            if (shaderStage1 == ShaderStageVertex)
+            {
+                shaderStage2 = hasTs ? ShaderStageTessControl :
+                                       (hasGs ? ShaderStageGeometry : ShaderStageInvalid);
+            }
+            else if (shaderStage1 == ShaderStageTessControl)
+            {
+                shaderStage2 = ShaderStageVertex;
+            }
+            else if (shaderStage1 == ShaderStageTessEval)
+            {
+                shaderStage2 = hasGs ? ShaderStageGeometry : ShaderStageInvalid;
+            }
+            else if (shaderStage1 == ShaderStageGeometry)
+            {
+                shaderStage2 = hasTs ? ShaderStageTessEval : ShaderStageVertex;
+            }
+
+            if (shaderStage2 != ShaderStageInvalid)
+            {
+                pResUsage2 = m_pContext->GetShaderResourceUsage(shaderStage2);
+            }
+        }
+    }
 
     if (pNode->type == ResourceMappingNodeType::PushConst)
     {
-        active = (pResUsage->pushConstSizeInBytes > 0);
+        active = (pResUsage1->pushConstSizeInBytes > 0);
+        if ((active == false) && (pResUsage2 != nullptr))
+        {
+            active = (pResUsage2->pushConstSizeInBytes > 0);
+        }
     }
     else if (pNode->type == ResourceMappingNodeType::DescriptorTableVaPtr)
     {
@@ -687,9 +787,11 @@ bool PatchEntryPointMutate::IsResourceMappingNodeActive(
         DescriptorPair descPair = {};
         descPair.descSet = pNode->srdRange.set;
         descPair.binding = pNode->srdRange.binding;
-        if (pResUsage->descPairs.find(descPair.u64All) != pResUsage->descPairs.end())
+
+        active = (pResUsage1->descPairs.find(descPair.u64All) != pResUsage1->descPairs.end());
+        if ((active == false) && (pResUsage2 != nullptr))
         {
-            active = true;
+            active = (pResUsage2->descPairs.find(descPair.u64All) != pResUsage2->descPairs.end());
         }
     }
 

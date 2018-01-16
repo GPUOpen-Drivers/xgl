@@ -55,11 +55,10 @@ enum class BinaryType : uint32_t
 
 // =====================================================================================================================
 // Represents output data of building a shader module.
-struct ShaderModuleData
+struct ShaderModuleData : public ShaderModuleDataHeader
 {
     BinaryType      binType;    // Shader binary type
     BinaryData      binCode;    // Shader binary data
-    MetroHash::Hash hash;       // Shader hash code
 };
 
 // Represents the properties of GPU device.
@@ -102,13 +101,7 @@ public:
     // Gets the count of compiler instance.
     static uint32_t GetInstanceCount() { return m_instanceCount; }
 
-    virtual uint64_t GetGraphicsPipelineHash(const GraphicsPipelineBuildInfo* pPipelineInfo) const;
-    virtual uint64_t GetComputePipelineHash(const ComputePipelineBuildInfo* pPipelineInfo) const;
     virtual Result CreateShaderCache(const ShaderCacheCreateInfo* pCreateInfo, IShaderCache** ppShaderCache);
-
-    virtual void DumpGraphicsPipeline(const GraphicsPipelineBuildInfo* pPipelineInfo) const;
-    virtual void DumpComputePipeline(const ComputePipelineBuildInfo* pPipelineInfo) const;
-
 private:
     LLPC_DISALLOW_DEFAULT_CTOR(Compiler);
     LLPC_DISALLOW_COPY_AND_ASSIGN(Compiler);
@@ -120,21 +113,13 @@ private:
                                 llvm::LLVMContext*           pContext,
                                 llvm::Module**               ppModule) const;
 
-    MetroHash::Hash GenerateHashForGraphicsPipeline(const GraphicsPipelineBuildInfo* pPipeline) const;
-    MetroHash::Hash GenerateHashForComputePipeline(const ComputePipelineBuildInfo* pPipeline) const;
-    MetroHash::Hash GenerateHashForCompileOptions(uint32_t optionCount, const char*const* pOptions) const;
-
-    void UpdateHashForPipelineShaderInfo(ShaderStage               shaderStage,
-                                         const PipelineShaderInfo* pShaderInfo,
-                                         MetroHash64*              pHasher) const;
-
-    void UpdateHashForResourceMappingNode(const ResourceMappingNode* pUserDataNode,
-                                          MetroHash64*               pHasher) const;
+    MetroHash::Hash GenerateHashForCompileOptions(uint32_t          optionCount,
+                                                  const char*const* pOptions) const;
 
     Result ValidatePipelineShaderInfo(ShaderStage shaderStage, const PipelineShaderInfo* pShaderInfo) const;
 
     Result BuildNullFs(Context* pContext, std::unique_ptr<llvm::Module>& pNullFsModule) const;
-    Result BuildCopyShader(Context* pContext, ElfPackage* pCopyShaderElf) const;
+    Result BuildCopyShader(Context* pContext, llvm::Module** ppCopyShaderModule) const;
 
     Result ReplaceShader(const ShaderModuleData* pOrigModuleData, ShaderModuleData** ppModuleData) const;
 

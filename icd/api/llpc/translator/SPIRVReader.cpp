@@ -302,7 +302,6 @@ public:
   std::string transTypeToOCLTypeName(SPIRVType *BT, bool IsSigned = true);
   std::vector<Type *> transTypeVector(const std::vector<SPIRVType *>&);
   bool translate(ExecutionModel EntryExecModel, const char *EntryName);
-  CallingConv::ID transExecutionModel(SPIRVExecutionModelKind ExecModel);
   bool transAddressingModel();
 
   Value *transValue(SPIRVValue *, Function *F, BasicBlock *,
@@ -2411,7 +2410,6 @@ SPIRVToLLVM::transFunction(SPIRVFunction *BF) {
   mapFunction(BF, F);
   if (!F->isIntrinsic()) {
     if (IsEntry) {
-      F->setCallingConv(transExecutionModel(ExecModel));
       // Setup metadata for execution model
       std::vector<Metadata*> ExecModelMDs;
       auto Int32Ty = Type::getInt32Ty(*Context);
@@ -2419,8 +2417,8 @@ SPIRVToLLVM::transFunction(SPIRVFunction *BF) {
         ConstantAsMetadata::get(ConstantInt::get(Int32Ty, ExecModel)));
       auto ExecModelMDNode = MDNode::get(*Context, ExecModelMDs);
       F->addMetadata(gSPIRVMD::ExecutionModel, *ExecModelMDNode);
-    } else
-      F->setCallingConv(CallingConv::SPIR_FUNC);
+    }
+    F->setCallingConv(CallingConv::SPIR_FUNC);
 
     if (isFuncNoUnwind())
       F->addFnAttr(Attribute::NoUnwind);
@@ -3036,9 +3034,13 @@ SPIRVToLLVM::translate(ExecutionModel EntryExecModel, const char *EntryName) {
 
   for (unsigned I = 0, E = BM->getNumFunctions(); I != E; ++I) {
     auto BF = BM->getFunction(I);
-    // Non entry-points and targeted entry-point should be translated
-    if (BM->isEntryPoint(BF->getId()) == false || BF == EntryTarget)
-      transFunction(BF);
+    // Non entry-points and targeted entry-point should be translated.
+    // Set DLLExport on targeted entry-point so we can find it later.
+    if (BM->isEntryPoint(BF->getId()) == false || BF == EntryTarget) {
+      auto F = transFunction(BF);
+      if (BF == EntryTarget)
+        F->setDLLStorageClass(GlobalValue::DLLExportStorageClass);
+    }
   }
 
   if (!transKernelMetadata())
@@ -3065,21 +3067,6 @@ SPIRVToLLVM::translate(ExecutionModel EntryExecModel, const char *EntryName) {
   eraseUselessFunctions(M);
   DbgTran.finalize();
   return true;
-}
-
-CallingConv::ID
-SPIRVToLLVM::transExecutionModel(SPIRVExecutionModelKind ExecModel) {
-  switch (ExecModel) {
-  case ExecutionModelVertex: return CallingConv::AMDGPU_VS;
-  case ExecutionModelTessellationControl: return CallingConv::AMDGPU_HS;
-  case ExecutionModelTessellationEvaluation: return CallingConv::AMDGPU_VS;
-  case ExecutionModelGeometry: return CallingConv::AMDGPU_GS;
-  case ExecutionModelFragment: return CallingConv::AMDGPU_PS;
-  case ExecutionModelGLCompute: return CallingConv::AMDGPU_CS;
-  case ExecutionModelKernel: return CallingConv::SPIR_KERNEL;
-  default: llvm_unreachable("Invalid execution model");
-  }
-  return CallingConv::SPIR_FUNC;
 }
 
 bool

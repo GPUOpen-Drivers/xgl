@@ -1730,8 +1730,6 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags)
     Pal::ImageCreateInfo palImageCreateInfo;
     palImageCreateInfo.flags.u32All         = 0;
 
-    palImageCreateInfo.flags.formatChangeSrd    = (imageCreateFlags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)   ? 1 : 0;
-    palImageCreateInfo.flags.formatChangeTgt    = (imageCreateFlags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT)   ? 1 : 0;
     palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)  ? 1 : 0;
     palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
     palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT_KHR)        ? 1 : 0;

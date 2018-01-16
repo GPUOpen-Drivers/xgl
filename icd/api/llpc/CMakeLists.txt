@@ -169,10 +169,8 @@ target_sources(llpc PRIVATE
     patch/llpcCodeGenManager.cpp
     patch/llpcFragColorExport.cpp
     patch/llpcPatch.cpp
-    patch/llpcPatchDeadFuncRemove.cpp
     patch/llpcPatchDescriptorLoad.cpp
     patch/llpcPatchEntryPointMutate.cpp
-    patch/llpcPatchExternalLibLink.cpp
     patch/llpcPatchInOutImportExport.cpp
     patch/llpcPatchBufferOp.cpp
     patch/llpcPatchImageOp.cpp
@@ -230,6 +228,7 @@ target_sources(llpc PRIVATE
     util/llpcPassExternalLibLink.cpp
     util/llpcPassNonNativeFuncRemove.cpp
     util/llpcPipelineDumper.cpp
+    util/llpcUtil.cpp
 )
 
 ### LLPC Auto-generated Files ##########################################################################################
@@ -249,15 +248,16 @@ set(GEN_GLSL_EMU_LIB_DEPS
     ${OP_EMU_LIB_GEN_DIR}/glslImageOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/glslInlineConstOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/glslMatrixOpEmu.ll
+    ${OP_EMU_LIB_GEN_DIR}/glslMatrixOpEmuF16.ll
     ${OP_EMU_LIB_GEN_DIR}/glslMatrixOpEmuF64.ll
     ${OP_EMU_LIB_GEN_DIR}/glslPushConstOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/glslNullFsEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/glslSharedVarOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/glslSpecialOpEmu.ll
+    ${OP_EMU_LIB_GEN_DIR}/glslSpecialOpEmuF16.ll
     ${OP_EMU_LIB_GEN_DIR}/gfx6/glslArithOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/gfx6/glslNoOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/gfx9/glslArithOpEmu.ll
-    ${OP_EMU_LIB_GEN_DIR}/gfx9/glslMatrixOpEmuF16.ll
     ${OP_EMU_LIB_GEN_DIR}/script/genGlslArithOpEmuCode.py
     ${OP_EMU_LIB_GEN_DIR}/script/genGlslArithOpEmuCode.txt
     ${OP_EMU_LIB_GEN_DIR}/script/genGlslArithOpEmuCodeF64.txt

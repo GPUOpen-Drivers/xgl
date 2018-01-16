@@ -149,7 +149,7 @@ void SpirvLowerGlobal::visitReturnInst(
     }
 
     // We only handle the "return" in entry point
-    if (retInst.getParent()->getParent()->getCallingConv() == CallingConv::SPIR_FUNC)
+    if (retInst.getParent()->getParent()->getDLLStorageClass() != GlobalValue::DLLExportStorageClass)
     {
         return;
     }

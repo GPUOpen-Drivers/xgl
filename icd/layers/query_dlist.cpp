@@ -36,6 +36,12 @@ namespace vk
 {
 
 // =====================================================================================================================
+// Query primary device verdor ID and device ID
+void QueryPrimaryDeviceInfo(unsigned int* pVendorId, unsigned int* pDeviceId)
+{
+}
+
+// =====================================================================================================================
 // Use GDI APIs to enumerate all the adapters, query AMD adapter whether it is in a hybrid graphics platform, then call
 // Dlist interface to query AMD Radeon Settings configuration
 void QueryDlistForApplication(

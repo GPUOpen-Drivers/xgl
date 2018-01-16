@@ -479,6 +479,8 @@ public:
     uint32_t GetPipelineCacheExpectedEntryCount();
     void DecreasePipelineCacheCount();
 
+    VK_INLINE VirtualStackAllocator* GetStackAllocator() { return m_pStackAllocator; }
+
 protected:
     Device(
         uint32_t                         deviceCount,

@@ -357,24 +357,21 @@ static VkResult ConvertImageCreateInfo(
     pPalCreateInfo->tiling           = VkToPalImageTiling(pCreateInfo->tiling);
     pPalCreateInfo->tilingOptMode    = settings.imageTilingOptMode;
     pPalCreateInfo->tilingPreference = settings.imageTilingPreference;
-
-    if (pDevice->GetRuntimeSettings().ignoreMutableFlag)
-    {
-        // Mask the MUTABLE bit
-        VkImageCreateFlags imageCreateFlags = (pCreateInfo->flags & ~VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT);
-        pPalCreateInfo->flags.u32All = VkToPalImageCreateFlags(imageCreateFlags);
-    }
-    else
-    {
-        pPalCreateInfo->flags.u32All = VkToPalImageCreateFlags(pCreateInfo->flags);
-    }
-
+    pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(pCreateInfo->flags);
     pPalCreateInfo->usageFlags       = VkToPalImageUsageFlags(
                                          imageUsage,
                                          pCreateInfo->format,
                                          pCreateInfo->samples,
                                          (VkImageUsageFlags)(settings.optImgMaskToApplyShaderReadUsageForTransferSrc),
                                          (VkImageUsageFlags)(settings.optImgMaskToApplyShaderWriteUsageForTransferDst));
+
+    if (((pCreateInfo->flags & VK_IMAGE_CREATE_MUTABLE_FORMAT_BIT) != 0) &&
+        (pDevice->GetRuntimeSettings().ignoreMutableFlag == false))
+    {
+        // Set viewFormatCount to Pal::AllCompatibleFormats to indicate that all compatible formats can be used for
+        // image views created from the image. This gets overridden later if VK_KHR_image_format_list is used.
+        pPalCreateInfo->viewFormatCount = Pal::AllCompatibleFormats;
+    }
 
     // Vulkan allows individual subresources to be transitioned from uninitialized layout which means we
     // have to set this bit for PAL to be able to support this.  This may have performance implications
@@ -548,6 +545,9 @@ VkResult Image::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkImage*                        pImage)
 {
+    VirtualStackFrame virtStackFrame(pDevice->GetStackAllocator());
+    Pal::SwizzledFormat* pPalFormatList = nullptr;
+
     // Convert input create info
     Pal::ImageCreateInfo palCreateInfo  = {};
     uint32_t concurrentQueueFlags    = 0;
@@ -616,9 +616,22 @@ VkResult Image::Create(
 
         case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR:
         {
-            // TODO: SWDEV-130757 - Vulkan - VK_KHR_image_format_list
-            // The issue is kept open until we figure out whether we can take advantage of the additional information
-            // provided by the applications about the list of formats the image will be used with.
+            pPalFormatList = virtStackFrame.AllocArray<Pal::SwizzledFormat>(
+                                 pVkImageFormatListCreateInfoKHR->viewFormatCount);
+
+            palCreateInfo.viewFormatCount = 0;
+            palCreateInfo.pViewFormats    = pPalFormatList;
+
+            for (uint32_t i = 0; i < pVkImageFormatListCreateInfoKHR->viewFormatCount; ++i)
+            {
+                // Skip any entries that specify the same format as the base format of the image as the PAL interface
+                // expects that to be excluded from the list.
+                if (pVkImageFormatListCreateInfoKHR->pViewFormats[i] != pImageCreateInfo->format)
+                {
+                    pPalFormatList[palCreateInfo.viewFormatCount++] =
+                        VkToPalFormat(pVkImageFormatListCreateInfoKHR->pViewFormats[i]);
+                }
+            }
             break;
         }
 
@@ -788,6 +801,11 @@ VkResult Image::Create(
             // Failure in creating the PAL image object. Free system memory and return error.
             pAllocator->pfnFree(pAllocator->pUserData, pMemory);
         }
+    }
+
+    if (pPalFormatList != nullptr)
+    {
+        virtStackFrame.FreeArray(pPalFormatList);
     }
 
     return result;

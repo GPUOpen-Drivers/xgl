@@ -151,7 +151,7 @@ public:
     void ResetShader(CacheEntryHandle         hEntry);
 
     Result RetrieveShader(CacheEntryHandle   hEntry,
-                          void**             ppBlob,
+                          const void**       ppBlob,
                           size_t*            pSize);
 
     bool IsCompatible(const ShaderCacheCreateInfo* pCreateInfo, const ShaderCacheAuxCreateInfo* pAuxCreateInfo);

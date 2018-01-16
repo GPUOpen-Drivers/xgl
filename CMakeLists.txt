@@ -26,7 +26,15 @@
 cmake_minimum_required(VERSION 3.5)
 project(XGL VERSION 1 LANGUAGES C CXX)
 
+### Set Default Build Type #############################################################################################
+if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  message(STATUS "No build type selected, default to release")
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type (default Release)" FORCE)
+endif()
+
 ### CMake Includes #####################################################################################################
+SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/../pal/cmake/Modules)
+SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/icd/imported/pal/cmake/Modules)
 include(CMakeDependentOption)
 include(AmdCmakeHelper)
 include(SetupAmdGlobalRoots)
@@ -85,7 +93,7 @@ if(ICD_GPUOPEN_DEVMODE_BUILD)
 endif()
 
 # PAL
-set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/icd/imported/pal CACHE PATH "Specify the path to the PAL project.")
+set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/../pal CACHE PATH "Specify the path to the PAL project.")
 set(PAL_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_PAL_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(PAL_CLIENT "VULKAN" CACHE STRING "${PROJECT_NAME} override." FORCE)
 
@@ -99,7 +107,7 @@ set(PAL_BUILD_GPUOPEN ${ICD_GPUOPEN_DEVMODE_BUILD} CACHE BOOL "${PROJECT_NAME} o
 set(PAL_BUILD_VIDEO ${ICD_BUILD_VIDEO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 # LLVM
-set(XGL_LLVM_SRC_PATH ${PROJECT_SOURCE_DIR}/icd/imported/llvm CACHE PATH "Specify the path to the LLVM.")
+set(XGL_LLVM_SRC_PATH ${PROJECT_SOURCE_DIR}/../llvm CACHE PATH "Specify the path to the LLVM.")
 
 ### Generator Dependencies #############################################################################################
 find_package(PythonInterp 3)

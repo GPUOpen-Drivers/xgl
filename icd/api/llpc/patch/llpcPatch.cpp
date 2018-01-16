@@ -45,12 +45,12 @@
 
 #include "llpcContext.h"
 #include "llpcInternal.h"
+#include "llpcPassDeadFuncRemove.h"
+#include "llpcPassExternalLibLink.h"
 #include "llpcPatch.h"
 #include "llpcPatchBufferOp.h"
-#include "llpcPatchDeadFuncRemove.h"
 #include "llpcPatchDescriptorLoad.h"
 #include "llpcPatchEntryPointMutate.h"
-#include "llpcPatchExternalLibLink.h"
 #include "llpcPatchImageOp.h"
 #include "llpcPatchInOutImportExport.h"
 #include "llpcPatchPushConstOp.h"
@@ -114,7 +114,7 @@ Result Patch::Run(
     Module* pModule)    // [in,out] LLVM module to be run on
 {
     Result result = Result::Success;
-
+    Context* pContext = static_cast<Context*>(&pModule->getContext());
     // Do patching opertions
     legacy::PassManager passMgr;
 
@@ -131,12 +131,12 @@ Result Patch::Run(
     passMgr.add(PatchBufferOp::Create());
 
     // Link external libraries and remove dead functions after it
-    passMgr.add(PatchExternalLibLink::Create());
-    passMgr.add(PatchDeadFuncRemove::Create());
+    passMgr.add(PassExternalLibLink::Create(pContext->GetGlslEmuLibrary()));
+    passMgr.add(PassDeadFuncRemove::Create());
 
     // Function inlining and remove dead functions after it
     passMgr.add(createFunctionInliningPass(InlineThreshold));
-    passMgr.add(PatchDeadFuncRemove::Create());
+    passMgr.add(PassDeadFuncRemove::Create());
 
     // Patch input import and output export operations
     passMgr.add(PatchInOutImportExport::Create());
@@ -146,7 +146,7 @@ Result Patch::Run(
 
     // Prior to general optimization, do funcion inlining and dead function removal once again
     passMgr.add(createFunctionInliningPass(InlineThreshold));
-    passMgr.add(PatchDeadFuncRemove::Create());
+    passMgr.add(PassDeadFuncRemove::Create());
 
     // Add some optimization passes
     passMgr.add(createPromoteMemoryToRegisterPass());

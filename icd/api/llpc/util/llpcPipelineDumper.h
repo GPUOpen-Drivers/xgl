@@ -40,6 +40,7 @@ struct ComputePipelineBuildInfo;
 struct GraphicsPipelineBuildInfo;
 struct BinaryData;
 namespace MetroHash { struct Hash; };
+class MetroHash64;
 
 class PipelineDumper
 {
@@ -58,6 +59,12 @@ public:
     static void DumpPipelineBinary(std::ostream*                    pDumpFile,
                                    GfxIpVersion                     gfxIp,
                                    const BinaryData*                pPipelineBin);
+
+    static uint64_t GetGraphicsPipelineHash(const GraphicsPipelineBuildInfo* pPipelineInfo);
+    static uint64_t GetComputePipelineHash(const ComputePipelineBuildInfo* pPipelineInfo);
+
+    static MetroHash::Hash GenerateHashForGraphicsPipeline(const GraphicsPipelineBuildInfo* pPipeline);
+    static MetroHash::Hash GenerateHashForComputePipeline(const ComputePipelineBuildInfo* pPipeline);
 
 private:
     static std::string GetSpirvBinaryFileName(const MetroHash::Hash* pHash);
@@ -81,6 +88,13 @@ private:
                                      std::ostream&                   dumpFile);
      static void DumpGraphicsStateInfo(const GraphicsPipelineBuildInfo* pPipelineInfo,
                                       std::ostream&                    dumpFile);
+
+    static void UpdateHashForPipelineShaderInfo(ShaderStage               stage,
+                                                const PipelineShaderInfo* pShaderInfo,
+                                                MetroHash64*              pHasher);
+
+    static void UpdateHashForResourceMappingNode(const ResourceMappingNode* pUserDataNode,
+                                                 MetroHash64*               pHasher);
 };
 
 } // Llpc

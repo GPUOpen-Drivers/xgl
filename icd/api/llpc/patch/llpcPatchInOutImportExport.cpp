@@ -854,14 +854,7 @@ void PatchInOutImportExport::visitReturnInst(
     ReturnInst& retInst)  // [in] "Ret" instruction
 {
     // We only handle the "ret" of shader entry point
-    const auto callConv = retInst.getParent()->getParent()->getCallingConv();
-    if ((callConv != CallingConv::AMDGPU_LS) &&
-        (callConv != CallingConv::AMDGPU_HS) &&
-        (callConv != CallingConv::AMDGPU_GS) &&
-        (callConv != CallingConv::AMDGPU_ES) &&
-        (callConv != CallingConv::AMDGPU_VS) &&
-        (callConv != CallingConv::AMDGPU_PS) &&
-        (callConv != CallingConv::AMDGPU_CS))
+    if (retInst.getParent()->getParent()->getDLLStorageClass() != GlobalValue::DLLExportStorageClass)
     {
         return;
     }
@@ -943,7 +936,7 @@ void PatchInOutImportExport::visitReturnInst(
             args.push_back(pZero);                                                     // src0
             args.push_back(pZero);                                                     // src1
             args.push_back(pZero);                                                     // src2
-            args.push_back(pZero);                                                     // src3
+            args.push_back(pOne);                                                      // src3
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));             // done
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));             // vm
 
@@ -1342,16 +1335,16 @@ void PatchInOutImportExport::visitReturnInst(
 #endif
         }
 
-        // NOTE: If no generic outputs are present in this sha shader, we have to export a dummy one
+        // NOTE: If no generic outputs are present in this shader, we have to export a dummy one
         if (inOutUsage.expCount == 0)
         {
             args.clear();
             args.push_back(ConstantInt::get(m_pContext->Int32Ty(), EXP_TARGET_PARAM_0)); // tgt
-            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0xF));                // en
-            args.push_back(pZero);                                                       // src0
-            args.push_back(pZero);                                                       // src1
-            args.push_back(pZero);                                                       // src2
-            args.push_back(pOne);                                                        // src3
+            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));                  // en
+            args.push_back(pUndef);                                                      // src0
+            args.push_back(pUndef);                                                      // src1
+            args.push_back(pUndef);                                                      // src2
+            args.push_back(pUndef);                                                      // src3
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));               // done
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));               // vm
 
@@ -1424,11 +1417,11 @@ void PatchInOutImportExport::visitReturnInst(
         {
             args.clear();
             args.push_back(ConstantInt::get(m_pContext->Int32Ty(), EXP_TARGET_MRT_0)); // tgt
-            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0xF));              // en
+            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0x1));              // en
             args.push_back(pZero);                                                     // src0
-            args.push_back(pZero);                                                     // src1
-            args.push_back(pZero);                                                     // src2
-            args.push_back(pZero);                                                     // src3
+            args.push_back(pUndef);                                                    // src1
+            args.push_back(pUndef);                                                    // src2
+            args.push_back(pUndef);                                                    // src3
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));             // done
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), true));              // vm
 
@@ -4469,10 +4462,16 @@ void PatchInOutImportExport::StoreTessFactorToBuffer(
 
         if (m_pContext->IsTessOffChip())
         {
-            pTfBufferOffset = BinaryOperator::CreateAdd(pTfBufferOffset,
-                                                        ConstantInt::get(m_pContext->Int32Ty(), 4),
-                                                        "",
-                                                        pInsertPos);
+            // NOTE: GFX9 does not support dynamic tessellation control, so additional 4-byte offset is not required for
+            // tessellation off-chip mode.
+            const auto gfxIp = m_pContext->GetGfxIpVersion();
+            if (gfxIp.major != 9)
+            {
+                pTfBufferOffset = BinaryOperator::CreateAdd(pTfBufferOffset,
+                                                            ConstantInt::get(m_pContext->Int32Ty(), 4),
+                                                            "",
+                                                            pInsertPos);
+            }
         }
 
         for (uint32_t i = 0; i < tessFactors.size(); ++i)

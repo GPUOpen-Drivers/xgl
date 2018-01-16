@@ -35,15 +35,7 @@
 
 #include "spirv.hpp"
 #include "llpc.h"
-
-// Disallow the use of the default constructor for a class
-#define LLPC_DISALLOW_DEFAULT_CTOR(_typename)       \
-    _typename();
-
-// Disallow the use of the copy constructor and assignment operator for a class
-#define LLPC_DISALLOW_COPY_AND_ASSIGN(_typename)    \
-    _typename(const _typename&);                    \
-    _typename& operator =(const _typename&);
+#include "llpcUtil.h"
 
 namespace llvm { class Module; }
 namespace Llpc { class Context; }
@@ -121,12 +113,6 @@ namespace LlpcName
 
 } // LlpcName
 
-// Invalid value
-static const uint32_t InvalidValue  = ~0;
-
-// Size of vec4
-static const uint32_t SizeOfVec4 = sizeof(float) * 4;
-
 // Maximum count of input/output locations that a shader stage (except fragment shader outputs) is allowed to specify
 static const uint32_t MaxInOutLocCount = 32;
 
@@ -185,26 +171,11 @@ std::string GetTypeNameForScalarOrVector(llvm::Type* pTy);
 // Gets the shader stage from the specified LLVM module.
 ShaderStage GetShaderStageFromModule(llvm::Module* pModule);
 
-// Gets the name string of shader stage.
-const char* GetShaderStageName(ShaderStage shaderStage);
-
-// Gets name string of the abbreviation for the specified shader stage.
-const char* GetShaderStageAbbreviation(ShaderStage shaderStage, bool upper = false);
-
 // Gets the argument from the specified function according to the argument index.
 llvm::Value* GetFunctionArgument(llvm::Function* pFunc, uint32_t idx);
 
 // Checks if one type can be bitcasted to the other (type1 -> type2).
 bool CanBitCast(const llvm::Type* pTy1, const llvm::Type* pTy2);
-
-// Gets the symbol name for .text section.
-const char* GetSymbolNameForTextSection(ShaderStage stage, uint32_t stageMask);
-
-// Gets the symbol name for .AMDGPU.disasm section.
-const char* GetSymbolNameForDisasmSection(ShaderStage stage, uint32_t stageMask);
-
-// Gets the symbol name for .AMDGPU.csdata section.
-const char* GetSymbolNameForCsdataSection(ShaderStage stage, uint32_t stageMask);
 
 // Checks whether input binary data is SPIR-V binary
 bool IsSpirvBinary(const BinaryData*  pShaderBin);
@@ -218,9 +189,6 @@ uint32_t GetStageMaskFromSpirvBinary(const BinaryData* pSpvBin, const char* pEnt
 // Verifies if the SPIR-V binary is valid and is supported
 Result VerifySpirvBinary(const BinaryData* pSpvBin);
 
-// Translates shader stage to corresponding stage mask.
-uint32_t ShaderStageToMask(ShaderStage stage);
-
 // Checks if the specified value actually represents a don't-care value (0xFFFFFFFF).
 bool IsDontCareValue(llvm::Value* pValue);
 
@@ -232,93 +200,6 @@ int64_t GetPerfFrequency();
 
 // Retrieves the current value of the performance counter.
 int64_t GetPerfCpuTime();
-
-// =====================================================================================================================
-// Increments a pointer by nBytes by first casting it to a uint8_t*.
-//
-// Returns incremented pointer.
-inline void* VoidPtrInc(
-    const void* p,         // [in] Pointer to be incremented.
-    size_t      numBytes)  // Number of bytes to increment the pointer by
-{
-    void* ptr = const_cast<void*>(p);
-    return (static_cast<uint8_t*>(ptr) + numBytes);
-}
-
-// =====================================================================================================================
-// Decrements a pointer by nBytes by first casting it to a uint8_t*.
-//
-// Returns decremented pointer.
-inline void* VoidPtrDec(
-    const void* p,         // [in] Pointer to be decremented.
-    size_t      numBytes)  // Number of bytes to decrement the pointer by
-{
-    void* ptr = const_cast<void*>(p);
-    return (static_cast<uint8_t*>(ptr) - numBytes);
-}
-
-// =====================================================================================================================
-// Finds the number of bytes between two pointers by first casting them to uint8*.
-//
-// This function expects the first pointer to not be smaller than the second.
-//
-// Returns Number of bytes between the two pointers.
-inline size_t VoidPtrDiff(
-    const void* p1,  //< [in] First pointer (higher address).
-    const void* p2)  //< [in] Second pointer (lower address).
-{
-    return (static_cast<const uint8_t*>(p1) - static_cast<const uint8_t*>(p2));
-}
-
-// =====================================================================================================================
-// Determines if a value is a power of two.
-inline bool IsPowerOfTwo(
-    uint64_t value)  // Value to check.
-{
-    return (value == 0) ? false : ((value & (value - 1)) == 0);
-}
-
-// =====================================================================================================================
-// Rounds the specified uint "value" up to the nearest value meeting the specified "alignment".  Only power of 2
-// alignments are supported by this function.
-template<typename T>
-inline T Pow2Align(
-    T        value,      // Value to align.
-    uint64_t alignment)  // Desired alignment (must be a power of 2)
-{
-    LLPC_ASSERT(IsPowerOfTwo(alignment));
-    return ((value + static_cast<T>(alignment) - 1) & ~(static_cast<T>(alignment) - 1));
-}
-
-// =====================================================================================================================
-// Rounds up the specified integer to the nearest multiple of the specified alignment value.
-// Returns rounded value.
-template<typename T>
-inline T RoundUpToMultiple(
-    T operand,   //< Value to be aligned.
-    T alignment) //< Alignment desired.
-{
-    return (((operand + (alignment - 1)) / alignment) * alignment);
-}
-
-// =====================================================================================================================
-// Rounds down the specified integer to the nearest multiple of the specified alignment value.
-// Returns rounded value.
-template<typename T>
-inline T RoundDownToMultiple(
-    T operand,    //< Value to be aligned.
-    T alignment)  //< Alignment desired.
-{
-    return ((operand / alignment) * alignment);
-}
-
-// ===================================================================================
-// Returns the bits of a floating point value as an unsigned integer.
-inline uint32_t FloatToBits(
-    float f)        // Float to be converted to bits
-{
-    return (*(reinterpret_cast<uint32_t*>(&f)));
-}
 
 // =====================================================================================================================
 // Represents the result of CPU time profiling.

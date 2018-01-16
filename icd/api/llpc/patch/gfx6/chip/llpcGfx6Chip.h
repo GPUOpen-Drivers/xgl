@@ -32,6 +32,7 @@
 
 #include <cstdint>
 #include <unordered_map>
+#include "llpcAbiMetadata.h"
 #include "llpcElf.h"
 
 namespace Llpc
@@ -51,9 +52,6 @@ namespace Gfx6
 
 // Initializes register ID and its value
 #define INIT_REG(_reg)            { _reg##_ID = mm##_reg; _reg##_VAL.u32All = 0; }
-
-// Case label for switch, set register value
-#define CASE_SET_REG(_stage, _reg, _val)   case (mm##_reg * 4): { (_stage)->_reg##_VAL.u32All = (_val); break; }
 
 // Adds an entry for the map from register ID to its name string
 #define ADD_REG_MAP(_reg)         RegNameMap[mm##_reg * 4] = #_reg;

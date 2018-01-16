@@ -707,7 +707,7 @@ void ShaderCache::ResetShader(
 // Retrieves the shader from the cache which is identified by the specified entry handle.
 Result ShaderCache::RetrieveShader(
     CacheEntryHandle   hEntry,   // [in] Handle of shader cache entry
-    void**             ppBlob,   // [out] Shader data
+    const void**       ppBlob,   // [out] Shader data
     size_t*            pSize)    // [out] size of shader data in bytes
 {
     Result result = Result::Success;

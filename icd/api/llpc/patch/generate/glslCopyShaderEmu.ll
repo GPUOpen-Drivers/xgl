@@ -42,22 +42,29 @@ target triple = "spir64-unknown-unknown"
 ; Loads descriptor of GS-VS ring buffer (only stream 0 is supported)
 define <4 x i32> @llpc.descriptor.load.gsvsringbuffer(i32 %internalTablePtrLow, i64 %ringOutOffset) #0
 {
-    %1 = insertelement <2 x i32> undef, i32 %internalTablePtrLow, i32 0
-    %2 = insertelement <2 x i32> %1, i32 1, i32 1
-    %3 = bitcast <2 x i32> %2 to i64
-    %4 = shl i64 %ringOutOffset, 4
-    %5 = add i64 %3, %4
-    %6 = inttoptr i64 %5 to <4 x i32> addrspace(2)*, !amdgpu.uniform !1
-    %7 = load <4 x i32>, <4 x i32> addrspace(2)* %6
+    ; Get address high word from program counter
+    %1 = call i64 @llvm.amdgcn.s.getpc()
+    %2 = bitcast i64 %1 to <2 x i32>
+    %3 = extractelement <2 x i32> %2, i32 1
 
-    ret <4 x i32> %7
+    %4 = insertelement <2 x i32> undef, i32 %internalTablePtrLow, i32 0
+    %5 = insertelement <2 x i32> %4, i32 %3, i32 1
+    %6 = bitcast <2 x i32> %5 to i64
+    %7 = shl i64 %ringOutOffset, 4
+    %8 = add i64 %6, %7
+    %9 = inttoptr i64 %8 to <4 x i32> addrspace(2)*, !amdgpu.uniform !1
+    %10 = load <4 x i32>, <4 x i32> addrspace(2)* %9
+
+    ret <4 x i32> %10
 }
 
 ; Copy shader skeleton
-define amdgpu_vs void @main(i32 inreg, i32 inreg, i32) #0 !spirv.ExecutionModel !3 {
+define dllexport amdgpu_vs void @_amdgpu_vs_main(i32 inreg, i32 inreg, i32) #0 !spirv.ExecutionModel !3 {
 .entry:
     ret void
 }
+
+declare i64 @llvm.amdgcn.s.getpc() #0
 
 attributes #0 = { nounwind }
 

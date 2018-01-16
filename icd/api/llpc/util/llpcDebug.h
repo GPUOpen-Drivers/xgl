@@ -57,6 +57,15 @@
 // Output general message
 #define LLPC_OUTS(_msg) { if (EnableOuts()) { outs() << _msg; } }
 
+// Disallow the use of the default constructor for a class
+#define LLPC_DISALLOW_DEFAULT_CTOR(_typename)       \
+    _typename();
+
+// Disallow the use of the copy constructor and assignment operator for a class
+#define LLPC_DISALLOW_COPY_AND_ASSIGN(_typename)    \
+    _typename(const _typename&);                    \
+    _typename& operator =(const _typename&);
+
 namespace llvm { class raw_ostream; }
 namespace llvm { class raw_fd_ostream; }
 
