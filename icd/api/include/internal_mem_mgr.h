@@ -146,6 +146,12 @@ public:
         return m_gpuVA[idx];
     }
 
+    void* CpuAddr(int32_t idx = DefaultDeviceIndex) const
+    {
+        VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
+        return m_memoryPool.groupMemory.CpuAddr(idx);
+    }
+
     Pal::gpusize Offset() const
         { return m_offset; }
 
@@ -210,7 +216,8 @@ public:
         Pal::IGpuMemoryBindable*        pBindable,
         bool                            readOnly,
         InternalMemory*                 pInternalMemory,
-        bool                            removeInvisibleHeap = false);
+        bool                            removeInvisibleHeap = false,
+        bool                            persistentMapped    = false);
 
     void FreeGpuMem(
         const InternalMemory*           pInternalMemory);

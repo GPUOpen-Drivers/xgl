@@ -53,6 +53,7 @@
 #include "palDevice.h"
 #include "palPlatform.h"
 #include "palOglPresent.h"
+#include "palListImpl.h"
 
 #include <new>
 
@@ -85,7 +86,8 @@ Instance::Instance(
 #endif
     m_screenCount(0),
     m_pScreenStorage(nullptr),
-    m_pDevModeMgr(nullptr)
+    m_pDevModeMgr(nullptr),
+    m_debugReportCallbacks(&m_palAllocator)
 #if PAL_ENABLE_PRINTS_ASSERTS
     , m_dispatchTableQueryCount(0)
 #endif
@@ -266,6 +268,13 @@ VkResult Instance::Init(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    // Initialize mutexes used for debug report extension before registering the callback with the Platform.
+    if ((m_logCallbackInternalOnlyMutex.Init() != Pal::Result::Success) ||
+        (m_logCallbackInternalExternalMutex.Init() != Pal::Result::Success))
+    {
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
     // Thunk PAL's memory allocator callbacks to our own
     const Util::AllocCallbacks allocCb =
     {
@@ -276,6 +285,15 @@ VkResult Instance::Init(
 
     Pal::PlatformCreateInfo createInfo = { 0 };
     createInfo.pAllocCb = &allocCb;
+
+    const Util::LogCallbackInfo callbackInfo =
+    {
+        this,
+        &LogCallback
+    };
+
+    createInfo.pLogInfo = &callbackInfo;
+
     createInfo.pSettingsPath = "/etc/amd";
 
     // Switch to "null" GPU mode if requested
@@ -584,6 +602,7 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_SEMAPHORE_CAPABILITIES));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_FENCE_CAPABILITIES));
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_REPORT));
 
         supportedExtensionsPopulated = true;
     }
@@ -820,6 +839,164 @@ VkResult Instance::QueryApplicationProfile(RuntimeSettings* pRuntimeSettings)
     return result;
 }
 #endif
+
+// =====================================================================================================================
+// Callback function used to route debug prints to the VK_EXT_debug_report extension
+void PAL_STDCALL Instance::LogCallback(
+    void*       pClientData,
+    Pal::uint32 level,
+    Pal::uint64 categoryMask,
+    const char* pFormat,
+    va_list     args)
+{
+    Instance* pInstance = reinterpret_cast<Instance*>(pClientData);
+    pInstance->LogMessage(level, categoryMask, pFormat, args);
+}
+
+// =====================================================================================================================
+// Add the given Debug Report Callback to the instance.
+VkResult Instance::RegisterDebugCallback(
+    DebugReportCallback* pCallback)
+{
+    VkResult result = VK_SUCCESS;
+
+    Pal::Result palResult = m_debugReportCallbacks.PushBack(pCallback);
+
+    if (palResult == Pal::Result::Success)
+    {
+        result = VK_SUCCESS;
+    }
+    else
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Remove the given Debug Report Callback from the instance.
+void Instance::UnregisterDebugCallback(
+    DebugReportCallback* pCallback)
+{
+    auto it = m_debugReportCallbacks.Begin();
+
+    DebugReportCallback* element = *it.Get();
+
+    while (element != nullptr)
+    {
+        if (pCallback == element)
+        {
+            m_debugReportCallbacks.Erase(&it);
+
+            // Each element should only be in the list once; break out of loop once found
+            element = nullptr;
+        }
+        else
+        {
+            it.Next();
+            element = *it.Get();
+        }
+    }
+}
+
+// =====================================================================================================================
+// Convert log message data to match the format of the external callback, then call required external callbacks
+void Instance::LogMessage(uint32_t    level,
+                          uint64_t    categoryMask,
+                          const char* pFormat,
+                          va_list     args)
+{
+    // Guarantee serialization of this function to keep internal log messages from getting intermixed
+    m_logCallbackInternalOnlyMutex.Lock();
+
+    uint32_t flags = 0;
+
+    if (categoryMask == Pal::LogCategoryMaskInternal)
+    {
+        if ((level == static_cast<uint32_t>(Pal::LogLevel::Info)) ||
+            (level == static_cast<uint32_t>(Pal::LogLevel::Verbose)))
+        {
+            flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT;
+        }
+        else if (level == static_cast<uint32_t>(Pal::LogLevel::Alert))
+        {
+            flags = VK_DEBUG_REPORT_WARNING_BIT_EXT;
+        }
+        else if (level == static_cast<uint32_t>(Pal::LogLevel::Error))
+        {
+            flags = VK_DEBUG_REPORT_ERROR_BIT_EXT;
+        }
+        else if (level == static_cast<uint32_t>(Pal::LogLevel::Debug))
+        {
+            flags = VK_DEBUG_REPORT_DEBUG_BIT_EXT;
+        }
+        else if (level == static_cast<uint32_t>(Pal::LogLevel::Always))
+        {
+            flags = VK_DEBUG_REPORT_DEBUG_BIT_EXT |
+                    VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
+                    VK_DEBUG_REPORT_WARNING_BIT_EXT |
+                    VK_DEBUG_REPORT_ERROR_BIT_EXT;
+        }
+    }
+    else if (categoryMask == Pal::LogCategoryMaskPerformance)
+    {
+        flags = VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+    }
+
+    constexpr uint64_t  object = 0;
+    constexpr size_t    location = 0;
+    constexpr int32_t   messageCode = 0;
+    constexpr char      layerPrefix[] = "AMDVLK\0";
+
+    constexpr uint32_t messageSize = 256;
+    char message[messageSize];
+
+    Util::Vsnprintf(message,
+                    messageSize,
+                    pFormat,
+                    args);
+
+    CallExternalCallbacks(flags,
+                          VK_DEBUG_REPORT_OBJECT_TYPE_UNKNOWN_EXT,
+                          object,
+                          location,
+                          messageCode,
+                          layerPrefix,
+                          message);
+
+    m_logCallbackInternalOnlyMutex.Unlock();
+}
+
+// =====================================================================================================================
+// Call all registered callbacks with the given VkDebugReportFlagsEXT.
+void Instance::CallExternalCallbacks(
+    VkDebugReportFlagsEXT       flags,
+    VkDebugReportObjectTypeEXT  objectType,
+    uint64_t                    object,
+    size_t                      location,
+    int32_t                     messageCode,
+    const char*                 pLayerPrefix,
+    const char*                 pMessage)
+{
+    // Guarantee serialization of this function to keep internal and external log messages from getting intermixed
+    m_logCallbackInternalExternalMutex.Lock();
+
+    for (auto it = m_debugReportCallbacks.Begin(); it.Get() != nullptr; it.Next())
+    {
+        DebugReportCallback* element = *it.Get();
+
+        if (flags & element->GetFlags())
+        {
+            PFN_vkDebugReportCallbackEXT pfnCallback = element->GetCallbackFunc();
+            void* pUserData = element->GetUserData();
+
+            (*pfnCallback)(flags, objectType, object, location, messageCode, pLayerPrefix, pMessage, pUserData);
+        }
+    }
+
+    m_logCallbackInternalExternalMutex.Unlock();
+}
 
 namespace entry
 {

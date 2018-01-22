@@ -3465,6 +3465,10 @@ SPIRVToLLVM::transShaderDecoration(SPIRVValue *BV, Value *V) {
         InOutDec.Value.BuiltIn = BuiltInPerVertex;
       }
 
+      SPIRVWord Component = SPIRVID_INVALID;
+      if (BV->hasDecorate(DecorationComponent, 0, &Component))
+        InOutDec.Component = Component;
+
       if (BV->hasDecorate(DecorationFlat))
         InOutDec.Interp.Mode = InterpModeFlat;
 
@@ -3482,7 +3486,7 @@ SPIRVToLLVM::transShaderDecoration(SPIRVValue *BV, Value *V) {
 
       SPIRVWord StreamId = SPIRVID_INVALID;
       if (BV->hasDecorate(DecorationStream, 0, &StreamId))
-          InOutDec.StreamId = StreamId;
+        InOutDec.StreamId = StreamId;
 
       Type* MDTy = nullptr;
       SPIRVType* BT = BV->getType()->getPointerElementType();
@@ -3724,6 +3728,10 @@ SPIRVToLLVM::buildShaderInOutMetadata(SPIRVType *BT,
     InOutDec.IsBuiltIn = true;
   }
 
+  SPIRVWord Component = SPIRVID_INVALID;
+  if (BT->hasDecorate(DecorationComponent, 0, &Component))
+    InOutDec.Component = Component;
+
   if (BT->hasDecorate(DecorationFlat))
     InOutDec.Interp.Mode = InterpModeFlat;
 
@@ -3759,6 +3767,7 @@ SPIRVToLLVM::buildShaderInOutMetadata(SPIRVType *BT,
       InOutMD.Value = InOutDec.Value.Loc;
     }
 
+    InOutMD.Component = InOutDec.Component;
     InOutMD.InterpMode = InOutDec.Interp.Mode;
     InOutMD.InterpLoc = InOutDec.Interp.Loc;
     InOutMD.PerPatch = InOutDec.PerPatch;
@@ -3826,6 +3835,7 @@ SPIRVToLLVM::buildShaderInOutMetadata(SPIRVType *BT,
       InOutMD.Value = StartLoc;
     }
 
+    InOutMD.Component = InOutDec.Component;
     InOutMD.InterpMode = InOutDec.Interp.Mode;
     InOutMD.InterpLoc = InOutDec.Interp.Loc;
     InOutMD.PerPatch = InOutDec.PerPatch;
@@ -3860,6 +3870,11 @@ SPIRVToLLVM::buildShaderInOutMetadata(SPIRVType *BT,
         MemberDec.IsBuiltIn = true;
         MemberDec.Value.BuiltIn = MemberBuiltIn;
       }
+
+      SPIRVWord MemberComponent = SPIRVID_INVALID;
+      if (BT->hasMemberDecorate(
+            MemberIdx, DecorationComponent, 0, &MemberComponent))
+        MemberDec.Component = Component;
 
       if (BT->hasMemberDecorate(MemberIdx, DecorationFlat))
         MemberDec.Interp.Mode = InterpModeFlat;

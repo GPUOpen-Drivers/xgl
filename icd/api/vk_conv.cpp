@@ -394,55 +394,530 @@ VK_TO_PAL_DECL_LOOKUP_TABLE(COMPONENT_SWIZZLE,              ChannelSwizzle      
 VK_TO_PAL_DECL_LOOKUP_TABLE(PIPELINE_BIND_POINT,            PipelineBindPoint                                          )
 
 // =====================================================================================================================
+// Converts a PAL::Result value to an equivalent string name
+const char* PalResultName(
+    Pal::Result result)
+{
+    const char* resultName = nullptr;
+
+    switch (result)
+    {
+    case Pal::Result::TooManyFlippableAllocations:
+        resultName = "TooManyFlippableAllocations";
+        break;
+
+    case Pal::Result::PresentOccluded:
+        resultName = "PresentOccluded";
+        break;
+
+    case Pal::Result::Unsupported:
+        resultName = "Unsupported";
+        break;
+
+    case Pal::Result::NotReady:
+        resultName = "NotReady";
+        break;
+
+    case Pal::Result::Timeout:
+        resultName = "Timeout";
+        break;
+
+    case Pal::Result::ErrorFenceNeverSubmitted:
+        resultName = "ErrorFenceNeverSubmitted";
+        break;
+
+    case Pal::Result::EventSet:
+        resultName = "EventSet";
+        break;
+
+    case Pal::Result::EventReset:
+        resultName = "EventReset";
+        break;
+
+    case Pal::Result::ErrorInitializationFailed:
+        resultName = "ErrorInitializationFailed";
+        break;
+
+    case Pal::Result::ErrorOutOfMemory:
+        resultName = "ErrorOutOfMemory";
+        break;
+
+    case Pal::Result::ErrorOutOfGpuMemory:
+        resultName = "ErrorOutOfGpuMemory";
+        break;
+
+    case Pal::Result::ErrorDeviceLost:
+        resultName = "ErrorDeviceLost";
+        break;
+
+    case Pal::Result::ErrorIncompatibleLibrary:
+        resultName = "ErrorIncompatibleLibrary";
+        break;
+
+    case Pal::Result::ErrorGpuMemoryMapFailed:
+        resultName = "ErrorGpuMemoryMapFailed";
+        break;
+
+    case Pal::Result::ErrorNotMappable:
+        resultName = "ErrorNotMappable";
+        break;
+
+    case Pal::Result::ErrorUnknown:
+        resultName = "ErrorUnknown";
+        break;
+
+    case Pal::Result::ErrorUnavailable:
+        resultName = "ErrorUnavailable";
+        break;
+
+    case Pal::Result::ErrorInvalidPointer:
+        resultName = "ErrorInvalidPointer";
+        break;
+
+    case Pal::Result::ErrorInvalidValue:
+        resultName = "ErrorInvalidValue";
+        break;
+
+    case Pal::Result::ErrorInvalidOrdinal:
+        resultName = "ErrorInvalidOrdinal";
+        break;
+
+    case Pal::Result::ErrorInvalidMemorySize:
+        resultName = "ErrorInvalidMemorySize";
+        break;
+
+    case Pal::Result::ErrorInvalidFlags:
+        resultName = "ErrorInvalidFlags";
+        break;
+
+    case Pal::Result::ErrorInvalidAlignment:
+        resultName = "ErrorInvalidAlignment";
+        break;
+
+    case Pal::Result::ErrorInvalidFormat:
+        resultName = "ErrorInvalidFormat";
+        break;
+
+    case Pal::Result::ErrorInvalidImage:
+        resultName = "ErrorInvalidImage";
+        break;
+
+    case Pal::Result::ErrorInvalidDescriptorSetData:
+        resultName = "ErrorInvalidDescriptorSetData";
+        break;
+
+    case Pal::Result::ErrorInvalidQueueType:
+        resultName = "ErrorInvalidQueueType";
+        break;
+
+    case Pal::Result::ErrorUnsupportedShaderIlVersion:
+        resultName = "ErrorUnsupportedShaderIlVersion";
+        break;
+
+    case Pal::Result::ErrorBadShaderCode:
+        resultName = "ErrorBadShaderCode";
+        break;
+
+    case Pal::Result::ErrorBadPipelineData:
+        resultName = "ErrorBadPipelineData";
+        break;
+
+    case Pal::Result::ErrorGpuMemoryUnmapFailed:
+        resultName = "ErrorGpuMemoryUnmapFailed";
+        break;
+
+    case Pal::Result::ErrorIncompatibleDevice:
+        resultName = "ErrorIncompatibleDevice";
+        break;
+
+    case Pal::Result::ErrorBuildingCommandBuffer:
+        resultName = "ErrorBuildingCommandBuffer";
+        break;
+
+    case Pal::Result::ErrorGpuMemoryNotBound:
+        resultName = "ErrorGpuMemoryNotBound";
+        break;
+
+    case Pal::Result::ErrorImageNotShaderAccessible:
+        resultName = "ErrorImageNotShaderAccessible";
+        break;
+
+    case Pal::Result::ErrorInvalidUsageForFormat:
+        resultName = "ErrorInvalidUsageForFormat";
+        break;
+
+    case Pal::Result::ErrorFormatIncompatibleWithImageUsage:
+        resultName = "ErrorFormatIncompatibleWithImageUsage";
+        break;
+
+    case Pal::Result::ErrorThreadGroupTooBig:
+        resultName = "ErrorThreadGroupTooBig";
+        break;
+
+    case Pal::Result::ErrorInvalidMsaaMipLevels:
+        resultName = "ErrorInvalidMsaaMipLevels";
+        break;
+
+    case Pal::Result::ErrorInvalidSampleCount:
+        resultName = "ErrorInvalidSampleCount";
+        break;
+
+    case Pal::Result::ErrorInvalidImageArraySize:
+        resultName = "ErrorInvalidImageArraySize";
+        break;
+
+    case Pal::Result::ErrorInvalid3dImageArraySize:
+        resultName = "ErrorInvalid3dImageArraySize";
+        break;
+
+    case Pal::Result::ErrorInvalidImageWidth:
+        resultName = "ErrorInvalidImageWidth";
+        break;
+
+    case Pal::Result::ErrorInvalidImageHeight:
+        resultName = "ErrorInvalidImageHeight";
+        break;
+
+    case Pal::Result::ErrorInvalidImageDepth:
+        resultName = "ErrorInvalidImageDepth";
+        break;
+
+    case Pal::Result::ErrorInvalidMipCount:
+        resultName = "ErrorInvalidMipCount";
+        break;
+
+    case Pal::Result::ErrorInvalidBaseMipLevel:
+        resultName = "ErrorInvalidBaseMipLevel";
+        break;
+
+    case Pal::Result::ErrorInvalidViewArraySize:
+        resultName = "ErrorInvalidViewArraySize";
+        break;
+
+    case Pal::Result::ErrorInvalidViewBaseSlice:
+        resultName = "ErrorInvalidViewBaseSlice";
+        break;
+
+    case Pal::Result::ErrorInsufficientImageArraySize:
+        resultName = "ErrorInsufficientImageArraySize";
+        break;
+
+    case Pal::Result::ErrorCubemapNonSquareFaceSize:
+        resultName = "ErrorCubemapNonSquareFaceSize";
+        break;
+
+    case Pal::Result::ErrorInvalidImageTargetUsage:
+        resultName = "ErrorInvalidImageTargetUsage";
+        break;
+
+    case Pal::Result::ErrorMissingDepthStencilUsage:
+        resultName = "ErrorMissingDepthStencilUsage";
+        break;
+
+    case Pal::Result::ErrorInvalidColorTargetType:
+        resultName = "ErrorInvalidColorTargetType";
+        break;
+
+    case Pal::Result::ErrorInvalidDepthTargetType:
+        resultName = "ErrorInvalidDepthTargetType";
+        break;
+
+    case Pal::Result::ErrorInvalidMsaaType:
+        resultName = "ErrorInvalidMsaaType";
+        break;
+
+    case Pal::Result::ErrorInvalidCompressedImageType:
+        resultName = "ErrorInvalidCompressedImageType";
+        break;
+
+    case Pal::Result::ErrorImageAspectUnavailable:
+        resultName = "ErrorImageAspectUnavailable";
+        break;
+
+    case Pal::Result::ErrorInvalidFormatSwizzle:
+        resultName = "ErrorInvalidFormatSwizzle";
+        break;
+
+    case Pal::Result::ErrorViewTypeIncompatibleWithImageType:
+        resultName = "ErrorViewTypeIncompatibleWithImageType";
+        break;
+
+    case Pal::Result::ErrorCubemapIncompatibleWithMsaa:
+        resultName = "ErrorCubemapIncompatibleWithMsaa";
+        break;
+
+    case Pal::Result::ErrorInvalidMsaaFormat:
+        resultName = "ErrorInvalidMsaaFormat";
+        break;
+
+    case Pal::Result::ErrorFormatIncompatibleWithImageFormat:
+        resultName = "ErrorFormatIncompatibleWithImageFormat";
+        break;
+
+    case Pal::Result::ErrorFormatIncompatibleWithImageAspect:
+        resultName = "ErrorFormatIncompatibleWithImageAspect";
+        break;
+
+    case Pal::Result::ErrorFullscreenUnavailable:
+        resultName = "ErrorFullscreenUnavailable";
+        break;
+
+    case Pal::Result::ErrorScreenRemoved:
+        resultName = "ErrorScreenRemoved";
+        break;
+
+    case Pal::Result::ErrorIncompatibleScreenMode:
+        resultName = "ErrorIncompatibleScreenMode";
+        break;
+
+    case Pal::Result::ErrorMultiDevicePresentFailed:
+        resultName = "ErrorMultiDevicePresentFailed";
+        break;
+
+    case Pal::Result::ErrorWindowedPresentUnavailable:
+        resultName = "ErrorWindowedPresentUnavailable";
+        break;
+
+    case Pal::Result::ErrorInvalidResolution:
+        resultName = "ErrorInvalidResolution";
+        break;
+
+    case Pal::Result::ErrorInvalidObjectType:
+        resultName = "ErrorInvalidObjectType";
+        break;
+
+    case Pal::Result::ErrorTooManyMemoryReferences:
+        resultName = "ErrorTooManyMemoryReferences";
+        break;
+
+    case Pal::Result::ErrorNotShareable:
+        resultName = "ErrorNotShareable";
+        break;
+
+    case Pal::Result::ErrorImageFmaskUnavailable:
+        resultName = "ErrorImageFmaskUnavailable";
+        break;
+
+    case Pal::Result::ErrorPrivateScreenRemoved:
+        resultName = "ErrorPrivateScreenRemoved";
+        break;
+
+    case Pal::Result::ErrorPrivateScreenUsed:
+        resultName = "ErrorPrivateScreenUsed";
+        break;
+
+    case Pal::Result::ErrorTooManyPrivateDisplayImages:
+        resultName = "ErrorTooManyPrivateDisplayImages";
+        break;
+
+    case Pal::Result::ErrorPrivateScreenNotEnabled:
+        resultName = "ErrorPrivateScreenNotEnabled";
+        break;
+
+    default:
+        VK_NOT_IMPLEMENTED;
+        resultName = "??";
+        break;
+    }
+
+    return resultName;
+}
+
+// =====================================================================================================================
+// Converts a VkResult value to an equivalent string name
+const char* VkResultName(
+    VkResult result)
+{
+    const char* errName = nullptr;
+
+    switch (result)
+    {
+    case VkResult::VK_SUCCESS:
+        errName = "VK_SUCCESS";
+        break;
+
+    case VkResult::VK_NOT_READY:
+        errName = "VK_NOT_READY";
+        break;
+
+    case VkResult::VK_TIMEOUT:
+        errName = "VK_TIMEOUT";
+        break;
+
+    case VkResult::VK_EVENT_SET:
+        errName = "VK_EVENT_SET";
+        break;
+
+    case VkResult::VK_EVENT_RESET:
+        errName = "VK_EVENT_RESET";
+        break;
+
+    case VkResult::VK_INCOMPLETE:
+        errName = "VK_INCOMPLETE";
+        break;
+
+    case VkResult::VK_ERROR_OUT_OF_HOST_MEMORY:
+        errName = "VK_ERROR_OUT_OF_HOST_MEMORY";
+        break;
+
+    case VkResult::VK_ERROR_OUT_OF_DEVICE_MEMORY:
+        errName = "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+        break;
+
+    case VkResult::VK_ERROR_INITIALIZATION_FAILED:
+        errName = "VK_ERROR_INITIALIZATION_FAILED";
+        break;
+
+    case VkResult::VK_ERROR_DEVICE_LOST:
+        errName = "VK_ERROR_DEVICE_LOST";
+        break;
+
+    case VkResult::VK_ERROR_MEMORY_MAP_FAILED:
+        errName = "VK_ERROR_MEMORY_MAP_FAILED";
+        break;
+
+    case VkResult::VK_ERROR_LAYER_NOT_PRESENT:
+        errName = "VK_ERROR_LAYER_NOT_PRESENT";
+        break;
+
+    case VkResult::VK_ERROR_EXTENSION_NOT_PRESENT:
+        errName = "VK_ERROR_EXTENSION_NOT_PRESENT";
+        break;
+
+    case VkResult::VK_ERROR_FEATURE_NOT_PRESENT:
+        errName = "VK_ERROR_FEATURE_NOT_PRESENT";
+        break;
+
+    case VkResult::VK_ERROR_INCOMPATIBLE_DRIVER:
+        errName = "VK_ERROR_INCOMPATIBLE_DRIVER";
+        break;
+
+    case VkResult::VK_ERROR_TOO_MANY_OBJECTS:
+        errName = "VK_ERROR_TOO_MANY_OBJECTS";
+        break;
+
+    case VkResult::VK_ERROR_FORMAT_NOT_SUPPORTED:
+        errName = "VK_ERROR_FORMAT_NOT_SUPPORTED";
+        break;
+
+    case VkResult::VK_ERROR_FRAGMENTED_POOL:
+        errName = "VK_ERROR_FRAGMENTED_POOL";
+        break;
+
+    case VkResult::VK_ERROR_OUT_OF_POOL_MEMORY_KHR:
+        errName = "VK_ERROR_OUT_OF_POOL_MEMORY_KHR";
+        break;
+
+    case VkResult::VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR:
+        errName = "VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR";
+        break;
+
+    case VkResult::VK_ERROR_SURFACE_LOST_KHR:
+        errName = "VK_ERROR_SURFACE_LOST_KHR";
+        break;
+
+    case VkResult::VK_ERROR_NATIVE_WINDOW_IN_USE_KHR:
+        errName = "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
+        break;
+
+    case VkResult::VK_SUBOPTIMAL_KHR:
+        errName = "VK_SUBOPTIMAL_KHR";
+        break;
+
+    case VkResult::VK_ERROR_OUT_OF_DATE_KHR:
+        errName = "VK_ERROR_OUT_OF_DATE_KHR";
+        break;
+
+    case VkResult::VK_ERROR_INCOMPATIBLE_DISPLAY_KHR:
+        errName = "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR";
+        break;
+
+    case VkResult::VK_ERROR_VALIDATION_FAILED_EXT:
+        errName = "VK_ERROR_VALIDATION_FAILED_EXT";
+        break;
+
+    case VkResult::VK_ERROR_INVALID_SHADER_NV:
+        errName = "VK_ERROR_INVALID_SHADER_NV";
+        break;
+
+    case VkResult::VK_ERROR_NOT_PERMITTED_EXT:
+        errName = "VK_ERROR_NOT_PERMITTED_EXT";
+        break;
+
+    default:
+        VK_NOT_IMPLEMENTED;
+        errName = "??";
+        break;
+    };
+
+    return errName;
+}
+
+// =====================================================================================================================
 // Converts a non-Success PAL result to an equivalent VK error
 VkResult PalToVkError(
     Pal::Result result)
 {
     VK_ASSERT(result != Pal::Result::Success);
 
+    VkResult vkResult = VK_SUCCESS;
+
     switch (result)
     {
     // These PAL error codes currently aren't handled specially and they indicate success otherwise
     case Pal::Result::TooManyFlippableAllocations:
     case Pal::Result::PresentOccluded:
-        return VK_SUCCESS;
+        vkResult = VK_SUCCESS;
+        break;
 
     case Pal::Result::Unsupported:
-        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        vkResult = VK_ERROR_FORMAT_NOT_SUPPORTED;
+        break;
 
     case Pal::Result::NotReady:
-        return VK_NOT_READY;
+        vkResult = VK_NOT_READY;
+        break;
 
     case Pal::Result::Timeout:
     case Pal::Result::ErrorFenceNeverSubmitted:
-        return VK_TIMEOUT;
+        vkResult = VK_TIMEOUT;
+        break;
 
     case Pal::Result::EventSet:
-        return VK_EVENT_SET;
+        vkResult = VK_EVENT_SET;
+        break;
 
     case Pal::Result::EventReset:
-        return VK_EVENT_RESET;
+        vkResult = VK_EVENT_RESET;
+        break;
 
     case Pal::Result::ErrorInitializationFailed:
-        return VK_ERROR_INITIALIZATION_FAILED;
+        vkResult = VK_ERROR_INITIALIZATION_FAILED;
+        break;
 
     case Pal::Result::ErrorOutOfMemory:
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
+        vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        break;
 
     case Pal::Result::ErrorOutOfGpuMemory:
-        return VK_ERROR_OUT_OF_DEVICE_MEMORY;
+        vkResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+        break;
 
     case Pal::Result::ErrorDeviceLost:
-        return VK_ERROR_DEVICE_LOST;
+        vkResult = VK_ERROR_DEVICE_LOST;
+        break;
 
     case Pal::Result::ErrorIncompatibleLibrary:
-        return VK_ERROR_INCOMPATIBLE_DRIVER;
+        vkResult = VK_ERROR_INCOMPATIBLE_DRIVER;
+        break;
 
     case Pal::Result::ErrorGpuMemoryMapFailed:
-        return VK_ERROR_MEMORY_MAP_FAILED;
+        vkResult = VK_ERROR_MEMORY_MAP_FAILED;
+        break;
 
     case Pal::Result::ErrorNotMappable:
-        return VK_ERROR_MEMORY_MAP_FAILED;
+        vkResult = VK_ERROR_MEMORY_MAP_FAILED;
+        break;
 
     case Pal::Result::ErrorUnknown:
     case Pal::Result::ErrorUnavailable:
@@ -499,7 +974,8 @@ VkResult PalToVkError(
     case Pal::Result::ErrorMultiDevicePresentFailed:
     case Pal::Result::ErrorWindowedPresentUnavailable:
     case Pal::Result::ErrorInvalidResolution:
-        return VK_ERROR_INITIALIZATION_FAILED;
+        vkResult = VK_ERROR_INITIALIZATION_FAILED;
+        break;
 
     case Pal::Result::ErrorInvalidObjectType:
         // This is only generated by RemapVirtualMemoryPages currently which is only used
@@ -520,8 +996,17 @@ VkResult PalToVkError(
         // There's no private screen support yet. Fall through to the default path.
     default:
         VK_NOT_IMPLEMENTED;
-        return VK_ERROR_INITIALIZATION_FAILED;
+        vkResult = VK_ERROR_INITIALIZATION_FAILED;
+        break;
     }
+
+#if PAL_ENABLE_PRINTS_ASSERTS
+    const char* palErrorName = PalResultName(result);
+    const char* vkErrorName = VkResultName(vkResult);
+    PAL_DPINFO("Vulkan error: %s(%d), from Pal error: Pal::Result::%s(%d)", vkErrorName, vkResult, palErrorName, result);
+#endif
+
+    return vkResult;
 }
 
 // =====================================================================================================================

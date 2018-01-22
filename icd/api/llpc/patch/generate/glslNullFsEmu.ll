@@ -22,8 +22,8 @@ target triple = "spir64-unknown-unknown"
 ;
 ; #version 450
 ;
-; layout (location = 0) in vec4 fragIn;
-; layout (location = 0) out vec4 fragOut;
+; layout (location = 0) in float fragIn;
+; layout (location = 0) out float fragOut;
 ;
 ; void main()
 ; {
@@ -31,16 +31,16 @@ target triple = "spir64-unknown-unknown"
 ; }
 ;
 
-define dllexport void @main() #0 !spirv.ExecutionModel !5
+define dllexport amdgpu_ps void @main() #0 !spirv.ExecutionModel !5
 {
 .entry:
-    %0 = tail call float @llpc.input.import.generic.f32(i32 0, i32 0, i32 1) #0
-    tail call void @llpc.output.export.generic.f32(i32 0, float %0) #0
+    %0 = tail call float @llpc.input.import.generic.f32(i32 0, i32 0, i32 0, i32 1) #0
+    tail call void @llpc.output.export.generic.f32(i32 0, i32 0, float %0) #0
     ret void
 }
 
-declare float @llpc.input.import.generic.f32(i32, i32, i32) #0
-declare void @llpc.output.export.generic.f32(i32, float) #0
+declare float @llpc.input.import.generic.f32(i32, i32, i32, i32) #0
+declare void @llpc.output.export.generic.f32(i32, i32, float) #0
 
 attributes #0 = { nounwind }
 

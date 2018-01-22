@@ -195,7 +195,9 @@ protected:
         void*                       pAllocHandle,
         VkDescriptorSet*            pHandle);
 
-    void InitImmutableDescriptors(uint32_t numPalDevices);
+    void InitImmutableDescriptors(
+        const DescriptorSetLayout*  pLayout,
+        uint32_t                    numPalDevices);
 
     void* AllocHandle() const
         { return m_pAllocHandle; }

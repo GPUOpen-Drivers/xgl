@@ -50,6 +50,7 @@ class PatchInOutImportExport:
 public:
     PatchInOutImportExport();
     virtual ~PatchInOutImportExport();
+
     virtual bool runOnModule(llvm::Module& module);
     virtual void visitCallInst(llvm::CallInst& callInst);
     virtual void visitReturnInst(llvm::ReturnInst& retInst);
@@ -64,7 +65,10 @@ public:
 private:
     LLPC_DISALLOW_COPY_AND_ASSIGN(PatchInOutImportExport);
 
-    llvm::Value* PatchVsGenericInputImport(llvm::Type* pInputTy, uint32_t location, llvm::Instruction* pInsertPos);
+    llvm::Value* PatchVsGenericInputImport(llvm::Type*        pInputTy,
+                                           uint32_t           location,
+                                           uint32_t           compIdx,
+                                           llvm::Instruction* pInsertPos);
     llvm::Value* PatchTcsGenericInputImport(llvm::Type*        pInputTy,
                                             uint32_t           location,
                                             llvm::Value*       pLocOffset,
@@ -79,6 +83,7 @@ private:
                                             llvm::Instruction* pInsertPos);
     llvm::Value* PatchGsGenericInputImport(llvm::Type*        pInputTy,
                                            uint32_t           location,
+                                           uint32_t           compIdx,
                                            llvm::Value*       pVertexIdx,
                                            llvm::Instruction* pInsertPos);
     llvm::Value* PatchFsGenericInputImport(llvm::Type*        pInputTy,
@@ -97,19 +102,29 @@ private:
                                              llvm::Value*       pVertexIdx,
                                              llvm::Instruction* pInsertPos);
 
-    void PatchVsGenericOutputExport(llvm::Value* pOutput, uint32_t location, llvm::Instruction* pInsertPos);
+    void PatchVsGenericOutputExport(llvm::Value*       pOutput,
+                                    uint32_t           location,
+                                    uint32_t           compIdx,
+                                    llvm::Instruction* pInsertPos);
     void PatchTcsGenericOutputExport(llvm::Value*       pOutput,
                                      uint32_t           location,
                                      llvm::Value*       pLocOffset,
                                      llvm::Value*       pCompIdx,
                                      llvm::Value*       pVertexIdx,
                                      llvm::Instruction* pInsertPos);
-    void PatchTesGenericOutputExport(llvm::Value* pOutput, uint32_t location, llvm::Instruction* pInsertPos);
+    void PatchTesGenericOutputExport(llvm::Value*       pOutput,
+                                     uint32_t           location,
+                                     uint32_t           compIdx,
+                                     llvm::Instruction* pInsertPos);
     void PatchGsGenericOutputExport(llvm::Value*       pOutput,
                                     uint32_t           location,
+                                    uint32_t           compIdx,
                                     uint32_t           streamId,
                                     llvm::Instruction* pInsertPos);
-    void PatchFsGenericOutputExport(llvm::Value* pOutput, uint32_t location, llvm::Instruction* pInsertPos);
+    void PatchFsGenericOutputExport(llvm::Value*       pOutput,
+                                    uint32_t           location,
+                                    uint32_t           compIdx,
+                                    llvm::Instruction* pInsertPos);
 
     llvm::Value* PatchVsBuiltInInputImport(llvm::Type* pInputTy, uint32_t builtInId, llvm::Instruction* pInsertPos);
     llvm::Value* PatchTcsBuiltInInputImport(llvm::Type*        pInputTy,
@@ -151,37 +166,39 @@ private:
     void PatchCopyShaderGenericOutputExport(llvm::Value* pOutput, uint32_t location, llvm::Instruction* pInsertPos);
     void PatchCopyShaderBuiltInOutputExport(llvm::Value* pOutput, uint32_t builtInId, llvm::Instruction* pInsertPos);
 
-    void StoreValueToEsGsRingBuffer(llvm::Value*        pStoreValue,
-                                    uint32_t            location,
-                                    uint32_t            compIdx,
-                                    llvm::Instruction*  pInsertPos);
+    void StoreValueToEsGsRing(llvm::Value*        pStoreValue,
+                              uint32_t            location,
+                              uint32_t            compIdx,
+                              llvm::Instruction*  pInsertPos);
 
-    llvm::Value* LoadValueFromEsGsRingBuffer(llvm::Type*         pLoadType,
-                                             uint32_t            location,
-                                             uint32_t            compIdx,
-                                             llvm::Value*        pVertexIdx,
-                                             llvm::Instruction*  pInsertPos);
+    llvm::Value* LoadValueFromEsGsRing(llvm::Type*         pLoadType,
+                                       uint32_t            location,
+                                       uint32_t            compIdx,
+                                       llvm::Value*        pVertexIdx,
+                                       llvm::Instruction*  pInsertPos);
 
     void StoreValueToGsVsRingBuffer(llvm::Value*        pStoreValue,
                                     uint32_t            location,
                                     uint32_t            compIdx,
                                     llvm::Instruction*  pInsertPos);
 
-    llvm::Value* CalcEsGsRingBufferOffsetForOutput(uint32_t           location,
-                                                   uint32_t           compIdx,
-                                                   llvm::Instruction* pInsertPos);
+    llvm::Value* CalcEsGsRingOffsetForOutput(uint32_t           location,
+                                             uint32_t           compIdx,
+                                             llvm::Value*       pEsGsOffset,
+                                             llvm::Instruction* pInsertPos);
 
-    llvm::Value* CalcEsGsRingBufferOffsetForInput(uint32_t           location,
-                                                  uint32_t           compIdx,
-                                                  llvm::Value*       pVertexIdx,
-                                                  llvm::Instruction* pInsertPos);
+    llvm::Value* CalcEsGsRingOffsetForInput(uint32_t           location,
+                                            uint32_t           compIdx,
+                                            llvm::Value*       pVertexIdx,
+                                            llvm::Instruction* pInsertPos);
 
-    llvm::Value* CalcGsVsRingBufferOffsetForOutput(uint32_t           location,
-                                                   uint32_t           compIdx,
-                                                   llvm::Value*       pVertexIdx,
-                                                   llvm::Instruction* pInsertPos);
+    llvm::Value* CalcGsVsRingOffsetForOutput(uint32_t           location,
+                                             uint32_t           compIdx,
+                                             llvm::Value*       pVertexIdx,
+                                             llvm::Value*       pGsVsOffset,
+                                             llvm::Instruction* pInsertPos);
 
-    llvm::Value* ReadValueFromLds(llvm::Type* pReadTy, llvm::Value* pLdsOffset, llvm::Instruction* pInsertPos);
+    llvm::Value* ReadValueFromLds(bool isOutput, llvm::Type* pReadTy, llvm::Value* pLdsOffset, llvm::Instruction* pInsertPos);
     void WriteValueToLds(llvm::Value* pWriteValue, llvm::Value* pLdsOffset, llvm::Instruction* pInsertPos);
 
     llvm::Value* CalcTessFactorOffset(bool isOuter, llvm::Value* pElemIdx, llvm::Instruction* pInsertPos);
@@ -198,7 +215,10 @@ private:
                                           uint32_t outVertexStride,
                                           uint32_t patchConstCount) const;
 
-    llvm::Value* CalcLdsOffsetForVsOutput(uint32_t location, llvm::Instruction* pInsertPos);
+    llvm::Value* CalcLdsOffsetForVsOutput(Type*              pOutputTy,
+                                          uint32_t           location,
+                                          uint32_t           compIdx,
+                                          llvm::Instruction* pInsertPos);
 
     llvm::Value* CalcLdsOffsetForTcsInput(Type*              pInputTy,
                                           uint32_t           location,
@@ -221,7 +241,10 @@ private:
                                           llvm::Value*       pVertexIdx,
                                           llvm::Instruction* pInsertPos);
 
-    void AddExportInstForGenericOutput(llvm::Value* pOutput, uint32_t location, llvm::Instruction* pInsertPos);
+    void AddExportInstForGenericOutput(llvm::Value*       pOutput,
+                                       uint32_t           location,
+                                       uint32_t           compIdx,
+                                       llvm::Instruction* pInsertPos);
     void AddExportInstForBuiltInOutput(llvm::Value* pOutput, uint32_t builtInId, llvm::Instruction* pInsertPos);
 
     // -----------------------------------------------------------------------------------------------------------------
@@ -253,6 +276,9 @@ private:
     bool                    m_hasGs;                    // Whether the pipeline has geometry shader
 
     GlobalVariable*         m_pLds;                     // Global variable to model LDS
+    llvm::Value*            m_pThreadId;                // Thread ID
+
+    std::vector<Value*>     m_expFragColors[MaxColorTargets]; // Exported fragment colors
 
     std::vector<llvm::CallInst*> m_importCalls; // List of "call" instructions to import inputs
     std::vector<llvm::CallInst*> m_exportCalls; // List of "call" instructions to export outputs

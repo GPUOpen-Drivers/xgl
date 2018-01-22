@@ -999,6 +999,26 @@ extern void GetNextDeviceLayerTable(
                            pInstance, pDevice, remainingCount, pRemainingTables,
                            VK_SECURE_ENTRY(vkGetFenceWin32HandleKHR)));
 #endif
+#if VK_AMD_buffer_marker
+    pNextLayerFuncs->vkCmdWriteBufferMarkerAMD =
+                       reinterpret_cast<PFN_vkCmdWriteBufferMarkerAMD>(vk::GetIcdProcAddr(
+                           pInstance, pDevice, remainingCount, pRemainingTables,
+                           VK_SECURE_ENTRY(vkCmdWriteBufferMarkerAMD)));
+#endif
+#if VK_EXT_debug_report
+    pNextLayerFuncs->vkCreateDebugReportCallbackEXT =
+                       reinterpret_cast<PFN_vkCreateDebugReportCallbackEXT>(vk::GetIcdProcAddr(
+                           pInstance, pDevice, remainingCount, pRemainingTables,
+                           VK_SECURE_ENTRY(vkCreateDebugReportCallbackEXT)));
+    pNextLayerFuncs->vkDestroyDebugReportCallbackEXT =
+                       reinterpret_cast<PFN_vkDestroyDebugReportCallbackEXT>(vk::GetIcdProcAddr(
+                           pInstance, pDevice, remainingCount, pRemainingTables,
+                           VK_SECURE_ENTRY(vkDestroyDebugReportCallbackEXT)));
+    pNextLayerFuncs->vkDebugReportMessageEXT =
+                       reinterpret_cast<PFN_vkDebugReportMessageEXT>(vk::GetIcdProcAddr(
+                           pInstance, pDevice, remainingCount, pRemainingTables,
+                           VK_SECURE_ENTRY(vkDebugReportMessageEXT)));
+#endif
 
 }
 

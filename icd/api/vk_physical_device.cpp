@@ -2444,6 +2444,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     // TODO: Add this extension if the related implementation of Linux is done.
     // availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE_FD));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));
+
     return availableExtensions;
 }
 

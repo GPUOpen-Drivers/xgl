@@ -245,3 +245,9 @@ vkGetFenceFdKHR                                 @dext KHR_external_fence_fd
 
 vkImportFenceWin32HandleKHR                     @dext KHR_external_fence_win32
 vkGetFenceWin32HandleKHR                        @dext KHR_external_fence_win32
+
+vkCmdWriteBufferMarkerAMD                       @dext AMD_buffer_marker
+
+vkCreateDebugReportCallbackEXT                  @iext EXT_debug_report
+vkDestroyDebugReportCallbackEXT                 @iext EXT_debug_report
+vkDebugReportMessageEXT                         @iext EXT_debug_report

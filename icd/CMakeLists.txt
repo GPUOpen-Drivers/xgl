@@ -169,6 +169,7 @@ target_sources(xgl PRIVATE
     api/vk_cmd_pool.cpp
     api/vk_compute_pipeline.cpp
     api/vk_conv.cpp
+    api/vk_debug_report.cpp
     api/vk_descriptor_set.cpp
     api/vk_descriptor_set_layout.cpp
     api/vk_descriptor_pool.cpp

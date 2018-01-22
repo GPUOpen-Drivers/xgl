@@ -304,6 +304,14 @@ struct EntryPointTable
     PFN_vkImportFenceWin32HandleKHR vkImportFenceWin32HandleKHR;
     PFN_vkGetFenceWin32HandleKHR vkGetFenceWin32HandleKHR;
 #endif
+#if VK_AMD_buffer_marker
+    PFN_vkCmdWriteBufferMarkerAMD vkCmdWriteBufferMarkerAMD;
+#endif
+#if VK_EXT_debug_report
+    PFN_vkCreateDebugReportCallbackEXT vkCreateDebugReportCallbackEXT;
+    PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallbackEXT;
+    PFN_vkDebugReportMessageEXT vkDebugReportMessageEXT;
+#endif
 
 };
 

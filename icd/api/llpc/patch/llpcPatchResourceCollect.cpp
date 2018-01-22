@@ -229,56 +229,41 @@ void PatchResourceCollect::visitCallInst(
             if ((m_shaderStage == ShaderStageTessControl) || (m_shaderStage == ShaderStageTessEval))
             {
                 auto pLocOffset = callInst.getOperand(1);
-                auto pCompIdx = IsDontCareValue(callInst.getOperand(2)) ? nullptr : callInst.getOperand(2);
+                auto pCompIdx = callInst.getOperand(2);
+
                 if (isa<ConstantInt>(pLocOffset))
                 {
                     // Location offset is constant
                     auto locOffset = cast<ConstantInt>(pLocOffset)->getZExtValue();
                     loc += locOffset;
 
-                    if (pCompIdx != nullptr)
+                    auto bitWidth = pInputTy->getScalarSizeInBits();
+                    if (bitWidth == 64)
                     {
-                        // Vector component addressing
-                        LLPC_ASSERT(pInputTy->isVectorTy() == false); // Must be scalar type
-
-                        auto bitWidth = pInputTy->getScalarSizeInBits();
-                        if (bitWidth == 64)
+                        if (isa<ConstantInt>(pCompIdx))
                         {
-                            if (isa<ConstantInt>(pCompIdx))
-                            {
-                                auto compIdx = cast<ConstantInt>(pCompIdx)->getZExtValue();
+                            auto compIdx = cast<ConstantInt>(pCompIdx)->getZExtValue();
 
-                                m_activeInputLocs.insert(loc);
-                                if (compIdx >= 2)
-                                {
-                                    // NOTE: For the addressing of .z/.w component of 64-bit vector, the count of
-                                    // occupied locations are two.
-                                    m_activeInputLocs.insert(loc + 1);
-                                }
-                            }
-                            else
+                            m_activeInputLocs.insert(loc);
+                            if (compIdx >= 2)
                             {
-                                // NOTE: If vector component index is not constant, we treat this as dynamic indexing.
-                                m_hasDynIndexedInput = true;
+                                // NOTE: For the addressing of .z/.w component of 64-bit vector/scalar, the count of
+                                // occupied locations are two.
+                                m_activeInputLocs.insert(loc + 1);
                             }
                         }
                         else
                         {
-                            // NOTE: For 32-bit scalar, one location is sufficient regardless of vector component
-                            // addressing.
-                            LLPC_ASSERT(bitWidth == 32);
-                            m_activeInputLocs.insert(loc);
+                            // NOTE: If vector component index is not constant, we treat this as dynamic indexing.
+                            m_hasDynIndexedInput = true;
                         }
                     }
                     else
                     {
-                        // Not vector component addressing
+                        // NOTE: For 32-bit vector/scalar, one location is sufficient regardless of vector component
+                        // addressing.
+                        LLPC_ASSERT(bitWidth == 32);
                         m_activeInputLocs.insert(loc);
-                        if (pInputTy->getPrimitiveSizeInBits() > (8 * SizeOfVec4))
-                        {
-                            LLPC_ASSERT(pInputTy->getPrimitiveSizeInBits() <= (8 * 2 * SizeOfVec4));
-                            m_activeInputLocs.insert(loc + 1);
-                        }
                     }
                 }
                 else
@@ -353,7 +338,7 @@ void PatchResourceCollect::visitCallInst(
 
         auto loc = cast<ConstantInt>(callInst.getOperand(0))->getZExtValue();
         auto pLocOffset = callInst.getOperand(1);
-        auto pCompIdx = IsDontCareValue(callInst.getOperand(2)) ? nullptr : callInst.getOperand(2);
+        auto pCompIdx = callInst.getOperand(2);
 
         if (isa<ConstantInt>(pLocOffset))
         {
@@ -361,49 +346,33 @@ void PatchResourceCollect::visitCallInst(
             auto locOffset = cast<ConstantInt>(pLocOffset)->getZExtValue();
             loc += locOffset;
 
-            if (pCompIdx != nullptr)
+            auto bitWidth = pOutputTy->getScalarSizeInBits();
+            if (bitWidth == 64)
             {
-                // Vector component addressing
-                LLPC_ASSERT(pOutputTy->isVectorTy() == false); // Must be scalar type
-
-                auto bitWidth = pOutputTy->getScalarSizeInBits();
-                if (bitWidth == 64)
+                if (isa<ConstantInt>(pCompIdx))
                 {
-                    if (isa<ConstantInt>(pCompIdx))
-                    {
-                        auto compIdx = cast<ConstantInt>(pCompIdx)->getZExtValue();
+                    auto compIdx = cast<ConstantInt>(pCompIdx)->getZExtValue();
 
-                        m_importedOutputLocs.insert(loc);
-                        if (compIdx >= 2)
-                        {
-                            // NOTE: For the addressing of .z/.w component of 64-bit vector, the count of
-                            // occupied locations are two.
-                            m_importedOutputLocs.insert(loc + 1);
-                        }
-                    }
-                    else
+                    m_importedOutputLocs.insert(loc);
+                    if (compIdx >= 2)
                     {
-                        // NOTE: If vector component index is not constant, we treat this as dynamic indexing.
-                        m_hasDynIndexedOutput = true;
+                        // NOTE: For the addressing of .z/.w component of 64-bit vector/scalar, the count of
+                        // occupied locations are two.
+                        m_importedOutputLocs.insert(loc + 1);
                     }
                 }
                 else
                 {
-                    // NOTE: For 32-bit scalar, one location is sufficient regardless of vector component
-                    // addressing.
-                    LLPC_ASSERT(bitWidth == 32);
-                    m_importedOutputLocs.insert(loc);
+                    // NOTE: If vector component index is not constant, we treat this as dynamic indexing.
+                    m_hasDynIndexedOutput = true;
                 }
             }
             else
             {
-                // Not vector component addressing
+                // NOTE: For 32-bit vector/scalar, one location is sufficient regardless of vector component
+                // addressing.
+                LLPC_ASSERT(bitWidth == 32);
                 m_importedOutputLocs.insert(loc);
-                if (pOutputTy->getPrimitiveSizeInBits() > (8 * SizeOfVec4))
-                {
-                    LLPC_ASSERT(pOutputTy->getPrimitiveSizeInBits() <= (8 * 2 * SizeOfVec4));
-                    m_importedOutputLocs.insert(loc + 1);
-                }
             }
         }
         else
@@ -431,25 +400,19 @@ void PatchResourceCollect::visitCallInst(
 
             auto loc = cast<ConstantInt>(callInst.getOperand(0))->getZExtValue();
             auto pLocOffset = callInst.getOperand(1);
-            auto pCompIdx = IsDontCareValue(callInst.getOperand(2)) ? nullptr : callInst.getOperand(2);
+            auto pCompIdx = callInst.getOperand(2);
 
             if (isa<ConstantInt>(pLocOffset))
             {
                 // Location offset is constant
-                if (pCompIdx != nullptr)
+                auto bitWidth = pOutputTy->getScalarSizeInBits();
+                LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
+
+                if ((bitWidth == 64) && (isa<ConstantInt>(pCompIdx) == false))
                 {
-                    // Vector component addressing
-                    LLPC_ASSERT(pOutputTy->isVectorTy() == false); // Must be scalar type
-
-                    auto bitWidth = pOutputTy->getScalarSizeInBits();
-                    LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
-
-                    if ((bitWidth == 64) && (isa<ConstantInt>(pCompIdx) == false))
-                    {
-                        // NOTE: If vector component index is not constant and it is vector component addressing for
-                        // 64-bit vector, we treat this as dynamic indexing.
-                        m_hasDynIndexedOutput = true;
-                    }
+                    // NOTE: If vector component index is not constant and it is vector component addressing for
+                    // 64-bit vector, we treat this as dynamic indexing.
+                    m_hasDynIndexedOutput = true;
                 }
             }
             else

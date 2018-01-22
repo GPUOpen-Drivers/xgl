@@ -57,6 +57,12 @@ option(USE_NEXT_SDK "Use next SDK?" OFF)
 
 option(ICD_BUILD_VIDEO "Build Video Support?" OFF)
 
+option(ICD_UPSTREAM_LLVM "Build with upstream LLVM?" OFF)
+
+if(NOT ICD_BUILD_LLPC)
+    set(ICD_UPSTREAM_LLVM OFF CACHE BOOL "ICD_UPSTREAM_LLVM is overrided to false." FORCE)
+endif()
+
 option(ICD_GPUOPEN_DEVMODE_BUILD "Build ${PROJECT_NAME} with GPU Open Developer Mode driver support?" ON)
 
 option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})

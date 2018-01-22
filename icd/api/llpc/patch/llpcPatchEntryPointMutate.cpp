@@ -80,7 +80,7 @@ char PatchEntryPointMutate::ID = 0;
 PatchEntryPointMutate::PatchEntryPointMutate()
     :
     Patch(ID),
-    m_hasTes(false),
+    m_hasTs(false),
     m_hasGs(false)
 {
     initializePatchEntryPointMutatePass(*PassRegistry::getPassRegistry());
@@ -96,8 +96,9 @@ bool PatchEntryPointMutate::runOnModule(
     Patch::Init(&module);
 
     const uint32_t stageMask = m_pContext->GetShaderStageMask();
-    m_hasTes    = ((stageMask & ShaderStageToMask(ShaderStageTessEval)) != 0);
-    m_hasGs     = ((stageMask & ShaderStageToMask(ShaderStageGeometry)) != 0);
+    m_hasTs = ((stageMask & (ShaderStageToMask(ShaderStageTessControl) |
+                             ShaderStageToMask(ShaderStageTessEval))) != 0);
+    m_hasGs = ((stageMask & ShaderStageToMask(ShaderStageGeometry)) != 0);
 
     const auto& dataLayout = m_pModule->getDataLayout();
 
@@ -594,7 +595,7 @@ bool PatchEntryPointMutate::runOnModule(
     }
 
 	// Setup ES-GS ring buffer descriptor
-    if (((m_shaderStage == ShaderStageVertex) && m_hasGs && (m_hasTes == false)) ||
+    if (((m_shaderStage == ShaderStageVertex) && m_hasGs && (m_hasTs == false)) ||
         ((m_shaderStage == ShaderStageTessEval) && m_hasGs))
     {
         // Setup ES-GS ring buffer descriptor for VS or TES output
@@ -630,9 +631,8 @@ bool PatchEntryPointMutate::runOnModule(
     switch (m_shaderStage)
     {
     case ShaderStageVertex:
-        callingConv = m_hasTes ?
-                          CallingConv::AMDGPU_LS :
-                          (m_hasGs ? CallingConv::AMDGPU_ES : CallingConv::AMDGPU_VS);
+        callingConv = m_hasTs ? CallingConv::AMDGPU_LS :
+                                (m_hasGs ? CallingConv::AMDGPU_ES : CallingConv::AMDGPU_VS);
         break;
     case ShaderStageTessControl:
         callingConv = CallingConv::AMDGPU_HS;
@@ -651,6 +651,7 @@ bool PatchEntryPointMutate::runOnModule(
     }
     pEntryPoint->setCallingConv(callingConv);
     pEntryPoint->setDLLStorageClass(GlobalValue::DefaultStorageClass);
+
     // Set the entry name required by PAL ABI
     auto entryStage = Util::Abi::PipelineSymbolType::CsMainEntry;
     switch (callingConv)
@@ -1165,7 +1166,7 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
     {
     case ShaderStageVertex:
         {
-            if (m_hasGs && (m_hasTes == false))
+            if (m_hasGs && (m_hasTs == false))
             {
                 argTys.push_back(m_pContext->Int32Ty()); // ES to GS offset
                 entryArgIdxs.vs.esGsOffset = argIdx;

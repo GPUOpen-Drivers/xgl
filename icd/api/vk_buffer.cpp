@@ -46,7 +46,8 @@ namespace vk
 // based on its declared usage bits at create time.  These masks come in handy when trying to decide optimal PAL
 // caches coherency flags during a pipeline barrier.
 void Buffer::CalcBarrierUsage(
-    VkBufferUsageFlags          usage)
+    const Device*      pDevice,
+    VkBufferUsageFlags usage)
 {
     m_inputCacheMask  = 0;
     m_outputCacheMask = Pal::CoherCpu | Pal::CoherMemory;   // Always allow CPU writes and memory writes
@@ -61,6 +62,13 @@ void Buffer::CalcBarrierUsage(
         // Also need Pal::CoherShader here as vkCmdCopyQueryPoolResults uses a compute shader defined in the Vulkan
         // API layer when used with timestamp queries.
         m_outputCacheMask |= Pal::CoherCopy | Pal::CoherShader;
+
+        // Buffer markers fall under the same PAL coherency rules as timestamp writes
+        if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_BUFFER_MARKER))
+        {
+            m_inputCacheMask  |= Pal::CoherTimestamp;
+            m_outputCacheMask |= Pal::CoherTimestamp;
+        }
     }
 
     if (usage & (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT))
@@ -116,12 +124,12 @@ Buffer::Buffer(
     {
         if (pGpuMemory[deviceIdx] != nullptr)
         {
-            m_pGpuMemory[deviceIdx] = pGpuMemory[deviceIdx];
+            m_pGpuMemory[deviceIdx]  = pGpuMemory[deviceIdx];
             m_gpuVirtAddr[deviceIdx] = pGpuMemory[deviceIdx]->Desc().gpuVirtAddr;
         }
     }
 
-    CalcBarrierUsage(usage);
+    CalcBarrierUsage(pDevice, usage);
 }
 
 // =====================================================================================================================
@@ -378,7 +386,7 @@ VkResult Buffer::GetMemoryRequirements(
         // however, we'll specify such an alignment requirement which should fit formatted buffer use
         // with any kind of format
         pMemoryRequirements->alignment = (ubUsageEnabled) ? ubRequiredAlignment : 4;
-        pMemoryRequirements->size      = (!ubUsageEnabled) ? m_size : Util::RoundUpToMultiple(m_size, ubRequiredAlignment);
+        pMemoryRequirements->size      = Util::RoundUpToMultiple(m_size, pMemoryRequirements->alignment);
     }
 
     // Allow all available memory types for buffers

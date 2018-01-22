@@ -1510,6 +1510,37 @@ VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(VkPipelineStageF
     return srcPipePoint;
 }
 
+// =====================================================================================================================
+// Converts Vulkan source pipeline stage flags to PAL buffer marker writes (top/bottom only)
+VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForMarkers(
+    VkPipelineStageFlags flags,
+    Pal::EngineType      engineType)
+{
+    // This function is written against the following three engine types.  If you hit this assert then check if this
+    // new engine supports top of pipe writes at all (e.g. SDMA doesn't).
+    VK_ASSERT(engineType == Pal::EngineTypeDma ||
+              engineType == Pal::EngineTypeUniversal ||
+              engineType == Pal::EngineTypeCompute);
+
+    // Flags that allow signaling at top-of-pipe (anything else maps to bottom)
+    constexpr VkPipelineStageFlags SrcTopOfPipeFlags =
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+
+    Pal::HwPipePoint srcPipePoint;
+
+    if (((flags & ~SrcTopOfPipeFlags) == 0) &&
+        (engineType != Pal::EngineTypeDma)) // SDMA engines only support bottom of pipe writes
+    {
+        srcPipePoint = Pal::HwPipeTop;
+    }
+    else
+    {
+        srcPipePoint = Pal::HwPipeBottom;
+    }
+
+    return srcPipePoint;
+}
+
 // Helper structure for mapping stage flag sets to PAL pipe points
 struct HwPipePointMappingEntry
 {

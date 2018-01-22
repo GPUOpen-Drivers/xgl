@@ -282,7 +282,8 @@ void DescriptorSetLayout::ConvertImmutableInfo(
 VkResult DescriptorSetLayout::ConvertCreateInfo(
     const Device*                          pDevice,
     const VkDescriptorSetLayoutCreateInfo* pIn,
-    CreateInfo*                            pOut)
+    CreateInfo*                            pOut,
+    BindingInfo*                           pOutBindings)
 {
     if (pIn == nullptr)
     {
@@ -324,7 +325,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                 for (uint32_t inIndex = 0; inIndex < pInfo->bindingCount; ++inIndex)
                 {
                     const VkDescriptorSetLayoutBinding & currentBinding = pInfo->pBindings[inIndex];
-                    pOut->bindings[currentBinding.binding].info = currentBinding;
+                    pOutBindings[currentBinding.binding].info = currentBinding;
                 }
 
                 // Now iterate over our output array to convert the binding info.  Any gaps in
@@ -332,7 +333,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                 // should be safe to call ConvertBindingInfo on those as well.
                 for (uint32_t bindingNumber = 0; bindingNumber < pOut->count; ++bindingNumber)
                 {
-                    BindingInfo* pBinding = &pOut->bindings[bindingNumber];
+                    BindingInfo* pBinding = &pOutBindings[bindingNumber];
 
                     // Determine the alignment requirement of descriptors in dwords.
                     uint32_t descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32_t);
@@ -441,10 +442,10 @@ VkResult DescriptorSetLayout::Create(
     info.count = bindingCount;
 
     // Set the bindings array to the appropriate location within the allocated memory
-    info.bindings = reinterpret_cast<BindingInfo*>(reinterpret_cast<uint8_t*>(pSysMem) + apiSize);
+    BindingInfo* pBindings = reinterpret_cast<BindingInfo*>(reinterpret_cast<uint8_t*>(pSysMem) + apiSize);
 
     // Also memset it as not all bindings may be actually used
-    memset(info.bindings, 0, bindingInfoAuxSize);
+    memset(pBindings, 0, bindingInfoAuxSize);
 
     // Set the base pointer of the immutable sampler data to the appropriate location within the allocated memory
     info.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(Util::VoidPtrInc(pSysMem, apiSize + bindingInfoAuxSize));
@@ -453,7 +454,8 @@ VkResult DescriptorSetLayout::Create(
     VkResult result = ConvertCreateInfo(
         pDevice,
         pCreateInfo,
-        &info);
+        &info,
+        pBindings);
 
     if (result != VK_SUCCESS)
     {

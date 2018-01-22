@@ -42,11 +42,14 @@
 #include "include/vk_dispatch.h"
 #include "include/vk_utils.h"
 #include "include/vk_extensions.h"
+#include "include/vk_debug_report.h"
 
 #include "palDeveloperHooks.h"
 #include "palLib.h"
 #include "palScreen.h"
 #include "palSysMemory.h"
+#include "palList.h"
+#include "palMutex.h"
 
 namespace Pal
 {
@@ -194,6 +197,26 @@ public:
 
     VkResult QueryApplicationProfile(RuntimeSettings* pRuntimeSettings = nullptr);
 
+    VkResult RegisterDebugCallback(
+        DebugReportCallback* pCallback);
+
+    void UnregisterDebugCallback(
+        DebugReportCallback* pCallback);
+
+    void LogMessage(uint32_t    level,
+                    uint64_t    categoryMask,
+                    const char* pFormat,
+                    va_list     args);
+
+    void CallExternalCallbacks(
+        VkDebugReportFlagsEXT       flags,
+        VkDebugReportObjectTypeEXT  objectType,
+        uint64_t                    object,
+        size_t                      location,
+        int32_t                     messageCode,
+        const char*                 pLayerPrefix,
+        const char*                 pMessage);
+
 private:
     Instance(
         const VkAllocationCallbacks*        pAllocCb,
@@ -217,6 +240,13 @@ private:
         const Pal::uint32            deviceIndex,
         Pal::Developer::CallbackType type,
         void*                        pCbData);
+
+    static void PAL_STDCALL LogCallback(
+        void*       pClientData,
+        Pal::uint32 level,
+        Pal::uint64 categoryMask,
+        const char* pFormat,
+        va_list     args);
 
     Pal::IPlatform*                     m_pPalPlatform;             // Pal Platform object.
     VkAllocationCallbacks               m_allocCallbacks;
@@ -257,6 +287,15 @@ private:
 #ifdef ICD_BUILD_APPPROFILE
     ChillSettings m_chillSettings; // Dynamic chill settings structure
 #endif
+
+    Util::List<DebugReportCallback*, PalAllocator>  m_debugReportCallbacks;             // List of registered Debug
+                                                                                        // Report Callbacks
+    Util::Mutex                                     m_logCallbackInternalOnlyMutex;     // Serialize internal log
+                                                                                        // message translation prior
+                                                                                        // to calling external callbacks
+    Util::Mutex                                     m_logCallbackInternalExternalMutex; // Serialize all calls to
+                                                                                        // external callbacks from
+                                                                                        // internal and external sources
 
 #ifdef PAL_ENABLE_PRINTS_ASSERTS
     mutable uint32_t m_dispatchTableQueryCount;

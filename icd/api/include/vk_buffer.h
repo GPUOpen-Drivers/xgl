@@ -126,6 +126,7 @@ private:
            BufferFlags                  internalFlags);
 
     void CalcBarrierUsage(
+        const Device*      pDevice,
         VkBufferUsageFlags usage);
 
     Pal::IGpuMemory*        m_pGpuMemory[MaxPalDevices];

@@ -72,7 +72,8 @@ GraphicsContext::GraphicsContext(
     m_pPipelineInfo(pPipelineInfo),
     m_stageMask(0),
     m_activeStageCount(0),
-    m_tessOffchip(cl::EnableTessOffChip)
+    m_tessOffchip(cl::EnableTessOffChip),
+    m_gsOnChip(false)
 {
 #ifdef LLPC_BUILD_GFX9
     if (gfxIp.major >= 9)
@@ -332,7 +333,7 @@ uint64_t GraphicsContext::GetShaderHashCode(
 // Determines whether or not GS on-chip mode is valid for this pipeline.
 bool GraphicsContext::CanGsOnChip()
 {
-    bool gsOnChip = false;
+    bool gsOnChip = true;
 
     uint32_t stageMask = GetShaderStageMask();
     const bool hasTs = ((stageMask & (ShaderStageToMask(ShaderStageTessControl) |
@@ -345,12 +346,12 @@ bool GraphicsContext::CanGsOnChip()
     {
         uint32_t gsPrimsPerSubgroup = m_pGpuProperty->gsOnChipDefaultPrimsPerSubgroup;
 
-        const uint32_t esGsItemSize    = 4 * pEsResUsage->inOutUsage.outputMapLocCount;
-        const uint32_t gsInstanceCount = pGsResUsage->builtInUsage.gs.invocations;
-        const uint32_t gsVsItemSize    = 4 *
-                                         pGsResUsage->inOutUsage.outputMapLocCount *
-                                         pGsResUsage->builtInUsage.gs.outputVertices *
-                                         gsInstanceCount;
+        const uint32_t esGsRingItemSize = 4 * pEsResUsage->inOutUsage.outputMapLocCount;
+        const uint32_t gsInstanceCount  = pGsResUsage->builtInUsage.gs.invocations;
+        const uint32_t gsVsRingItemSize = 4 *
+                                          pGsResUsage->inOutUsage.outputMapLocCount *
+                                          pGsResUsage->builtInUsage.gs.outputVertices *
+                                          gsInstanceCount;
 
         uint32_t vertsPerPrim = 1;
         bool     useAdjacency = false;
@@ -393,11 +394,11 @@ bool GraphicsContext::CanGsOnChip()
         }
 
         // Compute GS-VS LDS size based on target GS primitives per subgroup
-        uint32_t gsVsLdsSize = (gsVsItemSize * gsPrimsPerSubgroup);
+        uint32_t gsVsLdsSize = (gsVsRingItemSize * gsPrimsPerSubgroup);
 
         // Compute ES-GS LDS size based on the worst case number of ES vertices needed to create the target number of
         // GS primitives per subgroup.
-        uint32_t esGsLdsSize = esGsItemSize * esMinVertsPerSubgroup * gsPrimsPerSubgroup;
+        uint32_t esGsLdsSize = esGsRingItemSize * esMinVertsPerSubgroup * gsPrimsPerSubgroup;
 
         // Total LDS use per subgroup aligned to the register granularity
         uint32_t gsOnChipLdsSize = Pow2Align((esGsLdsSize + gsVsLdsSize), m_pGpuProperty->ldsSizeDwordGranularity);
@@ -412,18 +413,18 @@ bool GraphicsContext::CanGsOnChip()
         // If total LDS usage is too big, refactor partitions based on ratio of ES-GS and GS-VS item sizes.
         if (gsOnChipLdsSize > maxLdsSize)
         {
-            const uint32_t esGsItemSizePerPrim = esGsItemSize * esMinVertsPerSubgroup;
-            const uint32_t itemSizeTotal       = esGsItemSizePerPrim + gsVsItemSize;
+            const uint32_t esGsItemSizePerPrim = esGsRingItemSize * esMinVertsPerSubgroup;
+            const uint32_t itemSizeTotal       = esGsItemSizePerPrim + gsVsRingItemSize;
 
             esGsLdsSize = RoundUpToMultiple((esGsItemSizePerPrim * maxLdsSize) / itemSizeTotal, esGsItemSizePerPrim);
-            gsVsLdsSize = RoundDownToMultiple(maxLdsSize - esGsLdsSize, gsVsItemSize);
+            gsVsLdsSize = RoundDownToMultiple(maxLdsSize - esGsLdsSize, gsVsRingItemSize);
 
             gsOnChipLdsSize = maxLdsSize;
         }
 
         // Based on the LDS space, calculate how many GS prims per subgroup and ES vertices per subgroup can be dispatched.
-        gsPrimsPerSubgroup          = (gsVsLdsSize / gsVsItemSize);
-        uint32_t esVertsPerSubgroup = (esGsLdsSize / esGsItemSize);
+        gsPrimsPerSubgroup          = (gsVsLdsSize / gsVsRingItemSize);
+        uint32_t esVertsPerSubgroup = (esGsLdsSize / esGsRingItemSize);
 
         LLPC_ASSERT(esVertsPerSubgroup >= esMinVertsPerSubgroup);
 
@@ -441,7 +442,15 @@ bool GraphicsContext::CanGsOnChip()
         esVertsPerSubgroup -= (esMinVertsPerSubgroup - 1);
 
         // TODO: Accept GsOffChipDefaultThreshold from panel option
-        constexpr uint32_t GsOffChipDefaultThreshold = 64;
+        // TODO: Value of GsOffChipDefaultThreshold should be 64, due to an issue it's changed to 32 in order to test
+        // on-chip GS code generation before fixing that issue.
+        // The issue is because we only remove unused builtin output till final GS output store generation, when
+        // determining onchip/offchip mode, unused builtin output like PointSize and Clip/CullDistance is factored in
+        // LDS usage and deactivates onchip GS when GsOffChipDefaultThreshold  is 64. To fix this we will probably
+        // need to clear unused builtin ouput before determining onchip/offchip GS mode.
+        constexpr uint32_t GsOffChipDefaultThreshold = 32;
+
+        pGsResUsage->inOutUsage.gs.esGsLdsSize  = esGsLdsSize;
 
         if (((gsPrimsPerSubgroup * gsInstanceCount) < GsOffChipDefaultThreshold) || (esVertsPerSubgroup == 0))
         {

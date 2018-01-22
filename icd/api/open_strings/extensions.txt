@@ -10,6 +10,7 @@ VK_KHR_external_memory_capabilities
 VK_KHR_external_semaphore_capabilities
 VK_KHR_external_fence_capabilities
 VK_KHX_device_group_creation
+VK_EXT_debug_report
 
 ###############################################################################
 # DEVICE EXTENSIONS
@@ -57,3 +58,4 @@ VK_AMD_shader_fragment_mask
 VK_EXT_sample_locations
 VK_KHR_win32_keyed_mutex
 VK_EXT_global_priority
+VK_AMD_buffer_marker

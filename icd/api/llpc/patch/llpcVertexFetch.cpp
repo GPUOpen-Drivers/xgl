@@ -983,6 +983,7 @@ VertexFetch::VertexFetch(
 Value* VertexFetch::Run(
     Type*        pInputTy,      // [in] Type of vertex input
     uint32_t     location,      // Location of vertex input
+    uint32_t     compIdx,       // Index used for vector element indexing
     Instruction* pInsertPos)    // [in] Where to insert vertex fetch instructions
 {
     Value* pVertex = nullptr;
@@ -1221,92 +1222,114 @@ Value* VertexFetch::Run(
     // Finalize vertex fetch
     Type* pBasicTy = pInputTy->isVectorTy() ? pInputTy->getVectorElementType() : pInputTy;
     const uint32_t bitWidth = pBasicTy->getScalarSizeInBits();
+    LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
 
-    const uint32_t inputCompCount = pInputTy->isVectorTy() ? pInputTy->getVectorNumElements() : 1;
-    const uint32_t vertexCompCount = inputCompCount * bitWidth / 32;
-    const uint32_t fetchCompCount = pVertexFetch->getType()->isVectorTy() ?
-                                        pVertexFetch->getType()->getVectorNumElements() : 1;
-    if (vertexCompCount == fetchCompCount)
+    // Get default fetch values
+    Constant* pDefaults = nullptr;
+
+    if (pBasicTy->isIntegerTy())
     {
-        // Exact match, vertex input takes values from vertex fetch results
-        pVertex = pVertexFetch;
-    }
-    else if (vertexCompCount < fetchCompCount)
-    {
-        // Vertex input takes part of values from vertex fetch results
-        if (vertexCompCount == 1)
+        if (bitWidth == 32)
         {
-            Constant* pIndex = ConstantInt::get(m_pContext->Int32Ty(), 0);
-            pVertex = ExtractElementInst::Create(pVertexFetch, pIndex, "", pInsertPos);
+            pDefaults = m_fetchDefaults.pInt;
         }
         else
         {
-            shuffleMask.clear();
-            for (uint32_t i = 0; i < vertexCompCount; ++i)
-            {
-                shuffleMask.push_back(ConstantInt::get(m_pContext->Int32Ty(), i));
-            }
-            pVertex = new ShuffleVectorInst(pVertexFetch, pVertexFetch, ConstantVector::get(shuffleMask), "", pInsertPos);
+            LLPC_ASSERT(bitWidth == 64);
+            pDefaults = m_fetchDefaults.pInt64;
+        }
+    }
+    else if (pBasicTy->isFloatingPointTy())
+    {
+        if (bitWidth == 32)
+        {
+            pDefaults = m_fetchDefaults.pFloat;
+        }
+        else
+        {
+            LLPC_ASSERT(bitWidth == 64);
+            pDefaults = m_fetchDefaults.pDouble;
         }
     }
     else
     {
-        // Vertex input takes values from both vertex fetch results and the default fetch values
-        Constant* pDefaults = nullptr;
+        LLPC_NEVER_CALLED();
+    }
 
-        // Get default fetch values
-        if (pBasicTy->isIntegerTy())
+    const uint32_t defaultCompCount = pDefaults->getType()->getVectorNumElements();
+    std::vector<Value*> defaultValues(defaultCompCount);
+
+    for (uint32_t i = 0; i < defaultValues.size(); ++i)
+    {
+        defaultValues[i] = ExtractElementInst::Create(pDefaults,
+                                                      ConstantInt::get(m_pContext->Int32Ty(), i),
+                                                      "",
+                                                      pInsertPos);
+    }
+
+    // Get vertex fetch values
+    const uint32_t fetchCompCount = pVertexFetch->getType()->isVectorTy() ?
+                                        pVertexFetch->getType()->getVectorNumElements() : 1;
+    std::vector<Value*> fetchValues(fetchCompCount);
+
+    if (fetchCompCount == 1)
+    {
+        fetchValues[0] = pVertexFetch;
+    }
+    else
+    {
+        for (uint32_t i = 0; i < fetchCompCount; ++i)
         {
-            if (bitWidth == 32)
-            {
-                pDefaults = m_fetchDefaults.pInt;
-            }
-            else
-            {
-                LLPC_ASSERT(bitWidth == 64);
-                pDefaults = m_fetchDefaults.pInt64;
-            }
+            fetchValues[i] = ExtractElementInst::Create(pVertexFetch,
+                                                        ConstantInt::get(m_pContext->Int32Ty(), i),
+                                                        "",
+                                                        pInsertPos);
         }
-        else if (pBasicTy->isFloatingPointTy())
+    }
+
+    // Construct vertex fetch results
+    const uint32_t inputCompCount = pInputTy->isVectorTy() ? pInputTy->getVectorNumElements() : 1;
+    const uint32_t vertexCompCount = inputCompCount * bitWidth / 32;
+
+    std::vector<Value*> vertexValues(vertexCompCount);
+
+    // NOTE: Original component index is based on the basic scalar type.
+    compIdx *= ((bitWidth == 64) ? 2 : 1);
+
+    // Vertex input might take values from vertex fetch values or default fetch values
+    for (uint32_t i = 0; i < vertexCompCount; i++)
+    {
+        if (compIdx + i < fetchCompCount)
         {
-            if (bitWidth == 32)
-            {
-                pDefaults = m_fetchDefaults.pFloat;
-            }
-            else
-            {
-                LLPC_ASSERT(bitWidth == 64);
-                pDefaults = m_fetchDefaults.pDouble;
-            }
+            vertexValues[i] = fetchValues[compIdx + i];
+        }
+        else if (compIdx + i < defaultCompCount)
+        {
+            vertexValues[i] = defaultValues[compIdx + i];
         }
         else
         {
             LLPC_NEVER_CALLED();
+            vertexValues[i] = UndefValue::get(m_pContext->Int32Ty());
         }
+    }
 
+    if (vertexCompCount == 1)
+    {
+        pVertex = vertexValues[0];
+    }
+    else
+    {
         Type* pVertexTy = VectorType::get(m_pContext->Int32Ty(), vertexCompCount);
         pVertex = UndefValue::get(pVertexTy);
 
-        if (fetchCompCount == 1)
+        for (uint32_t i = 0; i < vertexCompCount; ++i)
         {
-            Constant* pIndex = ConstantInt::get(m_pContext->Int32Ty(), 0);
-            pVertex = InsertElementInst::Create(pVertex, pVertexFetch, pIndex, "", pInsertPos);
-        }
-        else
-        {
-            for (uint32_t i = 0; i < fetchCompCount; ++i)
-            {
-                Constant* pIndex = ConstantInt::get(m_pContext->Int32Ty(), i);
-                Value* pVertexComp = ExtractElementInst::Create(pVertexFetch, pIndex, "", pInsertPos);
-                pVertex = InsertElementInst::Create(pVertex, pVertexComp, pIndex, "", pInsertPos);
-            }
-        }
-
-        for (uint32_t i = fetchCompCount; i < vertexCompCount; ++i)
-        {
-            Constant* pIndex = ConstantInt::get(m_pContext->Int32Ty(), i);
-            Value* pVertexComp = ExtractElementInst::Create(pDefaults, pIndex, "", pInsertPos);
-            pVertex = InsertElementInst::Create(pVertex, pVertexComp, pIndex, "", pInsertPos);
+            pVertex = InsertElementInst::Create(pVertex,
+                                                vertexValues[i],
+                                                ConstantInt::get(m_pContext->Int32Ty(), i),
+                                                "",
+                                                pInsertPos);
         }
     }
 

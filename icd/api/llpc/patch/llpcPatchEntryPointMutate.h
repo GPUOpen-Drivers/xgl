@@ -76,8 +76,9 @@ private:
 
     // Reserved argument count for single DWORD descriptor table pointer
     static const uint32_t   TablePtrReservedArgCount = 2;
-    bool                    m_hasTes;                   // Whether the pipeline has tessllation evaluation shader
-    bool                    m_hasGs;                    // Whether the pipeline has geometry shader
+
+    bool    m_hasTs;    // Whether the pipeline has tessllation shader
+    bool    m_hasGs;    // Whether the pipeline has geometry shader
 };
 
 } // Llpc

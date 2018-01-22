@@ -95,6 +95,25 @@ Result CopyShader::Run(
     auto& inOutUsage = m_pContext->GetShaderResourceUsage(ShaderStageCopyShader)->inOutUsage;
     inOutUsage.gs.pGsVsRingBufDesc = pGsVsRingBufDesc;
 
+    if (m_pContext->IsGsOnChip())
+    {
+        // Construct LDS type: [ldsSize * i32], address space 3
+        auto ldsSize = m_pContext->GetGpuProperty()->ldsSizePerCu;
+        auto pLdsTy = ArrayType::get(m_pContext->Int32Ty(), ldsSize / sizeof(uint32_t));
+
+        m_pLds = new GlobalVariable(*m_pModule,
+                                    pLdsTy,
+                                    false,
+                                    GlobalValue::ExternalLinkage,
+                                    nullptr,
+                                    "lds",
+                                    nullptr,
+                                    GlobalValue::NotThreadLocal,
+                                    ADDR_SPACE_LOCAL);
+        LLPC_ASSERT(m_pLds != nullptr);
+        m_pLds->setAlignment(sizeof(uint32_t));
+    }
+
     // Export GS outputs to FS
     if (result == Result::Success)
     {
@@ -175,9 +194,15 @@ void CopyShader::ExportOutput()
 
     for (auto& byteSizeMap : genericOutByteSizes)
     {
+        // <location, <component, byteSize>>
         uint32_t loc = byteSizeMap.first;
 
-        uint32_t byteSize = byteSizeMap.second;
+        uint32_t byteSize = 0;
+        for (uint32_t i = 0; i < 4; ++i)
+        {
+            byteSize += byteSizeMap.second[i];
+        }
+
         LLPC_ASSERT(byteSize % 4 == 0);
         uint32_t dwordSize = byteSize / 4;
         auto pOutputTy = VectorType::get(m_pContext->FloatTy(), dwordSize);
@@ -359,8 +384,8 @@ Result CopyShader::DoPatch()
 }
 
 // =====================================================================================================================
-// Calculates GS to VS buffer offset from input/output location
-Value* CopyShader::CalcGsVsRingBufferOffsetForOutput(
+// Calculates GS to VS ring offset from input location
+Value* CopyShader::CalcGsVsRingOffsetForInput(
     uint32_t        location,    // Output location
     uint32_t        compIdx,     // Output component
     Instruction*    pInsertPos)  // [in] Where to insert the instruction
@@ -369,22 +394,38 @@ Value* CopyShader::CalcGsVsRingBufferOffsetForOutput(
 
     auto pResUsage = m_pContext->GetShaderResourceUsage(ShaderStageGeometry);
 
-    uint32_t outputVertices = pResUsage->builtInUsage.gs.outputVertices;
+    Value* pRingOffset = nullptr;
+    if (m_pContext->IsGsOnChip())
+    {
+        // ringOffset = esGsLdsSize + vertexOffset + location * 4 + compIdx
+        pRingOffset = ConstantInt::get(m_pContext->Int32Ty(), pResUsage->inOutUsage.gs.esGsLdsSize);
 
-    // byteOffset = vertexOffset * 4 + (location * 4 + compIdx) * 64 * maxVertices
-    Value* pRingBufOffset = BinaryOperator::CreateMul(pVertexOffset,
-                                                      ConstantInt::get(m_pContext->Int32Ty(), 4),
-                                                      "",
-                                                      pInsertPos);
+        pRingOffset = BinaryOperator::CreateAdd(pRingOffset, pVertexOffset, "", pInsertPos);
 
-    pRingBufOffset = BinaryOperator::CreateAdd(pRingBufOffset,
-                                               ConstantInt::get(m_pContext->Int32Ty(),
-                                                                (location * 4 + compIdx) * 64 *
-                                                                outputVertices),
-                                               "",
-                                               pInsertPos);
+        pRingOffset = BinaryOperator::CreateAdd(pRingOffset,
+                                                ConstantInt::get(m_pContext->Int32Ty(), (location * 4) + compIdx),
+                                                "",
+                                                pInsertPos);
+    }
+    else
+    {
+        uint32_t outputVertices = pResUsage->builtInUsage.gs.outputVertices;
 
-    return pRingBufOffset;
+        // ringOffset = vertexOffset * 4 + (location * 4 + compIdx) * 64 * maxVertices
+        pRingOffset = BinaryOperator::CreateMul(pVertexOffset,
+                                                ConstantInt::get(m_pContext->Int32Ty(), 4),
+                                                "",
+                                                pInsertPos);
+
+        pRingOffset = BinaryOperator::CreateAdd(pRingOffset,
+                                                ConstantInt::get(m_pContext->Int32Ty(),
+                                                                 (location * 4 + compIdx) * 64 *
+                                                                 outputVertices),
+                                                "",
+                                                pInsertPos);
+    }
+
+    return pRingOffset;
 }
 
 // =====================================================================================================================
@@ -394,21 +435,39 @@ Value* CopyShader::LoadValueFromGsVsRingBuffer(
     uint32_t        compIdx,    // Output component
     Instruction*    pInsertPos) // [in] Where to insert the load instruction
 {
-    Value* pRingBufOffset = CalcGsVsRingBufferOffsetForOutput(location, compIdx, pInsertPos);
-    auto& inOutUsage = m_pContext->GetShaderResourceUsage(ShaderStageCopyShader)->inOutUsage;
+    Value* pLoadValue = nullptr;
+    Value* pRingOffset = CalcGsVsRingOffsetForInput(location, compIdx, pInsertPos);
 
-    std::vector<Value*> args;
-    args.push_back(inOutUsage.gs.pGsVsRingBufDesc);
-    args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
-    args.push_back(pRingBufOffset);
-    args.push_back(ConstantInt::get(m_pContext->BoolTy(), true));  // glc
-    args.push_back(ConstantInt::get(m_pContext->BoolTy(), true));  // slc
-    return EmitCall(m_pModule,
-                    "llvm.amdgcn.buffer.load.f32",
-                    m_pContext->FloatTy(),
-                    args,
-                    NoAttrib,
-                    pInsertPos);
+    if (m_pContext->IsGsOnChip())
+    {
+        std::vector<Value*> idxs;
+        idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
+        idxs.push_back(pRingOffset);
+
+        Value* pLoadPtr = GetElementPtrInst::Create(nullptr, m_pLds, idxs, "", pInsertPos);
+        pLoadValue = new LoadInst(pLoadPtr, "", false, m_pLds->getAlignment(), pInsertPos);
+
+        pLoadValue = BitCastInst::Create(Instruction::BitCast, pLoadValue, m_pContext->FloatTy(), "", pInsertPos);
+    }
+    else
+    {
+        auto& inOutUsage = m_pContext->GetShaderResourceUsage(ShaderStageCopyShader)->inOutUsage;
+
+        std::vector<Value*> args;
+        args.push_back(inOutUsage.gs.pGsVsRingBufDesc);
+        args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
+        args.push_back(pRingOffset);
+        args.push_back(ConstantInt::get(m_pContext->BoolTy(), true));  // glc
+        args.push_back(ConstantInt::get(m_pContext->BoolTy(), true));  // slc
+        pLoadValue = EmitCall(m_pModule,
+                              "llvm.amdgcn.buffer.load.f32",
+                              m_pContext->FloatTy(),
+                              args,
+                              NoAttrib,
+                              pInsertPos);
+    }
+
+    return pLoadValue;
 }
 
 // =====================================================================================================================

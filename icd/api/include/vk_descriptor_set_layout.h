@@ -89,7 +89,6 @@ public:
     struct CreateInfo
     {
         uint32_t        count;              // Total number of layout entries
-        BindingInfo*    bindings;           // Array of entries
         uint32_t        activeStageMask;    // Shader stage mask describing which stages in which at least one
                                             // binding of this layout's set is active
         uint32_t        numDynamicDescriptors; // Number of dynamic descriptors in this layout
@@ -110,7 +109,12 @@ public:
         Device*                                     pDevice,
         const VkAllocationCallbacks*                pAllocator);
 
-    const BindingInfo& Binding(uint32_t bindingIndex) const { return m_info.bindings[bindingIndex]; }
+    const BindingInfo& Binding(uint32_t bindingIndex) const
+    {
+        // The bindings are allocated immediately after the object.  See DescriptorSetLayout::Create().
+        BindingInfo* pBindings = static_cast<BindingInfo*>(Util::VoidPtrInc(this, sizeof(*this)));
+        return pBindings[bindingIndex];
+    }
 
     const CreateInfo& Info() const { return m_info; }
 
@@ -133,7 +137,8 @@ protected:
     static VkResult ConvertCreateInfo(
         const Device*                                pDevice,
         const VkDescriptorSetLayoutCreateInfo*       pIn,
-        CreateInfo*                                  pInfo);
+        CreateInfo*                                  pInfo,
+        BindingInfo*                                 pOutBindings);
 
     static void ConvertBindingInfo(
         const VkDescriptorSetLayoutBinding* pBindingInfo,

@@ -595,7 +595,8 @@ VkResult InternalMemMgr::AllocAndBindGpuMem(
     Pal::IGpuMemoryBindable* pBindable,
     bool                     readOnly,
     InternalMemory*          pInternalMemory,
-    bool                     removeInvisibleHeap)
+    bool                     removeInvisibleHeap,
+    bool                     persistentMapped)
 {
     VK_ASSERT(pBindable != nullptr);
     VK_ASSERT(pInternalMemory != nullptr);
@@ -610,20 +611,21 @@ VkResult InternalMemMgr::AllocAndBindGpuMem(
         return VK_SUCCESS;
     }
 
+    // Fill in the GPU memory object creation info based on the memory requirements
+    InternalMemCreateInfo createInfo = {};
+
     if (removeInvisibleHeap)
     {
         FilterInvisibleHeap(&memReqs);
     }
 
-    // Fill in the GPU memory object creation info based on the memory requirements
-    InternalMemCreateInfo createInfo = {};
-
-    createInfo.pal.size       = memReqs.size;
-    createInfo.pal.alignment  = memReqs.alignment;
-    createInfo.pal.vaRange    = Pal::VaRange::Default;
-    createInfo.pal.priority   = Pal::GpuMemPriority::Normal;
-    createInfo.pal.heapCount  = memReqs.heapCount;
-    createInfo.flags.readOnly = readOnly;
+    createInfo.pal.size               = memReqs.size;
+    createInfo.pal.alignment          = memReqs.alignment;
+    createInfo.pal.vaRange            = Pal::VaRange::Default;
+    createInfo.pal.priority           = Pal::GpuMemPriority::Normal;
+    createInfo.pal.heapCount          = memReqs.heapCount;
+    createInfo.flags.readOnly         = readOnly;
+    createInfo.flags.persistentMapped = persistentMapped ? 1 : 0;
 
     for (uint32_t h = 0; h < memReqs.heapCount; ++h)
     {

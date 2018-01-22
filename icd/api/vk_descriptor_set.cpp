@@ -106,7 +106,7 @@ void DescriptorSet::Reassign(
 
             // In this case we also have to copy the immutable sampler data from the descriptor set layout to the
             // descriptor set's appropriate memory locations.
-            InitImmutableDescriptors(numPalDevices);
+            InitImmutableDescriptors(pLayout, numPalDevices);
         }
         else
         {
@@ -126,19 +126,23 @@ void DescriptorSet::Reassign(
 
 // =====================================================================================================================
 // Initialize immutable descriptor data in the descriptor set.
-void DescriptorSet::InitImmutableDescriptors(uint32_t numPalDevices)
+void DescriptorSet::InitImmutableDescriptors(
+    const DescriptorSetLayout*  pLayout,
+    uint32_t                    numPalDevices)
 {
-    const size_t imageDescDwSize = m_pLayout->VkDevice()->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
-    const size_t samplerDescSize = m_pLayout->VkDevice()->GetProperties().descriptorSizes.sampler;
+    VK_ASSERT(m_pLayout == pLayout);
 
-    uint32_t immutableSamplersLeft = m_pLayout->Info().imm.numImmutableSamplers;
+    const size_t imageDescDwSize = pLayout->VkDevice()->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
+    const size_t samplerDescSize = pLayout->VkDevice()->GetProperties().descriptorSizes.sampler;
+
+    uint32_t immutableSamplersLeft = pLayout->Info().imm.numImmutableSamplers;
     uint32_t binding = 0;
 
-    uint32_t* pSrcData  = m_pLayout->Info().imm.pImmutableSamplerData;
+    uint32_t* pSrcData  = pLayout->Info().imm.pImmutableSamplerData;
 
     while (immutableSamplersLeft > 0)
     {
-        const DescriptorSetLayout::BindingInfo& bindingInfo = m_pLayout->Info().bindings[binding];
+        const DescriptorSetLayout::BindingInfo& bindingInfo = pLayout->Binding(binding);
         uint32_t desCount = bindingInfo.info.descriptorCount;
 
         if (bindingInfo.imm.dwSize > 0)

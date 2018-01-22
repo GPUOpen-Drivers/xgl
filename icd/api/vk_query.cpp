@@ -158,7 +158,10 @@ VkResult PalQueryPool::Create(
     {
         // Allocate and bind GPU memory for the object
         const bool removeInvisibleHeap = true;
-        result = pDevice->MemMgr()->AllocAndBindGpuMem(pPalQueryPool, false, &internalMem, removeInvisibleHeap);
+        const bool persistentMapped = true;
+
+        result = pDevice->MemMgr()->AllocAndBindGpuMem(
+                                        pPalQueryPool, false, &internalMem, removeInvisibleHeap, persistentMapped);
     }
 
     if (result == VK_SUCCESS)
@@ -227,6 +230,7 @@ VkResult PalQueryPool::GetResults(
             m_palQueryType,
             startQuery,
             queryCount,
+            m_internalMem.CpuAddr(),
             &dataSize,
             pData,
             static_cast<size_t>(stride));
@@ -406,8 +410,9 @@ VkResult TimestampQueryPool::GetResults(
 
         // Although the spec says that dataSize has to be large enough to contain the result of each query, which sort
         // of sounds like it makes it redundant, clamp the maximum number of queries written to the given dataSize
-        // just in case, since it's harmless to do.
-        queryCount = static_cast<uint32_t>(Util::Min(static_cast<size_t>(queryCount), dataSize / querySlotSize));
+        // and take account of the supplied stride, since it's harmless to do.
+        queryCount = Util::Min(queryCount,
+                static_cast<uint32_t>(dataSize / Util::Max(querySlotSize, static_cast<size_t>(stride))));
 
         // Write results of each query slot
         for (uint32_t dstSlot = 0; dstSlot < queryCount; ++dstSlot)

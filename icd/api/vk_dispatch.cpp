@@ -61,6 +61,7 @@
 #include "include/vk_shader.h"
 #include "include/vk_surface.h"
 #include "include/vk_swapchain.h"
+#include "include/vk_debug_report.h"
 
 #include <cstring>
 
@@ -447,6 +448,11 @@ const DispatchTableEntry g_StandardDispatchTable[] =
     PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceMultisamplePropertiesEXT     ),
 
     PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceExternalFencePropertiesKHR   ),
+    PRIMARY_DISPATCH_ENTRY( vkCreateDebugReportCallbackEXT                  ),
+    PRIMARY_DISPATCH_ENTRY( vkDestroyDebugReportCallbackEXT                 ),
+    PRIMARY_DISPATCH_ENTRY( vkDebugReportMessageEXT                         ),
+
+    PRIMARY_DISPATCH_ENTRY( vkCmdWriteBufferMarkerAMD                             ),
 
     VK_DISPATCH_TABLE_END()
 };

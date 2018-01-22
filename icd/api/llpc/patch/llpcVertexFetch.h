@@ -69,7 +69,7 @@ public:
 
     static const VertexFormatInfo* GetVertexFormatInfo(VkFormat format);
 
-    llvm::Value* Run(llvm::Type* pInputTy, uint32_t location, llvm::Instruction* pInsertPos);
+    llvm::Value* Run(llvm::Type* pInputTy, uint32_t location, uint32_t compIdx, llvm::Instruction* pInsertPos);
 
     // Gets variable corresponding to vertex index
     llvm::Value* GetVertexIndex() { return m_pVertexIndex; }

@@ -349,25 +349,6 @@ VkResult Memory::Create(
     }
     else if (vkResult == VK_SUCCESS)
     {
-        // Initialize tiny host visible allocations to zero
-        const uint32_t NumBytesToZero = 32;
-
-        if ((pAllocInfo->allocationSize < NumBytesToZero) &&
-            (createInfo.heaps[0] != Pal::GpuHeapInvisible))
-        {
-            void*    pData  = nullptr;
-            VkResult result = pMemory->Map(0, 0, NumBytesToZero, &pData);
-
-            VK_ASSERT(createInfo.size >= NumBytesToZero);
-
-            if (result == VK_SUCCESS)
-            {
-                memset(pData, 0, NumBytesToZero);
-
-                pMemory->Unmap();
-            }
-        }
-
         // notify the memory object that it is counted so that the destructor can decrease the counter accordingly
         pMemory->SetAllocationCounted();
 

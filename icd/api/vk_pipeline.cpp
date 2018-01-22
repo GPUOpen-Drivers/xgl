@@ -484,12 +484,6 @@ void Pipeline::CreateLegacyPathElfBinary(
                 gpuVersionNote.gfxipMajorVer = 9;
                 gpuVersionNote.gfxipMinorVer = 0;
                 break;
-#ifdef VKI_CLOSED_SOURCE
-            case Pal::GfxIpLevel::GfxIp10:
-                gpuVersionNote.gfxipMajorVer = 10;
-                gpuVersionNote.gfxipMinorVer = 0;
-                break;
-#endif
             default:
                 VK_NEVER_CALLED();
                 break;

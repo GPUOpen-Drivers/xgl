@@ -945,21 +945,6 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                         m_pResUsage->builtInUsage.fs.runAtSampleRate = true;
                     }
                 }
-                else
-                {
-                    LLPC_ASSERT(addrSpace == SPIRAS_Output);
-
-                    // Collect CB shader mask
-                    LLPC_ASSERT(pBaseTy->isSingleValueType());
-                    const uint32_t compCount = pBaseTy->isVectorTy() ? pBaseTy->getVectorNumElements() : 1;
-                    const uint32_t channelMask = ((1 << compCount) - 1);
-
-                    LLPC_ASSERT(startLoc + locCount <= MaxColorTargets);
-                    for (uint32_t i = 0; i < locCount; ++i)
-                    {
-                        m_pResUsage->inOutUsage.fs.cbShaderMask |= (channelMask << 4 * (startLoc + i));
-                    }
-                }
             }
         }
     }

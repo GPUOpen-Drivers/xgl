@@ -55,9 +55,9 @@ private:
     void ExportOutput();
     Result DoPatch();
 
-    llvm::Value* CalcGsVsRingBufferOffsetForOutput(uint32_t           location,
-                                                   uint32_t           compIdx,
-                                                   llvm::Instruction* pInsertPos);
+    llvm::Value* CalcGsVsRingOffsetForInput(uint32_t           location,
+                                            uint32_t           compIdx,
+                                            llvm::Instruction* pInsertPos);
 
     llvm::Value* LoadValueFromGsVsRingBuffer(uint32_t           location,
                                              uint32_t           compIdx,
@@ -74,9 +74,10 @@ private:
     // Start offset of currently-processed vertex in GS-VS ring buffer
     static const uint32_t EntryArgIdxVertexOffset = 2;
 
-    llvm::Module*       m_pModule;                      // LLVM module for copy shader
-    Context*            m_pContext;                     // LLPC context
-    llvm::Function*     m_pEntryPoint;                  // Entry point of copy shader module
+    llvm::Module*           m_pModule;                      // LLVM module for copy shader
+    Context*                m_pContext;                     // LLPC context
+    llvm::Function*         m_pEntryPoint;                  // Entry point of copy shader module
+    llvm::GlobalVariable*   m_pLds;                         // Global variable to model LDS
 };
 
 } // Llpc

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -22,26 +22,33 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+ **********************************************************************************************************************
+ * @file  vk_amd_buffer_marker.h
+ * @brief Header for VK_AMD_buffer marker extension.
+ **********************************************************************************************************************
+ */
+#ifndef VK_AMD_BUFFER_MARKER_H_
+#define VK_AMD_BUFFER_MARKER_H_
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#define VK_AMD_buffer_marker                  1
+#define VK_AMD_BUFFER_MARKER_SPEC_VERSION     1
+#define VK_AMD_BUFFER_MARKER_EXTENSION_NUMBER 180
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#define VK_AMD_BUFFER_MARKER_EXTENSION_NAME   "VK_AMD_buffer_marker"
 
-#define VULKAN_API_MAJOR_VERSION    1
-#define VULKAN_API_MINOR_VERSION    0
-#define VULKAN_API_BUILD_VERSION    65
+typedef void (VKAPI_PTR *PFN_vkCmdWriteBufferMarkerAMD)(
+    VkCommandBuffer         commandBuffer,
+    VkPipelineStageFlagBits pipelineStage,
+    VkBuffer                dstBuffer,
+    VkDeviceSize            dstOffset,
+    uint32_t                marker);
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarkerAMD(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineStageFlagBits                     pipelineStage,
+    VkBuffer                                    dstBuffer,
+    VkDeviceSize                                dstOffset,
+    uint32_t                                    marker);
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
-
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION    10
-
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
+#endif /* VK_AMD_BUFFER_MARKER_H_ */

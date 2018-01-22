@@ -892,3 +892,19 @@ extern const char vkGetFenceWin32HandleKHR_name[];
 static const char* VKGETFENCEWIN32HANDLEKHR_name = vkGetFenceWin32HandleKHR_name;
 #define vkGetFenceWin32HandleKHR_condition_type vk::secure::entry::ENTRY_POINT_DEVICE_EXTENSION
 #define vkGetFenceWin32HandleKHR_condition_value vk::DeviceExtensions::KHR_EXTERNAL_FENCE_WIN32
+extern const char vkCmdWriteBufferMarkerAMD_name[];
+static const char* VKCMDWRITEBUFFERMARKERAMD_name = vkCmdWriteBufferMarkerAMD_name;
+#define vkCmdWriteBufferMarkerAMD_condition_type vk::secure::entry::ENTRY_POINT_DEVICE_EXTENSION
+#define vkCmdWriteBufferMarkerAMD_condition_value vk::DeviceExtensions::AMD_BUFFER_MARKER
+extern const char vkCreateDebugReportCallbackEXT_name[];
+static const char* VKCREATEDEBUGREPORTCALLBACKEXT_name = vkCreateDebugReportCallbackEXT_name;
+#define vkCreateDebugReportCallbackEXT_condition_type vk::secure::entry::ENTRY_POINT_INSTANCE_EXTENSION
+#define vkCreateDebugReportCallbackEXT_condition_value vk::InstanceExtensions::EXT_DEBUG_REPORT
+extern const char vkDestroyDebugReportCallbackEXT_name[];
+static const char* VKDESTROYDEBUGREPORTCALLBACKEXT_name = vkDestroyDebugReportCallbackEXT_name;
+#define vkDestroyDebugReportCallbackEXT_condition_type vk::secure::entry::ENTRY_POINT_INSTANCE_EXTENSION
+#define vkDestroyDebugReportCallbackEXT_condition_value vk::InstanceExtensions::EXT_DEBUG_REPORT
+extern const char vkDebugReportMessageEXT_name[];
+static const char* VKDEBUGREPORTMESSAGEEXT_name = vkDebugReportMessageEXT_name;
+#define vkDebugReportMessageEXT_condition_type vk::secure::entry::ENTRY_POINT_INSTANCE_EXTENSION
+#define vkDebugReportMessageEXT_condition_value vk::InstanceExtensions::EXT_DEBUG_REPORT

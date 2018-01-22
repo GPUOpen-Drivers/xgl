@@ -180,6 +180,7 @@ public:
         KHX_DEVICE_GROUP_CREATION,
         KHR_EXTERNAL_SEMAPHORE_CAPABILITIES,
         KHR_EXTERNAL_FENCE_CAPABILITIES,
+        EXT_DEBUG_REPORT,
         Count
     };
 };
@@ -237,6 +238,8 @@ public:
         KHR_EXTERNAL_FENCE_WIN32,
         KHR_WIN32_KEYED_MUTEX,
         EXT_GLOBAL_PRIORITY,
+        AMD_BUFFER_MARKER,
+
         Count
     };
 };

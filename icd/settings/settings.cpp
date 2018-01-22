@@ -105,6 +105,9 @@ void ProcessSettings(
     // setup default values for the settings.
     SetupDefaults(pSettings);
 
+    // Update PAL settings based on runtime settings and desired driver defaults if needed
+    UpdatePalSettings(pPalDevice, pSettings);
+
 #ifdef ICD_BUILD_APPPROFILE
     const AppProfile origProfile = *pAppProfile;
     // Override defaults based on application profile
@@ -135,11 +138,6 @@ void ProcessSettings(
     if (*pAppProfile != origProfile)
     {
         ProcessSettings(pPalDevice, pAppProfile, pSettings);
-    }
-    else
-    {
-        // update PAL settings based on runtime settings if needed
-        UpdatePalSettings(pPalDevice, pSettings);
     }
 #endif
 }
@@ -180,7 +178,7 @@ void UpdatePalSettings(
 {
     Pal::PalPublicSettings* pPalSettings = pPalDevice->GetPublicSettings();
 
-    /* Nothing to do here at the moment */
+    pPalSettings->hintDisableSmallSurfColorCompressionSize = 0;
 }
 
 };

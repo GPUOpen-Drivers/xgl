@@ -499,6 +499,12 @@ public:
         uint32_t                                    length,
         const void*                                 values);
 
+    void WriteBufferMarker(
+        VkPipelineStageFlagBits pipelineStage,
+        VkBuffer                dstBuffer,
+        VkDeviceSize            dstOffset,
+        uint32_t                marker);
+
     VK_INLINE void SetDeviceMask(uint32_t deviceMask)
     {
         // Ensure we are enabling valid devices within the group
@@ -541,9 +547,10 @@ public:
         return m_pPalCmdBuffers[idx];
     }
 
-    static Pal::uint32 ConvertBarrierSrcAccessFlags(VkAccessFlags accessMask);
-    static Pal::uint32 ConvertBarrierDstAccessFlags(VkAccessFlags accessMask);
+    static Pal::uint32 ConvertBarrierSrcAccessFlags(const Device* pDevice, VkAccessFlags accessMask);
+    static Pal::uint32 ConvertBarrierDstAccessFlags(const Device* pDevice, VkAccessFlags accessMask);
     static void ConvertBarrierCacheFlags(
+               const Device*           pDevice,
                VkAccessFlags           srcAccess,
                VkAccessFlags           dstAccess,
                uint32_t                supportInputCacheMask,
@@ -1337,6 +1344,14 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerInsertEXT(
 VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleLocationsEXT(
     VkCommandBuffer                             commandBuffer,
     const VkSampleLocationsInfoEXT*             pSampleLocationsInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarkerAMD(
+    VkCommandBuffer         commandBuffer,
+    VkPipelineStageFlagBits pipelineStage,
+    VkBuffer                dstBuffer,
+    VkDeviceSize            dstOffset,
+    uint32_t                marker);
+
 } // namespace entry
 
 } // namespace vk

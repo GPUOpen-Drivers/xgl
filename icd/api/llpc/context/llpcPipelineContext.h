@@ -371,13 +371,17 @@ struct ResourceUsage
             // outputs to fragment shader, always from vertex stream 0)
             std::unordered_map<uint32_t, uint32_t> builtInOutLocs;
 
-            // Map from tightly packed locations to byte sizes of generic outputs (used by copy shader to export
-            // generic outputs to fragment shader, always from vertex stream 0)
-            std::unordered_map<uint32_t, uint32_t> genericOutByteSizes;
+            // Map from tightly packed locations to byte sizes of generic outputs (used by copy shader to
+            // export generic outputs to fragment shader, always from vertex stream 0):
+            //   <location, <component, byteSize>>
+            std::unordered_map<uint32_t, uint32_t[4]> genericOutByteSizes;
 
             llvm::Value* pEsGsOffsets;          // ES -> GS offsets (GS in)
             llvm::Value* pGsVsRingBufDesc;      // GS -> VS ring buffer descriptor (GS out);
             llvm::Value* pEmitCounterPtr;
+
+            uint32_t esGsLdsSize;               // ES -> GS ring LDS size (GS in)
+            uint32_t gsVsRingItemSize;          // Size of each primitive written to the GSVS Ring ( in dwords)
         } gs;
 
         struct

@@ -89,6 +89,10 @@ target_compile_definitions(llpc PRIVATE ${TARGET_ARCHITECTURE_ENDIANESS}ENDIAN_C
 target_compile_definitions(llpc PRIVATE _SPIRV_LLVM_API)
 target_compile_definitions(llpc PRIVATE LLPC_BUILD_GFX9)
 
+if(ICD_UPSTREAM_LLVM)
+    target_compile_definitions(llpc PRIVATE LLVM_SOURCE_PROMOTION=1)
+endif()
+
 target_include_directories(llpc
     PUBLIC
         ${PROJECT_SOURCE_DIR}/include

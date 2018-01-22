@@ -241,3 +241,7 @@ const char vkImportFenceFdKHR_name[] = "vkImportFenceFdKHR";
 const char vkGetFenceFdKHR_name[] = "vkGetFenceFdKHR";
 const char vkImportFenceWin32HandleKHR_name[] = "vkImportFenceWin32HandleKHR";
 const char vkGetFenceWin32HandleKHR_name[] = "vkGetFenceWin32HandleKHR";
+const char vkCmdWriteBufferMarkerAMD_name[] = "vkCmdWriteBufferMarkerAMD";
+const char vkCreateDebugReportCallbackEXT_name[] = "vkCreateDebugReportCallbackEXT";
+const char vkDestroyDebugReportCallbackEXT_name[] = "vkDestroyDebugReportCallbackEXT";
+const char vkDebugReportMessageEXT_name[] = "vkDebugReportMessageEXT";

@@ -2657,7 +2657,9 @@ void CmdBuffer::ResetEvent(
 // =====================================================================================================================
 // Given a bitmask of VkAccessFlags, computes the representative PAL CacheCoherencyUsageFlags that will be written
 // in the srcCacheMask field of a pipeline BarrierTransition.
-Pal::uint32 CmdBuffer::ConvertBarrierSrcAccessFlags(VkAccessFlags accessMask)
+Pal::uint32 CmdBuffer::ConvertBarrierSrcAccessFlags(
+    const Device* pDevice,
+    VkAccessFlags accessMask)
 {
     Pal::uint32 coher = 0;
 
@@ -2686,6 +2688,11 @@ Pal::uint32 CmdBuffer::ConvertBarrierSrcAccessFlags(VkAccessFlags accessMask)
         // Also need Pal::CoherShader here as vkCmdCopyQueryPoolResults uses a compute shader defined in the Vulkan
         // API layer when used with timestamp queries.
         coher |= Pal::CoherCopy | Pal::CoherResolve | Pal::CoherClear | Pal::CoherShader;
+
+        if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_BUFFER_MARKER))
+        {
+            coher |= Pal::CoherTimestamp;
+        }
     }
 
     if (accessMask & VK_ACCESS_MEMORY_WRITE_BIT)
@@ -2705,7 +2712,9 @@ Pal::uint32 CmdBuffer::ConvertBarrierSrcAccessFlags(VkAccessFlags accessMask)
 // =====================================================================================================================
 // Given a bitmask of VkAccessFlags, computes the representative PAL CacheCoherencyUsageFlags that will be written
 // in the dstCacheMask field of a pipeline BarrierTransition.
-Pal::uint32 CmdBuffer::ConvertBarrierDstAccessFlags(VkAccessFlags accessMask)
+Pal::uint32 CmdBuffer::ConvertBarrierDstAccessFlags(
+    const Device* pDevice,
+    VkAccessFlags accessMask)
 {
     // With the more loose memory barrier semantics introduced we practically have to always invalidate all relevant
     // caches. The complete set is limited based on the usage allowed by the resource at the caller side.
@@ -2742,6 +2751,7 @@ Pal::uint32 CmdBuffer::ConvertBarrierDstAccessFlags(VkAccessFlags accessMask)
 // Convert src access and dst access mask to the PAL CacheCoherencyUsageFlags that will be written
 // in the srcCacheMask and dstCacheMask field of a pipeline BarrierTransition.
 void CmdBuffer::ConvertBarrierCacheFlags(
+    const Device*           pDevice,
     VkAccessFlags           srcAccess,
     VkAccessFlags           dstAccess,
     uint32_t                supportInputCacheMask,
@@ -2749,7 +2759,7 @@ void CmdBuffer::ConvertBarrierCacheFlags(
     uint32_t                barrierOptions,
     Pal::BarrierTransition* pResult)
 {
-     pResult->srcCacheMask = (supportOutputCacheMask != 0xFFFFFFFF) ? supportOutputCacheMask & ConvertBarrierSrcAccessFlags(srcAccess) : ConvertBarrierSrcAccessFlags(srcAccess);
+     pResult->srcCacheMask = supportOutputCacheMask & ConvertBarrierSrcAccessFlags(pDevice, srcAccess);
 
      // srccachemask is 0 for all read only source access like VK_ACCESS_*_READ_BIT
      // etc. hence, only validate against all input caches if we are going from write to any other access flag.
@@ -2761,7 +2771,7 @@ void CmdBuffer::ConvertBarrierCacheFlags(
      }
      else
      {
-         pResult->dstCacheMask = (supportInputCacheMask != 0xFFFFFFFF) ? supportInputCacheMask & ConvertBarrierDstAccessFlags(dstAccess) : ConvertBarrierDstAccessFlags(dstAccess);
+         pResult->dstCacheMask = supportInputCacheMask & ConvertBarrierDstAccessFlags(pDevice, dstAccess);
      }
 }
 
@@ -2837,7 +2847,13 @@ void CmdBuffer::ExecuteBarriers(
 
     for (uint32_t i = 0; i < memBarrierCount; ++i)
     {
-        ConvertBarrierCacheFlags(pMemoryBarriers[i].srcAccessMask, pMemoryBarriers[i].dstAccessMask, 0xFFFFFFFF, 0xFFFFFFFF, barrierOptions, pNextMain);
+        ConvertBarrierCacheFlags(
+            m_pDevice,
+            pMemoryBarriers[i].srcAccessMask,
+            pMemoryBarriers[i].dstAccessMask,
+            0xFFFFFFFF, 0xFFFFFFFF,
+            barrierOptions,
+            pNextMain);
 
         pNextMain->imageInfo.pImage = nullptr;
         VK_ASSERT(pMemoryBarriers[i].pNext == nullptr);
@@ -2872,7 +2888,14 @@ void CmdBuffer::ExecuteBarriers(
         uint32_t supportInputCoherMask = pBuffer->GetSupportedInputCoherMask();
         uint32_t supportOutputCoherMask = pBuffer->GetSupportedOutputCoherMask();
 
-        ConvertBarrierCacheFlags(pBufferMemoryBarriers[i].srcAccessMask, pBufferMemoryBarriers[i].dstAccessMask, supportInputCoherMask, supportOutputCoherMask, barrierOptions, pNextMain);
+        ConvertBarrierCacheFlags(
+            m_pDevice,
+            pBufferMemoryBarriers[i].srcAccessMask,
+            pBufferMemoryBarriers[i].dstAccessMask,
+            supportInputCoherMask,
+            supportOutputCoherMask,
+            barrierOptions,
+            pNextMain);
 
         pNextMain->imageInfo.pImage = nullptr;
 
@@ -2909,7 +2932,14 @@ void CmdBuffer::ExecuteBarriers(
         uint32_t               supportOutputCoherMask = pImage->GetSupportedOutputCoherMask();
         Pal::BarrierTransition barrierTransition      = { 0 };
 
-        ConvertBarrierCacheFlags(pImageMemoryBarriers[i].srcAccessMask, pImageMemoryBarriers[i].dstAccessMask, supportInputCoherMask, supportOutputCoherMask, barrierOptions, &barrierTransition);
+        ConvertBarrierCacheFlags(
+            m_pDevice,
+            pImageMemoryBarriers[i].srcAccessMask,
+            pImageMemoryBarriers[i].dstAccessMask,
+            supportInputCoherMask,
+            supportOutputCoherMask,
+            barrierOptions,
+            &barrierTransition);
 
         pNextMain->imageInfo.pImage = nullptr;
 
@@ -4109,6 +4139,7 @@ void CmdBuffer::RPSyncPoint(
             pGlobalTransition->imageInfo.pImage = nullptr;
 
             ConvertBarrierCacheFlags(
+                m_pDevice,
                 syncPoint.barrier.srcAccessMask,
                 syncPoint.barrier.dstAccessMask,
                 0xffffffff,
@@ -5017,6 +5048,30 @@ void CmdBuffer::DbgCmdBarrier(bool preCmd)
 #endif
 
 // =====================================================================================================================
+void CmdBuffer::WriteBufferMarker(
+    VkPipelineStageFlagBits pipelineStage,
+    VkBuffer                dstBuffer,
+    VkDeviceSize            dstOffset,
+    uint32_t                marker)
+{
+    const Buffer* pDestBuffer        = Buffer::ObjectFromHandle(dstBuffer);
+    const Pal::HwPipePoint pipePoint = VkToPalSrcPipePointForMarkers(pipelineStage, m_palEngineType);
+
+    utils::IterateMask deviceGroup(m_palDeviceMask);
+
+    while (deviceGroup.Iterate())
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        PalCmdBuffer(deviceIdx)->CmdWriteImmediate(
+            pipePoint,
+            marker,
+            Pal::ImmediateDataWidth::ImmediateData32Bit,
+            pDestBuffer->GpuVirtAddr(deviceIdx) + dstOffset);
+    }
+}
+
+// =====================================================================================================================
 RenderPassInstanceState::RenderPassInstanceState(
     PalAllocator* pAllocator)
     :
@@ -5780,6 +5835,18 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetSampleLocationsEXT(
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetSampleLocations(pSampleLocationsInfo);
 }
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarkerAMD(
+    VkCommandBuffer         commandBuffer,
+    VkPipelineStageFlagBits pipelineStage,
+    VkBuffer                dstBuffer,
+    VkDeviceSize            dstOffset,
+    uint32_t                marker)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->WriteBufferMarker(pipelineStage, dstBuffer, dstOffset, marker);
+}
+
 } // namespace entry
 
 } // namespace vk

@@ -1400,23 +1400,64 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
             }
         }
 
-        if ((m_shaderStage == ShaderStageTessControl) ||
-            (m_shaderStage == ShaderStageTessEval) ||
+        if ((m_shaderStage == ShaderStageTessControl) || (m_shaderStage == ShaderStageTessEval) ||
             (interpLoc != InterpLocUnknown))
         {
-            // NOTE: For tessellation shader and fragment shader with interpolation functions, we add element indexing
-            // as an addition parameter to do addressing for the input/output.
-            if (pElemIdx == nullptr)
+            if (inOutMeta.IsBuiltIn)
             {
-                // When element indexing is not specified, we set it to don't-care value
-                pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), InvalidValue);
+                if (pElemIdx == nullptr)
+                {
+                    // When element indexing is not specified, we set it to don't-care value
+                    pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), InvalidValue);
+                }
             }
+            else
+            {
+                LLPC_ASSERT(pInOutTy->isSingleValueType());
+
+                uint32_t elemIdx = inOutMeta.Component;
+                LLPC_ASSERT(inOutMeta.Component <= 3);
+                if (pInOutTy->getScalarSizeInBits() == 64)
+                {
+                    LLPC_ASSERT(inOutMeta.Component % 2 == 0); // Must be even for 64-bit type
+                    elemIdx = inOutMeta.Component / 2;
+                }
+
+                if (pElemIdx != nullptr)
+                {
+                    pElemIdx = BinaryOperator::CreateAdd(pElemIdx,
+                                                         ConstantInt::get(m_pContext->Int32Ty(), elemIdx),
+                                                         "",
+                                                         pInsertPos);
+                }
+                else
+                {
+                    pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), elemIdx);
+                }
+            }
+
             args.push_back(pElemIdx);
         }
         else
         {
             // Element indexing is not valid for other shader stages
             LLPC_ASSERT(pElemIdx == nullptr);
+
+            if ((inOutMeta.IsBuiltIn == false) && (m_shaderStage != ShaderStageCompute))
+            {
+                LLPC_ASSERT(pInOutTy->isSingleValueType());
+
+                uint32_t elemIdx = inOutMeta.Component;
+                LLPC_ASSERT(inOutMeta.Component <= 3);
+                if (pInOutTy->getScalarSizeInBits() == 64)
+                {
+                    LLPC_ASSERT(inOutMeta.Component % 2 == 0); // Must be even for 64-bit type
+                    elemIdx = inOutMeta.Component / 2;
+                }
+
+                pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), elemIdx);
+                args.push_back(pElemIdx);
+            }
         }
 
         if ((m_shaderStage == ShaderStageTessControl) ||
@@ -1452,7 +1493,7 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
         }
 
         //
-        // VS:  @llpc.input.import.generic.%Type%(i32 location)
+        // VS:  @llpc.input.import.generic.%Type%(i32 location, i32 elemIdx)
         //      @llpc.input.import.builtin.%BuiltIn%(i32 builtInId)
         //
         // TCS: @llpc.input.import.generic.%Type%(i32 location, i32 locOffset, i32 elemIdx, i32 vertexIdx)
@@ -1465,12 +1506,13 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
         // TES: @llpc.input.import.generic.%Type%(i32 location, i32 locOffset, i32 elemIdx, i32 vertexIdx)
         //      @llpc.input.import.builtin.%BuiltIn%.%Type%(i32 builtInId, i32 elemIdx, i32 vertexIdx)
 
-        // GS:  @llpc.input.import.generic.%Type%(i32 location, i32 vertexIdx)
+        // GS:  @llpc.input.import.generic.%Type%(i32 location, i32 elemIdx, i32 vertexIdx)
         //      @llpc.input.import.builtin.%BuiltIn%(i32 builtInId, i32 vertexIdx)
         //
-        // FS:  @llpc.input.import.generic.%Type%(i32 location, i32 interpMode, i32 interpLoc)
+        // FS:  @llpc.input.import.generic.%Type%(i32 location, i32 elemIdx, i32 interpMode, i32 interpLoc)
         //      @llpc.input.import.builtin.%BuiltIn%(i32 builtInId)
-        //      @llpc.input.import.interpolant.%Type%(i32 location, i32 locOffset, i32 elemIdx, i32 interpMode, <2 x float> ij)
+        //      @llpc.input.import.interpolant.%Type%(i32 location, i32 locOffset, i32 elemIdx,
+        //                                            i32 interpMode, <2 x float> ij)
         //
         // CS:  @llpc.input.import.builtin.%BuiltIn%(i32 builtInId)
         //
@@ -1681,15 +1723,65 @@ void SpirvLowerGlobal::AddCallInstForOutputExport(
 
         if (m_shaderStage == ShaderStageTessControl)
         {
-            // NOTE: For tessellation control shader, we add element indexing as an addition parameter to do addressing
-            // for the output.
-            if (pElemIdx == nullptr)
+            if (outputMeta.IsBuiltIn)
             {
-                // When element indexing is not specified, we set it to don't-care value
-                pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), InvalidValue);
+                if (pElemIdx == nullptr)
+                {
+                    // When element indexing is not specified, we set it to don't-care value
+                    pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), InvalidValue);
+                }
             }
-            args.push_back(pElemIdx);
+            else
+            {
+                LLPC_ASSERT(pOutputTy->isSingleValueType());
 
+                uint32_t elemIdx = outputMeta.Component;
+                LLPC_ASSERT(outputMeta.Component <= 3);
+                if (pOutputTy->getScalarSizeInBits() == 64)
+                {
+                    LLPC_ASSERT(outputMeta.Component % 2 == 0); // Must be even for 64-bit type
+                    elemIdx = outputMeta.Component / 2;
+                }
+
+                if (pElemIdx != nullptr)
+                {
+                    pElemIdx = BinaryOperator::CreateAdd(pElemIdx,
+                                                         ConstantInt::get(m_pContext->Int32Ty(), elemIdx),
+                                                         "",
+                                                         pInsertPos);
+                }
+                else
+                {
+                    pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), elemIdx);
+                }
+            }
+
+            args.push_back(pElemIdx);
+        }
+        else
+        {
+            // Element indexing is not valid for other shader stages
+            LLPC_ASSERT(pElemIdx == nullptr);
+
+            if ((outputMeta.IsBuiltIn == false) && (m_shaderStage != ShaderStageCompute))
+            {
+                LLPC_ASSERT(pOutputTy->isSingleValueType());
+
+                uint32_t elemIdx = outputMeta.Component;
+                LLPC_ASSERT(outputMeta.Component <= 3);
+                if (pOutputTy->getScalarSizeInBits() == 64)
+                {
+                    LLPC_ASSERT(outputMeta.Component % 2 == 0); // Must be even for 64-bit type
+                    elemIdx = outputMeta.Component / 2;
+                }
+
+                pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), elemIdx);
+                args.push_back(pElemIdx);
+            }
+        }
+
+        if (m_shaderStage == ShaderStageTessControl)
+        {
             // NOTE: For tessellation control shader, we add vertex indexing as an addition parameter to do addressing
             // for the output.
             if (pVertexIdx == nullptr)
@@ -1701,8 +1793,8 @@ void SpirvLowerGlobal::AddCallInstForOutputExport(
         }
         else
         {
-            // Element and vertex indexing is not valid for other shader stages
-            LLPC_ASSERT((pElemIdx == nullptr) && (pVertexIdx == nullptr));
+            // Vertex indexing is not valid for other shader stages
+            LLPC_ASSERT(pVertexIdx == nullptr);
         }
 
         if (m_shaderStage == ShaderStageGeometry)
@@ -1720,7 +1812,7 @@ void SpirvLowerGlobal::AddCallInstForOutputExport(
         args.push_back(pOutputValue);
 
         //
-        // VS:  @llpc.output.export.generic.%Type%(i32 location, %Type% outputValue)
+        // VS:  @llpc.output.export.generic.%Type%(i32 location, i32 elemIdx, %Type% outputValue)
         //      @llpc.output.export.builtin.%BuiltIn%(i32 builtInId, %Type% outputValue)
         //
         // TCS: @llpc.output.export.generic.%Type%(i32 location, i32 locOffset, i32 elemIdx, i32 vertexIdx,
@@ -1728,13 +1820,13 @@ void SpirvLowerGlobal::AddCallInstForOutputExport(
         //      @llpc.output.export.builtin.%BuiltIn%.%Type%(i32 builtInId, i32 elemIdx, i32 vertexIdx,
         //                                                   %Type% outputValue)
         //
-        // TES: @llpc.output.export.generic.%Type%(i32 location, %Type% outputValue)
+        // TES: @llpc.output.export.generic.%Type%(i32 location, i32 elemIdx, %Type% outputValue)
         //      @llpc.output.export.builtin.%BuiltIn%.%Type%(i32 builtInId, %Type% outputValue)
 
-        // GS:  @llpc.output.export.generic.%Type%(i32 location, i32 streamId, %Type% outputValue)
+        // GS:  @llpc.output.export.generic.%Type%(i32 location, i32 elemIdx, i32 streamId, %Type% outputValue)
         //      @llpc.output.export.builtin.%BuiltIn%(i32 builtInId, i32 streamId, %Type% outputValue)
         //
-        // FS:  @llpc.output.export.generic.%Type%(i32 location, %Type% outputValue)
+        // FS:  @llpc.output.export.generic.%Type%(i32 location, i32 elemIdx, %Type% outputValue)
         //      @llpc.output.export.builtin.%BuiltIn%(i32 builtInId, %Type% outputValue)
         //
         EmitCall(m_pModule, instName, m_pContext->VoidTy(), args, NoAttrib, pInsertPos);

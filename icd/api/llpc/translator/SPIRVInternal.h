@@ -1210,6 +1210,7 @@ union ShaderInOutMetadata {
     uint32_t Value              : 16; // Generic location or SPIR-V built-in ID
     uint32_t IsLoc              : 1;  // Whether value is a location
     uint32_t IsBuiltIn          : 1;  // Whether value is a SPIR-V built-in ID
+    uint32_t Component          : 2;  // Component offset of inputs and outputs
     uint32_t Signedness         : 1;  // Signedness of the input/output, valid
                                       // for integer (0 - unsigned, 1 - signed)
     uint32_t InterpMode         : 2;  // Interpolation mode (fragment shader)
@@ -1219,7 +1220,7 @@ union ShaderInOutMetadata {
                                       // output (tessellation shader)
     uint32_t StreamId           : 2;  // ID of output stream (geometry shader)
 
-    uint32_t Unused             : 8;
+    uint32_t Unused             : 6;
   };
   uint32_t U32All;
 };
@@ -1235,6 +1236,8 @@ struct ShaderInOutDecorate {
   } Value;
 
   bool           IsBuiltIn;         // Whether this is a SPIR-V built-in
+
+  uint32_t       Component;         // Component offset of inputs and outputs
 
   bool           PerPatch;          // Whether this is a per-patch input/output
                                     // (tessellation shader)
