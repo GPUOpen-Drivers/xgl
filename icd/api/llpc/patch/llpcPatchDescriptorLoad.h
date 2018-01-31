@@ -81,6 +81,9 @@ private:
 
     std::vector<llvm::CallInst*>        m_descLoadCalls; // List of "call" instructions to load descriptors
     std::unordered_set<llvm::Function*> m_descLoadFuncs; // Set of descriptor load functions
+
+    // Map from descriptor range value to global variables modeling related descriptors (act as immediate constants)
+    std::unordered_map<const DescriptorRangeValue*, llvm::GlobalVariable*> m_descs;
 };
 
 } // Llpc

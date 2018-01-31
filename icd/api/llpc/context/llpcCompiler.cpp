@@ -136,11 +136,6 @@ static opt<std::string> ShaderReplacePipelineHashes("shader-replace-pipeline-has
                                                     value_desc("hashes with comma as separator"),
                                                     init(""));
 
-// -disable-gs-onchip: disable geometry shader on-chip mode
-opt<bool> DisableGsOnChip("disable-gs-onchip",
-                          desc("Disable geometry shader on-chip mode"),
-                          init(true));
-
 // -enable-spirv-opt: enable optimization for SPIR-V binary
 opt<bool> EnableSpirvOpt("enable-spirv-opt", desc("Enable optimization for SPIR-V binary"), init(false));
 
@@ -744,9 +739,11 @@ Result Compiler::BuildGraphicsPipeline(
         }
 
         // Determine whether or not GS on-chip mode is valid for this pipeline
-        if ((result == Result::Success) && (cl::DisableGsOnChip == false) && (modules[ShaderStageGeometry] != nullptr))
+        if ((result == Result::Success) && (modules[ShaderStageGeometry] != nullptr))
         {
-            bool gsOnChip = pContext->CanGsOnChip();
+            // NOTE: Always call CheckGsOnChipValidity() even when GS on-chip mode is disabled, because that method
+            // also computes esGsRingItemSize and gsVsRingItemSize.
+            bool gsOnChip = pContext->CheckGsOnChipValidity();
             pContext->SetGsOnChip(gsOnChip);
         }
 
@@ -1699,13 +1696,15 @@ void Compiler::InitGpuProperty()
 
     m_gpuProperty.maxUserDataCount = (m_gfxIp.major >= 9) ? 32 : 16;
 
+    m_gpuProperty.gsOnChipMaxLdsSize = 16384;
+
     if (m_gfxIp.major <= 8)
     {
         // TODO: Accept gsOnChipDefaultPrimsPerSubgroup from panel option
         m_gpuProperty.gsOnChipDefaultPrimsPerSubgroup   = 64;
         // TODO: Accept gsOnChipDefaultLdsSizePerSubgroup from panel option
         m_gpuProperty.gsOnChipDefaultLdsSizePerSubgroup = 8192;
-        m_gpuProperty.ldsSizeDwordGranularity           = 128;
+        m_gpuProperty.ldsSizeDwordGranularityShift      = 7;
     }
 
     if (m_gfxIp.major == 6)
@@ -1764,6 +1763,7 @@ Context* Compiler::AcquireContext()
         {
             pFreeContext = pContext;
             pFreeContext->SetInUse(true);
+            break;
         }
     }
 

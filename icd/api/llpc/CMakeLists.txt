@@ -89,7 +89,7 @@ target_compile_definitions(llpc PRIVATE ${TARGET_ARCHITECTURE_ENDIANESS}ENDIAN_C
 target_compile_definitions(llpc PRIVATE _SPIRV_LLVM_API)
 target_compile_definitions(llpc PRIVATE LLPC_BUILD_GFX9)
 
-if(ICD_UPSTREAM_LLVM)
+if(XGL_LLVM_UPSTREAM)
     target_compile_definitions(llpc PRIVATE LLVM_SOURCE_PROMOTION=1)
 endif()
 
@@ -259,8 +259,7 @@ set(GEN_GLSL_EMU_LIB_DEPS
     ${OP_EMU_LIB_GEN_DIR}/glslSharedVarOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/glslSpecialOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/glslSpecialOpEmuF16.ll
-    ${OP_EMU_LIB_GEN_DIR}/gfx6/glslArithOpEmu.ll
-    ${OP_EMU_LIB_GEN_DIR}/gfx6/glslNoOpEmu.ll
+    ${OP_EMU_LIB_GEN_DIR}/gfx8/glslSpecialOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/gfx9/glslArithOpEmu.ll
     ${OP_EMU_LIB_GEN_DIR}/script/genGlslArithOpEmuCode.py
     ${OP_EMU_LIB_GEN_DIR}/script/genGlslArithOpEmuCode.txt

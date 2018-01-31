@@ -32,8 +32,8 @@ inFile = "copy_timestamp_query_pool"
 
 # Generate spv file
 print(">>>  (glslangValidator) " + inFile + ".comp ==> " + inFile + ".spv")
-cmd = "../../../test/bil/install/win64/glslangValidator.exe -V " + inFile + ".comp -o " + inFile + ".spv"
-subprocess.call(cmd)
+cmd = "glslangValidator -V " + inFile + ".comp -o " + inFile + ".spv"
+os.system(cmd)
 
 # Convert .spv file to a hex file
 spvFile = inFile + ".spv"

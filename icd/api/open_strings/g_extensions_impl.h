@@ -79,3 +79,4 @@ const char VK_EXT_sample_locations_name[] = "VK_EXT_sample_locations";
 const char VK_KHR_win32_keyed_mutex_name[] = "VK_KHR_win32_keyed_mutex";
 const char VK_EXT_global_priority_name[] = "VK_EXT_global_priority";
 const char VK_AMD_buffer_marker_name[] = "VK_AMD_buffer_marker";
+const char VK_EXT_external_memory_host_name[] = "VK_EXT_external_memory_host";

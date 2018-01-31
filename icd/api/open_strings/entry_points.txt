@@ -251,3 +251,5 @@ vkCmdWriteBufferMarkerAMD                       @dext AMD_buffer_marker
 vkCreateDebugReportCallbackEXT                  @iext EXT_debug_report
 vkDestroyDebugReportCallbackEXT                 @iext EXT_debug_report
 vkDebugReportMessageEXT                         @iext EXT_debug_report
+
+vkGetMemoryHostPointerPropertiesEXT             @dext EXT_external_memory_host

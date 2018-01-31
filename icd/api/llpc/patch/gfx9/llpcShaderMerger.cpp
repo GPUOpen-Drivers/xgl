@@ -86,6 +86,7 @@ Result ShaderMerger::BuildLsHsMergedShader(
             auto pLsEntryPoint = GetEntryPoint(pLsModule);
             pLsEntryPoint->setName(LlpcName::LsEntryPoint);
             pLsEntryPoint->setCallingConv(CallingConv::C);
+            pLsEntryPoint->setDLLStorageClass(GlobalValue::DefaultStorageClass);
 
             if (linker.linkInModule(std::unique_ptr<Module>(pLsModule)))
             {
@@ -98,6 +99,7 @@ Result ShaderMerger::BuildLsHsMergedShader(
             auto pHsEntryPoint = GetEntryPoint(pHsModule);
             pHsEntryPoint->setName(LlpcName::HsEntryPoint);
             pHsEntryPoint->setCallingConv(CallingConv::C);
+            pHsEntryPoint->setDLLStorageClass(GlobalValue::DefaultStorageClass);
 
             if (linker.linkInModule(std::unique_ptr<Module>(pHsModule)))
             {
@@ -149,6 +151,7 @@ Result ShaderMerger::BuildEsGsMergedShader(
             auto pEsEntryPoint = GetEntryPoint(pEsModule);
             pEsEntryPoint->setName(LlpcName::EsEntryPoint);
             pEsEntryPoint->setCallingConv(CallingConv::C);
+            pEsEntryPoint->setDLLStorageClass(GlobalValue::DefaultStorageClass);
 
             if (linker.linkInModule(std::unique_ptr<Module>(pEsModule)))
             {
@@ -160,6 +163,7 @@ Result ShaderMerger::BuildEsGsMergedShader(
             auto pGsEntryPoint = GetEntryPoint(pGsModule);
             pGsEntryPoint->setName(LlpcName::GsEntryPoint);
             pGsEntryPoint->setCallingConv(CallingConv::C);
+            pGsEntryPoint->setDLLStorageClass(GlobalValue::DefaultStorageClass);
 
             if (linker.linkInModule(std::unique_ptr<Module>(pGsModule)))
             {
@@ -241,12 +245,16 @@ void ShaderMerger::GenerateLsHsEntryPoint(
     uint64_t inRegMask = 0;
     auto pEntryPointTy = GenerateLsHsEntryPointType(&inRegMask);
 
+    const char* pEntryName =
+        Util::Abi::PipelineAbiSymbolNameStrings[static_cast<uint32_t>(Util::Abi::PipelineSymbolType::HsMainEntry)];
+
     Function* pEntryPoint = Function::Create(pEntryPointTy,
                                              GlobalValue::ExternalLinkage,
-                                             "main",
+                                             pEntryName,
                                              pLsHsModule);
 
     pEntryPoint->setCallingConv(CallingConv::AMDGPU_HS);
+    pEntryPoint->setDLLStorageClass(GlobalValue::DLLExportStorageClass);
     pEntryPoint->addFnAttr("amdgpu-max-work-group-size", "128"); // Force s_barrier to be present (ignore optimization)
 
     for (auto& arg : pEntryPoint->args())
@@ -419,14 +427,14 @@ void ShaderMerger::GenerateLsHsEntryPoint(
                 LLPC_ASSERT(pLsArgTy->getVectorElementType()->isIntegerTy());
 
                 const uint32_t userDataSize = pLsArgTy->getVectorNumElements();
-                userDataIdx += userDataSize;
 
                 std::vector<Constant*> shuffleMask;
                 for (uint32_t i = 0; i < userDataSize; ++i)
                 {
-                    shuffleMask.push_back(ConstantInt::get(m_pContext->Int32Ty(), userDataIdx));
-                    ++userDataIdx;
+                    shuffleMask.push_back(ConstantInt::get(m_pContext->Int32Ty(), userDataIdx + i));
                 }
+
+                userDataIdx += userDataSize;
 
                 auto pLsUserData =
                     new ShuffleVectorInst(pUserData, pUserData, ConstantVector::get(shuffleMask), "", pBeginLsBlock);
@@ -525,14 +533,14 @@ void ShaderMerger::GenerateLsHsEntryPoint(
                 LLPC_ASSERT(pHsArgTy->getVectorElementType()->isIntegerTy());
 
                 const uint32_t userDataSize = pHsArgTy->getVectorNumElements();
-                userDataIdx += userDataSize;
 
                 std::vector<Constant*> shuffleMask;
                 for (uint32_t i = 0; i < userDataSize; ++i)
                 {
-                    shuffleMask.push_back(ConstantInt::get(m_pContext->Int32Ty(), userDataIdx));
-                    ++userDataIdx;
+                    shuffleMask.push_back(ConstantInt::get(m_pContext->Int32Ty(), userDataIdx + i));
                 }
+
+                userDataIdx += userDataSize;
 
                 auto pHsUserData =
                     new ShuffleVectorInst(pUserData, pUserData, ConstantVector::get(shuffleMask), "", pBeginHsBlock);
@@ -662,12 +670,16 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     uint64_t inRegMask = 0;
     auto pEntryPointTy = GenerateEsGsEntryPointType(&inRegMask);
 
+    const char* pEntryName =
+        Util::Abi::PipelineAbiSymbolNameStrings[static_cast<uint32_t>(Util::Abi::PipelineSymbolType::GsMainEntry)];
+
     Function* pEntryPoint = Function::Create(pEntryPointTy,
                                              GlobalValue::ExternalLinkage,
-                                             "main",
+                                             pEntryName,
                                              pEsGsModule);
 
     pEntryPoint->setCallingConv(CallingConv::AMDGPU_GS);
+    pEntryPoint->setDLLStorageClass(GlobalValue::DLLExportStorageClass);
     pEntryPoint->addFnAttr("amdgpu-max-work-group-size", "128"); // Force s_barrier to be present (ignore optimization)
 
     for (auto& arg : pEntryPoint->args())
@@ -839,14 +851,14 @@ void ShaderMerger::GenerateEsGsEntryPoint(
                 LLPC_ASSERT(pEsArgTy->getVectorElementType()->isIntegerTy());
 
                 const uint32_t userDataSize = pEsArgTy->getVectorNumElements();
-                userDataIdx += userDataSize;
 
                 std::vector<Constant*> shuffleMask;
                 for (uint32_t i = 0; i < userDataSize; ++i)
                 {
-                    shuffleMask.push_back(ConstantInt::get(m_pContext->Int32Ty(), userDataIdx));
-                    ++userDataIdx;
+                    shuffleMask.push_back(ConstantInt::get(m_pContext->Int32Ty(), userDataIdx + i));
                 }
+
+                userDataIdx += userDataSize;
 
                 auto pEsUserData =
                     new ShuffleVectorInst(pUserData, pUserData, ConstantVector::get(shuffleMask), "", pBeginEsBlock);
@@ -1030,14 +1042,14 @@ void ShaderMerger::GenerateEsGsEntryPoint(
                 LLPC_ASSERT(pGsArgTy->getVectorElementType()->isIntegerTy());
 
                 const uint32_t userDataSize = pGsArgTy->getVectorNumElements();
-                userDataIdx += userDataSize;
 
                 std::vector<Constant*> shuffleMask;
                 for (uint32_t i = 0; i < userDataSize; ++i)
                 {
-                    shuffleMask.push_back(ConstantInt::get(m_pContext->Int32Ty(), userDataIdx));
-                    ++userDataIdx;
+                    shuffleMask.push_back(ConstantInt::get(m_pContext->Int32Ty(), userDataIdx + i));
                 }
+
+                userDataIdx += userDataSize;
 
                 auto pGsUserData =
                     new ShuffleVectorInst(pUserData, pUserData, ConstantVector::get(shuffleMask), "", pBeginGsBlock);

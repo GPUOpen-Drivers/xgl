@@ -44,6 +44,7 @@
 
 #include "palGpuMemory.h"
 #include "palImage.h"
+#include "palAutoBuffer.h"
 
 namespace vk
 {
@@ -545,15 +546,15 @@ VkResult Image::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkImage*                        pImage)
 {
-    VirtualStackFrame virtStackFrame(pDevice->GetStackAllocator());
-    Pal::SwizzledFormat* pPalFormatList = nullptr;
-
     // Convert input create info
     Pal::ImageCreateInfo palCreateInfo  = {};
     uint32_t concurrentQueueFlags    = 0;
     Pal::PresentableImageCreateInfo presentImageCreateInfo = {};
 
     const VkImageCreateInfo*  pImageCreateInfo = nullptr;
+
+    uint32_t                  viewFormatCount = 0;
+    const VkFormat*           pViewFormats    = nullptr;
 
     const uint32_t numDevices = pDevice->NumPalDevices();
     const bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
@@ -589,6 +590,7 @@ VkResult Image::Create(
             palCreateInfo.flags.invariant = 1;
 
             VkExternalMemoryPropertiesKHR externalMemoryProperties = {};
+
             pDevice->VkPhysicalDevice()->GetExternalMemoryProperties(
                 isSparse,
                 static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExternalMemoryImageCreateInfoKHR->handleTypes),
@@ -603,6 +605,21 @@ VkResult Image::Create(
                                                                    VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR))
             {
                 imageFlags.externallyShareable = true;
+
+                if ((pExternalMemoryImageCreateInfoKHR->handleTypes &
+                    (VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT_KHR |
+                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT_KHR |
+                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_HEAP_BIT_KHR |
+                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT_KHR)) != 0)
+                {
+                    imageFlags.externalD3DHandle = true;
+                }
+
+                if ((pExternalMemoryImageCreateInfoKHR->handleTypes &
+                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT) != 0)
+                {
+                    imageFlags.externalPinnedHost = true;
+                }
             }
 
             break;
@@ -616,28 +633,35 @@ VkResult Image::Create(
 
         case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR:
         {
-            pPalFormatList = virtStackFrame.AllocArray<Pal::SwizzledFormat>(
-                                 pVkImageFormatListCreateInfoKHR->viewFormatCount);
-
-            palCreateInfo.viewFormatCount = 0;
-            palCreateInfo.pViewFormats    = pPalFormatList;
-
-            for (uint32_t i = 0; i < pVkImageFormatListCreateInfoKHR->viewFormatCount; ++i)
-            {
-                // Skip any entries that specify the same format as the base format of the image as the PAL interface
-                // expects that to be excluded from the list.
-                if (pVkImageFormatListCreateInfoKHR->pViewFormats[i] != pImageCreateInfo->format)
-                {
-                    pPalFormatList[palCreateInfo.viewFormatCount++] =
-                        VkToPalFormat(pVkImageFormatListCreateInfoKHR->pViewFormats[i]);
-                }
-            }
+            // Processing of the actual contents of this happens later due to AutoBuffer scoping.
+            viewFormatCount = pVkImageFormatListCreateInfoKHR->viewFormatCount;
+            pViewFormats    = pVkImageFormatListCreateInfoKHR->pViewFormats;
             break;
         }
 
         default:
             // Skip any unknown extension structures
             break;
+        }
+    }
+
+    Util::AutoBuffer<Pal::SwizzledFormat, 16, PalAllocator> palFormatList(
+        viewFormatCount,
+        pDevice->VkInstance()->Allocator());
+
+    if (viewFormatCount > 0)
+    {
+        palCreateInfo.viewFormatCount = 0;
+        palCreateInfo.pViewFormats    = &palFormatList[0];
+
+        for (uint32_t i = 0; i < viewFormatCount; ++i)
+        {
+            // Skip any entries that specify the same format as the base format of the image as the PAL interface
+            // expects that to be excluded from the list.
+            if (pViewFormats[i] != pImageCreateInfo->format)
+            {
+                palFormatList[palCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i]);
+            }
         }
     }
 
@@ -801,11 +825,6 @@ VkResult Image::Create(
             // Failure in creating the PAL image object. Free system memory and return error.
             pAllocator->pfnFree(pAllocator->pUserData, pMemory);
         }
-    }
-
-    if (pPalFormatList != nullptr)
-    {
-        virtStackFrame.FreeArray(pPalFormatList);
     }
 
     return result;
@@ -1150,7 +1169,8 @@ VkResult Image::BindMemory(
                 VkDeviceSize baseGpuAddr = pGpuMem->Desc().gpuVirtAddr;
 
                 // If the base address of the VkMemory is not already aligned
-                if (Util::IsPow2Aligned(baseGpuAddr, reqs.alignment) == false)
+                if ((Util::IsPow2Aligned(baseGpuAddr, reqs.alignment) == false) &&
+                    (m_internalFlags.externalD3DHandle == false))
                 {
                     // This should only happen in situations where the image's alignment is extremely larger than
                     // the VkMemory object.
@@ -1535,6 +1555,14 @@ VkResult Image::GetMemoryRequirements(
         {
             pReqs->memoryTypeBits |= 1 << typeIndex;
         }
+    }
+
+    // Limit heaps to those compatible with pinned system memory
+    if (m_internalFlags.externalPinnedHost)
+    {
+        pReqs->memoryTypeBits &= m_pDevice->GetPinnedSystemMemoryTypes();
+
+        VK_ASSERT(pReqs->memoryTypeBits != 0);
     }
 
     // Adjust the size to account for internal padding required to align the base address

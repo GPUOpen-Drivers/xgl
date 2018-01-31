@@ -4261,9 +4261,10 @@ Value* PatchInOutImportExport::CalcEsGsRingOffsetForOutput(
     if (m_pContext->IsGsOnChip())
     {
         // ringOffset = esGsOffset + threadId * esGsRingItemSize + location * 4 + compIdx
-        const auto pResUsage        = m_pContext->GetShaderResourceUsage(m_shaderStage);
-        const auto& inOutUsage      = pResUsage->inOutUsage;
-        uint32_t esGsRingItemSize   = inOutUsage.outputMapLocCount * 4;
+
+        LLPC_ASSERT((m_pContext->GetShaderStageMask() & ShaderStageToMask(ShaderStageGeometry)) != 0);
+        const auto& gsCalcFactor = m_pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs.calcFactor;
+
         pEsGsOffset = BinaryOperator::CreateExact(Instruction::LShr,
                                                   pEsGsOffset,
                                                   ConstantInt::get(m_pContext->Int32Ty(), 2),
@@ -4271,7 +4272,8 @@ Value* PatchInOutImportExport::CalcEsGsRingOffsetForOutput(
                                                   pInsertPos);
 
         pRingOffset = BinaryOperator::CreateMul(m_pThreadId,
-                                                ConstantInt::get(m_pContext->Int32Ty(), esGsRingItemSize),
+                                                ConstantInt::get(m_pContext->Int32Ty(),
+                                                                 gsCalcFactor.esGsRingItemSize),
                                                 "",
                                                 pInsertPos);
 
@@ -4361,11 +4363,7 @@ Value* PatchInOutImportExport::CalcGsVsRingOffsetForOutput(
         //              threadId * gsVsRingItemSize +
         //              (vertexIdx * vertexSize) + location * 4 + compIdx
 
-        uint32_t gsVsRingItemSize = 4 *
-                                    pResUsage->inOutUsage.outputMapLocCount *
-                                    pResUsage->builtInUsage.gs.outputVertices;
-
-        auto pEsGsLdsSize = ConstantInt::get(m_pContext->Int32Ty(), pResUsage->inOutUsage.gs.esGsLdsSize);
+        auto pEsGsLdsSize = ConstantInt::get(m_pContext->Int32Ty(), pResUsage->inOutUsage.gs.calcFactor.esGsLdsSize);
 
         pGsVsOffset = BinaryOperator::CreateExact(Instruction::LShr,
                                                   pGsVsOffset,
@@ -4373,10 +4371,12 @@ Value* PatchInOutImportExport::CalcGsVsRingOffsetForOutput(
                                                   "",
                                                   pInsertPos);
 
-        auto pRingItemOffset = BinaryOperator::CreateMul(m_pThreadId,
-                                                         ConstantInt::get(m_pContext->Int32Ty(), gsVsRingItemSize),
-                                                         "",
-                                                         pInsertPos);
+        auto pRingItemOffset =
+            BinaryOperator::CreateMul(m_pThreadId,
+                                      ConstantInt::get(m_pContext->Int32Ty(),
+                                                       pResUsage->inOutUsage.gs.calcFactor.gsVsRingItemSize),
+                                      "",
+                                      pInsertPos);
 
         uint32_t vertexSize = pResUsage->inOutUsage.outputMapLocCount * 4;
         auto pVertexItemOffset = BinaryOperator::CreateMul(pVertexIdx,

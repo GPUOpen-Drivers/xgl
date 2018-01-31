@@ -34,11 +34,46 @@
 
 #include "palColorTargetView.h"
 #include "palDepthStencilView.h"
+#include "palVectorImpl.h"
 
 namespace vk
 {
 
 using namespace Util;
+
+// =====================================================================================================================
+// Finds SubresRanges defined by aspectMask, which are avaliable in the Attachment.
+Vector<Pal::SubresRange, MaxRangePerAttachment, GenericAllocator>
+Framebuffer::Attachment::FindSubresRanges(
+    const VkImageAspectFlags aspectMask
+    ) const
+{
+    // Note that no allocation will be performed, so Util::Vector allocator is nullptr.
+    Vector<Pal::SubresRange, MaxRangePerAttachment, GenericAllocator> subresRanges { nullptr };
+
+    for (uint32_t i = 0; i < subresRangeCount; ++i)
+    {
+        const Pal::ImageAspect attachmentAspect = subresRange[i].startSubres.aspect;
+
+        const bool   colorAvailable = (aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) &&
+                                      (attachmentAspect == Pal::ImageAspect::Color);
+
+        const bool   depthAvailable = (aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+                                      (attachmentAspect == Pal::ImageAspect::Depth);
+
+        const bool stencilAvailable = (aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) &&
+                                      (attachmentAspect == Pal::ImageAspect::Stencil);
+
+        if (colorAvailable || depthAvailable || stencilAvailable)
+        {
+            VK_ASSERT(subresRanges.NumElements() < MaxRangePerAttachment);
+
+            subresRanges.PushBack(subresRange[i]);
+        }
+    }
+
+    return subresRanges;
+}
 
 // =====================================================================================================================
 VkResult Framebuffer::Create(
@@ -149,35 +184,6 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
             imageInfo.extent,
             pAttachment->subresRange[0].startSubres.mipLevel);
     }
-}
-
-// =====================================================================================================================
-// Does the given clear box cover the entire subresource range of the attachment or only partially covered?
-bool Framebuffer::IsPartialClear(
-    const Pal::Box&                box,
-    const Framebuffer::Attachment& attachment)
-{
-    VK_ASSERT(attachment.subresRangeCount == 1 ||
-              attachment.subresRange[0].numSlices == attachment.subresRange[1].numSlices);
-
-    bool isPartialClear = ((box.offset.x != 0) ||
-                           (box.offset.y != 0) ||
-                           (box.extent.width  != attachment.baseSubresExtent.width) ||
-                           (box.extent.height != attachment.baseSubresExtent.height));
-
-    if (attachment.pImage->Is2dArrayCompatible())
-    {
-        // VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT_KHR is used to create a 2D or 2D array view of a 3D texture, so this
-        // case is also a partial clear given all of the depth slices are part of the same subresource in PAL.
-        if ((box.offset.z != 0) ||
-            (box.extent.depth != attachment.baseSubresExtent.depth))
-        {
-            isPartialClear = true;
-        }
-    }
-    // For other images, each layer is considered a separate subresource.
-
-    return isPartialClear;
 }
 
 // =====================================================================================================================

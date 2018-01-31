@@ -489,6 +489,14 @@ define float @llpc.fsign.f32(float %x) #0
     ret float %ret2
 }
 
+; GLSL: float fma(float, float, float)
+define float @llpc.fma.f32(float %x, float %y, float %z) #0
+{
+    %1 = fmul float %x, %y
+    %2 = fadd float %1, %z
+    ret float %2
+}
+
 ; GLSL: int sign(int)
 define i32 @llpc.ssign.i32(i32 %x) #0
 {

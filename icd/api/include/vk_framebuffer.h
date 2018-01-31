@@ -32,6 +32,8 @@
 #include "include/vk_dispatch.h"
 #include "include/vk_object.h"
 
+#include "palVector.h"
+
 namespace vk
 {
 
@@ -62,6 +64,9 @@ public:
         Pal::SubresRange              subresRange[MaxRangePerAttachment]; // Attached subres ranges
         Pal::Extent3d                 baseSubresExtent;   // Dimensions of the first subresource in subresRange
         Pal::Range                    zRange;             // Base and num layers for 2D/2D array views of 3D textures
+
+        Util::Vector<Pal::SubresRange, MaxRangePerAttachment, Util::GenericAllocator>
+        FindSubresRanges(const VkImageAspectFlags aspectMask) const;
     };
 
     static VkResult Create(
@@ -78,10 +83,6 @@ public:
 
     const Framebuffer::Attachment& GetAttachment(uint32_t index) const
         { return m_attachments[index]; }
-
-    static bool IsPartialClear(
-        const Pal::Box&   box,
-        const Attachment& attachment);
 
 protected:
     Framebuffer(const VkFramebufferCreateInfo& info, Attachment* pAttachments);

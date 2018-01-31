@@ -33,14 +33,18 @@
 
 #include "devmode/devmode_mgr.h"
 #include "include/vk_cmdbuffer.h"
+#include "include/vk_compute_pipeline.h"
 #include "include/vk_device.h"
 #include "include/vk_graphics_pipeline.h"
-#include "include/vk_compute_pipeline.h"
+#include "include/vk_image.h"
+#include "include/vk_image_view.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_queue.h"
 #include "include/vk_instance.h"
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
+
+#include "palHashMapImpl.h"
 
 namespace vk
 {
@@ -1516,6 +1520,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(
                 GraphicsPipeline* pPipeline = NonDispatchable<VkPipeline, GraphicsPipeline>::ObjectFromHandle(
                     pPipelines[i]);
 
+                auto* pMeta = pSqtt->GetObjectMgr()->ObjectCreated(pDevice,
+                    VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT, pPipelines[i]);
+
+                if (pMeta != nullptr)
+                {
+                    memset(pMeta->pipeline.shaderModules, 0, sizeof(pMeta->pipeline.shaderModules));
+
+                    for (uint32_t stage = 0; stage < pCreateInfos[i].stageCount; ++stage)
+                    {
+                        size_t palIdx = static_cast<size_t>(VkToPalShaderType(pCreateInfos[i].pStages[stage].stage));
+
+                        pMeta->pipeline.shaderModules[palIdx] = pCreateInfos[i].pStages[stage].module;
+                    }
+                }
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
                 pDevMgr->PipelineCreated(pDevice, pPipeline);
 #endif
@@ -1553,6 +1572,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
                 ComputePipeline* pPipeline = NonDispatchable<VkPipeline, ComputePipeline>::ObjectFromHandle(
                     pPipelines[i]);
 
+                auto* pMeta = pSqtt->GetObjectMgr()->ObjectCreated(pDevice,
+                    VK_DEBUG_REPORT_OBJECT_TYPE_PIPELINE_EXT, pPipelines[i]);
+
+                if (pMeta != nullptr)
+                {
+                    memset(pMeta->pipeline.shaderModules, 0, sizeof(pMeta->pipeline.shaderModules));
+
+                    pMeta->pipeline.shaderModules[static_cast<size_t>(Pal::ShaderType::Compute)] =
+                        pCreateInfos[i].stage.module;
+                }
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
                 pDevMgr->PipelineCreated(pDevice, pPipeline);
 #endif
@@ -1561,6 +1591,56 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectNameEXT(
+    VkDevice                                    device,
+    const VkDebugMarkerObjectNameInfoEXT*       pNameInfo)
+{
+    Device* pDevice  = ApiDevice::ObjectFromHandle(device);
+    SqttMgr* pSqtt   = pDevice->GetSqttMgr();
+    auto* pObjectMgr = pSqtt->GetObjectMgr();
+
+    if (pObjectMgr->IsEnabled(pNameInfo->objectType))
+    {
+        SqttMetaState* pMeta = pObjectMgr->GetMetaState(pNameInfo->objectType, pNameInfo->object);
+
+        if (pMeta == nullptr)
+        {
+            pObjectMgr->ObjectCreated(pDevice, pNameInfo->objectType, pNameInfo->object);
+
+            pMeta = pObjectMgr->GetMetaState(pNameInfo->objectType, pNameInfo->object);
+        }
+
+        if (pMeta != nullptr)
+        {
+            size_t nameSize = strlen(pNameInfo->pObjectName) + 1;
+
+            if (pMeta->debugNameCapacity < nameSize)
+            {
+                if (pMeta->pDebugName != nullptr)
+                {
+                    pDevice->VkInstance()->FreeMem(pMeta->pDebugName);
+                }
+
+                pMeta->pDebugName = static_cast<char*>(pDevice->VkInstance()->AllocMem(nameSize,
+                    VK_SYSTEM_ALLOCATION_SCOPE_DEVICE));
+
+                if (pMeta->pDebugName != nullptr)
+                {
+                    pMeta->debugNameCapacity = nameSize;
+                }
+            }
+
+            if (pMeta->debugNameCapacity >= nameSize)
+            {
+                memcpy(pMeta->pDebugName, pNameInfo->pObjectName, nameSize);
+            }
+        }
+    }
+
+    return SQTT_CALL_NEXT_LAYER(vkDebugMarkerSetObjectNameEXT)(device, pNameInfo);
 }
 
 #define SQTT_DISPATCH_ENTRY(entry_name) VK_DISPATCH_ENTRY(entry_name, vk::entry::sqtt::entry_name)
@@ -1620,6 +1700,7 @@ const DispatchTableEntry g_SqttDispatchTable[] =
     // Device functions
     SQTT_DISPATCH_ENTRY(vkCreateGraphicsPipelines),
     SQTT_DISPATCH_ENTRY(vkCreateComputePipelines),
+    SQTT_DISPATCH_ENTRY(vkDebugMarkerSetObjectNameEXT),
 
     VK_DISPATCH_TABLE_END()
 };

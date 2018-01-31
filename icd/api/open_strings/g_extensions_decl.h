@@ -134,3 +134,5 @@ extern const char VK_EXT_global_priority_name[];
 static const char* VK_EXT_GLOBAL_PRIORITY_name = VK_EXT_global_priority_name;
 extern const char VK_AMD_buffer_marker_name[];
 static const char* VK_AMD_BUFFER_MARKER_name = VK_AMD_buffer_marker_name;
+extern const char VK_EXT_external_memory_host_name[];
+static const char* VK_EXT_EXTERNAL_MEMORY_HOST_name = VK_EXT_external_memory_host_name;

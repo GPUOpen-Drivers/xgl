@@ -1019,6 +1019,12 @@ extern void GetNextDeviceLayerTable(
                            pInstance, pDevice, remainingCount, pRemainingTables,
                            VK_SECURE_ENTRY(vkDebugReportMessageEXT)));
 #endif
+#if VK_EXT_external_memory_host
+    pNextLayerFuncs->vkGetMemoryHostPointerPropertiesEXT =
+                       reinterpret_cast<PFN_vkGetMemoryHostPointerPropertiesEXT>(vk::GetIcdProcAddr(
+                           pInstance, pDevice, remainingCount, pRemainingTables,
+                           VK_SECURE_ENTRY(vkGetMemoryHostPointerPropertiesEXT)));
+#endif
 
 }
 

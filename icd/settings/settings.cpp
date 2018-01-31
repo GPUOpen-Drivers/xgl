@@ -82,11 +82,6 @@ static void OverrideProfiledSettings(
         pSettings->anisoThreshold      = 1.0f;
     }
 
-    if (appProfile == AppProfile::MadMax)
-    {
-        pSettings->optimizeCmdbufMode = DisableOptimizeCmdbuf;
-    }
-
 }
 #endif
 

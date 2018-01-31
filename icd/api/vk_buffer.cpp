@@ -237,6 +237,7 @@ VkResult Buffer::Create(
             (pExternalInfo->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR))
         {
             VkExternalMemoryPropertiesKHR externalMemoryProperties = {};
+
             pDevice->VkPhysicalDevice()->GetExternalMemoryProperties(
                 isSparse,
                 static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExternalInfo->handleTypes),
@@ -251,6 +252,11 @@ VkResult Buffer::Create(
                                                                    VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR))
             {
                 bufferFlags.externallyShareable = true;
+
+                if (pExternalInfo->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
+                {
+                    bufferFlags.externalPinnedHost = true;
+                }
             }
         }
     }
@@ -404,6 +410,14 @@ VkResult Buffer::GetMemoryRequirements(
             uint32_t visibleMemBit = 1 << visibleMemIndex;
             pMemoryRequirements->memoryTypeBits &= ~visibleMemBit;
         }
+    }
+
+    // Limit heaps to those compatible with pinned system memory
+    if (m_internalFlags.externalPinnedHost)
+    {
+        pMemoryRequirements->memoryTypeBits &= m_pDevice->GetPinnedSystemMemoryTypes();
+
+        VK_ASSERT(pMemoryRequirements->memoryTypeBits != 0);
     }
 
     return VK_SUCCESS;

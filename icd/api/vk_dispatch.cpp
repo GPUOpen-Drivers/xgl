@@ -451,8 +451,8 @@ const DispatchTableEntry g_StandardDispatchTable[] =
     PRIMARY_DISPATCH_ENTRY( vkCreateDebugReportCallbackEXT                  ),
     PRIMARY_DISPATCH_ENTRY( vkDestroyDebugReportCallbackEXT                 ),
     PRIMARY_DISPATCH_ENTRY( vkDebugReportMessageEXT                         ),
-
     PRIMARY_DISPATCH_ENTRY( vkCmdWriteBufferMarkerAMD                             ),
+    PRIMARY_DISPATCH_ENTRY( vkGetMemoryHostPointerPropertiesEXT                   ),
 
     VK_DISPATCH_TABLE_END()
 };

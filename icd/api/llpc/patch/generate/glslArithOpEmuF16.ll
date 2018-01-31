@@ -392,8 +392,8 @@ define half @llpc.atanh.f16(half %x) #0
     ; In(x) = log2(x)/(log2(e))
     ; 1.0f/log2(e) = 0.6931471824646
     %5 = call half @llvm.log2.f16(half %4)
-    ; 0x3FE62C0000000000: 1.0f/(2*log2(e)) = 0.34657359
-    %6 = fmul half %5, 0x3FE62C0000000000
+    ; 0x3FD62C0000000000: 1.0f/(2*log2(e)) = 0.34657359
+    %6 = fmul half %5, 0x3FD62C0000000000
     ret half %6
 }
 
@@ -404,8 +404,8 @@ define half @llpc.atanh.f16(half %x) #0
 ; GLSL: float16_t  pow(float16_t, float16_t)
 define half @llpc.pow.f16(half %x, half %y) #0
 {
-    %1 = call half @llvm.log2.f16(half %y)
-    %2 = fmul half %x, %1
+    %1 = call half @llvm.log2.f16(half %x)
+    %2 = fmul half %y, %1
     %3 = call half @llvm.exp2.f16(half %2)
     ret half %3
 }
@@ -993,8 +993,9 @@ define spir_func <3 x half> @_Z5crossDv3_DhDv3_Dh(<3 x half> %x, <3 x half> %y) 
 ; GLSL: float16_t normalize(float16_t)
 define spir_func half @_Z9normalizeDh(half %x) #0
 {
-    %1 = call half @llvm.fabs.f16(half %x)
-    ret half %1
+    %1 = fcmp ogt half %x, 0.0
+    %2 = select i1 %1, half 1.0, half -1.0
+    ret half %2
 }
 
 ; GLSL: f16vec2 normalize(f16vec2)

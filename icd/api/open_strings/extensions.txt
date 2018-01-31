@@ -59,3 +59,4 @@ VK_EXT_sample_locations
 VK_KHR_win32_keyed_mutex
 VK_EXT_global_priority
 VK_AMD_buffer_marker
+VK_EXT_external_memory_host

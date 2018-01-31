@@ -61,10 +61,12 @@ VkResult Memory::Create(
 
     Pal::Result palResult;
     VkResult    vkResult   = VK_SUCCESS;
+
     union
     {
-        const VkStructHeader*               pHeader;
-        const VkMemoryAllocateInfo*         pInfo;
+        const VkStructHeader*                   pHeader;
+        const VkMemoryAllocateInfo*             pInfo;
+        const VkImportMemoryHostPointerInfoEXT* pImportMemoryInfo;
     };
 
     VK_ASSERT(pDevice != nullptr);
@@ -82,6 +84,7 @@ VkResult Memory::Create(
     Pal::OsExternalHandle handle    = 0;
     bool sharedViaNtHandle          = false;
     bool isExternal                 = false;
+    void* pPinnedHostPtr            = nullptr; // If non-null, this memory is allocated as pinned system memory
     const Pal::gpusize palAlignment = Util::Max(palProperties.gpuMemoryProperties.virtualMemAllocGranularity,
                                                 palProperties.gpuMemoryProperties.realMemAllocGranularity);
 
@@ -157,14 +160,14 @@ VkResult Memory::Create(
                 }
                 break;
             case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR:
-                {
+            {
                 const VkExportMemoryAllocateInfoKHR* pExportMemory =
                     reinterpret_cast<const VkExportMemoryAllocateInfoKHR *>(pHeader);
                     VK_ASSERT(pExportMemory->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
                     // Todo: we'd better to pass in the handleTypes to the Pal as well.
                     // The supported handleType should also be provided by Pal as Device Capabilities.
-                }
-                break;
+            }
+            break;
 
             case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO_KHX:
             {
@@ -181,6 +184,7 @@ VkResult Memory::Create(
                 }
             }
             break;
+
             case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR:
             {
                 const VkMemoryDedicatedAllocateInfoKHR* pDedicatedInfo =
@@ -192,9 +196,18 @@ VkResult Memory::Create(
                 }
             }
             break;
+
             default:
                 switch (static_cast<uint32_t>(pHeader->sType))
                 {
+                case VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT:
+                {
+                    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_EXTERNAL_MEMORY_HOST));
+
+                    pPinnedHostPtr = pImportMemoryInfo->pHostPointer;
+                }
+                break;
+
                 default:
                     // Skip any unknown extension structures
                     break;
@@ -214,26 +227,54 @@ VkResult Memory::Create(
             if (createInfo.size != 0)
             {
                 // Get CPU memory requirements for PAL
-                gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetGpuMemorySize(createInfo, &palResult);
-                VK_ASSERT(palResult == Pal::Result::Success);
+                const bool pinned = (pPinnedHostPtr != nullptr);
+
+                Pal::PinnedGpuMemoryCreateInfo pinnedInfo = {};
+
+                if (pinned == false)
+                {
+                    gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetGpuMemorySize(createInfo, &palResult);
+
+                    VK_ASSERT(palResult == Pal::Result::Success);
+                }
+                else
+                {
+                    VK_ASSERT(Util::IsPow2Aligned(reinterpret_cast<uint64_t>(pPinnedHostPtr),
+                        pDevice->VkPhysicalDevice()->PalProperties().gpuMemoryProperties.realMemAllocGranularity));
+
+                    pinnedInfo.size    = static_cast<size_t>(createInfo.size);
+                    pinnedInfo.pSysMem = pPinnedHostPtr;
+                    pinnedInfo.vaRange = Pal::VaRange::Default;
+
+                    gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetPinnedGpuMemorySize(
+                        pinnedInfo, &palResult);
+
+                    if (palResult != Pal::Result::Success)
+                    {
+                        vkResult = VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
+                    }
+                }
 
                 const size_t apiSize        = sizeof(Memory);
                 const size_t palSize        = gpuMemorySize * pDevice->NumPalDevices();
                 const size_t peerMemorySize = PeerMemory::GetMemoryRequirements(
                     pDevice, multiInstanceHeap, allocationMask, static_cast<uint32_t>(gpuMemorySize));
 
-                // Allocate enough for the PAL memory object and our own dispatchable memory
-                pSystemMem = static_cast<uint8_t*>(
-                        pAllocator->pfnAllocation(
-                            pAllocator->pUserData,
-                            apiSize + palSize + peerMemorySize,
-                            VK_DEFAULT_MEM_ALIGN,
-                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-
-                // Check for out of memory
-                if (pSystemMem == nullptr)
+                if (vkResult == VK_SUCCESS)
                 {
-                    vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                    // Allocate enough for the PAL memory object and our own dispatchable memory
+                    pSystemMem = static_cast<uint8_t*>(
+                            pAllocator->pfnAllocation(
+                                pAllocator->pUserData,
+                                apiSize + palSize + peerMemorySize,
+                                VK_DEFAULT_MEM_ALIGN,
+                                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+
+                    // Check for out of memory
+                    if (pSystemMem == nullptr)
+                    {
+                        vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                    }
                 }
 
                 if (vkResult == VK_SUCCESS)
@@ -249,8 +290,16 @@ VkResult Memory::Create(
                             Pal::IDevice* pPalDevice = pDevice->PalDevice(deviceIdx);
 
                             // Allocate the PAL memory object
-                            palResult = pPalDevice->CreateGpuMemory(
-                                createInfo, Util::VoidPtrInc(pSystemMem, palMemOffset), &pGpuMemory[deviceIdx]);
+                            if (pinned == false)
+                            {
+                                palResult = pPalDevice->CreateGpuMemory(
+                                    createInfo, Util::VoidPtrInc(pSystemMem, palMemOffset), &pGpuMemory[deviceIdx]);
+                            }
+                            else
+                            {
+                                palResult = pPalDevice->CreatePinnedGpuMemory(
+                                    pinnedInfo, Util::VoidPtrInc(pSystemMem, palMemOffset), &pGpuMemory[deviceIdx]);
+                            }
 
                             VK_ASSERT(palResult == Pal::Result::Success);
 
@@ -281,13 +330,16 @@ VkResult Memory::Create(
                         pMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(
                             pDevice, pGpuMemory, pPeerMemory, allocationMask, createInfo);
                     }
+                    else if (pinned)
+                    {
+                        vkResult = VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
+                    }
                     else if (palResult == Pal::Result::ErrorOutOfGpuMemory)
                     {
                         vkResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
                     }
                     else
                     {
-                        VK_ASSERT(palResult == Pal::Result::ErrorOutOfMemory);
                         vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
                     }
 

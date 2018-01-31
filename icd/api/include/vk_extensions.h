@@ -239,6 +239,8 @@ public:
         KHR_WIN32_KEYED_MUTEX,
         EXT_GLOBAL_PRIORITY,
         AMD_BUFFER_MARKER,
+        AMD_SHADER_IMAGE_LOAD_STORE_LOD,
+        EXT_EXTERNAL_MEMORY_HOST,
 
         Count
     };

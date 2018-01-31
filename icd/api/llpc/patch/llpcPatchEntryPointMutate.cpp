@@ -678,8 +678,8 @@ bool PatchEntryPointMutate::runOnModule(
         break;
     }
 
-    const char* pMainEntryName = Util::Abi::PipelineAbiSymbolNameStrings[(uint32_t)entryStage];
-    pEntryPoint->setName(pMainEntryName);
+    const char* pEntryName = Util::Abi::PipelineAbiSymbolNameStrings[static_cast<uint32_t>(entryStage)];
+    pEntryPoint->setName(pEntryName);
     pEntryPoint->setDLLStorageClass(GlobalValue::DLLExportStorageClass);
 
     // NOTE: Set function attribute for hard-coded high part of the GIT address. Use 0xFFFFFFFF (-1)
@@ -1048,30 +1048,19 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
     }
 
     // Internal user data
-    if (needSpill)
+    if (needSpill && useFixedLayout)
     {
         // Add spill table
         LLPC_ASSERT(pIntfData->spillTable.offsetInDwords != InvalidValue);
-        if (useFixedLayout)
-        {
-            LLPC_ASSERT(userDataIdx <= (InterfaceData::MaxCsUserDataCount + InterfaceData::CsStartUserData));
-            while (userDataIdx <= (InterfaceData::MaxCsUserDataCount + InterfaceData::CsStartUserData))
-            {
-                argTys.push_back(m_pContext->Int32Ty());
-                *pInRegMask |= (1ull << argIdx++);
-                ++userDataIdx;
-            }
-            pIntfData->userDataUsage.spillTable = userDataIdx - 1;
-            pIntfData->entryArgIdxs.spillTable = argIdx - 1;
-        }
-        else
+        LLPC_ASSERT(userDataIdx <= (InterfaceData::MaxCsUserDataCount + InterfaceData::CsStartUserData));
+        while (userDataIdx <= (InterfaceData::MaxCsUserDataCount + InterfaceData::CsStartUserData))
         {
             argTys.push_back(m_pContext->Int32Ty());
-            *pInRegMask |= (1ull << argIdx);
-
-            pIntfData->userDataUsage.spillTable = userDataIdx++;
-            pIntfData->entryArgIdxs.spillTable = argIdx++;
+            *pInRegMask |= (1ull << argIdx++);
+            ++userDataIdx;
         }
+        pIntfData->userDataUsage.spillTable = userDataIdx - 1;
+        pIntfData->entryArgIdxs.spillTable = argIdx - 1;
 
         pIntfData->spillTable.sizeInDwords = requiredUserDataCount - pIntfData->spillTable.offsetInDwords;
     }
@@ -1159,6 +1148,16 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
         }
     }
 
+    if (needSpill && (useFixedLayout == false))
+    {
+        argTys.push_back(m_pContext->Int32Ty());
+        *pInRegMask |= (1ull << argIdx);
+
+        pIntfData->userDataUsage.spillTable = userDataIdx++;
+        pIntfData->entryArgIdxs.spillTable = argIdx++;
+
+        pIntfData->spillTable.sizeInDwords = requiredUserDataCount - pIntfData->spillTable.offsetInDwords;
+    }
     pIntfData->userDataCount = userDataIdx;
 
     // NOTE: Here, we start to add system values, they should be behind user data.

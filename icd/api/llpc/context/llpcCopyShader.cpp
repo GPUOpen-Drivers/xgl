@@ -398,7 +398,7 @@ Value* CopyShader::CalcGsVsRingOffsetForInput(
     if (m_pContext->IsGsOnChip())
     {
         // ringOffset = esGsLdsSize + vertexOffset + location * 4 + compIdx
-        pRingOffset = ConstantInt::get(m_pContext->Int32Ty(), pResUsage->inOutUsage.gs.esGsLdsSize);
+        pRingOffset = ConstantInt::get(m_pContext->Int32Ty(), pResUsage->inOutUsage.gs.calcFactor.esGsLdsSize);
 
         pRingOffset = BinaryOperator::CreateAdd(pRingOffset, pVertexOffset, "", pInsertPos);
 

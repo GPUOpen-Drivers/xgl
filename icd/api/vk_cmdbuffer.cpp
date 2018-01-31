@@ -63,6 +63,8 @@
 
 namespace vk
 {
+namespace
+{
 
 // =====================================================================================================================
 // This finds the subset of an images subres ranges that need to be transitioned based changes between the source and
@@ -96,64 +98,199 @@ void FindDepthStencilLayoutTransitionRanges(
 }
 
 // =====================================================================================================================
-// This finds the subset of framebuffer attachment subres ranges that need to be cleared based on the render pass's
-// given clear aspect flags.
-void FindDepthStencilAttachmentClearRanges(
-    const Framebuffer::Attachment& attachment,
-    VkImageAspectFlags             clearAspects,
-    uint32_t*                      pRangeCount,
-    Pal::SubresRange               clearRanges[MaxRangePerAttachment])
-{
-    uint32_t rangeCount = 0;
-
-    for (uint32_t i = 0; i < attachment.subresRangeCount; ++i)
-    {
-        VK_ASSERT(rangeCount < MaxRangePerAttachment);
-
-        if ((clearAspects & VK_IMAGE_ASPECT_DEPTH_BIT) &&
-            (attachment.subresRange[i].startSubres.aspect == Pal::ImageAspect::Depth))
-        {
-            clearRanges[rangeCount++] = attachment.subresRange[i];
-        }
-        else if ((clearAspects & VK_IMAGE_ASPECT_STENCIL_BIT) &&
-            (attachment.subresRange[i].startSubres.aspect == Pal::ImageAspect::Stencil))
-        {
-            clearRanges[rangeCount++] = attachment.subresRange[i];
-        }
-    }
-
-    *pRangeCount = rangeCount;
-}
-
-// =====================================================================================================================
-// Converts a compatible PAL "clear box" structure from attachment + renderarea for a renderpass clear.
-void BuildClearBox(
+// Creates a compatible PAL "clear box" structure from attachment + render area for a renderpass clear.
+Pal::Box BuildClearBox(
     const Pal::Rect&               renderArea,
-    const Framebuffer::Attachment& attachment,
-    uint32_t*                      pBoxCount,
-    Pal::Box*                      pBox)
+    const Framebuffer::Attachment& attachment)
 {
+    Pal::Box box { };
+
     // 2D area
-    pBox->offset.x      = renderArea.offset.x;
-    pBox->offset.y      = renderArea.offset.y;
-    pBox->extent.width  = renderArea.extent.width;
-    pBox->extent.height = renderArea.extent.height;
+    box.offset.x      = renderArea.offset.x;
+    box.offset.y      = renderArea.offset.y;
+    box.extent.width  = renderArea.extent.width;
+    box.extent.height = renderArea.extent.height;
 
     if (attachment.pImage->Is2dArrayCompatible())
     {
-        pBox->offset.z     = attachment.zRange.offset;
-        pBox->extent.depth = attachment.zRange.extent;
+        box.offset.z     = attachment.zRange.offset;
+        box.extent.depth = attachment.zRange.extent;
     }
     else
     {
         // Whole slice range (these are offset relative to subresrange)
-        pBox->offset.z     = attachment.subresRange[0].startSubres.arraySlice;
-        pBox->extent.depth = attachment.subresRange[0].numSlices;
+        box.offset.z     = attachment.subresRange[0].startSubres.arraySlice;
+        box.extent.depth = attachment.subresRange[0].numSlices;
     }
 
-    // Only do a box clear if the clear area doesn't cover the whole attached subresource: partial surface clears
-    // preclude fast clears and PAL assumes all box clears are partial surface clears.
-    *pBoxCount = (Framebuffer::IsPartialClear(*pBox, attachment) ? 1 : 0);
+    return box;
+}
+
+// =====================================================================================================================
+// Returns ranges of consecutive bits set to 1 from a bit mask.
+//
+// uint32 { 0xE47F01D6 } -> [(1, 2) (4, 1) (6, 3) (16, 7) (26, 1) (29, 3)]
+//
+// <----->   <->     <------------->             <-----> <-> <--->
+// +---------------------------------------------------------------+
+// |1 1 1 0 0 1 0 0 0 1 1 1 1 1 1 1 0 0 0 0 0 0 0 1 1 1 0 1 0 1 1 0|
+// +---------------------------------------------------------------+
+//
+// @note The implementation of RangesOfOnesInBitMask() assumes that bitMask ends with 0.
+//       To satisfy that condition, the bitMask is promoted to uint64_t,
+//       filled with leading zeros and looped through only relevant 33 bits.
+//       Mentioned assumption allows avoiding edge case
+//       in which bitMask ends in the middle of range of ones.
+//
+Util::Vector<Pal::Range, 16, Util::GenericAllocator> RangesOfOnesInBitMask(
+    const uint32_t bitMask)
+{
+    // Note that no allocation will be performed, so Util::Vector allocator is nullptr.
+    Util::Vector<Pal::Range, 16, Util::GenericAllocator> rangesOfOnes { nullptr };
+
+    constexpr int32_t INVALID_INDEX = -1;
+    int32_t rangeStart = INVALID_INDEX;
+
+    for (int32_t bitIndex = 0; bitIndex <= 32; ++bitIndex)
+    {
+        const bool bitValue = (bitMask & (uint64_t { 0x1 } << bitIndex)) > 0;
+
+        if (bitValue) // 1
+        {
+            if (rangeStart == INVALID_INDEX)
+            {
+                rangeStart = bitIndex;
+            }
+        }
+        else // 0
+        {
+            if (rangeStart != INVALID_INDEX)
+            {
+                const uint32_t rangeLength = bitIndex - rangeStart;
+                rangesOfOnes.PushBack(Pal::Range { rangeStart, rangeLength });
+
+                rangeStart = INVALID_INDEX;
+            }
+        }
+    }
+
+    return rangesOfOnes;
+}
+
+// =====================================================================================================================
+// Returns PAL clear regions converted from Vulkan clear rects.
+// If multiview is enabled layer ranges are overridden according to viewMask.
+template <typename PalClearRegion>
+Util::Vector<PalClearRegion, 8, VirtualStackFrame> CreateClearRegions(
+    const uint32_t           rectCount,
+    const VkClearRect* const pRects,
+    const RenderPass&        renderPass,
+    const uint32_t           subpass,
+    VirtualStackFrame&       virtStackFrame)
+{
+    static_assert(std::is_same<PalClearRegion, Pal::ClearBoundTargetRegion>::value ||
+                  std::is_same<PalClearRegion, Pal::Box>::value, "");
+
+    Util::Vector<PalClearRegion, 8, VirtualStackFrame> clearRegions { &virtStackFrame };
+
+    if (renderPass.IsMultiviewEnabled())
+    {
+        const auto viewMask = renderPass.GetViewMask(subpass);
+        const auto layerRanges = RangesOfOnesInBitMask(viewMask);
+
+        clearRegions.Reserve(rectCount * layerRanges.NumElements());
+
+        for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
+        {
+            for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+            {
+                clearRegions.PushBack(VkToPalClearRegion<PalClearRegion>(pRects[rectIndex]));
+                OverrideLayerRanges(clearRegions.Back(), layerRangeIt.Get());
+            }
+        }
+    }
+    else
+    {
+        clearRegions.Reserve(rectCount);
+
+        for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+        {
+            clearRegions.PushBack(VkToPalClearRegion<PalClearRegion>(pRects[rectIndex]));
+        }
+    }
+
+    return clearRegions;
+}
+
+// =====================================================================================================================
+// Returns attachment's PAL subresource ranges defined by clearInfo with modified layer ranges
+// according to Vulkan clear rects (multiview disabled) or viewMask (multiview is enabled).
+Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> CreateClearSubresRanges(
+    const Framebuffer::Attachment& attachment,
+    const VkClearAttachment&       clearInfo,
+    const uint32_t                 rectCount,
+    const VkClearRect* const       pRects,
+    const RenderPass&              renderPass,
+    const uint32_t                 subpass,
+    VirtualStackFrame&             virtStackFrame)
+{
+    Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
+
+    const auto attachmentSubresRanges = attachment.FindSubresRanges(clearInfo.aspectMask);
+
+    if (renderPass.IsMultiviewEnabled())
+    {
+        const auto viewMask = renderPass.GetViewMask(subpass);
+        const auto layerRanges = RangesOfOnesInBitMask(viewMask);
+
+        clearSubresRanges.Reserve(attachmentSubresRanges.NumElements() * layerRanges.NumElements());
+
+        for (uint32_t rangeIndex = 0; rangeIndex < attachmentSubresRanges.NumElements(); ++rangeIndex)
+        {
+            for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
+            {
+                clearSubresRanges.PushBack(attachmentSubresRanges.At(rangeIndex));
+                clearSubresRanges.Back().startSubres.arraySlice += layerRangeIt.Get().offset;
+                clearSubresRanges.Back().numSlices               = layerRangeIt.Get().extent;
+            }
+        }
+    }
+    else
+    {
+        clearSubresRanges.Reserve(attachmentSubresRanges.NumElements() * rectCount);
+
+        for (uint32_t rangeIndex = 0; rangeIndex < attachmentSubresRanges.NumElements(); ++rangeIndex)
+        {
+            for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+            {
+                clearSubresRanges.PushBack(attachmentSubresRanges.At(rangeIndex));
+                clearSubresRanges.Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
+                clearSubresRanges.Back().numSlices               = pRects[rectIndex].layerCount;
+            }
+        }
+    }
+
+    return clearSubresRanges;
+}
+
+// =====================================================================================================================
+// Creates PAL rects from Vulkan clear rects.
+Util::Vector<Pal::Rect, 8, VirtualStackFrame> CreateClearRects(
+    const uint32_t           rectCount,
+    const VkClearRect* const pRects,
+    VirtualStackFrame&       virtStackFrame)
+{
+    Util::Vector<Pal::Rect, 8, VirtualStackFrame> clearRects { &virtStackFrame };
+    clearRects.Reserve(rectCount);
+
+    for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+    {
+        clearRects.PushBack(VkToPalRect(pRects[rectIndex].rect));
+    }
+
+    return clearRects;
+}
+
 }
 
 // =====================================================================================================================
@@ -2098,26 +2235,6 @@ void CmdBuffer::ClearDepthStencilImage(
 }
 
 // =====================================================================================================================
-static bool NeedBoxClear(
-    uint32_t                       rectCount,
-    const VkClearRect*             pRects,
-    const Framebuffer::Attachment& attachment)
-{
-    bool needBoxClear = false;
-
-    if (rectCount > 0)
-    {
-        Pal::Box clearBox;
-
-        VkToPalClearBox(pRects[0], &clearBox);
-
-        needBoxClear = Framebuffer::IsPartialClear(clearBox, attachment);
-    }
-
-    return needBoxClear;
-}
-
-// =====================================================================================================================
 // Clears a set of depth/stencil attachment in the current subpass
 void CmdBuffer::ClearAttachments(
     uint32_t                 attachmentCount,
@@ -2151,23 +2268,13 @@ void CmdBuffer::ClearBoundAttachments(
 
     // Note: Bound target clears are pipelined by the HW, so we do not have to insert any barriers
 
-    // Allocate space to store clear region information
-    Pal::ClearBoundTargetRegion* pRegions = virtStackFrame.AllocArray<Pal::ClearBoundTargetRegion>(rectCount);
+    const auto clearRegions = CreateClearRegions<Pal::ClearBoundTargetRegion>(
+        rectCount, pRects,
+        *pRenderPass, subpass,
+        virtStackFrame);
 
-    for (uint32_t i = 0; i < rectCount; ++i)
-    {
-        pRegions[i].rect.offset.x      = pRects[i].rect.offset.x;
-        pRegions[i].rect.offset.y      = pRects[i].rect.offset.y;
-        pRegions[i].startSlice         = pRects[i].baseArrayLayer;
-        pRegions[i].rect.extent.width  = pRects[i].rect.extent.width;
-        pRegions[i].rect.extent.height = pRects[i].rect.extent.height;
-        pRegions[i].numSlices          = pRects[i].layerCount;
-    }
-
-    // Allocate space to store clear target information
-    Pal::BoundColorTarget* pColorTargets = virtStackFrame.AllocArray<Pal::BoundColorTarget>(attachmentCount);
-
-    uint32_t colorCount = 0;
+    Util::Vector<Pal::BoundColorTarget, 8, VirtualStackFrame> colorTargets { &virtStackFrame };
+    colorTargets.Reserve(attachmentCount);
 
     for (uint32_t idx = 0; idx < attachmentCount; ++idx)
     {
@@ -2186,15 +2293,14 @@ void CmdBuffer::ClearBoundAttachments(
                 // Fill in bound target information for this target, but don't clear yet
                 const uint32_t tgtIdx = clearInfo.colorAttachment;
 
-                Pal::BoundColorTarget* pTarget = &pColorTargets[colorCount++];
+                Pal::BoundColorTarget target { };
+                target.targetIndex    = tgtIdx;
+                target.swizzledFormat = VkToPalFormat(pRenderPass->GetColorAttachmentFormat(subpass, tgtIdx));
+                target.samples        = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
+                target.fragments      = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
+                target.clearValue     = VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat.format);
 
-                pTarget->targetIndex    = tgtIdx;
-                pTarget->swizzledFormat =
-                    VkToPalFormat(m_state.allGpuState.pRenderPass->GetColorAttachmentFormat(subpass, tgtIdx));
-                pTarget->samples        = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
-                pTarget->fragments      = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
-                pTarget->clearValue     = VkToPalClearColor(&clearInfo.clearValue.color,
-                    pTarget->swizzledFormat.format);
+                colorTargets.PushBack(target);
             }
         }
         else // Depth-stencil clear
@@ -2219,31 +2325,27 @@ void CmdBuffer::ClearBoundAttachments(
                     pRenderPass->GetDepthStencilAttachmentSamples(subpass),
                     pRenderPass->GetDepthStencilAttachmentSamples(subpass),
                     selectFlags,
-                    rectCount,
-                    pRegions);
+                    clearRegions.NumElements(),
+                    clearRegions.Data());
 
                 DbgBarrierPostCmd(DbgBarrierClearDepth);
             }
         }
     }
 
-    if (colorCount > 0)
+    if (colorTargets.NumElements() > 0)
     {
         DbgBarrierPreCmd(DbgBarrierClearColor);
 
         // Clear the bound color targets
         PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundColorTargets(
-            colorCount,
-            pColorTargets,
-            rectCount,
-            pRegions);
+            colorTargets.NumElements(),
+            colorTargets.Data(),
+            clearRegions.NumElements(),
+            clearRegions.Data());
 
         DbgBarrierPostCmd(DbgBarrierClearColor);
     }
-
-    // Free memory
-    virtStackFrame.FreeArray(pRegions);
-    virtStackFrame.FreeArray(pColorTargets);
 }
 
 // =====================================================================================================================
@@ -2423,9 +2525,6 @@ void CmdBuffer::ClearImageAttachments(
     const RenderPass* pRenderPass = m_state.allGpuState.pRenderPass;
     const uint32_t subpass        = m_renderPassInstance.subpass;
 
-    // These are allocated on the fly for color clears
-    Pal::Box* pColorBoxes = nullptr;
-
     // Go through each of the clear attachment infos
     for (uint32_t idx = 0; idx < attachmentCount; ++idx)
     {
@@ -2437,7 +2536,7 @@ void CmdBuffer::ClearImageAttachments(
             // Get the color target index (subpass color reference index)
             const uint32_t targetIdx = clearInfo.colorAttachment;
 
-            // Get the corresponding color reference information in the current subpass
+            // Get the corresponding color reference in the current subpass
             const VkAttachmentReference& colorRef = pRenderPass->GetSubpassColorReference(subpass, targetIdx);
 
             // Get the referenced attachment index in the framebuffer
@@ -2446,53 +2545,33 @@ void CmdBuffer::ClearImageAttachments(
             // Clear only if the referenced attachment index is active
             if (attachmentIdx != VK_ATTACHMENT_UNUSED)
             {
-                // Get the matching framebuffer attachment information
+                // Get the matching framebuffer attachment
                 const Framebuffer::Attachment& attachment = m_state.allGpuState.pFramebuffer->GetAttachment(attachmentIdx);
-
-                // Figure out if we need to do a box clear.  A box clear disables fast clears.  We need to do a
-                // box clear if the given clear rectangles don't cover the whole surface
-                const bool needBoxClear = NeedBoxClear(rectCount, pRects, attachment);
-
-                // Convert the clear rectangle information for color clears.  This only has to happen once for all
-                // color attachments
-                if (needBoxClear && pColorBoxes == nullptr)
-                {
-                    pColorBoxes = virtStackFrame.AllocArray<Pal::Box>(rectCount);
-
-                    for (uint32_t i = 0; i < rectCount; ++i)
-                    {
-                        VkToPalClearBox(pRects[i], &pColorBoxes[i]);
-                    }
-                }
-
-                const auto subresRangeCount     = attachment.subresRangeCount * rectCount;
-                Pal::SubresRange* pSubresRanges = virtStackFrame.AllocArray<Pal::SubresRange>(subresRangeCount);
-
-                for (uint32_t j = 0; j < attachment.subresRangeCount; ++j)
-                {
-                    for (uint32_t i = 0; i < rectCount; ++i)
-                    {
-                        pSubresRanges[i] = attachment.subresRange[j];
-                        pSubresRanges[i].startSubres.arraySlice += pRects[i].baseArrayLayer;
-                        pSubresRanges[i].numSlices = pRects[i].layerCount;
-                    }
-                }
 
                 // Get the layout that this color attachment is currently in within the render pass
                 const Pal::ImageLayout targetLayout = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Color);
+
+                const auto clearBoxes = CreateClearRegions<Pal::Box>(
+                    rectCount, pRects,
+                    *pRenderPass, subpass,
+                    virtStackFrame);
+
+                const auto clearSubresRanges = CreateClearSubresRanges(
+                    attachment, clearInfo,
+                    rectCount, pRects,
+                    *pRenderPass, subpass,
+                    virtStackFrame);
 
                 // Execute the clear
                 PalCmdClearColorImage(
                     *attachment.pImage,
                     targetLayout,
                     VkToPalClearColor(&clearInfo.clearValue.color, attachment.viewFormat.format),
-                    subresRangeCount,
-                    pSubresRanges,
-                    needBoxClear ? rectCount : 0,
-                    pColorBoxes,
+                    clearSubresRanges.NumElements(),
+                    clearSubresRanges.Data(),
+                    clearBoxes.NumElements(),
+                    clearBoxes.Data(),
                     Pal::ClearColorImageFlags::ColorClearAutoSync);
-
-                virtStackFrame.FreeArray(pSubresRanges);
             }
         }
         else // Depth-stencil clear
@@ -2500,79 +2579,43 @@ void CmdBuffer::ClearImageAttachments(
             // Get the depth-stencil reference of the current subpass
             const VkAttachmentReference& depthStencilRef = pRenderPass->GetSubpassDepthStencilReference(subpass);
 
-            // Clear only if the attachment reference is active
-            if (depthStencilRef.attachment != VK_ATTACHMENT_UNUSED)
+            // Get the referenced attachment index in the framebuffer
+            const uint32_t attachmentIdx = depthStencilRef.attachment;
+
+            // Clear only if the referenced attachment index is active
+            if (attachmentIdx != VK_ATTACHMENT_UNUSED)
             {
                 // Get the matching framebuffer attachment
-                const Framebuffer::Attachment& attachment = m_state.allGpuState.pFramebuffer->GetAttachment(
-                    depthStencilRef.attachment);
-
-                // Figure out which ranges to clear based on the clear attachment info (depth, stencil, both)
-                Pal::SubresRange clearRange[MaxRangePerAttachment];
-                uint32_t rangeCount;
-
-                FindDepthStencilAttachmentClearRanges(
-                    attachment,
-                    clearInfo.aspectMask,
-                    &rangeCount,
-                    clearRange);
+                const Framebuffer::Attachment& attachment = m_state.allGpuState.pFramebuffer->GetAttachment(attachmentIdx);
 
                 // Get the layout(s) that this attachment is currently in within the render pass
-                const Pal::ImageLayout depthLayout   = RPGetAttachmentLayout(depthStencilRef.attachment,
-                                                                             Pal::ImageAspect::Depth);
-                const Pal::ImageLayout stencilLayout = RPGetAttachmentLayout(depthStencilRef.attachment,
-                                                                             Pal::ImageAspect::Stencil);
+                const Pal::ImageLayout depthLayout   = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Depth);
+                const Pal::ImageLayout stencilLayout = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Stencil);
 
-                const VkFormat format = attachment.pImage->GetFormat();
+                const auto clearRects = CreateClearRects(
+                    rectCount, pRects,
+                    virtStackFrame);
 
-                // Figure out if we need to do a box clear.  A box clear disables fast clears.  We need to do a
-                // box clear if the given clear rectangles don't cover the whole surface
-                const bool needBoxClear = NeedBoxClear(rectCount, pRects, attachment);
+                const auto clearSubresRanges = CreateClearSubresRanges(
+                    attachment, clearInfo,
+                    rectCount, pRects,
+                    *pRenderPass, subpass,
+                    virtStackFrame);
 
-                // 2D portion of the clear rect
-                Pal::Rect clearRect;
-
-                // Subres range specific to this clear rect where the z (slice) clear range is baked in
-                Pal::SubresRange rectSpecificRange[MaxRangePerAttachment];
-
-                for (uint32_t i = 0; i < rectCount; ++i)
-                {
-                    // Copy 2D clear rectangle
-                    clearRect.offset.x = pRects[i].rect.offset.x;
-                    clearRect.offset.y = pRects[i].rect.offset.y;
-                    clearRect.extent.width = pRects[i].rect.extent.width;
-                    clearRect.extent.height = pRects[i].rect.extent.height;
-
-                    for (uint32_t ri = 0; ri < rangeCount; ++ri)
-                    {
-                        // Start from attached subres range
-                        rectSpecificRange[ri] = clearRange[ri];
-
-                        // Override the array range based on clear rectangle
-                        rectSpecificRange[ri].startSubres.arraySlice += pRects[i].baseArrayLayer;
-                        rectSpecificRange[ri].numSlices = pRects[i].layerCount;
-                    }
-
-                    // Execute a box clear
-                    PalCmdClearDepthStencil(
-                        *attachment.pImage,
-                        depthLayout,
-                        stencilLayout,
-                        VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
-                        clearInfo.clearValue.depthStencil.stencil,
-                        rangeCount,
-                        rectSpecificRange,
-                        needBoxClear ? 1 : 0,
-                        needBoxClear ? &clearRect : nullptr,
-                        Pal::ClearDepthStencilFlags::DsClearAutoSync);
-                }
+                // Execute a box clear
+                PalCmdClearDepthStencil(
+                    *attachment.pImage,
+                    depthLayout,
+                    stencilLayout,
+                    VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
+                    clearInfo.clearValue.depthStencil.stencil,
+                    clearSubresRanges.NumElements(),
+                    clearSubresRanges.Data(),
+                    clearRects.NumElements(),
+                    clearRects.Data(),
+                    Pal::ClearDepthStencilFlags::DsClearAutoSync);
             }
         }
-    }
-
-    if (pColorBoxes != nullptr)
-    {
-        virtStackFrame.FreeArray(pColorBoxes);
     }
 }
 
@@ -4247,12 +4290,6 @@ void CmdBuffer::RPSyncPoint(
     pVirtStack->FreeArray(ppImages);
 }
 
-extern void BuildClearBox(
-    const Pal::Rect&               renderArea,
-    const Framebuffer::Attachment& attachment,
-    uint32_t*                      pBoxCount,
-    Pal::Box*                      pBox);
-
 // =====================================================================================================================
 // Does one or more load-op color clears during a render pass instance.
 void CmdBuffer::RPLoadOpClearColor(
@@ -4286,10 +4323,7 @@ void CmdBuffer::RPLoadOpClearColor(
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
-            uint32_t boxCount;
-            Pal::Box clearBox;
-
-            BuildClearBox(m_renderPassInstance.renderArea[deviceIdx], attachment, &boxCount, &clearBox);
+            Pal::Box clearBox = BuildClearBox(m_renderPassInstance.renderArea[deviceIdx], attachment);
 
             PalCmdBuffer(deviceIdx)->CmdClearColorImage(
                 *attachment.pImage->PalImage(deviceIdx),
@@ -4297,8 +4331,7 @@ void CmdBuffer::RPLoadOpClearColor(
                 clearColor,
                 attachment.subresRangeCount,
                 attachment.subresRange,
-                boxCount,
-                &clearBox,
+                1, &clearBox,
                 Pal::ColorClearAutoSync);
         }
     }
@@ -4363,14 +4396,7 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
-            // Only do a box clear if the clear area doesn't cover the whole attached subresource: partial surface clears
-            // preclude fast clears and PAL assumes all box clears are partial surface clears.
-            const Pal::Rect& clearBox = m_renderPassInstance.renderArea[deviceIdx];
-
-            bool isPartialClear = ((clearBox.offset.x != 0) ||
-                                   (clearBox.offset.y != 0) ||
-                                   (clearBox.extent.width != attachment.baseSubresExtent.width) ||
-                                   (clearBox.extent.height != attachment.baseSubresExtent.height));
+            const Pal::Rect& clearRect = m_renderPassInstance.renderArea[deviceIdx];
 
             PalCmdBuffer(deviceIdx)->CmdClearDepthStencil(
                 *attachment.pImage->PalImage(deviceIdx),
@@ -4380,8 +4406,7 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
                 clearStencil,
                 clearRangeCount,
                 clearRanges,
-                isPartialClear ? 1 : 0,
-                isPartialClear ? &clearBox : nullptr,
+                1, &clearRect,
                 Pal::DsClearAutoSync);
         }
     }
@@ -4520,11 +4545,13 @@ void CmdBuffer::RPBindTargets(
                 params.colorTargets[i].pColorTargetView = attachment.pView->PalColorTargetView(deviceIdx);
                 params.colorTargets[i].imageLayout = RPGetAttachmentLayout(reference.attachment,
                     Pal::ImageAspect::Color);
+
             }
             else
             {
                 params.colorTargets[i].pColorTargetView = nullptr;
                 params.colorTargets[i].imageLayout = NullLayout;
+
             }
         }
 
@@ -4537,15 +4564,18 @@ void CmdBuffer::RPBindTargets(
             params.depthTarget.pDepthStencilView = attachment.pView->PalDepthStencilView(deviceIdx);
             params.depthTarget.depthLayout       = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Depth);
             params.depthTarget.stencilLayout     = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Stencil);
+
         }
         else
         {
             params.depthTarget.pDepthStencilView = nullptr;
             params.depthTarget.depthLayout       = NullLayout;
             params.depthTarget.stencilLayout     = NullLayout;
+
         }
 
         PalCmdBuffer(deviceIdx)->CmdBindTargets(params);
+
     }
 }
 

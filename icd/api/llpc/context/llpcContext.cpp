@@ -61,9 +61,9 @@ const uint8_t Context::GlslEmuLib[]=
     #include "./generate/g_llpcGlslEmuLib.h"
 };
 
-const uint8_t Context::GlslEmuLibGfx6[]=
+const uint8_t Context::GlslEmuLibGfx8[] =
 {
-    #include "./generate/gfx6/g_llpcGlslEmuLibGfx6.h"
+#include "./generate/gfx8/g_llpcGlslEmuLibGfx8.h"
 };
 
 #ifdef LLPC_BUILD_GFX9
@@ -116,31 +116,36 @@ Context::Context(
     m_pGlslEmuLib = LoadLibary(&libBin);
     LLPC_ASSERT(m_pGlslEmuLib != nullptr);
 
+    // Link GFX-independent and GFX-dependent libraries together
+    EnableDebugOutput(false);
+
     std::unique_ptr<Module> pGlslEmuLibGfx;
-    if (gfxIp.major <= 8)
+    if (gfxIp.major >= 8)
     {
-        libBin.codeSize = sizeof(GlslEmuLibGfx6);
-        libBin.pCode    = GlslEmuLibGfx6;
+        libBin.codeSize = sizeof(GlslEmuLibGfx8);
+        libBin.pCode = GlslEmuLibGfx8;
         pGlslEmuLibGfx = LoadLibary(&libBin);
+        LLPC_ASSERT(pGlslEmuLibGfx != nullptr);
+        if (Linker::linkModules(*m_pGlslEmuLib, std::move(pGlslEmuLibGfx), Linker::OverrideFromSrc))
+        {
+            LLPC_ERRS("Fails to link LLVM libraries together\n");
+        }
     }
-    else
+
+    if (gfxIp.major >= 9)
     {
 #ifdef LLPC_BUILD_GFX9
         libBin.codeSize = sizeof(GlslEmuLibGfx9);
         libBin.pCode    = GlslEmuLibGfx9;
         pGlslEmuLibGfx = LoadLibary(&libBin);
+        LLPC_ASSERT(pGlslEmuLibGfx != nullptr);
+        if (Linker::linkModules(*m_pGlslEmuLib, std::move(pGlslEmuLibGfx), Linker::OverrideFromSrc))
+        {
+            LLPC_ERRS("Fails to link LLVM libraries together\n");
+        }
 #else
         LLPC_NOT_IMPLEMENTED();
 #endif
-    }
-    LLPC_ASSERT(pGlslEmuLibGfx != nullptr);
-
-    EnableDebugOutput(false);
-
-    // Link GFX-independent and GFX-dependent libraries together
-    if (Linker::linkModules(*m_pGlslEmuLib, std::move(pGlslEmuLibGfx), 0))
-    {
-        LLPC_ERRS("Fails to link LLVM libraries together\n");
     }
 
     // Do function inlining

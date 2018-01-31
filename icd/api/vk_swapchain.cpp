@@ -119,7 +119,14 @@ VkResult SwapChain::Create(
                     // The fullscreen present mode is always a preferred mode but platform would make the final call.
                     // To be fixed! The dota2 1080p + ultra mode noticed a performance drop.
                     // Dislabe the flip mode for now.
-                    properties.imagePresentSupport = Pal::PresentMode::Windowed;
+                    if (pDevice->GetRuntimeSettings().useFlipHint)
+                    {
+                        properties.imagePresentSupport = Pal::PresentMode::Fullscreen;
+                    }
+                    else
+                    {
+                        properties.imagePresentSupport = Pal::PresentMode::Windowed;
+                    }
                 }
                 // The swap chain is stereo if imageArraySize is 2
                 properties.stereo = (pVkSwapchainCreateInfoKHR->imageArrayLayers == 2) ? 1 : 0;

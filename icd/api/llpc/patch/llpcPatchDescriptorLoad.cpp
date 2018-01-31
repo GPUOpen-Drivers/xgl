@@ -195,15 +195,20 @@ void PatchDescriptorLoad::visitCallInst(
         {
             // Descriptor range value (immutable sampler in Vulkan)
             LLPC_ASSERT(nodeType == ResourceMappingNodeType::DescriptorSampler);
+
+            uint32_t descSizeInDword = pDescPtrTy->getPointerElementType()->getVectorNumElements();
+
             if ((pDescRangeValue->arraySize == 1) || isa<ConstantInt>(pArrayOffset))
             {
+                // Array size is 1 or array offset is constant
                 uint32_t arrayOffset = 0;
-                if (pDescRangeValue->arraySize != 1)
+                if (isa<ConstantInt>(pArrayOffset))
                 {
                     arrayOffset = cast<ConstantInt>(pArrayOffset)->getZExtValue();
                 }
-                uint32_t descSizeInDword = pDescPtrTy->getPointerElementType()->getVectorNumElements();
+
                 const uint32_t* pDescValue = pDescRangeValue->pValue + arrayOffset * descSizeInDword;
+
                 std::vector<Constant*> descElems;
                 for (uint32_t i = 0; i < descSizeInDword; ++i)
                 {
@@ -213,8 +218,51 @@ void PatchDescriptorLoad::visitCallInst(
             }
             else
             {
-                // Fallback to normal sampler path
-                LLPC_NOT_IMPLEMENTED();
+                // Array size is greater than 1 and array offset is non-constant
+                GlobalVariable* pDescs = nullptr;
+
+                if (m_descs.find(pDescRangeValue) == m_descs.end())
+                {
+                    std::vector<Constant*> descs;
+                    for (uint32_t i = 0; i < pDescRangeValue->arraySize; ++i)
+                    {
+                        const uint32_t* pDescValue = pDescRangeValue->pValue + i * descSizeInDword;
+
+                        std::vector<Constant*> descElems;
+                        for (uint32_t j = 0; j < descSizeInDword; ++j)
+                        {
+                            descElems.push_back(ConstantInt::get(m_pContext->Int32Ty(), pDescValue[j]));
+                        }
+
+                        descs.push_back(ConstantVector::get(descElems));
+                    }
+
+                    auto pDescsTy = ArrayType::get(VectorType::get(m_pContext->Int32Ty(), descSizeInDword),
+                                                   pDescRangeValue->arraySize);
+
+                    pDescs = new GlobalVariable(*m_pModule,
+                                                pDescsTy,
+                                                true, // isConstant
+                                                GlobalValue::InternalLinkage,
+                                                ConstantArray::get(pDescsTy, descs),
+                                                "",
+                                                nullptr,
+                                                GlobalValue::NotThreadLocal,
+                                                ADDR_SPACE_CONST);
+
+                    m_descs[pDescRangeValue] = pDescs;
+                }
+                else
+                {
+                    pDescs = m_descs[pDescRangeValue];
+                }
+
+                std::vector<Value*> idxs;
+                idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
+                idxs.push_back(pArrayOffset);
+
+                auto pDescPtr = GetElementPtrInst::Create(nullptr, pDescs, idxs, "", &callInst);
+                pDesc = new LoadInst(pDescPtr, "", &callInst);
             }
         }
 
@@ -239,7 +287,6 @@ void PatchDescriptorLoad::visitCallInst(
                     if (pDesc->getType() != pDescTy)
                     {
                         // Array dynamic descriptor
-
                         Value* pDynDesc = UndefValue::get(pDescTy);
                         auto pDescStride = ConstantInt::get(m_pContext->Int32Ty(), descSizeInDword);
                         auto pIndex = BinaryOperator::CreateMul(pArrayOffset, pDescStride, "", &callInst);

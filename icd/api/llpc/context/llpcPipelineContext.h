@@ -380,8 +380,15 @@ struct ResourceUsage
             llvm::Value* pGsVsRingBufDesc;      // GS -> VS ring buffer descriptor (GS out);
             llvm::Value* pEmitCounterPtr;
 
-            uint32_t esGsLdsSize;               // ES -> GS ring LDS size (GS in)
-            uint32_t gsVsRingItemSize;          // Size of each primitive written to the GSVS Ring ( in dwords)
+            struct
+            {
+                uint32_t esGsRingItemSize;          // Size of each vertex written to the ES -> GS Ring.
+                uint32_t gsVsRingItemSize;          // Size of each primitive written to the GS -> VS Ring.
+                uint32_t esVertsPerSubgroup;        // Number of vertices ES exports.
+                uint32_t gsPrimsPerSubgroup;        // Number of prims GS exports.
+                uint32_t esGsLdsSize;               // ES -> GS ring LDS size (GS in)
+                uint32_t gsOnChipLdsSize;           // Total LDS size for GS on-chip mode.
+            } calcFactor;
         } gs;
 
         struct
@@ -596,8 +603,8 @@ public:
     // Checks whether tessellation off-chip mode is enabled
     virtual bool IsTessOffChip() const = 0;
 
-    // Determines whether GS on-chip mode is valid for this pipeline
-    virtual bool CanGsOnChip() = 0;
+    // Determines whether GS on-chip mode is valid for this pipeline, also computes ES-GS/GS-VS ring item size.
+    virtual bool CheckGsOnChipValidity() = 0;
 
     // Checks whether GS on-chip mode is enabled
     virtual bool IsGsOnChip() const = 0;

@@ -70,8 +70,8 @@ struct GpuProperty
     uint32_t ldsSizePerThreadGroup;             // LDS size per thread group
     uint32_t gsOnChipDefaultPrimsPerSubgroup;   // Default target number of primitives per subgroup for GS on-chip mode.
     uint32_t gsOnChipDefaultLdsSizePerSubgroup; // Default value for the maximum LDS size per subgroup for
-                                                // GS on-chip mode (in DWORDs).
-    uint32_t ldsSizeDwordGranularity;           // Granularity used to interpretate the LDS_SIZE register field
+    uint32_t gsOnChipMaxLdsSize;                // Max LDS size used by GS on-chip mode (in DWORDs)
+    uint32_t ldsSizeDwordGranularityShift;      // Amount of bits used to shift the LDS_SIZE register field
 
     //TODO: Setup gsPrimBufferDepth from hardware config option, will be done in another change.
     uint32_t gsPrimBufferDepth;     // Comes from the hardware GPU__GC__GSPRIM_BUFF_DEPTH configuration option

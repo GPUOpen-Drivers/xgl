@@ -908,3 +908,7 @@ extern const char vkDebugReportMessageEXT_name[];
 static const char* VKDEBUGREPORTMESSAGEEXT_name = vkDebugReportMessageEXT_name;
 #define vkDebugReportMessageEXT_condition_type vk::secure::entry::ENTRY_POINT_INSTANCE_EXTENSION
 #define vkDebugReportMessageEXT_condition_value vk::InstanceExtensions::EXT_DEBUG_REPORT
+extern const char vkGetMemoryHostPointerPropertiesEXT_name[];
+static const char* VKGETMEMORYHOSTPOINTERPROPERTIESEXT_name = vkGetMemoryHostPointerPropertiesEXT_name;
+#define vkGetMemoryHostPointerPropertiesEXT_condition_type vk::secure::entry::ENTRY_POINT_DEVICE_EXTENSION
+#define vkGetMemoryHostPointerPropertiesEXT_condition_value vk::DeviceExtensions::EXT_EXTERNAL_MEMORY_HOST

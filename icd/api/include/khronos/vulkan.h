@@ -56,6 +56,7 @@
 
 #include "devext/vk_amd_gpa_interface.h"
 #include "devext/vk_amd_buffer_marker.h"
+#include "devext/vk_ext_external_memory_host.h"
 
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,

@@ -176,7 +176,6 @@ Device::Device(
     m_pPalQueueMemory(nullptr),
     m_internalMemMgr(this, pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_renderStateCache(this),
-    m_pStackAllocator(nullptr),
     m_enabledExtensions(enabledExtensions),
     m_pSqttMgr(nullptr),
     m_pipelineCacheCount(0)
@@ -647,12 +646,6 @@ VkResult Device::Initialize(
         }
     }
 
-    if (result == VK_SUCCESS)
-    {
-        // Acquire a stack allocator to be used by the device
-        result = PalToVkResult(m_pInstance->StackMgr()->AcquireAllocator(&m_pStackAllocator));
-    }
-
     m_pPalQueueMemory = pPalQueueMemory;
 
     memcpy(&m_pQueues, pQueues, sizeof(m_pQueues));
@@ -946,12 +939,6 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
     }
 
     pAllocator->pfnFree(pAllocator->pUserData, m_pPalQueueMemory);
-
-    if (m_pStackAllocator != nullptr)
-    {
-        // Release the stack allocator
-        VkInstance()->StackMgr()->ReleaseAllocator(m_pStackAllocator);
-    }
 
     for (uint32_t i = 0; i < BltMsaaStateCount; ++i)
     {
@@ -2113,6 +2100,39 @@ uint32_t Device::GetPipelineCacheExpectedEntryCount()
 }
 
 // =====================================================================================================================
+// Returns the memory types compatible with pinned system memory.
+uint32_t Device::GetPinnedSystemMemoryTypes() const
+{
+    uint32_t memoryTypes = 0;
+    uint32_t gartIndex;
+
+    if (GetVkTypeIndexFromPalHeap(Pal::GpuHeapGartCacheable, &gartIndex))
+    {
+        memoryTypes |= (1UL << gartIndex);
+    }
+
+    return memoryTypes;
+}
+
+// =====================================================================================================================
+// Returns the memory type bit-mask that is compatible to be used as pinned memory types for the given external
+// host pointer
+uint32_t Device::GetExternalHostMemoryTypes(
+    VkExternalMemoryHandleTypeFlagBitsKHR handleType,
+    const void*                           pExternalPtr
+    ) const
+{
+    uint32_t memoryTypes = 0;
+
+    if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
+    {
+        memoryTypes = GetPinnedSystemMemoryTypes();
+    }
+
+    return memoryTypes;
+}
+
+// =====================================================================================================================
 void Device::DecreasePipelineCacheCount()
 {
     Util::AtomicDecrement(&m_pipelineCacheCount);
@@ -2626,6 +2646,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
     }
 
     return PalToVkResult(palResult);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
+    VkDevice                                    device,
+    VkExternalMemoryHandleTypeFlagBitsKHR       handleType,
+    const void*                                 pHostPointer,
+    VkMemoryHostPointerPropertiesEXT*           pMemoryHostPointerProperties)
+{
+    VkResult result         = VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
+    const Device* pDevice   = ApiDevice::ObjectFromHandle(device);
+    const uint32_t memTypes = pDevice->GetExternalHostMemoryTypes(handleType, pHostPointer);
+
+    if (memTypes != 0)
+    {
+        pMemoryHostPointerProperties->memoryTypeBits = memTypes;
+
+        result = VK_SUCCESS;
+    }
+
+    return result;
 }
 
 } // entry

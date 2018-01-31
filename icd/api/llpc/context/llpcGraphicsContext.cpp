@@ -54,6 +54,11 @@ opt<bool> EnableTessOffChip("enable-tess-offchip",
                             desc("Enable tessellation off-chip mode "),
                             init(false));
 
+// -disable-gs-onchip: disable geometry shader on-chip mode
+opt<bool> DisableGsOnChip("disable-gs-onchip",
+                          desc("Disable geometry shader on-chip mode"),
+                          init(true));
+
 } // cl
 
 } // llvm
@@ -330,8 +335,8 @@ uint64_t GraphicsContext::GetShaderHashCode(
 }
 
 // =====================================================================================================================
-// Determines whether or not GS on-chip mode is valid for this pipeline.
-bool GraphicsContext::CanGsOnChip()
+// Determines whether GS on-chip mode is valid for this pipeline, also computes ES-GS/GS-VS ring item size.
+bool GraphicsContext::CheckGsOnChipValidity()
 {
     bool gsOnChip = true;
 
@@ -346,12 +351,20 @@ bool GraphicsContext::CanGsOnChip()
     {
         uint32_t gsPrimsPerSubgroup = m_pGpuProperty->gsOnChipDefaultPrimsPerSubgroup;
 
-        const uint32_t esGsRingItemSize = 4 * pEsResUsage->inOutUsage.outputMapLocCount;
+        const uint32_t esGsRingItemSize = 4 * std::max(1u, pEsResUsage->inOutUsage.outputMapLocCount);
         const uint32_t gsInstanceCount  = pGsResUsage->builtInUsage.gs.invocations;
-        const uint32_t gsVsRingItemSize = 4 *
-                                          pGsResUsage->inOutUsage.outputMapLocCount *
-                                          pGsResUsage->builtInUsage.gs.outputVertices *
-                                          gsInstanceCount;
+        const uint32_t gsVsRingItemSize = 4 * std::max(1u,
+                                                       (pGsResUsage->inOutUsage.outputMapLocCount *
+                                                        pGsResUsage->builtInUsage.gs.outputVertices));
+
+        uint32_t esGsRingItemSizeOnChip = esGsRingItemSize;
+        uint32_t gsVsRingItemSizeOnChip = gsVsRingItemSize;
+
+        // optimize ES -> GS ring and GS -> VS ring layout for bank conflicts
+        esGsRingItemSizeOnChip |= 1;
+        gsVsRingItemSizeOnChip |= 1;
+
+        uint32_t gsVsRingItemSizeOnChipInstanced = gsVsRingItemSizeOnChip * gsInstanceCount;
 
         uint32_t vertsPerPrim = 1;
         bool     useAdjacency = false;
@@ -394,14 +407,15 @@ bool GraphicsContext::CanGsOnChip()
         }
 
         // Compute GS-VS LDS size based on target GS primitives per subgroup
-        uint32_t gsVsLdsSize = (gsVsRingItemSize * gsPrimsPerSubgroup);
+        uint32_t gsVsLdsSize = (gsVsRingItemSizeOnChipInstanced * gsPrimsPerSubgroup);
 
         // Compute ES-GS LDS size based on the worst case number of ES vertices needed to create the target number of
         // GS primitives per subgroup.
-        uint32_t esGsLdsSize = esGsRingItemSize * esMinVertsPerSubgroup * gsPrimsPerSubgroup;
+        uint32_t esGsLdsSize = esGsRingItemSizeOnChip * esMinVertsPerSubgroup * gsPrimsPerSubgroup;
 
         // Total LDS use per subgroup aligned to the register granularity
-        uint32_t gsOnChipLdsSize = Pow2Align((esGsLdsSize + gsVsLdsSize), m_pGpuProperty->ldsSizeDwordGranularity);
+        uint32_t gsOnChipLdsSize = Pow2Align((esGsLdsSize + gsVsLdsSize),
+                                             static_cast<uint32_t>((1 << m_pGpuProperty->ldsSizeDwordGranularityShift)));
 
         // Use the client-specified amount of LDS space per subgroup. If they specified zero, they want us to choose a
         // reasonable default. The final amount must be 128-DWORD aligned.
@@ -413,18 +427,18 @@ bool GraphicsContext::CanGsOnChip()
         // If total LDS usage is too big, refactor partitions based on ratio of ES-GS and GS-VS item sizes.
         if (gsOnChipLdsSize > maxLdsSize)
         {
-            const uint32_t esGsItemSizePerPrim = esGsRingItemSize * esMinVertsPerSubgroup;
-            const uint32_t itemSizeTotal       = esGsItemSizePerPrim + gsVsRingItemSize;
+            const uint32_t esGsItemSizePerPrim = esGsRingItemSizeOnChip * esMinVertsPerSubgroup;
+            const uint32_t itemSizeTotal       = esGsItemSizePerPrim + gsVsRingItemSizeOnChipInstanced;
 
             esGsLdsSize = RoundUpToMultiple((esGsItemSizePerPrim * maxLdsSize) / itemSizeTotal, esGsItemSizePerPrim);
-            gsVsLdsSize = RoundDownToMultiple(maxLdsSize - esGsLdsSize, gsVsRingItemSize);
+            gsVsLdsSize = RoundDownToMultiple(maxLdsSize - esGsLdsSize, gsVsRingItemSizeOnChipInstanced);
 
             gsOnChipLdsSize = maxLdsSize;
         }
 
         // Based on the LDS space, calculate how many GS prims per subgroup and ES vertices per subgroup can be dispatched.
-        gsPrimsPerSubgroup          = (gsVsLdsSize / gsVsRingItemSize);
-        uint32_t esVertsPerSubgroup = (esGsLdsSize / esGsRingItemSize);
+        gsPrimsPerSubgroup          = (gsVsLdsSize / gsVsRingItemSizeOnChipInstanced);
+        uint32_t esVertsPerSubgroup = (esGsLdsSize / esGsRingItemSizeOnChip);
 
         LLPC_ASSERT(esVertsPerSubgroup >= esMinVertsPerSubgroup);
 
@@ -450,11 +464,35 @@ bool GraphicsContext::CanGsOnChip()
         // need to clear unused builtin ouput before determining onchip/offchip GS mode.
         constexpr uint32_t GsOffChipDefaultThreshold = 32;
 
-        pGsResUsage->inOutUsage.gs.esGsLdsSize  = esGsLdsSize;
+        bool disableGsOnChip = cl::DisableGsOnChip;
+        if (hasTs || (m_gfxIp.major == 6))
+        {
+            // GS on-chip is not supportd with tessellation, and is not supportd on GFX6
+            disableGsOnChip = true;
+        }
 
-        if (((gsPrimsPerSubgroup * gsInstanceCount) < GsOffChipDefaultThreshold) || (esVertsPerSubgroup == 0))
+        if (disableGsOnChip ||
+            ((gsPrimsPerSubgroup * gsInstanceCount) < GsOffChipDefaultThreshold) ||
+            (esVertsPerSubgroup == 0))
         {
             gsOnChip = false;
+            pGsResUsage->inOutUsage.gs.calcFactor.esVertsPerSubgroup   = 0;
+            pGsResUsage->inOutUsage.gs.calcFactor.gsPrimsPerSubgroup   = 0;
+            pGsResUsage->inOutUsage.gs.calcFactor.esGsLdsSize          = 0;
+            pGsResUsage->inOutUsage.gs.calcFactor.gsOnChipLdsSize      = 0;
+
+            pGsResUsage->inOutUsage.gs.calcFactor.esGsRingItemSize     = esGsRingItemSize;
+            pGsResUsage->inOutUsage.gs.calcFactor.gsVsRingItemSize     = gsVsRingItemSize;
+        }
+        else
+        {
+            pGsResUsage->inOutUsage.gs.calcFactor.esVertsPerSubgroup   = esVertsPerSubgroup;
+            pGsResUsage->inOutUsage.gs.calcFactor.gsPrimsPerSubgroup   = gsPrimsPerSubgroup;
+            pGsResUsage->inOutUsage.gs.calcFactor.esGsLdsSize          = esGsLdsSize;
+            pGsResUsage->inOutUsage.gs.calcFactor.gsOnChipLdsSize      = gsOnChipLdsSize;
+
+            pGsResUsage->inOutUsage.gs.calcFactor.esGsRingItemSize     = esGsRingItemSizeOnChip;
+            pGsResUsage->inOutUsage.gs.calcFactor.gsVsRingItemSize     = gsVsRingItemSizeOnChip;
         }
     }
     else
@@ -528,12 +566,21 @@ void GraphicsContext::DoUserDataNodeMerge()
 }
 
 // =====================================================================================================================
+// Compare the offsets of the two user data node (use "less" relational operator).
+static inline bool CompareNode(
+    const ResourceMappingNode* pNodes1, // [in] The first user data node
+    const ResourceMappingNode* pNodes2) // [in] The second user data node
+{
+    return (pNodes1->offsetInDwords < pNodes2->offsetInDwords);
+}
+
+// =====================================================================================================================
 // Merges user data nodes for LS-HS/ES-GS merged shader.
 //
 // NOTE: We assume those user data nodes are sorted in asceding order of the DWORD offset.
 void GraphicsContext::MergeUserDataNode(
     uint32_t                    nodeCount1,         // Count of user data nodes of the first shader
-    const ResourceMappingNode*  pNodes1,            // [in] User data nodes of the second shader
+    const ResourceMappingNode*  pNodes1,            // [in] User data nodes of the firset shader
     uint32_t                    nodeCount2,         // Count of user data nodes of the second shader
     const ResourceMappingNode*  pNodes2,            // [in] User data nodes of the second shader
     uint32_t*                   pMergedNodeCount,   // [out] Count of user data nodes of the merged shader
@@ -544,6 +591,24 @@ void GraphicsContext::MergeUserDataNode(
 
     if ((nodeCount1 > 0) && (nodeCount2 > 0))
     {
+        // Sort the two lists
+        std::vector<const ResourceMappingNode*> nodes1;
+        std::vector<const ResourceMappingNode*> nodes2;
+
+        for (uint32_t i = 0; i < nodeCount1; ++i)
+        {
+            nodes1.push_back(&pNodes1[i]);
+        }
+
+        for (uint32_t i = 0; i < nodeCount2; ++i)
+        {
+            nodes2.push_back(&pNodes2[i]);
+        }
+
+        std::sort(nodes1.begin(), nodes1.end(), CompareNode);
+        std::sort(nodes2.begin(), nodes2.end(), CompareNode);
+
+        // Merge the two lists
         std::vector<ResourceMappingNode> mergedNodes;
 
         uint32_t nodeOffset = 0;
@@ -554,8 +619,8 @@ void GraphicsContext::MergeUserDataNode(
         // Visit the two lists until one of them is finished
         while ((nodeIdx1 < nodeCount1) && (nodeIdx2 < nodeCount2))
         {
-            const ResourceMappingNode* pNode1 = &pNodes1[nodeIdx1];
-            const ResourceMappingNode* pNode2 = &pNodes2[nodeIdx2];
+            const ResourceMappingNode* pNode1 = nodes1[nodeIdx1];
+            const ResourceMappingNode* pNode2 = nodes2[nodeIdx2];
 
             ResourceMappingNode mergedNode = {};
 
@@ -618,7 +683,7 @@ void GraphicsContext::MergeUserDataNode(
         // Handle the remaining part of the list if it is not finished
         while (nodeIdx1 < nodeCount1)
         {
-            const ResourceMappingNode* pNode1 = &pNodes1[nodeIdx1];
+            const ResourceMappingNode* pNode1 = nodes1[nodeIdx1];
             mergedNodes.push_back(*pNode1);
             ++nodeIdx1;
         }
@@ -626,7 +691,7 @@ void GraphicsContext::MergeUserDataNode(
         // Handle the remaining part of the list if it is not finished
         while (nodeIdx2 < nodeCount2)
         {
-            const ResourceMappingNode* pNode2 = &pNodes2[nodeIdx2];
+            const ResourceMappingNode* pNode2 = nodes2[nodeIdx2];
             mergedNodes.push_back(*pNode2);
             ++nodeIdx2;
         }

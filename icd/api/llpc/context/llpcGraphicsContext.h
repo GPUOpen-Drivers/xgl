@@ -69,7 +69,7 @@ public:
     // Checks whether tessellation off-chip mode is enabled
     virtual bool IsTessOffChip() const { return m_tessOffchip; }
 
-    virtual bool CanGsOnChip();
+    virtual bool CheckGsOnChipValidity();
 
     // Checks whether GS on-chip mode is enabled
     virtual bool IsGsOnChip() const { return m_gsOnChip; }

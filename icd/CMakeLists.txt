@@ -221,7 +221,9 @@ endif()
 target_sources(xgl PRIVATE
     api/sqtt/sqtt_layer.cpp
     api/sqtt/sqtt_mgr.cpp
+    api/sqtt/sqtt_object_mgr.cpp
 )
+
 # Or for a separate lib: icdapisqtt
 # add_subdirectory(api/sqtt ${PROJECT_BINARY_DIR}/api/sqtt)
 # target_link_libraries(xgl sqtt)

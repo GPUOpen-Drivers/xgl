@@ -67,7 +67,7 @@ public:
     virtual bool IsTessOffChip() const { LLPC_NEVER_CALLED(); return false; }
 
     // Determines whether GS on-chip mode is valid for this pipeline
-    virtual bool CanGsOnChip() { LLPC_NEVER_CALLED(); return false; }
+    virtual bool CheckGsOnChipValidity() { LLPC_NEVER_CALLED(); return false; }
 
     // Checks whether GS on-chip mode is enabled
     virtual bool IsGsOnChip() const { LLPC_NEVER_CALLED(); return false; }

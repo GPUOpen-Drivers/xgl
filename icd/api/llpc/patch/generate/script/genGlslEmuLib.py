@@ -78,6 +78,16 @@ genGlslArithOpEmuCode.main("./script/genGlslArithOpEmuCodeF64.txt", "g_glslArith
 genGlslArithOpEmuCode.main("./script/genGlslArithOpEmuCodeI16.txt", "g_glslArithOpEmuI16.ll", "int16")
 genGlslArithOpEmuCode.main("./script/genGlslArithOpEmuCodeI64.txt", "g_glslArithOpEmuI64.ll", "int64")
 
+print("*******************************************************************************")
+print("                   Generate LLVM Emulation IR (GLSL Image) for %s             "%("GFX6"))
+print("*******************************************************************************")
+genGlslImageOpEmuCode.main("./script/genGlslImageOpEmuCode.txt", "g_glslImageOpEmu.ll", "gfx6")
+
+print("*******************************************************************************")
+print("                   Generate LLVM Emulation IR (GLSL Image) for %s             "%("GFX9"))
+print("*******************************************************************************")
+genGlslImageOpEmuCode.main("./script/genGlslImageOpEmuCode.txt", "gfx9/g_glslImageOpEmu.ll", "gfx9")
+
 # Generate .lib file
 print("*******************************************************************************")
 print("                   Generate LLVM Emulation Library (Common)                    ")
@@ -196,13 +206,8 @@ print("")
 # =====================================================================================================================
 
 # Assemble .ll files to .bc files and link emulation .bc files to libraries
-GFX_EMUS = ["gfx6", "gfx9"]
+GFX_EMUS = ["gfx8", "gfx9"]
 for gfx in GFX_EMUS:
-    print("*******************************************************************************")
-    print("                   Generate LLVM Emulation IR (GLSL Image) for %s             "%(gfx.upper()))
-    print("*******************************************************************************")
-    genGlslImageOpEmuCode.main("./script/genGlslImageOpEmuCode.txt", "%s/g_glslImageOpEmu.ll"%(gfx), gfx)
-
     print("*******************************************************************************")
     print("                    Generate LLVM Emulation Library (%s)                     "%(gfx.upper()))
     print("*******************************************************************************")

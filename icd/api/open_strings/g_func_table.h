@@ -312,6 +312,9 @@ struct EntryPointTable
     PFN_vkDestroyDebugReportCallbackEXT vkDestroyDebugReportCallbackEXT;
     PFN_vkDebugReportMessageEXT vkDebugReportMessageEXT;
 #endif
+#if VK_EXT_external_memory_host
+    PFN_vkGetMemoryHostPointerPropertiesEXT vkGetMemoryHostPointerPropertiesEXT;
+#endif
 
 };
 

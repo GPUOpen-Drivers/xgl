@@ -1874,42 +1874,28 @@ VK_INLINE Pal::PipelineBindPoint VkToPalPipelineBindPoint(VkPipelineBindPoint pi
     return convert::PipelineBindPoint(pipelineBind);
 }
 
-namespace convert
+// =====================================================================================================================
+VK_INLINE Pal::ShaderType VkToPalShaderType(
+    VkShaderStageFlagBits shaderStage)
 {
-    VK_INLINE Pal::ShaderType ShaderType(const VkShaderStageFlagBits& shaderStage)
+    switch (shaderStage)
     {
-        if (shaderStage & VK_SHADER_STAGE_VERTEX_BIT)
-        {
-            return Pal::ShaderType::Vertex;
-        }
-        else if(shaderStage & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)
-        {
-            return Pal::ShaderType::Hull;
-        }
-        else if(shaderStage & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
-        {
-            return Pal::ShaderType::Domain;
-        }
-        else if(shaderStage & VK_SHADER_STAGE_GEOMETRY_BIT)
-        {
-            return Pal::ShaderType::Geometry;
-        }
-        else if(shaderStage & VK_SHADER_STAGE_FRAGMENT_BIT)
-        {
-            return Pal::ShaderType::Pixel;
-        }
-        else if(shaderStage & VK_SHADER_STAGE_COMPUTE_BIT)
-        {
-            return Pal::ShaderType::Compute;
-        }
-        else
-            return Pal::ShaderType::Compute;
+    case VK_SHADER_STAGE_VERTEX_BIT:
+        return Pal::ShaderType::Vertex;
+    case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
+        return Pal::ShaderType::Hull;
+    case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
+        return Pal::ShaderType::Domain;
+    case VK_SHADER_STAGE_GEOMETRY_BIT:
+        return Pal::ShaderType::Geometry;
+    case VK_SHADER_STAGE_FRAGMENT_BIT:
+        return Pal::ShaderType::Pixel;
+    case VK_SHADER_STAGE_COMPUTE_BIT:
+        return Pal::ShaderType::Compute;
+    default:
+        VK_NEVER_CALLED();
+        return Pal::ShaderType::Compute;
     }
-}
-
-VK_INLINE Pal::ShaderType VkToPalShaderType(const VkShaderStageFlagBits& shaderStage)
-{
-    return convert::ShaderType(shaderStage);
 }
 
 // =====================================================================================================================
@@ -2311,17 +2297,84 @@ VK_INLINE uint32_t VkToPalPerfExperimentShaderFlags(
 }
 
 // =====================================================================================================================
+template <typename PalClearRegion>
+PalClearRegion VkToPalClearRegion(const VkClearRect& clearRect);
+
+// =====================================================================================================================
 // Converts Vulkan clear rect to an equivalent PAL box
-VK_INLINE void VkToPalClearBox(
-    const VkClearRect& clearRect,
-    Pal::Box*          pBox)
+template <>
+VK_INLINE Pal::Box VkToPalClearRegion<Pal::Box>(
+    const VkClearRect& clearRect)
 {
-    pBox->offset.x = clearRect.rect.offset.x;
-    pBox->offset.y = clearRect.rect.offset.y;
-    pBox->offset.z = clearRect.baseArrayLayer;
-    pBox->extent.width = clearRect.rect.extent.width;
-    pBox->extent.height = clearRect.rect.extent.height;
-    pBox->extent.depth = clearRect.layerCount;
+    Pal::Box box { };
+
+    box.offset.x      = clearRect.rect.offset.x;
+    box.offset.y      = clearRect.rect.offset.y;
+    box.offset.z      = clearRect.baseArrayLayer;
+    box.extent.width  = clearRect.rect.extent.width;
+    box.extent.height = clearRect.rect.extent.height;
+    box.extent.depth  = clearRect.layerCount;
+
+    return box;
+}
+
+// =====================================================================================================================
+// Converts Vulkan clear rect to an equivalent PAL clear bound target region
+template <>
+VK_INLINE Pal::ClearBoundTargetRegion VkToPalClearRegion<Pal::ClearBoundTargetRegion>(
+    const VkClearRect& clearRect)
+{
+    Pal::ClearBoundTargetRegion clearRegion { };
+
+    clearRegion.rect.offset.x      = clearRect.rect.offset.x;
+    clearRegion.rect.offset.y      = clearRect.rect.offset.y;
+    clearRegion.rect.extent.width  = clearRect.rect.extent.width;
+    clearRegion.rect.extent.height = clearRect.rect.extent.height;
+    clearRegion.startSlice         = clearRect.baseArrayLayer;
+    clearRegion.numSlices          = clearRect.layerCount;
+
+    return clearRegion;
+}
+
+// =====================================================================================================================
+// Overrides range of layers in PAL clear region
+VK_INLINE void OverrideLayerRanges(
+    Pal::ClearBoundTargetRegion& clearRegion,
+    const Pal::Range             layerRange)
+{
+    VK_ASSERT(clearRegion.startSlice == 0);
+    VK_ASSERT(clearRegion.numSlices  == 1);
+
+    clearRegion.startSlice = layerRange.offset;
+    clearRegion.numSlices  = layerRange.extent;
+}
+
+// =====================================================================================================================
+// Overrides range of layers in PAL box
+VK_INLINE void OverrideLayerRanges(
+    Pal::Box&        box,
+    const Pal::Range layerRange)
+{
+    VK_ASSERT(box.offset.z     == 0);
+    VK_ASSERT(box.extent.depth == 1);
+
+    box.offset.z      = layerRange.offset;
+    box.extent.depth  = layerRange.extent;
+}
+
+// =====================================================================================================================
+// Converts Vulkan rect 2D to an equivalent PAL rect
+VK_INLINE Pal::Rect VkToPalRect(
+    const VkRect2D& rect2D)
+{
+    Pal::Rect rect { };
+
+    rect.offset.x      = rect2D.offset.x;
+    rect.offset.y      = rect2D.offset.y;
+    rect.extent.width  = rect2D.extent.width;
+    rect.extent.height = rect2D.extent.height;
+
+    return rect;
 }
 
 // =====================================================================================================================

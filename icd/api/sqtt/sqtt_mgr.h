@@ -40,6 +40,7 @@
 #include "include/vk_dispatch.h"
 #include "include/vk_queue.h"
 
+#include "sqtt/sqtt_object_mgr.h"
 #include "sqtt/sqtt_rgp_annotations.h"
 
 namespace vk
@@ -72,6 +73,9 @@ public:
         Pal::Developer::CallbackType type,
         void*                        pCbData);
 
+    SqttObjectMgr* GetObjectMgr()
+        { return &m_objectMgr; }
+
 private:
     void InitLayer();
 
@@ -88,6 +92,9 @@ private:
 
     // Jump table to the next layer's functions
     EntryPointTable   m_nextLayer;
+
+    // Metadata tracking for Vulkan objects
+    SqttObjectMgr     m_objectMgr;
 };
 
 }; // namespace vk

@@ -195,9 +195,9 @@ public:
         return m_pPipelineContext->IsTessOffChip();
     }
 
-    bool CanGsOnChip()
+    bool CheckGsOnChipValidity()
     {
-        return m_pPipelineContext->CanGsOnChip();
+        return m_pPipelineContext->CheckGsOnChipValidity();
     };
 
     bool IsGsOnChip()
@@ -237,7 +237,7 @@ private:
      PipelineContext*              m_pPipelineContext;  // Pipeline-specific context
      std::unique_ptr<llvm::Module> m_pGlslEmuLib;       // LLVM library for GLSL emulation
      std::unique_ptr<llvm::Module> m_pNativeGlslEmuLib; // Native LLVM library for GLSL emulation
-     bool                          m_isInUse;           // Whether this context is in use
+     volatile  bool                m_isInUse;           // Whether this context is in use
 
     llvm::MDNode*       m_pEmptyMetaNode;   // Empty metadata node
 
@@ -275,7 +275,7 @@ private:
 
     // GLSL emulation libraries
     static const uint8_t GlslEmuLib[];
-    static const uint8_t GlslEmuLibGfx6[];
+    static const uint8_t GlslEmuLibGfx8[];
 #ifdef LLPC_BUILD_GFX9
     static const uint8_t GlslEmuLibGfx9[];
 #endif

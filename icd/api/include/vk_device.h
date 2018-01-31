@@ -479,7 +479,11 @@ public:
     uint32_t GetPipelineCacheExpectedEntryCount();
     void DecreasePipelineCacheCount();
 
-    VK_INLINE VirtualStackAllocator* GetStackAllocator() { return m_pStackAllocator; }
+    uint32_t GetPinnedSystemMemoryTypes() const;
+
+    uint32_t GetExternalHostMemoryTypes(
+        VkExternalMemoryHandleTypeFlagBitsKHR handleType,
+        const void*                           pExternalPtr) const;
 
 protected:
     Device(
@@ -521,8 +525,6 @@ protected:
 
     InternalMemMgr                      m_internalMemMgr;
     RenderStateCache                    m_renderStateCache;
-
-    VirtualStackAllocator*              m_pStackAllocator;
 
     DispatchableQueue*                  m_pQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily];
 
@@ -787,6 +789,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
 VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
     VkDevice                                    device,
     VkGpaDeviceClockModeInfoAMD*                pInfo);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
+    VkDevice                                    device,
+    VkExternalMemoryHandleTypeFlagBitsKHR       handleType,
+    const void*                                 pHostPointer,
+    VkMemoryHostPointerPropertiesEXT*           pMemoryHostPointerProperties);
 
 } // namespace entry
 

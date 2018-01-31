@@ -748,17 +748,31 @@ Result ConfigBuilder::BuildEsRegConfig(
 
     const auto pIntfData = pContext->GetShaderInterfaceData(shaderStage);
 
-    const auto pResUsage = pContext->GetShaderResourceUsage(shaderStage);
-    const auto& builtInUsage = pResUsage->builtInUsage;
-    const auto& inOutUsage   = pResUsage->inOutUsage;
+    const auto pEsResUsage = pContext->GetShaderResourceUsage(shaderStage);
+    const auto& esBuiltInUsage = pEsResUsage->builtInUsage;
+
+    LLPC_ASSERT((pContext->GetShaderStageMask() & ShaderStageToMask(ShaderStageGeometry)) != 0);
+    const auto& gsCalcFactor = pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs.calcFactor;
 
     SET_REG_FIELD(&pConfig->m_esRegs, SPI_SHADER_PGM_RSRC1_ES, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_esRegs, SPI_SHADER_PGM_RSRC1_ES, DX10_CLAMP, true); // Follow PAL setting
 
+    if (pContext->IsGsOnChip())
+    {
+        LLPC_ASSERT(gsCalcFactor.gsOnChipLdsSize <= pContext->GetGpuProperty()->gsOnChipMaxLdsSize);
+        LLPC_ASSERT((gsCalcFactor.gsOnChipLdsSize %
+                     (1 << pContext->GetGpuProperty()->ldsSizeDwordGranularityShift)) == 0);
+        SET_REG_FIELD(&pConfig->m_esRegs,
+                      SPI_SHADER_PGM_RSRC2_ES,
+                      LDS_SIZE__CI__VI,
+                      (gsCalcFactor.gsOnChipLdsSize >>
+                       pContext->GetGpuProperty()->ldsSizeDwordGranularityShift));
+    }
+
     uint32_t vgprCompCnt = 1;
     if (shaderStage == ShaderStageVertex)
     {
-        if (builtInUsage.vs.instanceIndex)
+        if (esBuiltInUsage.vs.instanceIndex)
         {
             vgprCompCnt = 3; // Enable instance ID
         }
@@ -767,13 +781,13 @@ Result ConfigBuilder::BuildEsRegConfig(
     {
         LLPC_ASSERT(shaderStage == ShaderStageTessEval);
 
-        if (builtInUsage.tes.tessCoord)
+        if (esBuiltInUsage.tes.tessCoord)
         {
             ++vgprCompCnt;
         }
 
         // NOTE: when primitive ID is used, set vgtCompCnt to 3 directly because primitive ID is the last VGPR.
-        if (builtInUsage.tes.primitiveId)
+        if (esBuiltInUsage.tes.primitiveId)
         {
             vgprCompCnt = 3;
         }
@@ -788,8 +802,7 @@ Result ConfigBuilder::BuildEsRegConfig(
 
     SET_REG_FIELD(&pConfig->m_esRegs, SPI_SHADER_PGM_RSRC2_ES, USER_SGPR, pIntfData->userDataCount);
 
-    uint32_t esGsRingItemSize = 4 * std::max(1u, inOutUsage.outputMapLocCount);
-    SET_REG_FIELD(&pConfig->m_esRegs, VGT_ESGS_RING_ITEMSIZE, ITEMSIZE, esGsRingItemSize);
+    SET_REG_FIELD(&pConfig->m_esRegs, VGT_ESGS_RING_ITEMSIZE, ITEMSIZE, gsCalcFactor.esGsRingItemSize);
 
     // Set shader user data maping
     result = ConfigBuilder::BuildUserDataConfig<T>(pContext, shaderStage, mmSPI_SHADER_USER_DATA_ES_0, pConfig);
@@ -899,9 +912,34 @@ Result ConfigBuilder::BuildGsRegConfig(
 
     // TODO: Currently only support offchip GS
     SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, MODE, GS_SCENARIO_G);
-    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, ONCHIP__CI__VI, VGT_GS_MODE_ONCHIP_OFF);
-    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, ES_WRITE_OPTIMIZE, true);
-    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, GS_WRITE_OPTIMIZE, true);
+    if (pContext->IsGsOnChip())
+    {
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, ONCHIP__CI__VI, VGT_GS_MODE_ONCHIP_ON);
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, ES_WRITE_OPTIMIZE, false);
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, GS_WRITE_OPTIMIZE, false);
+
+        uint32_t gsPrimsPerSubgrp = std::min(maxGsPerEs, inOutUsage.gs.calcFactor.gsPrimsPerSubgroup);
+
+        SET_REG_FIELD(&pConfig->m_gsRegs,
+                      VGT_GS_ONCHIP_CNTL__CI__VI,
+                      ES_VERTS_PER_SUBGRP,
+                      inOutUsage.gs.calcFactor.esVertsPerSubgroup);
+
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_ONCHIP_CNTL__CI__VI, GS_PRIMS_PER_SUBGRP, gsPrimsPerSubgrp);
+
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_ES_PER_GS, ES_PER_GS, inOutUsage.gs.calcFactor.esVertsPerSubgroup);
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_PER_ES, GS_PER_ES, gsPrimsPerSubgrp);
+    }
+    else
+    {
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, ONCHIP__CI__VI, VGT_GS_MODE_ONCHIP_OFF);
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, ES_WRITE_OPTIMIZE, true);
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, GS_WRITE_OPTIMIZE, true);
+        SET_REG(&pConfig->m_gsRegs, VGT_GS_ONCHIP_CNTL__CI__VI, 0);
+
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_ES_PER_GS, ES_PER_GS, EsThreadsPerGsThread);
+        SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_PER_ES, GS_PER_ES, std::min(maxGsPerEs, GsPrimsPerEsThread));
+    }
     if (builtInUsage.outputVertices <= 128)
     {
         SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, CUT_MODE, GS_CUT_128);
@@ -919,8 +957,6 @@ Result ConfigBuilder::BuildGsRegConfig(
         SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_MODE, CUT_MODE, GS_CUT_1024);
     }
 
-    SET_REG(&pConfig->m_gsRegs, VGT_GS_ONCHIP_CNTL__CI__VI, 0);
-    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_ES_PER_GS, ES_PER_GS, EsThreadsPerGsThread);
     uint32_t gsVertItemSize = 4 * std::max(1u, inOutUsage.outputMapLocCount);
     SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_VERT_ITEMSIZE, ITEMSIZE, gsVertItemSize);
 
@@ -950,17 +986,12 @@ Result ConfigBuilder::BuildGsRegConfig(
     SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_OUT_PRIM_TYPE, OUTPRIM_TYPE_2, gsOutputPrimitiveType);
     SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_OUT_PRIM_TYPE, OUTPRIM_TYPE_3, gsOutputPrimitiveType);
 
-    // NOTE: According to register spec,  GSVS_RING_ITEMSIZE must be at least 4 DWORDs.
-    uint32_t gsVsRingItemSize = 4 * std::max(1u, inOutUsage.outputMapLocCount * builtInUsage.outputVertices);
-
-    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GSVS_RING_ITEMSIZE, ITEMSIZE, gsVsRingItemSize );
+    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GSVS_RING_ITEMSIZE, ITEMSIZE, inOutUsage.gs.calcFactor.gsVsRingItemSize);
 
     // TODO: Multiple output streams are not supported.
-    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GSVS_RING_OFFSET_1, OFFSET, gsVsRingItemSize );
-    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GSVS_RING_OFFSET_2, OFFSET, gsVsRingItemSize );
-    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GSVS_RING_OFFSET_3, OFFSET, gsVsRingItemSize );
-
-    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_PER_ES, GS_PER_ES, std::min(maxGsPerEs, GsPrimsPerEsThread));
+    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GSVS_RING_OFFSET_1, OFFSET, inOutUsage.gs.calcFactor.gsVsRingItemSize);
+    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GSVS_RING_OFFSET_2, OFFSET, inOutUsage.gs.calcFactor.gsVsRingItemSize);
+    SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GSVS_RING_OFFSET_3, OFFSET, inOutUsage.gs.calcFactor.gsVsRingItemSize);
 
     // Set shader user data maping
     result = ConfigBuilder::BuildUserDataConfig<T>(pContext, shaderStage, mmSPI_SHADER_USER_DATA_GS_0, pConfig);

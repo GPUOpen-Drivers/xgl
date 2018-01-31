@@ -2878,6 +2878,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceIDPropertiesKHR*                pIDProperties;
         VkPhysicalDeviceSampleLocationsPropertiesEXT*   pSampleLocationsPropertiesEXT;
         VkPhysicalDeviceGpaPropertiesAMD*               pGpaProperties;
+        VkPhysicalDeviceExternalMemoryHostPropertiesEXT* pExternalMemoryHostProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -2914,6 +2915,16 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_PROPERTIES_AMD:
         {
             GetDeviceGpaProperties(pGpaProperties);
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT:
+        {
+            const Pal::DeviceProperties& palProps = PalProperties();
+
+            pExternalMemoryHostProperties->minImportedHostPointerAlignment =
+                palProps.gpuMemoryProperties.realMemAllocGranularity;
+
             break;
         }
 

@@ -359,6 +359,7 @@ void PipelineDumper::DumpPipelineShaderInfo(
             dumpFile << "descriptorRangeValue[" << i << "].type = " << pDescriptorRangeValue->type << "\n";
             dumpFile << "descriptorRangeValue[" << i << "].set = " << pDescriptorRangeValue->set << "\n";
             dumpFile << "descriptorRangeValue[" << i << "].binding = " << pDescriptorRangeValue->binding << "\n";
+            dumpFile << "descriptorRangeValue[" << i << "].arraySize = " << pDescriptorRangeValue->arraySize << "\n";
             for (uint32_t j = 0; j < pDescriptorRangeValue->arraySize; ++j)
             {
                 dumpFile << "descriptorRangeValue[" << i << "].uintData = ";

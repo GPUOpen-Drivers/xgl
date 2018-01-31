@@ -49,8 +49,17 @@ namespace vk
 
 class CmdBuffer;
 class Device;
+class ImageView;
 class RenderPass;
 class SqttMgr;
+
+// Contains parameters that are happening when renderpass targets are bound in the driver.
+struct SqttBindTargetParams
+{
+    const ImageView*             pColorTargets[Pal::MaxColorTargets];
+    const ImageView*             pDepthStencil;
+    const Pal::BindTargetParams* pBindParams;
+};
 
 // =====================================================================================================================
 // This is an auxiliary structure that tracks whatever cmdbuffer-level state is necessary to handle SQTT marker

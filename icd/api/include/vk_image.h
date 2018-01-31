@@ -243,9 +243,12 @@ private:
             uint32_t dedicatedRequired      : 1;  // Indicates if a dedicated memory is required.
             uint32_t externallyShareable    : 1;  // True if the backing memory of this image may be shared externally.
             uint32_t boundToExternalMemory  : 1;  // If true, indicates the image is bound to an external memory, and
-                                                  //  the m_pPalMemory is a pointer to an external Pal image.
+                                                  //   the m_pPalMemory is a pointer to an external Pal image (does
+                                                  //   not include backing pinned system memory case).
             uint32_t androidPresentable     : 1;  // True if this image is created as Android presentable image.
-            uint32_t reserved               : 26;
+            uint32_t externalPinnedHost     : 1;  // True if image backing memory is compatible with pinned sysmem.
+            uint32_t externalD3DHandle      : 1;  // True if image is backed by a D3D11 image
+            uint32_t reserved               : 24;
         };
         uint32_t     u32All;
     };

@@ -245,3 +245,4 @@ const char vkCmdWriteBufferMarkerAMD_name[] = "vkCmdWriteBufferMarkerAMD";
 const char vkCreateDebugReportCallbackEXT_name[] = "vkCreateDebugReportCallbackEXT";
 const char vkDestroyDebugReportCallbackEXT_name[] = "vkDestroyDebugReportCallbackEXT";
 const char vkDebugReportMessageEXT_name[] = "vkDebugReportMessageEXT";
+const char vkGetMemoryHostPointerPropertiesEXT_name[] = "vkGetMemoryHostPointerPropertiesEXT";

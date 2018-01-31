@@ -113,7 +113,9 @@ private:
                                                 // should be destroyed when this buffer is destroyed.
             uint32_t dedicatedRequired   : 1;   // Indicates the allocation of buffer is dedicated.
             uint32_t externallyShareable : 1;   // True if the backing memory of this buffer may be shared externally.
-            uint32_t reserved            : 29;
+            uint32_t externalPinnedHost  : 1;   // True if backing memory for this buffer may be imported from a pinned
+                                                // host allocation.
+            uint32_t reserved            : 28;
         };
         uint32_t     u32All;
     };
