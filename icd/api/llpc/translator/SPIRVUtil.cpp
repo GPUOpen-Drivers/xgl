@@ -1263,7 +1263,6 @@ getSPIRVImageTypePostfixes(StringRef SampledType,
   raw_string_ostream OS(S);
   OS << SampledType << kSPIRVTypeName::PostfixDelim
      << Desc.Dim << kSPIRVTypeName::PostfixDelim
-     << Desc.Depth << kSPIRVTypeName::PostfixDelim
      << Desc.Arrayed << kSPIRVTypeName::PostfixDelim
      << Desc.MS << kSPIRVTypeName::PostfixDelim
      << Desc.Sampled << kSPIRVTypeName::PostfixDelim
