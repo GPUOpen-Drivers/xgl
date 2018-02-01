@@ -829,7 +829,6 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                         if (addrSpace == SPIRAS_Input)
                         {
                             m_pResUsage->builtInUsage.fs.sampleMaskIn = true;
-                            m_pResUsage->builtInUsage.fs.runAtSampleRate = true;
                         }
                         else
                         {
