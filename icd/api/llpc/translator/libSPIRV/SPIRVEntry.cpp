@@ -467,7 +467,7 @@ SPIRVEntryPoint::decode(std::istream &I) {
   InOuts.resize(NumInOuts);
   getDecoder(I) >> InOuts;
   Module->setName(getOrCreateTarget(), Name);
-  Module->addEntryPoint(ExecModel, Target);
+  Module->addEntryPoint(this);
 }
 
 void
