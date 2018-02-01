@@ -2554,6 +2554,7 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
 
             auto pSampleCoverage = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.sampleCoverage);
             auto pAncillary = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.ancillary);
+            auto pPipelineInfo = static_cast<const GraphicsPipelineBuildInfo*>(m_pContext->GetPipelineBuildInfo());
 
             // gl_SampleID = Ancillary[11:8]
             std::vector<Value*> args;
@@ -2563,12 +2564,16 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
             auto pSampleId =
                 EmitCall(m_pModule, "llvm.amdgcn.ubfe.i32", m_pContext->Int32Ty(), args, NoAttrib, pInsertPos);
 
-            // gl_SampleMaskIn[0] = (SampleCoverage & (1 << gl_SampleID))
-            auto pSampleMaskIn = BinaryOperator::CreateShl(ConstantInt::get(m_pContext->Int32Ty(), 1),
-                                                           pSampleId,
-                                                           "",
-                                                           pInsertPos);
-            pSampleMaskIn = BinaryOperator::CreateAnd(pSampleCoverage, pSampleMaskIn, "", pInsertPos);
+            auto pSampleMaskIn = pSampleCoverage;
+            if (pPipelineInfo->rsState.perSampleShading)
+            {
+                // gl_SampleMaskIn[0] = (SampleCoverage & (1 << gl_SampleID))
+                pSampleMaskIn = BinaryOperator::CreateShl(ConstantInt::get(m_pContext->Int32Ty(), 1),
+                                                          pSampleId,
+                                                          "",
+                                                          pInsertPos);
+                pSampleMaskIn = BinaryOperator::CreateAnd(pSampleCoverage, pSampleMaskIn, "", pInsertPos);
+            }
 
             // NOTE: Only gl_SampleMaskIn[0] is valid for us.
             std::vector<uint32_t> idxs;
