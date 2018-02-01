@@ -134,8 +134,9 @@ public:
   virtual std::vector<SPIRVType *> getValueTypes(const std::vector<SPIRVId>&)
       const = 0;
   virtual SPIRVConstant* getLiteralAsConstant(unsigned Literal) = 0;
-  virtual bool isEntryPoint(SPIRVExecutionModelKind, SPIRVId) const = 0;
-  virtual bool isEntryPoint(SPIRVId, SPIRVExecutionModelKind * = nullptr) const = 0;
+  virtual SPIRVEntryPoint *getEntryPoint(SPIRVId) const = 0;
+  virtual SPIRVEntryPoint *getEntryPoint(
+    SPIRVExecutionModelKind, const char *) const = 0;
 
   virtual unsigned short getGeneratorId() const = 0;
   virtual unsigned short getGeneratorVer() const = 0;
@@ -186,7 +187,7 @@ public:
       SPIRVDecorationGroup *Group, const std::vector<SPIRVEntry *> &Targets) = 0;
   virtual SPIRVGroupDecorateGeneric *addGroupDecorateGeneric(
       SPIRVGroupDecorateGeneric *GDec) = 0;
-  virtual void addEntryPoint(SPIRVExecutionModelKind, SPIRVId) = 0;
+  virtual void addEntryPoint(SPIRVEntryPoint *EntryPoint) = 0;
   virtual SPIRVForward *addForward(SPIRVType *Ty) = 0;
   virtual SPIRVForward *addForward(SPIRVId, SPIRVType *Ty) = 0;
   virtual SPIRVFunction *addFunction(SPIRVFunction *) = 0;
