@@ -655,8 +655,12 @@ LLVMToSPIRV::transFunctionDecl(Function *F) {
   BF->setFunctionControlMask(transFunctionControlMask(F));
   if (F->hasName())
     BM->setName(BF, F->getName());
-  if (oclIsKernel(F))
-    BM->addEntryPoint(ExecutionModelKernel, BF->getId());
+  if (oclIsKernel(F)) {
+    SPIRVEntryPoint* EntryPoint =
+      new SPIRVEntryPoint(BM,ExecutionModelKernel, BF->getId(), F->getName());
+    BM->add(EntryPoint);
+    BM->addEntryPoint(EntryPoint);
+  }
   else if (F->getLinkage() != GlobalValue::InternalLinkage)
     BF->setLinkageType(transLinkageType(F));
   auto Attrs = F->getAttributes();

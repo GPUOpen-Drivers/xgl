@@ -110,7 +110,9 @@ typedef std::pair < unsigned, AttributeList > AttributeWithIndex;
 
 static bool
 isOpenCLKernel(SPIRVFunction *BF) {
-  return BF->getModule()->isEntryPoint(ExecutionModelKernel, BF->getId());
+  auto EntryPoint = BF->getModule()->getEntryPoint(BF->getId());
+  return (EntryPoint != nullptr) &&
+    (EntryPoint->getExecModel() == ExecutionModelKernel);
 }
 
 static void
@@ -2400,8 +2402,10 @@ SPIRVToLLVM::transFunction(SPIRVFunction *BF) {
   if (Loc != FuncMap.end())
     return Loc->second;
 
-  SPIRVExecutionModelKind ExecModel = ExecutionModelMax;
-  bool IsEntry = BM->isEntryPoint(BF->getId(), &ExecModel);
+  auto EntryPoint = BM->getEntryPoint(BF->getId());
+  bool IsEntry = (EntryPoint != nullptr);
+  SPIRVExecutionModelKind ExecModel =
+    IsEntry ? EntryPoint->getExecModel() : ExecutionModelMax;
   auto Linkage = IsEntry ? GlobalValue::ExternalLinkage : transLinkageType(BF);
   FunctionType *FT = dyn_cast<FunctionType>(transType(BF->getFunctionType()));
   Function *F = dyn_cast<Function>(mapValue(BF, Function::Create(FT, Linkage,
@@ -2967,24 +2971,22 @@ SPIRVToLLVM::translate(ExecutionModel EntryExecModel, const char *EntryName) {
   if (!transAddressingModel())
     return false;
 
+  // Find the targeted entry-point in this translation
+  auto EntryPoint = BM->getEntryPoint(EntryExecModel, EntryName);
+  if (EntryPoint == nullptr)
+    return false;
+
+  EntryTarget = BM->get<SPIRVFunction>(EntryPoint->getTargetId());
+  if (EntryTarget == nullptr)
+    return false;
+
   // Check if the SPIR-V corresponds to OpenCL kernel
   IsKernel = (EntryExecModel == ExecutionModelKernel);
 
   // Check if Enable force unroll
   EnableLoopUnroll = (EntryExecModel == ExecutionModelVertex ||
-                  EntryExecModel == ExecutionModelFragment ||
-                  EntryExecModel == ExecutionModelGLCompute);
-
-  // Find the targeted entry-point in this translation
-  for (unsigned I = 0, E = BM->getNumFunctions(); I != E; ++I) {
-    auto BF = BM->getFunction(I);
-    ExecutionModel ExecModel = ExecutionModelMax;
-    bool IsEntry = BM->isEntryPoint(BF->getId(), &ExecModel);
-    if (IsEntry && ExecModel == EntryExecModel && BF->getName() == EntryName) {
-      EntryTarget = BF;
-      break;
-    }
-  }
+                      EntryExecModel == ExecutionModelFragment ||
+                      EntryExecModel == ExecutionModelGLCompute);
 
   DbgTran.createCompileUnit();
   DbgTran.addDbgInfoVersion();
@@ -3036,7 +3038,7 @@ SPIRVToLLVM::translate(ExecutionModel EntryExecModel, const char *EntryName) {
     auto BF = BM->getFunction(I);
     // Non entry-points and targeted entry-point should be translated.
     // Set DLLExport on targeted entry-point so we can find it later.
-    if (BM->isEntryPoint(BF->getId()) == false || BF == EntryTarget) {
+    if (BM->getEntryPoint(BF->getId()) == nullptr || BF == EntryTarget) {
       auto F = transFunction(BF);
       if (BF == EntryTarget)
         F->setDLLStorageClass(GlobalValue::DLLExportStorageClass);
@@ -3108,7 +3110,7 @@ SPIRVToLLVM::transFPContractMetadata() {
     SPIRVFunction *BF = BM->getFunction(I);
     if (!IsKernel)
       continue;
-    if (BM->isEntryPoint(BF->getId()) && BF != EntryTarget)
+    if (BM->getEntryPoint(BF->getId()) != nullptr && BF != EntryTarget)
       continue; // Ignore those untargeted entry-points
     if (BF->getExecutionMode(ExecutionModeContractionOff)) {
       ContractOff = true;
@@ -3139,15 +3141,16 @@ SPIRVToLLVM::transKernelMetadata() {
   NamedMDNode *KernelMDs = M->getOrInsertNamedMetadata(SPIR_MD_KERNELS);
   for (unsigned I = 0, E = BM->getNumFunctions(); I != E; ++I) {
     SPIRVFunction *BF = BM->getFunction(I);
-    if (BM->isEntryPoint(BF->getId()) && BF != EntryTarget)
+    auto EntryPoint = BM->getEntryPoint(BF->getId());
+    if (EntryPoint != nullptr && BF != EntryTarget)
       continue; // Ignore those untargeted entry-points
 
     Function *F = static_cast<Function *>(getTranslatedValue(BF));
     assert(F && "Invalid translated function");
 
-    SPIRVExecutionModelKind ExecModel = ExecutionModelMax;
-    if (!BM->isEntryPoint(BF->getId(), &ExecModel))
+    if (EntryPoint == nullptr)
       continue;
+    SPIRVExecutionModelKind ExecModel = EntryPoint->getExecModel();
 
     if (ExecModel != ExecutionModelKernel) {
       NamedMDNode *EntryMDs =

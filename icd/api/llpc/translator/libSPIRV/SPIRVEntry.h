@@ -439,6 +439,8 @@ public:
   SPIRVEntryPoint(SPIRVModule *TheModule, SPIRVExecutionModelKind,
       SPIRVId TheId, const std::string &TheName);
   SPIRVEntryPoint():ExecModel(ExecutionModelKernel){}
+  SPIRVExecutionModelKind getExecModel()const { return ExecModel; }
+  std::string getName()const { return Name; }
   _SPIRV_DCL_ENCDEC
 protected:
   SPIRVExecutionModelKind ExecModel;
