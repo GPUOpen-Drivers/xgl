@@ -167,6 +167,11 @@ public:
     VK_INLINE bool IsExtensionEnabled(InstanceExtensions::ExtensionId id) const
         { return m_enabledExtensions.IsExtensionEnabled(id); }
 
+    VkResult FindScreens(
+        const Pal::IDevice* pDevice,
+        uint32_t*           pDisplayCount,
+        Pal::IScreen**      ppScreens) const;
+
     Pal::IScreen* FindScreen(
         Pal::IDevice*           pDevice,
         Pal::OsWindowHandle     windowHandle,

@@ -146,14 +146,7 @@ bool SpirvLowerBufferOp::runOnModule(
     m_callInsts.clear();
     getElemInsts.clear();
 
-    DEBUG(dbgs() << "After the pass Spirv-Lower-Buffer-Op: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }
@@ -776,7 +769,7 @@ Value* SpirvLowerBufferOp::AddBufferLoadInst(
             Type* pCastTy = VectorType::get(m_pContext->Int8Ty(), loadSize);
 
             const uint32_t bitWidth = pCompTy->getScalarSizeInBits();
-            LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
+            LLPC_ASSERT((bitWidth == 16) || (bitWidth == 32) || (bitWidth == 64));
             std::string suffix = "v" + std::to_string(bitWidth / 8) + "i8";
 
             for (uint32_t i = 0; i < compCount; ++i)
@@ -860,7 +853,7 @@ Value* SpirvLowerBufferOp::AddBufferLoadInst(
 
             const uint32_t bitWidth = pLoadTy->getScalarSizeInBits();
             const uint32_t compCount = pLoadTy->isVectorTy() ? pLoadTy->getVectorNumElements() : 1;
-            LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
+            LLPC_ASSERT((bitWidth == 16) || (bitWidth == 32) || (bitWidth == 64));
             std::string suffix = "v" + std::to_string(bitWidth / 8 * compCount) + "i8";
 
             pLoadValue = EmitCall(m_pModule, pInstName + suffix, pCastTy, args, NoAttrib, pInsertPos);
@@ -1029,7 +1022,7 @@ void SpirvLowerBufferOp::AddBufferStoreInst(
             Type* pCastTy = VectorType::get(m_pContext->Int8Ty(), storeSize);
 
             const uint32_t bitWidth = pCompTy->getScalarSizeInBits();
-            LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
+            LLPC_ASSERT((bitWidth == 16) || (bitWidth == 32) || (bitWidth == 64));
             std::string suffix = "v" + std::to_string(bitWidth / 8) + "i8";
 
             for (uint32_t i = 0; i < compCount; ++i)
@@ -1083,7 +1076,7 @@ void SpirvLowerBufferOp::AddBufferStoreInst(
 
             const uint32_t bitWidth = pStoreTy->getScalarSizeInBits();
             const uint32_t compCount = pStoreTy->isVectorTy() ? pStoreTy->getVectorNumElements() : 1;
-            LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
+            LLPC_ASSERT((bitWidth == 16) || (bitWidth == 32) || (bitWidth == 64));
             std::string suffix = "v" + std::to_string(bitWidth / 8 * compCount) + "i8";
 
             EmitCall(m_pModule, LlpcName::BufferStore + suffix, m_pContext->VoidTy(), args, NoAttrib, pInsertPos);

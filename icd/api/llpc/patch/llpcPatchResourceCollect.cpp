@@ -114,14 +114,7 @@ bool PatchResourceCollect::runOnModule(
         pCall->eraseFromParent();
     }
 
-    DEBUG(dbgs() << "After the pass Patch-Resource-Collect: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }
@@ -482,6 +475,7 @@ void PatchResourceCollect::ClearInactiveInput()
     {
         auto& builtInUsage = m_pResUsage->builtInUsage;
 
+        // Check per-stage built-in usage
         if (m_shaderStage == ShaderStageVertex)
         {
             if (builtInUsage.vs.drawIndex &&
@@ -696,6 +690,12 @@ void PatchResourceCollect::ClearInactiveInput()
                 builtInUsage.fs.layer = false;
             }
 
+            if (builtInUsage.fs.viewIndex &&
+                (m_activeInputBuiltIns.find(BuiltInViewIndex) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.fs.viewIndex = false;
+            }
+
             if (builtInUsage.fs.viewportIndex &&
                 (m_activeInputBuiltIns.find(BuiltInViewportIndex) == m_activeInputBuiltIns.end()))
             {
@@ -731,6 +731,49 @@ void PatchResourceCollect::ClearInactiveInput()
             {
                 builtInUsage.cs.workgroupId = false;
             }
+        }
+
+        // Check common built-in usage
+        if (builtInUsage.common.subgroupSize &&
+            (m_activeInputBuiltIns.find(BuiltInSubgroupSize) == m_activeInputBuiltIns.end()))
+        {
+            builtInUsage.common.subgroupSize = false;
+        }
+
+        if (builtInUsage.common.subgroupLocalInvocationId &&
+            (m_activeInputBuiltIns.find(BuiltInSubgroupLocalInvocationId) == m_activeInputBuiltIns.end()))
+        {
+            builtInUsage.common.subgroupLocalInvocationId = false;
+        }
+
+        if (builtInUsage.common.subgroupEqMask &&
+            (m_activeInputBuiltIns.find(BuiltInSubgroupEqMaskKHR) == m_activeInputBuiltIns.end()))
+        {
+            builtInUsage.common.subgroupEqMask = false;
+        }
+
+        if (builtInUsage.common.subgroupGeMask &&
+            (m_activeInputBuiltIns.find(BuiltInSubgroupGeMaskKHR) == m_activeInputBuiltIns.end()))
+        {
+            builtInUsage.common.subgroupGeMask = false;
+        }
+
+        if (builtInUsage.common.subgroupGtMask &&
+            (m_activeInputBuiltIns.find(BuiltInSubgroupGtMaskKHR) == m_activeInputBuiltIns.end()))
+        {
+            builtInUsage.common.subgroupGtMask = false;
+        }
+
+        if (builtInUsage.common.subgroupLeMask &&
+            (m_activeInputBuiltIns.find(BuiltInSubgroupLeMaskKHR) == m_activeInputBuiltIns.end()))
+        {
+            builtInUsage.common.subgroupLeMask = false;
+        }
+
+        if (builtInUsage.common.subgroupLtMask &&
+            (m_activeInputBuiltIns.find(BuiltInSubgroupLtMaskKHR) == m_activeInputBuiltIns.end()))
+        {
+            builtInUsage.common.subgroupLtMask = false;
         }
     }
 }
@@ -1003,6 +1046,14 @@ void PatchResourceCollect::MapBuiltInToGenericInOut()
                 inOutUsage.builtInOutputLocMap[BuiltInLayer] = mapLoc;
             }
 
+            if (nextBuiltInUsage.viewIndex)
+            {
+                LLPC_ASSERT(nextInOutUsage.builtInInputLocMap.find(BuiltInViewIndex) !=
+                    nextInOutUsage.builtInInputLocMap.end());
+                const uint32_t mapLoc = nextInOutUsage.builtInInputLocMap[BuiltInViewIndex];
+                inOutUsage.builtInOutputLocMap[BuiltInViewIndex] = mapLoc;
+            }
+
             if (nextBuiltInUsage.viewportIndex)
             {
                 LLPC_ASSERT(nextInOutUsage.builtInInputLocMap.find(BuiltInViewportIndex) !=
@@ -1169,6 +1220,11 @@ void PatchResourceCollect::MapBuiltInToGenericInOut()
             if (builtInUsage.vs.layer)
             {
                 inOutUsage.builtInOutputLocMap[BuiltInLayer] = availOutMapLoc++;
+            }
+
+            if (builtInUsage.vs.viewIndex)
+            {
+                inOutUsage.builtInOutputLocMap[BuiltInViewIndex] = availOutMapLoc++;
             }
         }
 
@@ -1529,6 +1585,14 @@ void PatchResourceCollect::MapBuiltInToGenericInOut()
                 inOutUsage.builtInOutputLocMap[BuiltInLayer] = mapLoc;
             }
 
+            if (nextBuiltInUsage.viewIndex)
+            {
+                LLPC_ASSERT(nextInOutUsage.builtInInputLocMap.find(BuiltInViewIndex) !=
+                    nextInOutUsage.builtInInputLocMap.end());
+                const uint32_t mapLoc = nextInOutUsage.builtInInputLocMap[BuiltInViewIndex];
+                inOutUsage.builtInOutputLocMap[BuiltInViewIndex] = mapLoc;
+            }
+
             if (nextBuiltInUsage.viewportIndex)
             {
                 LLPC_ASSERT(nextInOutUsage.builtInInputLocMap.find(BuiltInViewportIndex) !=
@@ -1635,6 +1699,11 @@ void PatchResourceCollect::MapBuiltInToGenericInOut()
             {
                 inOutUsage.builtInOutputLocMap[BuiltInLayer] = availOutMapLoc++;
             }
+
+            if (builtInUsage.tes.viewIndex)
+            {
+                inOutUsage.builtInOutputLocMap[BuiltInViewIndex] = availOutMapLoc++;
+            }
         }
 
         inOutUsage.inputMapLocCount = std::max(inOutUsage.inputMapLocCount, availInMapLoc);
@@ -1716,6 +1785,11 @@ void PatchResourceCollect::MapBuiltInToGenericInOut()
             inOutUsage.builtInOutputLocMap[BuiltInLayer] = availOutMapLoc++;
         }
 
+        if (builtInUsage.gs.viewIndex)
+        {
+            inOutUsage.builtInOutputLocMap[BuiltInViewIndex] = availOutMapLoc++;
+        }
+
         if (builtInUsage.gs.viewportIndex)
         {
             inOutUsage.builtInOutputLocMap[BuiltInViewportIndex] = availOutMapLoc++;
@@ -1760,6 +1834,14 @@ void PatchResourceCollect::MapBuiltInToGenericInOut()
                             nextInOutUsage.builtInInputLocMap.end());
                 const uint32_t mapLoc = nextInOutUsage.builtInInputLocMap[BuiltInLayer];
                 builtInOutLocs[BuiltInLayer] = mapLoc;
+            }
+
+            if (nextBuiltInUsage.viewIndex)
+            {
+                LLPC_ASSERT(nextInOutUsage.builtInInputLocMap.find(BuiltInViewIndex) !=
+                    nextInOutUsage.builtInInputLocMap.end());
+                const uint32_t mapLoc = nextInOutUsage.builtInInputLocMap[BuiltInViewIndex];
+                builtInOutLocs[BuiltInViewIndex] = mapLoc;
             }
 
             if (nextBuiltInUsage.viewportIndex)
@@ -1814,6 +1896,11 @@ void PatchResourceCollect::MapBuiltInToGenericInOut()
             {
                 builtInOutLocs[BuiltInLayer] = availOutMapLoc++;
             }
+
+            if (builtInUsage.gs.viewIndex)
+            {
+                builtInOutLocs[BuiltInViewIndex] = availOutMapLoc++;
+            }
         }
 
         inOutUsage.inputMapLocCount = std::max(inOutUsage.inputMapLocCount, availInMapLoc);
@@ -1837,6 +1924,11 @@ void PatchResourceCollect::MapBuiltInToGenericInOut()
         if (builtInUsage.fs.layer)
         {
             inOutUsage.builtInInputLocMap[BuiltInLayer] = availInMapLoc++;
+        }
+
+        if (builtInUsage.fs.viewIndex)
+        {
+            inOutUsage.builtInInputLocMap[BuiltInViewIndex] = availInMapLoc++;
         }
 
         if (builtInUsage.fs.viewportIndex)

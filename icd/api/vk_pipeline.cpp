@@ -57,7 +57,13 @@ Pipeline::Pipeline(
     m_pBinary(pBinary)
 {
     memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));
-    memcpy(m_pPalPipeline, pPalPipeline, sizeof(pPalPipeline[0]) * pDevice->NumPalDevices());
+    memset(m_palPipelineHash, 0, sizeof(m_palPipelineHash));
+
+    for (uint32_t devIdx = 0; devIdx < pDevice->NumPalDevices(); devIdx++)
+    {
+        m_pPalPipeline[devIdx]      = pPalPipeline[devIdx];
+        m_palPipelineHash[devIdx]   = pPalPipeline[devIdx]->GetInfo().pipelineHash;
+    }
 }
 
 // =====================================================================================================================

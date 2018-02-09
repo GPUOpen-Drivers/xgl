@@ -107,6 +107,9 @@ public:
     VK_INLINE const FullscreenMgr* GetFullscreenMgr() const
         { return m_pFullscreenMgr; }
 
+    VK_INLINE FullscreenMgr* GetFullscreenMgr()
+        { return m_pFullscreenMgr; }
+
     VK_INLINE uint32_t GetPresentCount() const
         { return m_presentCount; }
 
@@ -241,11 +244,17 @@ public:
     VK_INLINE Pal::IScreen* GetPalScreen() const
         { return m_pScreen; }
 
+    VkResult SetHdrMetadata(
+        Device*                    pDevice,
+        const VkHdrMetadataEXT*    pMetadata);
+
     bool TryEnterExclusive(SwapChain* pSwapChain);
     bool TryExitExclusive(SwapChain* pSwapChain);
-    bool EvaluateExclusiveModeCompat(SwapChain* pSwapChain);
+    bool UpdateExclusiveModeCompat(SwapChain* pSwapChain);
 
 private:
+    CompatibilityFlags EvaluateExclusiveModeCompat(const SwapChain* pSwapChain) const;
+
     void UpdateExclusiveMode(SwapChain* pSwapChain);
     void DisableFullscreenPresents();
     void FullscreenPresentEvent(bool success);
@@ -259,6 +268,10 @@ private:
                                                     // access or failed a fullscreen present because Windows kicked us
                                                     // out.
     uint32_t            m_fullscreenPresentSuccessCount; // Number of consecutively successful fullscreen presents.
+
+    Pal::ScreenColorCapabilities m_colorCaps;
+    Pal::ScreenColorConfig       m_colorParams;
+    Pal::ScreenColorConfig       m_windowedColorParams;
 
     Pal::Extent2d       m_lastResolution;
     uint32_t            m_vidPnSourceId;            // Video present source identifier
@@ -291,6 +304,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHX(
     VkDevice                                    device,
     const VkAcquireNextImageInfoKHX*            pAcquireInfo,
     uint32_t*                                   pImageIndex);
+
+VKAPI_ATTR void VKAPI_CALL vkSetHdrMetadataEXT(
+    VkDevice                                    device,
+    uint32_t                                    swapchainCount,
+    const VkSwapchainKHR*                       pSwapchains,
+    const VkHdrMetadataEXT*                     pMetadata);
 
 }// entry
 }// vk

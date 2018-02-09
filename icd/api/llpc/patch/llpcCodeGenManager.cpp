@@ -303,10 +303,7 @@ Result CodeGenManager::BuildGraphicsPipelineRegConfig(
         else
         {
 #ifdef LLPC_BUILD_GFX9
-            // TODO: Implement GS on GFX9+.
-            // result = Gfx9::ConfigBuilder::BuildPipelineVsGsFsRegConfig(pContext, ppConfig, pConfigSize);
-            LLPC_NOT_IMPLEMENTED();
-            result = Result::Unsupported;
+            result = Gfx9::ConfigBuilder::BuildPipelineVsGsFsRegConfig(pContext, ppConfig, pConfigSize);
 #else
             result = Result::Unsupported;
 #endif
@@ -322,10 +319,7 @@ Result CodeGenManager::BuildGraphicsPipelineRegConfig(
         else
         {
 #ifdef LLPC_BUILD_GFX9
-            // TODO: Implement GS on GFX9+.
-            // result = Gfx9::ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(pContext, ppConfig, pConfigSize);
-            LLPC_NOT_IMPLEMENTED();
-            result = Result::Unsupported;
+            result = Gfx9::ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(pContext, ppConfig, pConfigSize);
 #else
             result = Result::Unsupported;
 #endif

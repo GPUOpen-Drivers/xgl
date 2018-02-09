@@ -35,7 +35,6 @@
 #pragma once
 
 #include "include/vk_utils.h"
-
 #include "include/khronos/vulkan.h"
 
 namespace vk

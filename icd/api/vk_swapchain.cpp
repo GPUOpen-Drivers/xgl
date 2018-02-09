@@ -617,7 +617,7 @@ void SwapChain::MarkAsDeprecated()
 
 // =====================================================================================================================
 VkResult SwapChain::AcquireWin32FullscreenOwnership(
-    Device*                      pDevice)
+    Device*     pDevice)
 {
     VK_ASSERT(m_pFullscreenMgr != nullptr);
 
@@ -626,7 +626,7 @@ VkResult SwapChain::AcquireWin32FullscreenOwnership(
 
 // =====================================================================================================================
 VkResult SwapChain::ReleaseWin32FullscreenOwnership(
-    Device*                      pDevice)
+    Device*     pDevice)
 {
     VK_ASSERT(m_pFullscreenMgr != nullptr);
 
@@ -654,6 +654,8 @@ FullscreenMgr::FullscreenMgr(
     m_fullscreenPresentSuccessCount = 0;
     m_lastResolution.width          = 0;
     m_lastResolution.height         = 0;
+
+    pScreen->GetColorCapabilities(&m_colorCaps);
 }
 
 // =====================================================================================================================
@@ -697,6 +699,18 @@ static Pal::Result GetWindowRectangle(
 bool FullscreenMgr::TryEnterExclusive(
     SwapChain* pSwapChain)
 {
+    CompatibilityFlags compatFlags = EvaluateExclusiveModeCompat(pSwapChain);
+
+    if (compatFlags.u32All != 0)
+    {
+        if (m_exclusiveModeAcquired)
+        {
+            TryExitExclusive(pSwapChain);
+        }
+
+        return false;
+    }
+
     if (m_pScreen != nullptr && m_pImage != nullptr)
     {
         if (m_exclusiveModeAcquired == false)
@@ -705,6 +719,8 @@ bool FullscreenMgr::TryEnterExclusive(
 
             if (result == Pal::Result::Success)
             {
+                const SwapChain::Properties&props = pSwapChain->GetProperties();
+
                 result = m_pScreen->TakeFullscreenOwnership(*m_pImage->PalImage());
 
                 // NOTE: ErrorFullscreenUnavailable means according to PAL, we already have exclusive access.
@@ -714,12 +730,11 @@ bool FullscreenMgr::TryEnterExclusive(
 
                     if (m_mode != Implicit)
                     {
-                        const SwapChain::Properties& props = pSwapChain->GetProperties();
-                        PhysicalDeviceManager* pPhyicalDeviceManager = m_pDevice->VkPhysicalDevice()->Manager();
+                        m_colorParams.format     = VkToPalFormat(props.fullscreenSurfaceFormat.format).format;
+                        m_colorParams.colorSpace = vk::convert::ScreenColorSpace(props.fullscreenSurfaceFormat.colorSpace);
+                        m_colorParams.u32All     = 0;
 
-                        pPhyicalDeviceManager->GetDisplayManager()->SetColorSpace(
-                            props.pFullscreenSurface,
-                            props.fullscreenSurfaceFormat.colorSpace);
+                        m_pScreen->SetColorConfiguration(&m_colorParams);
                     }
                 }
             }
@@ -746,23 +761,6 @@ bool FullscreenMgr::TryExitExclusive(
 
         const SwapChain::Properties& props = pSwapChain->GetProperties();
         PhysicalDeviceManager* pPhyicalDeviceManager = m_pDevice->VkPhysicalDevice()->Manager();
-
-        switch (m_mode)
-        {
-            case Implicit:
-                break;
-
-            case Explicit:
-                // Note. We are making the assumption that the desktop was in SRGB mode.
-                pPhyicalDeviceManager->GetDisplayManager()->SetColorSpace(
-                    props.pFullscreenSurface, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR);
-                break;
-
-            case Explicit_Mixed:
-                pPhyicalDeviceManager->GetDisplayManager()->SetColorSpace(
-                    props.pSurface, props.surfaceFormat.colorSpace);
-                break;
-        }
     }
 
     // if we acquired full screen ownership before with this fullscreenmanager.
@@ -775,6 +773,32 @@ bool FullscreenMgr::TryExitExclusive(
     m_exclusiveModeAcquired = false;
 
     return true;
+}
+
+// =====================================================================================================================
+VkResult FullscreenMgr::SetHdrMetadata(
+    Device*                    pDevice,
+    const VkHdrMetadataEXT*    pMetadata)
+{
+    Pal::ColorGamut& palGamut = m_colorParams.userDefinedColorGamut;
+
+    auto ConvertUnits = [] (float input) { return static_cast<uint32_t>(static_cast<double>(input) * 10000.0); };
+
+    palGamut.chromaticityRedX         = ConvertUnits(pMetadata->displayPrimaryRed.x);
+    palGamut.chromaticityRedY         = ConvertUnits(pMetadata->displayPrimaryRed.y);
+    palGamut.chromaticityGreenX       = ConvertUnits(pMetadata->displayPrimaryGreen.x);
+    palGamut.chromaticityGreenY       = ConvertUnits(pMetadata->displayPrimaryGreen.y);
+    palGamut.chromaticityBlueX        = ConvertUnits(pMetadata->displayPrimaryBlue.x);
+    palGamut.chromaticityBlueY        = ConvertUnits(pMetadata->displayPrimaryBlue.y);
+    palGamut.chromaticityWhitePointX  = ConvertUnits(pMetadata->whitePoint.x);
+    palGamut.chromaticityWhitePointY  = ConvertUnits(pMetadata->whitePoint.y);
+    palGamut.minLuminance             = ConvertUnits(pMetadata->minLuminance);
+    palGamut.maxLuminance             = ConvertUnits(pMetadata->maxLuminance);
+
+    // TODO: I don't know if average luminance is important, but VK_EXT_hdr_metadata does not currently expose it.
+    // ie. palGamut.avgLuminance = ConvertUnits(pMetadata->avgLuminance);
+
+    return VK_SUCCESS;
 }
 
 // =====================================================================================================================
@@ -1058,75 +1082,82 @@ void FullscreenMgr::PostPresent(
 // This function evaluates compatibility flags for whether it's safe to take exclusive access of the screen without
 // the user being (more or less) able to tell the difference.  This is only possible if multiple conditions are all
 // true.
-bool FullscreenMgr::EvaluateExclusiveModeCompat(
+FullscreenMgr::CompatibilityFlags FullscreenMgr::EvaluateExclusiveModeCompat(
+    const SwapChain* pSwapChain) const
+{
+    FullscreenMgr::CompatibilityFlags compatFlags = {};
+
+    Pal::OsWindowHandle windowHandle = pSwapChain->GetProperties().displayableInfo.windowHandle;
+
+    VK_ASSERT(m_pScreen != nullptr);
+
+    constexpr Pal::OsDisplayHandle unknownHandle = 0;
+
+    Pal::IScreen* pScreen = m_pDevice->VkInstance()->FindScreen(
+                m_pDevice->PalDevice(), windowHandle, unknownHandle);
+
+    if (pScreen != m_pScreen)
+    {
+        compatFlags.screenChanged = 1;
+    }
+
+    VK_ASSERT(m_pImage != nullptr);
+
+    const auto& imageInfo = m_pImage->PalImage()->GetImageCreateInfo();
+
+    Pal::Extent2d lastResolution = {};
+
+    if (compatFlags.screenChanged == 0)
+    {
+        compatFlags.resolutionBad = 1;
+        compatFlags.windowRectBad = 1;
+
+        // Get the current resolution of the screen
+        Pal::Result resolutionResult = GetScreenResolution(m_pScreen, &lastResolution);
+
+        if (resolutionResult == Pal::Result::Success)
+        {
+            // Test that the current screen resolution matches current swap chain extents
+            if ((lastResolution.width == imageInfo.extent.width) &&
+                (lastResolution.height == imageInfo.extent.height))
+            {
+                compatFlags.resolutionBad = 0;
+            }
+
+            // Test that the current window rectangle (in desktop coordinates) covers the whole monitor resolution
+            Pal::Rect windowRect = {};
+
+            if (GetWindowRectangle(windowHandle, &windowRect) == Pal::Result::Success)
+            {
+                if ((windowRect.offset.x == 0) &&
+                    (windowRect.offset.y == 0) &&
+                    (windowRect.extent.width  == lastResolution.width) &&
+                    (windowRect.extent.height == lastResolution.height))
+                {
+                    compatFlags.windowRectBad = 0;
+                }
+            }
+        }
+    }
+
+    if (compatFlags.u32All == 0)
+    {
+        compatFlags.windowNotForeground = 1;
+    }
+
+    return compatFlags;
+}
+
+// =====================================================================================================================
+// This function evaluates compatibility flags for whether it's safe to take exclusive access of the screen without
+// the user being (more or less) able to tell the difference.  This is only possible if multiple conditions are all
+// true.
+bool FullscreenMgr::UpdateExclusiveModeCompat(
     SwapChain* pSwapChain)
 {
     if (m_compatFlags.disabled == 0)
     {
-        Pal::OsWindowHandle windowHandle = pSwapChain->GetProperties().displayableInfo.windowHandle;
-
-        m_compatFlags.u32All = 0;
-
-        // Update which screen holds ownership of this window
-        if (m_compatFlags.u32All == 0)
-        {
-            VK_ASSERT(m_pScreen != nullptr);
-
-            constexpr Pal::OsDisplayHandle unknownHandle = 0;
-
-            Pal::IScreen* pScreen = m_pDevice->VkInstance()->FindScreen(
-                        m_pDevice->PalDevice(), windowHandle, unknownHandle);
-
-            if (pScreen != m_pScreen)
-            {
-                m_compatFlags.screenChanged = 1;
-            }
-        }
-
-        VK_ASSERT(m_pImage != nullptr);
-
-        const auto& imageInfo = m_pImage->PalImage()->GetImageCreateInfo();
-
-        m_lastResolution.width = 0;
-        m_lastResolution.height = 0;
-
-        if (m_compatFlags.screenChanged == 0)
-        {
-            m_compatFlags.resolutionBad = 1;
-            m_compatFlags.windowRectBad = 1;
-
-            // Get the current resolution of the screen
-            Pal::Result resolutionResult = GetScreenResolution(m_pScreen, &m_lastResolution);
-
-            if (resolutionResult == Pal::Result::Success)
-            {
-                // Test that the current screen resolution matches current swap chain extents
-                if (m_lastResolution.width == imageInfo.extent.width &&
-                    m_lastResolution.height == imageInfo.extent.height)
-                {
-                    m_compatFlags.resolutionBad = 0;
-                }
-
-                // Test that the current window rectangle (in desktop coordinates) covers the whole monitor resolution
-                Pal::Rect windowRect = {};
-
-                if (GetWindowRectangle(windowHandle, &windowRect) == Pal::Result::Success)
-                {
-                    if (windowRect.offset.x == 0 &&
-                        windowRect.offset.y == 0 &&
-                        windowRect.extent.width == m_lastResolution.width &&
-                        windowRect.extent.height == m_lastResolution.height)
-                    {
-                        m_compatFlags.windowRectBad = 0;
-                    }
-                }
-            }
-        }
-
-        if (m_compatFlags.u32All == 0)
-        {
-            m_compatFlags.windowNotForeground = 1;
-        }
+        m_compatFlags = EvaluateExclusiveModeCompat(pSwapChain);
     }
 
     return m_compatFlags.u32All == 0;
@@ -1144,14 +1175,17 @@ VkResult FullscreenMgr::UpdatePresentInfo(
 {
     VkResult result = VK_SUCCESS;
 
+    if (m_compatFlags.disabled == 0)
+    {
+        // Try to get exclusive access if things are compatible
+        UpdateExclusiveMode(pSwapChain);
+    }
+
     switch(m_mode)
     {
     case Implicit:
         if (m_compatFlags.disabled == 0)
         {
-            // Try to get exclusive access if things are compatible
-            UpdateExclusiveMode(pSwapChain);
-
             // If we've successfully entered exclusive mode, switch to fullscreen presents
             if (m_exclusiveModeAcquired)
             {
@@ -1278,6 +1312,26 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHX(
     pAcquireInfoKHX = pAcquireInfo;
 
     return SwapChain::ObjectFromHandle(pAcquireInfo->swapchain)->AcquireNextImage(pHeader, pImageIndex);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkSetHdrMetadataEXT(
+    VkDevice                                    device,
+    uint32_t                                    swapchainCount,
+    const VkSwapchainKHR*                       pSwapchains,
+    const VkHdrMetadataEXT*                     pMetadata)
+{
+    VkResult result = VK_SUCCESS;
+
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    for (uint32_t swapChainIndex = 0; (swapChainIndex < swapchainCount) && (result == VK_SUCCESS); swapChainIndex++)
+    {
+        result = SwapChain::ObjectFromHandle(
+                    pSwapchains[swapChainIndex])->GetFullscreenMgr()->SetHdrMetadata(pDevice, pMetadata);
+    }
+
+    VK_ASSERT(result == VK_SUCCESS);
 }
 
 } // namespace entry

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -22,26 +22,21 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+***********************************************************************************************************************
+* @file  color_space_helper.cpp
+* @brief Helper class to convert Pal to Vulkan API data formats
+***********************************************************************************************************************
+*/
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#include "include/color_space_helper.h"
+#include "include/vk_utils.h"
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#include "palFormatInfo.h"
+#include "palScreen.h"
 
-#define VULKAN_API_MAJOR_VERSION    1
-#define VULKAN_API_MINOR_VERSION    0
-#define VULKAN_API_BUILD_VERSION    65
+namespace vk
+{
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+} //namespace vk
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
-
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION    14
-
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"

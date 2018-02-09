@@ -501,7 +501,6 @@ private:
   Type *transFPType(SPIRVType* T);
   BinaryOperator *transShiftLogicalBitwiseInst(SPIRVValue* BV, BasicBlock* BB,
       Function* F);
-  void transFlags(llvm::Value* V);
   Instruction *transCmpInst(SPIRVValue* BV, BasicBlock* BB, Function* F);
   void transOCLBuiltinFromInstPreproc(SPIRVInstruction* BI, Type *&RetTy,
       std::vector<SPIRVValue *> &Args);
@@ -940,17 +939,6 @@ SPIRVToLLVM::isSPIRVCmpInstTransToLLVMInst(SPIRVInstruction* BI) const {
 }
 
 void
-SPIRVToLLVM::transFlags(llvm::Value* V) {
-  if(!isa<Instruction>(V))
-    return;
-  auto OC = cast<Instruction>(V)->getOpcode();
-  if (OC == Instruction::AShr || OC == Instruction::LShr) {
-    cast<BinaryOperator>(V)->setIsExact();
-    return;
-  }
-}
-
-void
 SPIRVToLLVM::setName(llvm::Value* V, SPIRVValue* BV) {
   auto Name = BV->getName();
   if (!Name.empty() && (!V->hasName() || Name != V->getName()))
@@ -1026,7 +1014,6 @@ SPIRVToLLVM::transValue(SPIRVValue *BV, Function *F, BasicBlock *BB,
     assert (0 && "trans decoration fail");
     return nullptr;
   }
-  transFlags(V);
 
   SPIRVDBG(dbgs() << *V << '\n';)
 

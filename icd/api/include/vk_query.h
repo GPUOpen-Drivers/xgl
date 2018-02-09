@@ -159,6 +159,14 @@ class TimestampQueryPool : public QueryPool
 public:
     static constexpr size_t SlotSize = sizeof(uint64_t);
 
+    static constexpr uint32_t TimestampNotReadyChunk = UINT32_MAX;
+    // +------------------------+------------------------+
+    // | TimestampNotReadyChunk | TimestampNotReadyChunk |
+    // |------------------------+------------------------|
+    // |                TimestampNotReady                |
+    // +-------------------------------------------------+
+    static constexpr uint64_t TimestampNotReady = (uint64_t(TimestampNotReadyChunk) << 32) + TimestampNotReadyChunk;
+
     static VkResult Create(
         Device*                         pDevice,
         const VkQueryPoolCreateInfo*    pCreateInfo,
@@ -187,14 +195,11 @@ public:
         return m_internalMem.Offset() + query * SlotSize;
     }
 
-    VK_INLINE const size_t GetSlotSize() const
-        { return SlotSize; }
+    VK_INLINE const Pal::IGpuMemory& PalMemory(uint32_t deviceIdx) const
+        { return *m_internalMem.PalMemory(deviceIdx); }
 
-    VK_INLINE const Pal::IGpuMemory& PalMemory(uint32_t idx) const
-        { return *m_internalMem.PalMemory(idx); }
-
-    VK_INLINE const void* GetStorageView(uint32_t idx) const
-        { return m_pStorageView[idx]; }
+    VK_INLINE const void* GetStorageView(uint32_t deviceIdx) const
+        { return m_pStorageView[deviceIdx]; }
 
 private:
     TimestampQueryPool(

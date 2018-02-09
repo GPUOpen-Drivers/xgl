@@ -30,6 +30,7 @@
  */
 
 #include "include/khronos/vulkan.h"
+#include "include/color_space_helper.h"
 #include "include/vk_buffer_view.h"
 #include "include/vk_dispatch.h"
 #include "include/vk_device.h"
@@ -54,6 +55,7 @@
 
 #include "palDevice.h"
 #include "palCmdBuffer.h"
+#include "palFormatInfo.h"
 #include "palLib.h"
 #include "palMath.h"
 #include "palMsaaState.h"
@@ -1085,8 +1087,9 @@ void PhysicalDevice::GetSparseImageFormatProperties(
         && (type != VK_IMAGE_TYPE_1D)
         // 2D sparse images depend on HW capability
         && ((type != VK_IMAGE_TYPE_2D) || (GetPrtFeatures() & Pal::PrtFeatureImage2D))
-        // 3D sparse images depend on HW capability but we currently don't have proper support for them in PAL
-        && ((type != VK_IMAGE_TYPE_3D) || ((GetPrtFeatures() & Pal::PrtFeatureImage3D) != 0))
+        // 3D sparse images depend on HW capability
+        && ((type != VK_IMAGE_TYPE_3D) ||
+            ((GetPrtFeatures() & (Pal::PrtFeatureImage3D | Pal::PrtFeatureNonStandardImage3D)) != 0))
         // Multisampled sparse images depend on HW capability
         && ((samples == VK_SAMPLE_COUNT_1_BIT) ||
             ((type == VK_IMAGE_TYPE_2D) && (GetPrtFeatures() & Pal::PrtFeatureImageMultisampled)))
@@ -1141,19 +1144,42 @@ void PhysicalDevice::GetSparseImageFormatProperties(
             }
             else if (type == VK_IMAGE_TYPE_3D)
             {
-                // Report standard 3D sparse block shapes
-                static const VkExtent3D Std3DBlockShapes[] =
+                if (GetPrtFeatures() & Pal::PrtFeatureImage3D)
                 {
-                    {   64,     32,     32  },  // 8-bit
-                    {   32,     32,     32  },  // 16-bit
-                    {   32,     32,     16  },  // 32-bit
-                    {   32,     16,     16  },  // 64-bit
-                    {   16,     16,     16  },  // 128-bit
-                };
+                    // Report standard 3D sparse block shapes
+                    static const VkExtent3D Std3DBlockShapes[] =
+                    {
+                        {   64,     32,     32  },  // 8-bit
+                        {   32,     32,     32  },  // 16-bit
+                        {   32,     32,     16  },  // 32-bit
+                        {   32,     16,     16  },  // 64-bit
+                        {   16,     16,     16  },  // 128-bit
+                    };
 
-                VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std3DBlockShapes));
+                    VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std3DBlockShapes));
 
-                pProperties->imageGranularity = Std3DBlockShapes[pixelSizeIndex];
+                    pProperties->imageGranularity = Std3DBlockShapes[pixelSizeIndex];
+                }
+                else
+                {
+                    VK_ASSERT((GetPrtFeatures() & Pal::PrtFeatureNonStandardImage3D) != 0);
+
+                    // When standard shapes aren't supported, report shapes with a depth equal to the tile thickness, 4,
+                    // except for 128-bit, which would cause a tile split.  PAL chooses PRT thick mode for 3D images,
+                    // and addrlib uses these unmodified for CI/VI.
+                    static const VkExtent3D NonStd3DBlockShapes[] =
+                    {
+                        {   128,    128,    4  },  // 8-bit
+                        {   128,    64,     4  },  // 16-bit
+                        {   64,     64,     4  },  // 32-bit
+                        {   64,     32,     4  },  // 64-bit
+                        {   64,     64,     1  },  // 128-bit
+                    };
+
+                    VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(NonStd3DBlockShapes));
+
+                    pProperties->imageGranularity = NonStd3DBlockShapes[pixelSizeIndex];
+                }
             }
             else if ((type == VK_IMAGE_TYPE_2D) && (samples != VK_SAMPLE_COUNT_1_BIT))
             {
@@ -1272,8 +1298,9 @@ VkResult PhysicalDevice::GetDeviceProperties(
     pProperties->sparseProperties.residencyStandard2DMultisampleBlockShape =
         GetPrtFeatures() & Pal::PrtFeatureImageMultisampled ? VK_TRUE : VK_FALSE;
 
-    // 3D sparse images depend on HW capability but we currently don't have proper support for them in PAL
-    pProperties->sparseProperties.residencyStandard3DBlockShape = VK_FALSE;
+    // NOTE: GFX7 and GFX8 may expose sparseResidencyImage3D but are unable to support residencyStandard3DBlockShape
+    pProperties->sparseProperties.residencyStandard3DBlockShape =
+        GetPrtFeatures() & Pal::PrtFeatureImage3D ? VK_TRUE : VK_FALSE;
 
     pProperties->sparseProperties.residencyAlignedMipSize =
         GetPrtFeatures() & Pal::PrtFeatureUnalignedMipSize ? VK_FALSE : VK_TRUE;
@@ -2252,27 +2279,9 @@ VkResult PhysicalDevice::GetSurfaceFormats(
 {
     VkResult result = VK_SUCCESS;
 
-    if (pSurface->GetOSDisplayHandle() != 0)
-    {
-        // Fullscreen Presents
+    uint32_t numPresentFormats = 0;
+    const uint32_t maxBufferCount = (pSurfaceFormats != nullptr) ? *pSurfaceFormatCount : 0;
 
-        constexpr Pal::OsWindowHandle unknownHandle = 0;
-
-        Pal::IScreen* pScreen = VkInstance()->FindScreen(m_pPalDevice, unknownHandle, pSurface->GetOSDisplayHandle());
-
-        if ((pScreen == nullptr) || (Manager()->GetDisplayManager() == nullptr))
-        {
-            if (pSurfaceFormats == nullptr)
-            {
-                *pSurfaceFormatCount = 0;
-                return VK_SUCCESS;
-            }
-            return VK_ERROR_INITIALIZATION_FAILED;
-        }
-
-        result = Manager()->GetDisplayManager()->GetFormats(pScreen, pSurfaceFormatCount, pSurfaceFormats);
-    }
-    else
     {
         // Windowed Presents
 
@@ -2388,7 +2397,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_SEMAPHORE));
         if ((pPhysicalDevice == nullptr) ||
-            (pPhysicalDevice->PalProperties().osProperties.supportProSemaphore))
+            (pPhysicalDevice->PalProperties().osProperties.supportOpaqueFdSemaphore))
         {
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_SEMAPHORE_FD));
         }
@@ -2445,6 +2454,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     // availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE_FD));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTERNAL_MEMORY_HOST));
 
     return availableExtensions;
 }
@@ -2612,7 +2622,9 @@ VkResult PhysicalDevice::EnumerateExtensionProperties(
 }
 
 // =====================================================================================================================
-// Retriving the UUID of device/driver as well as the LUID if it is for windows platform.
+
+// =====================================================================================================================
+// Retrieving the UUID of device/driver as well as the LUID if it is for windows platform.
 // - DeviceUUID
 //   domain:bus:device:function is enough to identify the pci device even for gemini or vf.
 //   The current interface did not provide the domain so we just use bdf to compose the DeviceUUID.

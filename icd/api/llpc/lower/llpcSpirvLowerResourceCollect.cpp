@@ -268,14 +268,7 @@ bool SpirvLowerResourceCollect::runOnModule(
         }
     }
 
-    DEBUG(dbgs() << "After the pass Spirv-Lower-Resource-Collect: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }
@@ -1004,6 +997,30 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInLayer:
                     m_pResUsage->builtInUsage.vs.layer = true;
                     break;
+                case BuiltInViewIndex:
+                    m_pResUsage->builtInUsage.vs.viewIndex = true;
+                    break;
+                case BuiltInSubgroupSize:
+                    m_pResUsage->builtInUsage.common.subgroupSize = true;
+                    break;
+                case BuiltInSubgroupLocalInvocationId:
+                    m_pResUsage->builtInUsage.common.subgroupLocalInvocationId = true;
+                    break;
+                case BuiltInSubgroupEqMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupEqMask = true;
+                    break;
+                case BuiltInSubgroupGeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGeMask = true;
+                    break;
+                case BuiltInSubgroupGtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGtMask = true;
+                    break;
+                case BuiltInSubgroupLeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLeMask = true;
+                    break;
+                case BuiltInSubgroupLtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLtMask = true;
+                    break;
                 default:
                     LLPC_NEVER_CALLED();
                     break;
@@ -1043,6 +1060,27 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                     break;
                 case BuiltInPrimitiveId:
                     m_pResUsage->builtInUsage.tcs.primitiveId = true;
+                    break;
+                case BuiltInSubgroupSize:
+                    m_pResUsage->builtInUsage.common.subgroupSize = true;
+                    break;
+                case BuiltInSubgroupLocalInvocationId:
+                    m_pResUsage->builtInUsage.common.subgroupLocalInvocationId = true;
+                    break;
+                case BuiltInSubgroupEqMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupEqMask = true;
+                    break;
+                case BuiltInSubgroupGeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGeMask = true;
+                    break;
+                case BuiltInSubgroupGtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGtMask = true;
+                    break;
+                case BuiltInSubgroupLeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLeMask = true;
+                    break;
+                case BuiltInSubgroupLtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLtMask = true;
                     break;
                 default:
                     LLPC_NEVER_CALLED();
@@ -1090,6 +1128,30 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInLayer:
                     m_pResUsage->builtInUsage.tes.layer = true;
                     break;
+                case BuiltInViewIndex:
+                    m_pResUsage->builtInUsage.tes.viewIndex = true;
+                    break;
+                case BuiltInSubgroupSize:
+                    m_pResUsage->builtInUsage.common.subgroupSize = true;
+                    break;
+                case BuiltInSubgroupLocalInvocationId:
+                    m_pResUsage->builtInUsage.common.subgroupLocalInvocationId = true;
+                    break;
+                case BuiltInSubgroupEqMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupEqMask = true;
+                    break;
+                case BuiltInSubgroupGeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGeMask = true;
+                    break;
+                case BuiltInSubgroupGtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGtMask = true;
+                    break;
+                case BuiltInSubgroupLeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLeMask = true;
+                    break;
+                case BuiltInSubgroupLtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLtMask = true;
+                    break;
                 default:
                     LLPC_NEVER_CALLED();
                     break;
@@ -1130,6 +1192,9 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInLayer:
                     m_pResUsage->builtInUsage.gs.layer = true;
                     break;
+                case BuiltInViewIndex:
+                    m_pResUsage->builtInUsage.gs.viewIndex = true;
+                    break;
                 case BuiltInPrimitiveId:
                     if (addrSpace == SPIRAS_Input)
                     {
@@ -1140,6 +1205,27 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                         LLPC_ASSERT(addrSpace == SPIRAS_Output);
                         m_pResUsage->builtInUsage.gs.primitiveId = true;
                     }
+                    break;
+                case BuiltInSubgroupSize:
+                    m_pResUsage->builtInUsage.common.subgroupSize = true;
+                    break;
+                case BuiltInSubgroupLocalInvocationId:
+                    m_pResUsage->builtInUsage.common.subgroupLocalInvocationId = true;
+                    break;
+                case BuiltInSubgroupEqMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupEqMask = true;
+                    break;
+                case BuiltInSubgroupGeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGeMask = true;
+                    break;
+                case BuiltInSubgroupGtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGtMask = true;
+                    break;
+                case BuiltInSubgroupLeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLeMask = true;
+                    break;
+                case BuiltInSubgroupLtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLtMask = true;
                     break;
                 default:
                     LLPC_NEVER_CALLED();
@@ -1192,6 +1278,30 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInFragStencilRefEXT:
                     m_pResUsage->builtInUsage.fs.fragStencilRef = true;
                     break;
+                case BuiltInViewIndex:
+                    m_pResUsage->builtInUsage.fs.viewIndex = true;
+                    break;
+                case BuiltInSubgroupSize:
+                    m_pResUsage->builtInUsage.common.subgroupSize = true;
+                    break;
+                case BuiltInSubgroupLocalInvocationId:
+                    m_pResUsage->builtInUsage.common.subgroupLocalInvocationId = true;
+                    break;
+                case BuiltInSubgroupEqMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupEqMask = true;
+                    break;
+                case BuiltInSubgroupGeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGeMask = true;
+                    break;
+                case BuiltInSubgroupGtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGtMask = true;
+                    break;
+                case BuiltInSubgroupLeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLeMask = true;
+                    break;
+                case BuiltInSubgroupLtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLtMask = true;
+                    break;
                 default:
                     LLPC_NEVER_CALLED();
                     break;
@@ -1217,6 +1327,27 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInLocalInvocationIndex:
                     m_pResUsage->builtInUsage.cs.workgroupId = true;
                     m_pResUsage->builtInUsage.cs.localInvocationId = true;
+                    break;
+                case BuiltInSubgroupSize:
+                    m_pResUsage->builtInUsage.common.subgroupSize = true;
+                    break;
+                case BuiltInSubgroupLocalInvocationId:
+                    m_pResUsage->builtInUsage.common.subgroupLocalInvocationId = true;
+                    break;
+                case BuiltInSubgroupEqMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupEqMask = true;
+                    break;
+                case BuiltInSubgroupGeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGeMask = true;
+                    break;
+                case BuiltInSubgroupGtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupGtMask = true;
+                    break;
+                case BuiltInSubgroupLeMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLeMask = true;
+                    break;
+                case BuiltInSubgroupLtMaskKHR:
+                    m_pResUsage->builtInUsage.common.subgroupLtMask = true;
                     break;
                 default:
                     LLPC_NEVER_CALLED();

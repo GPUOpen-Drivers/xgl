@@ -40,6 +40,23 @@
 
 using namespace llvm;
 
+namespace llvm
+{
+namespace cl
+{
+
+// -send-gsdone-in-merged-shader: send GS_DONE message in merged shader. For GFX9+, this will prevent the instruction
+// from being removed by LLVM optimization.
+opt<bool> SendGsDoneInMergedShader("send-gsdone-in-merged-shader",
+                                   desc("Send GS_DONE message in merged shader. For GFX9+,"
+                                        "this will prevent the instruction from being removed"
+                                        "by LLVM optimization."),
+                                   init(true));
+
+} // cl
+
+} // llvm
+
 namespace Llpc
 {
 
@@ -731,6 +748,8 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     std::vector<Value*> args;
     std::vector<Attribute::AttrKind> attribs;
 
+    const auto& gsInOutUsage = m_pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs;
+
     auto pArg = pEntryPoint->arg_begin();
 
     Value* pGsVsOffset      = (pArg + EsGsSysValueGsVsOffset);
@@ -796,14 +815,45 @@ void ShaderMerger::GenerateEsGsEntryPoint(
 
     auto pGsWaveId = EmitCall(pEsGsModule, "llvm.amdgcn.ubfe.i32", m_pContext->Int32Ty(), args, attribs, pEntryBlock);
 
+    args.clear();
+    args.push_back(pMergeWaveInfo);
+    args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 24));
+    args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 4));
+
+    auto pEsGsOffset = EmitCall(pEsGsModule,
+                                    "llvm.amdgcn.ubfe.i32",
+                                    m_pContext->Int32Ty(),
+                                    args,
+                                    attribs,
+                                    pEntryBlock);
+    uint32_t gsOnChipLdsSize = gsInOutUsage.calcFactor.gsOnChipLdsSize;
+
+    pEsGsOffset = BinaryOperator::CreateMul(pEsGsOffset,
+                                            ConstantInt::get(m_pContext->Int32Ty(), gsOnChipLdsSize),
+                                            "",
+                                            pEntryBlock);
+
     auto pEsEnable = new ICmpInst(*pEntryBlock, ICmpInst::ICMP_ULT, pThreadId, pEsVertCount, "");
     BranchInst::Create(pBeginEsBlock, pEndEsBlock, pEsEnable, pEntryBlock);
 
     Value* pEsGsOffsets01 = pArg;
-    Value* pEsGsOffsets23 = (pArg + 1);
+
+    Value* pEsGsOffsets23 = UndefValue::get(m_pContext->Int32Ty());
+    if (gsInOutUsage.calcFactor.inputVertices > 2)
+    {
+        // NOTE: ES to GS offset (vertex 2 and 3) is valid once the primitive type has more than 2 vertices.
+        pEsGsOffsets23 = (pArg + 1);
+    }
+
     Value* pGsPrimitiveId = (pArg + 2);
     Value* pInvocationId  = (pArg + 3);
-    Value* pEsGsOffsets45 = (pArg + 4);
+
+    Value* pEsGsOffsets45 = UndefValue::get(m_pContext->Int32Ty());
+    if (gsInOutUsage.calcFactor.inputVertices > 4)
+    {
+        // NOTE: ES to GS offset (vertex 4 and 5) is valid once the primitive type has more than 4 vertices.
+        pEsGsOffsets45 = (pArg + 4);
+    }
 
     Value* pTessCoordX    = (pArg + 5);
     Value* pTessCoordY    = (pArg + 6);
@@ -891,7 +941,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
                 ++esArgIdx;
             }
 
-            args.push_back(UndefValue::get(m_pContext->Int32Ty())); // ES to GS offset, not valid for merged shader
+            args.push_back(pEsGsOffset);
             ++esArgIdx;
 
             // Set up system value VGPRs
@@ -910,7 +960,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
         else
         {
             // Set up system value SGPRs
-            args.push_back(UndefValue::get(m_pContext->Int32Ty())); // ES to GS offset, not valid for merged shader
+            args.push_back(pEsGsOffset);
             ++esArgIdx;
 
             // Set up system value VGPRs
@@ -1105,6 +1155,17 @@ void ShaderMerger::GenerateEsGsEntryPoint(
         LLPC_ASSERT(gsArgIdx == gsArgCount); // Must have visit all arguments of GS entry point
 
         EmitCall(pEsGsModule, LlpcName::GsEntryPoint, m_pContext->VoidTy(), args, NoAttrib, pBeginGsBlock);
+
+        // NOTE: Send GS_NONE message in the end of geometry shader. For GFX9+, this is to prevent the instruction
+        // from being removed by LLVM optimization.
+        if (cl::SendGsDoneInMergedShader)
+        {
+            args.clear();
+            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), GS_DONE));
+            args.push_back(pGsWaveId);
+
+            EmitCall(pEsGsModule, "llvm.amdgcn.s.sendmsg", m_pContext->VoidTy(), args, NoAttrib, pBeginGsBlock);
+        }
     }
     BranchInst::Create(pEndGsBlock, pBeginGsBlock);
 

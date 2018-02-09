@@ -157,6 +157,7 @@ target_link_libraries(xgl PRIVATE pal)
 target_sources(xgl PRIVATE
     api/app_profile.cpp
     api/app_shader_optimizer.cpp
+    api/color_space_helper.cpp
     api/gpu_event_mgr.cpp
     api/internal_mem_mgr.cpp
     api/stencil_ops_combiner.cpp

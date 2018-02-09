@@ -29,6 +29,139 @@ define half @llpc.fdiv.f16(half %y, half %x) #0
     ret half %2
 }
 
+; GLSL: float16_t = float16_t(float) (rounding mode: RTZ)
+define spir_func half @_Z16convert_half_rtzf(float %x) #0
+{
+    %1 = call <2 x half> @llvm.amdgcn.cvt.pkrtz(float %x, float 0.0) #1
+    %2 = extractelement <2 x half> %1, i32 0
+    ret half %2
+}
+
+; GLSL: f16vec2 = f16vec2(vec2) (rounding mode: RTZ)
+define spir_func <2 x half> @_Z17convert_half2_rtzDv2_f(<2 x float> %x) #0
+{
+    %1 = extractelement <2 x float> %x, i32 0
+    %2 = extractelement <2 x float> %x, i32 1
+    %3 = call <2 x half> @llvm.amdgcn.cvt.pkrtz(float %1, float %2) #1
+    ret <2 x half> %3
+}
+
+; GLSL: f16vec3 = f16vec3(vec3) (rounding mode: RTZ)
+define spir_func <3 x half> @_Z17convert_half3_rtzDv3_f(<3 x float> %x) #0
+{
+    %1 = extractelement <3 x float> %x, i32 0
+    %2 = extractelement <3 x float> %x, i32 1
+    %3 = extractelement <3 x float> %x, i32 2
+    %4 = call <2 x half> @llvm.amdgcn.cvt.pkrtz(float %1, float %2) #1
+    %5 = call <2 x half> @llvm.amdgcn.cvt.pkrtz(float %3, float 0.0) #1
+    %6 = shufflevector <2 x half> %4, <2 x half> %5, <3 x i32> <i32 0, i32 1, i32 2>
+    ret <3 x half> %6
+}
+
+; GLSL: f16vec4 = f16vec4(vec4) (rounding mode: RTZ)
+define spir_func <4 x half> @_Z17convert_half4_rtzDv4_f(<4 x float> %x) #0
+{
+    %1 = extractelement <4 x float> %x, i32 0
+    %2 = extractelement <4 x float> %x, i32 1
+    %3 = extractelement <4 x float> %x, i32 2
+    %4 = extractelement <4 x float> %x, i32 3
+    %5 = call <2 x half> @llvm.amdgcn.cvt.pkrtz(float %1, float %2) #1
+    %6 = call <2 x half> @llvm.amdgcn.cvt.pkrtz(float %3, float %4) #1
+    %7 = shufflevector <2 x half> %5, <2 x half> %6, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+    ret <4 x half> %7
+}
+
+; GLSL: float16_t = float16_t(float) (rounding mode: RTE)
+define spir_func half @_Z16convert_half_rtef(float %x) #0
+{
+    %1 = fptrunc float %x to half
+    ret half %1
+}
+
+; GLSL: f16vec2 = f16vec2(vec2) (rounding mode: RTE)
+define spir_func <2 x half> @_Z17convert_half2_rteDv2_f(<2 x float> %x) #0
+{
+    %1 = fptrunc <2 x float> %x to <2 x half>
+    ret <2 x half> %1
+}
+
+; GLSL: f16vec3 = f16vec3(vec3) (rounding mode: RTE)
+define spir_func <3 x half> @_Z17convert_half3_rteDv3_f(<3 x float> %x) #0
+{
+    %1 = fptrunc <3 x float> %x to <3 x half>
+    ret <3 x half> %1
+}
+
+; GLSL: f16vec4 = f16vec4(vec4) (rounding mode: RTE)
+define spir_func <4 x half> @_Z17convert_half4_rteDv4_f(<4 x float> %x) #0
+{
+    %1 = fptrunc <4 x float> %x to <4 x half>
+    ret <4 x half> %1
+}
+
+; GLSL: float16_t = float16_t(float) (rounding mode: RTP)
+define spir_func half @_Z16convert_half_rtpf(float %x) #0
+{
+    %1 = fptrunc float %x to half
+    ret half %1
+}
+
+; GLSL: f16vec2 = f16vec2(vec2) (rounding mode: RTP)
+define spir_func <2 x half> @_Z17convert_half2_rtpDv2_f(<2 x float> %x) #0
+{
+    ; TODO: Use s.setreg() to change HW_REG_MODE.
+    %1 = fptrunc <2 x float> %x to <2 x half>
+    ret <2 x half> %1
+}
+
+; GLSL: f16vec3 = f16vec3(vec3) (rounding mode: RTP)
+define spir_func <3 x half> @_Z17convert_half3_rtpDv3_f(<3 x float> %x) #0
+{
+    ; TODO: Use s.setreg() to change HW_REG_MODE.
+    %1 = fptrunc <3 x float> %x to <3 x half>
+    ret <3 x half> %1
+}
+
+; GLSL: f16vec4 = f16vec4(vec4) (rounding mode: RTP)
+define spir_func <4 x half> @_Z17convert_half4_rtpDv4_f(<4 x float> %x) #0
+{
+    ; TODO: Use s.setreg() to change HW_REG_MODE.
+    %1 = fptrunc <4 x float> %x to <4 x half>
+    ret <4 x half> %1
+}
+
+; GLSL: float16_t = float16_t(float) (rounding mode: RTN)
+define spir_func half @_Z16convert_half_rtnf(float %x) #0
+{
+    ; TODO: Use s.setreg() to change HW_REG_MODE.
+    %1 = fptrunc float %x to half
+    ret half %1
+}
+
+; GLSL: f16vec2 = f16vec2(vec2) (rounding mode: RTN)
+define spir_func <2 x half> @_Z17convert_half2_rtnDv2_f(<2 x float> %x) #0
+{
+    ; TODO: Use s.setreg() to change HW_REG_MODE.
+    %1 = fptrunc <2 x float> %x to <2 x half>
+    ret <2 x half> %1
+}
+
+; GLSL: f16vec3 = f16vec3(vec3) (rounding mode: RTN)
+define spir_func <3 x half> @_Z17convert_half3_rtnDv3_f(<3 x float> %x) #0
+{
+    ; TODO: Use s.setreg() to change HW_REG_MODE.
+    %1 = fptrunc <3 x float> %x to <3 x half>
+    ret <3 x half> %1
+}
+
+; GLSL: f16vec4 = f16vec4(vec4) (rounding mode: RTN)
+define spir_func <4 x half> @_Z17convert_half4_rtnDv4_f(<4 x float> %x) #0
+{
+    ; TODO: Use s.setreg() to change HW_REG_MODE.
+    %1 = fptrunc <4 x float> %x to <4 x half>
+    ret <4 x half> %1
+}
+
 ; =====================================================================================================================
 ; >>>  Angle and Trigonometry Functions
 ; =====================================================================================================================
@@ -1545,6 +1678,7 @@ declare half @llvm.amdgcn.fmed3.f16(half %x, half %minVal, half %maxVal) #1
 declare half @llvm.rint.f16(half) #0
 declare i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x) #1
 declare half @llvm.amdgcn.frexp.mant.f16(half) #1
+declare <2 x half> @llvm.amdgcn.cvt.pkrtz(float, float) #1
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readnone }

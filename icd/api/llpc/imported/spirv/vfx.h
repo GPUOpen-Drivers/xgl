@@ -553,6 +553,7 @@ struct GraphicsPipelineState
     uint32_t    alphaToCoverageEnable;        // Enable alpha to coverage
     uint32_t    dualSourceBlendEnable;        // Blend state bound at draw time will use a dual source blend mode
     uint32_t    switchWinding;                // reverse the TCS declared output primitive vertex order
+    uint32_t    enableMultiView;              // Whether to enable multi-views mask
     ColorBuffer colorBuffer[MaxColorTargets]; // Color target state.
 };
 

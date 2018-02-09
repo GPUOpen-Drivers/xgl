@@ -31,6 +31,7 @@
 #define DEBUG_TYPE "llpc-spirv-lower"
 
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/Transforms/IPO.h"
 
 #include "llpcContext.h"
@@ -133,6 +134,17 @@ Result SpirvLower::Run(
     if (passMgr.run(*pModule) == false)
     {
         result = Result::ErrorInvalidShader;
+    }
+
+    if (result == Result::Success)
+    {
+        std::string errMsg;
+        raw_string_ostream errStream(errMsg);
+        if (verifyModule(*pModule, &errStream))
+        {
+            LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
+            result = Result::ErrorInvalidShader;
+        }
     }
 
     return result;

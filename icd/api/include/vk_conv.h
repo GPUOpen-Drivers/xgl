@@ -41,6 +41,7 @@
 #include "palImage.h"
 #include "palPipeline.h"
 #include "palQueryPool.h"
+#include "palScreen.h"
 #include "palShader.h"
 #include "palSwapChain.h"
 
@@ -1408,6 +1409,108 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format)
     {
         return Pal::UndefinedSwizzledFormat;
     }
+}
+
+// =====================================================================================================================
+// TODO: VK_EXT_swapchain_colorspace combines the concept of a transfer function and a color space, which is
+// insufficient. For now,  map the capabilities of Pal using either the transfer function OR color space
+// settings to support the current revision of VK_EXT_swapchain_colorspace.
+// To expose the complete capability, we should propose VK_EXT_swapchain_transfer_function (or a similar named)
+// extension and propose revisions to VK_EXT_swapchain_colorspace.
+namespace convert
+{
+    VK_INLINE Pal::ScreenColorSpace ScreenColorSpace(VkColorSpaceKHR colorSpace)
+    {
+        union
+        {
+            Pal::ScreenColorSpace palColorSpace;
+            uint32_t              palColorSpaceBits;
+        };
+
+        switch (colorSpace)
+        {
+        // sRGB
+        case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
+            palColorSpaceBits  = Pal::ScreenColorSpace::TfSrgb;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsSrgb;
+            break;
+
+        case VK_COLOR_SPACE_DISPLAY_P3_NONLINEAR_EXT:
+        case VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT:
+        case VK_COLOR_SPACE_DCI_P3_LINEAR_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsDciP3;
+            break;
+
+        case VK_COLOR_SPACE_EXTENDED_SRGB_NONLINEAR_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsScrgb;
+            break;
+
+        // Adobe
+        case VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT:
+        case VK_COLOR_SPACE_ADOBERGB_NONLINEAR_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsAdobe;
+            break;
+
+        // BT 709
+        case VK_COLOR_SPACE_BT709_NONLINEAR_EXT:
+        case VK_COLOR_SPACE_BT709_LINEAR_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfBt709;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsBt709;
+            break;
+
+        // HDR 10
+        case VK_COLOR_SPACE_HDR10_ST2084_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfPq2084;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsBt709;
+            break;
+
+        case VK_COLOR_SPACE_BT2020_LINEAR_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsBt2020;
+            break;
+
+        case VK_COLOR_SPACE_HDR10_HLG_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfHlg;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsBt709;
+            break;
+
+        // Dolby
+        case VK_COLOR_SPACE_DOLBYVISION_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfDolbyVision;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsDolbyVision;
+            break;
+
+        // MS
+        case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsScrgb;
+            break;
+
+        // User defined
+        case VK_COLOR_SPACE_PASS_THROUGH_EXT:
+            palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsUserDefined;
+            break;
+
+        // Unknown
+        default:
+            palColorSpace = Pal::ScreenColorSpace::TfUndefined;
+            VK_ASSERT(!"Unknown Colorspace!");
+            break;
+        }
+
+        return palColorSpace;
+    }
+}
+
+// =====================================================================================================================
+// Converts Vulkan cull mode to PAL equivalent
+VK_INLINE Pal::ScreenColorSpace VkToPalScreenSpace(VkColorSpaceKHR colorSpace)
+{
+    return convert::ScreenColorSpace(colorSpace);
 }
 
 // =====================================================================================================================

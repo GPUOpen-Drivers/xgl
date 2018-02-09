@@ -77,6 +77,7 @@ struct GpuProperty
     uint32_t gsPrimBufferDepth;     // Comes from the hardware GPU__GC__GSPRIM_BUFF_DEPTH configuration option
 
     uint32_t maxUserDataCount;                  // Max allowed count of user data SGPRs
+    uint32_t tessOffChipLdsBufferSize;             // Off-chip Tess Buffer Size
 };
 
 // =====================================================================================================================

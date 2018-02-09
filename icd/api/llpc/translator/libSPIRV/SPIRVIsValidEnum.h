@@ -469,6 +469,11 @@ isValid(spv::BuiltIn V) {
     case BuiltInBaseInstance:
     case BuiltInDrawIndex:
     case BuiltInFragStencilRefEXT:
+    case BuiltInSubgroupEqMaskKHR:
+    case BuiltInSubgroupGeMaskKHR:
+    case BuiltInSubgroupGtMaskKHR:
+    case BuiltInSubgroupLeMaskKHR:
+    case BuiltInSubgroupLtMaskKHR:
       return true;
     default:
       return false;
@@ -577,6 +582,12 @@ isValid(spv::Capability V) {
     case CapabilityPipeStorage:
     case CapabilityStencilExportEXT:
     case CapabilityShaderViewportIndexLayerEXT:
+    case CapabilitySubgroupBallotKHR:
+    case CapabilitySubgroupVoteKHR:
+    case CapabilityStorageBuffer16BitAccess:
+    case CapabilityUniformAndStorageBuffer16BitAccess:
+    case CapabilityStoragePushConstant16:
+    case CapabilityStorageInputOutput16:
       return true;
     default:
       return false;
@@ -891,6 +902,12 @@ isValid(spv::Op V) {
     case OpMemoryNamedBarrier:
     case OpModuleProcessed:
     case OpForward:
+    case OpSubgroupBallotKHR:
+    case OpSubgroupFirstInvocationKHR:
+    case OpSubgroupReadInvocationKHR:
+    case OpSubgroupAllKHR:
+    case OpSubgroupAnyKHR:
+    case OpSubgroupAllEqualKHR:
       return true;
     default:
       return false;

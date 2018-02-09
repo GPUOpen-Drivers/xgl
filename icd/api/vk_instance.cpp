@@ -358,16 +358,6 @@ VkResult Instance::Init(
         deviceCount = 0;
     }
 
-    // Enumerate the displays which are connected to the Physical devices
-    if (status == VK_SUCCESS)
-    {
-        DisplayManager* pDisplayManager = m_pPhysicalDeviceManager->GetDisplayManager();
-        if (pDisplayManager != nullptr)
-        {
-            pDisplayManager->EnumerateDisplays(m_pPhysicalDeviceManager);
-        }
-    }
-
     // Late-initialize the developer mode manager.  Needs to be called after settings are committed but BEFORE
     // physical devices are late-initialized (below).
     if ((status == VK_SUCCESS) && (m_pDevModeMgr != nullptr))
@@ -660,6 +650,45 @@ VkResult Instance::EnumerateExtensionProperties(
 }
 
 // =====================================================================================================================
+// Finds the PAL screens attached to a given physical device
+VkResult Instance::FindScreens(
+    const Pal::IDevice* pDevice,
+    uint32_t*           pDisplayCount,
+    Pal::IScreen**      ppScreens) const
+{
+    VkResult       result = VK_SUCCESS;
+    uint32_t       numFound = 0;
+    const uint32_t maxEntries = (ppScreens == nullptr) ? 0 : *pDisplayCount;
+
+    for (uint32_t screenIdx = 0; screenIdx < m_screenCount; ++screenIdx)
+    {
+        Pal::ScreenProperties props = {};
+
+        if (m_pScreens[screenIdx]->GetProperties(&props) == Pal::Result::Success)
+        {
+            if (props.pMainDevice == pDevice)
+            {
+                if (numFound < maxEntries)
+                {
+                    ppScreens[numFound] = m_pScreens[screenIdx];
+                }
+
+                numFound++;
+            }
+        }
+    }
+
+    if (ppScreens != nullptr && (numFound > maxEntries))
+    {
+        result = VK_INCOMPLETE;
+    }
+
+    *pDisplayCount = numFound;
+
+    return result;
+}
+
+// =====================================================================================================================
 // Finds the PAL screen (if any) associated with the given window handle
 Pal::IScreen* Instance::FindScreen(
     Pal::IDevice*        pDevice,
@@ -779,6 +808,10 @@ VkResult Instance::EnumeratePhysicalDeviceGroups(
     {
         numDeviceGroups = *pPhysicalDeviceGroupCount;
         result          = VK_INCOMPLETE;
+    }
+    else
+    {
+        *pPhysicalDeviceGroupCount = numDeviceGroups;
     }
 
     // Enumerate Pal devices in the order as defined in m_pPhysicalDeviceManager->EnumeratePhysicalDevices(...)

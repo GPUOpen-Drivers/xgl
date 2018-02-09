@@ -45,6 +45,19 @@
 using namespace llvm;
 using namespace Llpc;
 
+namespace llvm
+{
+namespace cl
+{
+
+// -send-gsdone-in-merged-shader: send GS_DONE message in merged shader. For GFX9+, this will prevent the instruction
+// from being removed by LLVM optimization.
+extern opt<bool> SendGsDoneInMergedShader;
+
+} // cl
+
+} // llvm
+
 namespace Llpc
 {
 
@@ -265,9 +278,11 @@ bool PatchInOutImportExport::runOnModule(
                              ShaderStageToMask(ShaderStageTessEval))) != 0);
     m_hasGs = ((stageMask & ShaderStageToMask(ShaderStageGeometry)) != 0);
 
-    // Calculate and store thread ID, it will be used in on-chip GS offset calculation
-    if (m_hasGs && m_pContext->IsGsOnChip())
+    // Thread ID will be used in on-chip GS offset calculation (ES -> GS ring is always on-chip on GFX9)
+    const bool useThreadId = (m_hasGs && (m_pContext->IsGsOnChip() || (m_gfxIp.major >= 9)));
+    if (useThreadId)
     {
+        // Calculate and store thread ID
         auto pInsertPos = m_pEntryPoint->begin()->getFirstInsertionPt();
 
         std::vector<Value*> args;
@@ -282,7 +297,8 @@ bool PatchInOutImportExport::runOnModule(
     }
 
     // Create the global variable that is to model LDS
-    if (m_hasTs || (m_hasGs && m_pContext->IsGsOnChip()))
+    // NOTE: ES -> GS ring is always on-chip on GFX9.
+    if (m_hasTs || (m_hasGs && (m_pContext->IsGsOnChip() || (m_gfxIp.major >= 9))))
     {
         // Construct LDS type: [ldsSize * i32], address space 3
         auto ldsSize = m_pContext->GetGpuProperty()->ldsSizePerCu;
@@ -327,14 +343,7 @@ bool PatchInOutImportExport::runOnModule(
         pCallInst->eraseFromParent();
     }
 
-    DEBUG(dbgs() << "After the pass Patch-In-Out-Import-Export: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }
@@ -932,9 +941,13 @@ void PatchInOutImportExport::visitReturnInst(
 
         auto& inOutUsage = m_pContext->GetShaderResourceUsage(m_shaderStage)->inOutUsage;
 
+        const auto enableMultiView = (reinterpret_cast<const GraphicsPipelineBuildInfo*>(
+            m_pContext->GetPipelineBuildInfo()))->iaState.enableMultiView;
+
         if (m_shaderStage == ShaderStageVertex)
         {
             auto& builtInUsage = m_pContext->GetShaderResourceUsage(ShaderStageVertex)->builtInUsage.vs;
+            auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageVertex)->entryArgIdxs.vs;
 
             usePosition       = builtInUsage.position;
             usePointSize      = builtInUsage.pointSize;
@@ -944,10 +957,16 @@ void PatchInOutImportExport::visitReturnInst(
             clipDistanceCount = builtInUsage.clipDistance;
             cullDistanceCount = builtInUsage.cullDistance;
 
+            if (enableMultiView)
+            {
+                // NOTE: If multi-view is enabled, the exported value of gl_Layer is from gl_ViewIndex.
+                m_pLayer = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
+            }
         }
         else if (m_shaderStage == ShaderStageTessEval)
         {
             auto& builtInUsage = m_pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes;
+            auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageTessEval)->entryArgIdxs.tes;
 
             usePosition       = builtInUsage.position;
             usePointSize      = builtInUsage.pointSize;
@@ -956,11 +975,18 @@ void PatchInOutImportExport::visitReturnInst(
             useViewportIndex  = builtInUsage.viewportIndex;
             clipDistanceCount = builtInUsage.clipDistance;
             cullDistanceCount = builtInUsage.cullDistance;
+
+            if (enableMultiView)
+            {
+                // NOTE: If multi-view is enabled, the exported value of gl_Layer is from gl_ViewIndex.
+                m_pLayer = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
+            }
         }
         else
         {
             LLPC_ASSERT(m_shaderStage == ShaderStageCopyShader);
             auto& builtInUsage = m_pContext->GetShaderResourceUsage(ShaderStageCopyShader)->builtInUsage.gs;
+            auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageGeometry)->entryArgIdxs.gs;
 
             usePosition       = builtInUsage.position;
             usePointSize      = builtInUsage.pointSize;
@@ -969,7 +995,15 @@ void PatchInOutImportExport::visitReturnInst(
             useViewportIndex  = builtInUsage.viewportIndex;
             clipDistanceCount = builtInUsage.clipDistance;
             cullDistanceCount = builtInUsage.cullDistance;
+
+            if (enableMultiView)
+            {
+                // NOTE: If multi-view is enabled, the exported value of gl_Layer is from gl_ViewIndex.
+                m_pLayer = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
+            }
         }
+
+        useLayer = enableMultiView || useLayer;
 
         // NOTE: If gl_Position is not present in this shader stage, we have to export a dummy one.
         if (usePosition == false)
@@ -1157,7 +1191,7 @@ void PatchInOutImportExport::visitReturnInst(
                     else
                     {
                         LLPC_ASSERT(inOutUsage.builtInOutputLocMap.find(BuiltInCullDistance) !=
-                                    inOutUsage.builtInOutputLocMap.end());
+                            inOutUsage.builtInOutputLocMap.end());
                         loc = inOutUsage.builtInOutputLocMap[BuiltInCullDistance];
                     }
                 }
@@ -1218,13 +1252,13 @@ void PatchInOutImportExport::visitReturnInst(
                 if (m_shaderStage == ShaderStageCopyShader)
                 {
                     LLPC_ASSERT(inOutUsage.gs.builtInOutLocs.find(BuiltInPrimitiveId) !=
-                                inOutUsage.gs.builtInOutLocs.end());
+                        inOutUsage.gs.builtInOutLocs.end());
                     loc = inOutUsage.gs.builtInOutLocs[BuiltInPrimitiveId];
                 }
                 else
                 {
                     LLPC_ASSERT(inOutUsage.builtInOutputLocMap.find(BuiltInPrimitiveId) !=
-                                inOutUsage.builtInOutputLocMap.end());
+                        inOutUsage.builtInOutputLocMap.end());
                     loc = inOutUsage.builtInOutputLocMap[BuiltInPrimitiveId];
                 }
 
@@ -1244,6 +1278,11 @@ void PatchInOutImportExport::visitReturnInst(
                 EmitCall(m_pModule, "llvm.amdgcn.exp.f32", m_pContext->VoidTy(), args, NoAttrib, pInsertPos);
                 ++inOutUsage.expCount;
             }
+        }
+        // NOTE: If multi-view is enabled, always do exporting for gl_Layer.
+        if ((m_gfxIp.major <= 8) && enableMultiView)
+        {
+            AddExportInstForBuiltInOutput(m_pLayer, BuiltInLayer, pInsertPos);
         }
 
         // Export gl_Layer and gl_ViewportIndex before entry-point returns
@@ -1341,7 +1380,7 @@ void PatchInOutImportExport::visitReturnInst(
                     const auto& nextBuiltInUsage =
                         m_pContext->GetShaderResourceUsage(ShaderStageFragment)->builtInUsage.fs;
 
-                    hasLayerExport = nextBuiltInUsage.layer;
+                    hasLayerExport = nextBuiltInUsage.layer|| nextBuiltInUsage.viewIndex;
                 }
 
                 if (hasLayerExport)
@@ -1350,14 +1389,22 @@ void PatchInOutImportExport::visitReturnInst(
                     if (m_shaderStage == ShaderStageCopyShader)
                     {
                         LLPC_ASSERT(inOutUsage.gs.builtInOutLocs.find(BuiltInLayer) !=
+                                    inOutUsage.gs.builtInOutLocs.end() ||
+                                    inOutUsage.gs.builtInOutLocs.find(BuiltInViewIndex) !=
                                     inOutUsage.gs.builtInOutLocs.end());
-                        loc = inOutUsage.gs.builtInOutLocs[BuiltInLayer];
+
+                        loc = enableMultiView ? inOutUsage.gs.builtInOutLocs[BuiltInViewIndex] :
+                            inOutUsage.gs.builtInOutLocs[BuiltInLayer];
                     }
                     else
                     {
                         LLPC_ASSERT(inOutUsage.builtInOutputLocMap.find(BuiltInLayer) !=
+                                    inOutUsage.builtInOutputLocMap.end() ||
+                                    inOutUsage.builtInOutputLocMap.find(BuiltInViewIndex) !=
                                     inOutUsage.builtInOutputLocMap.end());
-                        loc = inOutUsage.builtInOutputLocMap[BuiltInLayer];
+
+                        loc = enableMultiView ? inOutUsage.builtInOutputLocMap[BuiltInViewIndex]:
+                            inOutUsage.builtInOutputLocMap[BuiltInLayer];
                     }
 
                     Value* pLayer = new BitCastInst(m_pLayer, m_pContext->FloatTy(), "", pInsertPos);
@@ -1398,15 +1445,22 @@ void PatchInOutImportExport::visitReturnInst(
     }
     else if (m_shaderStage == ShaderStageGeometry)
     {
-        // NOTE: In the end of geometry shader, we have to send GS_DONE message.
-        args.clear();
-        args.push_back(ConstantInt::get(m_pContext->Int32Ty(), GS_DONE));
+        // NOTE: For pre-GFX9, we have to send GS_NONE message in the end of geometry shader. For GFX9+, this is
+        // done in ES-GS merged shader to prevent this instruction from being removed by LLVM optimization.
+        if (cl::SendGsDoneInMergedShader && m_gfxIp.major < 9)
+        {
+            // NOTE: Workaround backend issue SC1-637: During LLVM's function inline pass, if GS only contain 1
+            // sendmsg(GS_DONE) instruction, this instruction will be dropped. To workaround this, move
+            // sendmsg(GS_DONE) instruction to merged shader entry function.
+            args.clear();
+            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), GS_DONE));
 
-        auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageGeometry)->entryArgIdxs.gs;
-        auto pWaveId = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.waveId);
-        args.push_back(pWaveId);
+            auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageGeometry)->entryArgIdxs.gs;
+            auto pWaveId = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.waveId);
+            args.push_back(pWaveId);
 
-        EmitCall(m_pModule, "llvm.amdgcn.s.sendmsg", m_pContext->VoidTy(), args, NoAttrib, pInsertPos);
+            EmitCall(m_pModule, "llvm.amdgcn.s.sendmsg", m_pContext->VoidTy(), args, NoAttrib, pInsertPos);
+        }
     }
     else if (m_shaderStage == ShaderStageFragment)
     {
@@ -2117,6 +2171,11 @@ Value* PatchInOutImportExport::PatchVsBuiltInInputImport(
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.drawIndex);
             break;
         }
+    case BuiltInViewIndex:
+        {
+            pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
+            break;
+        }
     default:
         {
             LLPC_NEVER_CALLED();
@@ -2363,6 +2422,11 @@ Value* PatchInOutImportExport::PatchTesBuiltInInputImport(
 
             break;
         }
+    case BuiltInViewIndex:
+        {
+            pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
+            break;
+        }
     default:
         {
             LLPC_NEVER_CALLED();
@@ -2446,6 +2510,12 @@ Value* PatchInOutImportExport::PatchGsBuiltInInputImport(
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.invocationId);
             break;
         }
+    case BuiltInViewIndex:
+        {
+            pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
+            break;
+        }
+    // Handle internal-use built-ins
     case BuiltInWaveId:
         {
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.waveId);
@@ -2583,6 +2653,7 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
     case BuiltInPrimitiveId:
     case BuiltInLayer:
     case BuiltInViewportIndex:
+    case BuiltInViewIndex:
         {
             uint32_t loc = InvalidValue;
 
@@ -2596,6 +2667,11 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
             {
                 LLPC_ASSERT(inOutUsage.builtInInputLocMap.find(BuiltInLayer) != inOutUsage.builtInInputLocMap.end());
                 loc = inOutUsage.builtInInputLocMap[BuiltInLayer];
+            }
+            else if (builtInId == BuiltInViewIndex)
+            {
+                LLPC_ASSERT(inOutUsage.builtInInputLocMap.find(BuiltInViewIndex) != inOutUsage.builtInInputLocMap.end());
+                loc = inOutUsage.builtInInputLocMap[BuiltInViewIndex];
             }
             else
             {
@@ -2614,6 +2690,7 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
             interpInfo[loc] = { loc, true }; // Flat interpolation
 
             // Emulation for "in int gl_PrimitiveID" or "in int gl_Layer" or "in int gl_ViewportIndex"
+            // or "in int gl_ViewIndex"
             pInput = PatchFsGenericInputImport(pInputTy,
                                                loc,
                                                nullptr,
@@ -3199,8 +3276,11 @@ void PatchInOutImportExport::PatchVsBuiltInOutputExport(
                 return;
             }
 
+            const auto enableMultiView = static_cast<const GraphicsPipelineBuildInfo*>(
+                m_pContext->GetPipelineBuildInfo())->iaState.enableMultiView;
+
             // NOTE: Only last non-fragment shader stage has to export the value of gl_Layer.
-            if ((m_hasTs == false) && (m_hasGs == false))
+            if ((m_hasTs == false) && (m_hasGs == false) && (enableMultiView == false))
             {
                 if (m_gfxIp.major <= 8)
                 {
@@ -3338,164 +3418,160 @@ void PatchInOutImportExport::PatchTcsBuiltInOutputExport(
         }
     case BuiltInTessLevelOuter:
         {
-            if (builtInUsage.tessLevelOuter == false)
+            if (builtInUsage.tessLevelOuter)
             {
-                return;
-            }
-
-            // Extract tessellation factors
-            std::vector<Value*> tessFactors;
-            if (pElemIdx == nullptr)
-            {
-                LLPC_ASSERT(pOutputTy->isArrayTy());
-
-                uint32_t tessFactorCount = 0;
-
-                uint32_t primitiveMode =
-                    m_pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes.primitiveMode;
-
-                switch (primitiveMode)
+                // Extract tessellation factors
+                std::vector<Value*> tessFactors;
+                if (pElemIdx == nullptr)
                 {
-                case Isolines:
-                    tessFactorCount = 2;
-                    break;
-                case Triangles:
-                    tessFactorCount = 3;
-                    break;
-                case Quads:
-                    tessFactorCount = 4;
-                    break;
-                default:
-                    LLPC_NEVER_CALLED();
-                    break;
+                    LLPC_ASSERT(pOutputTy->isArrayTy());
+
+                    uint32_t tessFactorCount = 0;
+
+                    uint32_t primitiveMode =
+                        m_pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes.primitiveMode;
+
+                    switch (primitiveMode)
+                    {
+                    case Isolines:
+                        tessFactorCount = 2;
+                        break;
+                    case Triangles:
+                        tessFactorCount = 3;
+                        break;
+                    case Quads:
+                        tessFactorCount = 4;
+                        break;
+                    default:
+                        LLPC_NEVER_CALLED();
+                        break;
+                    }
+
+                    for (uint32_t i = 0; i < tessFactorCount; ++i)
+                    {
+                        std::vector<uint32_t> idxs;
+                        idxs.push_back(i);
+
+                        Value* pElem = ExtractValueInst::Create(pOutput, idxs, "", pInsertPos);
+                        tessFactors.push_back(pElem);
+                    }
+
+                    if (primitiveMode == Isolines)
+                    {
+                        LLPC_ASSERT(tessFactorCount == 2);
+                        std::swap(tessFactors[0], tessFactors[1]);
+                    }
+                }
+                else
+                {
+                    LLPC_ASSERT(pOutputTy->isFloatTy());
+                    tessFactors.push_back(pOutput);
                 }
 
-                for (uint32_t i = 0; i < tessFactorCount; ++i)
-                {
-                    std::vector<uint32_t> idxs;
-                    idxs.push_back(i);
+                Value* pTessFactorOffset = CalcTessFactorOffset(true, pElemIdx, pInsertPos);
+                StoreTessFactorToBuffer(tessFactors, pTessFactorOffset, pInsertPos);
 
-                    Value* pElem = ExtractValueInst::Create(pOutput, idxs, "", pInsertPos);
-                    tessFactors.push_back(pElem);
+                LLPC_ASSERT(perPatchBuiltInOutLocMap.find(builtInId) != perPatchBuiltInOutLocMap.end());
+                uint32_t loc = perPatchBuiltInOutLocMap[builtInId];
+
+                if (pElemIdx == nullptr)
+                {
+                    // gl_TessLevelOuter[4] is treated as vec4
+                    LLPC_ASSERT(pOutputTy->isArrayTy());
+
+                    for (uint32_t i = 0; i < pOutputTy->getArrayNumElements(); ++i)
+                    {
+                        std::vector<uint32_t> idxs;
+                        idxs.push_back(i);
+                        auto pElem = ExtractValueInst::Create(pOutput, idxs, "", pInsertPos);
+
+                        auto pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), i);
+                        auto pLdsOffset =
+                            CalcLdsOffsetForTcsOutput(pElem->getType(), loc, nullptr, pElemIdx, pVertexIdx, pInsertPos);
+                        WriteValueToLds(pElem, pLdsOffset, pInsertPos);
+                    }
                 }
-
-                if (primitiveMode == Isolines)
+                else
                 {
-                    LLPC_ASSERT(tessFactorCount == 2);
-                    std::swap(tessFactors[0], tessFactors[1]);
-                }
-            }
-            else
-            {
-                LLPC_ASSERT(pOutputTy->isFloatTy());
-                tessFactors.push_back(pOutput);
-            }
-
-            Value* pTessFactorOffset = CalcTessFactorOffset(true, pElemIdx, pInsertPos);
-            StoreTessFactorToBuffer(tessFactors, pTessFactorOffset, pInsertPos);
-
-            LLPC_ASSERT(perPatchBuiltInOutLocMap.find(builtInId) != perPatchBuiltInOutLocMap.end());
-            uint32_t loc = perPatchBuiltInOutLocMap[builtInId];
-
-            if (pElemIdx == nullptr)
-            {
-                // gl_TessLevelOuter[4] is treated as vec4
-                LLPC_ASSERT(pOutputTy->isArrayTy());
-
-                for (uint32_t i = 0; i < pOutputTy->getArrayNumElements(); ++i)
-                {
-                    std::vector<uint32_t> idxs;
-                    idxs.push_back(i);
-                    auto pElem = ExtractValueInst::Create(pOutput, idxs, "", pInsertPos);
-
-                    auto pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), i);
-                    auto pLdsOffset =
-                        CalcLdsOffsetForTcsOutput(pElem->getType(), loc, nullptr, pElemIdx, pVertexIdx, pInsertPos);
-                    WriteValueToLds(pElem, pLdsOffset, pInsertPos);
+                    auto pLdsOffset = CalcLdsOffsetForTcsOutput(pOutputTy, loc, nullptr, pElemIdx, nullptr, pInsertPos);
+                    WriteValueToLds(pOutput, pLdsOffset, pInsertPos);
                 }
             }
-            else
-            {
-                auto pLdsOffset = CalcLdsOffsetForTcsOutput(pOutputTy, loc, nullptr, pElemIdx, nullptr, pInsertPos);
-                WriteValueToLds(pOutput, pLdsOffset, pInsertPos);
-            }
-
             break;
         }
     case BuiltInTessLevelInner:
         {
-            if (builtInUsage.tessLevelInner == false)
+            if (builtInUsage.tessLevelInner)
             {
-                return;
-            }
-
-            // Extract tessellation factors
-            std::vector<Value*> tessFactors;
-            if (pElemIdx == nullptr)
-            {
-                uint32_t tessFactorCount = 0;
-
-                uint32_t primitiveMode =
-                    m_pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes.primitiveMode;
-
-                switch (primitiveMode)
+                // Extract tessellation factors
+                std::vector<Value*> tessFactors;
+                if (pElemIdx == nullptr)
                 {
-                case Isolines:
-                    tessFactorCount = 0;
-                    break;
-                case Triangles:
-                    tessFactorCount = 1;
-                    break;
-                case Quads:
-                    tessFactorCount = 2;
-                    break;
-                default:
-                    LLPC_NEVER_CALLED();
-                    break;
+                    uint32_t tessFactorCount = 0;
+
+                    uint32_t primitiveMode =
+                        m_pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes.primitiveMode;
+
+                    switch (primitiveMode)
+                    {
+                    case Isolines:
+                        tessFactorCount = 0;
+                        break;
+                    case Triangles:
+                        tessFactorCount = 1;
+                        break;
+                    case Quads:
+                        tessFactorCount = 2;
+                        break;
+                    default:
+                        LLPC_NEVER_CALLED();
+                        break;
+                    }
+
+                    for (uint32_t i = 0; i < tessFactorCount; ++i)
+                    {
+                        std::vector<uint32_t> idxs;
+                        idxs.push_back(i);
+
+                        Value* pElem = ExtractValueInst::Create(pOutput, idxs, "", pInsertPos);
+                        tessFactors.push_back(pElem);
+                    }
+                }
+                else
+                {
+                    LLPC_ASSERT(pOutputTy->isFloatTy());
+                    tessFactors.push_back(pOutput);
                 }
 
-                for (uint32_t i = 0; i < tessFactorCount; ++i)
+                Value* pTessFactorOffset = CalcTessFactorOffset(false, pElemIdx, pInsertPos);
+                StoreTessFactorToBuffer(tessFactors, pTessFactorOffset, pInsertPos);
+
+                LLPC_ASSERT(perPatchBuiltInOutLocMap.find(builtInId) != perPatchBuiltInOutLocMap.end());
+                uint32_t loc = perPatchBuiltInOutLocMap[builtInId];
+
+                if (pElemIdx == nullptr)
                 {
-                    std::vector<uint32_t> idxs;
-                    idxs.push_back(i);
+                    // gl_TessLevelInner[2] is treated as vec2
+                    LLPC_ASSERT(pOutputTy->isArrayTy());
 
-                    Value* pElem = ExtractValueInst::Create(pOutput, idxs, "", pInsertPos);
-                    tessFactors.push_back(pElem);
+                    for (uint32_t i = 0; i < pOutputTy->getArrayNumElements(); ++i)
+                    {
+                        std::vector<uint32_t> idxs;
+                        idxs.push_back(i);
+                        auto pElem = ExtractValueInst::Create(pOutput, idxs, "", pInsertPos);
+
+                        auto pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), i);
+                        auto pLdsOffset =
+                            CalcLdsOffsetForTcsOutput(pElem->getType(), loc, nullptr, pElemIdx, pVertexIdx, pInsertPos);
+                        WriteValueToLds(pElem, pLdsOffset, pInsertPos);
+                    }
                 }
-            }
-            else
-            {
-                LLPC_ASSERT(pOutputTy->isFloatTy());
-                tessFactors.push_back(pOutput);
-            }
-
-            Value* pTessFactorOffset = CalcTessFactorOffset(false, pElemIdx, pInsertPos);
-            StoreTessFactorToBuffer(tessFactors, pTessFactorOffset, pInsertPos);
-
-            LLPC_ASSERT(perPatchBuiltInOutLocMap.find(builtInId) != perPatchBuiltInOutLocMap.end());
-            uint32_t loc = perPatchBuiltInOutLocMap[builtInId];
-
-            if (pElemIdx == nullptr)
-            {
-                // gl_TessLevelInner[2] is treated as vec2
-                LLPC_ASSERT(pOutputTy->isArrayTy());
-
-                for (uint32_t i = 0; i < pOutputTy->getArrayNumElements(); ++i)
+                else
                 {
-                    std::vector<uint32_t> idxs;
-                    idxs.push_back(i);
-                    auto pElem = ExtractValueInst::Create(pOutput, idxs, "", pInsertPos);
-
-                    auto pElemIdx = ConstantInt::get(m_pContext->Int32Ty(), i);
-                    auto pLdsOffset =
-                        CalcLdsOffsetForTcsOutput(pElem->getType(), loc, nullptr, pElemIdx, pVertexIdx, pInsertPos);
-                    WriteValueToLds(pElem, pLdsOffset, pInsertPos);
+                    auto pLdsOffset = CalcLdsOffsetForTcsOutput(pOutputTy, loc, nullptr, pElemIdx, nullptr, pInsertPos);
+                    WriteValueToLds(pOutput, pLdsOffset, pInsertPos);
                 }
-            }
-            else
-            {
-                auto pLdsOffset = CalcLdsOffsetForTcsOutput(pOutputTy, loc, nullptr, pElemIdx, nullptr, pInsertPos);
-                WriteValueToLds(pOutput, pLdsOffset, pInsertPos);
+
             }
 
             break;
@@ -3652,8 +3728,11 @@ void PatchInOutImportExport::PatchTesBuiltInOutputExport(
                 return;
             }
 
+            const auto enableMultiView = static_cast<const GraphicsPipelineBuildInfo*>(
+                m_pContext->GetPipelineBuildInfo())->iaState.enableMultiView;
+
             // NOTE: Only last non-fragment shader stage has to export the value of gl_Layer.
-            if (m_hasGs == false)
+            if ((m_hasGs == false) && (enableMultiView == false))
             {
                 if (m_gfxIp.major <= 8)
                 {
@@ -3979,16 +4058,22 @@ void PatchInOutImportExport::PatchCopyShaderBuiltInOutputExport(
         }
     case BuiltInLayer:
         {
-            if (m_gfxIp.major <= 8)
+            const auto enableMultiView = static_cast<const GraphicsPipelineBuildInfo*>(
+                m_pContext->GetPipelineBuildInfo())->iaState.enableMultiView;
+
+            if (enableMultiView == false)
             {
-                AddExportInstForBuiltInOutput(pOutput, builtInId, pInsertPos);
-            }
-            else
-            {
+                if (m_gfxIp.major <= 8)
+                {
+                    AddExportInstForBuiltInOutput(pOutput, builtInId, pInsertPos);
+                }
+                else
+                {
 #ifdef LLPC_BUILD_GFX9
-                // NOTE: The export of gl_Layer is delayed and is done before entry-point returns.
-                m_pLayer = pOutput;
+                    // NOTE: The export of gl_Layer is delayed and is done before entry-point returns.
+                    m_pLayer = pOutput;
 #endif
+                }
             }
 
             break;
@@ -4075,7 +4160,7 @@ void PatchInOutImportExport::StoreValueToEsGsRing(
 
         auto pRingOffset = CalcEsGsRingOffsetForOutput(location, compIdx, pEsGsOffset, pInsertPos);
 
-        if (m_pContext->IsGsOnChip())
+        if (m_pContext->IsGsOnChip() || (m_gfxIp.major >= 9))   // ES -> GS ring is always on-chip on GFX9
         {
             std::vector<Value*> idxs;
             idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
@@ -4147,7 +4232,7 @@ Value* PatchInOutImportExport::LoadValueFromEsGsRing(
     else
     {
         Value* pRingOffset = CalcEsGsRingOffsetForInput(location, compIdx, pVertexIdx, pInsertPos);
-        if (m_pContext->IsGsOnChip())
+        if (m_pContext->IsGsOnChip() || (m_gfxIp.major >= 9))   // ES -> GS ring is always on-chip on GFX9
         {
             std::vector<Value*> idxs;
             idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
@@ -4258,12 +4343,12 @@ Value* PatchInOutImportExport::CalcEsGsRingOffsetForOutput(
     Instruction*    pInsertPos)  // [in] Where to insert the instruction
 {
     Value* pRingOffset = nullptr;
-    if (m_pContext->IsGsOnChip())
+    if (m_pContext->IsGsOnChip() || (m_gfxIp.major >= 9))   // ES -> GS ring is always on-chip on GFX9
     {
         // ringOffset = esGsOffset + threadId * esGsRingItemSize + location * 4 + compIdx
 
         LLPC_ASSERT((m_pContext->GetShaderStageMask() & ShaderStageToMask(ShaderStageGeometry)) != 0);
-        const auto& gsCalcFactor = m_pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs.calcFactor;
+        const auto& calcFactor = m_pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs.calcFactor;
 
         pEsGsOffset = BinaryOperator::CreateExact(Instruction::LShr,
                                                   pEsGsOffset,
@@ -4273,7 +4358,7 @@ Value* PatchInOutImportExport::CalcEsGsRingOffsetForOutput(
 
         pRingOffset = BinaryOperator::CreateMul(m_pThreadId,
                                                 ConstantInt::get(m_pContext->Int32Ty(),
-                                                                 gsCalcFactor.esGsRingItemSize),
+                                                                 calcFactor.esGsRingItemSize),
                                                 "",
                                                 pInsertPos);
 
@@ -4301,7 +4386,7 @@ Value* PatchInOutImportExport::CalcEsGsRingOffsetForInput(
     Instruction*    pInsertPos)  // [in] Where to insert the instruction
 {
     Value* pRingOffset = nullptr;
-    if (m_pContext->IsGsOnChip())
+    if (m_pContext->IsGsOnChip() || (m_gfxIp.major >= 9))   // ES -> GS ring is always on-chip on GFX9
     {
         const auto& inOutUsage = m_pContext->GetShaderResourceUsage(m_shaderStage)->inOutUsage;
         LLPC_ASSERT(inOutUsage.gs.pEsGsOffsets != nullptr);
@@ -4795,10 +4880,14 @@ void PatchInOutImportExport::StoreTessFactorToBuffer(
 
         if (m_pContext->IsTessOffChip())
         {
-            pTfBufferBase = BinaryOperator::CreateAdd(pTfBufferBase,
-                                                       ConstantInt::get(m_pContext->Int32Ty(), 4),
-                                                       "",
-                                                       pInsertPos);
+            if (m_pContext->GetGfxIpVersion().major != 9)
+            {
+                pTfBufferBase = BinaryOperator::CreateAdd(pTfBufferBase,
+                                                          ConstantInt::get(m_pContext->Int32Ty(), 4),
+                                                          "",
+                                                          pInsertPos);
+            }
+
         }
 
         std::vector<Value*> args;
@@ -5197,9 +5286,9 @@ Value* PatchInOutImportExport::CalcLdsOffsetForTesInput(
 // Calculates the patch count for per-thread group.
 uint32_t PatchInOutImportExport::CalcPatchCountPerThreadGroup(
     uint32_t inVertexCount,     // Count of vertices of input patch
-    uint32_t inVertexStride,    // Vertex stride of input patch
+    uint32_t inVertexStride,    // Vertex stride of input patch in (DWORDs)
     uint32_t outVertexCount,    // Count of vertices of output patch
-    uint32_t outVertexStride,   // Vertex stride of output patch
+    uint32_t outVertexStride,   // Vertex stride of output patch in (DWORDs)
     uint32_t patchConstCount    // Count of output patch constants
     ) const
 {
@@ -5211,7 +5300,9 @@ uint32_t PatchInOutImportExport::CalcPatchCountPerThreadGroup(
     const uint32_t patchCountLimitedByThread = maxThreadCountPerThreadGroup / maxThreadCountPerPatch;
 
     const uint32_t inPatchSize = (inVertexCount * inVertexStride);
+    // Hull shader output vertex size in DWORD
     const uint32_t outPatchSize = (outVertexCount * outVertexStride);
+    // Hull shader patch-const vertex size in DWORD
     const uint32_t patchConstSize = patchConstCount * 4;
 
     // Compute the required LDS size per patch, always include the space for VS vertex out
@@ -5229,6 +5320,14 @@ uint32_t PatchInOutImportExport::CalcPatchCountPerThreadGroup(
     const uint32_t optimalPatchCountPerThreadGroup = 16;
 #endif
     patchCountPerThreadGroup = std::min(patchCountPerThreadGroup, optimalPatchCountPerThreadGroup);
+
+    if (m_pContext->IsTessOffChip())
+    {
+        // out patch size in BYTES
+        auto outPatchLdsBufferSize = (outPatchSize + patchConstSize) * 4;
+        auto numPatchForOcLds = m_pContext->GetGpuProperty()->tessOffChipLdsBufferSize / outPatchLdsBufferSize;
+        patchCountPerThreadGroup = std::min(patchCountPerThreadGroup, numPatchForOcLds);
+    }
 
     return patchCountPerThreadGroup;
 }
@@ -5441,6 +5540,10 @@ void PatchInOutImportExport::AddExportInstForBuiltInOutput(
     case BuiltInLayer:
         {
             LLPC_ASSERT(m_gfxIp.major <= 8); // For GFX9, gl_ViewportIndex and gl_Layer are packed
+
+            const auto enableMultiView = static_cast<const GraphicsPipelineBuildInfo*>(
+                m_pContext->GetPipelineBuildInfo())->iaState.enableMultiView;
+
             Value* pLayer = new BitCastInst(pOutput, m_pContext->FloatTy(), "", pInsertPos);
 
             args.clear();
@@ -5464,7 +5567,7 @@ void PatchInOutImportExport::AddExportInstForBuiltInOutput(
                 const auto& nextBuiltInUsage =
                     m_pContext->GetShaderResourceUsage(ShaderStageFragment)->builtInUsage.fs;
 
-                hasLayerExport = nextBuiltInUsage.layer;
+                hasLayerExport = nextBuiltInUsage.layer || nextBuiltInUsage.viewIndex;
             }
 
             if (hasLayerExport)
@@ -5473,14 +5576,21 @@ void PatchInOutImportExport::AddExportInstForBuiltInOutput(
                 if (m_shaderStage == ShaderStageCopyShader)
                 {
                     LLPC_ASSERT(inOutUsage.gs.builtInOutLocs.find(BuiltInLayer) !=
+                                inOutUsage.gs.builtInOutLocs.end() ||
+                                inOutUsage.gs.builtInOutLocs.find(BuiltInViewIndex) !=
                                 inOutUsage.gs.builtInOutLocs.end());
-                    loc = inOutUsage.gs.builtInOutLocs[BuiltInLayer];
+                    loc = enableMultiView ? inOutUsage.gs.builtInOutLocs[BuiltInViewIndex]:
+                        inOutUsage.gs.builtInOutLocs[BuiltInLayer];
                 }
                 else
                 {
                     LLPC_ASSERT(inOutUsage.builtInOutputLocMap.find(BuiltInLayer) !=
+                                inOutUsage.builtInOutputLocMap.end() ||
+                                inOutUsage.builtInOutputLocMap.find(BuiltInViewIndex) !=
                                 inOutUsage.builtInOutputLocMap.end());
-                    loc = inOutUsage.builtInOutputLocMap[BuiltInLayer];
+
+                    loc = enableMultiView ? inOutUsage.builtInOutputLocMap[BuiltInViewIndex] :
+                        inOutUsage.builtInOutputLocMap[BuiltInLayer];
                 }
 
                 args.clear();

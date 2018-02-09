@@ -41,10 +41,11 @@ void main()
         // compute start of destination query result array
         r3.x = gl_GlobalInvocationID.x * queryParam.z;
 
-        // determine if counter is non-zero and produce a 0/1 availability value (note that
-        // we could also just output any non-zero value for available, but we are being "pretty" here)
-        r1.z = r1.x | r1.y;
-        if (r1.z != 0)
+        const uint TimestampNotReadyChunk = 0xFFFFFFFF;
+        // determine if counter is not TimestampNotReady to produce a 0/1 availability value
+        // (note that we could also just output any non-zero value, but we are being "pretty" here)
+        r1.z = r1.x & r1.y; // compare timestamp chunks
+        if (r1.z != TimestampNotReadyChunk) // check if both timestamp chunks are not TimestampNotReadyChunk
         {
             r1.z = 1;  // 64-bit low word
         }
@@ -56,7 +57,7 @@ void main()
             // write counter value only if result is available to first element
             if (r1.z != 0)
             {
-                uav1.data[r3.x / 4] = r1.x;
+                uav1.data[r3.x / 4    ] = r1.x;
                 uav1.data[r3.x / 4 + 1] = r1.y;
             }
 
@@ -64,7 +65,7 @@ void main()
             if (r2.y != 0)
             {
                 r3.y = r3.x + 8;
-                uav1.data[r3.y / 4] = r1.z;
+                uav1.data[r3.y / 4    ] = r1.z;
                 uav1.data[r3.y / 4 + 1] = r1.w;
             }
         }

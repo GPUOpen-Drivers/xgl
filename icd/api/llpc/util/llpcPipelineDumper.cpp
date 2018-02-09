@@ -474,6 +474,7 @@ void PipelineDumper::DumpGraphicsStateInfo(
     dumpFile << "deviceIndex = " << pPipelineInfo->iaState.deviceIndex << "\n";
     dumpFile << "disableVertexReuse = " << pPipelineInfo->iaState.disableVertexReuse << "\n";
     dumpFile << "switchWinding = " << pPipelineInfo->iaState.switchWinding << "\n";
+    dumpFile << "enableMultiView = " << pPipelineInfo->iaState.enableMultiView << "\n";
     dumpFile << "depthClipEnable = " << pPipelineInfo->vpState.depthClipEnable << "\n";
 
     dumpFile << "rasterizerDiscardEnable = " << pPipelineInfo->rsState.rasterizerDiscardEnable << "\n";
@@ -606,6 +607,11 @@ MetroHash::Hash PipelineDumper::GenerateHashForGraphicsPipeline(
     if (pIaState->switchWinding)
     {
         hasher.Update(pIaState->switchWinding);
+    }
+
+    if (pIaState->enableMultiView)
+    {
+        hasher.Update(pIaState->enableMultiView);
     }
 
     auto pVpState = &pPipeline->vpState;

@@ -18,6 +18,113 @@ target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f3
 target triple = "spir64-unknown-unknown"
 
 ; =====================================================================================================================
+; >>>  Common Built-in Variables
+; =====================================================================================================================
+
+; GLSL: in uint gl_SubGroupSize
+define i32 @llpc.input.import.builtin.SubgroupSize(i32 %builtInId) #0
+{
+    ret i32 64
+}
+
+; GLSL: in uint gl_SubGroupInvocation
+define i32 @llpc.input.import.builtin.SubgroupLocalInvocationId(i32 %builtInId) #0
+{
+    %1 = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #1
+    %2 = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %1) #1
+
+    ret i32 %2
+}
+
+; GLSL: in uint64_t gl_SubGroupEqMask
+define i64 @llpc.input.import.builtin.SubgroupEqMaskKHR(i32 %builtInId) #0
+{
+    %1 = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #1
+    %2 = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %1) #1
+
+    %3 = zext i32 %2 to i64
+
+    ; 1 << threadId
+    %4 = shl i64 1, %3
+
+    ret i64 %4
+}
+
+; GLSL: in uint64_t gl_SubGroupGeMask
+define i64 @llpc.input.import.builtin.SubgroupGeMaskKHR(i32 %builtInId) #0
+{
+    %1 = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #1
+    %2 = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %1) #1
+
+    %3 = zext i32 %2 to i64
+
+    ; 0xFFFFFFFF'FFFFFFFF << threadId
+    %4 = shl i64 -1, %3
+
+    ret i64 %4
+}
+
+; GLSL: in uint64_t gl_SubGroupGtMask
+define i64 @llpc.input.import.builtin.SubgroupGtMaskKHR(i32 %builtInId) #0
+{
+    %1 = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #1
+    %2 = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %1) #1
+
+    %3 = zext i32 %2 to i64
+
+    ; 0xFFFFFFFF'FFFFFFFF << threadId
+    %4 = shl i64 -1, %3
+
+    ; 1 << threadId
+    %5 = shl i64 1, %3
+
+    ; (0xFFFFFFFF'FFFFFFFF << threadId) ^ (1 << threadId)
+    %6 = xor i64 %4, %5
+
+    ret i64 %6
+}
+
+; GLSL: in uint64_t gl_SubGroupLeMask
+define i64 @llpc.input.import.builtin.SubgroupLeMaskKHR(i32 %builtInId) #0
+{
+    %1 = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #1
+    %2 = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %1) #1
+
+    %3 = zext i32 %2 to i64
+
+    ; 0xFFFFFFFF'FFFFFFFF << threadId
+    %4 = shl i64 -1, %3
+
+    ; 1 << threadId
+    %5 = shl i64 1, %3
+
+    ; (0xFFFFFFFF'FFFFFFFF << threadId) ^ (1 << threadId)
+    %6 = xor i64 %4, %5
+
+    ; ~((0xFFFFFFFF'FFFFFFFF << threadId) ^ (1 << threadId))
+    %7 = xor i64 %6, -1
+
+    ret i64 %7
+}
+
+; GLSL: in uint64_t gl_SubGroupLtMask
+define i64 @llpc.input.import.builtin.SubgroupLtMaskKHR(i32 %builtInId) #0
+{
+    %1 = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #1
+    %2 = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %1) #1
+
+    %3 = zext i32 %2 to i64
+
+    ; 0xFFFFFFFF'FFFFFFFF << threadId
+    %4 = shl i64 -1, %3
+
+    ; ~(0xFFFFFFFF'FFFFFFFF << threadId)
+    %5 = xor i64 %4, -1
+
+    ret i64 %5
+}
+
+; =====================================================================================================================
 ; >>>  Compute Shader Built-in Variables
 ; =====================================================================================================================
 
@@ -97,5 +204,8 @@ declare i32 @llpc.input.import.builtin.SamplePatternIdx(i32) #0
 declare i32 @llpc.input.import.builtin.SampleId(i32) #0
 declare <8 x i8> @llpc.buffer.load.uniform.v8i8(i32, i32, i32, i32, i1, i1, i1)
 declare <8 x i8> @llpc.buffer.load.v8i8(i32, i32, i32, i32, i1, i1, i1)
+declare i32 @llvm.amdgcn.mbcnt.lo(i32, i32) #1
+declare i32 @llvm.amdgcn.mbcnt.hi(i32, i32) #1
 
 attributes #0 = { nounwind }
+attributes #1 = { nounwind readnone }

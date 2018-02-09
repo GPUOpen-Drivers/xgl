@@ -347,6 +347,34 @@ bool GraphicsContext::CheckGsOnChipValidity()
     auto pEsResUsage = GetShaderResourceUsage(hasTs ? ShaderStageTessEval : ShaderStageVertex);
     auto pGsResUsage = GetShaderResourceUsage(ShaderStageGeometry);
 
+    uint32_t vertsPerPrim = 1;
+    bool     useAdjacency = false;
+    switch (pGsResUsage->builtInUsage.gs.inputPrimitive)
+    {
+    case InputPoints:
+        vertsPerPrim = 1;
+        break;
+    case InputLines:
+        vertsPerPrim = 2;
+        break;
+    case InputLinesAdjacency:
+        useAdjacency = true;
+        vertsPerPrim = 4;
+        break;
+    case InputTriangles:
+        vertsPerPrim = 3;
+        break;
+    case InputTrianglesAdjacency:
+        useAdjacency = true;
+        vertsPerPrim = 6;
+        break;
+    default:
+        LLPC_NEVER_CALLED();
+        break;
+    }
+
+    pGsResUsage->inOutUsage.gs.calcFactor.inputVertices = vertsPerPrim;
+
     if (m_gfxIp.major <= 8)
     {
         uint32_t gsPrimsPerSubgroup = m_pGpuProperty->gsOnChipDefaultPrimsPerSubgroup;
@@ -366,31 +394,6 @@ bool GraphicsContext::CheckGsOnChipValidity()
 
         uint32_t gsVsRingItemSizeOnChipInstanced = gsVsRingItemSizeOnChip * gsInstanceCount;
 
-        uint32_t vertsPerPrim = 1;
-        bool     useAdjacency = false;
-        switch (pGsResUsage->builtInUsage.gs.inputPrimitive)
-        {
-        case InputPoints:
-            vertsPerPrim = 1;
-            break;
-        case InputLines:
-            vertsPerPrim = 2;
-            break;
-        case InputLinesAdjacency:
-            useAdjacency = true;
-            vertsPerPrim = 4;
-            break;
-        case InputTriangles:
-            vertsPerPrim = 3;
-            break;
-        case InputTrianglesAdjacency:
-            useAdjacency = true;
-            vertsPerPrim = 6;
-            break;
-        default:
-            LLPC_NEVER_CALLED();
-            break;
-        }
         uint32_t esMinVertsPerSubgroup = vertsPerPrim;
 
         // If the primitive has adjacency half the number of vertices will be reused in multiple primitives.
@@ -449,8 +452,8 @@ bool GraphicsContext::CheckGsOnChipValidity()
             esMinVertsPerSubgroup = vertsPerPrim;
         }
 
-        // For normal primitives, the VGT only checks if they are past the ES verts per subgroup after allocating a full
-        // GS primitive and if they are, kick off a new subgrp. But if those additional ES vertices are unique
+        // For normal primitives, the VGT only checks if they are past the ES verts per sub-group after allocating a full
+        // GS primitive and if they are, kick off a new sub group. But if those additional ES vertices are unique
         // (e.g. not reused) we need to make sure there is enough LDS space to account for those ES verts beyond
         // ES_VERTS_PER_SUBGRP.
         esVertsPerSubgroup -= (esMinVertsPerSubgroup - 1);
@@ -497,7 +500,105 @@ bool GraphicsContext::CheckGsOnChipValidity()
     }
     else
     {
+#ifdef LLPC_BUILD_GFX9
+        uint32_t gsPrimsPerSubgroup = m_pGpuProperty->gsOnChipDefaultPrimsPerSubgroup;
+
+        // NOTE: Make esGsItemSize odd by "| 1", to optimize ES -> GS ring layout for LDS bank conflicts
+        const uint32_t esGsItemSize     = (4 * std::max(1u, pEsResUsage->inOutUsage.outputMapLocCount)) | 1;
+        const uint32_t gsVsRingItemSize = 4 * std::max(1u,
+                                                       (pGsResUsage->inOutUsage.outputMapLocCount *
+                                                        pGsResUsage->builtInUsage.gs.outputVertices));
+        const uint32_t gsInstanceCount  = pGsResUsage->builtInUsage.gs.invocations;
+        // TODO: Confirm no extra LDS space used in ES and GS
+        const uint32_t esGsExtraLdsDwords  = 0;
+        const uint32_t maxEsVertsPerSubgroup = Gfx9::OnChipGsMaxEsVertsPerSubgroup;
+
+        uint32_t esMinVertsPerSubgroup = vertsPerPrim;
+
+        // If the primitive has adjacency half the number of vertices will be reused in multiple primitives.
+        if (useAdjacency)
+        {
+            esMinVertsPerSubgroup >>= 1;
+        }
+
+        uint32_t maxGsPrimsPerSubgroup = Gfx9::OnChipGsMaxPrimPerSubgroup;
+
+        // There is a hardware requirement for gsPrimsPerSubgroup * gsInstanceCount to be capped by
+        // OnChipGsMaxPrimPerSubgroup for adjacency primitive or when GS instanceing is used.
+        if (useAdjacency || (gsInstanceCount > 1))
+        {
+            maxGsPrimsPerSubgroup = (Gfx9::OnChipGsMaxPrimPerSubgroupAdj / gsInstanceCount);
+        }
+
+        gsPrimsPerSubgroup = std::min(gsPrimsPerSubgroup, maxGsPrimsPerSubgroup);
+
+        uint32_t worstCaseEsVertsPerSubgroup = std::min(esMinVertsPerSubgroup * gsPrimsPerSubgroup,
+                                                        maxEsVertsPerSubgroup);
+
+        uint32_t esGsLdsSize = (esGsItemSize * worstCaseEsVertsPerSubgroup);
+
+        // Total LDS use per subgroup aligned to the register granularity.
+        uint32_t onChipGsLdsSize =
+            RoundUpToMultiple(esGsLdsSize + esGsExtraLdsDwords,
+                              static_cast<uint32_t>(1 << m_pGpuProperty->ldsSizeDwordGranularityShift));
+
+        // Use the client-specified amount of LDS space per sub-group. If they specified zero, they want us to choose a
+        // reasonable default. The final amount must be 128-DWORD aligned.
+        // TODO: Accept DefaultLdsSizePerSubGroup from panel setting
+        uint32_t maxLdsSize = Gfx9::DefaultLdsSizePerSubGroup;
+
+        // If total LDS usage is too big, refactor partitions based on ratio of ESGS item sizes.
+        if (onChipGsLdsSize > maxLdsSize)
+        {
+            // Our target GS Prims Per Subgroup was too large.
+            // Calculate the maximum number of GS Prims per sub-group that will fit into LDS, capped
+            // by the maximum that the hardware can support.
+            uint32_t availableLdsSize   = maxLdsSize - esGsExtraLdsDwords;
+            gsPrimsPerSubgroup          = std::min((availableLdsSize / (esGsItemSize * esMinVertsPerSubgroup)),
+                                                   maxGsPrimsPerSubgroup);
+            worstCaseEsVertsPerSubgroup = std::min(esMinVertsPerSubgroup * gsPrimsPerSubgroup, maxEsVertsPerSubgroup);
+
+            LLPC_ASSERT(gsPrimsPerSubgroup > 0);
+
+            esGsLdsSize     = (esGsItemSize * worstCaseEsVertsPerSubgroup);
+            onChipGsLdsSize =
+                RoundUpToMultiple(esGsLdsSize + esGsExtraLdsDwords,
+                                  1u << static_cast<uint32_t>(1 << m_pGpuProperty->ldsSizeDwordGranularityShift));
+            LLPC_ASSERT(onChipGsLdsSize <= maxLdsSize);
+        }
+
+        // TODO: Check GS -> VS ring on-chip validity
+
+        uint32_t esVertsPerSubgroup = std::min(esGsLdsSize / esGsItemSize, maxEsVertsPerSubgroup);
+
+        LLPC_ASSERT(esVertsPerSubgroup >= esMinVertsPerSubgroup);
+
+        // Vertices for adjacency primitives are not always reused (e.g. in the case of shadow volumes). Acording to
+        // hardware engineers, we must restore esMinVertsPerSubgroup for ES_VERTS_PER_SUBGRP.
+        if (useAdjacency)
+        {
+            esMinVertsPerSubgroup = vertsPerPrim;
+        }
+
+        // For normal primitives, the VGT only checks if they are past the ES verts per sub group after allocating
+        // a full GS primitive and if they are, kick off a new sub group.  But if those additional ES verts are
+        // unique (e.g. not reused) we need to make sure there is enough LDS space to account for those ES verts
+        // beyond ES_VERTS_PER_SUBGRP.
+        esVertsPerSubgroup -= (esMinVertsPerSubgroup - 1);
+
+        pGsResUsage->inOutUsage.gs.calcFactor.esVertsPerSubgroup   = esVertsPerSubgroup;
+        pGsResUsage->inOutUsage.gs.calcFactor.gsPrimsPerSubgroup   = gsPrimsPerSubgroup;
+        pGsResUsage->inOutUsage.gs.calcFactor.esGsLdsSize          = esGsLdsSize;
+        pGsResUsage->inOutUsage.gs.calcFactor.gsOnChipLdsSize      = onChipGsLdsSize;
+
+        pGsResUsage->inOutUsage.gs.calcFactor.esGsRingItemSize     = esGsItemSize;
+        pGsResUsage->inOutUsage.gs.calcFactor.gsVsRingItemSize     = gsVsRingItemSize;
+
+        // TODO: GFX9 GS -> VS ring on chip is not supported yet
+        gsOnChip = false;
+#else
         LLPC_NOT_IMPLEMENTED();
+#endif
     }
 
     return gsOnChip;

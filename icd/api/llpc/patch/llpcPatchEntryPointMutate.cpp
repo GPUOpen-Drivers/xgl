@@ -65,6 +65,12 @@ static opt<std::string> WavesPerEu("waves-per-eu",
                                    value_desc("minVal,maxVal"),
                                    init(""));
 
+// -inreg-esgs-lds-size: Add a dummy "inreg" argument for ES-GS LDS size, this is to keep consistent with PAL's
+// GS on-chip behavior. In the future, if PAL allows hardcoded ES-GS LDS size, this option could be deprecated.
+opt<bool> InRegEsGsLdsSize("inreg-esgs-lds-size",
+                          desc("For GS on-chip, add esGsLdsSize in user data"),
+                          init(true));
+
 } // cl
 
 } // llvm
@@ -690,14 +696,7 @@ bool PatchEntryPointMutate::runOnModule(
         pEntryPoint->addFnAttr("amdgpu-git-ptr-high", Twine(m_pContext->GetDescriptorTablePtrHigh()).str());
     }
 
-    DEBUG(dbgs() << "After the pass Patch-Entry-Point-Mutate: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }
@@ -901,6 +900,8 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
             }
         }
     }
+    const auto enableMultiView = (static_cast<const GraphicsPipelineBuildInfo*>(
+                            m_pContext->GetPipelineBuildInfo()))->iaState.enableMultiView;
 
     switch (m_shaderStage)
     {
@@ -921,11 +922,38 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
             {
                 availUserDataCount -= 1;
             }
+            if (enableMultiView)
+            {
+                availUserDataCount -= 1;
+            }
             break;
         }
     case ShaderStageTessControl:
+        {
+            break;
+        }
     case ShaderStageTessEval:
+        {
+            if (enableMultiView)
+            {
+                availUserDataCount -= 1;
+            }
+            break;
+        }
     case ShaderStageGeometry:
+        {
+            if (enableMultiView)
+            {
+                availUserDataCount -= 1;
+            }
+            if (m_pContext->IsGsOnChip() && cl::InRegEsGsLdsSize)
+            {
+                // NOTE: Add a dummy "inreg" argument for ES-GS LDS size, this is to keep consistent
+                // with PAL's GS on-chip behavior.
+                availUserDataCount -= 1;
+            }
+            break;
+        }
     case ShaderStageFragment:
         {
             // Do nothing
@@ -1108,14 +1136,50 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
                 pIntfData->userDataUsage.vs.drawIndex = userDataIdx;
                 ++userDataIdx;
             }
+
+            if (enableMultiView)
+            {
+                argTys.push_back(m_pContext->Int32Ty()); // View Index
+                entryArgIdxs.vs.viewIndex = argIdx;
+                *pInRegMask |= (1ull << (argIdx++));
+                pIntfData->userDataUsage.vs.viewIndex = userDataIdx;
+                ++userDataIdx;
+            }
             break;
         }
     case ShaderStageTessControl:
+        break;
     case ShaderStageTessEval:
-    case ShaderStageGeometry:
-    case ShaderStageFragment:
         {
-            // Do nothing
+            if (enableMultiView)
+            {
+                argTys.push_back(m_pContext->Int32Ty()); // View Index
+                entryArgIdxs.tes.viewIndex = argIdx;
+                *pInRegMask |= (1ull << (argIdx++));
+                pIntfData->userDataUsage.tes.viewIndex = userDataIdx;
+                ++userDataIdx;
+            }
+            break;
+        }
+    case ShaderStageGeometry:
+        {
+            if (m_pContext->IsGsOnChip() && cl::InRegEsGsLdsSize)
+            {
+                // NOTE: Add a dummy "inreg" argument for ES-GS LDS size, this is to keep consistent
+                // with PAL's GS on-chip behavior.
+                argTys.push_back(m_pContext->Int32Ty());
+                *pInRegMask |= (1ull << (argIdx++));
+                pIntfData->userDataUsage.gs.esGsLdsSize = userDataIdx;
+                ++userDataIdx;
+            }
+            if (enableMultiView)
+            {
+                argTys.push_back(m_pContext->Int32Ty()); // View Index
+                entryArgIdxs.gs.viewIndex = argIdx;
+                *pInRegMask |= (1ull << (argIdx++));
+                pIntfData->userDataUsage.gs.viewIndex = userDataIdx;
+                ++userDataIdx;
+            }
             break;
         }
     case ShaderStageCompute:
@@ -1139,6 +1203,11 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
                 *pInRegMask |= (1ull << (argIdx++));
                 userDataIdx += 2;
             }
+            break;
+        }
+    case ShaderStageFragment:
+        {
+            // Do nothing
             break;
         }
     default:

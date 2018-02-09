@@ -70,14 +70,7 @@ bool SpirvLowerAccessChain::runOnModule(
     // Invoke handling of "getelementptr" instruction
     visit(m_pModule);
 
-    DEBUG(dbgs() << "After the pass Spirv-Lower-Access-Chain: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }

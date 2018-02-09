@@ -114,170 +114,204 @@ struct ResourceUsage
     bool                       perShaderTable;        // Whether per shader stage table is used
 
     // Usage of built-ins
-    union
+    struct
     {
-        // Vertex shader
-        struct
+        // Per-stage built-in usage
+        union
         {
-            // Input
-            uint32_t vertexIndex          : 1;      // Whether gl_VertexIndex is used
-            uint32_t instanceIndex        : 1;      // Whether gl_InstanceIndex is used
-            uint32_t baseVertex           : 1;      // Whether gl_BaseVertex is used
-            uint32_t baseInstance         : 1;      // Whether gl_BaseInstance is used
-            uint32_t drawIndex            : 1;      // Whether gl_DrawID is used
-            uint32_t primitiveId          : 1;      // Whether an implicit gl_PrimitiveID is required
-            // Output
-            uint32_t pointSize            : 1;      // Whether gl_PointSize is used
-            uint32_t position             : 1;      // Whether gl_Position is used
-            uint32_t clipDistance         : 4;      // Array size of gl_ClipDistance[] (0 means unused)
-            uint32_t cullDistance         : 4;      // Array size of gl_CullDistance[] (0 means unused)
-            uint32_t viewportIndex        : 1;      // Whether gl_ViewportIndex is used
-            uint32_t layer                : 1;      // Whether gl_Layer is used
+            // Vertex shader
+            struct
+            {
+                // Input
+                uint32_t vertexIndex          : 1;      // Whether gl_VertexIndex is used
+                uint32_t instanceIndex        : 1;      // Whether gl_InstanceIndex is used
+                uint32_t baseVertex           : 1;      // Whether gl_BaseVertex is used
+                uint32_t baseInstance         : 1;      // Whether gl_BaseInstance is used
+                uint32_t drawIndex            : 1;      // Whether gl_DrawID is used
+                uint32_t primitiveId          : 1;      // Whether an implicit gl_PrimitiveID is required
+                uint32_t viewIndex            : 1;      // Whether gl_ViewIndex is used
+                // Output
+                uint32_t pointSize            : 1;      // Whether gl_PointSize is used
+                uint32_t position             : 1;      // Whether gl_Position is used
+                uint32_t clipDistance         : 4;      // Array size of gl_ClipDistance[] (0 means unused)
+                uint32_t cullDistance         : 4;      // Array size of gl_CullDistance[] (0 means unused)
+                uint32_t viewportIndex        : 1;      // Whether gl_ViewportIndex is used
+                uint32_t layer                : 1;      // Whether gl_Layer is used
 
-            uint64_t unused               : 46;
-        } vs;
+                uint64_t unused               : 45;
+            } vs;
 
-        // Tessellation control shader
-        struct
+            // Tessellation control shader
+            struct
+            {
+                // Input
+                uint32_t pointSizeIn          : 1;      // Whether gl_in[].gl_PointSize is used
+                uint32_t positionIn           : 1;      // Whether gl_in[].gl_Position is used
+                uint32_t clipDistanceIn       : 4;      // Array size of gl_in[].gl_ClipDistance[] (0 means unused)
+                uint32_t cullDistanceIn       : 4;      // Array size of gl_in[].gl_CullDistance[] (0 means unused)
+                uint32_t patchVertices        : 1;      // Whether gl_PatchVerticesIn is used
+                uint32_t primitiveId          : 1;      // Whether gl_PrimitiveID is used
+                uint32_t invocationId         : 1;      // Whether gl_InvocationID is used
+                // Output
+                uint32_t pointSize            : 1;      // Whether gl_out[].gl_PointSize is used
+                uint32_t position             : 1;      // Whether gl_out[].gl_Position is used
+                uint32_t clipDistance         : 4;      // Array size of gl_out[].gl_ClipDistance[] (0 means unused)
+                uint32_t cullDistance         : 4;      // Array size of gl_out[].gl_CullDistance[] (0 means unused)
+                uint32_t tessLevelOuter       : 1;      // Whether gl_TessLevelOuter[] is used
+                uint32_t tessLevelInner       : 1;      // Whether gl_TessLevelInner[] is used
+                // Execution mode (shared with tessellation evaluation shader)
+                uint32_t vertexSpacing        : 2;      // Vertex spacing
+                uint32_t vertexOrder          : 2;      // Vertex ordering
+                uint32_t primitiveMode        : 2;      // Tesselllation primitive mode
+                uint32_t pointMode            : 1;      // Whether point mode is specified
+                uint32_t outputVertices       : 6;      // Number of produced vertices in the output patch
+
+                uint64_t unused               : 26;
+            } tcs;
+
+            // Tessellation evaluation shader
+            struct
+            {
+                // Input
+                uint32_t pointSizeIn          : 1;      // Whether gl_in[].gl_PointSize is used
+                uint32_t positionIn           : 1;      // Whether gl_in[].gl_Position is used
+                uint32_t clipDistanceIn       : 4;      // Array size of gl_in[].gl_ClipDistance[] (0 means unused)
+                uint32_t cullDistanceIn       : 4;      // Array size of gl_in[].gl_CullDistance[] (0 means unused)
+                uint32_t patchVertices        : 1;      // Whether gl_PatchVerticesIn is used
+                uint32_t primitiveId          : 1;      // Whether gl_PrimitiveID is used
+                uint32_t tessCoord            : 1;      // Whether gl_TessCoord is used
+                uint32_t tessLevelOuter       : 1;      // Whether gl_TessLevelOuter[] is used
+                uint32_t tessLevelInner       : 1;      // Whether gl_TessLevelInner[] is used
+                uint32_t viewIndex            : 1;      // Whether gl_ViewIndex is used
+                // Output
+                uint32_t pointSize            : 1;      // Whether gl_PointSize is used
+                uint32_t position             : 1;      // Whether gl_Position is used
+                uint32_t clipDistance         : 4;      // Array size gl_ClipDistance[] (0 means unused)
+                uint32_t cullDistance         : 4;      // Array size gl_CullDistance[] (0 means unused)
+                uint32_t viewportIndex        : 1;      // Whether gl_ViewportIndex is used
+                uint32_t layer                : 1;      // Whether gl_Layer is used
+                // Execution mode (shared with tessellation control shader)
+                uint32_t vertexSpacing        : 2;      // Vertex spacing
+                uint32_t vertexOrder          : 2;      // Vertex ordering
+                uint32_t primitiveMode        : 2;      // Tesselllation primitive mode
+                uint32_t pointMode            : 1;      // Whether point mode is specified
+                uint32_t outputVertices       : 6;      // Number of produced vertices in the output patch
+
+                uint64_t unused               : 23;
+            } tes;
+
+            // Geometry shader
+            struct
+            {
+                // Input
+                uint32_t pointSizeIn          : 1;      // Whether gl_in[].gl_PointSize is used
+                uint32_t positionIn           : 1;      // Whether gl_in[].gl_Position is used
+                uint32_t clipDistanceIn       : 4;      // Array size of gl_in[].gl_ClipDistance[] (0 means unused)
+                uint32_t cullDistanceIn       : 4;      // Array size of gl_in[].gl_CullDistance[] (0 means unused)
+                uint32_t primitiveIdIn        : 1;      // Whether gl_PrimitiveIDIn is used
+                uint32_t invocationId         : 1;      // Whether gl_InvocationID is used
+                uint32_t viewIndex            : 1;      // Whether gl_ViewIndex is used
+                // Output
+                uint32_t pointSize            : 1;      // Whether gl_PointSize is used
+                uint32_t position             : 1;      // Whether gl_Position is used
+                uint32_t clipDistance         : 4;      // Array size gl_ClipDistance[] (0 means unused)
+                uint32_t cullDistance         : 4;      // Array size gl_CullDistance[] (0 means unused)
+                uint32_t primitiveId          : 1;      // Whether gl_PrimitiveID is used
+                uint32_t viewportIndex        : 1;      // Whether gl_ViewportIndex is used
+                uint32_t layer                : 1;      // Whether gl_Layer is used
+                // Execution mode
+                uint32_t inputPrimitive       : 3;      // Type of input primitive
+                uint32_t outputPrimitive      : 2;      // Type of output primitive
+                uint32_t invocations          : 7;      // Number of times to invoke shader for each input primitive
+                uint32_t outputVertices       : 11;     // Max number of vertices the shader will emit (one invocation)
+
+                uint64_t unused               : 15;
+            } gs;
+
+            // Fragment shader
+            struct
+            {
+                // Interpolation
+                uint32_t smooth               : 1;      // Whether "smooth" qualifier is used
+                uint32_t noperspective        : 1;      // Whether "noperspective" qualifier is used
+                uint32_t flat                 : 1;      // Whether "flat" qualifier is used
+                uint32_t centroid             : 1;      // Whether "centroid" qualifier is used
+                uint32_t sample               : 1;      // Whether "sample" qualifier is used
+                uint32_t center               : 1;      // Whether location qualifiers are not used (default: "center")
+                uint32_t pullMode             : 1;      // Whether pull mode interpolation is used
+                uint32_t custom               : 1;      // Whether custom interpolation is used
+                // Input
+                uint32_t fragCoord            : 1;      // Whether gl_FragCoord is used
+                uint32_t frontFacing          : 1;      // Whether gl_FrontFacing is used
+                uint32_t clipDistance         : 4;      // Array size of gl_ClipDistance[] (0 means unused)
+                uint32_t cullDistance         : 4;      // Array size of gl_CullDistance[] (0 means unused)
+                uint32_t pointCoord           : 1;      // Whether gl_PointCoord is used
+                uint32_t primitiveId          : 1;      // Whether gl_PrimitiveID is used
+                uint32_t sampleId             : 1;      // Whether gl_SampleID is used
+                uint32_t samplePosition       : 1;      // Whether gl_SamplePosition is used
+                uint32_t sampleMaskIn         : 1;      // Whether gl_SampleMaskIn[] is used
+                uint32_t layer                : 1;      // Whether gl_Layer is used
+                uint32_t viewportIndex        : 1;      // Whether gl_ViewportIndex is used
+                uint32_t helperInvocation     : 1;      // Whether gl_HelperInvocation is used
+                uint32_t viewIndex            : 1;      // Whether gl_ViewIndex is used
+                // Output
+                uint32_t fragDepth            : 1;      // Whether gl_FragDepth is used
+                uint32_t sampleMask           : 1;      // Whether gl_SampleMask[] is used
+                uint32_t fragStencilRef       : 1;      // Whether gl_FragStencilRef is used
+                // Execution mode
+                uint32_t originUpperLeft      : 1;      // Whether "origin_upper_left" qualifier is used
+                uint32_t pixelCenterInteger   : 1;      // Whether "pixel_center_integer" qualifier is used
+                uint32_t earlyFragmentTests   : 1;      // Whether "early_fragment_tests" qualifier is used
+                uint32_t depthMode            : 2;      // Mode of gl_FragDepth
+                // Statements
+                uint32_t discard              : 1;      // Whether "discard" statement is used
+                uint32_t runAtSampleRate      : 1;      // Whether fragment shader run at sample rate
+
+                uint64_t unused               : 27;
+            } fs;
+
+            // Compute shader
+            struct
+            {
+                // Input
+                uint32_t numWorkgroups        : 1;      // Whether gl_NumWorkGroups is used
+                uint32_t localInvocationId    : 1;      // Whether gl_LocalInvocationID is used
+                uint32_t workgroupId          : 1;      // Whether gl_WorkGroupID is used
+                // Execution mode
+                uint32_t workgroupSizeX       : 16;     // X value of gl_WorkGroupSize
+                uint32_t workgroupSizeY       : 16;     // Y value of gl_WorkGroupSize
+                uint32_t workgroupSizeZ       : 16;     // Z value of gl_WorkGroupSize
+
+                uint64_t unused               : 45;
+            } cs;
+
+            struct
+            {
+                uint64_t u64All;
+            } perStage;
+        };
+
+        // Common built-in usage
+        union
         {
-            // Input
-            uint32_t pointSizeIn          : 1;      // Whether gl_in[].gl_PointSize is used
-            uint32_t positionIn           : 1;      // Whether gl_in[].gl_Position is used
-            uint32_t clipDistanceIn       : 4;      // Array size of gl_in[].gl_ClipDistance[] (0 means unused)
-            uint32_t cullDistanceIn       : 4;      // Array size of gl_in[].gl_CullDistance[] (0 means unused)
-            uint32_t patchVertices        : 1;      // Whether gl_PatchVerticesIn is used
-            uint32_t primitiveId          : 1;      // Whether gl_PrimitiveID is used
-            uint32_t invocationId         : 1;      // Whether gl_InvocationID is used
-            // Output
-            uint32_t pointSize            : 1;      // Whether gl_out[].gl_PointSize is used
-            uint32_t position             : 1;      // Whether gl_out[].gl_Position is used
-            uint32_t clipDistance         : 4;      // Array size of gl_out[].gl_ClipDistance[] (0 means unused)
-            uint32_t cullDistance         : 4;      // Array size of gl_out[].gl_CullDistance[] (0 means unused)
-            uint32_t tessLevelOuter       : 1;      // Whether gl_TessLevelOuter[] is used
-            uint32_t tessLevelInner       : 1;      // Whether gl_TessLevelInner[] is used
-            // Execution mode (shared with tessellation evaluation shader)
-            uint32_t vertexSpacing        : 2;      // Vertex spacing
-            uint32_t vertexOrder          : 2;      // Vertex ordering
-            uint32_t primitiveMode        : 2;      // Tesselllation primitive mode
-            uint32_t pointMode            : 1;      // Whether point mode is specified
-            uint32_t outputVertices       : 6;      // Number of produced vertices in the output patch
+            struct
+            {
+                uint32_t subgroupSize         : 1;      // Whether gl_SubGroupSize is used
+                uint32_t subgroupLocalInvocationId : 1; // Whether gl_SubGroupInvocation is used
+                uint32_t subgroupEqMask       : 1;      // Whether gl_SubGroupEqMask is used
+                uint32_t subgroupGeMask       : 1;      // Whether gl_SubGroupGeMask is used
+                uint32_t subgroupGtMask       : 1;      // Whether gl_SubGroupGtMask is used
+                uint32_t subgroupLeMask       : 1;      // Whether gl_SubGroupLeMask is used
+                uint32_t subgroupLtMask       : 1;      // Whether gl_SubGroupLtMask is used
 
-            uint64_t unused               : 26;
-        } tcs;
+                uint64_t unused               : 57;
+            } common;
 
-        // Tessellation evaluation shader
-        struct
-        {
-            // Input
-            uint32_t pointSizeIn          : 1;      // Whether gl_in[].gl_PointSize is used
-            uint32_t positionIn           : 1;      // Whether gl_in[].gl_Position is used
-            uint32_t clipDistanceIn       : 4;      // Array size of gl_in[].gl_ClipDistance[] (0 means unused)
-            uint32_t cullDistanceIn       : 4;      // Array size of gl_in[].gl_CullDistance[] (0 means unused)
-            uint32_t patchVertices        : 1;      // Whether gl_PatchVerticesIn is used
-            uint32_t primitiveId          : 1;      // Whether gl_PrimitiveID is used
-            uint32_t tessCoord            : 1;      // Whether gl_TessCoord is used
-            uint32_t tessLevelOuter       : 1;      // Whether gl_TessLevelOuter[] is used
-            uint32_t tessLevelInner       : 1;      // Whether gl_TessLevelInner[] is used
-            // Output
-            uint32_t pointSize            : 1;      // Whether gl_PointSize is used
-            uint32_t position             : 1;      // Whether gl_Position is used
-            uint32_t clipDistance         : 4;      // Array size gl_ClipDistance[] (0 means unused)
-            uint32_t cullDistance         : 4;      // Array size gl_CullDistance[] (0 means unused)
-            uint32_t viewportIndex        : 1;      // Whether gl_ViewportIndex is used
-            uint32_t layer                : 1;      // Whether gl_Layer is used
-            // Execution mode (shared with tessellation control shader)
-            uint32_t vertexSpacing        : 2;      // Vertex spacing
-            uint32_t vertexOrder          : 2;      // Vertex ordering
-            uint32_t primitiveMode        : 2;      // Tesselllation primitive mode
-            uint32_t pointMode            : 1;      // Whether point mode is specified
-            uint32_t outputVertices       : 6;      // Number of produced vertices in the output patch
-
-            uint64_t unused               : 24;
-        } tes;
-
-        // Geometry shader
-        struct
-        {
-            // Input
-            uint32_t pointSizeIn          : 1;      // Whether gl_in[].gl_PointSize is used
-            uint32_t positionIn           : 1;      // Whether gl_in[].gl_Position is used
-            uint32_t clipDistanceIn       : 4;      // Array size of gl_in[].gl_ClipDistance[] (0 means unused)
-            uint32_t cullDistanceIn       : 4;      // Array size of gl_in[].gl_CullDistance[] (0 means unused)
-            uint32_t primitiveIdIn        : 1;      // Whether gl_PrimitiveIDIn is used
-            uint32_t invocationId         : 1;      // Whether gl_InvocationID is used
-            // Output
-            uint32_t pointSize            : 1;      // Whether gl_PointSize is used
-            uint32_t position             : 1;      // Whether gl_Position is used
-            uint32_t clipDistance         : 4;      // Array size gl_ClipDistance[] (0 means unused)
-            uint32_t cullDistance         : 4;      // Array size gl_CullDistance[] (0 means unused)
-            uint32_t primitiveId          : 1;      // Whether gl_PrimitiveID is used
-            uint32_t viewportIndex        : 1;      // Whether gl_ViewportIndex is used
-            uint32_t layer                : 1;      // Whether gl_Layer is used
-            // Execution mode
-            uint32_t inputPrimitive       : 3;      // Type of input primitive
-            uint32_t outputPrimitive      : 2;      // Type of output primitive
-            uint32_t invocations          : 7;      // Number of times to invoke the shader for each input primitive
-            uint32_t outputVertices       : 11;     // Maximum number of vertices the shader will emit (one invocation)
-
-            uint64_t unused               : 16;
-        } gs;
-
-        // Fragment shader
-        struct
-        {
-            // Interpolation
-            uint32_t smooth               : 1;      // Whether "smooth" qualifier is used
-            uint32_t noperspective        : 1;      // Whether "noperspective" qualifier is used
-            uint32_t flat                 : 1;      // Whether "flat" qualifier is used
-            uint32_t centroid             : 1;      // Whether "centroid" qualifier is used
-            uint32_t sample               : 1;      // Whether "sample" qualifier is used
-            uint32_t center               : 1;      // Whether location qualifiers are not used (default is "center")
-            uint32_t pullMode             : 1;      // Whether pull mode interpolation is used
-            uint32_t custom               : 1;      // Whether custom interpolation is used
-            // Input
-            uint32_t fragCoord            : 1;      // Whether gl_FragCoord is used
-            uint32_t frontFacing          : 1;      // Whether gl_FrontFacing is used
-            uint32_t clipDistance         : 4;      // Array size of gl_ClipDistance[] (0 means unused)
-            uint32_t cullDistance         : 4;      // Array size of gl_CullDistance[] (0 means unused)
-            uint32_t pointCoord           : 1;      // Whether gl_PointCoord is used
-            uint32_t primitiveId          : 1;      // Whether gl_PrimitiveID is used
-            uint32_t sampleId             : 1;      // Whether gl_SampleID is used
-            uint32_t samplePosition       : 1;      // Whether gl_SamplePosition is used
-            uint32_t sampleMaskIn         : 1;      // Whether gl_SampleMaskIn[] is used
-            uint32_t layer                : 1;      // Whether gl_Layer is used
-            uint32_t viewportIndex        : 1;      // Whether gl_ViewportIndex is used
-            uint32_t helperInvocation     : 1;      // Whether gl_HelperInvocation is used
-            // Output
-            uint32_t fragDepth            : 1;      // Whether gl_FragDepth is used
-            uint32_t sampleMask           : 1;      // Whether gl_SampleMask[] is used
-            uint32_t fragStencilRef       : 1;      // Whether gl_FragStencilRef is used
-            // Execution mode
-            uint32_t originUpperLeft      : 1;      // Whether "origin_upper_left" qualifier is used
-            uint32_t pixelCenterInteger   : 1;      // Whether "pixel_center_integer" qualifier is used
-            uint32_t earlyFragmentTests   : 1;      // Whether "early_fragment_tests" qualifier is used
-            uint32_t depthMode            : 2;      // Mode of gl_FragDepth
-            // Statements
-            uint32_t discard              : 1;      // Whether "discard" statement is used
-            uint32_t runAtSampleRate      : 1;      // Whether fragment shader run at sample rate
-
-            uint64_t unused               : 28;
-        } fs;
-
-        // Compute shader
-        struct
-        {
-            uint32_t numWorkgroups        : 1;     // Whether gl_NumWorkGroups is used
-            uint32_t localInvocationId    : 1;     // Whether gl_LocalInvocationID is used
-            uint32_t workgroupId          : 1;     // Whether gl_WorkGroupID is used
-            // Execution mode
-            uint32_t workgroupSizeX       : 16;    // X value of gl_WorkGroupSize
-            uint32_t workgroupSizeY       : 16;    // Y value of gl_WorkGroupSize
-            uint32_t workgroupSizeZ       : 16;    // Z value of gl_WorkGroupSize
-
-            uint32_t unused               : 13;
-        } cs;
-
-        uint64_t u64All;
+            struct
+            {
+                uint64_t u64All;
+            } allStage;
+        };
 
     } builtInUsage;
 
@@ -388,6 +422,7 @@ struct ResourceUsage
                 uint32_t gsPrimsPerSubgroup;        // Number of prims GS exports.
                 uint32_t esGsLdsSize;               // ES -> GS ring LDS size (GS in)
                 uint32_t gsOnChipLdsSize;           // Total LDS size for GS on-chip mode.
+                uint32_t inputVertices;             // Number of GS input vertices
             } calcFactor;
         } gs;
 
@@ -452,7 +487,20 @@ struct InterfaceData
                 uint32_t baseInstance;              // Base instance
                 uint32_t drawIndex;                 // Draw index
                 uint32_t vbTablePtr;                // Pointer of vertex buffer table
+                uint32_t viewIndex;                 // View Index
             } vs;
+
+            struct
+            {
+                uint32_t viewIndex;                 // View Index
+            } tes;
+
+            // Geometry shader
+            struct
+            {
+                uint32_t esGsLdsSize;               // ES -> GS ring LDS size for GS on-chip mode
+                uint32_t viewIndex;                 // View Index
+            } gs;
 
             // Compute shader
             struct
@@ -480,6 +528,7 @@ struct InterfaceData
                 uint32_t instanceId;                // Instance ID
                 uint32_t drawIndex;                 // Draw index
                 uint32_t primitiveId;               // Primitive ID
+                uint32_t viewIndex;                 // View Index
                 uint32_t vbTablePtr;                // Pointer of vertex buffer table
                 uint32_t esGsOffset;                // ES-GS ring buffer offset
             } vs;
@@ -502,16 +551,18 @@ struct InterfaceData
                 uint32_t patchId;             // Patch ID
                 uint32_t esGsOffset;          // ES-GS ring buffer offset
                 uint32_t offChipLdsBase;      // Base offset of off-chip LDS buffer
+                uint32_t viewIndex;           // View Index
             } tes;
 
             // Geometry shader
             struct
             {
-                uint32_t gsVsOffset;
-                uint32_t waveId;
-                uint32_t esGsOffsets[MaxEsGsOffsetCount];
-                uint32_t primitiveId;
-                uint32_t invocationId;
+                uint32_t gsVsOffset;                        // GS -> VS ring offset
+                uint32_t waveId;                            // GS wave ID
+                uint32_t esGsOffsets[MaxEsGsOffsetCount];   // ES -> GS ring offset
+                uint32_t primitiveId;                       // Primitive ID
+                uint32_t invocationId;                      // Invocation ID
+                uint32_t viewIndex;                         // View Index
             } gs;
 
             // Fragment shader

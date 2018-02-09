@@ -152,7 +152,6 @@ void PsRegConfig::Init()
     INIT_REG(PS_SCRATCH_SIZE);
     INIT_REG(PS_NUM_USED_VGPRS);
     INIT_REG(PS_NUM_USED_SGPRS);
-    INIT_REG(PS_RUNS_AT_SAMPLE_RATE);
 }
 
 // =====================================================================================================================
@@ -556,7 +555,6 @@ void InitRegisterNameMap(
     ADD_REG_MAP(PS_SCRATCH_SIZE);
     ADD_REG_MAP(PS_NUM_USED_VGPRS);
     ADD_REG_MAP(PS_NUM_USED_SGPRS);
-    ADD_REG_MAP(PS_RUNS_AT_SAMPLE_RATE);
 
     ADD_REG_MAP(CS_SCRATCH_SIZE);
     ADD_REG_MAP(CS_NUM_USED_VGPRS);

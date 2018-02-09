@@ -90,6 +90,12 @@ public:
         return m_pPalPipeline[idx];
     }
 
+    uint64_t PalPipelineHash(int32_t idx = DefaultDeviceIndex) const
+    {
+        VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
+        return m_palPipelineHash[idx];
+    }
+
     VK_INLINE const PipelineBinaryInfo* GetBinary() const
         { return m_pBinary; }
 
@@ -112,6 +118,7 @@ protected:
     Device* const                   m_pDevice;
     const PipelineLayout* const     m_pLayout;
     Pal::IPipeline*                 m_pPalPipeline[MaxPalDevices];
+    uint64_t                        m_palPipelineHash[MaxPalDevices];
 
 private:
     PipelineBinaryInfo* const       m_pBinary;

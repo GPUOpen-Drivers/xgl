@@ -346,5 +346,5 @@ if(UNIX)
 endif()
 
 target_link_libraries(amdllpc PRIVATE llpc dl stdc++)
-llvm_map_components_to_libnames(llvm_libs amdgpucodegen amdgpuinfo amdgpuasmparser amdgpudisassembler LTO ipo analysis bitreader bitwriter codegen irreader linker mc passes support target transformutils coroutines)
+        llvm_map_components_to_libnames(llvm_libs amdgpucodegen amdgpuinfo amdgpuasmparser amdgpudisassembler LTO ipo analysis bitreader bitwriter codegen irreader linker mc passes support target transformutils coroutines)
 target_link_libraries(amdllpc PRIVATE ${llvm_libs})

@@ -2296,6 +2296,12 @@ _SPIRV_OP(EmitVertex, false, 1, false)
 _SPIRV_OP(EndPrimitive, false, 1, false)
 _SPIRV_OP(EmitStreamVertex, false, 2, false)
 _SPIRV_OP(EndStreamPrimitive, false, 2, false)
+_SPIRV_OP(SubgroupBallotKHR, true, 4, false)
+_SPIRV_OP(SubgroupFirstInvocationKHR, true, 4, false)
+_SPIRV_OP(SubgroupReadInvocationKHR, true, 5, false)
+_SPIRV_OP(SubgroupAllKHR, true, 4, false)
+_SPIRV_OP(SubgroupAnyKHR, true, 4, false)
+_SPIRV_OP(SubgroupAllEqualKHR, true, 4, false)
 #undef _SPIRV_OP
 
 SPIRVSpecConstantOp *createSpecConstantOpInst(SPIRVInstruction *Inst);

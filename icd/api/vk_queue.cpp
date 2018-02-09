@@ -894,8 +894,16 @@ VkResult Queue::BindSparseEntry(
             // Calculate subresource row and depth pitch in tiles
             // In Gfx9, the tiles within same mip level may not continuous thus we have to take
             // the mipChainPitch into account when calculate the offset of next tile.
-            // for pre-gfx9, the blockSize.depth for none 3d resources are 0.
-            uint32_t depth = subResLayout.blockSize.depth ? subResLayout.blockSize.depth : 1;
+
+            // If no blockSize.depth is reported, our prtTileDepth better match the reported tileSize.depth for the
+            // mapping of block depth to HW tile thickness to match.  If it can't for some reason, additional block
+            // dimensions can be exposed and then the matching imageGranularity can be returned for the image via
+            // vkGetImageSparseMemoryRequirements so that they do match.
+            const Pal::ImageMemoryLayout& memoryLayout = image.PalImage(DefaultDeviceIndex)->GetMemoryLayout();
+
+            VK_ASSERT((subResLayout.blockSize.depth != 0) || (tileSize.depth == memoryLayout.prtTileDepth));
+
+            uint32_t depth = subResLayout.blockSize.depth ? subResLayout.blockSize.depth : memoryLayout.prtTileDepth;
             VkDeviceSize prtTileRowPitch   = subResLayout.rowPitch * subResLayout.blockSize.height * depth;
 
             VkDeviceSize prtTileDepthPitch = prtTileRowPitch * subresExtentInTiles.height;

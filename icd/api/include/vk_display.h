@@ -42,16 +42,6 @@ namespace vk
 // Forward declare Vulkan classes used in this file.
 class DispatchableDisplay;
 
-struct ADLtoVKDisplay
-{
-    static const uint32_t MaxDisplays = 32;
-
-    uint32_t                             adlAdaptorIndex;
-    uint32_t                             adlDisplayIndex;
-
-    uint32_t                             hdrCapabilityFlags;
-};
-
 }
 
 #endif /* __VK_DISPLAY_H__ */

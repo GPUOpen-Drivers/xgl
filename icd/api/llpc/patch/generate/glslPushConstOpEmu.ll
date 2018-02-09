@@ -17,7 +17,17 @@
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024"
 target triple = "spir64-unknown-unknown"
 
-; GLSL: load float/int/uint (dword)
+; GLSL: load float16/int16/uint16 (word)
+define <2 x i8> @llpc.pushconst.load.v2i8(i32 %memberOffset, i1 %glc, i1 %slc) #0
+{
+    %spillTablePtr = call [512 x i8] addrspace(2)* @llpc.descriptor.load.spilltable()
+    %1 = getelementptr [512 x i8], [512 x i8] addrspace(2)* %spillTablePtr, i32 0, i32 %memberOffset
+    %2 = bitcast i8 addrspace(2)* %1 to <2 x i8> addrspace(2)*, !amdgpu.uniform !0
+    %3 = load <2 x i8>, <2 x i8> addrspace(2)* %2, align 4
+    ret <2 x i8> %3
+}
+
+; GLSL: load f16vec2/i16vec2/u16vec2/float/int/uint (dword)
 define <4 x i8> @llpc.pushconst.load.v4i8(i32 %memberOffset, i1 %glc, i1 %slc) #0
 {
     %spillTablePtr = call [512 x i8] addrspace(2)* @llpc.descriptor.load.spilltable()
@@ -27,7 +37,17 @@ define <4 x i8> @llpc.pushconst.load.v4i8(i32 %memberOffset, i1 %glc, i1 %slc) #
     ret <4 x i8> %3
 }
 
-; GLSL: load vec2/ivec2/uvec2/double/int64/uint64 (dwordx2)
+; GLSL: load f16vec3/i16vec3/u16vec3 (wordx3)
+define <6 x i8> @llpc.pushconst.load.v6i8(i32 %memberOffset, i1 %glc, i1 %slc) #0
+{
+    %spillTablePtr = call [512 x i8] addrspace(2)* @llpc.descriptor.load.spilltable()
+    %1 = getelementptr [512 x i8], [512 x i8] addrspace(2)* %spillTablePtr, i32 0, i32 %memberOffset
+    %2 = bitcast i8 addrspace(2)* %1 to <6 x i8> addrspace(2)*, !amdgpu.uniform !0
+    %3 = load <6 x i8>, <6 x i8> addrspace(2)* %2, align 4
+    ret <6 x i8> %3
+}
+
+; GLSL: load f16vec4/i16vec4/u16vec4/vec2/ivec2/uvec2/double/int64/uint64 (dwordx2)
 define <8 x i8> @llpc.pushconst.load.v8i8(i32 %memberOffset, i1 %glc, i1 %slc) #0
 {
     %spillTablePtr = call [512 x i8] addrspace(2)* @llpc.descriptor.load.spilltable()

@@ -86,14 +86,7 @@ bool PatchPushConstOp::runOnModule(
         }
     }
 
-    DEBUG(dbgs() << "After the pass Patch-Push-Const-Op: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }

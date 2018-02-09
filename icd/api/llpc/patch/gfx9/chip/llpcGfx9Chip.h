@@ -113,19 +113,25 @@ namespace Gfx9
 // Sets GFX-dependent register field value
 #define SET_REG_FIELD_GFX9(_stage, _reg, _field, _val)      (_stage)->_reg##__GFX09_VAL.bits._field = (_val);
 
-// Preferred number of ES threads per GS thread.
-constexpr uint32_t EsThreadsPerGsThread = 128;
-
 // Preferred number of GS primitives per ES thread.
 constexpr uint32_t GsPrimsPerEsThread = 256;
 
 // Preferred number of GS threads per VS thread.
 constexpr uint32_t GsThreadsPerVsThread = 2;
 
+// Max size of primitives per subgroup for adjacency primitives or when GS instancing is used. This restriction is
+// applicable only when onchip GS is used.
+constexpr uint32_t OnChipGsMaxPrimPerSubgroup    = 255;
+constexpr uint32_t OnChipGsMaxPrimPerSubgroupAdj = 127;
+constexpr uint32_t OnChipGsMaxEsVertsPerSubgroup = 255;
+
+// Default value for the maximum LDS size per GS subgroup, in DWORD's.
+constexpr uint32_t DefaultLdsSizePerSubGroup = 8192;
+
 // The register headers don't specify an enum for the values of VGT_GS_MODE.ONCHIP.
 enum VGT_GS_MODE_ONCHIP_TYPE : uint32_t
 {
-    VGT_GS_MODE_ONCHIP_OFF         = 0,
+    VGT_GS_MODE_ONCHIP_OFF         = 1,
     VGT_GS_MODE_ONCHIP_ON          = 3,
 };
 
@@ -180,18 +186,17 @@ struct EsGsRegConfig
 {
     DEF_REG(SPI_SHADER_PGM_RSRC1_GS);
     DEF_REG_GFX(SPI_SHADER_PGM_RSRC2_GS);
+    DEF_REG_GFX(SPI_SHADER_PGM_RSRC4_GS);
     DEF_REG(GS_SCRATCH_SIZE);
     DEF_REG(GS_NUM_USED_VGPRS);
     DEF_REG(GS_NUM_USED_SGPRS);
     DEF_REG(VGT_GS_MAX_VERT_OUT);
     DEF_REG(VGT_GS_ONCHIP_CNTL);
-    DEF_REG(VGT_ES_PER_GS);
     DEF_REG(VGT_GS_VERT_ITEMSIZE);
     DEF_REG(VGT_GS_INSTANCE_CNT);
     DEF_REG(VGT_GS_PER_VS);
     DEF_REG(VGT_GS_OUT_PRIM_TYPE);
     DEF_REG(VGT_GSVS_RING_ITEMSIZE);
-    DEF_REG(VGT_GS_PER_ES);
     DEF_REG(VGT_GS_VERT_ITEMSIZE_1);
     DEF_REG(VGT_GS_VERT_ITEMSIZE_2);
     DEF_REG(VGT_GS_VERT_ITEMSIZE_3);
@@ -224,7 +229,6 @@ struct PsRegConfig
     DEF_REG(PS_SCRATCH_SIZE);
     DEF_REG(PS_NUM_USED_VGPRS);
     DEF_REG(PS_NUM_USED_SGPRS);
-    DEF_REG(PS_RUNS_AT_SAMPLE_RATE);
     DEF_REG(PA_SC_AA_CONFIG);
     DEF_REG(PA_SC_SHADER_CONTROL);
     DEF_REG(PA_SC_CONSERVATIVE_RASTERIZATION_CNTL);
@@ -321,7 +325,8 @@ struct PipelineVsGsFsRegConfig: public PipelineRegConfig
     static const uint32_t MaxDynamicRegs = 32 + // mmSPI_SHADER_USER_DATA_ES_0~31
                                            32 + // mmSPI_SHADER_USER_DATA_PS_0~31
                                            32 + // mmSPI_SHADER_USER_DATA_VS_0~31
-                                           32;  // mmSPI_PS_INPUT_CNTL_0~31
+                                           32 + // mmSPI_PS_INPUT_CNTL_0~31
+                                           1;   // mmVGT_GS_MAX_PRIMS_PER_SUBGROUP
 
     EsGsRegConfig m_esGsRegs;   // VS-GS -> hardware ES-GS
     PsRegConfig   m_psRegs;     // FS -> hardware PS

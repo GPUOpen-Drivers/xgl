@@ -40,7 +40,7 @@
 namespace Llpc
 {
 
-static const uint32_t  Version = 4;
+static const uint32_t  Version = 5;
 static const uint32_t  MaxColorTargets = 8;
 static const char      VkIcdName[]     = "amdvlk";
 
@@ -240,6 +240,7 @@ struct GraphicsPipelineBuildInfo
         uint32_t             deviceIndex;        ///< Device index for device group
         bool                 disableVertexReuse; ///< Disable reusing vertex shader output for indexed draws
         bool                 switchWinding ;     ///< Whether to reverse vertex ordering for tessellation
+        bool                 enableMultiView;    ///< Whether to enable multi-view support
     } iaState;                                   ///< Input-assembly state
 
     struct

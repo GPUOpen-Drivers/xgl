@@ -246,6 +246,10 @@ VkResult Memory::Create(
                     pinnedInfo.pSysMem = pPinnedHostPtr;
                     pinnedInfo.vaRange = Pal::VaRange::Default;
 
+                    // Ensure that the CPU pages are committed before creating a pinned sysmem allocation (this is
+                    // required by at least Windows).
+                    Util::VirtualCommit(pPinnedHostPtr, pinnedInfo.size, false);
+
                     gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetPinnedGpuMemorySize(
                         pinnedInfo, &palResult);
 

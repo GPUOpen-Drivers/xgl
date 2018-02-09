@@ -74,14 +74,7 @@ bool PatchImageOp::runOnModule(
         pCallInst->eraseFromParent();
     }
 
-    DEBUG(dbgs() << "After the pass Patch-Image-Op: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }

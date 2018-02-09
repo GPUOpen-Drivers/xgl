@@ -250,6 +250,98 @@ define spir_func void @_Z9mem_fencej(i32 %semantics) #0
 }
 
 ; =====================================================================================================================
+; >>>  Shader Invocation Group Functions
+; =====================================================================================================================
+
+; GLSL: uint64_t ballot(bool)
+define spir_func <4 x i32> @_Z17SubgroupBallotKHRb(i1 %value) #0
+{
+    ; TODO: Add real support for ballot()
+    %1 = select i1 %value, i64 -1, i64 0
+
+    %2 = trunc i64 %1 to i32
+    %3 = lshr i64 %1, 32
+    %4 = trunc i64 %3 to i32
+    %5 = insertelement <4 x i32> undef, i32 %2, i32 0
+    %6 = insertelement <4 x i32> %5, i32 %4, i32 1
+
+    ret <4 x i32> %6
+}
+
+; GLSL: float readInvocation(float, uint)
+define spir_func float @_Z25SubgroupReadInvocationKHRfi(float %value, i32 %invocationIndex)
+{
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llvm.amdgcn.readlane(i32 %1, i32 %invocationIndex)
+    %3 = bitcast i32 %2 to float
+
+    ret float %3
+}
+
+; GLSL: int/uint readInvocation(int/uint, uint)
+define spir_func i32 @_Z25SubgroupReadInvocationKHRii(i32 %value, i32 %invocationIndex)
+{
+    %1 = call i32 @llvm.amdgcn.readlane(i32 %value, i32 %invocationIndex)
+
+    ret i32 %1
+}
+
+; GLSL: float readFirstInvocation(float)
+define spir_func float @_Z26SubgroupFirstInvocationKHRf(float %value)
+{
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llvm.amdgcn.readfirstlane(i32 %1)
+    %3 = bitcast i32 %2 to float
+
+    ret float %3
+}
+
+; GLSL: int/uint readFirstInvocation(int/uint)
+define spir_func i32 @_Z26SubgroupFirstInvocationKHRi(i32 %value)
+{
+    %1 = call i32 @llvm.amdgcn.readfirstlane(i32 %value)
+
+    ret i32 %1
+}
+
+; GLSL: bool anyInvocation(bool)
+define spir_func i1 @_Z14SubgroupAnyKHRb(i1 %value)
+{
+    ; TODO: Add real support for ballot()
+    %1 = select i1 %value, i64 -1, i64 0
+
+    %2 = icmp ne i64 %1, 0
+
+    ret i1 %2
+}
+
+; GLSL: bool allInvocations(bool)
+define spir_func i1 @_Z14SubgroupAllKHRb(i1 %value)
+{
+    ; TODO: Add real support for ballot()
+    %1 = select i1 %value, i64 -1, i64 0
+    %2 = select i1 true, i64 -1, i64 0
+
+    %3 = icmp eq i64 %1, %2
+
+    ret i1 %3
+}
+
+; GLSL: bool allInvocationsEqual(bool)
+define spir_func i1 @_Z19SubgroupAllEqualKHRb(i1 %value)
+{
+    ; TODO: Add real support for ballot()
+    %1 = select i1 %value, i64 -1, i64 0
+    %2 = select i1 true, i64 -1, i64 0
+
+    %3 = icmp eq i64 %1, %2
+    %4 = icmp eq i64 %1, 0
+    %5 = or i1 %3, %4
+
+    ret i1 %5
+}
+
+; =====================================================================================================================
 ; >>>  Interpolation Functions
 ; =====================================================================================================================
 
@@ -351,6 +443,8 @@ declare <3 x float> @llpc.input.import.builtin.InterpPullMode(i32) #0
 declare <2 x float> @llpc.input.import.builtin.InterpLinearCenter(i32) #0
 declare <2 x float> @llpc.input.import.builtin.SamplePosOffset(i32, i32) #0
 declare i32 @llpc.input.import.builtin.GsWaveId(i32) #0
+declare i32 @llvm.amdgcn.readlane(i32, i32) #2
+declare i32 @llvm.amdgcn.readfirstlane(i32) #2
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readonly }

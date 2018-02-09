@@ -112,11 +112,6 @@ bool PassNonNativeFuncRemove::runOnModule(
                 nonNativeFuncs.insert(&*pFunc);
             }
         }
-
-        if (pFunc->getName().startswith("_Z") && (pFunc->getName().find("Atomic") != StringRef::npos))
-        {
-            nonNativeFuncs.insert(&*pFunc);
-        }
     }
 
     // Remove functions which reference non-native function
@@ -137,14 +132,7 @@ bool PassNonNativeFuncRemove::runOnModule(
         changed = true;
     }
 
-    DEBUG(dbgs() << "After the pass Pass-Non-Native-Func-Remove: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return changed;
 }

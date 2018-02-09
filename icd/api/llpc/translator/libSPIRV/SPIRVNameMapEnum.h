@@ -395,6 +395,12 @@ SPIRVMap<BuiltIn, std::string>::init() {
   add(BuiltInBaseInstance, "BuiltInBaseInstance");
   add(BuiltInDrawIndex, "BuiltInDrawIndex");
   add(BuiltInFragStencilRefEXT, "BuiltInFragStencilRefEXT");
+  add(BuiltInViewIndex, "BuiltInViewIndex");
+  add(BuiltInSubgroupEqMaskKHR, "BuiltInSubgroupEqMaskKHR");
+  add(BuiltInSubgroupGeMaskKHR, "BuiltInSubgroupGeMaskKHR");
+  add(BuiltInSubgroupGtMaskKHR, "BuiltInSubgroupGtMaskKHR");
+  add(BuiltInSubgroupLeMaskKHR, "BuiltInSubgroupLeMaskKHR");
+  add(BuiltInSubgroupLtMaskKHR, "BuiltInSubgroupLtMaskKHR");
 }
 SPIRV_DEF_NAMEMAP(BuiltIn, SPIRVBuiltInNameMap)
 
@@ -485,6 +491,13 @@ SPIRVMap<Capability, std::string>::init() {
   add(CapabilityMultiViewport, "MultiViewport");
   add(CapabilityStencilExportEXT, "StencilExportEXT");
   add(CapabilityShaderViewportIndexLayerEXT, "ShaderViewportIndexLayerEXT");
+  add(CapabilityMultiView, "MultiView");
+  add(CapabilitySubgroupBallotKHR, "SubgroupBallotKHR");
+  add(CapabilitySubgroupVoteKHR, "SubgroupVoteKHR");
+  add(CapabilityStorageBuffer16BitAccess, "StorageBuffer16BitAccess");
+  add(CapabilityUniformAndStorageBuffer16BitAccess, "UniformAndStorageBuffer16BitAccess");
+  add(CapabilityStoragePushConstant16, "StoragePushConstant16");
+  add(CapabilityStorageInputOutput16, "StorageInputOutput16");
 }
 SPIRV_DEF_NAMEMAP(Capability, SPIRVCapabilityNameMap)
 

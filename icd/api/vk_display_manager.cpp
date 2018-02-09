@@ -29,74 +29,8 @@
  ***********************************************************************************************************************
  */
 
-#include "include/vk_conv.h"
-#include "include/vk_display.h"
-#include "include/vk_display_manager.h"
-#include "include/vk_physical_device.h"
-#include "include/vk_surface.h"
-
 namespace vk
 {
-
-// =====================================================================================================================
-DisplayManager::DisplayManager(Instance* pInstance) :
-m_pInstance(pInstance),
-m_IsValid(false),
-m_DisplayCount(0)
-{
-}
-
-// =====================================================================================================================
-DisplayManager::~DisplayManager()
-{
-    if (m_IsValid == true)
-    {
-    }
-}
-
-// =====================================================================================================================
-VkResult DisplayManager::Initialize()
-{
-    return (SetupADL() == true) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
-}
-
-// =====================================================================================================================
-// TODO When SWDEV-121790 is implemented we can remove this code.
-bool DisplayManager::SetupADL()
-{
-
-    return m_IsValid;
-}
-
-// =====================================================================================================================
-// TODO When SWDEV-121790 is implemented we can remove the code which calls into ADL
-uint32_t DisplayManager::EnumerateDisplays(
-    PhysicalDeviceManager* pPhysicalDeviceManager)
-{
-    VK_ASSERT(m_DisplayCount == 0);
-
-    return m_DisplayCount;
-}
-
-// =====================================================================================================================
-VkResult DisplayManager::GetFormats(
-    Pal::IScreen*           pPalScreen,
-    uint32_t*               pSurfaceFormatCount,
-    VkSurfaceFormatKHR*     pSurfaceFormats) const
-{
-    VkResult result = VK_SUCCESS;
-
-    return result;
-}
-
-// =====================================================================================================================
-// Set the display mode for the attached high dynamic range display
-bool DisplayManager::SetColorSpace(
-    const Surface*  pSurface,
-    VkColorSpaceKHR colorSpace) const
-{
-    return false;
-}
 
 }//namespace vk
 

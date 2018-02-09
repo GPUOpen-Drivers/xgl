@@ -424,7 +424,7 @@ VkResult TimestampQueryPool::GetResults(
 
             // Test if the timestamp query is available
             uint64_t value = *pTimestamp;
-            bool ready     = (value != 0);
+            bool ready     = (value != TimestampNotReady);
 
             // Wait until the timestamp query has become available
             if ((flags & VK_QUERY_RESULT_WAIT_BIT) != 0)
@@ -432,7 +432,7 @@ VkResult TimestampQueryPool::GetResults(
                 while (!ready)
                 {
                     value = *pTimestamp;
-                    ready = (value != 0);
+                    ready = (value != TimestampNotReady);
                 }
             }
 

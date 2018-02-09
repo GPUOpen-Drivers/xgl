@@ -34,7 +34,19 @@
 #include "llpcAbiMetadata.h"
 #include "llpcContext.h"
 #include "llpcCodeGenManager.h"
+#include "llpcCopyShader.h"
 #include "llpcGfx6ConfigBuilder.h"
+
+namespace llvm
+{
+namespace cl
+{
+
+extern opt<bool> InRegEsGsLdsSize;
+
+} // cl
+
+} // llvm
 
 namespace Llpc
 {
@@ -503,7 +515,14 @@ Result ConfigBuilder::BuildVsRegConfig(
 
     SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, DX10_CLAMP, true);  // Follow PAL setting
-    SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, USER_SGPR, pIntfData->userDataCount);
+    if (shaderStage == ShaderStageCopyShader)
+    {
+        SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, USER_SGPR, Llpc::CopyShaderUserSgprCount);
+    }
+    else
+    {
+        SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, USER_SGPR, pIntfData->userDataCount);
+    }
 
     auto pPipelineInfo = static_cast<const GraphicsPipelineBuildInfo*>(pContext->GetPipelineBuildInfo());
 
@@ -599,6 +618,13 @@ Result ConfigBuilder::BuildVsRegConfig(
         useViewportIndex  = builtInUsage.gs.viewportIndex;
         clipDistanceCount = builtInUsage.gs.clipDistance;
         cullDistanceCount = builtInUsage.gs.cullDistance;
+
+        if (cl::InRegEsGsLdsSize && pContext->IsGsOnChip())
+        {
+            SET_DYN_REG(pConfig,
+                        mmSPI_SHADER_USER_DATA_VS_0 + Llpc::CopyShaderUserSgprIdxEsGsLdsSize,
+                        static_cast<uint32_t>(Util::Abi::UserDataMapping::EsGsLdsSize));
+        }
     }
 
     SET_REG_FIELD(&pConfig->m_vsRegs, VGT_PRIMITIVEID_EN, PRIMITIVEID_EN, usePrimitiveId);
@@ -623,6 +649,8 @@ Result ConfigBuilder::BuildVsRegConfig(
     SET_REG_FIELD(&pConfig->m_vsRegs, VGT_REUSE_OFF, REUSE_OFF, disableVertexReuse);
 
     SET_REG_FIELD(&pConfig->m_vsRegs, VGT_VERTEX_REUSE_BLOCK_CNTL, VTX_REUSE_DEPTH, 14);
+
+    useLayer = useLayer || pPipelineInfo->iaState.enableMultiView;
 
     if (usePointSize || useLayer || useViewportIndex)
     {
@@ -752,20 +780,20 @@ Result ConfigBuilder::BuildEsRegConfig(
     const auto& esBuiltInUsage = pEsResUsage->builtInUsage;
 
     LLPC_ASSERT((pContext->GetShaderStageMask() & ShaderStageToMask(ShaderStageGeometry)) != 0);
-    const auto& gsCalcFactor = pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs.calcFactor;
+    const auto& calcFactor = pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs.calcFactor;
 
     SET_REG_FIELD(&pConfig->m_esRegs, SPI_SHADER_PGM_RSRC1_ES, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_esRegs, SPI_SHADER_PGM_RSRC1_ES, DX10_CLAMP, true); // Follow PAL setting
 
     if (pContext->IsGsOnChip())
     {
-        LLPC_ASSERT(gsCalcFactor.gsOnChipLdsSize <= pContext->GetGpuProperty()->gsOnChipMaxLdsSize);
-        LLPC_ASSERT((gsCalcFactor.gsOnChipLdsSize %
+        LLPC_ASSERT(calcFactor.gsOnChipLdsSize <= pContext->GetGpuProperty()->gsOnChipMaxLdsSize);
+        LLPC_ASSERT((calcFactor.gsOnChipLdsSize %
                      (1 << pContext->GetGpuProperty()->ldsSizeDwordGranularityShift)) == 0);
         SET_REG_FIELD(&pConfig->m_esRegs,
                       SPI_SHADER_PGM_RSRC2_ES,
                       LDS_SIZE__CI__VI,
-                      (gsCalcFactor.gsOnChipLdsSize >>
+                      (calcFactor.gsOnChipLdsSize >>
                        pContext->GetGpuProperty()->ldsSizeDwordGranularityShift));
     }
 
@@ -802,7 +830,7 @@ Result ConfigBuilder::BuildEsRegConfig(
 
     SET_REG_FIELD(&pConfig->m_esRegs, SPI_SHADER_PGM_RSRC2_ES, USER_SGPR, pIntfData->userDataCount);
 
-    SET_REG_FIELD(&pConfig->m_esRegs, VGT_ESGS_RING_ITEMSIZE, ITEMSIZE, gsCalcFactor.esGsRingItemSize);
+    SET_REG_FIELD(&pConfig->m_esRegs, VGT_ESGS_RING_ITEMSIZE, ITEMSIZE, calcFactor.esGsRingItemSize);
 
     // Set shader user data maping
     result = ConfigBuilder::BuildUserDataConfig<T>(pContext, shaderStage, mmSPI_SHADER_USER_DATA_ES_0, pConfig);
@@ -849,21 +877,12 @@ Result ConfigBuilder::BuildLsRegConfig(
     uint32_t ldsSize = 0;
     const auto gfxIp = pContext->GetGfxIpVersion();
 
-    if (gfxIp.major == 6)
-    {
-        // NOTE: On GFX6, granularity for the LDS_SIZE field is 64. The range is 0~128 which allocates 0 to 8K DWORDs.
-        const uint32_t ldsSizeDwordGranularity = 64u;
-        const uint32_t ldsSizeDwordGranularityShift = 6u;
-        ldsSize = Pow2Align(ldsSizeInDwords, ldsSizeDwordGranularity) >> ldsSizeDwordGranularityShift;
-    }
-    else
-    {
-        // NOTE: On GFX7+, granularity for the LDS_SIZE field is 128. The range is 0~128 which allocates 0 to 16K
-        // DWORDs.
-        const uint32_t ldsSizeDwordGranularity = 128u;
-        const uint32_t ldsSizeDwordGranularityShift = 7u;
-        ldsSize = Pow2Align(ldsSizeInDwords, ldsSizeDwordGranularity) >> ldsSizeDwordGranularityShift;
-    }
+    // NOTE: On GFX6, granularity for the LDS_SIZE field is 64. The range is 0~128 which allocates 0 to 8K DWORDs.
+    // On GFX7+, granularity for the LDS_SIZE field is 128. The range is 0~128 which allocates 0 to 16K DWORDs.
+    const uint32_t ldsSizeDwordGranularityShift = pContext->GetGpuProperty()->ldsSizeDwordGranularityShift;
+    const uint32_t ldsSizeDwordGranularity = 1u << ldsSizeDwordGranularityShift;
+    ldsSize = Pow2Align(ldsSizeInDwords, ldsSizeDwordGranularity) >> ldsSizeDwordGranularityShift;
+
     SET_REG_FIELD(&pConfig->m_lsRegs, SPI_SHADER_PGM_RSRC2_LS, LDS_SIZE, ldsSize);
 
     // Set shader user data maping
@@ -929,6 +948,13 @@ Result ConfigBuilder::BuildGsRegConfig(
 
         SET_REG_FIELD(&pConfig->m_gsRegs, VGT_ES_PER_GS, ES_PER_GS, inOutUsage.gs.calcFactor.esVertsPerSubgroup);
         SET_REG_FIELD(&pConfig->m_gsRegs, VGT_GS_PER_ES, GS_PER_ES, gsPrimsPerSubgrp);
+
+        if (cl::InRegEsGsLdsSize)
+        {
+            SET_DYN_REG(pConfig,
+                        mmSPI_SHADER_USER_DATA_GS_0 + pIntfData->userDataUsage.gs.esGsLdsSize,
+                        static_cast<uint32_t>(Util::Abi::UserDataMapping::EsGsLdsSize));
+        }
     }
     else
     {
@@ -1021,8 +1047,6 @@ Result ConfigBuilder::BuildPsRegConfig(
     SET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, DX10_CLAMP, true);  // Follow PAL setting
     SET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC2_PS, USER_SGPR, pIntfData->userDataCount);
-
-    SET_REG(&pConfig->m_psRegs, PS_RUNS_AT_SAMPLE_RATE, builtInUsage.runAtSampleRate);
 
     SET_REG_FIELD(&pConfig->m_psRegs, SPI_BARYC_CNTL, FRONT_FACE_ALL_BITS, true);
     if (builtInUsage.pixelCenterInteger)
@@ -1220,8 +1244,18 @@ Result ConfigBuilder::BuildUserDataConfig(
 {
     Result result = Result::Success;
 
+    bool enableMultiView = false;
+    if (pContext->IsGraphics())
+    {
+        enableMultiView = static_cast<const GraphicsPipelineBuildInfo*>(
+            pContext->GetPipelineBuildInfo())->iaState.enableMultiView;
+    }
+
+    const auto nextStage = pContext->GetNextShaderStage(shaderStage);
+    bool isLastVertexProcessingStage = ((nextStage == ShaderStageInvalid) || (nextStage == ShaderStageFragment));
+
     const auto pIntfData = pContext->GetShaderInterfaceData(shaderStage);
-    const auto&entryArgIdxs = pIntfData->entryArgIdxs;
+    const auto& entryArgIdxs = pIntfData->entryArgIdxs;
 
     const auto pResUsage = pContext->GetShaderResourceUsage(shaderStage);
     const auto& builtInUsage = pResUsage->builtInUsage;
@@ -1253,6 +1287,30 @@ Result ConfigBuilder::BuildUserDataConfig(
                         startUserData + pIntfData->userDataUsage.vs.drawIndex,
                         static_cast<uint32_t>(Util::Abi::UserDataMapping::DrawIndex));
         }
+        if (enableMultiView && isLastVertexProcessingStage)
+        {
+            SET_DYN_REG(pConfig,
+                startUserData + pIntfData->userDataUsage.vs.viewIndex,
+                static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+        }
+    }
+    else if (shaderStage == ShaderStageTessEval)
+    {
+        if (enableMultiView && isLastVertexProcessingStage)
+        {
+            SET_DYN_REG(pConfig,
+                startUserData + pIntfData->userDataUsage.tes.viewIndex,
+                static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+        }
+    }
+    else if (shaderStage == ShaderStageCopyShader)
+    {
+        if (enableMultiView && isLastVertexProcessingStage)
+        {
+            SET_DYN_REG(pConfig,
+                startUserData + pIntfData->userDataUsage.gs.viewIndex,
+                static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+        }
     }
     else if (shaderStage == ShaderStageCompute)
     {
@@ -1273,18 +1331,18 @@ Result ConfigBuilder::BuildUserDataConfig(
 
     uint32_t userDataLimit = 0;
     uint32_t spillThreshold = UINT32_MAX;
-    uint32_t maxUserDataCount = pContext->GetGpuProperty()->maxUserDataCount;
-    for (uint32_t i = 0; i < maxUserDataCount; ++i)
-    {
-        if (pIntfData->userDataMap[i] != InterfaceData::UserDataUnmapped)
-        {
-            SET_DYN_REG(pConfig, startUserData + i, pIntfData->userDataMap[i]);
-            userDataLimit = std::max(userDataLimit, pIntfData->userDataMap[i] + 1);
-        }
-    }
-
     if (shaderStage != ShaderStageCopyShader)
     {
+        uint32_t maxUserDataCount = pContext->GetGpuProperty()->maxUserDataCount;
+        for (uint32_t i = 0; i < maxUserDataCount; ++i)
+        {
+            if (pIntfData->userDataMap[i] != InterfaceData::UserDataUnmapped)
+            {
+                SET_DYN_REG(pConfig, startUserData + i, pIntfData->userDataMap[i]);
+                userDataLimit = std::max(userDataLimit, pIntfData->userDataMap[i] + 1);
+            }
+        }
+
         if (pIntfData->userDataUsage.spillTable > 0)
         {
             SET_DYN_REG(pConfig,

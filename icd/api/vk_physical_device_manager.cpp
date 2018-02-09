@@ -66,7 +66,7 @@ VkResult PhysicalDeviceManager::Create(
 
     VK_ASSERT(pInstance != nullptr);
 
-    const uint32_t objSize = sizeof(PhysicalDeviceManager) + sizeof(DisplayManager);
+    const uint32_t objSize = sizeof(PhysicalDeviceManager);
 
     void* pMemory = pInstance->AllocMem(objSize, VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 
@@ -80,17 +80,7 @@ VkResult PhysicalDeviceManager::Create(
 
     if (result == VK_SUCCESS)
     {
-        const uint32_t offset = sizeof(PhysicalDeviceManager);
-
-        pDisplayManager = VK_PLACEMENT_NEW(Util::VoidPtrInc(pMemory, offset)) DisplayManager(pInstance);
-        if (pDisplayManager->Initialize() != VK_SUCCESS)
-        {
-            // DisplayManager initialization is allowed to fail.
-            Util::Destructor(pDisplayManager);
-            pDisplayManager = nullptr;
-        }
-
-        pManager = VK_PLACEMENT_NEW(pMemory) PhysicalDeviceManager(pInstance, pDisplayManager);
+        pManager = VK_PLACEMENT_NEW(pMemory) PhysicalDeviceManager(pInstance, nullptr);
 
         result = pManager->Initialize();
     }
@@ -141,7 +131,6 @@ PhysicalDeviceManager::~PhysicalDeviceManager()
 // =====================================================================================================================
 VkResult PhysicalDeviceManager::Destroy(void)
 {
-    Util::Destructor(m_pDisplayManager);
     Util::Destructor(this);
 
     m_pInstance->FreeMem(this);

@@ -11,13 +11,21 @@
 
 ;**********************************************************************************************************************
 ;* @file  glslInlineConstOpEmu.ll
-;* @brief LLPC LLVM-IR file: contains emulation codes for GLSL Inline constant buffer operations.
+;* @brief LLPC LLVM-IR file: contains emulation codes for GLSL inline constant buffer operations.
 ;**********************************************************************************************************************
 
 target datalayout = "e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v16:16:16-v24:32:32-v32:32:32-v48:64:64-v64:64:64-v96:128:128-v128:128:128-v192:256:256-v256:256:256-v512:512:512-v1024:1024:1024"
 target triple = "spir64-unknown-unknown"
 
-; GLSL: uniform load float/int/uint (dword) from inline constant buffer
+; GLSL: uniform load float16/int16/uint16 (word) from inline constant buffer
+define <2 x i8> @llpc.inlineconst.load.uniform.v2i8(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i1 %readonly, i1 %glc, i1 %slc) #0
+{
+    ; TODO: Use buffer.load.i16() to load a WORD.
+    ret <2 x i8> undef
+}
+
+; GLSL: uniform load f16vec2/i16vec2/u16vec2/float/int/uint (dword) from inline constant buffer
 define <4 x i8> @llpc.inlineconst.load.uniform.v4i8(
     i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i1 %readonly, i1 %glc, i1 %slc) #0
 {
@@ -27,7 +35,15 @@ define <4 x i8> @llpc.inlineconst.load.uniform.v4i8(
     ret <4 x i8> %2
 }
 
-; GLSL: uniform load vec2/ivec2/uvec2/double/int64/uint64 (dwordx2) from inline constant buffer
+; GLSL: uniform load f16vec3/i16vec3/u16vec3 (wordx3) from inline constant buffer
+define <6 x i8> @llpc.inlineconst.load.uniform.v6i8(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i1 %readonly, i1 %glc, i1 %slc) #0
+{
+    ; TODO: Use buffer.load.i16() to load a DWORD and a WORD.
+    ret <6 x i8> undef
+}
+
+; GLSL: uniform load f16vec4/i16vec4/u16vec4/vec2/ivec2/uvec2/double/int64/uint64 (dwordx2) from inline constant buffer
 define <8 x i8> @llpc.inlineconst.load.uniform.v8i8(
     i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i1 %readonly, i1 %glc, i1 %slc) #0
 {

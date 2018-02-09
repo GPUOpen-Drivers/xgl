@@ -1821,47 +1821,12 @@ void CmdBuffer::CopyImage(
 
     uint32_t palRegionCount = 0;
 
-    bool singleStepCopy = true;
     for (uint32_t i = 0; i < regionCount; ++i)
     {
         VkToPalImageCopyRegion(pRegions[i], srcFormat.format, dstFormat.format, pPalRegions, palRegionCount);
-
-        if (m_pDevice->IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
-        {
-            singleStepCopy &= GpuUtil::ValidateImageCopyRegion(
-                m_pDevice->VkPhysicalDevice()->PalProperties(),
-                m_palEngineType,
-                *pSrcImage->PalImage(),
-                *pDstImage->PalImage(),
-                pPalRegions[i]);
-        }
-        else
-        {
-            singleStepCopy &= GpuUtil::ValidateImageCopyRegion(
-                m_pDevice->VkPhysicalDevice()->PalProperties(),
-                m_palEngineType,
-                *pSrcImage->PalImage(pSrcImage->GetMemoryInstanceIdx(0)),
-                *pDstImage->PalImage(pDstImage->GetMemoryInstanceIdx(0)),
-                pPalRegions[i]);
-        }
     }
 
-    if(singleStepCopy)
-    {
-        PalCmdCopyImage(pSrcImage, palSrcImgLayout, pDstImage, palDstImgLayout, palRegionCount, pPalRegions);
-    }
-    else
-    {
-        // The properties of the image do not support a single copy per the engine type.
-        // A two step is copy approach is needed. This should only be happening on the DMA queues.
-        // For now continue to do the single step copy as this will fix failures in the
-        // dEQP-VK.synchronization.op.multi_queue.* group.
-
-        VK_NOT_IMPLEMENTED;
-
-        VK_ASSERT(m_palQueueType == Pal::QueueTypeDma);
-        PalCmdCopyImage(pSrcImage, palSrcImgLayout, pDstImage, palDstImgLayout, palRegionCount, pPalRegions);
-    }
+    PalCmdCopyImage(pSrcImage, palSrcImgLayout, pDstImage, palDstImgLayout, palRegionCount, pPalRegions);
 
     virtStackFrame.FreeArray(pPalRegions);
 
@@ -2018,7 +1983,6 @@ void CmdBuffer::CopyImageToBuffer(
 
     uint32_t engineCopyCount = 0;
 
-    bool singleStepCopy = true;
     for (uint32_t i = 0; i < regionCount; ++i)
     {
         // For image-buffer copies we have to override the format for depth-only and stencil-only copies
@@ -2026,31 +1990,9 @@ void CmdBuffer::CopyImageToBuffer(
             pRegions[i].imageSubresource.aspectMask));
 
         pPalRegions[engineCopyCount++] = VkToPalMemoryImageCopyRegion(pRegions[i], srcFormat.format, dstMemOffset);
-
-        singleStepCopy &= GpuUtil::ValidateMemoryImageRegion(
-            m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(),
-            m_palEngineType,
-            palImage,
-            *pDstMemory,
-            pPalRegions[i]);
     }
 
-    if (singleStepCopy)
-    {
-        PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionCount, pPalRegions);
-    }
-    else
-    {
-        // The properties of the image do not support a single copy per the engine type.
-        // A two step is copy approach is needed. This should only be happening on the DMA queues.
-        // For now continue to do the single step copy as this will fix failures in the
-        // dEQP-VK.synchronization.op.multi_queue.* group.
-
-        VK_NOT_IMPLEMENTED;
-
-        VK_ASSERT(m_palQueueType == Pal::QueueTypeDma);
-        PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionCount, pPalRegions);
-    }
+    PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionCount, pPalRegions);
 
     virtStackFrame.FreeArray(pPalRegions);
 
@@ -3289,13 +3231,46 @@ void CmdBuffer::BeginQuery(
 {
     DbgBarrierPreCmd(DbgBarrierQueryBeginEnd);
 
+    const auto palQueryControlFlags = VkToPalQueryControlFlags(flags);
+
     // NOTE: This function is illegal to call for TimestampQueryPools
     const PalQueryPool* pQueryPool = QueryPool::ObjectFromHandle(queryPool)->AsPalQueryPool();
 
-    PalCmdBuffer(DefaultDeviceIndex)->CmdBeginQuery(*pQueryPool->PalPool(),
-                                  pQueryPool->PalQueryType(),
-                                  query,
-                                  VkToPalQueryControlFlags(flags));
+    PalCmdBuffer(DefaultDeviceIndex)->CmdBeginQuery(
+       *pQueryPool->PalPool(),
+        pQueryPool->PalQueryType(),
+        query, palQueryControlFlags);
+
+    const auto* const pRenderPass = m_state.allGpuState.pRenderPass;
+
+    // If queries are used while executing a render pass instance that has multiview enabled,
+    // the query uses N consecutive query indices in the query pool (starting at query) where
+    // N is the number of bits set in the view mask in the subpass the query is used in.
+    //
+    // Implementations may write the total result to the first query and
+    // write zero to the other queries.
+    if (pRenderPass && pRenderPass->IsMultiviewEnabled())
+    {
+        const auto viewMask  = pRenderPass->GetViewMask(m_renderPassInstance.subpass);
+        const auto viewCount = Util::CountSetBits(viewMask);
+
+        // Call Begin() and immediately call End() for all remaining queries,
+        // to set value of each remaining query to 0 and to make them avaliable.
+        for (uint32_t remainingQuery = 1; remainingQuery < viewCount; ++remainingQuery)
+        {
+            const auto remainingQueryIndex = query + remainingQuery;
+
+            PalCmdBuffer(DefaultDeviceIndex)->CmdBeginQuery(
+               *pQueryPool->PalPool(),
+                pQueryPool->PalQueryType(),
+                remainingQueryIndex, palQueryControlFlags);
+
+            PalCmdBuffer(DefaultDeviceIndex)->CmdEndQuery(
+               *pQueryPool->PalPool(),
+                pQueryPool->PalQueryType(),
+                remainingQueryIndex);
+        }
+    }
 
     DbgBarrierPostCmd(DbgBarrierQueryBeginEnd);
 }
@@ -3315,6 +3290,95 @@ void CmdBuffer::EndQuery(
                                 query);
 
     DbgBarrierPostCmd(DbgBarrierQueryBeginEnd);
+}
+
+void CmdBuffer::FillTimestampQueryPool(
+    const TimestampQueryPool& timestampQueryPool,
+    const uint32_t firstQuery,
+    const uint32_t queryCount,
+    const uint32_t timestampChunk)
+{
+    // All the cache operations operating on the query pool's timestamp memory
+    // that may have occurred before/after this reset.
+    static const uint32_t TimestampCoher =
+        Pal::CoherShader    | // vkCmdCopyQueryPoolResults (CmdDispatch)
+        Pal::CoherMemory    | // vkCmdResetQueryPool (CmdFillMemory)
+        Pal::CoherTimestamp;  // vkCmdWriteTimestamp (CmdWriteTimestamp)
+
+    static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
+    static const Pal::BarrierFlags flags = { 0 };
+
+    // Wait for any timestamp query pool events to complete prior to filling memory
+    {
+        static const Pal::BarrierTransition Transition =
+        {
+            TimestampCoher,   // srcCacheMask
+            Pal::CoherMemory, // dstCacheMask
+            { }               // imageInfo
+        };
+
+        static const Pal::BarrierInfo Barrier =
+        {
+            flags,                                  // flags
+            Pal::HwPipeTop,                         // waitPoint
+            1,                                      // pipePointWaitCount
+            &pipePoint,                             // pPipePoints
+            0,                                      // gpuEventCount
+            nullptr,                                // ppGpuEvents
+            0,                                      // rangeCheckedTargetWaitCount
+            nullptr,                                // ppTargets
+            1,                                      // transitionCount
+            &Transition,                            // pTransitions
+            nullptr,                                // pSplitBarrierGpuEvent
+            RgpBarrierInternalPreResetQueryPoolSync // reason
+        };
+
+        PalCmdBarrier(Barrier);
+    }
+
+    // +----------------+----------------+
+    // | TimestampChunk | TimestampChunk |
+    // |----------------+----------------|
+    // |         TimestampValue          |
+    // +---------------------------------+
+    // TimestampValue = (uint64_t(TimestampChunk) << 32) + TimestampChunk
+    //
+    // Write TimestampValue to all timestamps in TimestampQueryPool.
+    // Note that each slot in TimestampQueryPool contains only timestamp value.
+    // The avaliability info is generated on the fly from timestamp value.
+    PalCmdBuffer(DefaultDeviceIndex)->CmdFillMemory(
+        timestampQueryPool.PalMemory(DefaultDeviceIndex),
+        timestampQueryPool.GetSlotOffset(firstQuery),
+        TimestampQueryPool::SlotSize * queryCount,
+        timestampChunk);
+
+    // Wait for memory fill to complete
+    {
+        static const Pal::BarrierTransition Transition =
+        {
+            Pal::CoherMemory, // srcCacheMask
+            TimestampCoher,   // dstCacheMask
+            { }               // imageInfo
+        };
+
+        static const Pal::BarrierInfo Barrier =
+        {
+            flags,                                   // flags
+            Pal::HwPipeTop,                          // waitPoint
+            1,                                       // pipePointWaitCount
+            &pipePoint,                              // pPipePoints
+            0,                                       // gpuEventCount
+            nullptr,                                 // ppGpuEvents
+            0,                                       // rangeCheckedTargetWaitCount
+            nullptr,                                 // ppTargets
+            1,                                       // transitionCount
+            &Transition,                             // pTransitions
+            nullptr,                                 // pSplitBarrierGpuEvent
+            RgpBarrierInternalPostResetQueryPoolSync // reason
+        };
+
+        PalCmdBarrier(Barrier);
+    }
 }
 
 // =====================================================================================================================
@@ -3338,85 +3402,14 @@ void CmdBuffer::ResetQueryPool(
     }
     else
     {
-        // All the cache operations operating on the query pool's timestamp memory that may have occurred
-        // before/after this reset.
-        constexpr uint32_t TimestampCoher =
-            Pal::CoherShader    | // vkCmdCopyQueryPoolResults (CmdDispatch)
-            Pal::CoherMemory    | // vkCmdResetQueryPool (CmdFillMemory)
-            Pal::CoherTimestamp;  // vkCmdWriteTimestamp (CmdWriteTimestamp)
-
         const TimestampQueryPool* pQueryPool = pBasePool->AsTimestampQueryPool();
 
-        // Wait for any timestamp query pool events to complete prior to filling memory
-        static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
-
-        {
-            static const Pal::BarrierTransition Transition =
-            {
-                TimestampCoher,   // srcCacheMask
-                Pal::CoherMemory, // dstCacheMask
-                { }               // imageInfo
-            };
-
-            static const Pal::BarrierFlags flags = {0};
-
-            static const Pal::BarrierInfo Barrier =
-            {
-                flags,                                  // flags
-                Pal::HwPipeTop,                         // waitPoint
-                1,                                      // pipePointWaitCount
-                &pipePoint,                             // pPipePoints
-                0,                                      // gpuEventCount
-                nullptr,                                // ppGpuEvents
-                0,                                      // rangeCheckedTargetWaitCount
-                nullptr,                                // ppTargets
-                1,                                      // transitionCount
-                &Transition,                            // pTransitions
-                nullptr,                                // pSplitBarrierGpuEvent
-                RgpBarrierInternalPreResetQueryPoolSync // reason
-            };
-
-            PalCmdBarrier(Barrier);
-        }
-
-        // Fill memory to 0
-        const Pal::gpusize startOffset = pQueryPool->GetSlotOffset(firstQuery);
-
-        PalCmdBuffer(DefaultDeviceIndex)->CmdFillMemory(
-            pQueryPool->PalMemory(DefaultDeviceIndex),
-            startOffset,
-            pQueryPool->GetSlotSize() * queryCount,
-            0);
-
-        // Wait for memory fill to complete
-        {
-            static const Pal::BarrierTransition Transition =
-            {
-                Pal::CoherMemory, // srcCacheMask
-                TimestampCoher,   // dstCacheMask
-                {}                // imageInfo
-            };
-
-            static const Pal::BarrierFlags flags = {0};
-
-            static const Pal::BarrierInfo Barrier =
-            {
-                flags,                                   // flags
-                Pal::HwPipeTop,                          // waitPoint
-                1,                                       // pipePointWaitCount
-                &pipePoint,                              // pPipePoints
-                0,                                       // gpuEventCount
-                nullptr,                                 // ppGpuEvents
-                0,                                       // rangeCheckedTargetWaitCount
-                nullptr,                                 // ppTargets
-                1,                                       // transitionCount
-                &Transition,                             // pTransitions
-                nullptr,                                 // pSplitBarrierGpuEvent
-                RgpBarrierInternalPostResetQueryPoolSync // reason
-            };
-
-            PalCmdBarrier(Barrier);
-        }
+        // Write TimestampNotReady to all timestamps in TimestampQueryPool.
+        FillTimestampQueryPool(
+           *pQueryPool,
+            firstQuery,
+            queryCount,
+            TimestampQueryPool::TimestampNotReadyChunk);
     }
 
     DbgBarrierPostCmd(DbgBarrierQueryReset);
@@ -3507,7 +3500,7 @@ void CmdBuffer::PalCmdBindMsaaStates(
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        PalCmdBindMsaaState(deviceIdx, (pStates != nullptr) ? pStates[deviceIdx] : nullptr);
+        PalCmdBindMsaaState(PalCmdBuffer(deviceIdx), deviceIdx, (pStates != nullptr) ? pStates[deviceIdx] : nullptr);
     }
 }
 
@@ -3705,6 +3698,37 @@ void CmdBuffer::WriteTimestamp(
             VkToPalSrcPipePointForTimestampWrite(pipelineStage),
             pQueryPool->PalMemory(deviceIdx),
             pQueryPool->GetSlotOffset(query));
+
+        const auto* const pRenderPass = m_state.allGpuState.pRenderPass;
+
+        // If vkCmdWriteTimestamp is called while executing a render pass instance that has multiview enabled,
+        // the timestamp uses N consecutive query indices in the query pool (starting at query) where
+        // N is the number of bits set in the view mask of the subpass the command is executed in.
+        //
+        // The first query is a timestamp value and (if more than one bit is set in the view mask)
+        // zero is written to the remaining queries.
+        if (pRenderPass && pRenderPass->IsMultiviewEnabled())
+        {
+            const auto viewMask  = pRenderPass->GetViewMask(m_renderPassInstance.subpass);
+            const auto viewCount = Util::CountSetBits(viewMask);
+
+            VK_ASSERT(viewCount > 0);
+            const auto remainingQueryCount = viewCount - 1;
+
+            if (remainingQueryCount > 0)
+            {
+                const auto firstRemainingQuery = query + 1;
+                constexpr uint32_t TimestampZeroChunk = 0;
+
+                // Set value of each remaining query to 0 and to make them avaliable.
+                // Note that values of remaining queries (to which 0 was written) are not considered timestamps.
+                FillTimestampQueryPool(
+                   *pQueryPool,
+                    firstRemainingQuery,
+                    remainingQueryCount,
+                    TimestampZeroChunk);
+            }
+        }
     }
     DbgBarrierPostCmd(DbgBarrierWriteTimestamp);
 }

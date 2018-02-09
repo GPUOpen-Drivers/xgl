@@ -67,7 +67,6 @@ DEF_META(USER_DATA_LIMIT, UserDataLimit)
 DEF_META(HS_MAX_TESS_FACTOR, HsMaxTessFactor)
 DEF_META(PS_USES_UAVS, PsUsesUavs)
 DEF_META(PS_USES_ROVS, PsUsesRovs)
-DEF_META(PS_RUNS_AT_SAMPLE_RATE, PsRunsAtSampleRate)
 DEF_META(SPILL_THRESHOLD, SpillThreshold)
 DEF_META(LS_NUM_USED_VGPRS, LsNumUsedVgprs)
 DEF_META(HS_NUM_USED_VGPRS, HsNumUsedVgprs)
@@ -94,26 +93,5 @@ DEF_META(INDIRECT_TABLE_ENTRY, IndirectTableEntryLow)
 DEF_META(USES_VIEWPORT_ARRAY_INDEX, UsesViewportArrayIndex)
 DEF_META(API_HW_SHADER_MAPPING_LO, ApiHwShaderMappingLo)
 DEF_META(API_HW_SHADER_MAPPING_HI, ApiHwShaderMappingHi)
-
-#define mmIA_MULTI_VGT_PARAM_DEFAULT \
-    (mmIA_MULTI_VGT_PARAM | \
-     static_cast<uint32_t>(Util::Abi::PipelineRegisterFlags::IaMultiVgtParamDefault))
-
-#define mmIA_MULTI_VGT_PARAM_FORCE_SWITCH_ON_EOP \
-    (mmIA_MULTI_VGT_PARAM | \
-     static_cast<uint32_t>(Util::Abi::PipelineRegisterFlags::IaMultiVgtParamForceSwitchOnEop))
-
-#ifdef LLPC_BUILD_GFX9
-#define mmIA_MULTI_VGT_PARAM_DEFAULT__GFX09 \
-    (mmIA_MULTI_VGT_PARAM__GFX09 | \
-     static_cast<uint32_t>(Util::Abi::PipelineRegisterFlags::IaMultiVgtParamDefault))
-
-#define mmIA_MULTI_VGT_PARAM_FORCE_SWITCH_ON_EOP__GFX09 \
-    (mmIA_MULTI_VGT_PARAM__GFX09 | \
-     static_cast<uint32_t>(Util::Abi::PipelineRegisterFlags::IaMultiVgtParamForceSwitchOnEop))
-#endif
-
-typedef HwReg regIA_MULTI_VGT_PARAM_DEFAULT;
-typedef HwReg regIA_MULTI_VGT_PARAM_FORCE_SWITCH_ON_EOP;
 
 } // Llpc

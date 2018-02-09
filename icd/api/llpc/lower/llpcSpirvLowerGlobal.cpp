@@ -125,14 +125,7 @@ bool SpirvLowerGlobal::runOnModule(
         }
     }
 
-    DEBUG(dbgs() << "After the pass Spirv-Lower-Global: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }
@@ -344,7 +337,7 @@ void SpirvLowerGlobal::visitLoadInst(
             if (isVertexIdx)
             {
                 pInOutTy = pInOutTy->getArrayElementType();
-                pVertexIdx = pGetElemInst->getOperand(2);
+                pVertexIdx = indexOperands[1];
                 ++operandIdx;
 
                 pInOutMeta = cast<Constant>(pInOutMeta->getOperand(2));
@@ -456,7 +449,7 @@ void SpirvLowerGlobal::visitStoreInst(
             if (isVertexIdx)
             {
                 pOutputTy = pOutputTy->getArrayElementType();
-                pVertexIdx = pGetElemInst->getOperand(2);
+                pVertexIdx = indexOperands[1];
                 ++operandIdx;
 
                 pOutputMeta = cast<Constant>(pOutputMeta->getOperand(2));
@@ -1516,6 +1509,26 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
         //
         // CS:  @llpc.input.import.builtin.%BuiltIn%(i32 builtInId)
         //
+        //
+        // Common: @llpc.input.import.builtin.%BuiltIn%(i32 builtInId)
+        //
+        if (inOutMeta.IsBuiltIn)
+        {
+            BuiltIn builtInId = static_cast<BuiltIn>(inOutMeta.Value);
+            if ((builtInId == BuiltInSubgroupSize)              ||
+                (builtInId == BuiltInSubgroupLocalInvocationId) ||
+                (builtInId == BuiltInSubgroupEqMaskKHR)         ||
+                (builtInId == BuiltInSubgroupGeMaskKHR)         ||
+                (builtInId == BuiltInSubgroupGtMaskKHR)         ||
+                (builtInId == BuiltInSubgroupLeMaskKHR)         ||
+                (builtInId == BuiltInSubgroupLtMaskKHR))
+            {
+                // NOTE: For those common built-ins that are stage independent, the import calls could be simplified.
+                args.clear();
+                args.push_back(ConstantInt::get(m_pContext->Int32Ty(), builtInId));
+            }
+        }
+
         pInOutValue = EmitCall(m_pModule, instName, pInOutTy, args, NoAttrib, pInsertPos);
     }
 

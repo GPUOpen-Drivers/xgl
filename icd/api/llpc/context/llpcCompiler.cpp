@@ -1698,13 +1698,24 @@ void Compiler::InitGpuProperty()
 
     m_gpuProperty.gsOnChipMaxLdsSize = 16384;
 
+    m_gpuProperty.tessOffChipLdsBufferSize = 32768;
+
+    // TODO: Accept gsOnChipDefaultPrimsPerSubgroup from panel option
+    m_gpuProperty.gsOnChipDefaultPrimsPerSubgroup   = 64;
+
+    if (m_gfxIp.major <= 6)
+    {
+        m_gpuProperty.ldsSizeDwordGranularityShift = 6;
+    }
+    else
+    {
+        m_gpuProperty.ldsSizeDwordGranularityShift = 7;
+    }
+
     if (m_gfxIp.major <= 8)
     {
-        // TODO: Accept gsOnChipDefaultPrimsPerSubgroup from panel option
-        m_gpuProperty.gsOnChipDefaultPrimsPerSubgroup   = 64;
         // TODO: Accept gsOnChipDefaultLdsSizePerSubgroup from panel option
         m_gpuProperty.gsOnChipDefaultLdsSizePerSubgroup = 8192;
-        m_gpuProperty.ldsSizeDwordGranularityShift      = 7;
     }
 
     if (m_gfxIp.major == 6)

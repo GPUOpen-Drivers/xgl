@@ -117,6 +117,7 @@ VkResult GraphicsPipeline::BuildRasterizationState(
         {
         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO:
             {
+                pInfo->pipeline.rsState.depthClampDisable = (pRs->depthClampEnable == VK_FALSE);
                 // When depth clamping is enabled, depth clipping should be disabled, and vice versa
                 pInfo->pipelineLlpc.vpState.depthClipEnable         = (pRs->depthClampEnable == VK_FALSE);
                 pInfo->pipelineLlpc.rsState.rasterizerDiscardEnable = (pRs->rasterizerDiscardEnable != VK_FALSE);
@@ -720,6 +721,7 @@ VkResult GraphicsPipeline::BuildPatchedShaders(
 
             pInfo->pipelineLlpc.iaState.topology           = topology;
             pInfo->pipelineLlpc.iaState.patchControlPoints = pInfo->pipeline.iaState.topologyInfo.patchControlPoints;
+            pInfo->pipelineLlpc.iaState.enableMultiView = pInfo->pipeline.viewInstancingDesc.enableMasking;
             pInfo->pipelineLlpc.rsState.perSampleShading   = (pInfo->msaa.pixelShaderSamples > 1);
 
             for (uint32_t stage = 0; stage < activeStageCount; ++stage)
@@ -1220,9 +1222,8 @@ void GraphicsPipeline::BindToCmdBuffer(
 
         if (pRenderState->allGpuState.pGraphicsPipeline != nullptr)
         {
-            const uint64_t oldHash =
-                pRenderState->allGpuState.pGraphicsPipeline->PalPipeline(deviceIdx)->GetInfo().pipelineHash;
-            const uint64_t newHash = m_pPalPipeline[deviceIdx]->GetInfo().pipelineHash;
+            const uint64_t oldHash = pRenderState->allGpuState.pGraphicsPipeline->PalPipelineHash(deviceIdx);
+            const uint64_t newHash = PalPipelineHash(deviceIdx);
 
             if ((oldHash != newHash)
                 )
@@ -1246,9 +1247,9 @@ void GraphicsPipeline::BindToCmdBuffer(
         }
 
         // Bind state objects that are always static; these are redundancy checked by the pointer in the command buffer.
-        pCmdBuffer->PalCmdBindDepthStencilState(deviceIdx, m_pPalDepthStencil[deviceIdx]);
-        pCmdBuffer->PalCmdBindColorBlendState(deviceIdx, m_pPalColorBlend[deviceIdx]);
-        pCmdBuffer->PalCmdBindMsaaState(deviceIdx, m_pPalMsaa[deviceIdx]);
+        pCmdBuffer->PalCmdBindDepthStencilState(pPalCmdBuf, deviceIdx, m_pPalDepthStencil[deviceIdx]);
+        pCmdBuffer->PalCmdBindColorBlendState(pPalCmdBuf, deviceIdx, m_pPalColorBlend[deviceIdx]);
+        pCmdBuffer->PalCmdBindMsaaState(pPalCmdBuf, deviceIdx, m_pPalMsaa[deviceIdx]);
 
         // Write parameters that are marked static pipeline state.  Redundancy check these based on static tokens:
         // skip the write if the previously written static token matches.

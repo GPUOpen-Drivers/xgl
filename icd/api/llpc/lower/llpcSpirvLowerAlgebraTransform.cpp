@@ -71,14 +71,7 @@ bool SpirvLowerAlgebraTransform::runOnModule(
 
     visit(m_pModule);
 
-    DEBUG(dbgs() << "After the pass Spirv-Lower-Algebra-Transform: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return m_changed;
 }

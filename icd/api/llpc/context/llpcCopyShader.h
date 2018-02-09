@@ -38,6 +38,12 @@ namespace Llpc
 
 class Context;
 
+// Count of user SGPRs used in copy shader
+static const uint32_t CopyShaderUserSgprCount = 3;
+
+// User SGPR index for ES-GS LDS size used in copy shader
+static const uint32_t CopyShaderUserSgprIdxEsGsLdsSize = 2;
+
 // =====================================================================================================================
 // Represents the manager of copy shader generation.
 class CopyShader
@@ -72,7 +78,7 @@ private:
     static const uint32_t EntryArgIdxInternalTablePtrLow = 0;
 
     // Start offset of currently-processed vertex in GS-VS ring buffer
-    static const uint32_t EntryArgIdxVertexOffset = 2;
+    static const uint32_t EntryArgIdxVertexOffset = 3;
 
     llvm::Module*           m_pModule;                      // LLVM module for copy shader
     Context*                m_pContext;                     // LLPC context

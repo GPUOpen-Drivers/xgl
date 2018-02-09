@@ -50,7 +50,7 @@ VkResult Surface::Create(
 
     union
     {
-        const VkStructHeader*                        pHeader;
+        const VkStructHeader*                    pHeader;
 
         const VkXcbSurfaceCreateInfoKHR*             pVkXcbSurfaceCreateInfoKHR;
         const VkXlibSurfaceCreateInfoKHR*            pVkXlibSurfaceCreateInfoKHR;

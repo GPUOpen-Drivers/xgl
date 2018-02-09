@@ -187,6 +187,7 @@ SPIRVMap<SPIRVCapabilityKind, SPIRVCapVec>::init() {
   ADD_VEC_INIT(CapabilityDrawParameters, { CapabilityShader });
   ADD_VEC_INIT(CapabilityStencilExportEXT, { CapabilityShader });
   ADD_VEC_INIT(CapabilityShaderViewportIndexLayerEXT, { CapabilityMultiViewport });
+  ADD_VEC_INIT(CapabilityUniformAndStorageBuffer16BitAccess, { CapabilityStorageBuffer16BitAccess });
 }
 
 template<> inline void
@@ -392,6 +393,11 @@ SPIRVMap<BuiltIn, SPIRVCapVec>::init() {
   ADD_VEC_INIT(BuiltInBaseInstance, { CapabilityDrawParameters });
   ADD_VEC_INIT(BuiltInDrawIndex, { CapabilityDrawParameters });
   ADD_VEC_INIT(BuiltInFragStencilRefEXT, { CapabilityStencilExportEXT });
+  ADD_VEC_INIT(BuiltInSubgroupEqMaskKHR, { CapabilitySubgroupBallotKHR });
+  ADD_VEC_INIT(BuiltInSubgroupGeMaskKHR, { CapabilitySubgroupBallotKHR });
+  ADD_VEC_INIT(BuiltInSubgroupGtMaskKHR, { CapabilitySubgroupBallotKHR });
+  ADD_VEC_INIT(BuiltInSubgroupLeMaskKHR, { CapabilitySubgroupBallotKHR });
+  ADD_VEC_INIT(BuiltInSubgroupLtMaskKHR, { CapabilitySubgroupBallotKHR });
 }
 
 template<> inline void

@@ -716,14 +716,17 @@ public:
     void PalCmdBindMsaaStates(const Pal::IMsaaState* const * pStates);
 
     VK_INLINE void PalCmdBindMsaaState(
+        Pal::ICmdBuffer*       pPalCmdBuf,
         uint32_t               deviceIdx,
         const Pal::IMsaaState* pState);
 
     VK_INLINE void PalCmdBindColorBlendState(
+        Pal::ICmdBuffer*             pPalCmdBuf,
         uint32_t                     deviceIdx,
         const Pal::IColorBlendState* pState);
 
     VK_INLINE void PalCmdBindDepthStencilState(
+        Pal::ICmdBuffer*               pPalCmdBuf,
         uint32_t                       deviceIdx,
         const Pal::IDepthStencilState* pState);
 
@@ -833,6 +836,12 @@ private:
     VK_INLINE Pal::ImageLayout RPGetAttachmentLayout(uint32_t attachment, Pal::ImageAspect aspect);
     VK_INLINE void RPSetAttachmentLayout(uint32_t attachment, Pal::ImageAspect aspect, Pal::ImageLayout layout);
 
+    void FillTimestampQueryPool(
+        const TimestampQueryPool& timestampQueryPool,
+        const uint32_t            firstQuery,
+        const uint32_t            queryCount,
+        const uint32_t            timestampChunk);
+
 #if VK_ENABLE_DEBUG_BARRIERS
     void DbgCmdBarrier(bool preCmd);
 #endif
@@ -877,6 +886,7 @@ bool CmdBuffer::IsStaticStateDifferent(
 
 // =====================================================================================================================
 void CmdBuffer::PalCmdBindMsaaState(
+    Pal::ICmdBuffer*       pPalCmdBuf,
     uint32_t               deviceIdx,
     const Pal::IMsaaState* pState)
 {
@@ -884,7 +894,7 @@ void CmdBuffer::PalCmdBindMsaaState(
 
     if (pState != m_state.perGpuState[deviceIdx].pMsaaState)
     {
-        PalCmdBuffer(deviceIdx)->CmdBindMsaaState(pState);
+        pPalCmdBuf->CmdBindMsaaState(pState);
 
         m_state.perGpuState[deviceIdx].pMsaaState = pState;
     }
@@ -892,6 +902,7 @@ void CmdBuffer::PalCmdBindMsaaState(
 
 // =====================================================================================================================
 void CmdBuffer::PalCmdBindColorBlendState(
+    Pal::ICmdBuffer*             pPalCmdBuf,
     uint32_t                     deviceIdx,
     const Pal::IColorBlendState* pState)
 {
@@ -899,7 +910,7 @@ void CmdBuffer::PalCmdBindColorBlendState(
 
     if (pState != m_state.perGpuState[deviceIdx].pColorBlendState)
     {
-        PalCmdBuffer(deviceIdx)->CmdBindColorBlendState(pState);
+        pPalCmdBuf->CmdBindColorBlendState(pState);
 
         m_state.perGpuState[deviceIdx].pColorBlendState = pState;
     }
@@ -907,6 +918,7 @@ void CmdBuffer::PalCmdBindColorBlendState(
 
 // =====================================================================================================================
 void CmdBuffer::PalCmdBindDepthStencilState(
+    Pal::ICmdBuffer*               pPalCmdBuf,
     uint32_t                       deviceIdx,
     const Pal::IDepthStencilState* pState)
 {
@@ -914,7 +926,7 @@ void CmdBuffer::PalCmdBindDepthStencilState(
 
     if (pState != m_state.perGpuState[deviceIdx].pDepthStencilState)
     {
-        PalCmdBuffer(deviceIdx)->CmdBindDepthStencilState(pState);
+        pPalCmdBuf->CmdBindDepthStencilState(pState);
 
         m_state.perGpuState[deviceIdx].pDepthStencilState = pState;
     }

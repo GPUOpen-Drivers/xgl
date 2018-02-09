@@ -106,10 +106,10 @@ namespace LlpcName
     const static char OutputProxyPrefix[]             = "__llpc_output_proxy_";
 
     // Names of entry-points for merged shader
-    const static char LsEntryPoint[]                  = "llpc.amdgpu.ls.main";
-    const static char HsEntryPoint[]                  = "llpc.amdgpu.hs.main";
-    const static char EsEntryPoint[]                  = "llpc.amdgpu.es.main";
-    const static char GsEntryPoint[]                  = "llpc.amdgpu.gs.main";
+    const static char LsEntryPoint[]                  = "llpc.ls.main";
+    const static char HsEntryPoint[]                  = "llpc.hs.main";
+    const static char EsEntryPoint[]                  = "llpc.es.main";
+    const static char GsEntryPoint[]                  = "llpc.gs.main";
 
 } // LlpcName
 

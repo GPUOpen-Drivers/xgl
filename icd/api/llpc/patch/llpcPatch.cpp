@@ -36,6 +36,7 @@
 #include "llvm/Bitcode/BitstreamWriter.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Verifier.h"
 #include "llvm/Linker/Linker.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
@@ -159,6 +160,17 @@ Result Patch::Run(
     if (passMgr.run(*pModule) == false)
     {
         result = Result::ErrorInvalidShader;
+    }
+
+    if (result == Result::Success)
+    {
+        std::string errMsg;
+        raw_string_ostream errStream(errMsg);
+        if (verifyModule(*pModule, &errStream))
+        {
+            LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
+            result = Result::ErrorInvalidShader;
+        }
     }
 
     return result;

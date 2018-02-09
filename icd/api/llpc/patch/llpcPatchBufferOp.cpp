@@ -42,19 +42,6 @@
 using namespace llvm;
 using namespace Llpc;
 
-namespace llvm
-{
-
-namespace cl
-{
-
-// -enable-pipeline-dump: enable pipeline info dump
-opt<bool> Gfx9WorkaroundLdsAtomicAddress("gfx9-workaround-lds-atomic-addr", desc("Workaround gfx9 lds atomic address"), init(true));
-
-} // cl
-
-} // llvm
-
 namespace Llpc
 {
 
@@ -89,14 +76,7 @@ bool PatchBufferOp::runOnModule(
         pCall->eraseFromParent();
     }
 
-    DEBUG(dbgs() << "After the pass Patch-Buffer-Op: " << module);
-
-    std::string errMsg;
-    raw_string_ostream errStream(errMsg);
-    if (verifyModule(module, &errStream))
-    {
-        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");
-    }
+    LLPC_VERIFY_MODULE_FOR_PASS(module);
 
     return true;
 }
@@ -155,60 +135,6 @@ void PatchBufferOp::visitCallInst(
             // NOTE: Only uniform block support inline constant now, and we can't translate other buffer operations to
             // scalar
             LLPC_ASSERT(isInlineConst == false);
-        }
-    }
-    else if (cl::Gfx9WorkaroundLdsAtomicAddress &&
-             (m_pContext->GetGfxIpVersion().major == 9) &&
-             mangledName.startswith("_Z8AtomicOrPU3AS3iiii"))
-    {
-        // Workaround a backend issue(SC1-594), there is an optimization in backend which is possible to break LDS atomic address
-        // alignment (to 4). This workaround is to clamp LDS atomic address between 0 to MAX_COMPUTE_SHARED_MEMORY_SIZE,
-        // after clamp the address will not be subjected to the problematic optimization in backend.
-        // This workaround can be removed after the backend issue be fixed.
-        static const uint32_t MAX_COMPUTE_SHARED_MEMORY_SIZE = 0x8000;
-
-        auto* pMaxComputeSharedMemoryIdx32 = ConstantInt::get(m_pContext->Int32Ty(), (MAX_COMPUTE_SHARED_MEMORY_SIZE - 1));
-        auto* pMaxComputeSharedMemoryIdx64 = ConstantInt::get(m_pContext->Int64Ty(), (MAX_COMPUTE_SHARED_MEMORY_SIZE - 1));
-        auto* pArg0 = callInst.getArgOperand(0);
-        if (isa<GetElementPtrInst>(*pArg0))
-        {
-            GetElementPtrInst& gep = cast<GetElementPtrInst>(*pArg0);
-            for (uint32_t i = 2; i < gep.getNumOperands(); ++i)
-            {
-                Value* pIdx = gep.getOperand(i);
-                if (!isa<ConstantInt>(*pIdx))
-                {
-                    Type* pIdxTy = pIdx->getType();
-                    LLPC_ASSERT(pIdxTy->isIntegerTy());
-
-                    Value* pClampedIdx = nullptr;
-                    if (pIdxTy->getScalarSizeInBits() == 32)
-                    {
-                        std::vector<Value*> args;
-                        args.push_back(pIdx);
-                        args.push_back(pMaxComputeSharedMemoryIdx32);
-                        pClampedIdx = EmitCall(m_pModule,
-                                               "llpc.uminnum.i32",
-                                               m_pContext->Int32Ty(),
-                                               args,
-                                               NoAttrib,
-                                               &gep);
-                    }
-                    else if (pIdxTy->getScalarSizeInBits() == 64)
-                    {
-
-                        auto* pCmpLt = CmpInst::Create(CmpInst::ICmp,
-                                                       CmpInst::ICMP_ULT,
-                                                       pIdx,
-                                                       pMaxComputeSharedMemoryIdx64,
-                                                       "",
-                                                       &gep);
-
-                        pClampedIdx = SelectInst::Create(pCmpLt, pIdx, pMaxComputeSharedMemoryIdx64, "", &gep);
-                    }
-                    gep.setOperand(i, pClampedIdx);
-                }
-            }
         }
     }
 }

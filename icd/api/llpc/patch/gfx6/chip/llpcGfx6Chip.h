@@ -215,7 +215,6 @@ struct PsRegConfig
     DEF_REG(PS_SCRATCH_SIZE);
     DEF_REG(PS_NUM_USED_VGPRS);
     DEF_REG(PS_NUM_USED_SGPRS);
-    DEF_REG(PS_RUNS_AT_SAMPLE_RATE);
 
     void Init();
 };

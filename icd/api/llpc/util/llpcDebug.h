@@ -66,6 +66,15 @@
     _typename(const _typename&);                    \
     _typename& operator =(const _typename&);
 
+// Verify the specified module for a LLPC pass and report error messages if the verification fails
+#define LLPC_VERIFY_MODULE_FOR_PASS(M) DEBUG(                                                 \
+    std::string errMsg;                                                                       \
+    raw_string_ostream errStream(errMsg);                                                     \
+    if (verifyModule(M, &errStream))                                                          \
+    {                                                                                         \
+        LLPC_ERRS("Fails to verify module (" DEBUG_TYPE "): " << errStream.str() << "\n");    \
+    })                                                                                        \
+
 namespace llvm { class raw_ostream; }
 namespace llvm { class raw_fd_ostream; }
 
