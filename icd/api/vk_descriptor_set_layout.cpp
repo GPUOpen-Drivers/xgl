@@ -216,13 +216,13 @@ void DescriptorSetLayout::ConvertBindingInfo(
         // Update total section size by how much space this binding takes.
         pSectionInfo->dwSize += pBindingSectionInfo->dwSize;
 
-        // Update total number of PAL ResourceMappingNodes required by this binding.
-        pSectionInfo->numPalRsrcMapNodes++;
+        // Update total number of ResourceMappingNodes required by this binding.
+        pSectionInfo->numRsrcMapNodes++;
 
-        // Combined image sampler descriptors in static section need an additional PAL ResourceMappingNode.
+        // Combined image sampler descriptors in static section need an additional ResourceMappingNode.
         if (!isFmaskSection && (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER))
         {
-            pSectionInfo->numPalRsrcMapNodes++;
+            pSectionInfo->numRsrcMapNodes++;
         }
     }
 }
@@ -301,15 +301,15 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                                                  // setting all flags active makes no difference...
 
     pOut->sta.dwSize                = 0;
-    pOut->sta.numPalRsrcMapNodes    = 0;
+    pOut->sta.numRsrcMapNodes       = 0;
 
     pOut->dyn.dwSize                = 0;
-    pOut->dyn.numPalRsrcMapNodes    = 0;
+    pOut->dyn.numRsrcMapNodes       = 0;
 
     pOut->imm.numImmutableSamplers  = 0;
 
     pOut->fmask.dwSize              = 0;
-    pOut->fmask.numPalRsrcMapNodes  = 0;
+    pOut->fmask.numRsrcMapNodes     = 0;
 
     for (pInfo = pIn; pHeader != nullptr; pHeader = pHeader->pNext)
     {

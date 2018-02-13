@@ -99,6 +99,10 @@ cl::opt<bool> SPIRVGenImgTypeAccQualPostfix("spirv-gen-image-type-acc-postfix",
     cl::init(false), cl::desc("Enable generating access qualifier postfix"
         " in OpenCL image type names"));
 
+cl::opt<bool> SPIRVGenFastMath("spirv-gen-fast-math",
+    cl::init(true), cl::desc("Enable fast math mode with generating floating"
+                              "point binary ops"));
+
 // Prefix for placeholder global variable name.
 const char* kPlaceholderPrefix = "placeholder.";
 
@@ -1072,6 +1076,16 @@ BinaryOperator *SPIRVToLLVM::transShiftLogicalBitwiseInst(SPIRVValue* BV,
   auto Inst = BinaryOperator::Create(BO,
       transValue(BBN->getOperand(0), F, BB),
       transValue(BBN->getOperand(1), F, BB), BV->getName(), BB);
+  // For floating-point operations, if "FastMath" is enabled, set the "FastMath"
+  // flags on the handled instruction
+  if (SPIRVGenFastMath && isa<FPMathOperator>(Inst)) {
+    llvm::FastMathFlags FMF;
+    FMF.setNoNaNs();
+    FMF.setAllowReassoc();
+    FMF.setAllowReciprocal();
+    FMF.setAllowContract(true);
+    Inst->setFastMathFlags(FMF);
+  }
   return Inst;
 }
 
@@ -2132,7 +2146,9 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
   case OpExtInst: {
     SPIRVExtInst* BC = static_cast<SPIRVExtInst *>(BV);
     SPIRVExtInstSetKind Set = BM->getBuiltinSet(BC->getExtSetId());
-    assert(Set == SPIRVEIS_OpenCL || Set == SPIRVEIS_GLSL);
+    assert(Set == SPIRVEIS_OpenCL || Set == SPIRVEIS_GLSL ||
+      Set == SPIRVEIS_ShaderBallotAMD);
+
     if (Set == SPIRVEIS_OpenCL)
       return mapValue(BV, transOCLBuiltinFromExtInst(BC, BB));
     else
@@ -4153,13 +4169,20 @@ SPIRVToLLVM::transGLSLBuiltinFromExtInst(SPIRVExtInst *BC, BasicBlock *BB)
   assert(BB && "Invalid BB");
 
   SPIRVExtInstSetKind Set = BM->getBuiltinSet(BC->getExtSetId());
-  assert(Set == SPIRVEIS_GLSL && "Not GLSL extended instruction");
+  assert((Set == SPIRVEIS_GLSL || Set == SPIRVEIS_ShaderBallotAMD)
+    && "Not valid extended instruction");
 
   SPIRVWord EntryPoint = BC->getExtOp();
   auto BArgs = BC->getArguments();
   std::vector<Type *> ArgTys = transTypeVector(BC->getValueTypes(BArgs));
-  string UnmangledName = GLSLExtOpMap::map(
-                           static_cast<GLSLExtOpKind>(EntryPoint));
+  string UnmangledName = "";
+  if (Set == SPIRVEIS_GLSL)
+    UnmangledName =  GLSLExtOpMap::map(
+      static_cast<GLSLExtOpKind>(EntryPoint));
+  else if (Set == SPIRVEIS_ShaderBallotAMD)
+    UnmangledName = ShaderBallotAMDExtOpMap::map(
+      static_cast<ShaderBallotAMDExtOpKind>(EntryPoint));
+
   string MangledName;
   MangleGLSLBuiltin(UnmangledName, ArgTys, MangledName);
   FunctionType *FuncTy = FunctionType::get(transType(BC->getType()),

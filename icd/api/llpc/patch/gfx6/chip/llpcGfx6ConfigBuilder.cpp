@@ -209,10 +209,10 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
     // Set up IA_MULTI_VGT_PARAM
     regIA_MULTI_VGT_PARAM iaMultiVgtParam = {};
 
-    const auto& vsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageVertex)->builtInUsage.vs;
     const auto& tcsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessControl)->builtInUsage.tcs;
+    const auto& tesBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes;
 
-    if (vsBuiltInUsage.primitiveId || tcsBuiltInUsage.primitiveId)
+    if (tcsBuiltInUsage.primitiveId || tesBuiltInUsage.primitiveId)
     {
         iaMultiVgtParam.bits.PARTIAL_ES_WAVE_ON = true;
         iaMultiVgtParam.bits.SWITCH_ON_EOI = true;
@@ -423,11 +423,11 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
     // Set up IA_MULTI_VGT_PARAM
     regIA_MULTI_VGT_PARAM iaMultiVgtParam = {};
 
-    const auto& vsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageVertex)->builtInUsage.vs;
     const auto& tcsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessControl)->builtInUsage.tcs;
+    const auto& tesBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes;
     const auto& gsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageGeometry)->builtInUsage.gs;
 
-    if (vsBuiltInUsage.primitiveId || tcsBuiltInUsage.primitiveId || gsBuiltInUsage.primitiveId)
+    if (tcsBuiltInUsage.primitiveId || tesBuiltInUsage.primitiveId || gsBuiltInUsage.primitiveId)
     {
         iaMultiVgtParam.bits.PARTIAL_ES_WAVE_ON = true;
         iaMultiVgtParam.bits.SWITCH_ON_EOI = true;
@@ -573,12 +573,11 @@ Result ConfigBuilder::BuildVsRegConfig(
 
         if (builtInUsage.vs.instanceIndex)
         {
-            // TODO: Need to set SPI_SHADER_PGM_RSRC1_VS.VGPR_COMP_CNT in .AMDGPU.config section
-            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 0x3); // 0x3: Enable instance ID
+            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 3); // 3: Enable instance ID
         }
         else if (builtInUsage.vs.primitiveId)
         {
-            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 0x2);
+            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 2);
         }
     }
     else if (shaderStage == ShaderStageTessEval)
@@ -590,18 +589,15 @@ Result ConfigBuilder::BuildVsRegConfig(
         clipDistanceCount = builtInUsage.tes.clipDistance;
         cullDistanceCount = builtInUsage.tes.cullDistance;
 
-        uint32_t vgtCompCnt = 1;
-        if (builtInUsage.tes.tessCoord)
-        {
-            vgtCompCnt++;
-        }
-
-        // NOTE: when primitive ID is used, set vgtCompCnt to 3 directly because primitive ID is the last VGPR.
         if (builtInUsage.tes.primitiveId)
         {
-            vgtCompCnt = 3;
+            // NOTE: when primitive ID is used, set vgtCompCnt to 3 directly because primitive ID is the last VGPR.
+            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 3); // 3: Enable primitive ID
         }
-        SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, vgtCompCnt);
+        else
+        {
+            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 2);
+        }
 
         if (pContext->IsTessOffChip())
         {
@@ -776,8 +772,8 @@ Result ConfigBuilder::BuildEsRegConfig(
 
     const auto pIntfData = pContext->GetShaderInterfaceData(shaderStage);
 
-    const auto pEsResUsage = pContext->GetShaderResourceUsage(shaderStage);
-    const auto& esBuiltInUsage = pEsResUsage->builtInUsage;
+    const auto pResUsage = pContext->GetShaderResourceUsage(shaderStage);
+    const auto& builtInUsage = pResUsage->builtInUsage;
 
     LLPC_ASSERT((pContext->GetShaderStageMask() & ShaderStageToMask(ShaderStageGeometry)) != 0);
     const auto& calcFactor = pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs.calcFactor;
@@ -797,10 +793,10 @@ Result ConfigBuilder::BuildEsRegConfig(
                        pContext->GetGpuProperty()->ldsSizeDwordGranularityShift));
     }
 
-    uint32_t vgprCompCnt = 1;
+    uint32_t vgprCompCnt = 0;
     if (shaderStage == ShaderStageVertex)
     {
-        if (esBuiltInUsage.vs.instanceIndex)
+        if (builtInUsage.vs.instanceIndex)
         {
             vgprCompCnt = 3; // Enable instance ID
         }
@@ -809,15 +805,14 @@ Result ConfigBuilder::BuildEsRegConfig(
     {
         LLPC_ASSERT(shaderStage == ShaderStageTessEval);
 
-        if (esBuiltInUsage.tes.tessCoord)
-        {
-            ++vgprCompCnt;
-        }
-
         // NOTE: when primitive ID is used, set vgtCompCnt to 3 directly because primitive ID is the last VGPR.
-        if (esBuiltInUsage.tes.primitiveId)
+        if (builtInUsage.tes.primitiveId)
         {
             vgprCompCnt = 3;
+        }
+        else
+        {
+            vgprCompCnt = 2;
         }
 
         if (pContext->IsTessOffChip())
@@ -1303,9 +1298,9 @@ Result ConfigBuilder::BuildUserDataConfig(
                 static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
         }
     }
-    else if (shaderStage == ShaderStageCopyShader)
+    else if (shaderStage == ShaderStageGeometry)
     {
-        if (enableMultiView && isLastVertexProcessingStage)
+        if (enableMultiView)
         {
             SET_DYN_REG(pConfig,
                 startUserData + pIntfData->userDataUsage.gs.viewIndex,

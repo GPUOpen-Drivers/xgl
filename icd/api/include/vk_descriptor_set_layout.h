@@ -73,7 +73,7 @@ public:
     struct SectionInfo
     {
         uint32_t    dwSize;                 // The total number of dwords of this section of one descriptor set
-        uint32_t    numPalRsrcMapNodes;     // Number of required Pal::ResourceMappingNodes to build a descriptor
+        uint32_t    numRsrcMapNodes;        // Number of required ResourceMappingNodes to build a descriptor
                                             // mapping for this section of the layout during pipeline construction
     };
 

@@ -80,6 +80,7 @@ enum SPIRVInstructionSchemaKind {
 enum SPIRVExtInstSetKind {
   SPIRVEIS_OpenCL,
   SPIRVEIS_GLSL,
+  SPIRVEIS_ShaderBallotAMD,
   SPIRVEIS_Count,
 };
 
@@ -119,6 +120,7 @@ template<> inline void
 SPIRVMap<SPIRVExtInstSetKind, std::string>::init() {
   add(SPIRVEIS_OpenCL, "OpenCL.std");
   add(SPIRVEIS_GLSL, "GLSL.std.450");
+  add(SPIRVEIS_ShaderBallotAMD, "SPV_AMD_shader_ballot");
 }
 typedef SPIRVMap<SPIRVExtInstSetKind, std::string> SPIRVBuiltinSetNameMap;
 

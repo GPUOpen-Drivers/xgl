@@ -341,6 +341,23 @@ define spir_func i1 @_Z19SubgroupAllEqualKHRb(i1 %value)
     ret i1 %5
 }
 
+; GLSL: float writeInvocation(float, float, uint)
+define spir_func float @_Z18WriteInvocationAMDffi(float %inputValue, float %writeValue, i32 %invocationIndex)
+{
+    %1 = bitcast float %writeValue to i32
+    %2 = bitcast float %inputValue to i32
+    %3 = call i32 @llvm.amdgcn.writelane(i32 %1, i32 %invocationIndex, i32 %2)
+    %4 = bitcast i32 %3 to float
+    ret float %4
+}
+
+; GLSL: int/uint writeInvocation(int/uint, int/uint, int/uint)
+define spir_func i32 @_Z18WriteInvocationAMDiii(i32 %inputValue, i32 %writeValue, i32 %invocationIndex)
+{
+    %1 = call i32 @llvm.amdgcn.writelane(i32 %writeValue, i32 %invocationIndex, i32 %inputValue)
+    ret i32 %1
+}
+
 ; =====================================================================================================================
 ; >>>  Interpolation Functions
 ; =====================================================================================================================
@@ -445,6 +462,7 @@ declare <2 x float> @llpc.input.import.builtin.SamplePosOffset(i32, i32) #0
 declare i32 @llpc.input.import.builtin.GsWaveId(i32) #0
 declare i32 @llvm.amdgcn.readlane(i32, i32) #2
 declare i32 @llvm.amdgcn.readfirstlane(i32) #2
+declare i32 @llvm.amdgcn.writelane(i32, i32, i32) #2
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readonly }

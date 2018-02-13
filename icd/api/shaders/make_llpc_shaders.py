@@ -28,12 +28,23 @@ import os
 import subprocess
 import sys
 
+def Is64Bit():
+    # https://docs.python.org/2/library/sys.html#sys.maxsize
+    # https://docs.python.org/2/library/platform.html#cross-platform
+    return sys.maxsize > 2**32
+
+vulkanSDK = os.getenv("VULKAN_SDK")
+
+if vulkanSDK is None:
+    sys.exit("Specify path to Vulkan SDK by setting VULKAN_SDK enviroment variable.")
+
+glslangValidator = os.path.join(vulkanSDK, "bin" if Is64Bit() else "Bin32", "glslangValidator")
+
 inFile = "copy_timestamp_query_pool"
 
 # Generate spv file
 print(">>>  (glslangValidator) " + inFile + ".comp ==> " + inFile + ".spv")
-cmd = "glslangValidator -V " + inFile + ".comp -o " + inFile + ".spv"
-os.system(cmd)
+subprocess.call([glslangValidator, "-V", inFile + ".comp", "-o", inFile + ".spv"])
 
 # Convert .spv file to a hex file
 spvFile = inFile + ".spv"

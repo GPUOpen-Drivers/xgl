@@ -33,6 +33,11 @@
 
 #include "llpc.h"
 
+namespace Scpc
+{
+struct ShaderTuningOptions;
+}
+
 namespace Pal { enum class ResourceMappingNodeType : Pal::uint32; }
 
 namespace vk

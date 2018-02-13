@@ -175,10 +175,10 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, HS_EN, HS_STAGE_ON);
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, LS_EN, LS_STAGE_ON);
 
-        const auto pIntfData = pContext->GetShaderInterfaceData(ShaderStageVertex);
-        if (pIntfData->vbTable.resNodeIdx != InvalidValue)
+        const auto pVsIntfData = pContext->GetShaderInterfaceData(ShaderStageVertex);
+        if (pVsIntfData->vbTable.resNodeIdx != InvalidValue)
         {
-            SET_REG(pConfig, INDIRECT_TABLE_ENTRY, pIntfData->vbTable.resNodeIdx);
+            SET_REG(pConfig, INDIRECT_TABLE_ENTRY, pVsIntfData->vbTable.resNodeIdx);
         }
     }
 
@@ -205,10 +205,10 @@ Result ConfigBuilder::BuildPipelineVsTsFsRegConfig(
     // Set up IA_MULTI_VGT_PARAM
     regIA_MULTI_VGT_PARAM iaMultiVgtParam = {};
 
-    const auto& vsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageVertex)->builtInUsage.vs;
     const auto& tcsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessControl)->builtInUsage.tcs;
+    const auto& tesBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes;
 
-    if (vsBuiltInUsage.primitiveId || tcsBuiltInUsage.primitiveId)
+    if (tcsBuiltInUsage.primitiveId || tesBuiltInUsage.primitiveId)
     {
         iaMultiVgtParam.bits.PARTIAL_ES_WAVE_ON = true;
         iaMultiVgtParam.bits.SWITCH_ON_EOI = true;
@@ -266,26 +266,6 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
                                                              hasGs ? ShaderStageGeometry : ShaderStageInvalid,
                                                              pConfig);
 
-        if (hasGs)
-        {
-            if (gfxIp.major == 9)
-            {
-                const auto pGsResUsage = pContext->GetShaderResourceUsage(ShaderStageGeometry);
-                const auto& gsBuiltInUsage = pGsResUsage->builtInUsage.gs;
-                const auto& calcFactor     = pGsResUsage->inOutUsage.gs.calcFactor;
-
-                regVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09 vgtGsMaxPrimsPerSubgroup = {};
-                vgtGsMaxPrimsPerSubgroup.bits.MAX_PRIMS_PER_SUBGROUP =
-                    pConfig->m_esGsRegs.VGT_GS_ONCHIP_CNTL_VAL.bits.GS_INST_PRIMS_IN_SUBGRP *
-                    pConfig->m_esGsRegs.VGT_GS_MAX_VERT_OUT_VAL.bits.MAX_VERT_OUT;
-                SET_DYN_REG(pConfig, mmVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09, vgtGsMaxPrimsPerSubgroup.u32All);
-            }
-            else
-            {
-                LLPC_NOT_IMPLEMENTED();
-            }
-        }
-
         hash64 = pContext->GetShaderHashCode(ShaderStageVertex);
         SET_REG(pConfig, API_VS_HASH_LO, static_cast<uint32_t>(hash64));
         SET_REG(pConfig, API_VS_HASH_HI, static_cast<uint32_t>(hash64 >> 32));
@@ -297,10 +277,23 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, ES_EN, ES_STAGE_REAL);
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, GS_EN, GS_STAGE_ON);
 
-        const auto pIntfData = pContext->GetShaderInterfaceData(ShaderStageVertex);
-        if (pIntfData->vbTable.resNodeIdx != InvalidValue)
+        const auto pVsIntfData = pContext->GetShaderInterfaceData(ShaderStageVertex);
+        if (pVsIntfData->vbTable.resNodeIdx != InvalidValue)
         {
-            SET_REG(pConfig, INDIRECT_TABLE_ENTRY, pIntfData->vbTable.resNodeIdx);
+            SET_REG(pConfig, INDIRECT_TABLE_ENTRY, pVsIntfData->vbTable.resNodeIdx);
+        }
+
+        if (gfxIp.major == 9)
+        {
+            regVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09 vgtGsMaxPrimsPerSubgroup = {};
+            vgtGsMaxPrimsPerSubgroup.bits.MAX_PRIMS_PER_SUBGROUP =
+                pConfig->m_esGsRegs.VGT_GS_ONCHIP_CNTL_VAL.bits.GS_INST_PRIMS_IN_SUBGRP *
+                pConfig->m_esGsRegs.VGT_GS_MAX_VERT_OUT_VAL.bits.MAX_VERT_OUT;
+            SET_DYN_REG(pConfig, mmVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09, vgtGsMaxPrimsPerSubgroup.u32All);
+        }
+        else
+        {
+            LLPC_NOT_IMPLEMENTED();
         }
     }
 
@@ -389,10 +382,10 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, HS_EN, HS_STAGE_ON);
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, LS_EN, LS_STAGE_ON);
 
-        const auto pIntfData = pContext->GetShaderInterfaceData(ShaderStageVertex);
-        if (pIntfData->vbTable.resNodeIdx != InvalidValue)
+        const auto pVsIntfData = pContext->GetShaderInterfaceData(ShaderStageVertex);
+        if (pVsIntfData->vbTable.resNodeIdx != InvalidValue)
         {
-            SET_REG(pConfig, INDIRECT_TABLE_ENTRY, pIntfData->vbTable.resNodeIdx);
+            SET_REG(pConfig, INDIRECT_TABLE_ENTRY, pVsIntfData->vbTable.resNodeIdx);
         }
     }
 
@@ -406,26 +399,6 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
                                                                hasGs ? ShaderStageGeometry : ShaderStageInvalid,
                                                                pConfig);
 
-        if (hasGs)
-        {
-            if (gfxIp.major == 9)
-            {
-                const auto pGsResUsage = pContext->GetShaderResourceUsage(ShaderStageGeometry);
-                const auto& gsBuiltInUsage = pGsResUsage->builtInUsage.gs;
-                const auto& calcFactor = pGsResUsage->inOutUsage.gs.calcFactor;
-
-                regVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09 vgtGsMaxPrimsPerSubgroup = {};
-                vgtGsMaxPrimsPerSubgroup.bits.MAX_PRIMS_PER_SUBGROUP =
-                    pConfig->m_esGsRegs.VGT_GS_ONCHIP_CNTL_VAL.bits.GS_INST_PRIMS_IN_SUBGRP *
-                    pConfig->m_esGsRegs.VGT_GS_MAX_VERT_OUT_VAL.bits.MAX_VERT_OUT;
-                SET_DYN_REG(pConfig, mmVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09, vgtGsMaxPrimsPerSubgroup.u32All);
-            }
-            else
-            {
-                LLPC_NOT_IMPLEMENTED();
-            }
-        }
-
         hash64 = pContext->GetShaderHashCode(ShaderStageTessEval);
         SET_REG(pConfig, API_DS_HASH_LO, static_cast<uint32_t>(hash64));
         SET_REG(pConfig, API_DS_HASH_HI, static_cast<uint32_t>(hash64 >> 32));
@@ -436,6 +409,19 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
 
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, ES_EN, ES_STAGE_DS);
         SET_REG_FIELD(pConfig, VGT_SHADER_STAGES_EN, GS_EN, GS_STAGE_ON);
+
+        if (gfxIp.major == 9)
+        {
+            regVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09 vgtGsMaxPrimsPerSubgroup = {};
+            vgtGsMaxPrimsPerSubgroup.bits.MAX_PRIMS_PER_SUBGROUP =
+                pConfig->m_esGsRegs.VGT_GS_ONCHIP_CNTL_VAL.bits.GS_INST_PRIMS_IN_SUBGRP *
+                pConfig->m_esGsRegs.VGT_GS_MAX_VERT_OUT_VAL.bits.MAX_VERT_OUT;
+            SET_DYN_REG(pConfig, mmVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09, vgtGsMaxPrimsPerSubgroup.u32All);
+        }
+        else
+        {
+            LLPC_NOT_IMPLEMENTED();
+        }
     }
 
     if ((result == Result::Success) && (stageMask & ShaderStageToMask(ShaderStageFragment)))
@@ -457,11 +443,11 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
     // Set up IA_MULTI_VGT_PARAM
     regIA_MULTI_VGT_PARAM iaMultiVgtParam = {};
 
-    const auto& vsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageVertex)->builtInUsage.vs;
     const auto& tcsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessControl)->builtInUsage.tcs;
+    const auto& tesBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes;
     const auto& gsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageGeometry)->builtInUsage.gs;
 
-    if (vsBuiltInUsage.primitiveId || tcsBuiltInUsage.primitiveId || gsBuiltInUsage.primitiveId)
+    if (tcsBuiltInUsage.primitiveId || tesBuiltInUsage.primitiveId || gsBuiltInUsage.primitiveId)
     {
         iaMultiVgtParam.bits.PARTIAL_ES_WAVE_ON = true;
         iaMultiVgtParam.bits.SWITCH_ON_EOI = true;
@@ -564,6 +550,7 @@ Result ConfigBuilder::BuildVsRegConfig(
     bool depthClipDisable = (pPipelineInfo->vpState.depthClipEnable == false);
     bool rasterizerDiscardEnable = pPipelineInfo->rsState.rasterizerDiscardEnable;
     bool disableVertexReuse = pPipelineInfo->iaState.disableVertexReuse;
+
     SET_REG_FIELD(&pConfig->m_vsRegs, PA_CL_CLIP_CNTL, UCP_ENA_0, (usrClipPlaneMask >> 0) & 0x1);
     SET_REG_FIELD(&pConfig->m_vsRegs, PA_CL_CLIP_CNTL, UCP_ENA_1, (usrClipPlaneMask >> 1) & 0x1);
     SET_REG_FIELD(&pConfig->m_vsRegs, PA_CL_CLIP_CNTL, UCP_ENA_2, (usrClipPlaneMask >> 2) & 0x1);
@@ -607,12 +594,11 @@ Result ConfigBuilder::BuildVsRegConfig(
 
         if (builtInUsage.vs.instanceIndex)
         {
-            // TODO: Need to set SPI_SHADER_PGM_RSRC1_VS.VGPR_COMP_CNT in .AMDGPU.config section
-            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 0x3); // 0x3: Enable instance ID
+            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 3); // 3: Enable instance ID
         }
         else if (builtInUsage.vs.primitiveId)
         {
-            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 0x2);
+            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 2);
         }
     }
     else if (shaderStage == ShaderStageTessEval)
@@ -624,18 +610,15 @@ Result ConfigBuilder::BuildVsRegConfig(
         clipDistanceCount = builtInUsage.tes.clipDistance;
         cullDistanceCount = builtInUsage.tes.cullDistance;
 
-        uint32_t vgtCompCnt = 1;
-        if (builtInUsage.tes.tessCoord)
-        {
-            ++vgtCompCnt;
-        }
-
-        // NOTE: when primitive ID is used, set vgtCompCnt to 3 directly because primitive ID is the last VGPR.
         if (builtInUsage.tes.primitiveId)
         {
-            vgtCompCnt = 3;
+            // NOTE: when primitive ID is used, set vgtCompCnt to 3 directly because primitive ID is the last VGPR.
+            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 3); // 3: Enable primitive ID
         }
-        SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, vgtCompCnt);
+        else
+        {
+            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, VGPR_COMP_CNT, 2);
+        }
 
         if (pContext->IsTessOffChip())
         {
@@ -659,6 +642,20 @@ Result ConfigBuilder::BuildVsRegConfig(
         useViewportIndex  = builtInUsage.gs.viewportIndex;
         clipDistanceCount = builtInUsage.gs.clipDistance;
         cullDistanceCount = builtInUsage.gs.cullDistance;
+
+        // NOTE: For ES-GS merged shader, the actual use of primitive ID should take both ES and GS into consideration.
+        const bool hasTs = ((pContext->GetShaderStageMask() & (ShaderStageToMask(ShaderStageTessControl) |
+                                                               ShaderStageToMask(ShaderStageTessEval))) != 0);
+        if (hasTs)
+        {
+            const auto& tesBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes;
+            usePrimitiveId = usePrimitiveId || tesBuiltInUsage.primitiveId;
+        }
+        else
+        {
+            const auto& vsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageVertex)->builtInUsage.vs;
+            usePrimitiveId = usePrimitiveId || vsBuiltInUsage.primitiveId;
+        }
     }
 
     SET_REG_FIELD(&pConfig->m_vsRegs, VGT_PRIMITIVEID_EN, PRIMITIVEID_EN, usePrimitiveId);
@@ -952,13 +949,9 @@ Result ConfigBuilder::BuildEsGsRegConfig(
         {
             esVgprCompCnt = 3;
         }
-        else if (tesBuiltInUsage.tessCoord)
-        {
-            esVgprCompCnt = 1;
-        }
         else
         {
-            esVgprCompCnt = 0;
+            esVgprCompCnt = 2;
         }
 
         if (pContext->IsTessOffChip())
@@ -1392,9 +1385,9 @@ Result ConfigBuilder::BuildUserDataConfig(
                 static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
         }
     }
-    else if (shaderStage == ShaderStageCopyShader)
+    else if (shaderStage == ShaderStageGeometry)
     {
-        if (enableMultiView && isLastVertexProcessingStage)
+        if (enableMultiView)
         {
             SET_DYN_REG(pConfig,
                 startUserData + pIntfData->userDataUsage.gs.viewIndex,

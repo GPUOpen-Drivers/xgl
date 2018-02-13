@@ -170,6 +170,13 @@ bool PatchEntryPointMutate::runOnModule(
     AttributeList::AttrIndex attribIdx = AttributeList::AttrIndex(AttributeList::FunctionIndex);
     pEntryPoint->addAttributes(attribIdx, builder);
 
+    // NOTE: Remove "readnone" attribute for entry-point. If GS is emtry, this attribute will allow
+    // LLVM optimization to remove sendmsg(GS_DONE). It is unexpected.
+    if (pEntryPoint->hasFnAttribute(Attribute::ReadNone))
+    {
+        pEntryPoint->removeFnAttr(Attribute::ReadNone);
+    }
+
     // Update attributes of new entry-point
     for (auto pArg = pEntryPoint->arg_begin(), pEnd = pEntryPoint->arg_end(); pArg != pEnd; ++pArg)
     {

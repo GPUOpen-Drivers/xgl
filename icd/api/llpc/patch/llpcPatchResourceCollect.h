@@ -61,6 +61,7 @@ private:
     LLPC_DISALLOW_COPY_AND_ASSIGN(PatchResourceCollect);
 
     void ClearInactiveInput();
+    void ClearInactiveOutput();
 
     void MatchGenericInOut();
     void MapBuiltInToGenericInOut();
@@ -73,6 +74,7 @@ private:
 
     std::unordered_set<uint32_t>    m_activeInputLocs;          // Locations of active generic inputs
     std::unordered_set<uint32_t>    m_activeInputBuiltIns;      // IDs of active built-in inputs
+    std::unordered_set<uint32_t>    m_activeOutputBuiltIns;     // IDs of active built-in outputs
 
     std::unordered_set<uint32_t>    m_importedOutputLocs;       // Locations of imported generic outputs
     std::unordered_set<uint32_t>    m_importedOutputBuiltIns;   // IDs of imported built-in outputs

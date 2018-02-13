@@ -35,6 +35,8 @@
 
 #include "llpc.h"
 
+#include <climits>
+
 namespace vk
 {
 
@@ -172,7 +174,7 @@ VkResult ShaderModule::Init(const Device* pDevice)
         moduleInfo.shaderBin.pCode    = m_pCode;
         moduleInfo.shaderBin.codeSize = m_codeSize;
 
-        Llpc::Result llpcResult = pDevice->GetCompiler()->BuildShaderModule(&moduleInfo, &m_llpcConvertOut);
+        Llpc::Result llpcResult = pDevice->GetLlpcCompiler()->BuildShaderModule(&moduleInfo, &m_llpcConvertOut);
 
         if ((llpcResult != Llpc::Result::Success) && (llpcResult != Llpc::Result::Delayed))
         {

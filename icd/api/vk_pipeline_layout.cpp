@@ -75,8 +75,8 @@ VkResult PipelineLayout::ConvertCreateInfo(
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    pPipelineInfo->numPalRsrcMapNodes = 0;
-    pPipelineInfo->numPalDescRangeValueNodes = 0;
+    pPipelineInfo->numRsrcMapNodes        = 0;
+    pPipelineInfo->numDescRangeValueNodes = 0;
 
     // Always allocates:
     // 1 extra user data node for the vertex buffer table pointer
@@ -141,17 +141,17 @@ VkResult PipelineLayout::ConvertCreateInfo(
         if (setLayoutInfo.activeStageMask != 0)
         {
             // Accumulate the space needed by all resource nodes for this set
-            pPipelineInfo->numPalRsrcMapNodes += setLayoutInfo.sta.numPalRsrcMapNodes;
+            pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
 
             // Accumulate the space needed by all fmask resource nodes for this set
-            pPipelineInfo->numPalRsrcMapNodes += setLayoutInfo.fmask.numPalRsrcMapNodes;
+            pPipelineInfo->numRsrcMapNodes += setLayoutInfo.fmask.numRsrcMapNodes;
 
             // Add space for the user data node entries needed for dynamic descriptors
-            pPipelineInfo->numUserDataNodes += setLayoutInfo.dyn.numPalRsrcMapNodes + 1;
+            pPipelineInfo->numUserDataNodes += setLayoutInfo.dyn.numRsrcMapNodes + 1;
 
             // Add space for immutable sampler descriptor storage needed by the set
-            pPipelineInfo->numImmutableSamplers      += setLayoutInfo.imm.numImmutableSamplers;
-            pPipelineInfo->numPalDescRangeValueNodes += setLayoutInfo.imm.numDescriptorValueNodes;
+            pPipelineInfo->numImmutableSamplers   += setLayoutInfo.imm.numImmutableSamplers;
+            pPipelineInfo->numDescRangeValueNodes += setLayoutInfo.imm.numDescriptorValueNodes;
 
             // Reserve user data register space for dynamic descriptor data
             pSetUserData->dynDescDataRegOffset = pSetUserData->firstRegOffset + pSetUserData->totalRegCount;
@@ -160,7 +160,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
             totalDynDescCount += setLayoutInfo.numDynamicDescriptors;
 
-            if (setLayoutInfo.sta.numPalRsrcMapNodes > 0)
+            if (setLayoutInfo.sta.numRsrcMapNodes > 0)
             {
                 // If the set has a static portion reserve an extra user data node entry for the set pointer
                 pPipelineInfo->numUserDataNodes++;
@@ -181,14 +181,14 @@ VkResult PipelineLayout::ConvertCreateInfo(
     VK_ASSERT(totalDynDescCount <= MaxDynamicDescriptors);
 
     // In case we need an internal vertex buffer table, add nodes required for its entries, and its set pointer.
-    pPipelineInfo->numPalRsrcMapNodes += MaxVertexBuffers;
+    pPipelineInfo->numRsrcMapNodes += MaxVertexBuffers;
 
     // Add the user data nodes count to the total number of resource mapping nodes
-    pPipelineInfo->numPalRsrcMapNodes += pPipelineInfo->numUserDataNodes;
+    pPipelineInfo->numRsrcMapNodes += pPipelineInfo->numUserDataNodes;
 
-    pPipelineInfo->tempStageSize = (pPipelineInfo->numPalRsrcMapNodes * sizeof(Llpc::ResourceMappingNode));
+    pPipelineInfo->tempStageSize = (pPipelineInfo->numRsrcMapNodes * sizeof(Llpc::ResourceMappingNode));
 
-    pPipelineInfo->tempStageSize += (pPipelineInfo->numPalDescRangeValueNodes * sizeof(Llpc::DescriptorRangeValue));
+    pPipelineInfo->tempStageSize += (pPipelineInfo->numDescRangeValueNodes * sizeof(Llpc::DescriptorRangeValue));
 
     // Calculate scratch buffer size for building pipeline mappings for all shader stages based on this layout
     pPipelineInfo->tempBufferSize = (ShaderStageCount * pPipelineInfo->tempStageSize);
@@ -462,7 +462,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
 
     Llpc::ResourceMappingNode* pAllNodes = pUserDataNodes + m_pipelineInfo.numUserDataNodes;
     Llpc::DescriptorRangeValue* pDescriptorRangeValues =
-        reinterpret_cast<Llpc::DescriptorRangeValue*>(pUserDataNodes + m_pipelineInfo.numPalRsrcMapNodes);
+        reinterpret_cast<Llpc::DescriptorRangeValue*>(pUserDataNodes + m_pipelineInfo.numRsrcMapNodes);
     uint32_t descriptorRangeCount = 0;
 
     uint32_t mappingNodeCount  = 0; // Number of consumed ResourceMappingNodes
@@ -572,7 +572,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     pShaderInfo->descriptorRangeValueCount = descriptorRangeCount;
 
     // If you hit this assert, we precomputed an insufficient amount of scratch space during layout creation.
-    VK_ASSERT(mappingNodeCount <= m_pipelineInfo.numPalRsrcMapNodes);
+    VK_ASSERT(mappingNodeCount <= m_pipelineInfo.numRsrcMapNodes);
 
     return VK_SUCCESS;
 }

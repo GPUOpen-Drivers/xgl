@@ -548,7 +548,10 @@ public:
     }
 
     static Pal::uint32 ConvertBarrierSrcAccessFlags(const Device* pDevice, VkAccessFlags accessMask);
-    static Pal::uint32 ConvertBarrierDstAccessFlags(const Device* pDevice, VkAccessFlags accessMask);
+    static Pal::uint32 ConvertBarrierDstAccessFlags(
+               const Device* pDevice,
+               VkAccessFlags accessMask,
+               uint32_t      combinedAccessMask);
     static void ConvertBarrierCacheFlags(
                const Device*           pDevice,
                VkAccessFlags           srcAccess,

@@ -32,6 +32,7 @@
 #include <xcb/xcb.h>
 
 #include "include/khronos/vulkan.h"
+#include "include/vk_alloccb.h"
 #include "include/vk_buffer.h"
 #include "include/vk_buffer_view.h"
 #include "include/vk_descriptor_pool.h"
@@ -165,7 +166,6 @@ Device::Device(
     uint32_t                            palDeviceCount,
     PhysicalDevice**                    pPhysicalDevices,
     Pal::IDevice**                      pPalDevices,
-    Pal::GpuMemoryRef*                  pMemRefArrays,
     const DeviceExtensions::Enabled&    enabledExtensions,
     const VkPhysicalDeviceFeatures*     pFeatures)
     :
@@ -203,11 +203,7 @@ Device::Device(
     m_allocatedCount = 0;
     m_maxAllocations = pPhysicalDevices[DefaultDeviceIndex]->GetLimits().maxMemoryAllocationCount;
 
-    memset(m_pCompiler, 0, sizeof(m_pCompiler));
-    for (uint32_t i = 0; i < palDeviceCount; ++i)
-    {
-        InitLlpcCompiler(i);
-    }
+    memset(m_pLlpcCompiler, 0, sizeof(m_pLlpcCompiler));
 
 }
 
@@ -364,19 +360,8 @@ VkResult Device::Create(
 
     DispatchableQueue* pQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
 
-    size_t       palMemRefArraySize = 0;
-    const size_t palMemRefArrayOffset = sizeof(DispatchableDevice) + (totalQueues * sizeof(DispatchableQueue));
-
-    for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
-    {
-        Pal::DeviceProperties props = {};
-        palResult = pPalDevices[deviceIdx]->GetProperties(&props);
-
-        palMemRefArraySize += sizeof(Pal::GpuMemoryRef) * props.maxGpuMemoryRefsResident;
-    }
-
     pMemory = pInstance->AllocMem(
-        sizeof(DispatchableDevice) + (totalQueues * sizeof(DispatchableQueue)) + palMemRefArraySize,
+        sizeof(DispatchableDevice) + (totalQueues * sizeof(DispatchableQueue)),
         VK_DEFAULT_MEM_ALIGN,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -393,7 +378,6 @@ VkResult Device::Create(
                 numDevices,
                 pPhysicalDevices,
                 pPalDevices,
-                reinterpret_cast<Pal::GpuMemoryRef*>(reinterpret_cast<uint8_t*>(pMemory) + palMemRefArrayOffset),
                 enabledDeviceExtensions,
                 pCreateInfo->pEnabledFeatures));
 
@@ -687,6 +671,19 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
+        for (uint32_t i = 0; i < m_palDeviceCount; ++i)
+        {
+            result = CreateLlpcCompiler(i);
+
+            if (result != VK_SUCCESS)
+            {
+                break;
+            }
+        }
+    }
+
+    if (result == VK_SUCCESS)
+    {
         result = CreateLlpcInternalPipelines();
     }
 
@@ -949,10 +946,10 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
     for (uint32_t i = 0; i < MaxPalDevices; ++i)
     {
-        if (m_pCompiler[i] != nullptr)
+        if (m_pLlpcCompiler[i] != nullptr)
         {
-            m_pCompiler[i]->Destroy();
-            m_pCompiler[i] = nullptr;
+            m_pLlpcCompiler[i]->Destroy();
+            m_pLlpcCompiler[i] = nullptr;
         }
     }
 
@@ -1006,7 +1003,7 @@ VkResult Device::CreateLlpcInternalComputePipeline(
     shaderInfo.shaderBin.pCode    = pCode;
     shaderInfo.shaderBin.codeSize = codeByteSize;
 
-    llpcResult = GetCompiler()->BuildShaderModule(&shaderInfo, &shaderOut);
+    llpcResult = GetLlpcCompiler()->BuildShaderModule(&shaderInfo, &shaderOut);
     if ((llpcResult != Llpc::Result::Success) && (llpcResult != Llpc::Result::Delayed))
     {
         result = VK_ERROR_INITIALIZATION_FAILED;
@@ -1026,7 +1023,7 @@ VkResult Device::CreateLlpcInternalComputePipeline(
         pShaderInfo->pEntryTarget        = "main";
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
-        llpcResult = GetCompiler()->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut);
+        llpcResult = GetLlpcCompiler()->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut);
         if (llpcResult != Llpc::Result::Success)
         {
             result = VK_ERROR_INITIALIZATION_FAILED;
@@ -1873,8 +1870,8 @@ VkDeviceSize Device::GetMemoryBaseAddrAlignment(
 }
 
 // =====================================================================================================================
-// Initialize LLPC compiler handle
-void Device::InitLlpcCompiler(
+// Create LLPC compiler handle
+VkResult Device::CreateLlpcCompiler(
     int32_t deviceIdx)  // Device index
 {
     const uint32_t     OptionBufferSize = 4096;
@@ -1885,7 +1882,6 @@ void Device::InitLlpcCompiler(
     // Initialzie GfxIpVersion according to PAL gfxLevel
     Pal::DeviceProperties info;
     PalDevice(deviceIdx)->GetProperties(&info);
-    Pal::PalPublicSettings* pPalSettings = PalDevice()->GetPublicSettings();
 
     switch (info.gfxLevel)
     {
@@ -2016,7 +2012,7 @@ void Device::InitLlpcCompiler(
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
 
-    Pal::ShaderCacheMode shaderCacheMode = pPalSettings->shaderCacheMode;
+    ShaderCacheMode shaderCacheMode = m_settings.shaderCacheMode;
 #ifdef ICD_BUILD_APPPROFILE
     const AppProfile appProfile = GetAppProfile();
     if ((appProfile == AppProfile::Talos) ||
@@ -2027,13 +2023,13 @@ void Device::InitLlpcCompiler(
     }
 
     // Force enable cache to disk to improve user experience
-    if ((shaderCacheMode == Pal::ShaderCacheRuntimeOnly) &&
+    if ((shaderCacheMode == ShaderCacheEnableRuntimeOnly) &&
          ((appProfile == AppProfile::MadMax) ||
           (appProfile == AppProfile::SeriousSamFusion) ||
           (appProfile == AppProfile::F1_2017)))
     {
         // Force to use internal disk cache.
-        shaderCacheMode = static_cast<Pal::ShaderCacheMode>(Pal::ShaderCacheOnDisk + 1);
+        shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
     }
 #endif
 
@@ -2076,7 +2072,9 @@ void Device::InitLlpcCompiler(
     Llpc::Result llpcResult = Llpc::ICompiler::Create(gfxIp, numOptions, llpcOptions, &pCompiler);
     VK_ASSERT(llpcResult == Llpc::Result::Success);
 
-    m_pCompiler[deviceIdx] = pCompiler;
+    m_pLlpcCompiler[deviceIdx] = pCompiler;
+
+    return (llpcResult == Llpc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
 }
 
 // =====================================================================================================================

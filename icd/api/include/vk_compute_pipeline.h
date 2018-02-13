@@ -31,6 +31,8 @@
 #include "include/vk_pipeline.h"
 #include "include/internal_mem_mgr.h"
 
+#include "palPipeline.h"
+
 namespace vk
 {
 
@@ -42,26 +44,6 @@ class PipelineCache;
 // Vulkan implementation of compute pipelines created by vkCreateComputePipeline
 class ComputePipeline : public Pipeline, public NonDispatchable<VkPipeline, ComputePipeline>
 {
-    // Immediate state info that will be written during Bind() but is not
-    // encapsulated within a state object.
-    //
-    // NOTE: This structure needs to be revisited when the new PAL state headers
-    // are in place.
-    struct ImmedInfo
-    {
-        // Bitfield to detect which subset of pipeline state is static (written at bind-time).
-        uint32_t                      staticStateMask;
-
-        Pal::DynamicComputeShaderInfo computeWaveLimitParams;
-
-        // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
-        // state programming during pipeline binds.
-        struct
-        {
-            uint32_t waveLimits;
-        } staticTokens;
-    };
-
 public:
     static VkResult Create(
         Device*                                pDevice,
@@ -92,6 +74,26 @@ public:
     }
 
 protected:
+    // Immediate state info that will be written during Bind() but is not
+    // encapsulated within a state object.
+    //
+    // NOTE: This structure needs to be revisited when the new PAL state headers
+    // are in place.
+    struct ImmedInfo
+    {
+        // Bitfield to detect which subset of pipeline state is static (written at bind-time).
+        uint32_t                      staticStateMask;
+
+        Pal::DynamicComputeShaderInfo computeWaveLimitParams;
+
+        // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
+        // state programming during pipeline binds.
+        struct
+        {
+            uint32_t waveLimits;
+        } staticTokens;
+    };
+
     ComputePipeline(
         Device* const                        pDevice,
         Pal::IPipeline**                     pPalPipeline,
@@ -102,16 +104,27 @@ protected:
     void CreateStaticState();
     void DestroyStaticState(const VkAllocationCallbacks* pAllocator);
 
-    static VkResult ConvertComputePipelineInfo(
-        Device*                                 pDevice,
-        PipelineCache*                          pPipelineCache,
-        const VkComputePipelineCreateInfo*      pIn,
-        Pal::ComputePipelineCreateInfo*         pOutInfo,
-        ImmedInfo*                              pImmedInfo,
-        void**                                  ppTempBuffer,
-        void**                                  ppTempShaderBuffer,
-        size_t*                                 pPipelineBinarySize,
-        const void**                            ppPipelineBinary);
+    // Converted creation info parameters of the Vulkan compute pipeline
+    struct CreateInfo
+    {
+        ImmedInfo                              immedInfo;
+        Pal::ComputePipelineCreateInfo         pipeline;
+        const PipelineLayout*                  pLayout;
+        const VkPipelineShaderStageCreateInfo* pStage;
+        VkPipelineCreateFlags                  flags;
+    };
+
+    static void ConvertComputePipelineInfo(
+        Device*                            pDevice,
+        const VkComputePipelineCreateInfo* pIn,
+        CreateInfo*                        pOutInfo);
+
+    static VkResult CreateComputePipelineBinaries(
+        Device*                            pDevice,
+        PipelineCache*                     pPipelineCache,
+        CreateInfo*                        pCreateInfo,
+        size_t                             pipelineBinarySizes[MaxPalDevices],
+        void*                              pPipelineBinaries[MaxPalDevices]);
 
 private:
     ImmedInfo m_info; // Immediate state that will go in CmdSet* functions

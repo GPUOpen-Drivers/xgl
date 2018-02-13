@@ -154,6 +154,20 @@ void ReadPublicSettings(
     {
         pSettings->enableTurboSync = turboSyncGlobal;
     }
+
+    // Read TFQ global key
+    uint32_t texFilterQuality = TextureFilterOptimizationsEnabled;
+    if (pPalDevice->ReadSetting("TFQ",
+                                Pal::SettingScope::Global,
+                                Util::ValueType::Uint,
+                                &texFilterQuality,
+                                sizeof(texFilterQuality)))
+    {
+        if (texFilterQuality <= TextureFilterOptimizationsAggressive)
+        {
+            pSettings->vulkanTexFilterQuality = static_cast<TextureFilterOptimizationSettings>(texFilterQuality);
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -163,6 +177,29 @@ void ValidateSettings(
     Pal::IDevice*      pPalDevice,
     RuntimeSettings*   pSettings)
 {
+    // Override the default preciseAnisoMode value based on the public CCC vulkanTexFilterQuality (TFQ) setting.
+    // Note: This will override any Vulkan app specific profile.
+    // TODO: Add code to read the Radeon Settings' per-app profile blob's TFQ setting and use that to override
+    //       the global registry TFQ settings.
+    switch (pSettings->vulkanTexFilterQuality)
+    {
+    case TextureFilterOptimizationsDisabled:
+        // Use precise aniso and disable optimizations.  Highest image quality.
+        // This is acutally redundant because TFQ should cause the GPU's PERF_MOD field to be set in such a
+        // way that all texture filtering optimizations are disabled anyway.
+        pSettings->preciseAnisoMode = EnablePreciseAniso;
+        break;
+
+    case TextureFilterOptimizationsAggressive:
+        // Enable both aniso and trilinear filtering optimizations. Lowest image quality.
+        // This will cause Vulkan to fail conformance tests.
+        pSettings->preciseAnisoMode = DisablePreciseAnisoAll;
+        break;
+
+    case TextureFilterOptimizationsEnabled:
+        // This is the default.  Do nothing and maintain default settings.
+        break;
+    }
 }
 
 // =====================================================================================================================
@@ -173,7 +210,7 @@ void UpdatePalSettings(
 {
     Pal::PalPublicSettings* pPalSettings = pPalDevice->GetPublicSettings();
 
-    pPalSettings->hintDisableSmallSurfColorCompressionSize = 0;
+    /* Nothing to do here at the moment */
 }
 
 };

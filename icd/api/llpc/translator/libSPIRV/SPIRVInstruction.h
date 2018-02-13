@@ -1484,7 +1484,8 @@ public:
     assert(Module && "Invalid module");
     ExtSetKind = Module->getBuiltinSet(ExtSetId);
     assert((ExtSetKind == SPIRVEIS_OpenCL ||
-            ExtSetKind == SPIRVEIS_GLSL) && "not supported");
+            ExtSetKind == SPIRVEIS_GLSL ||
+            ExtSetKind == SPIRVEIS_ShaderBallotAMD) && "not supported");
   }
   void encode(spv_ostream &O) const {
     getEncoder(O) << Type << Id << ExtSetId;
@@ -1494,6 +1495,9 @@ public:
       break;
     case SPIRVEIS_GLSL:
       getEncoder(O) << ExtOpGLSL;
+      break;
+    case SPIRVEIS_ShaderBallotAMD:
+      getEncoder(O) << ExtOpShaderBallotAMD;
       break;
     default:
       assert(0 && "not supported");
@@ -1510,6 +1514,9 @@ public:
       break;
     case SPIRVEIS_GLSL:
       getDecoder(I) >> ExtOpGLSL;
+      break;
+    case SPIRVEIS_ShaderBallotAMD:
+      getDecoder(I) >> ExtOpShaderBallotAMD;
       break;
     default:
       assert(0 && "not supported");
@@ -1544,6 +1551,7 @@ protected:
     SPIRVWord ExtOp;
     OCLExtOpKind ExtOpOCL;
     GLSLExtOpKind ExtOpGLSL;
+    ShaderBallotAMDExtOpKind ExtOpShaderBallotAMD;
   };
   SPIRVExtInstSetKind ExtSetKind;
 };

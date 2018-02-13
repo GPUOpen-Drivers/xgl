@@ -40,6 +40,7 @@
 #include "palDepthStencilState.h"
 #include "palMsaaState.h"
 #include "palPipeline.h"
+
 #include "llpc.h"
 
 namespace vk
@@ -155,6 +156,45 @@ static void ConvertToPalMsaaQuadSamplePattern(
 // Vulkan implementation of graphics pipelines created by vkCreateGraphicsPipeline
 class GraphicsPipeline : public Pipeline, public NonDispatchable<VkPipeline, GraphicsPipeline>
 {
+public:
+    static VkResult Create(
+        Device*                                 pDevice,
+        PipelineCache*                          pPipelineCache,
+        const VkGraphicsPipelineCreateInfo*     pCreateInfo,
+        const VkAllocationCallbacks*            pAllocator,
+        VkPipeline*                             pPipeline);
+
+    VkResult Destroy(
+        Device*                         pDevice,
+        const VkAllocationCallbacks*    pAllocator) override;
+
+    const VbBindingInfo* GetVbBindingInfo() const
+        { return &m_vbInfo; }
+
+    void BindToCmdBuffer(
+        CmdBuffer*                             pCmdBuffer,
+        CmdBufferRenderState*                  pRenderState,
+        StencilOpsCombiner*                    pStencilCombiner) const;
+
+    void BindToCmdBuffer(
+        CmdBuffer*                             pCmdBuffer,
+        CmdBufferRenderState*                  pRenderState,
+        StencilOpsCombiner*                    pStencilCombiner,
+        const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos) const;
+
+    const Pal::IMsaaState* const* GetMsaaStates() const { return m_pPalMsaa; }
+
+    static void BindNullPipeline(CmdBuffer* pCmdBuffer);
+
+    // This function returns true if any of the bits in the given state mask (corresponding to shifted values of
+    // VK_DYNAMIC_STATE_*) should be programmed by the pipeline when it is bound (instead of by the application via
+    // vkCmdSet*).
+    VK_INLINE bool PipelineSetsState(DynamicStatesInternal dynamicState) const
+    {
+        return ((m_info.staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0);
+    }
+
+protected:
     // Immediate state info that will be written during Bind() but is not
     // encapsulated within a state object.
     //
@@ -198,62 +238,6 @@ class GraphicsPipeline : public Pipeline, public NonDispatchable<VkPipeline, Gra
         } staticTokens;
     };
 
-public:
-    // Creation info parameters for all the necessary PAL state objects encapsulated
-    // by the Vulkan graphics pipeline.
-    struct CreateInfo
-    {
-        Pal::GraphicsPipelineCreateInfo  pipeline;
-        Pal::MsaaStateCreateInfo         msaa;
-        Pal::ColorBlendStateCreateInfo   blend;
-        Pal::DepthStencilStateCreateInfo ds;
-        const PipelineLayout*            pLayout;
-        void*                            pShaderMem;
-        Llpc::GraphicsPipelineBuildInfo  pipelineLlpc;
-        uint32_t                         sampleCoverage;
-    };
-
-    static VkResult Create(
-        Device*                                 pDevice,
-        PipelineCache*                          pPipelineCache,
-        const VkGraphicsPipelineCreateInfo*     pCreateInfo,
-        const VkAllocationCallbacks*            pAllocator,
-        VkPipeline*                             pPipeline);
-
-    VkResult Destroy(
-        Device*                         pDevice,
-        const VkAllocationCallbacks*    pAllocator) override;
-
-    const VbBindingInfo* GetVbBindingInfo() const
-        { return &m_vbInfo; }
-
-    const ImmedInfo* GetImmediateInfo() const
-        { return &m_info; }
-
-    void BindToCmdBuffer(
-        CmdBuffer*                             pCmdBuffer,
-        CmdBufferRenderState*                  pRenderState,
-        StencilOpsCombiner*                    pStencilCombiner) const;
-
-    void BindToCmdBuffer(
-        CmdBuffer*                             pCmdBuffer,
-        CmdBufferRenderState*                  pRenderState,
-        StencilOpsCombiner*                    pStencilCombiner,
-        const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos) const;
-
-    const Pal::IMsaaState* const* GetMsaaStates() const { return m_pPalMsaa; }
-
-    static void BindNullPipeline(CmdBuffer* pCmdBuffer);
-
-    // This function returns true if any of the bits in the given state mask (corresponding to shifted values of
-    // VK_DYNAMIC_STATE_*) should be programmed by the pipeline when it is bound (instead of by the application via
-    // vkCmdSet*).
-    VK_INLINE bool PipelineSetsState(DynamicStatesInternal dynamicState) const
-    {
-        return ((m_info.staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0);
-    }
-
-protected:
     GraphicsPipeline(
         Device* const                          pDevice,
         Pal::IPipeline**                       pPalPipeline,
@@ -271,24 +255,43 @@ protected:
 
     ~GraphicsPipeline();
 
-    static VkResult BuildPatchedShaders(
+    // Creation info parameters for all the necessary PAL/LLPC/SCPC state objects encapsulated
+    // by the Vulkan graphics pipeline.
+    struct CreateInfo
+    {
+        Pal::GraphicsPipelineCreateInfo             pipeline;
+        Llpc::GraphicsPipelineBuildInfo             pipelineLlpc;
+        Pal::MsaaStateCreateInfo                    msaa;
+        Pal::ColorBlendStateCreateInfo              blend;
+        Pal::DepthStencilStateCreateInfo            ds;
+        ImmedInfo                                   immedInfo;
+        const PipelineLayout*                       pLayout;
+        void*                                       pShaderMem;
+        uint32_t                                    sampleCoverage;
+        const VkPipelineVertexInputStateCreateInfo* pVertexInput;
+        uint32_t                                    activeStageCount;
+        const VkPipelineShaderStageCreateInfo*      pActiveStages;
+        bool                                        isMultiviewEnabled;
+    };
+
+    static void ConvertGraphicsPipelineInfo(
+        Device*                             pDevice,
+        const VkGraphicsPipelineCreateInfo* pIn,
+        CreateInfo*                         pInfo);
+
+    static void BuildRasterizationState(
+        Device*                                       pDevice,
+        const VkPipelineRasterizationStateCreateInfo* pIn,
+        CreateInfo*                                   pInfo,
+        const bool                                    dynamicStateFlags[]);
+
+    static VkResult CreateGraphicsPipelineBinaries(
         Device*                             pDevice,
         PipelineCache*                      pPipelineCache,
-        const VkGraphicsPipelineCreateInfo* pIn,
         CreateInfo*                         pInfo,
-        ImmedInfo*                          pImmedInfo,
         VbBindingInfo*                      pVbInfo,
-        void**                              ppTempBuffer,
-        void**                              ppTempShaderBuffer,
-        size_t*                             pipelineBinarySize,
-        const void**                        ppPipelineBinary);
-
-    static VkResult BuildRasterizationState(
-        Device*                             pDevice,
-        const VkPipelineRasterizationStateCreateInfo* pIn,
-        CreateInfo*                         pInfo,
-        ImmedInfo*                          pImmedInfo,
-        const bool                          dynamicStateFlags[]);
+        size_t                              pipelineBinarySizes[MaxPalDevices],
+        void*                               pPipelineBinaries[MaxPalDevices]);
 
 private:
     ImmedInfo                 m_info;                             // Immediate state that will go in CmdSet* functions

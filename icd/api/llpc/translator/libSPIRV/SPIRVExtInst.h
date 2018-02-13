@@ -43,6 +43,7 @@
 #include "SPIRVUtil.h"
 #include "OpenCL.std.h"
 #include "GLSL.std.450.h"
+#include "GLSL.ext.AMD.h"
 
 #include <string>
 #include <vector>
@@ -373,6 +374,17 @@ SPIRVMap<GLSLExtOpKind, std::string>::init() {
   add(GLSLstd450NClamp, "nclamp");
 }
 SPIRV_DEF_NAMEMAP(GLSLExtOpKind, GLSLExtOpMap)
+
+typedef ShaderBallotAMD ShaderBallotAMDExtOpKind;
+
+template<> inline void
+SPIRVMap<ShaderBallotAMDExtOpKind, std::string>::init() {
+    add(SwizzleInvocationsAMD, "SwizzleInvocationsAMD");
+    add(SwizzleInvocationsMaskedAMD, "SwizzleInvocationsMaskedAMD");
+    add(WriteInvocationAMD, "WriteInvocationAMD");
+    add(MbcntAMD, "MbcntAMD");
+}
+SPIRV_DEF_NAMEMAP(ShaderBallotAMDExtOpKind, ShaderBallotAMDExtOpMap)
 
 }
 

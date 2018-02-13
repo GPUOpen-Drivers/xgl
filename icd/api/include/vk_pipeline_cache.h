@@ -54,7 +54,7 @@ struct PipelineCacheHeaderData
 // Enumerates the cache type in the pipeline cache
 enum PipelineCacheType : uint32_t
 {
-    PipelineCacheTypePal,   // Use shader cache provided by PAL
+    PipelineCacheTypeScpc,  // Use shader cache provided by SCPC
     PipelineCacheTypeLlpc   // Use shader cache provided by LLPC
 };
 

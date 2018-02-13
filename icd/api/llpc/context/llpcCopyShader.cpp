@@ -317,12 +317,16 @@ void CopyShader::ExportOutput()
         ExportBuiltInOutput(pLoadValue, BuiltInPrimitiveId, pInsertPos);
     }
 
-    if (builtInUsage.layer)
+    const auto enableMultiView = (reinterpret_cast<const GraphicsPipelineBuildInfo*>(
+        m_pContext->GetPipelineBuildInfo()))->iaState.enableMultiView;
+    if (builtInUsage.layer || enableMultiView)
     {
-        LLPC_ASSERT(pResUsage->inOutUsage.builtInOutputLocMap.find(BuiltInLayer) !=
-            pResUsage->inOutUsage.builtInOutputLocMap.end());
+        // NOTE: If mult-view is enabled, always export gl_ViewIndex rather than gl_Layer.
+        auto builtInId = enableMultiView ? BuiltInViewIndex : BuiltInLayer;
+        auto& builtInOutLocMap = pResUsage->inOutUsage.builtInOutputLocMap;
+        LLPC_ASSERT(builtInOutLocMap.find(builtInId) != builtInOutLocMap.end());
 
-        uint32_t loc = pResUsage->inOutUsage.builtInOutputLocMap[BuiltInLayer];
+        uint32_t loc = builtInOutLocMap[builtInId];
 
         auto pLoadValue = LoadValueFromGsVsRingBuffer(loc, 0, pInsertPos);
         pLoadValue = new BitCastInst(pLoadValue, m_pContext->Int32Ty(), "", pInsertPos);

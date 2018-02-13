@@ -45,19 +45,6 @@
 using namespace llvm;
 using namespace Llpc;
 
-namespace llvm
-{
-namespace cl
-{
-
-// -send-gsdone-in-merged-shader: send GS_DONE message in merged shader. For GFX9+, this will prevent the instruction
-// from being removed by LLVM optimization.
-extern opt<bool> SendGsDoneInMergedShader;
-
-} // cl
-
-} // llvm
-
 namespace Llpc
 {
 
@@ -877,6 +864,26 @@ void PatchInOutImportExport::visitCallInst(
         // Other calls relevant to input/output import/export
         if (mangledName.startswith("llvm.amdgcn.s.sendmsg"))
         {
+            // NOTE: Implicitly store the value of gl_ViewIndex to GS-VS ring buffer before emit calls.
+            const auto enableMultiView = (reinterpret_cast<const GraphicsPipelineBuildInfo*>(
+                m_pContext->GetPipelineBuildInfo()))->iaState.enableMultiView;
+
+            if (enableMultiView)
+            {
+                LLPC_ASSERT(m_shaderStage == ShaderStageGeometry); // Must be geometry shader
+
+                auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageGeometry)->entryArgIdxs.gs;
+                auto pViewIndex = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
+
+                auto pResUsage = m_pContext->GetShaderResourceUsage(ShaderStageGeometry);
+                auto& builtInOutLocMap = pResUsage->inOutUsage.builtInOutputLocMap;
+
+                LLPC_ASSERT(builtInOutLocMap.find(BuiltInViewIndex) != builtInOutLocMap.end());
+                uint32_t loc = builtInOutLocMap[BuiltInViewIndex];
+
+                StoreValueToGsVsRingBuffer(pViewIndex, loc, 0, &callInst);
+            }
+
             bool isEmitStream0 = false;
 
             uint64_t message = cast<ConstantInt>(callInst.getArgOperand(0))->getZExtValue();
@@ -995,12 +1002,6 @@ void PatchInOutImportExport::visitReturnInst(
             useViewportIndex  = builtInUsage.viewportIndex;
             clipDistanceCount = builtInUsage.clipDistance;
             cullDistanceCount = builtInUsage.cullDistance;
-
-            if (enableMultiView)
-            {
-                // NOTE: If multi-view is enabled, the exported value of gl_Layer is from gl_ViewIndex.
-                m_pLayer = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
-            }
         }
 
         useLayer = enableMultiView || useLayer;
@@ -1282,6 +1283,7 @@ void PatchInOutImportExport::visitReturnInst(
         // NOTE: If multi-view is enabled, always do exporting for gl_Layer.
         if ((m_gfxIp.major <= 8) && enableMultiView)
         {
+            LLPC_ASSERT(m_pLayer != nullptr);
             AddExportInstForBuiltInOutput(m_pLayer, BuiltInLayer, pInsertPos);
         }
 
@@ -1445,22 +1447,14 @@ void PatchInOutImportExport::visitReturnInst(
     }
     else if (m_shaderStage == ShaderStageGeometry)
     {
-        // NOTE: For pre-GFX9, we have to send GS_NONE message in the end of geometry shader. For GFX9+, this is
-        // done in ES-GS merged shader to prevent this instruction from being removed by LLVM optimization.
-        if (cl::SendGsDoneInMergedShader && m_gfxIp.major < 9)
-        {
-            // NOTE: Workaround backend issue SC1-637: During LLVM's function inline pass, if GS only contain 1
-            // sendmsg(GS_DONE) instruction, this instruction will be dropped. To workaround this, move
-            // sendmsg(GS_DONE) instruction to merged shader entry function.
-            args.clear();
-            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), GS_DONE));
+        args.clear();
+        args.push_back(ConstantInt::get(m_pContext->Int32Ty(), GS_DONE));
 
-            auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageGeometry)->entryArgIdxs.gs;
-            auto pWaveId = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.waveId);
-            args.push_back(pWaveId);
+        auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageGeometry)->entryArgIdxs.gs;
+        auto pWaveId = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.waveId);
+        args.push_back(pWaveId);
 
-            EmitCall(m_pModule, "llvm.amdgcn.s.sendmsg", m_pContext->VoidTy(), args, NoAttrib, pInsertPos);
-        }
+        EmitCall(m_pModule, "llvm.amdgcn.s.sendmsg", m_pContext->VoidTy(), args, NoAttrib, pInsertPos);
     }
     else if (m_shaderStage == ShaderStageFragment)
     {
@@ -3812,6 +3806,8 @@ void PatchInOutImportExport::PatchGsBuiltInOutputExport(
     {
     case BuiltInPosition:
         {
+            LLPC_ASSERT(builtInUsage.position);
+
             for (uint32_t i = 0; i < 4; ++i)
             {
                 auto pComp = ExtractElementInst::Create(pOutput,
@@ -3824,26 +3820,14 @@ void PatchInOutImportExport::PatchGsBuiltInOutputExport(
         }
     case BuiltInPointSize:
         {
-            if (isa<UndefValue>(pOutput))
-            {
-                // NOTE: gl_PointSize is always declared as a field of gl_PerVertex. We have to check the output
-                // value to determine if it is actually referenced in shader.
-                builtInUsage.pointSize = false;
-                return;
-            }
+            LLPC_ASSERT(builtInUsage.pointSize);
 
             StoreValueToGsVsRingBuffer(pOutput, loc, 0, pInsertPos);
             break;
         }
     case BuiltInClipDistance:
         {
-            if (isa<UndefValue>(pOutput))
-            {
-                // NOTE: gl_ClipDistance[] is always declared as a field of gl_PerVertex. We have to check the output
-                // value to determine if it is actually referenced in shader.
-                builtInUsage.clipDistance = 0;
-                return;
-            }
+            LLPC_ASSERT(builtInUsage.clipDistance);
 
             for (uint32_t i = 0; i < builtInUsage.clipDistance; ++i)
             {
@@ -3861,13 +3845,7 @@ void PatchInOutImportExport::PatchGsBuiltInOutputExport(
         }
     case BuiltInCullDistance:
         {
-            if (isa<UndefValue>(pOutput))
-            {
-                // NOTE: gl_CullDistance[] is always declared as a field of gl_PerVertex. We have to check the output
-                // value to determine if it is actually referenced in shader.
-                builtInUsage.cullDistance = 0;
-                return;
-            }
+            LLPC_ASSERT(builtInUsage.cullDistance);
 
             for (uint32_t i = 0; i < builtInUsage.cullDistance; ++i)
             {
@@ -3884,16 +3862,22 @@ void PatchInOutImportExport::PatchGsBuiltInOutputExport(
         }
     case BuiltInPrimitiveId:
         {
+            LLPC_ASSERT(builtInUsage.primitiveId);
+
             StoreValueToGsVsRingBuffer(pOutput, loc, 0, pInsertPos);
             break;
         }
     case BuiltInLayer:
         {
+            LLPC_ASSERT(builtInUsage.layer);
+
             StoreValueToGsVsRingBuffer(pOutput, loc, 0, pInsertPos);
             break;
         }
     case BuiltInViewportIndex:
         {
+            LLPC_ASSERT(builtInUsage.viewportIndex);
+
             StoreValueToGsVsRingBuffer(pOutput, loc, 0, pInsertPos);
             break;
         }
@@ -4066,19 +4050,16 @@ void PatchInOutImportExport::PatchCopyShaderBuiltInOutputExport(
             const auto enableMultiView = static_cast<const GraphicsPipelineBuildInfo*>(
                 m_pContext->GetPipelineBuildInfo())->iaState.enableMultiView;
 
-            if (enableMultiView == false)
+            if ((m_gfxIp.major <= 8) && (enableMultiView == false))
             {
-                if (m_gfxIp.major <= 8)
-                {
-                    AddExportInstForBuiltInOutput(pOutput, builtInId, pInsertPos);
-                }
-                else
-                {
+                AddExportInstForBuiltInOutput(pOutput, builtInId, pInsertPos);
+            }
+            else
+            {
 #ifdef LLPC_BUILD_GFX9
-                    // NOTE: The export of gl_Layer is delayed and is done before entry-point returns.
-                    m_pLayer = pOutput;
+                // NOTE: The export of gl_Layer is delayed and is done before entry-point returns.
+                m_pLayer = pOutput;
 #endif
-                }
             }
 
             break;

@@ -90,7 +90,7 @@ target_compile_definitions(llpc PRIVATE _SPIRV_LLVM_API)
 target_compile_definitions(llpc PRIVATE LLPC_BUILD_GFX9)
 
 if(XGL_LLVM_UPSTREAM)
-    target_compile_definitions(llpc PRIVATE LLVM_SOURCE_PROMOTION=1)
+    target_compile_definitions(llpc PRIVATE XGL_LLVM_UPSTREAM=1)
 endif()
 
 target_include_directories(llpc
@@ -346,5 +346,10 @@ if(UNIX)
 endif()
 
 target_link_libraries(amdllpc PRIVATE llpc dl stdc++)
+    if(XGL_LLVM_UPSTREAM)
+        llvm_map_components_to_libnames(llvm_libs amdgpucodegen amdgpuinfo amdgpuasmparser amdgpudisassembler LTO ipo analysis bitreader bitwriter codegen irreader linker mc passes support target transformutils coroutines aggressiveinstcombine)
+    else()
         llvm_map_components_to_libnames(llvm_libs amdgpucodegen amdgpuinfo amdgpuasmparser amdgpudisassembler LTO ipo analysis bitreader bitwriter codegen irreader linker mc passes support target transformutils coroutines)
+    endif()
+
 target_link_libraries(amdllpc PRIVATE ${llvm_libs})

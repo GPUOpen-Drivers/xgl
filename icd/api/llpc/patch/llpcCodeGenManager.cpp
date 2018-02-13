@@ -145,6 +145,9 @@ Result CodeGenManager::GenerateCode(
         features += ",-fp32-denormals";
     }
 
+    // Allow no signed zeros - this enables omod modifiers (div:2, mul:2)
+    targetOpts.NoSignedZerosFPMath = true;
+
     std::unique_ptr<TargetMachine> targetMachine(Target->createTargetMachine(triple,
                                                  pContext->GetGpuNameString(),
                                                  features,

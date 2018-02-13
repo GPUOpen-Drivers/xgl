@@ -40,23 +40,6 @@
 
 using namespace llvm;
 
-namespace llvm
-{
-namespace cl
-{
-
-// -send-gsdone-in-merged-shader: send GS_DONE message in merged shader. For GFX9+, this will prevent the instruction
-// from being removed by LLVM optimization.
-opt<bool> SendGsDoneInMergedShader("send-gsdone-in-merged-shader",
-                                   desc("Send GS_DONE message in merged shader. For GFX9+,"
-                                        "this will prevent the instruction from being removed"
-                                        "by LLVM optimization."),
-                                   init(true));
-
-} // cl
-
-} // llvm
-
 namespace Llpc
 {
 
@@ -311,10 +294,10 @@ void ShaderMerger::GenerateLsHsEntryPoint(
     //
     // .beginls:
     //     call void @llpc.amdgpu.ls.main(%sgpr..., %userData..., %vgpr...)
-    //     call void @llvm.amdgcn.s.barrier()
     //     br label %endls
     //
     // .endls:
+    //     call void @llvm.amdgcn.s.barrier()
     //     %hsEnable = icmp ult i32 %threadId, %hsVertCount
     //     br i1 %hsEnable, label %beginhs, label %endhs
     //
@@ -500,17 +483,15 @@ void ShaderMerger::GenerateLsHsEntryPoint(
         LLPC_ASSERT(lsArgIdx == lsArgCount); // Must have visit all arguments of LS entry point
 
         EmitCall(pLsHsModule, LlpcName::LsEntryPoint, m_pContext->VoidTy(), args, NoAttrib, pBeginLsBlock);
-
-        args.clear();
-
-        attribs.clear();
-        attribs.push_back(Attribute::NoRecurse);
-
-        EmitCall(pLsHsModule, "llvm.amdgcn.s.barrier", m_pContext->VoidTy(), args, attribs, pBeginLsBlock);
     }
     BranchInst::Create(pEndLsBlock, pBeginLsBlock);
 
     // Construct ".endls" block
+    args.clear();
+    attribs.clear();
+    attribs.push_back(Attribute::NoRecurse);
+    EmitCall(pLsHsModule, "llvm.amdgcn.s.barrier", m_pContext->VoidTy(), args, attribs, pEndLsBlock);
+
     auto pHsEnable = new ICmpInst(*pEndLsBlock, ICmpInst::ICMP_ULT, pThreadId, pHsVertCount, "");
     BranchInst::Create(pBeginHsBlock, pEndHsBlock, pHsEnable, pEndLsBlock);
 
@@ -723,18 +704,18 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     //     %threadId = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %threadId)
     //
     //     %esVertCount = call i32 @llvm.amdgcn.ubfe.i32(i32 %sgpr3, i32 0, i32 8)
-    //     %gsVertCount = call i32 @llvm.amdgcn.ubfe.i32(i32 %sgpr3, i32 8, i32 8)
+    //     %gsPrimCount = call i32 @llvm.amdgcn.ubfe.i32(i32 %sgpr3, i32 8, i32 8)
     //
     //     %esEnable = icmp ult i32 %threadId, %esVertCount
     //     br i1 %esEnable, label %begines, label %endes
     //
     // .begines:
     //     call void @llpc.amdgpu.es.main(%sgpr..., %userData..., %vgpr...)
-    //     call void @llvm.amdgcn.s.barrier()
     //     br label %endes
     //
     // .endes:
-    //     %gsEnable = icmp ult i32 %threadId, %gsVertCount
+    //     call void @llvm.amdgcn.s.barrier()
+    //     %gsEnable = icmp ult i32 %threadId, %gsPrimCount
     //     br i1 %gsEnable, label %begings, label %endgs
     //
     // .begings:
@@ -806,7 +787,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 8));
     args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 8));
 
-    auto pGsVertCount = EmitCall(pEsGsModule, "llvm.amdgcn.ubfe.i32", m_pContext->Int32Ty(), args, attribs, pEntryBlock);
+    auto pGsPrimCount = EmitCall(pEsGsModule, "llvm.amdgcn.ubfe.i32", m_pContext->Int32Ty(), args, attribs, pEntryBlock);
 
     args.clear();
     args.push_back(pMergeWaveInfo);
@@ -992,18 +973,16 @@ void ShaderMerger::GenerateEsGsEntryPoint(
         LLPC_ASSERT(esArgIdx == esArgCount); // Must have visit all arguments of ES entry point
 
         EmitCall(pEsGsModule, LlpcName::EsEntryPoint, m_pContext->VoidTy(), args, NoAttrib, pBeginEsBlock);
-
-        args.clear();
-
-        attribs.clear();
-        attribs.push_back(Attribute::NoRecurse);
-
-        EmitCall(pEsGsModule, "llvm.amdgcn.s.barrier", m_pContext->VoidTy(), args, attribs, pBeginEsBlock);
     }
     BranchInst::Create(pEndEsBlock, pBeginEsBlock);
 
     // Construct ".endes" block
-    auto pGsEnable = new ICmpInst(*pEndEsBlock, ICmpInst::ICMP_ULT, pThreadId, pGsVertCount, "");
+    args.clear();
+    attribs.clear();
+    attribs.push_back(Attribute::NoRecurse);
+    EmitCall(pEsGsModule, "llvm.amdgcn.s.barrier", m_pContext->VoidTy(), args, attribs, pEndEsBlock);
+
+    auto pGsEnable = new ICmpInst(*pEndEsBlock, ICmpInst::ICMP_ULT, pThreadId, pGsPrimCount, "");
     BranchInst::Create(pBeginGsBlock, pEndGsBlock, pGsEnable, pEndEsBlock);
 
     // Construct ".begings" block
@@ -1155,17 +1134,6 @@ void ShaderMerger::GenerateEsGsEntryPoint(
         LLPC_ASSERT(gsArgIdx == gsArgCount); // Must have visit all arguments of GS entry point
 
         EmitCall(pEsGsModule, LlpcName::GsEntryPoint, m_pContext->VoidTy(), args, NoAttrib, pBeginGsBlock);
-
-        // NOTE: Send GS_NONE message in the end of geometry shader. For GFX9+, this is to prevent the instruction
-        // from being removed by LLVM optimization.
-        if (cl::SendGsDoneInMergedShader)
-        {
-            args.clear();
-            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), GS_DONE));
-            args.push_back(pGsWaveId);
-
-            EmitCall(pEsGsModule, "llvm.amdgcn.s.sendmsg", m_pContext->VoidTy(), args, NoAttrib, pBeginGsBlock);
-        }
     }
     BranchInst::Create(pEndGsBlock, pBeginGsBlock);
 

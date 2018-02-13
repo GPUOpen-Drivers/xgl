@@ -49,6 +49,7 @@ class Device;
 class ComputePipeline;
 class GraphicsPipeline;
 class PipelineLayout;
+struct RuntimeSettings;
 
 // Structure containing information about a retrievable pipeline binary.  These are only retained by Pipeline objects
 // when specific device extensions (VK_AMD_shader_info) that can query them are enabled.
@@ -98,13 +99,6 @@ public:
 
     VK_INLINE const PipelineBinaryInfo* GetBinary() const
         { return m_pBinary; }
-
-    static void CreateLegacyPathElfBinary(
-        Device*         pDevice,
-        bool            graphicsPipeline,
-        Pal::IPipeline* pPalPipeline,
-        size_t*         pPipelineBinarySize,
-        void**          ppPipelineBinary);
 
 protected:
     Pipeline(

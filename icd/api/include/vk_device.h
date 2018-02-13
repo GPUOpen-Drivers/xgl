@@ -465,8 +465,8 @@ public:
     VK_INLINE Util::Mutex* GetTimerQueueMutex()
         { return &m_timerQueueMutex; }
 
-    VK_INLINE Llpc::ICompiler* GetCompiler(int32_t idx = DefaultDeviceIndex) const
-        { return m_pCompiler[idx]; }
+    VK_INLINE Llpc::ICompiler* GetLlpcCompiler(uint32_t idx = DefaultDeviceIndex) const
+        { return m_pLlpcCompiler[idx]; }
 
     static const Pal::MsaaQuadSamplePattern* GetDefaultQuadSamplePattern(uint32_t sampleCount);
     static uint32_t GetDefaultSamplePatternIndex(uint32_t sampleCount);
@@ -490,7 +490,6 @@ protected:
         uint32_t                         deviceCount,
         PhysicalDevice**                 pPhysicalDevices,
         Pal::IDevice**                   pPalDevices,
-        Pal::GpuMemoryRef*               pMemRefArrays,
         const DeviceExtensions::Enabled& enabledExtensions,
         const VkPhysicalDeviceFeatures*  pFeatures);
     VkResult CreateLlpcInternalComputePipeline(
@@ -508,7 +507,7 @@ protected:
 
     void InitSamplePatternPalette(Pal::SamplePatternPalette* pPalette) const;
 
-    void InitLlpcCompiler(int32_t idx = DefaultDeviceIndex);
+    VkResult CreateLlpcCompiler(int32_t idx = DefaultDeviceIndex);
 
     Instance* const                     m_pInstance;
     const RuntimeSettings&              m_settings;
@@ -548,7 +547,7 @@ protected:
     // The maximum allocations that can be created from the logical device
     uint32_t                             m_maxAllocations;
 
-    Llpc::ICompiler*                    m_pCompiler[MaxPalDevices];
+    Llpc::ICompiler*                    m_pLlpcCompiler[MaxPalDevices];
 
     // Record pipeline cache count created on this device. Note this may be dropped once there isn't any test creating
     // excessive pipeline caches.

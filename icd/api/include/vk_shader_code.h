@@ -26,7 +26,6 @@
 #pragma once
 
 #include "khronos/vulkan.h"
-#include "palPipeline.h"
 #include "vk_instance.h"
 
 namespace vk

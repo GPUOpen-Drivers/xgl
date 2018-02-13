@@ -45,6 +45,7 @@
 #include "llvm/Support/Format.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ManagedStatic.h"
+#include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/Signals.h"
@@ -554,7 +555,7 @@ static Result CompileGlsl(
     FILE* pOutFile = nullptr;
     if (result == Result::Success)
     {
-        outFile = inFile + LlpcExt::SpirvBin;
+        outFile = sys::path::filename(inFile).str() + LlpcExt::SpirvBin;
 
         pOutFile = fopen(outFile.c_str(), "wb");
         if (pOutFile == nullptr)
@@ -623,26 +624,6 @@ static Result CompileGlsl(
 }
 
 // =====================================================================================================================
-// Removes file extension if necessary and returns the file name without this extension.
-static std::string RemoveFileExtension(
-    const std::string& fileName)    // [in] Name of the file whose extension is to be removed
-{
-    std::string fileNameNoExt;
-
-    size_t extPos = fileName.find_last_of(".");
-    if (extPos != std::string::npos)
-    {
-        fileNameNoExt = fileName.substr(0, extPos);
-    }
-    else
-    {
-        fileNameNoExt = fileName;
-    }
-
-    return fileNameNoExt;
-}
-
-// =====================================================================================================================
 // SPIR-V assembler, converts SPIR-V assembly text file (input) to SPIR-V binary file (output).
 static Result AssembleSpirv(
     const std::string& inFile,  // [in] Input file, SPIR-V assembly text
@@ -660,7 +641,7 @@ static Result AssembleSpirv(
     FILE* pOutFile = nullptr;
     if (result == Result::Success)
     {
-        outFile = RemoveFileExtension(inFile) + LlpcExt::SpirvBin;
+        outFile = sys::path::stem(sys::path::filename(inFile)).str() + LlpcExt::SpirvBin;
 
         pOutFile = fopen(outFile.c_str(), "wb");
         if (pOutFile == nullptr)

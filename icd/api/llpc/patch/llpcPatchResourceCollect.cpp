@@ -82,6 +82,7 @@ bool PatchResourceCollect::runOnModule(
     }
 
     ClearInactiveInput();
+    ClearInactiveOutput();
 
     if (m_pContext->IsGraphics())
     {
@@ -412,6 +413,24 @@ void PatchResourceCollect::visitCallInst(
             {
                 // NOTE: If location offset is not constant, we consider dynamic indexing occurs.
                 m_hasDynIndexedOutput = true;
+            }
+        }
+    }
+    else if (mangledName.startswith(LlpcName::OutputExportBuiltIn))
+    {
+        // NOTE: If output value is undefined one, we can safely drop it and remove the output export call.
+        // Currently, do this for geometry shader.
+        if (m_shaderStage == ShaderStageGeometry)
+        {
+            auto* pOutputValue = callInst.getArgOperand(callInst.getNumArgOperands() - 1);
+            if (isa<UndefValue>(pOutputValue))
+            {
+                m_deadCalls.insert(&callInst);
+            }
+            else
+            {
+                uint32_t builtInId = cast<ConstantInt>(callInst.getOperand(0))->getZExtValue();
+                m_activeOutputBuiltIns.insert(builtInId);
             }
         }
     }
@@ -774,6 +793,59 @@ void PatchResourceCollect::ClearInactiveInput()
             (m_activeInputBuiltIns.find(BuiltInSubgroupLtMaskKHR) == m_activeInputBuiltIns.end()))
         {
             builtInUsage.common.subgroupLtMask = false;
+        }
+    }
+}
+
+// =====================================================================================================================
+// Clears inactive (those actually unused) outputs.
+void PatchResourceCollect::ClearInactiveOutput()
+{
+    // Clear inactive output builtins
+    if (m_shaderStage == ShaderStageGeometry)
+    {
+        auto& builtInUsage = m_pResUsage->builtInUsage.gs;
+
+        if (builtInUsage.position &&
+            (m_activeOutputBuiltIns.find(BuiltInPosition) == m_activeOutputBuiltIns.end()))
+        {
+            builtInUsage.position = false;
+        }
+
+        if (builtInUsage.pointSize &&
+            (m_activeOutputBuiltIns.find(BuiltInPointSize) == m_activeOutputBuiltIns.end()))
+        {
+            builtInUsage.pointSize = false;
+        }
+
+        if (builtInUsage.clipDistance &&
+            (m_activeOutputBuiltIns.find(BuiltInClipDistance) == m_activeOutputBuiltIns.end()))
+        {
+            builtInUsage.clipDistance = false;
+        }
+
+        if (builtInUsage.cullDistance &&
+            (m_activeOutputBuiltIns.find(BuiltInCullDistance) == m_activeOutputBuiltIns.end()))
+        {
+            builtInUsage.cullDistance = false;
+        }
+
+        if (builtInUsage.primitiveId &&
+            (m_activeOutputBuiltIns.find(BuiltInPrimitiveId) == m_activeOutputBuiltIns.end()))
+        {
+            builtInUsage.primitiveId = false;
+        }
+
+        if (builtInUsage.layer &&
+            (m_activeOutputBuiltIns.find(BuiltInLayer) == m_activeOutputBuiltIns.end()))
+        {
+            builtInUsage.layer = false;
+        }
+
+        if (builtInUsage.viewportIndex &&
+            (m_activeOutputBuiltIns.find(BuiltInViewportIndex) == m_activeOutputBuiltIns.end()))
+        {
+            builtInUsage.viewportIndex = false;
         }
     }
 }

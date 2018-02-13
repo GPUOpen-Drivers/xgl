@@ -78,9 +78,8 @@ VkResult PipelineCache::Create(
 
     uint32_t numPalDevices = pDevice->NumPalDevices();
 
-    size_t palSize = 0;
-    size_t pipelineCacheSize[MaxPalDevices];
-    PipelineCacheType cacheType = PipelineCacheTypePal;
+    size_t            scpcSize  = 0;
+    PipelineCacheType cacheType = PipelineCacheTypeScpc;
 
     if ((settings.enableLlpc == LlpcModeEnable) || (settings.enableLlpc == LlpcModeAutoFallback))
     {
@@ -120,7 +119,7 @@ VkResult PipelineCache::Create(
     }
 
     // Allocate system memory for all objects
-    const size_t objSize = sizeof(PipelineCache) + palSize;
+    const size_t objSize = sizeof(PipelineCache) + scpcSize;
 
     void* pMemory = pDevice->AllocApiObject(objSize, pAllocator);
 
@@ -152,7 +151,7 @@ VkResult PipelineCache::Create(
             Llpc::ShaderCacheCreateInfo createInfo = {};
             for (uint32_t i = 0; i < numPalDevices; i++)
             {
-                auto pCompiler = pDevice->GetCompiler();
+                auto pCompiler = pDevice->GetLlpcCompiler();
 
                 if (useInitialData)
                 {
@@ -218,7 +217,7 @@ VkResult PipelineCache::Destroy(
 // =====================================================================================================================
 // This function stores AMD specific pipeline cache data as follows:
 // First, AMD private pipeline cache header data, then the contents of
-// each PAL shader cache of each PAL device.
+// each SCPC shader cache of each PAL device.
 // ------------------------------------------------------------------------<-- offset 0 (after the header)
 // | PipelineCachePrivateHeaderData                                       |
 // ------------------------------------------------------------------------<-- offset H (PipelineCachePrivateHeaderData)
@@ -239,7 +238,7 @@ VkResult PipelineCache::GetData(
     VkResult        result = VK_SUCCESS;
     uint32_t numPalDevices = m_pDevice->NumPalDevices();
 
-    // The starting is an array of blob sizes of each PAL shader cache.
+    // The starting is an array of blob sizes of each SCPC shader cache.
     size_t allBlobSize = sizeof(PipelineCachePrivateHeaderData);
     PipelineCachePrivateHeaderData headerData = {};
 

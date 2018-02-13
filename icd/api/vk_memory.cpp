@@ -164,6 +164,7 @@ VkResult Memory::Create(
                 const VkExportMemoryAllocateInfoKHR* pExportMemory =
                     reinterpret_cast<const VkExportMemoryAllocateInfoKHR *>(pHeader);
                     VK_ASSERT(pExportMemory->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
+                    createInfo.flags.interprocess = 1;
                     // Todo: we'd better to pass in the handleTypes to the Pal as well.
                     // The supported handleType should also be provided by Pal as Device Capabilities.
             }

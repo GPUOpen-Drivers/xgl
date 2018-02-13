@@ -2699,37 +2699,117 @@ Pal::uint32 CmdBuffer::ConvertBarrierSrcAccessFlags(
 // in the dstCacheMask field of a pipeline BarrierTransition.
 Pal::uint32 CmdBuffer::ConvertBarrierDstAccessFlags(
     const Device* pDevice,
-    VkAccessFlags accessMask)
+    VkAccessFlags accessMask,
+    uint32_t      combinedAccessMask)
 {
-    // With the more loose memory barrier semantics introduced we practically have to always invalidate all relevant
-    // caches. The complete set is limited based on the usage allowed by the resource at the caller side.
-    // The current Vulkan Spec has language as:
-    //
-    // Memory dependency m guarantees that:
-    //   Memory writes in a' are made available.
-    //   Available memory writes, including those from a', are made visible to b'.
-    // Since PAL's model is to use both SrcAcess and DstAccess flag to define memory access dependency, it may not
-    // always to be able to take action for Vulkan a' available or previous write availablity with some type of Vulkan
-    // access masks, e.g. DstAccessMask = 0. I believe this is the reason Vulkan forces a conservertive dstAccessMask.
-    //
-    // Vulkan needs to be aware that for ASIC that has L2 coherency for most of the operations (but not all), what we
-    // do likely make all barriers with memory dependency to flush/inv L2.
-    constexpr uint32_t AllInputCaches = Pal::CoherCpu |
-                                        Pal::CoherShader |
-                                        Pal::CoherCopy |
-                                        Pal::CoherColorTarget |
-                                        Pal::CoherDepthStencilTarget |
-                                        Pal::CoherResolve |
-                                        Pal::CoherClear |
-                                        Pal::CoherIndirectArgs |
-                                        Pal::CoherIndexData |
-                                        Pal::CoherQueueAtomic |
-                                        Pal::CoherTimestamp |
-                                        Pal::CoherCeLoad |
-                                        Pal::CoherCeDump |
-                                        Pal::CoherStreamOut |
-                                        Pal::CoherMemory;
-    return AllInputCaches;
+    // Assure that the resource barrier provide combined src/dst accessmask
+    // No need to concern that access masks are provided by separate barriers
+    if (combinedAccessMask)
+    {
+        Pal::uint32 coher = 0;
+
+        if (accessMask & VK_ACCESS_HOST_READ_BIT)
+        {
+            coher |= Pal::CoherCpu;
+        }
+
+        if (accessMask & VK_ACCESS_SHADER_READ_BIT)
+        {
+            coher |= Pal::CoherShader;
+        }
+
+        if (accessMask & VK_ACCESS_COLOR_ATTACHMENT_READ_BIT)
+        {
+            coher |= Pal::CoherColorTarget;
+        }
+
+        if (accessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT)
+        {
+            coher |= Pal::CoherDepthStencilTarget;
+        }
+
+        if (accessMask & VK_ACCESS_TRANSFER_READ_BIT)
+        {
+            // Also need Pal::CoherShader here as vkCmdCopyQueryPoolResults uses a compute shader defined in the Vulkan
+            // API layer when used with timestamp queries.
+            coher |= Pal::CoherCopy | Pal::CoherResolve | Pal::CoherShader;
+        }
+
+        if (accessMask & VK_ACCESS_MEMORY_READ_BIT)
+        {
+            coher |= Pal::CoherMemory;
+        }
+
+        if (accessMask & VK_ACCESS_INPUT_ATTACHMENT_READ_BIT)
+        {
+            coher |= Pal::CoherShader;
+        }
+
+        if (accessMask & VK_ACCESS_UNIFORM_READ_BIT)
+        {
+            coher |= Pal::CoherShader;
+        }
+
+        if (accessMask & VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)
+        {
+            coher |= Pal::CoherShader;
+        }
+
+        if (accessMask & VK_ACCESS_INDEX_READ_BIT)
+        {
+            coher |= Pal::CoherIndexData;
+        }
+
+        if (accessMask & VK_ACCESS_INDEX_READ_BIT)
+        {
+            coher |= Pal::CoherIndexData;
+        }
+
+        if (accessMask & VK_ACCESS_INDIRECT_COMMAND_READ_BIT)
+        {
+            coher |= Pal::CoherIndirectArgs;
+        }
+
+        if (accessMask & VK_ACCESS_COMMAND_PROCESS_READ_BIT_NVX)
+        {
+            coher |= Pal::CoherMemory;
+        }
+
+        return coher;
+    }
+    else
+    {
+        // With the more loose memory barrier semantics introduced we practically have to always invalidate all relevant
+        // caches. The complete set is limited based on the usage allowed by the resource at the caller side.
+        // The current Vulkan Spec has language as:
+        //
+        // Memory dependency m guarantees that:
+        //   Memory writes in a' are made available.
+        //   Available memory writes, including those from a', are made visible to b'.
+        // Since PAL's model is to use both SrcAcess and DstAccess flag to define memory access dependency, it may not
+        // always to be able to take action for Vulkan a' available or previous write availablity with some type of Vulkan
+        // access masks, e.g. DstAccessMask = 0. I believe this is the reason Vulkan forces a conservertive dstAccessMask.
+        //
+        // Vulkan needs to be aware that for ASIC that has L2 coherency for most of the operations (but not all), what we
+        // do likely make all barriers with memory dependency to flush/inv L2.
+        constexpr uint32_t AllInputCaches = Pal::CoherCpu |
+                                            Pal::CoherShader |
+                                            Pal::CoherCopy |
+                                            Pal::CoherColorTarget |
+                                            Pal::CoherDepthStencilTarget |
+                                            Pal::CoherResolve |
+                                            Pal::CoherClear |
+                                            Pal::CoherIndirectArgs |
+                                            Pal::CoherIndexData |
+                                            Pal::CoherQueueAtomic |
+                                            Pal::CoherTimestamp |
+                                            Pal::CoherCeLoad |
+                                            Pal::CoherCeDump |
+                                            Pal::CoherStreamOut |
+                                            Pal::CoherMemory;
+        return AllInputCaches;
+    }
+
 }
 
 // =====================================================================================================================
@@ -2756,7 +2836,10 @@ void CmdBuffer::ConvertBarrierCacheFlags(
      }
      else
      {
-         pResult->dstCacheMask = supportInputCacheMask & ConvertBarrierDstAccessFlags(pDevice, dstAccess);
+         pResult->dstCacheMask = supportInputCacheMask & ConvertBarrierDstAccessFlags(
+                                                            pDevice,
+                                                            dstAccess,
+                                                            (barrierOptions & CombinedAccessMasks));
      }
 }
 
@@ -4195,9 +4278,11 @@ void CmdBuffer::RPSyncPoint(
     if ((pPalTransitions != nullptr) && (ppImages != nullptr))
     {
         // Construct global memory dependency to synchronize caches
-        if (syncPoint.barrier.srcAccessMask != 0 ||
-            syncPoint.barrier.dstAccessMask != 0 ||
-            syncPoint.barrier.flags.u32All != 0)
+        if (syncPoint.barrier.srcAccessMask != 0        ||
+            syncPoint.barrier.dstAccessMask != 0        ||
+            syncPoint.barrier.flags.preColorResolveSync ||
+            syncPoint.barrier.flags.preDsResolveSync    ||
+            syncPoint.barrier.flags.postResolveSync)
         {
             VK_ASSERT(barrier.transitionCount < maxTransitionCount);
 

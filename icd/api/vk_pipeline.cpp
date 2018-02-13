@@ -34,13 +34,11 @@
 #include "include/vk_pipeline.h"
 #include "include/vk_shader.h"
 
-#include "palPipeline.h"
-#include "palShaderCache.h"
 #include "palAutoBuffer.h"
-
-// Temporary includes to support legacy path ELF building
+#include "palInlineFuncs.h"
+#include "palPipeline.h"
 #include "palPipelineAbi.h"
-#include "palElfProcessorImpl.h"
+#include "palPipelineAbiProcessorImpl.h"
 
 namespace vk
 {
@@ -220,6 +218,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
 {
     VkResult result = VK_ERROR_FEATURE_NOT_PRESENT;
 
+    const Device*   pDevice   = ApiDevice::ObjectFromHandle(device);
     const Pipeline* pPipeline = Pipeline::ObjectFromHandle(pipeline);
     const Pal::IPipeline* pPalPipeline = pPipeline->PalPipeline();
 
@@ -248,7 +247,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
 
                     Pal::DeviceProperties info;
 
-                    ApiDevice::ObjectFromHandle(device)->VkPhysicalDevice()->PalDevice()->GetProperties(&info);
+                    pDevice->VkPhysicalDevice()->PalDevice()->GetProperties(&info);
 
                     pStats->numPhysicalVgprs = info.gfxipProperties.shaderCore.vgprsPerSimd;
                     pStats->numPhysicalSgprs = info.gfxipProperties.shaderCore.sgprsPerSimd;
@@ -289,267 +288,5 @@ return result;
 }
 
 } // namespace entry
-
-// =====================================================================================================================
-// This is a temporary function to infer a mockup of a PAL ABI ELF binary out of a previously-created PAL Pipeline
-// object.
-//
-// !!! This function only necessary until LLPC/SCPC compiler interfaces are in place that can produce full ELF       !!!
-// !!! binaries.                                                                                                     !!!
-//
-// This binary is not usable to create new PAL IPipelines but it should contain just enough information that
-// an external tool which queries it via VK_AMD_shader_info can feed it to an external disassembler object.
-void Pipeline::CreateLegacyPathElfBinary(
-    Device*         pDevice,
-    bool            graphicsPipeline,
-    Pal::IPipeline* pPalPipeline,
-    size_t*         pPipelineBinarySize,
-    void**          ppPipelineBinary)
-{
-    Pal::Result result = Pal::Result::Success;
-
-    using namespace Util::Elf;
-
-    const Pal::DeviceProperties& deviceProps = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
-
-    // Query shader code for each shader stage (not all of these are always available)
-    constexpr uint32_t ShaderTypeCount = 6;
-
-    PalAllocator* pAllocator             = pDevice->VkInstance()->Allocator();
-    size_t shaderSizes[ShaderTypeCount]  = {};
-    size_t entryOffsets[ShaderTypeCount] = {};
-    size_t textSize                      = 0;
-    void*  pTextData                     = nullptr;
-    uint32_t symbolCount                 = 0;
-
-    // Calculate the sizes of each shader stage and the "entry point offsets" within the .text section.
-    for (uint32_t stage = 0; stage < ShaderTypeCount; ++stage)
-    {
-        Pal::ShaderType shaderType = static_cast<Pal::ShaderType>(stage);
-
-        pPalPipeline->GetShaderCode(shaderType, &shaderSizes[stage], nullptr);
-
-        if (shaderSizes[stage] != 0)
-        {
-            size_t alignedOffset = Util::Pow2Align(textSize, 256);
-
-            entryOffsets[stage] = alignedOffset;
-
-            textSize = entryOffsets[stage] + shaderSizes[stage];
-
-            symbolCount++;
-        }
-    }
-
-    // Allocate memory for text section
-    if (textSize > 0)
-    {
-        pTextData = pDevice->VkInstance()->AllocMem(
-            textSize,
-            VK_DEFAULT_MEM_ALIGN,
-            VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-    }
-
-    // Extract the compiled code for each stage
-    if (pTextData != nullptr)
-    {
-        memset(pTextData, 0, textSize);
-
-        for (uint32_t stage = 0; stage < ShaderTypeCount; ++stage)
-        {
-            if (shaderSizes[stage] != 0)
-            {
-                pPalPipeline->GetShaderCode(
-                    static_cast<Pal::ShaderType>(stage),
-                    &shaderSizes[stage],
-                    Util::VoidPtrInc(pTextData, entryOffsets[stage]));
-            }
-        }
-    }
-
-    ElfProcessor<PalAllocator> elf(pAllocator);
-    result = elf.Init();
-
-    if (result == Pal::Result::Success)
-    {
-        // Set some random basic information
-        elf.SetClass(ElfClass64);
-        elf.SetEndianness(ElfLittleEndian);
-
-        // Add the .text section
-        Section<PalAllocator>* pTextSection = nullptr;
-
-        if (pTextData != nullptr)
-        {
-            pTextSection = elf.GetSections()->Add(SectionType::Text);
-
-            if (pTextSection != nullptr)
-            {
-                pTextSection->SetData(pTextData, textSize);
-            }
-        }
-
-        // Add a symbol table section that just contains the entry point offsets
-        if ((pTextSection != nullptr) && (symbolCount > 0))
-        {
-            auto* pStrTabSection = elf.GetSections()->Add(SectionType::StrTab);
-            auto* pSymTabSection = elf.GetSections()->Add(SectionType::SymTab);
-
-            if ((pStrTabSection != nullptr) && (pSymTabSection != nullptr))
-            {
-                pSymTabSection->SetLink(pStrTabSection);
-
-                StringProcessor<PalAllocator> stringProcessor(pStrTabSection, pAllocator);
-                SymbolProcessor<PalAllocator> symbolProcessor(pSymTabSection, &stringProcessor, pAllocator);
-
-                for (uint32_t stage = 0; stage < ShaderTypeCount; ++stage)
-                {
-                    if (shaderSizes[stage] != 0)
-                    {
-                        const Pal::ShaderType shaderType = static_cast<Pal::ShaderType>(stage);
-
-                        // This mapping from shader stage/type to PAL ABI pipeline symbol type is completely made-up and
-                        // inaccurate, but it's the best we can do.
-                        //
-                        // PAL ABI dictates that the logical unit of code is the whole pipeline.  This makes sense in
-                        // the context of newer gfxips where HW shader stages are merging.
-                        //
-                        // The entry points in the PAL ABI are defined in terms of HW shader stages of the current
-                        // gfxip, and that information is lost by PAL's HW abstraction.  The real ELF created by the
-                        // compiler interface has proper knowledge of all the HW stage entry point offsets.
-                        //
-                        // It is probably correct for CS and VS+PS cases, but it'll most likely be wrong when GS/TCS/TES
-                        // is involved, and also with NGG.
-                        Util::Abi::PipelineSymbolType symbolType = Util::Abi::PipelineSymbolType::Unknown;
-
-                        switch (shaderType)
-                        {
-                        case Pal::ShaderType::Compute:
-                            symbolType = Util::Abi::PipelineSymbolType::CsMainEntry;
-                            break;
-                        case Pal::ShaderType::Vertex:
-                            symbolType = Util::Abi::PipelineSymbolType::VsMainEntry;
-                            break;
-                        case Pal::ShaderType::Hull:
-                            symbolType = Util::Abi::PipelineSymbolType::HsMainEntry;
-                            break;
-                        case Pal::ShaderType::Domain:
-                            symbolType = Util::Abi::PipelineSymbolType::EsMainEntry;
-                            break;
-                        case Pal::ShaderType::Geometry:
-                            symbolType = Util::Abi::PipelineSymbolType::GsMainEntry;
-                            break;
-                        case Pal::ShaderType::Pixel:
-                            symbolType = Util::Abi::PipelineSymbolType::PsMainEntry;
-                            break;
-                        }
-
-                        if (symbolType != Util::Abi::PipelineSymbolType::Unknown)
-                        {
-                            symbolProcessor.Add(
-                                Util::Abi::PipelineAbiSymbolNameStrings[static_cast<size_t>(symbolType)],
-                                SymbolTableEntryBinding::Local,
-                                SymbolTableEntryType::Func,
-                                pTextSection->GetIndex(),
-                                entryOffsets[stage],
-                                shaderSizes[stage]);
-                        }
-                    }
-                }
-            }
-        }
-
-        auto* pNoteSection = elf.GetSections()->Add(SectionType::Note);
-
-        if (pNoteSection != nullptr)
-        {
-            // Add a .note identifying the GPU IP version.  This code is basically ripped from the LLPC ELF generation
-            NoteProcessor<PalAllocator> noteProcessor(pNoteSection, pAllocator);
-
-            Util::Abi::AbiAmdGpuVersionNote gpuVersionNote = {};
-
-            switch (deviceProps.gfxLevel)
-            {
-            case Pal::GfxIpLevel::GfxIp6:
-                gpuVersionNote.gfxipMajorVer = 6;
-                gpuVersionNote.gfxipMinorVer = 0;
-                break;
-            case Pal::GfxIpLevel::GfxIp7:
-                gpuVersionNote.gfxipMajorVer = 7;
-                gpuVersionNote.gfxipMinorVer = 0;
-                break;
-            case Pal::GfxIpLevel::GfxIp8:
-                gpuVersionNote.gfxipMajorVer = 8;
-                gpuVersionNote.gfxipMinorVer = 0;
-                break;
-            case Pal::GfxIpLevel::GfxIp8_1:
-                gpuVersionNote.gfxipMajorVer = 8;
-                gpuVersionNote.gfxipMinorVer = 1;
-                break;
-            case Pal::GfxIpLevel::GfxIp9:
-                gpuVersionNote.gfxipMajorVer = 9;
-                gpuVersionNote.gfxipMinorVer = 0;
-                break;
-            default:
-                VK_NEVER_CALLED();
-                break;
-            }
-
-            gpuVersionNote.gfxipStepping  = deviceProps.gfxStepping;
-
-            gpuVersionNote.vendorNameSize = sizeof(Util::Abi::AmdGpuVendorName);
-            gpuVersionNote.archNameSize   = sizeof(Util::Abi::AmdGpuArchName);
-
-            memcpy(gpuVersionNote.vendorName, Util::Abi::AmdGpuVendorName, sizeof(Util::Abi::AmdGpuVendorName));
-            memcpy(gpuVersionNote.archName,   Util::Abi::AmdGpuArchName, sizeof(Util::Abi::AmdGpuArchName));
-
-            // The empty spaces in the note strings here are because of a bug in the PAL ELF writer's alignment code.
-            // We really want to send empty strings, which translates to a 4 byte padded string, but they apply padding
-            // twice which hits an assert inside their code.
-
-            noteProcessor.Add(
-                static_cast<uint32_t>(Util::Abi::PipelineAbiNoteType::HsaIsa),
-                "   ",
-                &gpuVersionNote,
-                sizeof(gpuVersionNote));
-
-            // Add a .note identifying PAL version information.  Also ripped from the LLPC code.
-            Util::Abi::AbiMinorVersionNote ntAbiMinorVersion = {};
-
-            ntAbiMinorVersion.minorVersion = Util::Abi::ElfAbiMinorVersion;
-
-            noteProcessor.Add(
-                static_cast<uint32_t>(Util::Abi::PipelineAbiNoteType::AbiMinorVersion),
-                "   ",
-                &ntAbiMinorVersion,
-                sizeof(ntAbiMinorVersion));
-        }
-
-        elf.Finalize();
-
-        const size_t elfSize = elf.GetRequiredBufferSizeBytes();
-
-        if (elfSize > 0)
-        {
-            void* pElf = pDevice->VkInstance()->AllocMem(
-                elfSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-            if (pElf != nullptr)
-            {
-                elf.SaveToBuffer(pElf);
-
-                *ppPipelineBinary = pElf;
-                *pPipelineBinarySize = elfSize;
-            }
-        }
-    }
-
-    if (pTextData != nullptr)
-    {
-        pDevice->VkInstance()->FreeMem(pTextData);
-    }
-}
 
 } // namespace vk

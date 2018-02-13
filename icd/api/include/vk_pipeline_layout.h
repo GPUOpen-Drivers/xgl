@@ -131,14 +131,14 @@ public:
         size_t              tempBufferSize;
         // Size in the buffer required per shader stage.
         size_t              tempStageSize;
-        // Max. number of Pal::ResourceMappingNodes needed by all layouts in the chain, including the extra nodes
+        // Max. number of ResourceMappingNodes needed by all layouts in the chain, including the extra nodes
         // required by the extra set pointers, and any resource nodes required by potential internal tables.
-        uint32_t            numPalRsrcMapNodes;
+        uint32_t            numRsrcMapNodes;
         // Number of resource mapping nodes used for the user data nodes
         uint32_t            numUserDataNodes;
         // Number of immutable sampler descriptors
-        // Number of Pal::DescriptorRangeValue needed by all layouts in the chain
-        uint32_t            numPalDescRangeValueNodes;
+        // Number of DescriptorRangeValue needed by all layouts in the chain
+        uint32_t            numDescRangeValueNodes;
         // Number of immutable samplers used for all descriptor range value node
         uint32_t            numImmutableSamplers;
         // Immutable sampler descriptor data pointer
@@ -183,11 +183,6 @@ protected:
         const PipelineInfo& pipelineInfo);
 
     ~PipelineLayout() { }
-    int32_t  BuildVertexInputDescriptors(
-        const void*                                     pShaderPatchOut,
-        const VkPipelineVertexInputStateCreateInfo*     pInput,
-        Pal::ResourceMappingNode*                       pSetNodes,
-        VbBindingInfo*                                  pInfo) const;
 
     VkResult BuildLlpcSetMapping(
         ShaderStage                  stage,

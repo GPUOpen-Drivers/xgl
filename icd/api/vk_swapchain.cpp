@@ -995,7 +995,7 @@ void FullscreenMgr::UpdateExclusiveMode(
     if (m_compatFlags.disabled == 0)
     {
         // Update current exclusive access compatibility
-        EvaluateExclusiveModeCompat(pSwapChain);
+        m_compatFlags = EvaluateExclusiveModeCompat(pSwapChain);
 
         // Try to enter exclusive access mode if we are currently compatible with it and vice versa.
         if (IsExclusiveModePossible() != m_exclusiveModeAcquired)
