@@ -126,6 +126,8 @@ bool SpirvLowerResourceCollect::runOnModule(
         pGlobal->eraseFromParent();
     }
 
+    bool useViewIndex = false;
+
     // Collect resource usages from globals
     for (auto pGlobal = m_pModule->global_begin(), pEnd = m_pModule->global_end(); pGlobal != pEnd; ++pGlobal)
     {
@@ -165,6 +167,7 @@ bool SpirvLowerResourceCollect::runOnModule(
                         {
                             LLPC_ASSERT(m_shaderStage == ShaderStageFragment);
                             m_pResUsage->builtInUsage.fs.fragCoord = true;
+                            useViewIndex = true;
                         }
                     }
                 }
@@ -266,6 +269,36 @@ bool SpirvLowerResourceCollect::runOnModule(
                 break;
             }
         }
+    }
+
+    if (useViewIndex)
+    {
+        // NOTE: Here, we add a global variable to emulate gl_ViewIndex. If subpassLoad() is invoked while multi-view is enabled, gl_ViewIndex is used implicitly.
+
+        auto pViewIndex = new GlobalVariable(*m_pModule,
+                                             m_pContext->Int32Ty(),
+                                             false,
+                                             GlobalValue::ExternalLinkage,
+                                             nullptr,
+                                             "gl_ViewIndex",
+                                             0,
+                                             GlobalVariable::NotThreadLocal,
+                                             SPIRAS_Input);
+
+        std::vector<Metadata*> viewIndexMeta;
+
+        ShaderInOutMetadata viewIndexMetaValue = {};
+        viewIndexMetaValue.U32All = 0;
+        viewIndexMetaValue.IsBuiltIn = true;
+        viewIndexMetaValue.Value = BuiltInViewIndex;
+        viewIndexMetaValue.InterpMode = InterpModeSmooth;
+        viewIndexMetaValue.InterpLoc = InterpLocCenter;
+
+        auto pViewIndexMetaValue = ConstantInt::get(m_pContext->Int32Ty(), viewIndexMetaValue.U32All);
+        viewIndexMeta.push_back(ConstantAsMetadata::get(pViewIndexMetaValue));
+        auto pViewIndexMetaNode = MDNode::get(*m_pContext, viewIndexMeta);
+        pViewIndex->addMetadata(gSPIRVMD::InOut, *pViewIndexMetaNode);
+        CollectInOutUsage(m_pContext->Int32Ty(), pViewIndexMetaValue, SPIRAS_Input);
     }
 
     LLPC_VERIFY_MODULE_FOR_PASS(module);

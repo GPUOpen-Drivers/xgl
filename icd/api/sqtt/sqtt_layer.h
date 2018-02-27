@@ -44,6 +44,8 @@
 
 #include "sqtt/sqtt_rgp_annotations.h"
 
+#include "palList.h"
+
 namespace vk
 {
 
@@ -108,6 +110,9 @@ public:
     void DebugMarkerEnd();
     void DebugMarkerInsert(const VkDebugMarkerMarkerInfoEXT* pMarkerInfo);
 
+    void AddDebugTag(uint64_t tag);
+    bool HasDebugTag(uint64_t tag) const;
+
 private:
     RgpSqttMarkerEvent BuildEventMarker(RgpSqttMarkerEventType apiType);
     void WriteCbStartMarker() const;
@@ -156,6 +161,7 @@ private:
         bool     inside;               // True if inside a barrier begin/end
     } m_currentBarrier;
 
+    Util::List<uint64_t, PalAllocator> m_debugTags;
 };
 
 namespace entry

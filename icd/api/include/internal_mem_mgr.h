@@ -96,9 +96,9 @@ struct MemoryPoolProperties
 // Device Group Memory class, a container for memory and access for multi-gpu
 struct DeviceGroupMemory
 {
-    Pal::IGpuMemory* PalMemory(int32_t idx = DefaultDeviceIndex) const;
+    Pal::IGpuMemory* PalMemory(int32_t idx) const;
 
-    void* CpuAddr(int32_t idx = DefaultDeviceIndex) const;
+    void* CpuAddr(int32_t idx) const;
 
     void  Destroy(Instance* pInstance) const;
 
@@ -128,25 +128,25 @@ class InternalMemory
 public:
     VK_INLINE InternalMemory();
 
-    Pal::IGpuMemory* PalMemory(int32_t idx = DefaultDeviceIndex)
+    Pal::IGpuMemory* PalMemory(int32_t idx)
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_memoryPool.groupMemory.PalMemory(idx);
     }
 
-    Pal::IGpuMemory* PalMemory(int32_t idx = DefaultDeviceIndex) const
+    Pal::IGpuMemory* PalMemory(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_memoryPool.groupMemory.PalMemory(idx);
     }
 
-    Pal::gpusize GpuVirtAddr(int32_t idx = DefaultDeviceIndex) const
+    Pal::gpusize GpuVirtAddr(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_gpuVA[idx];
     }
 
-    void* CpuAddr(int32_t idx = DefaultDeviceIndex) const
+    void* CpuAddr(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_memoryPool.groupMemory.CpuAddr(idx);
@@ -210,14 +210,17 @@ public:
 
     VkResult AllocGpuMem(
         const InternalMemCreateInfo& internalInfo,
-        InternalMemory*              pInternalMemory);
+        InternalMemory*              pInternalMemory,
+        uint32_t                     allocMask);
 
     VkResult AllocAndBindGpuMem(
-        Pal::IGpuMemoryBindable*        pBindable,
-        bool                            readOnly,
-        InternalMemory*                 pInternalMemory,
-        bool                            removeInvisibleHeap = false,
-        bool                            persistentMapped    = false);
+        uint32_t                   numDevices,
+        Pal::IGpuMemoryBindable**  ppBindableObjectPerDevice,
+        bool                       readOnly,
+        InternalMemory*            pInternalMemory,
+        uint32_t                   allocMask,
+        bool                       removeInvisibleHeap = false,
+        bool                       persistentMapped    = false);
 
     void FreeGpuMem(
         const InternalMemory*           pInternalMemory);
@@ -244,12 +247,14 @@ private:
         MemoryPoolList*              pOwnerList,
         const InternalMemCreateInfo& initialSubAllocInfo,
         InternalMemoryPool*          pNewPool,
+        uint32_t                     allocMask,
         Pal::gpusize*                pSubAllocOffset);
 
     VkResult AllocBaseGpuMem(
         const Pal::GpuMemoryCreateInfo& createInfo,
         bool                            readOnly,
-        InternalMemoryPool*             pGpuMemory);
+        InternalMemoryPool*             pGpuMemory,
+        uint32_t                        allocMask);
 
     void FreeBaseGpuMem(
         const InternalMemoryPool*       pGpuMemory);

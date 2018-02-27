@@ -556,5 +556,4 @@ extern "C" const VK_LAYER_DISPATCH_TABLE dispatch_table =
     vk::entry::vkGetInstanceProcAddr,
     vk::entry::vkGetDeviceProcAddr,
 };
-
-#include "open_strings/g_func_table.cpp"
+#include "strings/g_func_table.cpp"

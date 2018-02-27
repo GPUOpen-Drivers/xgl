@@ -292,6 +292,22 @@ void SpirvLowerImageOp::visitCallInst(
             }
             else
             {
+                if (dim == DimSubpassData)
+                {
+                    LLPC_ASSERT(m_shaderStage == ShaderStageFragment);
+                    const auto enableMultiView = (reinterpret_cast<const GraphicsPipelineBuildInfo*>(
+                        m_pContext->GetPipelineBuildInfo()))->iaState.enableMultiView;
+
+                    if (enableMultiView)
+                    {
+                        const auto& pResUsage = m_pContext->GetShaderResourceUsage(m_shaderStage);
+                        pCoord = InsertElementInst::Create(pCoord,
+                                                           pResUsage->inOutUsage.fs.pViewIndex,
+                                                           ConstantInt::get(m_pContext->Int32Ty(), 0, true),
+                                                           "",
+                                                           &callInst);
+                    }
+                }
                 args.push_back(pCoord);
             }
 

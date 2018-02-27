@@ -2453,11 +2453,7 @@ Value* PatchInOutImportExport::PatchGsBuiltInInputImport(
     case BuiltInPosition:
     case BuiltInPointSize:
         {
-            pInput = LoadValueFromEsGsRing(pInputTy,
-                                                      loc,
-                                                      0,
-                                                      pVertexIdx,
-                                                      pInsertPos);
+            pInput = LoadValueFromEsGsRing(pInputTy, loc, 0, pVertexIdx, pInsertPos);
             break;
         }
     case BuiltInClipDistance:
@@ -2466,10 +2462,10 @@ Value* PatchInOutImportExport::PatchGsBuiltInInputImport(
             for (uint32_t i = 0; i < builtInUsage.clipDistanceIn; ++i)
             {
                 auto pComp = LoadValueFromEsGsRing(pInputTy->getArrayElementType(),
-                                                              loc + i / 4,
-                                                              i % 4,
-                                                              pVertexIdx,
-                                                              pInsertPos);
+                                                   loc + i / 4,
+                                                   i % 4,
+                                                   pVertexIdx,
+                                                   pInsertPos);
 
                 std::vector<uint32_t> idxs;
                 idxs.push_back(i);
@@ -2483,10 +2479,10 @@ Value* PatchInOutImportExport::PatchGsBuiltInInputImport(
             for (uint32_t i = 0; i < builtInUsage.cullDistanceIn; ++i)
             {
                 auto pComp = LoadValueFromEsGsRing(pInputTy->getArrayElementType(),
-                                                              loc + i / 4,
-                                                              i % 4,
-                                                              pVertexIdx,
-                                                              pInsertPos);
+                                                   loc + i / 4,
+                                                   i % 4,
+                                                   pVertexIdx,
+                                                   pInsertPos);
 
                 std::vector<uint32_t> idxs;
                 idxs.push_back(i);
@@ -4103,14 +4099,16 @@ void PatchInOutImportExport::StoreValueToEsGsRing(
 
     if (pStoreTy->isVectorTy())
     {
-        for (uint32_t i = 0; i < pStoreTy->getVectorNumElements(); ++i)
+        const uint32_t compCount = pStoreTy->getVectorNumElements();
+
+        for (uint32_t i = 0; i < compCount; ++i)
         {
             auto pStoreComp = ExtractElementInst::Create(pStoreValue,
                                                          ConstantInt::get(m_pContext->Int32Ty(), i),
                                                          "",
                                                          pInsertPos);
 
-            StoreValueToEsGsRing(pStoreComp, location + i / 4, i % 4, pInsertPos);
+            StoreValueToEsGsRing(pStoreComp, location + (compIdx + i) / 4, (compIdx + i) % 4, pInsertPos);
         }
     }
     else
@@ -4200,16 +4198,16 @@ Value* PatchInOutImportExport::LoadValueFromEsGsRing(
         auto pCompTy = pLoadTy->getVectorElementType();
         const uint32_t compCount = pLoadTy->getVectorNumElements();
 
-        for (uint32_t i = compIdx; i < compCount; ++i)
+        for (uint32_t i = 0; i < compCount; ++i)
         {
-            auto pLoadCompValue = LoadValueFromEsGsRing(pCompTy,
-                                                        location + i / 4,
-                                                        i % 4,
-                                                        pVertexIdx,
-                                                        pInsertPos);
+            auto pLoadComp = LoadValueFromEsGsRing(pCompTy,
+                                                   location + (compIdx + i) / 4,
+                                                   (compIdx + i) % 4,
+                                                   pVertexIdx,
+                                                   pInsertPos);
 
             pLoadValue = InsertElementInst::Create(pLoadValue,
-                                                   pLoadCompValue,
+                                                   pLoadComp,
                                                    ConstantInt::get(m_pContext->Int32Ty(), i),
                                                    "",
                                                    pInsertPos);
@@ -4336,15 +4334,13 @@ Value* PatchInOutImportExport::CalcEsGsRingOffsetForOutput(
         LLPC_ASSERT((m_pContext->GetShaderStageMask() & ShaderStageToMask(ShaderStageGeometry)) != 0);
         const auto& calcFactor = m_pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs.calcFactor;
 
-        pEsGsOffset = BinaryOperator::CreateExact(Instruction::LShr,
-                                                  pEsGsOffset,
-                                                  ConstantInt::get(m_pContext->Int32Ty(), 2),
-                                                  "",
-                                                  pInsertPos);
+        pEsGsOffset = BinaryOperator::CreateLShr(pEsGsOffset,
+                                                 ConstantInt::get(m_pContext->Int32Ty(), 2),
+                                                 "",
+                                                 pInsertPos);
 
         pRingOffset = BinaryOperator::CreateMul(m_pThreadId,
-                                                ConstantInt::get(m_pContext->Int32Ty(),
-                                                                 calcFactor.esGsRingItemSize),
+                                                ConstantInt::get(m_pContext->Int32Ty(), calcFactor.esGsRingItemSize),
                                                 "",
                                                 pInsertPos);
 
@@ -5286,9 +5282,7 @@ uint32_t PatchInOutImportExport::CalcPatchCountPerThreadGroup(
     const uint32_t patchCountLimitedByThread = maxThreadCountPerThreadGroup / maxThreadCountPerPatch;
 
     const uint32_t inPatchSize = (inVertexCount * inVertexStride);
-    // Hull shader output vertex size in DWORD
     const uint32_t outPatchSize = (outVertexCount * outVertexStride);
-    // Hull shader patch-const vertex size in DWORD
     const uint32_t patchConstSize = patchConstCount * 4;
 
     // Compute the required LDS size per patch, always include the space for VS vertex out
@@ -5309,10 +5303,10 @@ uint32_t PatchInOutImportExport::CalcPatchCountPerThreadGroup(
 
     if (m_pContext->IsTessOffChip())
     {
-        // out patch size in BYTES
         auto outPatchLdsBufferSize = (outPatchSize + patchConstSize) * 4;
-        auto numPatchForOcLds = m_pContext->GetGpuProperty()->tessOffChipLdsBufferSize / outPatchLdsBufferSize;
-        patchCountPerThreadGroup = std::min(patchCountPerThreadGroup, numPatchForOcLds);
+        auto tessOffChipPatchCountPerThreadGroup =
+            m_pContext->GetGpuProperty()->tessOffChipLdsBufferSize / outPatchLdsBufferSize;
+        patchCountPerThreadGroup = std::min(patchCountPerThreadGroup, tessOffChipPatchCountPerThreadGroup);
     }
 
     return patchCountPerThreadGroup;

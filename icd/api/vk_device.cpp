@@ -208,6 +208,43 @@ Device::Device(
 }
 
 // =====================================================================================================================
+static void ConstructQueueCreateInfo(
+    PhysicalDevice**            pPhysicalDevices,
+    uint32_t                    deviceIdx,
+    uint32_t                    queueFamilyIndex,
+    uint32_t                    queueIndex,
+    VkQueueGlobalPriorityEXT    queuePriority,
+    Pal::QueueCreateInfo*       pQueueCreateInfo)
+{
+    const Pal::QueueType palQueueType =
+        pPhysicalDevices[deviceIdx]->GetQueueFamilyPalQueueType(queueFamilyIndex);
+
+    const Pal::QueuePriority palQueuePriority =
+        VkToPalGlobalPriority(queuePriority);
+
+    // Get the sub engine index of vr high priority
+    // UINT32_MAX is returned if the required vr high priority sub engine is not available
+    uint32_t vrHighPriorityIndex = pPhysicalDevices[deviceIdx]->GetVrHighPrioritySubEngineIndex();
+
+    if ((palQueuePriority > Pal::QueuePriority::Low)       &&
+        (palQueueType == Pal::QueueType::QueueTypeCompute) &&
+        (vrHighPriorityIndex != UINT32_MAX))
+    {
+        pQueueCreateInfo->engineType  = Pal::EngineType::EngineTypeExclusiveCompute;
+        pQueueCreateInfo->engineIndex = vrHighPriorityIndex;
+    }
+    else
+    {
+        pQueueCreateInfo->engineType  =
+            pPhysicalDevices[deviceIdx]->GetQueueFamilyPalEngineType(queueFamilyIndex);
+        pQueueCreateInfo->engineIndex = queueIndex;
+    }
+
+    pQueueCreateInfo->queueType = palQueueType;
+    pQueueCreateInfo->priority  = palQueuePriority;
+}
+
+// =====================================================================================================================
 // Creates a new Vulkan API device object
 VkResult Device::Create(
     PhysicalDevice*                 pPhysicalDevice,
@@ -398,17 +435,13 @@ VkResult Device::Create(
                 {
                     for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
                     {
-                        const Pal::QueueType palQueueType =
-                                pPhysicalDevices[deviceIdx]->GetQueueFamilyPalQueueType(queueFamilyIndex);
-
-                        const Pal::EngineType palEngineType =
-                                pPhysicalDevices[deviceIdx]->GetQueueFamilyPalEngineType(queueFamilyIndex);
-
                         Pal::QueueCreateInfo queueCreateInfo = {};
-
-                        queueCreateInfo.queueType     = palQueueType;
-                        queueCreateInfo.engineType    = palEngineType;
-                        queueCreateInfo.engineIndex   = queueIndex;
+                        ConstructQueueCreateInfo(pPhysicalDevices,
+                                                 deviceIdx,
+                                                 queueFamilyIndex,
+                                                 queueIndex,
+                                                 queuePriority[queueFamilyIndex],
+                                                 &queueCreateInfo);
 
                         palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSize(queueCreateInfo, &palResult);
 
@@ -451,17 +484,12 @@ VkResult Device::Create(
                         for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
                         {
                             Pal::QueueCreateInfo queueCreateInfo = {};
-
-                            const Pal::QueueType palQueueType =
-                                    pPhysicalDevices[deviceIdx]->GetQueueFamilyPalQueueType(queueFamilyIndex);
-
-                            const Pal::EngineType palEngineType =
-                                    pPhysicalDevices[deviceIdx]->GetQueueFamilyPalEngineType(queueFamilyIndex);
-
-                            queueCreateInfo.queueType     = palQueueType;
-                            queueCreateInfo.engineType    = palEngineType;
-                            queueCreateInfo.engineIndex   = queueIndex;
-                            queueCreateInfo.priority      = VkToPalGlobalPriority(queuePriority[queueFamilyIndex]);
+                            ConstructQueueCreateInfo(pPhysicalDevices,
+                                                     deviceIdx,
+                                                     queueFamilyIndex,
+                                                     queueIndex,
+                                                     queuePriority[queueFamilyIndex],
+                                                     &queueCreateInfo);
 
                             palResult = pPalDevices[deviceIdx]->CreateQueue(queueCreateInfo,
                                                                 pPalQueueMemory + palQueueMemoryOffset,

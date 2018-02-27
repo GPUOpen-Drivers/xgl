@@ -1167,45 +1167,55 @@ void CmdBuffer::ResetState()
 {
     m_stencilCombiner.Reset();
 
-    memset(&m_state.allGpuState, 0, sizeof(AllGpuRenderState));
+    // Memset the first section of m_state.allGpuState.  The second section begins with pipelineState.
+    const size_t memsetBytes = offsetof(AllGpuRenderState, pipelineState);
+    memset(&m_state.allGpuState, 0, memsetBytes);
+
+    // Reset initial static values to "dynamic" values.  This will skip initial redundancy checking because the
+    // prior values are unknown.  Since DynamicRenderStateToken is 0, this is covered by the memset above.
+    static_assert(DynamicRenderStateToken == 0, "Unexpected value!");
+
+    uint32_t bindIdx = 0;
+    do
+    {
+        memset(&(m_state.allGpuState.pipelineState[bindIdx].userDataLayout),
+               0,
+               sizeof(m_state.allGpuState.pipelineState[bindIdx].userDataLayout));
+
+        m_state.allGpuState.pipelineState[bindIdx].pLayout = nullptr;
+        m_state.allGpuState.pipelineState[bindIdx].boundSetCount = 0;
+        m_state.allGpuState.pipelineState[bindIdx].pushedConstCount = 0;
+
+        bindIdx++;
+    }
+    while (bindIdx < static_cast<uint32_t>(Pal::PipelineBindPoint::Count));
+
+    m_state.allGpuState.scissor.count = 0;
+
+    m_state.allGpuState.viewport.count            = 0;
+    m_state.allGpuState.viewport.horzClipRatio    = FLT_MAX;
+    m_state.allGpuState.viewport.vertClipRatio    = FLT_MAX;
+    m_state.allGpuState.viewport.horzDiscardRatio = 1.0f;
+    m_state.allGpuState.viewport.vertDiscardRatio = 1.0f;
 
     const uint32_t numPalDevices = m_pDevice->NumPalDevices();
     uint32_t deviceIdx = 0;
     do
     {
-        memset(&(m_state.perGpuState[deviceIdx]), 0, sizeof(PerGpuRenderState));
+        m_state.perGpuState[deviceIdx].pMsaaState           = nullptr;
+        m_state.perGpuState[deviceIdx].pColorBlendState     = nullptr;
+        m_state.perGpuState[deviceIdx].pDepthStencilState   = nullptr;
+
         deviceIdx++;
     }
     while (deviceIdx < numPalDevices);
 
     m_palDeviceMask = InvalidPalDeviceMask;
 
-    for (uint32_t i = 0; i < Pal::MaxViewports; ++i)
-    {
-        m_state.allGpuState.viewport.viewports[i].origin = Pal::PointOrigin::UpperLeft;
-    }
-
-    m_state.allGpuState.viewport.horzClipRatio    = FLT_MAX;
-    m_state.allGpuState.viewport.vertClipRatio    = FLT_MAX;
-    m_state.allGpuState.viewport.horzDiscardRatio = 1.0f;
-    m_state.allGpuState.viewport.vertDiscardRatio = 1.0f;
-
     if (m_pGpuEventMgr != nullptr)
     {
         m_pGpuEventMgr->ResetCmdBuf(this);
     }
-
-    // Reset initial static values to "dynamic" values.  This will skip initial redundancy checking because the
-    // prior values are unknown.
-    m_state.allGpuState.staticTokens.inputAssemblyState   = DynamicRenderStateToken;
-    m_state.allGpuState.staticTokens.triangleRasterState  = DynamicRenderStateToken;
-    m_state.allGpuState.staticTokens.pointLineRasterState = DynamicRenderStateToken;
-    m_state.allGpuState.staticTokens.depthBiasState       = DynamicRenderStateToken;
-    m_state.allGpuState.staticTokens.blendConst           = DynamicRenderStateToken;
-    m_state.allGpuState.staticTokens.depthBounds          = DynamicRenderStateToken;
-    m_state.allGpuState.staticTokens.viewports            = DynamicRenderStateToken;
-    m_state.allGpuState.staticTokens.scissorRect          = DynamicRenderStateToken;
-    m_state.allGpuState.staticTokens.samplePattern        = DynamicRenderStateToken;
 
     m_renderPassInstance.pExecuteInfo = nullptr;
     m_renderPassInstance.subpass      = VK_SUBPASS_EXTERNAL;
@@ -1425,8 +1435,14 @@ void CmdBuffer::ExecuteCommands(
     {
         CmdBuffer* pInteralCmdBuf = ApiCmdBuffer::ObjectFromHandle(pCmdBuffers[i]);
 
-        Pal::ICmdBuffer* pPalNestedCmdBuffer = pInteralCmdBuf->PalCmdBuffer(DefaultDeviceIndex);
-        PalCmdBuffer(DefaultDeviceIndex)->CmdExecuteNestedCmdBuffers(1, &pPalNestedCmdBuffer);
+        utils::IterateMask deviceGroup(m_palDeviceMask);
+        while (deviceGroup.Iterate())
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+
+            Pal::ICmdBuffer* pPalNestedCmdBuffer = pInteralCmdBuf->PalCmdBuffer(deviceIdx);
+            PalCmdBuffer(deviceIdx)->CmdExecuteNestedCmdBuffers(1, &pPalNestedCmdBuffer);
+        }
     }
 
     DbgBarrierPostCmd(DbgBarrierExecuteCommands);
@@ -3319,10 +3335,16 @@ void CmdBuffer::BeginQuery(
     // NOTE: This function is illegal to call for TimestampQueryPools
     const PalQueryPool* pQueryPool = QueryPool::ObjectFromHandle(queryPool)->AsPalQueryPool();
 
-    PalCmdBuffer(DefaultDeviceIndex)->CmdBeginQuery(
-       *pQueryPool->PalPool(),
-        pQueryPool->PalQueryType(),
-        query, palQueryControlFlags);
+    utils::IterateMask deviceGroup(m_palDeviceMask);
+    while (deviceGroup.Iterate())
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        PalCmdBuffer(deviceIdx)->CmdBeginQuery(*pQueryPool->PalPool(deviceIdx),
+            pQueryPool->PalQueryType(),
+            query,
+            palQueryControlFlags);
+    }
 
     const auto* const pRenderPass = m_state.allGpuState.pRenderPass;
 
@@ -3343,15 +3365,21 @@ void CmdBuffer::BeginQuery(
         {
             const auto remainingQueryIndex = query + remainingQuery;
 
-            PalCmdBuffer(DefaultDeviceIndex)->CmdBeginQuery(
-               *pQueryPool->PalPool(),
-                pQueryPool->PalQueryType(),
-                remainingQueryIndex, palQueryControlFlags);
+            deviceGroup = utils::IterateMask(m_palDeviceMask);
+            while (deviceGroup.Iterate())
+            {
+                const uint32_t deviceIdx = deviceGroup.Index();
 
-            PalCmdBuffer(DefaultDeviceIndex)->CmdEndQuery(
-               *pQueryPool->PalPool(),
-                pQueryPool->PalQueryType(),
-                remainingQueryIndex);
+                PalCmdBuffer(deviceIdx)->CmdBeginQuery(
+                    *pQueryPool->PalPool(deviceIdx),
+                    pQueryPool->PalQueryType(),
+                    remainingQueryIndex, palQueryControlFlags);
+
+                PalCmdBuffer(deviceIdx)->CmdEndQuery(
+                    *pQueryPool->PalPool(deviceIdx),
+                    pQueryPool->PalQueryType(),
+                    remainingQueryIndex);
+            }
         }
     }
 
@@ -3368,9 +3396,15 @@ void CmdBuffer::EndQuery(
     // NOTE: This function is illegal to call for TimestampQueryPools
     const PalQueryPool* pQueryPool = QueryPool::ObjectFromHandle(queryPool)->AsPalQueryPool();
 
-    PalCmdBuffer(DefaultDeviceIndex)->CmdEndQuery(*pQueryPool->PalPool(),
-                                pQueryPool->PalQueryType(),
-                                query);
+    utils::IterateMask deviceGroup(m_palDeviceMask);
+    while (deviceGroup.Iterate())
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        PalCmdBuffer(deviceIdx)->CmdEndQuery(*pQueryPool->PalPool(deviceIdx),
+            pQueryPool->PalQueryType(),
+            query);
+    }
 
     DbgBarrierPostCmd(DbgBarrierQueryBeginEnd);
 }
@@ -3428,12 +3462,19 @@ void CmdBuffer::FillTimestampQueryPool(
     //
     // Write TimestampValue to all timestamps in TimestampQueryPool.
     // Note that each slot in TimestampQueryPool contains only timestamp value.
-    // The avaliability info is generated on the fly from timestamp value.
-    PalCmdBuffer(DefaultDeviceIndex)->CmdFillMemory(
-        timestampQueryPool.PalMemory(DefaultDeviceIndex),
-        timestampQueryPool.GetSlotOffset(firstQuery),
-        TimestampQueryPool::SlotSize * queryCount,
-        timestampChunk);
+    // The availability info is generated on the fly from timestamp value.
+
+    utils::IterateMask deviceGroup1(m_palDeviceMask);
+    while (deviceGroup1.Iterate())
+    {
+        const uint32_t deviceIdx = deviceGroup1.Index();
+
+        PalCmdBuffer(deviceIdx)->CmdFillMemory(
+            timestampQueryPool.PalMemory(deviceIdx),
+            timestampQueryPool.GetSlotOffset(firstQuery),
+            TimestampQueryPool::SlotSize * queryCount,
+            timestampChunk);
+    }
 
     // Wait for memory fill to complete
     {
@@ -3478,10 +3519,16 @@ void CmdBuffer::ResetQueryPool(
     {
         const PalQueryPool* pQueryPool = pBasePool->AsPalQueryPool();
 
-        PalCmdBuffer(DefaultDeviceIndex)->CmdResetQueryPool(
-            *pQueryPool->PalPool(),
-            firstQuery,
-            queryCount);
+        utils::IterateMask deviceGroup(m_palDeviceMask);
+        while (deviceGroup.Iterate())
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+
+            PalCmdBuffer(deviceIdx)->CmdResetQueryPool(
+                *pQueryPool->PalPool(deviceIdx),
+                firstQuery,
+                queryCount);
+        }
     }
     else
     {
@@ -3625,7 +3672,7 @@ void CmdBuffer::CopyQueryPoolResults(
             const uint32_t deviceIdx = deviceGroup.Index();
 
             PalCmdBuffer(deviceIdx)->CmdResolveQuery(
-                *pPool->PalPool(),
+                *pPool->PalPool(deviceIdx),
                 VkToPalQueryResultFlags(flags),
                 pPool->PalQueryType(),
                 firstQuery,

@@ -21,8 +21,11 @@ target triple = "spir64-unknown-unknown"
 define <2 x i8> @llpc.inlineconst.load.uniform.v2i8(
     i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i1 %readonly, i1 %glc, i1 %slc) #0
 {
-    ; TODO: Use buffer.load.i16() to load a WORD.
-    ret <2 x i8> undef
+    %desc = call <4 x i32> @llpc.descriptor.load.inlinebuffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    %1 = call float @llvm.amdgcn.buffer.load.ushort(<4 x i32> %desc, i32 0, i32 %memberOffset, i1 %glc, i1 %slc)
+    %2 = bitcast float %1 to <4 x i8>
+    %3 = shufflevector <4 x i8> %2, <4 x i8> %2, <2 x i32> <i32 0, i32 1>
+    ret <2 x i8> %3
 }
 
 ; GLSL: uniform load f16vec2/i16vec2/u16vec2/float/int/uint (dword) from inline constant buffer
@@ -39,8 +42,14 @@ define <4 x i8> @llpc.inlineconst.load.uniform.v4i8(
 define <6 x i8> @llpc.inlineconst.load.uniform.v6i8(
     i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i1 %readonly, i1 %glc, i1 %slc) #0
 {
-    ; TODO: Use buffer.load.i16() to load a DWORD and a WORD.
-    ret <6 x i8> undef
+    %desc = call <4 x i32> @llpc.descriptor.load.inlinebuffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    %1 = call i32 @llvm.amdgcn.s.buffer.load.i32(<4 x i32> %desc, i32 %memberOffset, i1 %glc)
+    %2 = bitcast i32 %1 to <4 x i8>
+    %3 = add i32 %memberOffset, 4
+    %4 = call float @llvm.amdgcn.buffer.load.ushort(<4 x i32> %desc, i32 0, i32 %3, i1 %glc, i1 %slc)
+    %5 = bitcast float %4 to <4 x i8>
+    %6 = shufflevector <4 x i8> %2, <4 x i8> %5, <6 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5>
+    ret <6 x i8> %6
 }
 
 ; GLSL: uniform load f16vec4/i16vec4/u16vec4/vec2/ivec2/uvec2/double/int64/uint64 (dwordx2) from inline constant buffer
@@ -105,6 +114,7 @@ define <32 x i8> @llpc.inlineconst.load.uniform.v32i8(
 declare i32 @llvm.amdgcn.s.buffer.load.i32(<4 x i32>, i32, i1) #1
 declare <2 x i32> @llvm.amdgcn.s.buffer.load.v2i32(<4 x i32>, i32, i1) #1
 declare <4 x i32> @llvm.amdgcn.s.buffer.load.v4i32(<4 x i32>, i32, i1) #1
+declare float @llvm.amdgcn.buffer.load.ushort(<4 x i32>, i32, i32, i1, i1) #1
 
 declare <4 x i32> @llpc.descriptor.load.inlinebuffer(i32 , i32 , i32) #0
 

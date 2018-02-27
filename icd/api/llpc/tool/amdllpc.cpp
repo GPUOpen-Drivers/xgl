@@ -84,59 +84,56 @@
 using namespace llvm;
 using namespace Llpc;
 
-namespace llvm
-{
-
-namespace cl
-{
-
 // Represents options of LLPC standalone tool.
 
 // -gfxip: graphics IP version
-static opt<std::string> GfxIp("gfxip", desc("Graphics IP version"), value_desc("major.minor.step"), init("8.0.0"));
+static cl::opt<std::string> GfxIp("gfxip", cl::desc("Graphics IP version"), cl::value_desc("major.minor.step"), cl::init("8.0.0"));
 
 // Input sources
-static opt<std::string> InFile1(Positional, desc("<first source>"),  init("-"));
-static opt<std::string> InFile2(Positional, desc("<second source>"), init("-"));
-static opt<std::string> InFile3(Positional, desc("<third source>"),  init("-"));
-static opt<std::string> InFile4(Positional, desc("<fourth source>"), init("-"));
-static opt<std::string> InFile5(Positional, desc("<fifth source>"),  init("-"));
+static cl::list<std::string> InFiles(cl::Positional, cl::OneOrMore, cl::ValueRequired,
+            cl::desc("<source>...\n"
+              "Type of input file is determined by its filename extension:\n"
+              "  .spv      SPIR-V binary\n"
+              "  .spvas    SPIR-V assembly text\n"
+              "  .vert     GLSL vertex shader\n"
+              "  .tesc     GLSL tessellation control shader\n"
+              "  .tese     GLSL tessellation evaluation shader\n"
+              "  .geom     GLSL geometry shader\n"
+              "  .frag     GLSL fragment shader\n"
+              "  .comp     GLSL compute shader\n"
+              "  .pipe     Pipeline info file\n"
+              "  .ll       LLVM IR assembly text"
+              ));
 
 // -o: output
-static opt<std::string> OutFile("o", desc("Output file"), value_desc("filename"));
+static cl::opt<std::string> OutFile("o", cl::desc("Output file"), cl::value_desc("filename"));
 
 // -l: link pipeline
-static opt<bool>        ToLink("l", desc("Link pipeline and generate ISA codes"), init(true));
+static cl::opt<bool>        ToLink("l", cl::desc("Link pipeline and generate ISA codes"), cl::init(true));
 
 // -val: validate input SPIR-V binary or text
-static opt<bool>        Validate("val", desc("Validate input SPIR-V binary or text"), init(true));
+static cl::opt<bool>        Validate("val", cl::desc("Validate input SPIR-V binary or text"), cl::init(true));
 
 // -entry-target: name string of entry target (for multiple entry-points)
-static opt<std::string> EntryTarget("entry-target",
-                                    desc("Name string of entry target"),
-                                    value_desc("entryname"),
-                                    init("main"));
+static cl::opt<std::string> EntryTarget("entry-target",
+                                        cl::desc("Name string of entry target"),
+                                        cl::value_desc("entryname"),
+                                        cl::init("main"));
 
 // -ignore-color-attachment-formats: ignore color attachment formats
-static opt<bool> IgnoreColorAttachmentFormats("ignore-color-attachment-formats",
-                                              desc("Ignore color attachment formats"), init(false));
+static cl::opt<bool> IgnoreColorAttachmentFormats("ignore-color-attachment-formats",
+                                                  cl::desc("Ignore color attachment formats"), cl::init(false));
 
 #ifdef WIN_OS
 // -assert-to-msgbox: pop message box when an assert is hit, only valid in Windows
-static opt<bool>        AssertToMsgBox("assert-to-msgbox", desc("Pop message box when assert is hit"));
+static cl::opt<bool>        AssertToMsgBox("assert-to-msgbox", cl::desc("Pop message box when assert is hit"));
 #endif
-
-} // cl
-
-} // llvm
 
 // Represents allowed extensions of LLPC source files.
 namespace LlpcExt
 {
 
 const char SpirvBin[]       = ".spv";
-const char LlvmBin[]        = ".bc";
-const char IsaBin[]         = ".isa";
 const char SpirvText[]      = ".spvas";
 const char GlslTextVs[]     = ".vert";
 const char GlslTextTcs[]    = ".tesc";
@@ -787,7 +784,7 @@ static Result BuildPipeline(
                 if (pShaderInfo->pEntryTarget == nullptr)
                 {
                     // If entry target is not specified, use the one from command line option
-                    pShaderInfo->pEntryTarget = cl::EntryTarget.c_str();
+                    pShaderInfo->pEntryTarget = EntryTarget.c_str();
                 }
                 pShaderInfo->pModuleData  = pShaderOut->pModuleData;
             }
@@ -821,7 +818,7 @@ static Result BuildPipeline(
         if (pShaderInfo->pEntryTarget == nullptr)
         {
             // If entry target is not specified, use the one from command line option
-            pShaderInfo->pEntryTarget = cl::EntryTarget.c_str();
+            pShaderInfo->pEntryTarget = EntryTarget.c_str();
         }
         pShaderInfo->pModuleData  = pShaderOut->pModuleData;
 
@@ -937,58 +934,41 @@ int32_t main(
     result = Init(argc, argv, &pCompiler, &compileInfo);
 
 #ifdef WIN_OS
-    if (cl::AssertToMsgBox)
+    if (AssertToMsgBox)
     {
         _set_error_mode(_OUT_TO_MSGBOX);
     }
 #endif
 
-    constexpr uint32_t MaxFileCount = ShaderStageGfxCount;
-
-    std::string inFiles[MaxFileCount] =
-    {
-        cl::InFile1,
-        cl::InFile2,
-        cl::InFile3,
-        cl::InFile4,
-        cl::InFile5,
-    };
-    std::string outFile = cl::OutFile;
-
     //
     // Translate sources to SPIR-V binary
     //
-    for (uint32_t i = 0; (i < MaxFileCount) && (result == Result::Success); ++i)
+    for (uint32_t i = 0; (i < InFiles.size()) && (result == Result::Success); ++i)
     {
+        const std::string& inFile = InFiles[i];
         std::string spvBinFile;
 
-        if (inFiles[i] == "-")
-        {
-            // Corresponding source file is not specified, ignore
-            continue;
-        }
-
-        if (IsGlslTextFile(inFiles[i]))
+        if (IsGlslTextFile(inFile))
         {
             // GLSL source text
             ShaderStage stage = ShaderStageInvalid;
-            result = CompileGlsl(inFiles[i], &stage, spvBinFile);
+            result = CompileGlsl(inFile, &stage, spvBinFile);
             if (result == Result::Success)
             {
                 compileInfo.stageMask |= ShaderStageToMask(stage);
                 result = GetSpirvBinaryFromFile(spvBinFile, &compileInfo.spirvBin[stage]);
             }
         }
-        else if (IsSpirvTextFile(inFiles[i]) || IsSpirvBinaryFile(inFiles[i]))
+        else if (IsSpirvTextFile(inFile) || IsSpirvBinaryFile(inFile))
         {
             // SPIR-V assembly text or SPIR-V binary
-            if (IsSpirvTextFile(inFiles[i]))
+            if (IsSpirvTextFile(inFile))
             {
-                result = AssembleSpirv(inFiles[i], spvBinFile);
+                result = AssembleSpirv(inFile, spvBinFile);
             }
             else
             {
-                spvBinFile = inFiles[i];
+                spvBinFile = inFile;
             }
 
             BinaryData spvBin = {};
@@ -998,7 +978,7 @@ int32_t main(
                 result = GetSpirvBinaryFromFile(spvBinFile, &spvBin);
             }
 
-            if ((result == Result::Success) && cl::Validate)
+            if ((result == Result::Success) && Validate)
             {
                 char log[1024] = {};
                 if (spvValidateSpirv != nullptr)
@@ -1013,7 +993,7 @@ int32_t main(
 
             if (result == Result::Success)
             {
-                uint32_t stageMask = GetStageMaskFromSpirvBinary(&spvBin, cl::EntryTarget.c_str());
+                uint32_t stageMask = GetStageMaskFromSpirvBinary(&spvBin, EntryTarget.c_str());
                 if (stageMask != 0)
                 {
                     for (uint32_t stage = ShaderStageVertex; stage < ShaderStageCount; ++stage)
@@ -1033,10 +1013,10 @@ int32_t main(
             }
 
         }
-        else if (IsPipelineInfoFile(inFiles[i]))
+        else if (IsPipelineInfoFile(inFile))
         {
             const char* pLog = nullptr;
-            bool vfxResult = vfxParseFile(inFiles[i].c_str(),
+            bool vfxResult = vfxParseFile(inFile.c_str(),
                                           0,
                                           nullptr,
                                           VfxDocTypePipeline,
@@ -1057,7 +1037,7 @@ int32_t main(
                 {
                     compileInfo.compPipelineInfo = pPipelineState->compPipelineInfo;
                     compileInfo.gfxPipelineInfo = pPipelineState->gfxPipelineInfo;
-                    if (cl::IgnoreColorAttachmentFormats)
+                    if (IgnoreColorAttachmentFormats)
                     {
                         // NOTE: When this option is enabled, we set color attachment format to
                         // R8G8B8A8_SRGB for color target 0. Also, for other color targets, if the
@@ -1096,23 +1076,23 @@ int32_t main(
             }
             else
             {
-                 LLPC_ERRS("Failed to parse input file: " << inFiles[i] << "\n" << pLog << "\n");
+                 LLPC_ERRS("Failed to parse input file: " << inFile << "\n" << pLog << "\n");
                  result = Result::ErrorInvalidShader;
             }
         }
-        else if (IsLlvmIrFile(inFiles[i]))
+        else if (IsLlvmIrFile(inFile))
         {
             LLVMContext context;
             SMDiagnostic errDiag;
 
             // Load LLVM IR
             std::unique_ptr<Module> pModule =
-                parseAssemblyFile(inFiles[i], errDiag, context, nullptr, false);
+                parseAssemblyFile(inFile, errDiag, context, nullptr, false);
             if (pModule.get() == nullptr)
             {
                 std::string errMsg;
                 raw_string_ostream errStream(errMsg);
-                errDiag.print(inFiles[i].c_str(), errStream);
+                errDiag.print(inFile.c_str(), errStream);
                 LLPC_ERRS(errMsg);
                 result = Result::ErrorInvalidShader;
             }
@@ -1122,7 +1102,7 @@ int32_t main(
             raw_string_ostream errStream(errMsg);
             if ((result == Result::Success) && verifyModule(*pModule.get(), &errStream))
             {
-                LLPC_ERRS("File " << inFiles[i] << " parsed, but fail to verify the module: " << errMsg << "\n");
+                LLPC_ERRS("File " << inFile << " parsed, but fail to verify the module: " << errMsg << "\n");
                 result = Result::ErrorInvalidShader;
             }
 
@@ -1133,7 +1113,7 @@ int32_t main(
                 shaderStage = GetShaderStageFromModule(pModule.get());
                 if (shaderStage == ShaderStageInvalid)
                 {
-                    LLPC_ERRS("File " << inFiles[i] << ": Fail to determine shader stage\n");
+                    LLPC_ERRS("File " << inFile << ": Fail to determine shader stage\n");
                     result = Result::ErrorInvalidShader;
                 }
             }
@@ -1152,6 +1132,12 @@ int32_t main(
                 compileInfo.stageMask |= ShaderStageToMask(static_cast<ShaderStage>(shaderStage));
             }
         }
+        else
+        {
+            LLPC_ERRS("File " << inFile << ": Bad file extension; try -help\n");
+            result = Result::ErrorInvalidShader;
+        }
+
     }
 
     //
@@ -1165,12 +1151,12 @@ int32_t main(
     //
     // Build pipeline
     //
-    if ((result == Result::Success) && cl::ToLink)
+    if ((result == Result::Success) && ToLink)
     {
         result = BuildPipeline(pCompiler, &compileInfo);
-        if ((result == Result::Success) && (outFile.empty() == false))
+        if ((result == Result::Success) && (OutFile.empty() == false))
         {
-            result = OutputElf(&compileInfo, outFile);
+            result = OutputElf(&compileInfo, OutFile);
         }
     }
 

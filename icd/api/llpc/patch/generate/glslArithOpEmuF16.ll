@@ -517,7 +517,7 @@ define half @llpc.acosh.f16(half %x) #0
 define half @llpc.atanh.f16(half %x) #0
 {
     ; In((x + 1)/( 1 - x)) * 0.5f;
-    ; ¨Ox¨O <1, undefined ¨Ox¨O ¡Ý 1
+    ; "Ox"O <1, undefined "Ox"O >= 1
     %1 = fadd half %x, 1.0
     %2 = fsub half 1.0, %x
     %3 = fdiv half 1.0, %2

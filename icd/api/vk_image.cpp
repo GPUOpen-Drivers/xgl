@@ -275,46 +275,6 @@ Image::Image(
 }
 
 // =====================================================================================================================
-static VkImageUsageFlags VkFormatFeatureFlagsToImageUsageFlags(
-    VkFormatFeatureFlags formatFeatures)
-{
-    VkImageUsageFlags imageUsage = 0;
-
-    if (formatFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR)
-    {
-        imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-    }
-
-    if (formatFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR)
-    {
-        imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-    }
-
-    if (formatFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)
-    {
-        imageUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
-        imageUsage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
-    }
-
-    if (formatFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)
-    {
-        imageUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
-    }
-
-    if (formatFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)
-    {
-        imageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-    }
-
-    if (formatFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
-    {
-        imageUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-    }
-
-    return imageUsage;
-}
-
-// =====================================================================================================================
 static VkResult ConvertImageCreateInfo(
     const Device*            pDevice,
     const VkImageCreateInfo* pCreateInfo,

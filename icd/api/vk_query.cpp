@@ -80,7 +80,7 @@ VkResult PalQueryPool::Create(
     VK_ASSERT(pCreateInfo->queryType != VK_QUERY_TYPE_TIMESTAMP);
 
     Pal::Result palResult;
-    VkResult result;
+    VkResult result = VK_SUCCESS;
 
     union
     {
@@ -126,7 +126,7 @@ VkResult PalQueryPool::Create(
     VK_ASSERT(palResult == Pal::Result::Success);
 
     const size_t apiSize    = sizeof(PalQueryPool);
-    const size_t size       = apiSize + palSize;
+    const size_t size       = apiSize + (pDevice->NumPalDevices() * palSize);
 
     // Allocate enough system memory for the API query pool object and the PAL query pool object
     void* pSystemMem = pAllocator->pfnAllocation(
@@ -141,16 +141,21 @@ VkResult PalQueryPool::Create(
     }
 
     // Create the PAL query pool
-    Pal::IQueryPool* pPalQueryPool = nullptr;
+    Pal::IQueryPool* pPalQueryPools[MaxPalDevices] = {};
 
     void* pPalQueryPoolAddr = Util::VoidPtrInc(pSystemMem, apiSize);
 
-    palResult = pDevice->PalDevice()->CreateQueryPool(
-        createInfo,
-        pPalQueryPoolAddr,
-        &pPalQueryPool);
+    for (uint32_t deviceIdx = 0;
+        (deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
+        deviceIdx++)
+    {
+        palResult = pDevice->PalDevice(deviceIdx)->CreateQueryPool(
+            createInfo,
+            Util::VoidPtrInc(pPalQueryPoolAddr, deviceIdx * palSize),
+            &pPalQueryPools[deviceIdx]);
 
-    result = PalToVkResult(palResult);
+        result = PalToVkResult(palResult);
+    }
 
     InternalMemory internalMem;
 
@@ -161,7 +166,12 @@ VkResult PalQueryPool::Create(
         const bool persistentMapped = true;
 
         result = pDevice->MemMgr()->AllocAndBindGpuMem(
-                                        pPalQueryPool, false, &internalMem, removeInvisibleHeap, persistentMapped);
+           pDevice->NumPalDevices(),
+           reinterpret_cast<Pal::IGpuMemoryBindable**>(pPalQueryPools),
+           false,
+           &internalMem,
+           removeInvisibleHeap,
+           persistentMapped);
     }
 
     if (result == VK_SUCCESS)
@@ -170,17 +180,20 @@ VkResult PalQueryPool::Create(
             pDevice,
             pVkInfo->queryType,
             queryType,
-            pPalQueryPool,
+            pPalQueryPools,
             &internalMem);
 
         *ppQueryPool = pObject;
     }
     else
     {
-        // Something went wrong
-        if (pPalQueryPool != nullptr)
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {
-            pPalQueryPool->Destroy();
+            // Something went wrong
+            if (pPalQueryPools[deviceIdx] != nullptr)
+            {
+                pPalQueryPools[deviceIdx]->Destroy();
+            }
         }
 
         // Failure in creating the PAL query pool object. Free system memory and return error.
@@ -196,8 +209,14 @@ VkResult PalQueryPool::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-    // Destroy the PAL object
-    m_pPalQueryPool->Destroy();
+    // Destroy the PAL objects
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    {
+        if (m_pPalQueryPool[deviceIdx] != nullptr)
+        {
+            m_pPalQueryPool[deviceIdx]->Destroy();
+        }
+    }
 
     // Free internal GPU memory allocation used by the object
     pDevice->MemMgr()->FreeGpuMem(&m_internalMem);
@@ -225,12 +244,12 @@ VkResult PalQueryPool::GetResults(
 
     if (queryCount > 0)
     {
-        Pal::Result palResult = m_pPalQueryPool->GetResults(
+        Pal::Result palResult = m_pPalQueryPool[DefaultDeviceIndex]->GetResults(
             VkToPalQueryResultFlags(flags),
             m_palQueryType,
             startQuery,
             queryCount,
-            m_internalMem.CpuAddr(),
+            m_internalMem.CpuAddr(DefaultDeviceIndex),
             &dataSize,
             pData,
             static_cast<size_t>(stride));
@@ -293,12 +312,27 @@ VkResult TimestampQueryPool::Create(
         info.pal.alignment          = SlotSize;
         info.pal.priority           = Pal::GpuMemPriority::Normal;
         info.flags.persistentMapped = true;
-        info.pal.heapCount          = 3;
-        info.pal.heaps[0]           = Pal::GpuHeapLocal;
-        info.pal.heaps[1]           = Pal::GpuHeapGartCacheable;
-        info.pal.heaps[2]           = Pal::GpuHeapGartUswc;
 
-        result = pDevice->MemMgr()->AllocGpuMem(info, &internalMemory);
+        uint32_t allocMask = pDevice->GetPalDeviceMask();
+
+        const bool sharedAllocation = (pDevice->NumPalDevices() > 1);
+        if (sharedAllocation == false)
+        {
+            info.pal.heapCount = 3;
+            info.pal.heaps[0]  = Pal::GpuHeapLocal;
+            info.pal.heaps[1]  = Pal::GpuHeapGartCacheable;
+            info.pal.heaps[2]  = Pal::GpuHeapGartUswc;
+        }
+        else
+        {
+            info.pal.heapCount = 1;
+            info.pal.heaps[0] = Pal::GpuHeapGartCacheable;
+
+            info.pal.flags.shareable = 1;
+            allocMask = 1 << DefaultMemoryInstanceIdx;
+        }
+
+        result = pDevice->MemMgr()->AllocGpuMem(info, &internalMemory, allocMask);
     }
 
     if (result == VK_SUCCESS)

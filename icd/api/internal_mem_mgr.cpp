@@ -51,8 +51,9 @@ static constexpr Pal::gpusize PoolMinSuballocationSize  = 1ull << 4;    // 16 by
 // =====================================================================================================================
 // Filter invisible heap. For some objects as pipeline, invisible heap will be appended in memory requirement.
 // We filter this because we don't expect to support object memory migration.
-static VK_INLINE void FilterInvisibleHeap(
-    Pal::GpuMemoryRequirements* pMemReq)
+static VK_INLINE void FilterHeap(
+    Pal::GpuMemoryRequirements* pMemReq,
+    Pal::GpuHeap typeToFilter)
 {
     uint32_t origHeapCount = pMemReq->heapCount;
 
@@ -60,7 +61,7 @@ static VK_INLINE void FilterInvisibleHeap(
 
     for (uint32_t i = 0; i< origHeapCount; ++i)
     {
-        if (pMemReq->heaps[i] != Pal::GpuHeapInvisible)
+        if (pMemReq->heaps[i] != typeToFilter)
         {
             pMemReq->heaps[pMemReq->heapCount++] = pMemReq->heaps[i];
         }
@@ -217,7 +218,10 @@ void InternalMemMgr::Destroy()
 
             pPool->groupMemory.Unmap();
 
-            m_pDevice->RemoveMemReference(m_pDevice->PalDevice(), pPool->groupMemory.PalMemory());
+            for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+            {
+                m_pDevice->RemoveMemReference(m_pDevice->PalDevice(deviceIdx), pPool->groupMemory.PalMemory(deviceIdx));
+            }
 
             // Delete the memory object and the system memory associated with it
             pPool->groupMemory.Destroy(m_pDevice->VkInstance());
@@ -355,6 +359,7 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
     MemoryPoolList*              pOwnerList,
     const InternalMemCreateInfo& initialSubAllocInfo,
     InternalMemoryPool*          pNewPool,
+    uint32_t                     allocMask,
     Pal::gpusize*                pSubAllocOffset)
 {
     InternalMemCreateInfo poolInfo = initialSubAllocInfo;
@@ -413,7 +418,7 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
         pInternalMemory = pOwnerList->Begin().Get();
 
         // Allocate the base GPU memory object for this pool
-        result = AllocBaseGpuMem(poolInfo.pal, poolInfo.flags.readOnly, pInternalMemory);
+        result = AllocBaseGpuMem(poolInfo.pal, poolInfo.flags.readOnly, pInternalMemory, allocMask);
     }
 
     // Persistently map the base allocation if requested.
@@ -432,7 +437,8 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
     {
         auto it = pOwnerList->Begin();
         bool needEraseFromOwnerList = pOwnerList->NumElements() > 0 ?
-            (it.Get()->groupMemory.PalMemory() == pInternalMemory->groupMemory.PalMemory()) : false;
+            (it.Get()->groupMemory.PalMemory(DefaultDeviceIndex) ==
+             pInternalMemory->groupMemory.PalMemory(DefaultDeviceIndex)) : false;
 
         // Unmap any persistently mapped memory
         pInternalMemory->groupMemory.Unmap();
@@ -484,7 +490,8 @@ void InternalMemMgr::CheckProvidedSubAllocPoolInfo(
 // Any new allocations are added to the residency list automatically.
 VkResult InternalMemMgr::AllocGpuMem(
     const InternalMemCreateInfo& createInfo,
-    InternalMemory*              pInternalMemory)
+    InternalMemory*              pInternalMemory,
+    uint32_t                     allocMask)
 {
     VK_ASSERT(pInternalMemory != nullptr);
 
@@ -553,6 +560,7 @@ VkResult InternalMemMgr::AllocGpuMem(
                     pPoolList,
                     createInfo,
                     &pInternalMemory->m_memoryPool,
+                    allocMask,
                     &pInternalMemory->m_offset);
             }
         }
@@ -565,7 +573,7 @@ VkResult InternalMemMgr::AllocGpuMem(
 
         // Issue a base memory allocation and use that as the memory object
         result = AllocBaseGpuMem(
-            createInfo.pal, createInfo.flags.readOnly, &pInternalMemory->m_memoryPool);
+            createInfo.pal, createInfo.flags.readOnly, &pInternalMemory->m_memoryPool, allocMask);
 
         // Persistently map the allocation if necessary
         if ((result == VK_SUCCESS) && (createInfo.flags.persistentMapped))
@@ -592,18 +600,19 @@ VkResult InternalMemMgr::AllocGpuMem(
 // Queries the provided GPU-memory-bindable object for its memory requirements, and allocates GPU memory to satisfy
 // those requirements. Finally, the memory is bound to the provided object if allocation is successful.
 VkResult InternalMemMgr::AllocAndBindGpuMem(
-    Pal::IGpuMemoryBindable* pBindable,
-    bool                     readOnly,
-    InternalMemory*          pInternalMemory,
-    bool                     removeInvisibleHeap,
-    bool                     persistentMapped)
+    uint32_t                  numDevices,
+    Pal::IGpuMemoryBindable** ppBindableObjectPerDevice,
+    bool                      readOnly,
+    InternalMemory*           pInternalMemory,
+    uint32_t                  allocMask,
+    bool                      removeInvisibleHeap,
+    bool                      persistentMapped)
 {
-    VK_ASSERT(pBindable != nullptr);
     VK_ASSERT(pInternalMemory != nullptr);
 
     // Get the memory requirements of the GPU-memory-bindable object
     Pal::GpuMemoryRequirements memReqs = {};
-    pBindable->GetGpuMemoryRequirements(&memReqs);
+    ppBindableObjectPerDevice[DefaultDeviceIndex]->GetGpuMemoryRequirements(&memReqs);
 
     // If the object reports that it doesn't need any GPU memory, return early.
     if (memReqs.heapCount == 0)
@@ -616,31 +625,48 @@ VkResult InternalMemMgr::AllocAndBindGpuMem(
 
     if (removeInvisibleHeap)
     {
-        FilterInvisibleHeap(&memReqs);
+        FilterHeap(&memReqs, Pal::GpuHeap::GpuHeapInvisible);
     }
 
     createInfo.pal.size               = memReqs.size;
     createInfo.pal.alignment          = memReqs.alignment;
     createInfo.pal.vaRange            = Pal::VaRange::Default;
     createInfo.pal.priority           = Pal::GpuMemPriority::Normal;
-    createInfo.pal.heapCount          = memReqs.heapCount;
     createInfo.flags.readOnly         = readOnly;
     createInfo.flags.persistentMapped = persistentMapped ? 1 : 0;
 
+    const bool sharedAllocation = (numDevices > 1) && (Util::CountSetBits(allocMask) == 1);
+    if (sharedAllocation == true)
+    {
+        createInfo.pal.flags.shareable = 1;
+
+        FilterHeap(&memReqs, Pal::GpuHeap::GpuHeapLocal);
+        if (removeInvisibleHeap == false)
+        {
+            FilterHeap(&memReqs, Pal::GpuHeap::GpuHeapInvisible);
+        }
+    }
+
+    createInfo.pal.heapCount = memReqs.heapCount;
     for (uint32_t h = 0; h < memReqs.heapCount; ++h)
     {
         createInfo.pal.heaps[h] = memReqs.heaps[h];
     }
 
     // Issue the memory allocation
-    VkResult result = AllocGpuMem(createInfo, pInternalMemory);
+    VkResult result = AllocGpuMem(createInfo, pInternalMemory, allocMask);
 
     if (result == VK_SUCCESS)
     {
-        // If the memory allocation succeeded then try to bind the memory to the object
-        Pal::Result palResult = pBindable->BindGpuMemory(
-            pInternalMemory->m_memoryPool.groupMemory.PalMemory(),
-            pInternalMemory->m_offset);
+        Pal::Result palResult = Pal::Result::Success;
+
+        for (uint32_t deviceIdx = 0; (deviceIdx < numDevices) && (palResult == Pal::Result::Success); deviceIdx++)
+        {
+            // If the memory allocation succeeded then try to bind the memory to the object
+            palResult = ppBindableObjectPerDevice[deviceIdx]->BindGpuMemory(
+                pInternalMemory->m_memoryPool.groupMemory.PalMemory(deviceIdx),
+                pInternalMemory->m_offset);
+        }
 
         if (palResult != Pal::Result::Success)
         {
@@ -688,7 +714,8 @@ void InternalMemMgr::FreeGpuMem(
 VkResult InternalMemMgr::AllocBaseGpuMem(
     const Pal::GpuMemoryCreateInfo& createInfo,
     bool                            readOnly,
-    InternalMemoryPool*             pGpuMemory)
+    InternalMemoryPool*             pGpuMemory,
+    uint32_t                        allocMask)
 {
     VK_ASSERT(pGpuMemory != nullptr);
 
@@ -720,33 +747,66 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
 
     if (pSystemMem != nullptr)
     {
-        size_t palMemOffset = 0;
+        size_t   palMemOffset = 0;
 
         // Issue the memory allocation
-        for (uint32_t deviceIdx = 0;
-            (deviceIdx < m_pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
-            deviceIdx++)
-        {
-            palResult = m_pDevice->PalDevice(deviceIdx)->CreateGpuMemory(
-                localCreateInfo,
-                Util::VoidPtrInc(pSystemMem, palMemOffset),
-                &pGpuMemory->groupMemory.m_pPalMemory[deviceIdx]);
+        Pal::IGpuMemory* pFirstAlloc = nullptr;
 
-            if (palResult == Pal::Result::Success)
+        // Pass 0 - Allocates the memory for each device according to any set bits in allocMask
+        // Pass 1 - Shares the allocated memory with other phsyical devices
+        const uint32_t numPasses = m_pDevice->NumPalDevices() == Util::CountSetBits(allocMask) ? 1 : 2;
+
+        for (uint32_t passIdx = 0; passIdx < numPasses; passIdx++)
+        {
+            const bool allocatingMemory = (passIdx == 0);
+            const bool mirroringMemory = (passIdx == 1);
+
+            const uint32_t mask = allocatingMemory ? allocMask : ~allocMask;
+
+            for (uint32_t deviceIdx = 0;
+                 (deviceIdx < m_pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
+                 deviceIdx++)
             {
-                palMemOffset += m_pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(localCreateInfo, &palResult);
-                VK_ASSERT(palResult == Pal::Result::Success);
+                if ((mask & (1 << deviceIdx)) != 0)
+                {
+                    if (allocatingMemory)
+                    {
+                        palResult = m_pDevice->PalDevice(deviceIdx)->CreateGpuMemory(
+                            localCreateInfo,
+                            Util::VoidPtrInc(pSystemMem, palMemOffset),
+                            &pGpuMemory->groupMemory.m_pPalMemory[deviceIdx]);
+
+                        if (pFirstAlloc == nullptr)
+                        {
+                            pFirstAlloc = pGpuMemory->groupMemory.m_pPalMemory[deviceIdx];
+                        }
+                    }
+
+                    if (mirroringMemory)
+                    {
+                        Pal::GpuMemoryOpenInfo shareMem = {};
+                        shareMem.pSharedMem = pFirstAlloc;
+
+                        Pal::IDevice* pPalDevice = m_pDevice->PalDevice(deviceIdx);
+                        palResult = pPalDevice->OpenSharedGpuMemory(
+                            shareMem,
+                            Util::VoidPtrInc(pSystemMem, palMemOffset),
+                            &pGpuMemory->groupMemory.m_pPalMemory[deviceIdx]);
+                    }
+
+                    if (palResult == Pal::Result::Success)
+                    {
+                        palMemOffset += m_pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(localCreateInfo, &palResult);
+                        VK_ASSERT(palResult == Pal::Result::Success);
+                    }
+
+                    // Add the newly created memory object to the residency list
+                    m_pDevice->AddMemReference(
+                        m_pDevice->PalDevice(deviceIdx), pGpuMemory->groupMemory.m_pPalMemory[deviceIdx], readOnly);
+                }
             }
         }
-
-        for (uint32_t deviceIdx = 0;
-            (deviceIdx < m_pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
-            deviceIdx++)
-        {
-            // Add the newly created memory object to the residency list
-            m_pDevice->AddMemReference(
-                    m_pDevice->PalDevice(deviceIdx), pGpuMemory->groupMemory.m_pPalMemory[deviceIdx], readOnly);
-        }
+        VK_ASSERT(palMemOffset == palMemSize);
 
         if (palResult != Pal::Result::Success)
         {
@@ -817,15 +877,16 @@ void DeviceGroupMemory::Destroy(Instance* pInstance) const
 // =====================================================================================================================
 Pal::Result DeviceGroupMemory::Map()
 {
-    Pal::Result result = Pal::Result::Success;
+    Pal::Result result = Pal::Result::ErrorNotMappable;
 
-    for (uint32_t deviceIdx = 0;
-        (deviceIdx < MaxPalDevices) && (result == Pal::Result::Success);
-        deviceIdx++)
+    for (uint32_t deviceIdx = 0; (deviceIdx < MaxPalDevices); deviceIdx++)
     {
         if (m_pPalMemory[deviceIdx] != nullptr)
         {
-            m_pPalMemory[deviceIdx]->Map(&m_pPersistentCpuAddr[deviceIdx]);
+            if (m_pPalMemory[deviceIdx]->Map(&m_pPersistentCpuAddr[deviceIdx]) == Pal::Result::Success)
+            {
+                result = Pal::Result::Success;
+            }
         }
     }
     return result;

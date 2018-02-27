@@ -98,7 +98,7 @@ llpc.image.gather.Dim2D|2DArray|Rect.constoffsets
 llpc.image.gather.Dim2D|2DArray|Rect.dref.constoffsets
 
 # Image read and write instructions
-llpc.image.read.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray|SubpassData
+llpc.image.read.Dim1D|2D|3D|Rect|Cube|Buffer|1DArray|2DArray|CubeArray|SubpassData|SubpassDataArray
 llpc.image.read.Dim2D|2DArray|SubpassData.sample
 llpc.image.read.DimSubpassData.sample.fmaskbased
 llpc.image.read.Dim1D|2D|3D|Cube|1DArray|2DArray|CubeArray.lod

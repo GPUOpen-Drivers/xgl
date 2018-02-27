@@ -628,7 +628,7 @@ VkResult Queue::Present(
 #if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
-            m_pDevice->VkInstance()->GetDevModeMgr()->PrePresent(this);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, true);
         }
 #endif
 
@@ -646,6 +646,7 @@ VkResult Queue::Present(
         Pal::Result palResult = PalQueue(presentationDeviceIdx)->PresentSwapChain(presentInfo);
 
         result = NotifyFlipMetadataAfterPresent(&presentInfo);
+
         if (result != VK_SUCCESS)
         {
             break;
@@ -658,7 +659,7 @@ VkResult Queue::Present(
 #if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
-            m_pDevice->VkInstance()->GetDevModeMgr()->PostPresent(this);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, true);
         }
 #endif
 

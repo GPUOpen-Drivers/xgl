@@ -137,7 +137,15 @@ VkResult SwapChain::Create(
                 imageCreateInfo.swizzledFormat     = VkToPalFormat(pVkSwapchainCreateInfoKHR->imageFormat);
                 imageCreateInfo.flags.stereo       = properties.stereo;
                 imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
-                imageCreateInfo.usage              = VkToPalImageUsageFlags(pVkSwapchainCreateInfoKHR->imageUsage,
+
+                VkFormatProperties formatProperties;
+                pDevice->VkPhysicalDevice()->GetFormatProperties(pVkSwapchainCreateInfoKHR->imageFormat,
+                                                                 &formatProperties);
+                VkImageUsageFlags imageUsage = pVkSwapchainCreateInfoKHR->imageUsage;
+                imageUsage &=
+                    VkFormatFeatureFlagsToImageUsageFlags(formatProperties.optimalTilingFeatures);
+
+                imageCreateInfo.usage              = VkToPalImageUsageFlags(imageUsage,
                                                                         pVkSwapchainCreateInfoKHR->imageFormat,
                                                                         1,
                                                                         (VkImageUsageFlags)(0),

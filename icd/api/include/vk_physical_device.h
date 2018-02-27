@@ -354,6 +354,11 @@ public:
         return m_limits;
     }
 
+    VK_INLINE uint32_t GetVrHighPrioritySubEngineIndex() const
+    {
+        return m_vrHighPrioritySubEngineIndex;
+    }
+
     VkResult EnumerateExtensionProperties(
         const char*                 pLayerName,
         uint32_t*                   pPropertyCount,
@@ -409,6 +414,7 @@ protected:
     VkFormatProperties               m_formatFeaturesTable[VK_SUPPORTED_FORMAT_COUNT];
     uint16_t                         m_formatFeatureMsaaTarget[(VK_SUPPORTED_FORMAT_COUNT + (sizeof(uint16_t) << 3) - 1) /
                                                                (sizeof(uint16_t) << 3)];
+    uint32_t                         m_vrHighPrioritySubEngineIndex;
     uint32_t                         m_queueFamilyCount;
     struct
     {

@@ -52,12 +52,12 @@ namespace secure
             ENTRY_POINT_DEVICE_EXTENSION,   // Device extension specific entry point
         };
 
-        #include "open_strings/g_entry_points_decl.h"
+        #include "strings/g_entry_points_decl.h"
     }
 
     namespace ext
     {
-        #include "open_strings/g_extensions_decl.h"
+        #include "strings/g_extensions_decl.h"
     }
 }
 

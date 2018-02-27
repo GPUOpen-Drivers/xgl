@@ -28,7 +28,7 @@
 **************************************************************************************************
 */
 
-#include "open_strings/strings.h"
+#include "strings.h"
 
 namespace vk
 {
@@ -37,11 +37,11 @@ namespace secure
 {
 namespace entry
 {
-#include "open_strings/g_entry_points_impl.h"
+#include "strings/g_entry_points_impl.h"
 }
 namespace ext
 {
-#include "open_strings/g_extensions_impl.h"
+#include "strings/g_extensions_impl.h"
 }
 }
 

@@ -245,11 +245,12 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
         // Upload new SRD values to CE-RAM for those that changed above
         if (firstChanged <= lastChanged)
         {
-            const uint32_t dwOffset = firstChanged * m_vbSrdDwSize;
-            const uint32_t dwSize = (lastChanged - firstChanged + 1) * m_vbSrdDwSize;
+            const uint32_t srcDwOffset = (static_cast<uint32_t>(strideDw) * deviceIdx) + (firstChanged * m_vbSrdDwSize);
+            const uint32_t dstDwOffset = firstChanged * m_vbSrdDwSize;
+            const uint32_t dwSize      = (lastChanged - firstChanged + 1) * m_vbSrdDwSize;
 
             pCmdBuf->PalCmdBuffer(deviceIdx)->CmdSetIndirectUserData(
-                VertexBufferTableId, dwOffset, dwSize, &m_pVbTblSysMem[dwOffset]);
+                VertexBufferTableId, dstDwOffset, dwSize, &m_pVbTblSysMem[srcDwOffset]);
         }
     }
 

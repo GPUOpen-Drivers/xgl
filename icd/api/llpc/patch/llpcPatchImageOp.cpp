@@ -153,6 +153,9 @@ void PatchImageOp::visitCallInst(
                 }
             }
 
+            const auto enableMultiView = (reinterpret_cast<const GraphicsPipelineBuildInfo*>(
+                m_pContext->GetPipelineBuildInfo()))->iaState.enableMultiView;
+
             for (uint32_t i = 0; i < callInst.getNumArgOperands(); ++i)
             {
                 Value* pArg = callInst.getArgOperand(i);
@@ -161,7 +164,9 @@ void PatchImageOp::visitCallInst(
                     LLPC_ASSERT(m_shaderStage == ShaderStageFragment);
                     auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageFragment)->entryArgIdxs.fs;
 
-                    // NOTE: For subpass data, gl_FragCoord is added as actual coordinate.
+                    // NOTE: For subpass data, if multiview enabled , gl_FragCoord and gl_ViewIndex
+                    // are added as actual coordinate.
+
                     LLPC_ASSERT(pArg->getType()->isVectorTy() &&
                                 (pArg->getType()->getVectorNumElements() == 2) &&
                                 (pArg->getType()->getVectorElementType()->isIntegerTy()));
@@ -169,7 +174,7 @@ void PatchImageOp::visitCallInst(
                     Value* pFragCoordX = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.fragCoord.x);
                     Value* pFragCoordY = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.fragCoord.y);
 
-                    Type* pFragCoordTy = m_pContext->Floatx2Ty();
+                    Type* pFragCoordTy = enableMultiView ? m_pContext->Floatx3Ty(): m_pContext->Floatx2Ty();
                     Value* pFragCoord = UndefValue::get(pFragCoordTy);
                     pFragCoord = InsertElementInst::Create(pFragCoord,
                                                            pFragCoordX,
@@ -181,13 +186,35 @@ void PatchImageOp::visitCallInst(
                                                            ConstantInt::get(m_pContext->Int32Ty(), 1, true),
                                                            "",
                                                            &callInst);
-                    pFragCoord = CastInst::Create(Instruction::FPToSI,
-                                                  pFragCoord,
-                                                  m_pContext->Int32x2Ty(),
-                                                  "",
-                                                  &callInst);
-                    pFragCoord = BinaryOperator::Create(Instruction::Add, pFragCoord, pArg, "", &callInst);
+                    if (enableMultiView)
+                    {
+                        Value* pViewIndex = ExtractElementInst::Create(pArg,
+                                                                       ConstantInt::get(m_pContext->Int32Ty(), 0, true),
+                                                                       "",
+                                                                       &callInst);
+                        pViewIndex = new SIToFPInst(pViewIndex, m_pContext->FloatTy(), "", &callInst);
+                        pFragCoord = InsertElementInst::Create(pFragCoord,
+                                                               pViewIndex,
+                                                               ConstantInt::get(m_pContext->Int32Ty(), 2),
+                                                               "",
+                                                               &callInst);
 
+                        pFragCoord = new FPToSIInst(pFragCoord,
+                                                    m_pContext->Int32x3Ty(),
+                                                    "",
+                                                    &callInst);
+                        callName = callName.substr(0, callName.find_last_of('.'));
+                        callName +=".SubpassDataArray";
+                    }
+                    else
+                    {
+                        pFragCoord = CastInst::Create(Instruction::FPToSI,
+                                                      pFragCoord,
+                                                      m_pContext->Int32x2Ty(),
+                                                      "",
+                                                      &callInst);
+                        pFragCoord = BinaryOperator::Create(Instruction::Add, pFragCoord, pArg, "", &callInst);
+                    }
                     args.push_back(pFragCoord);
                 }
                 else

@@ -107,22 +107,23 @@ struct PipelineBindState
     PipelineLayout::UserDataLayout userDataLayout;
     // Current pipeline's layout
     const PipelineLayout* pLayout;
-    // Currently pushed constant values (relative to an base = 0)
-    uint32_t pushConstData[MaxPushConstRegCount];
     // High-water mark of the largest number of bound sets
     uint32_t boundSetCount;
     // High-water mark of the largest number of pushed constants
     uint32_t pushedConstCount;
+    // Currently pushed constant values (relative to an base = 0)
+    uint32_t pushConstData[MaxPushConstRegCount];
 };
 
 // Members of CmdBufferRenderState that are different for each GPU
 struct PerGpuRenderState
 {
-    // Currently bound descriptor sets and dynamic offsets (relative to base = 00)
-    uint32_t setBindingData[static_cast<uint32_t>(Pal::PipelineBindPoint::Count)][MaxBindingRegCount];
+    // Any members added to this structure may need to be cleared in CmdBuffer::ResetState().
     const Pal::IMsaaState*          pMsaaState;
     const Pal::IColorBlendState*    pColorBlendState;
     const Pal::IDepthStencilState*  pDepthStencilState;
+    // Currently bound descriptor sets and dynamic offsets (relative to base = 00)
+    uint32_t setBindingData[static_cast<uint32_t>(Pal::PipelineBindPoint::Count)][MaxBindingRegCount];
 };
 
 // Members of CmdBufferRenderState that are the same for each GPU
@@ -133,14 +134,6 @@ struct AllGpuRenderState
     const RenderPass*              pRenderPass;
     const Framebuffer*             pFramebuffer;
     const Pal::IMsaaState* const * pBltMsaaStates;
-
-    PipelineBindState       pipelineState[static_cast<uint32_t>(Pal::PipelineBindPoint::Count)];
-
-    Pal::ViewportParams     viewport;
-    Pal::ScissorRectParams  scissor;
-
-    Pal::DynamicGraphicsShaderInfos  graphicsShaderInfo;
-    Pal::DynamicComputeShaderInfo    computeShaderInfo;
 
     // These tokens describe the current "static" values of pieces of Vulkan render state.  These are set by pipelines
     // that program static render state, and are reset to DynamicRenderStateToken by vkCmdSet* functions.
@@ -160,6 +153,16 @@ struct AllGpuRenderState
         uint32_t scissorRect;
         uint32_t samplePattern;
     } staticTokens;
+
+// =====================================================================================================================
+// The first part of the structure will be cleared with a memset in CmdBuffer::ResetState().
+// The second part of the structure contains the larger members that are selectively reset in CmdBuffer::ResetState().
+// =====================================================================================================================
+    // Keep pipelineState as the first member of the section that is selectively reset.  It is used to compute how large
+    // the first part is for the memset in CmdBuffer::ResetState().
+    PipelineBindState       pipelineState[static_cast<uint32_t>(Pal::PipelineBindPoint::Count)];
+    Pal::ScissorRectParams  scissor;
+    Pal::ViewportParams     viewport;
 };
 
 // This structure describes current render state within a command buffer during its building.

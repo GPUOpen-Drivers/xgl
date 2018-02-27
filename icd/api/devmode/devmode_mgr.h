@@ -45,6 +45,7 @@
 #if ICD_GPUOPEN_DEVMODE_BUILD
 // gpuopen headers
 #include "gpuopen.h"
+
 #endif
 
 // PAL forward declarations
@@ -81,6 +82,10 @@ class HandlerServer;
 struct Setting;
 }
 
+namespace RGPProtocol
+{
+class RGPServer;
+}
 }
 
 // Vulkan forward declarations
@@ -119,16 +124,16 @@ public:
 
     void Destroy();
 
-    void PrePresent(const Queue* pQueue);
-    void PostPresent(const Queue* pQueue);
+    void NotifyFrameBegin(const Queue* pQueue, bool viaPresent);
+    void NotifyFrameEnd(const Queue* pQueue, bool viaPresent);
     void WaitForDriverResume();
     void PipelineCreated(Device* pDevice, Pipeline* pPipeline);
+    void PostDeviceCreate(Device* pDevice);
+    void PreDeviceDestroy(Device* pDevice);
+    void NotifyPreSubmit();
 
     VK_INLINE bool IsTracingEnabled() const
         { VK_ASSERT(m_finalized); return m_tracingEnabled; }
-
-    void PostDeviceCreate(Device* pDevice);
-    void PreDeviceDestroy(Device* pDevice);
 
     Pal::Result TimedQueueSubmit(
         uint32_t               deviceIdx,
@@ -151,17 +156,24 @@ public:
         Pal::IQueueSemaphore*          pQueueSemaphore);
 
     VK_INLINE bool IsQueueTimingActive(const Device* pDevice) const;
+    VK_INLINE bool GetTraceFrameBeginTag(uint64_t* pTag) const;
+    VK_INLINE bool GetTraceFrameEndTag(uint64_t* pTag) const;
 
 private:
     // Steps that an RGP trace goes through
     enum class TraceStatus
     {
+        // "Pre-trace" stages:
         Idle = 0,           // No active trace and none requested
+        Pending,            // We've identified that a trace has been requested and we've received its parameters,
+                            // but we have not yet seen the first frame.
         Preparing,          // A trace has been requested but is not active yet because we are
                             // currently sampling timing information over some number of lead frames.
         Running,            // SQTT and queue timing is currently active for all command buffer submits.
-        WaitingForSqtt,
-        WaitingForResults   // Tracing is no longer active, but all results are not yet ready.
+
+        // "Post-trace" stages:
+        WaitingForSqtt,     // Command to turn off SQTT has been submitted and we're waiting for fence confirmation.
+        Ending              // Tracing is no longer active, but all results are not yet ready.
     };
 
     // Queue family (type)-specific state to support RGP tracing (part of device state)
@@ -224,16 +236,24 @@ private:
         Pal::ICmdBuffer*      pActiveCmdBufs[4];   // List of command buffers that need to be reset at end of trace
         uint32_t              preparedFrameCount;  // Number of frames counted while preparing for a trace
         uint32_t              sqttFrameCount;      // Number of frames counted while SQTT tracing is active
+        uint64_t              frameBeginTag;       // If a command buffer with this debug-tag is submitted, it is
+                                                   // treated as a virtual frame-start event.
+        uint64_t              frameEndTag;         // Similarly to above but for frame-end post-submit.
     };
 
     DevModeMgr(Instance* pInstance);
 
     Pal::Result Init();
-    Pal::Result PrepareRGPTrace(TraceState* pState, const Queue* pQueue);
-    Pal::Result BeginRGPTrace(TraceState* pState, const Queue* pQueue);
-    Pal::Result EndRGPHardwareTrace(TraceState* pState, const Queue* pQueue);
-    Pal::Result EndRGPTrace(TraceState* pState, const Queue* pQueue);
-    void FinishRGPTrace(TraceState* pState, bool aborted);
+
+    void AdvanceActiveTraceStep(TraceState* pState, const Queue* pQueue, bool beginFrame, bool actualPresent);
+    void TraceIdleToPendingStep(TraceState* pState);
+    Pal::Result TracePendingToPreparingStep(TraceState* pState, const Queue* pQueue, bool actualPresent);
+    Pal::Result TracePreparingToRunningStep(TraceState* pState, const Queue* pQueue);
+    Pal::Result TraceRunningToWaitingForSqttStep(TraceState* pState, const Queue* pQueue);
+    Pal::Result TraceWaitingForSqttToEndingStep(TraceState* pState, const Queue* pQueue);
+    Pal::Result TraceEndingToIdleStep(TraceState* pState);
+    void FinishOrAbortTrace(TraceState* pState, bool aborted);
+
     Pal::Result CheckTraceDeviceChanged(TraceState* pState, Device* pNewDevice);
     void DestroyRGPTracing(TraceState* pState);
     Pal::Result InitRGPTracing(TraceState* pState, Device* pDevice);
@@ -241,23 +261,28 @@ private:
     Pal::Result InitTraceQueueFamilyResources(TraceState* pTraceState, TraceQueueFamilyState* pFamilyState);
     void DestroyTraceQueueFamilyResources(TraceQueueFamilyState* pState);
     TraceQueueState* FindTraceQueueState(TraceState* pState, const Queue* pQueue);
-    Pal::Result CheckForTraceResults(TraceState* pState);
     bool QueueSupportsTiming(uint32_t deviceIdx, const Queue* pQueue);
     static bool GpuSupportsTracing(const Pal::DeviceProperties& props, const RuntimeSettings& settings);
 
-    Instance*                   m_pInstance;
-    DevDriver::DevDriverServer* m_pDevDriverServer;
-    Util::Mutex                 m_traceMutex;
-    TraceState                  m_trace;
-    bool                        m_hardwareSupportsTracing;  // True if gfxip supports tracing
-    bool                        m_rgpServerSupportsTracing; // True if gpuopen protocol successfully enabled tracing
-    bool                        m_finalized;
-    bool                        m_tracingEnabled;           // True if tracing is currently enabled (master flag)
-    uint32_t                    m_numPrepFrames;
-    uint32_t                    m_traceGpuMemLimit;
-    bool                        m_enableInstTracing;        // Enable instruction-level SQTT tokens
-    bool                        m_enableSampleUpdates;
-    uint32_t                    m_globalFrameIndex;
+    Instance*                           m_pInstance;
+    DevDriver::DevDriverServer*         m_pDevDriverServer;
+    DevDriver::RGPProtocol::RGPServer*  m_pRGPServer;
+    Util::Mutex                         m_traceMutex;
+    TraceState                          m_trace;
+    bool                                m_hardwareSupportsTracing;  // True if gfxip supports tracing
+    bool                                m_rgpServerSupportsTracing; // True if gpuopen protocol successfully enabled
+                                                                    // tracing
+    bool                                m_finalized;
+    bool                                m_tracingEnabled;           // True if tracing is currently enabled (master flag)
+    uint32_t                            m_numPrepFrames;
+    uint32_t                            m_traceGpuMemLimit;
+    bool                                m_enableInstTracing;        // Enable instruction-level SQTT tokens
+    bool                                m_enableSampleUpdates;
+    bool                                m_allowComputePresents;
+    bool                                m_blockingTraceEnd;         // Wait on trace-end fences immediately.
+    uint32_t                            m_globalFrameIndex;
+    uint64_t                            m_traceFrameBeginTag;
+    uint64_t                            m_traceFrameEndTag;
 
     PAL_DISALLOW_DEFAULT_CTOR(DevModeMgr);
     PAL_DISALLOW_COPY_AND_ASSIGN(DevModeMgr);
@@ -277,6 +302,49 @@ VK_INLINE bool DevModeMgr::IsQueueTimingActive(
              m_trace.status == TraceStatus::WaitingForSqtt) &&
             (pDevice == m_trace.pDevice));
 }
+
+// =====================================================================================================================
+bool DevModeMgr::GetTraceFrameBeginTag(
+    uint64_t* pTag
+    ) const
+{
+    bool active;
+
+    if (m_trace.status != TraceStatus::Idle)
+    {
+        *pTag = m_traceFrameBeginTag;
+
+        active = true;
+    }
+    else
+    {
+        active = false;
+    }
+
+    return active;
+}
+
+// =====================================================================================================================
+bool DevModeMgr::GetTraceFrameEndTag(
+    uint64_t*      pTag
+    ) const
+{
+    bool active;
+
+    if (m_trace.status != TraceStatus::Idle)
+    {
+        *pTag = m_traceFrameEndTag;
+
+        active = true;
+    }
+    else
+    {
+        active = false;
+    }
+
+    return active;
+}
+
 #endif
 };
 

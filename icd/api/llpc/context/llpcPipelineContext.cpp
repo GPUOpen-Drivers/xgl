@@ -98,6 +98,7 @@ const char* PipelineContext::GetGpuNameString() const
         { { 9, 0, 1 }, "gfx901"   },  // [9.0.1] gfx901
         { { 9, 0, 2 }, "gfx902"   },  // [9.0.2] gfx902
         { { 9, 0, 3 }, "gfx903"   },  // [9.0.3] gfx903
+        { { 9, 0, 4 }, "gfx904"   },  // [9.0.4] gfx904, vega12
     };
 
     const GpuNameStringMap* pNameMap = nullptr;

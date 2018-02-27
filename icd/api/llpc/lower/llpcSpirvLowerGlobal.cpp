@@ -550,6 +550,13 @@ void SpirvLowerGlobal::MapInputToProxy(
                                                  &*pInsertPos);
     new StoreInst(pInputValue, pProxy, &*pInsertPos);
 
+    bool useViewIndex = (pInput->getName().find("ViewIndex") != std::string::npos);
+    if (useViewIndex)
+    {
+        auto pResUsage = m_pContext->GetShaderResourceUsage(ShaderStageFragment);
+        pResUsage->inOutUsage.fs.pViewIndex = pInputValue;
+    }
+
     m_inputProxyMap[pInput] = pProxy;
 }
 

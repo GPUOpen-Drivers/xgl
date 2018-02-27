@@ -85,6 +85,7 @@ constexpr VkFormatFeatureFlags AllImgFeatures =
     VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
     VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
     VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+    VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT |
     VK_FORMAT_FEATURE_BLIT_DST_BIT;
 
 // Vulkan Spec Table 30.12: All features in bufferFeatures
@@ -250,6 +251,7 @@ PhysicalDevice::PhysicalDevice(
     m_pPalDevice(pPalDevice),
     m_memoryTypeMask(0),
     m_settings(settings),
+    m_vrHighPrioritySubEngineIndex(UINT32_MAX),
     m_queueFamilyCount(0),
 #ifdef ICD_BUILD_APPPROFILE
     m_appProfile(appProfile),
@@ -357,6 +359,34 @@ static void GetFormatFeatureFlags(
         }
     }
 
+    const uint32_t minMaxFeatureBits = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
+
+    // Handle the various special cases for Min\Max Image Filtering support
+    if ((retFlags & minMaxFeatureBits) != 0)
+    {
+        const auto& info = Pal::Formats::FormatInfoTable[static_cast<size_t>(swizzledFormat.format)];
+
+        // min/max filtering is supported only for single-component formats unless multiChannelMinMaxFilter == true
+        // Depth-stencil is considered a single-component format because stencil and depth are separate, single
+        // channel images and in Hw, you can only sample from one of them at a time.
+        bool supported = (info.componentCount == 1)             ||
+                         Formats::IsDepthStencilFormat(format)  ||
+                         (multiChannelMinMaxFilter == true);
+
+        if ((Formats::IsDepthStencilFormat(format) == false) &&
+            ((info.numericSupport == Pal::Formats::NumericSupportFlags::Uint) ||
+             (info.numericSupport == Pal::Formats::NumericSupportFlags::Sint)))
+        {
+            // TODO: Disable Uint and Sint via Pal.
+            supported = false;
+        }
+
+        if (supported == false)
+        {
+            retFlags &= ~minMaxFeatureBits;
+        }
+    }
+
     if (!Formats::IsDepthStencilFormat(format))
     {
         retFlags &= ~VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
@@ -385,10 +415,11 @@ VkResult PhysicalDevice::Initialize()
         {
             for (uint32_t idx = 0; idx < Pal::EngineTypeCount; ++idx)
             {
-                // We do not currently create any real-time compute or high priority queues,
+                // We do not currently create any high priority graphic queue
                 // so we don't need those engines.
-                if (idx != static_cast<uint32_t>(Pal::EngineTypeExclusiveCompute) &&
-                    idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityUniversal) &&
+                // In order to support global priority, we still need exclusive compute engine to be initialized
+                // but this engine can only be selected according to the global priority set by application
+                if (idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityUniversal) &&
                     idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityGraphics))
                 {
                     const auto& engineProps = m_properties.engineProperties[idx];
@@ -2405,6 +2436,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_GET_MEMORY_REQUIREMENTS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE2));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SAMPLER_FILTER_MINMAX));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
@@ -2455,6 +2487,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTERNAL_MEMORY_HOST));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_RANGE_UNRESTRICTED));
 
     return availableExtensions;
 }
@@ -2521,6 +2554,16 @@ void PhysicalDevice::PopulateQueueFamilies()
         VK_QUEUE_COMPUTE_BIT |
         VK_QUEUE_TRANSFER_BIT |
         VK_QUEUE_SPARSE_BINDING_BIT;
+
+    // find out the sub engine index of VrHighPriority.
+    const auto& exclusiveComputeProps = m_properties.engineProperties[Pal::EngineTypeExclusiveCompute];
+    for (uint32_t subEngineIndex = 0; subEngineIndex < exclusiveComputeProps.engineCount; subEngineIndex++)
+    {
+        if (exclusiveComputeProps.engineSubType[subEngineIndex] == Pal::EngineSubType::VrHighPriority)
+        {
+            m_vrHighPrioritySubEngineIndex = subEngineIndex;
+        }
+    }
 
     // Determine the queue family to PAL engine type mapping and populate its properties
     for (uint32_t i = 0; i < Pal::EngineTypeCount; ++i)
@@ -2890,7 +2933,8 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceIDPropertiesKHR*                pIDProperties;
         VkPhysicalDeviceSampleLocationsPropertiesEXT*   pSampleLocationsPropertiesEXT;
         VkPhysicalDeviceGpaPropertiesAMD*               pGpaProperties;
-        VkPhysicalDeviceExternalMemoryHostPropertiesEXT* pExternalMemoryHostProperties;
+        VkPhysicalDeviceExternalMemoryHostPropertiesEXT*  pExternalMemoryHostProperties;
+        VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT* pSamplerFilterMinmaxPropertiesEXT;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -2927,6 +2971,13 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_PROPERTIES_AMD:
         {
             GetDeviceGpaProperties(pGpaProperties);
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT:
+        {
+            pSamplerFilterMinmaxPropertiesEXT->filterMinmaxImageComponentMapping  = VK_FALSE;
+            pSamplerFilterMinmaxPropertiesEXT->filterMinmaxSingleComponentFormats = VK_TRUE;
             break;
         }
 

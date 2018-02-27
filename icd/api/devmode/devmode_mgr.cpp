@@ -60,6 +60,8 @@
 namespace vk
 {
 
+constexpr uint64_t InfiniteTimeout = static_cast<uint64_t>(1e10);
+
 // =====================================================================================================================
 // Translates a DevDriver result to a VkResult.
 static VkResult DevDriverToVkResult(
@@ -93,6 +95,7 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     :
     m_pInstance(pInstance),
     m_pDevDriverServer(pInstance->PalPlatform()->GetDevDriverServer()),
+    m_pRGPServer(nullptr),
     m_hardwareSupportsTracing(false),
     m_rgpServerSupportsTracing(false),
     m_finalized(false),
@@ -101,7 +104,11 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_traceGpuMemLimit(0),
     m_enableInstTracing(false),
     m_enableSampleUpdates(false),
-    m_globalFrameIndex(1) // Must start from 1 according to RGP spec
+    m_allowComputePresents(false),
+    m_blockingTraceEnd(false),
+    m_globalFrameIndex(1), // Must start from 1 according to RGP spec
+    m_traceFrameBeginTag(0),
+    m_traceFrameEndTag(0)
 {
     memset(&m_trace, 0, sizeof(m_trace));
 }
@@ -151,14 +158,17 @@ Pal::Result DevModeMgr::Init()
 {
     Pal::Result result = m_traceMutex.Init();
 
+    if (m_pDevDriverServer != nullptr)
+    {
+        m_pRGPServer = m_pDevDriverServer->GetRGPServer();
+    }
+
     // Tell RGP that the server (i.e. the driver) supports tracing if requested.
     if (result == Pal::Result::Success)
     {
-        DevDriver::RGPProtocol::RGPServer* pRGPServer = m_pDevDriverServer->GetRGPServer();
-
-        if (pRGPServer != nullptr)
+        if (m_pRGPServer != nullptr)
         {
-            m_rgpServerSupportsTracing = (pRGPServer->EnableTraces() == DevDriver::Result::Success);
+            m_rgpServerSupportsTracing = (m_pRGPServer->EnableTraces() == DevDriver::Result::Success);
         }
     }
 
@@ -203,11 +213,9 @@ void DevModeMgr::Finalize(
     }
 
     // If no GPU supports tracing, inform the RGP server to disable tracing
-    DevDriver::RGPProtocol::RGPServer* pRGPServer = m_pDevDriverServer->GetRGPServer();
-
-    if ((pRGPServer != nullptr) && (m_hardwareSupportsTracing == false))
+    if ((m_pRGPServer != nullptr) && (m_hardwareSupportsTracing == false))
     {
-        pRGPServer->DisableTraces();
+        m_pRGPServer->DisableTraces();
     }
 
     // Finalize the devmode manager
@@ -215,7 +223,7 @@ void DevModeMgr::Finalize(
 
     // Figure out if tracing support should be enabled or not
     m_finalized      = true;
-    m_tracingEnabled = (pRGPServer != nullptr) && pRGPServer->TracesEnabled();
+    m_tracingEnabled = (m_pRGPServer != nullptr) && m_pRGPServer->TracesEnabled();
 }
 
 // =====================================================================================================================
@@ -239,62 +247,138 @@ void DevModeMgr::WaitForDriverResume()
 }
 
 // =====================================================================================================================
-// Called before a swap chain presents.  This signals a frame-end boundary and is used to coordinate RGP trace
-// start/stop.
-void DevModeMgr::PrePresent(const Queue* pQueue)
+// Called to notify of a frame-end boundary and is used to coordinate RGP trace start/stop.
+//
+// If "actualPresent" is true, this call is coming from an actual present call.  Otherwise, it is a virtual
+// frame end boundary.
+void DevModeMgr::NotifyFrameEnd(
+    const Queue* pQueue,
+    bool         actualPresent)
 {
     // Get the RGP message server
-    DevDriver::RGPProtocol::RGPServer* pRGPServer = m_pDevDriverServer->GetRGPServer();
-
-    if ((pRGPServer != nullptr) && pRGPServer->TracesEnabled())
+    if ((m_pRGPServer != nullptr) && m_pRGPServer->TracesEnabled())
     {
-        Device* pPresentDevice = pQueue->VkDevice();
-
         // Only act if this present is coming from the same device that started the trace
-        if (m_trace.pDevice == pPresentDevice)
+        if (m_trace.status != TraceStatus::Idle)
         {
-            // If there's currently a trace running, submit the trace-end command buffer
-            if (m_trace.status == TraceStatus::Running)
-            {
-                Util::MutexAuto traceLock(&m_traceMutex);
+            Util::MutexAuto traceLock(&m_traceMutex);
 
-                if (m_trace.pDevice == pPresentDevice) // Double-checked lock
+            if (m_trace.status != TraceStatus::Idle)
+            {
+                if (IsQueueTimingActive(pQueue->VkDevice()))
+                {
+                    // Call TimedQueuePresent() to insert commands that collect GPU timestamp.
+                    Pal::IQueue* pPalQueue = pQueue->PalQueue();
+
+                    // Currently nothing in the PresentInfo struct is used for inserting a timed present marker.
+                    GpuUtil::TimedQueuePresentInfo timedPresentInfo = {};
+
+                    Pal::Result result = m_trace.pGpaSession->TimedQueuePresent(pPalQueue, timedPresentInfo);
+
+                    VK_ASSERT(result == Pal::Result::Success);
+                }
+
+                // Increment trace frame counters.  These control when the trace can transition
+                if (m_trace.status == TraceStatus::Preparing)
+                {
+                    m_trace.preparedFrameCount++;
+                }
+                else if (m_trace.status == TraceStatus::Running)
                 {
                     m_trace.sqttFrameCount++;
-
-                    if (m_trace.sqttFrameCount >= m_trace.pDevice->GetRuntimeSettings().devModeSqttFrameCount)
-                    {
-                        if (EndRGPHardwareTrace(&m_trace, pQueue) != Pal::Result::Success)
-                        {
-                            FinishRGPTrace(&m_trace, true);
-                        }
-                    }
                 }
-            }
 
-            if (IsQueueTimingActive(pPresentDevice))
-            {
-                // Call TimedQueuePresent() to insert commands that collect GPU timestamp.
-                Pal::IQueue* pPalQueue = pQueue->PalQueue();
-
-                // Currently nothing in the PresentInfo struct is used for inserting a timed present marker.
-                GpuUtil::TimedQueuePresentInfo timedPresentInfo = {};
-                Pal::Result result = m_trace.pGpaSession->TimedQueuePresent(pPalQueue, timedPresentInfo);
-                VK_ASSERT(result == Pal::Result::Success);
+                AdvanceActiveTraceStep(&m_trace, pQueue, false, actualPresent);
             }
+        }
+    }
+
+    m_globalFrameIndex++;
+}
+
+// =====================================================================================================================
+void DevModeMgr::AdvanceActiveTraceStep(
+    TraceState*  pState,
+    const Queue* pQueue,
+    bool         beginFrame,
+    bool         actualPresent)
+{
+    VK_ASSERT(pState->status != TraceStatus::Idle);
+
+    if (m_trace.status == TraceStatus::Pending)
+    {
+        // Attempt to start preparing for a trace
+        if (TracePendingToPreparingStep(&m_trace, pQueue, actualPresent) != Pal::Result::Success)
+        {
+            FinishOrAbortTrace(&m_trace, true);
+        }
+    }
+
+    if (m_trace.status == TraceStatus::Preparing)
+    {
+        if (TracePreparingToRunningStep(&m_trace, pQueue) != Pal::Result::Success)
+        {
+            FinishOrAbortTrace(&m_trace, true);
+        }
+    }
+
+    if (m_trace.status == TraceStatus::Running)
+    {
+        if (TraceRunningToWaitingForSqttStep(&m_trace, pQueue) != Pal::Result::Success)
+        {
+            FinishOrAbortTrace(&m_trace, true);
+        }
+    }
+
+    if (m_trace.status == TraceStatus::WaitingForSqtt)
+    {
+        if (TraceWaitingForSqttToEndingStep(&m_trace, pQueue) != Pal::Result::Success)
+        {
+            FinishOrAbortTrace(&m_trace, true);
+        }
+    }
+
+    if (m_trace.status == TraceStatus::Ending)
+    {
+        Pal::Result result = TraceEndingToIdleStep(&m_trace);
+
+        // Results ready: finish trace
+        if (result == Pal::Result::Success)
+        {
+            FinishOrAbortTrace(&m_trace, false);
+        }
+        // Error while computing results: abort trace
+        else if (result != Pal::Result::NotReady)
+        {
+            FinishOrAbortTrace(&m_trace, true);
         }
     }
 }
 
 // =====================================================================================================================
-Pal::Result DevModeMgr::CheckForTraceResults(TraceState* pState)
+// Checks if all trace results are ready and finalizes the results, transmitting data through gpuopen.
+//
+// Transitions from Ending to Idle step.
+Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
 {
-    // Get the RGP message server
-    DevDriver::RGPProtocol::RGPServer* pRGPServer = m_pDevDriverServer->GetRGPServer();
-
-    VK_ASSERT(pState->status == TraceStatus::WaitingForResults);
+    VK_ASSERT(pState->status == TraceStatus::Ending);
 
     Pal::Result result = Pal::Result::NotReady;
+
+    if (m_blockingTraceEnd)
+    {
+        result = pState->pDevice->PalDevice()->WaitForFences(1, &pState->pEndFence, true, InfiniteTimeout);
+
+        if (result != Pal::Result::Success)
+        {
+            return result;
+        }
+
+        while (pState->pGpaSession->IsReady() == false)
+        {
+            Util::YieldThread();
+        }
+    }
 
     // Check if trace results are ready
     if (pState->pGpaSession->IsReady()                              && // GPA session is ready
@@ -322,7 +406,7 @@ Pal::Result DevModeMgr::CheckForTraceResults(TraceState* pState)
                 Pal::Result::Success)
             {
                 // Transmit trace data to anyone who's listening
-                auto devResult = pRGPServer->WriteTraceData(static_cast<Pal::uint8*>(pTraceData), traceDataSize);
+                auto devResult = m_pRGPServer->WriteTraceData(static_cast<Pal::uint8*>(pTraceData), traceDataSize);
 
                 success = (devResult == DevDriver::Result::Success);
             }
@@ -340,144 +424,39 @@ Pal::Result DevModeMgr::CheckForTraceResults(TraceState* pState)
 }
 
 // =====================================================================================================================
-// Called after a swap chain presents.  This signals a (next) frame-begin boundary and is used to coordinate
-// RGP trace start/stop.
-void DevModeMgr::PostPresent(const Queue* pQueue)
+// Notifies of a frame-begin boundary and is used to coordinate RGP trace start/stop.
+//
+// If "actualPresent" is true, this is being called from an actual present; otherwise, this is manual frame-begin
+// signal.
+void DevModeMgr::NotifyFrameBegin(
+    const Queue* pQueue,
+    bool         actualPresent)
 {
     // Wait for the driver to be resumed in case it's been paused.
     WaitForDriverResume();
 
-    // Get the RGP message server
-    DevDriver::RGPProtocol::RGPServer* pRGPServer = m_pDevDriverServer->GetRGPServer();
-
-    if ((pRGPServer != nullptr) && pRGPServer->TracesEnabled())
+    if ((m_pRGPServer != nullptr) && m_pRGPServer->TracesEnabled())
     {
-        Util::MutexAuto traceLock(&m_traceMutex);
-
-        // Check if there's an RGP trace request pending and we're idle
-        if ((m_trace.status == TraceStatus::Idle) && pRGPServer->IsTracePending())
+        // Check for pending traces here also in case the application presents before submitting any work.  This
+        // may transition Idle to Pending which we will handle immediately below
+        //
+        // Note: deliberately above the mutex lock below because PendingTraceStep() is specially written to be
+        // thread-safe).
+        if (m_trace.status == TraceStatus::Idle)
         {
-            // Attempt to start preparing for a trace
-            if (PrepareRGPTrace(&m_trace, pQueue) == Pal::Result::Success)
-            {
-                // Attempt to start the trace immediately if we do not need to prepare
-                if (m_numPrepFrames == 0)
-                {
-                    if (BeginRGPTrace(&m_trace, pQueue) != Pal::Result::Success)
-                    {
-                        FinishRGPTrace(&m_trace, true);
-                    }
-                }
-            }
+            TraceIdleToPendingStep(&m_trace);
         }
-        else if (m_trace.status == TraceStatus::Preparing)
+
+        if (m_trace.status != TraceStatus::Idle)
         {
-            // Wait some number of "preparation frames" before starting the trace in order to get enough
-            // timer samples to sync CPU/GPU clock domains.
-            m_trace.preparedFrameCount++;
+            Util::MutexAuto traceLock(&m_traceMutex);
 
-            // Take a calibration timing measurement sample for this frame.
-            m_trace.pGpaSession->SampleTimingClocks();
-
-            // Start the SQTT trace if we've waited a sufficient number of preparation frames
-            if (m_trace.preparedFrameCount >= m_numPrepFrames)
+            if (m_trace.status != TraceStatus::Idle)
             {
-                Pal::Result result = BeginRGPTrace(&m_trace, pQueue);
-
-                if (result != Pal::Result::Success)
-                {
-                    FinishRGPTrace(&m_trace, true);
-                }
-            }
-            else if ((m_trace.preparedFrameCount == (m_numPrepFrames - 1)) &&
-                     m_enableSampleUpdates                                 &&
-                     m_trace.flushAllQueues)
-            {
-                // Flush all queues on the last preparation frame.
-                // We only need this if mid-trace sample updates are enabled and the driver setting for flushing queues
-                // is also enabled. This is used to provide RGP with a guaranteed idle point in the thread trace data.
-                // That point can be used to synchronize the hardware pipeline stages in the sqtt parsing logic.
-                Pal::Result result = Pal::Result::Success;
-
-                for (uint32_t family = 0; family < m_trace.queueFamilyCount; ++family)
-                {
-                    TraceQueueFamilyState* pFamilyState = &m_trace.queueFamilyState[family];
-
-                    if (pFamilyState->supportsTracing)
-                    {
-                        // If the queue family supports tracing, then find a queue that we can flush on.
-                        for (uint32_t queueIndex = 0; queueIndex < m_trace.queueCount; ++queueIndex)
-                        {
-                            TraceQueueState* pQueueState = &m_trace.queueState[queueIndex];
-
-                            if (pQueueState->pFamily == pFamilyState)
-                            {
-                                // Submit the flush command buffer
-                                Pal::SubmitInfo submitInfo = {};
-
-                                submitInfo.cmdBufferCount = 1;
-                                submitInfo.ppCmdBuffers = &pFamilyState->pTraceFlushCmdBuf;
-                                submitInfo.pFence = nullptr;
-
-                                result = pQueueState->pQueue->PalQueue()->Submit(submitInfo);
-
-                                break;
-                            }
-                        }
-                    }
-
-                    // Break out of the loop if we encounter an error.
-                    if (result != Pal::Result::Success)
-                    {
-                        break;
-                    }
-                }
-
-                if (result != Pal::Result::Success)
-                {
-                    FinishRGPTrace(&m_trace, true);
-                }
-            }
-        }
-        // Check if we're ending a trace waiting for SQTT to turn off.  If SQTT has turned off, end the trace
-        else if (m_trace.status == TraceStatus::WaitingForSqtt)
-        {
-            Pal::Result fenceResult = m_trace.pEndSqttFence->GetStatus();
-            Pal::Result result      = Pal::Result::Success;
-
-            if (fenceResult == Pal::Result::Success)
-            {
-                result = EndRGPTrace(&m_trace, pQueue);
-            }
-            else if (fenceResult != Pal::Result::NotReady)
-            {
-                result = fenceResult;
-            }
-
-            if (result != Pal::Result::Success)
-            {
-                FinishRGPTrace(&m_trace, true);
-            }
-        }
-        // Check if we're waiting for final trace results.
-        else if (m_trace.status == TraceStatus::WaitingForResults)
-        {
-            Pal::Result result = CheckForTraceResults(&m_trace);
-
-            // Results ready: finish trace
-            if (result == Pal::Result::Success)
-            {
-                FinishRGPTrace(&m_trace, false);
-            }
-            // Error while computing results: abort trace
-            else if (result != Pal::Result::NotReady)
-            {
-                FinishRGPTrace(&m_trace, true);
+                AdvanceActiveTraceStep(&m_trace, pQueue, true, actualPresent);
             }
         }
     }
-
-    m_globalFrameIndex++;
 }
 
 // =====================================================================================================================
@@ -498,52 +477,109 @@ DevModeMgr::TraceQueueState* DevModeMgr::FindTraceQueueState(TraceState* pState,
 }
 
 // =====================================================================================================================
+// Called from tracing layer before any queue submits any work.
+void DevModeMgr::NotifyPreSubmit()
+{
+    // Check for pending traces here.
+    TraceIdleToPendingStep(&m_trace);
+}
+
+// =====================================================================================================================
+// This function checks for any pending traces (i.e. if the user has triggered a trace request).  It's called during
+// each command buffer submit by the tracing layer and should be very light-weight.
+//
+// This function moves the trace state from Idle to Pending.
+void DevModeMgr::TraceIdleToPendingStep(
+    TraceState* pState)
+{
+    // Double-checked lock to test if there is a trace pending.  If so, extract its trace parameters.
+    if ((m_pRGPServer != nullptr) &&
+        (pState->status == TraceStatus::Idle) &&
+        m_pRGPServer->IsTracePending())
+    {
+        Util::MutexAuto lock(&m_traceMutex);
+
+        if (pState->status == TraceStatus::Idle)
+        {
+            // Update our trace parameters based on the new trace
+            const auto traceParameters = m_pRGPServer->QueryTraceParameters();
+
+            m_numPrepFrames        = traceParameters.numPreparationFrames;
+            m_traceGpuMemLimit     = traceParameters.gpuMemoryLimitInMb * 1024 * 1024;
+            m_enableInstTracing    = traceParameters.flags.enableInstructionTokens;
+            m_allowComputePresents = traceParameters.flags.allowComputePresents;
+
+            // Initially assume we don't need to block on trace end.  This may change during transition to
+            // Preparing.
+            m_blockingTraceEnd = false;
+
+            // Store virtual frame begin/end debug object command buffer tags
+            m_traceFrameBeginTag = traceParameters.beginTag;
+            m_traceFrameEndTag   = traceParameters.endTag;
+
+            // Override some parameters via panel
+            const RuntimeSettings& settings = pState->pDevice->GetRuntimeSettings();
+
+            if (settings.devModeSqttPrepareFrameCount != UINT_MAX)
+            {
+                m_numPrepFrames = settings.devModeSqttPrepareFrameCount;
+            }
+
+            if (settings.devModeSqttTraceBeginEndTagEnable)
+            {
+                m_traceFrameBeginTag = settings.devModeSqttTraceBeginTagValue;
+                m_traceFrameEndTag   = settings.devModeSqttTraceEndTagValue;
+            }
+
+            // Reset trace device status
+            pState->preparedFrameCount = 0;
+            pState->sqttFrameCount     = 0;
+            pState->status             = TraceStatus::Pending;
+        }
+    }
+}
+
+// =====================================================================================================================
 // This function starts preparing for an RGP trace.  Preparation involves some N frames of lead-up time during which
 // timing samples are accumulated to synchronize CPU and GPU clock domains.
 //
-// This function transitions from the Idle state to the Preparing state.
-Pal::Result DevModeMgr::PrepareRGPTrace(
+// If "actualPresent" is true, it means that this transition is happening as a consequence of an actual vkQueuePresent
+// call, rather than a virtual frame boundary being communicated via API signals (e.g. debug object frame begin/end
+// tags).
+//
+// This function transitions from the Pending state to the Preparing state.
+Pal::Result DevModeMgr::TracePendingToPreparingStep(
     TraceState*  pState,
-    const Queue* pQueue)
+    const Queue* pQueue,
+    bool         actualPresent)
 {
-    VK_ASSERT(pState->status == TraceStatus::Idle);
+    VK_ASSERT(pState->status  == TraceStatus::Pending);
+
+    // If we're presenting from a compute queue and the trace parameters indicate that we want to support
+    // compute queue presents, then we need to enable sample updates for this trace.  Mid-trace sample updates
+    // allow us to capture a smaller set of trace data as the preparation frames run, then change the sqtt
+    // token mask before the last frame to capture the full token set.  RGP requires the additional data
+    // from this technique in order to handle edge cases surrounding compute queue presentation.
+    m_enableSampleUpdates = m_allowComputePresents && (pQueue->PalQueue()->Type() == Pal::QueueTypeCompute);
 
     // We can only trace using a single device at a time currently, so recreate RGP trace
     // resources against this new one if the device is changing.
     Pal::Result result = CheckTraceDeviceChanged(pState, pQueue->VkDevice());
+
     Device* pDevice = pState->pDevice;
-
-    // Update our trace parameters based on the new trace
-    DevDriver::RGPProtocol::RGPServer* pRGPServer = m_pDevDriverServer->GetRGPServer();
-
-    if (pRGPServer != nullptr)
-    {
-        const auto traceParameters = pRGPServer->QueryTraceParameters();
-
-        m_numPrepFrames        = traceParameters.numPreparationFrames;
-        m_traceGpuMemLimit     = traceParameters.gpuMemoryLimitInMb * 1024 * 1024;
-        m_enableInstTracing    = traceParameters.flags.enableInstructionTokens;
-
-        // If we're presenting from a compute queue and the trace parameters indicate that we want to support
-        // compute queue presents, then we need to enable sample updates for this trace. Mid-trace sample updates
-        // allow us to capture a smaller set of trace data as the preparation frames run, then change the sqtt
-        // token mask before the last frame to capture the full token set. RGP requires the additional data
-        // from this technique in order to handle edge cases surrounding compute queue presentation.
-        m_enableSampleUpdates = ((pQueue->PalQueue()->Type() == Pal::QueueTypeCompute) &&
-                                 traceParameters.flags.allowComputePresents);
-    }
-    else
-    {
-        result = Pal::Result::ErrorIncompatibleDevice;
-    }
 
     // Notify the RGP server that we are starting a trace
     if (result == Pal::Result::Success)
     {
-        if (pRGPServer->BeginTrace() != DevDriver::Result::Success)
+        if (m_pRGPServer->BeginTrace() != DevDriver::Result::Success)
         {
             result = Pal::Result::ErrorUnknown;
         }
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        result = pState->pGpaSession->Reset();
     }
 
     // Tell the GPA session class we're starting a trace
@@ -556,9 +592,6 @@ Pal::Result DevModeMgr::PrepareRGPTrace(
 
         result = pState->pGpaSession->Begin(info);
     }
-
-    pState->preparedFrameCount = 0;
-    pState->sqttFrameCount     = 0;
 
     // Sample the timing clocks prior to starting a trace.
     if (result == Pal::Result::Success)
@@ -703,13 +736,20 @@ Pal::Result DevModeMgr::PrepareRGPTrace(
         pState->pTraceEndSqttQueue = nullptr;
 
         m_trace.status = TraceStatus::Preparing;
+
+        // If the app is not tracing using vkQueuePresent, we need to immediately block on trace end
+        // (rather than periodically checking during future present calls).
+        m_blockingTraceEnd |= (actualPresent == false);
+
+        // Override via panel setting
+        m_blockingTraceEnd |= pState->pDevice->GetRuntimeSettings().devModeSqttForceBlockOnTraceEnd;
     }
     else
     {
         // We failed to prepare for the trace so abort it.
-        if (pRGPServer != nullptr)
+        if (m_pRGPServer != nullptr)
         {
-            const DevDriver::Result devDriverResult = pRGPServer->AbortTrace();
+            const DevDriver::Result devDriverResult = m_pRGPServer->AbortTrace();
 
             // AbortTrace should always succeed unless we've used the api incorrectly.
             VK_ASSERT(devDriverResult == DevDriver::Result::Success);
@@ -721,62 +761,115 @@ Pal::Result DevModeMgr::PrepareRGPTrace(
 
 // =====================================================================================================================
 // This function begins an RGP trace by initializing all dependent resources and submitting the "begin trace"
-// information command buffer.
+// information command buffer which starts SQ thread tracing (SQTT).
 //
 // This function transitions from the Preparing state to the Running state.
-Pal::Result DevModeMgr::BeginRGPTrace(
+Pal::Result DevModeMgr::TracePreparingToRunningStep(
     TraceState*  pState,
     const Queue* pQueue)
 {
-    VK_ASSERT(m_trace.status == TraceStatus::Preparing);
+    VK_ASSERT(pState->status == TraceStatus::Preparing);
     VK_ASSERT(m_tracingEnabled);
 
     // We can only trace using a single device at a time currently, so recreate RGP trace
     // resources against this new one if the device is changing.
     Pal::Result result = CheckTraceDeviceChanged(pState, pQueue->VkDevice());
 
-    TraceQueueState* pTraceQueue = nullptr;
-
     if (result == Pal::Result::Success)
     {
-        pTraceQueue = FindTraceQueueState(pState, pQueue);
+        // Take a calibration timing measurement sample for this frame.
+        m_trace.pGpaSession->SampleTimingClocks();
 
-        // Only allow trace to start if the queue family at prep-time matches the queue
-        // family at begin time because the command buffer engine type must match
-        if ((pTraceQueue == nullptr) ||
-            (pTraceQueue->pFamily->supportsTracing == false) ||
-            (pState->pTracePrepareQueue == nullptr) ||
-            (pTraceQueue->pFamily != pState->pTracePrepareQueue->pFamily))
+        // Start the SQTT trace if we've waited a sufficient number of preparation frames
+        if (m_trace.preparedFrameCount >= m_numPrepFrames)
         {
-            result = Pal::Result::ErrorIncompatibleQueue;
+            TraceQueueState* pTraceQueue = nullptr;
+
+            if (result == Pal::Result::Success)
+            {
+                pTraceQueue = FindTraceQueueState(pState, pQueue);
+
+                // Only allow trace to start if the queue family at prep-time matches the queue
+                // family at begin time because the command buffer engine type must match
+                if ((pTraceQueue == nullptr) ||
+                    (pTraceQueue->pFamily->supportsTracing == false) ||
+                    (pState->pTracePrepareQueue == nullptr) ||
+                    (pTraceQueue->pFamily != pState->pTracePrepareQueue->pFamily))
+                {
+                    result = Pal::Result::ErrorIncompatibleQueue;
+                }
+            }
+
+            // Optionally execute a device wait idle if panel says so
+            if ((result == Pal::Result::Success) &&
+                pState->pDevice->GetRuntimeSettings().devModeSqttWaitIdle)
+            {
+                pState->pDevice->WaitIdle();
+            }
+
+            // Submit the trace-begin command buffer
+            if (result == Pal::Result::Success)
+            {
+                Pal::SubmitInfo submitInfo = {};
+
+                submitInfo.cmdBufferCount = 1;
+                submitInfo.ppCmdBuffers   = m_enableSampleUpdates ? &pTraceQueue->pFamily->pTraceBeginSqttCmdBuf
+                                                                  : &pTraceQueue->pFamily->pTraceBeginCmdBuf;
+                submitInfo.pFence         = pState->pBeginFence;
+
+                result = pQueue->PalQueue()->Submit(submitInfo);
+            }
+
+            // Make the trace active and remember which queue started it
+            if (result == Pal::Result::Success)
+            {
+                pState->status           = TraceStatus::Running;
+                pState->pTraceBeginQueue = pTraceQueue;
+            }
         }
-    }
+        // Flush all queues on the last preparation frame.
+        //
+        // We only need this if mid-trace sample updates are enabled and the driver setting for flushing queues
+        // is also enabled. This is used to provide RGP with a guaranteed idle point in the thread trace data.
+        // That point can be used to synchronize the hardware pipeline stages in the sqtt parsing logic.
+        else if ((m_trace.preparedFrameCount == (m_numPrepFrames - 1)) &&
+                  m_enableSampleUpdates                                &&
+                  m_trace.flushAllQueues)
+        {
+            for (uint32_t family = 0; family < m_trace.queueFamilyCount; ++family)
+            {
+                TraceQueueFamilyState* pFamilyState = &m_trace.queueFamilyState[family];
 
-    // Optionally execute a device wait idle if panel says so
-    if ((result == Pal::Result::Success) &&
-        pState->pDevice->GetRuntimeSettings().devModeSqttWaitIdle)
-    {
-        pState->pDevice->WaitIdle();
-    }
+                if (pFamilyState->supportsTracing)
+                {
+                    // If the queue family supports tracing, then find a queue that we can flush on.
+                    for (uint32_t queueIndex = 0; queueIndex < m_trace.queueCount; ++queueIndex)
+                    {
+                        TraceQueueState* pQueueState = &m_trace.queueState[queueIndex];
 
-    // Submit the trace-begin command buffer
-    if (result == Pal::Result::Success)
-    {
-        Pal::SubmitInfo submitInfo = {};
+                        if (pQueueState->pFamily == pFamilyState)
+                        {
+                            // Submit the flush command buffer
+                            Pal::SubmitInfo submitInfo = {};
 
-        submitInfo.cmdBufferCount = 1;
-        submitInfo.ppCmdBuffers   = m_enableSampleUpdates ? &pTraceQueue->pFamily->pTraceBeginSqttCmdBuf
-                                                          : &pTraceQueue->pFamily->pTraceBeginCmdBuf;
-        submitInfo.pFence         = pState->pBeginFence;
+                            submitInfo.cmdBufferCount = 1;
+                            submitInfo.ppCmdBuffers   = &pFamilyState->pTraceFlushCmdBuf;
+                            submitInfo.pFence         = nullptr;
 
-        result = pQueue->PalQueue()->Submit(submitInfo);
-    }
+                            result = pQueueState->pQueue->PalQueue()->Submit(submitInfo);
 
-    // Make the trace active and remember which queue started it
-    if (result == Pal::Result::Success)
-    {
-        pState->status           = TraceStatus::Running;
-        pState->pTraceBeginQueue = pTraceQueue;
+                            break;
+                        }
+                    }
+                }
+
+                // Break out of the loop if we encounter an error.
+                if (result != Pal::Result::Success)
+                {
+                    break;
+                }
+            }
+        }
     }
 
     return result;
@@ -786,11 +879,17 @@ Pal::Result DevModeMgr::BeginRGPTrace(
 // This function submits the command buffer to stop SQTT tracing.  Full tracing still continues.
 //
 // This function transitions from the Running state to the WaitingForSqtt state.
-Pal::Result DevModeMgr::EndRGPHardwareTrace(
+Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
     TraceState*  pState,
     const Queue* pQueue)
 {
     VK_ASSERT(pState->status == TraceStatus::Running);
+
+    // Do not advance unless we've traced the necessary number of frames
+    if (m_trace.sqttFrameCount < m_trace.pDevice->GetRuntimeSettings().devModeSqttFrameCount)
+    {
+        return Pal::Result::Success;
+    }
 
     Pal::Result result = Pal::Result::Success;
 
@@ -876,11 +975,29 @@ Pal::Result DevModeMgr::EndRGPHardwareTrace(
 // This function ends a running RGP trace.
 //
 // This function transitions from the WaitingForSqtt state to WaitingForResults state.
-Pal::Result DevModeMgr::EndRGPTrace(
+Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
     TraceState*  pState,
     const Queue* pQueue)
 {
     VK_ASSERT(pState->status == TraceStatus::WaitingForSqtt);
+
+    // Check if the SQTT-end fence has signaled yet.
+    Pal::Result fenceResult = pState->pEndSqttFence->GetStatus();
+
+    if (fenceResult == Pal::Result::NotReady && m_blockingTraceEnd)
+    {
+        fenceResult = pState->pDevice->PalDevice()->WaitForFences(1, &pState->pEndSqttFence, true, InfiniteTimeout);
+    }
+
+    // Return without advancing if not ready yet or submit failed
+    if (fenceResult == Pal::Result::NotReady)
+    {
+        return Pal::Result::Success;
+    }
+    else if (fenceResult != Pal::Result::Success)
+    {
+        return fenceResult;
+    }
 
     Pal::Result result = Pal::Result::Success;
 
@@ -950,7 +1067,7 @@ Pal::Result DevModeMgr::EndRGPTrace(
 
     if (result == Pal::Result::Success)
     {
-        pState->status         = TraceStatus::WaitingForResults;
+        pState->status         = TraceStatus::Ending;
         pState->pTraceEndQueue = pTraceQueue;
     }
 
@@ -960,22 +1077,22 @@ Pal::Result DevModeMgr::EndRGPTrace(
 // =====================================================================================================================
 // This function resets and possibly cancels a currently active (between begin/end) RGP trace.  It frees any dependent
 // resources.
-void DevModeMgr::FinishRGPTrace(
+void DevModeMgr::FinishOrAbortTrace(
     TraceState* pState,
     bool        aborted)
 {
-    DevDriver::RGPProtocol::RGPServer* pRGPServer = m_pDevDriverServer->GetRGPServer();
+    DevDriver::RGPProtocol::RGPServer* m_pRGPServer = m_pDevDriverServer->GetRGPServer();
 
-    VK_ASSERT(pRGPServer != nullptr);
+    VK_ASSERT(m_pRGPServer != nullptr);
 
     // Inform RGP protocol that we're done with the trace, either by aborting it or finishing normally
     if (aborted)
     {
-        pRGPServer->AbortTrace();
+        m_pRGPServer->AbortTrace();
     }
     else
     {
-        pRGPServer->EndTrace();
+        m_pRGPServer->EndTrace();
     }
 
     if (pState->pGpaSession != nullptr)
@@ -1005,8 +1122,8 @@ Pal::Result DevModeMgr::CheckTraceDeviceChanged(
 
     if (pState->pDevice != pNewDevice)
     {
-        // If we are idle, we can re-initialize trace resources based on the new device.
-        if (pState->status == TraceStatus::Idle)
+        // If we are idle or pending, we can re-initialize trace resources based on the new device.
+        if (pState->status == TraceStatus::Idle || pState->status == TraceStatus::Pending)
         {
             DestroyRGPTracing(pState);
 
@@ -1069,11 +1186,9 @@ void DevModeMgr::DestroyTraceQueueFamilyResources(TraceQueueFamilyState* pState)
 // Destroys device-persistent RGP resources
 void DevModeMgr::DestroyRGPTracing(TraceState* pState)
 {
-    DevDriver::RGPProtocol::RGPServer* pRGPServer = m_pDevDriverServer->GetRGPServer();
-
     if (pState->status != TraceStatus::Idle)
     {
-        FinishRGPTrace(pState, true);
+        FinishOrAbortTrace(pState, true);
     }
 
     // Destroy the GPA session
@@ -1421,10 +1536,8 @@ Pal::Result DevModeMgr::InitRGPTracing(
 
     Pal::Result result = Pal::Result::Success;
 
-    DevDriver::RGPProtocol::RGPServer* pRGPServer = m_pDevDriverServer->GetRGPServer();
-
     if ((m_tracingEnabled == false) ||  // Tracing is globally disabled
-        (pRGPServer == nullptr) ||      // There is no RGP server (this should never happen)
+        (m_pRGPServer == nullptr) ||    // There is no RGP server (this should never happen)
         (pDevice->NumPalDevices() > 1)) // MGPU device group tracing is not currently supported
     {
         result = Pal::Result::ErrorInitializationFailed;
@@ -1535,6 +1648,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
         if (pStorage != nullptr)
         {
             Pal::FenceCreateInfo createInfo = {};
+
             result = pPalDevice->CreateFence(createInfo, pStorage, &pState->pEndFence);
 
             if (result != Pal::Result::Success)
@@ -1596,9 +1710,9 @@ Pal::Result DevModeMgr::InitRGPTracing(
     if (result != Pal::Result::Success)
     {
         // If we've failed to initialize tracing, permanently disable traces
-        if (pRGPServer != nullptr)
+        if (m_pRGPServer != nullptr)
         {
-            pRGPServer->DisableTraces();
+            m_pRGPServer->DisableTraces();
 
             m_tracingEnabled = false;
         }

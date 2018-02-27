@@ -431,6 +431,7 @@ struct ResourceUsage
             std::vector<FsInterpInfo> interpInfo;   // Array of interpolation info
             ExportFormat expFmts[MaxColorTargets];  // Shader export formats
             uint32_t     cbShaderMask;              // CB shader channel mask (correspond to register CB_SHADER_MASK)
+            llvm::Value* pViewIndex;                // View Index
         } fs;
     } inOutUsage;
 };

@@ -36,8 +36,7 @@
 
 #include "include/vk_utils.h"
 #include "include/khronos/vk_icd.h"
-#include "open_strings/g_func_table.h"
-
+#include "strings/g_func_table.h"
 namespace vk
 {
 class Device;

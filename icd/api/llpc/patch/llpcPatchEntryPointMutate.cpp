@@ -1154,8 +1154,6 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
             }
             break;
         }
-    case ShaderStageTessControl:
-        break;
     case ShaderStageTessEval:
         {
             if (enableMultiView)
@@ -1212,6 +1210,7 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
             }
             break;
         }
+    case ShaderStageTessControl:
     case ShaderStageFragment:
         {
             // Do nothing

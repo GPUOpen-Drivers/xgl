@@ -158,6 +158,9 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format);
 #define VK_TO_PAL_TABLE_I_AMD(srcType, srcTypeName, dstType, mapping) \
     VK_TO_PAL_TABLE_I_WITH_SUFFIX(srcType, srcTypeName, dstType, mapping, _AMD)
 
+#define VK_TO_PAL_TABLE_I_EXT(srcType, srcTypeName, dstType, mapping) \
+    VK_TO_PAL_TABLE_I_WITH_SUFFIX(srcType, srcTypeName, dstType, mapping, _EXT)
+
 #define VK_TO_PAL_TABLE_I_WITH_SUFFIX(srcType, srcTypeName, dstType, mapping, suffix) \
     namespace convert \
     { \
@@ -165,10 +168,12 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format);
         { \
             VK_DBG_DECL(size_t numHandled = 0); \
             mapping \
-            VK_DBG_CHECK(numHandled == VK_##srcType##_RANGE_SIZE##suffix, "Not all Vk" #srcTypeName " enum values are handled"); \
+            VK_DBG_CHECK(numHandled == VK_##srcType##_RANGE_SIZE##suffix, "Not all Vk" #srcTypeName \
+                                                                          " enum values are handled"); \
             return static_cast<Pal::dstType>(value); \
         } \
-        VK_DBG_DECL(static Pal::dstType forceLoadTimeCallCheck##dstType = dstType(static_cast<Vk##srcTypeName>(0))); \
+        VK_DBG_DECL(static Pal::dstType forceLoadTimeCallCheck##srcTypeTo##dstType##suffix = \
+                                                   dstType(static_cast<Vk##srcTypeName>(0))); \
     }
 
 // =====================================================================================================================
@@ -679,6 +684,22 @@ VK_TO_PAL_ENTRY_X(  IMAGE_VIEW_TYPE_CUBE_ARRAY,             ImageViewType::TexCu
 VK_INLINE Pal::ImageViewType VkToPalImageViewType(VkImageViewType imgViewType)
 {
     return convert::ImageViewType(imgViewType);
+}
+
+// =====================================================================================================================
+VK_TO_PAL_TABLE_I_EXT(  SAMPLER_REDUCTION_MODE, SamplerReductionModeEXT,    TexFilterMode,
+// =====================================================================================================================
+    VK_TO_PAL_ENTRY_I(  SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE_EXT,        TexFilterMode::Blend)
+    VK_TO_PAL_ENTRY_I(  SAMPLER_REDUCTION_MODE_MIN_EXT,                     TexFilterMode::Min)
+    VK_TO_PAL_ENTRY_I(  SAMPLER_REDUCTION_MODE_MAX_EXT,                     TexFilterMode::Max)
+// =====================================================================================================================
+)
+
+// =====================================================================================================================
+// Converts Vulkan filter mode to PAL equivalent.
+VK_INLINE Pal::TexFilterMode VkToPalTexFilterMode(VkSamplerReductionModeEXT filterMode)
+{
+    return convert::TexFilterMode(filterMode);
 }
 
 // =====================================================================================================================
@@ -2227,6 +2248,11 @@ VK_INLINE VkFormatFeatureFlags PalToVkFormatFeatureFlags(Pal::FormatFeatureFlags
     if (flags & Pal::FormatFeatureImageShaderRead)
     {
         retFlags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
+
+        if (flags & Pal::FormatFeatureImageFilterMinMax)
+        {
+            retFlags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
+        }
     }
 
     if (flags & Pal::FormatFeatureImageShaderWrite)
@@ -2510,6 +2536,46 @@ VK_INLINE void VkToPalViewport(
         pViewport->height = -viewport.height;
         pViewport->origin = Pal::PointOrigin::LowerLeft;
     }
+}
+
+// =====================================================================================================================
+VK_INLINE VkImageUsageFlags VkFormatFeatureFlagsToImageUsageFlags(
+        VkFormatFeatureFlags formatFeatures)
+{
+    VkImageUsageFlags imageUsage = 0;
+
+    if (formatFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR)
+    {
+        imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    }
+
+    if (formatFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR)
+    {
+        imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    }
+
+    if (formatFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)
+    {
+        imageUsage |= VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageUsage |= VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT;
+    }
+
+    if (formatFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)
+    {
+        imageUsage |= VK_IMAGE_USAGE_STORAGE_BIT;
+    }
+
+    if (formatFeatures & VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT)
+    {
+        imageUsage |= VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    }
+
+    if (formatFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+    {
+        imageUsage |= VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    }
+
+    return imageUsage;
 }
 
 // =====================================================================================================================

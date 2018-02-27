@@ -45,6 +45,7 @@
 #include "sqtt/sqtt_mgr.h"
 
 #include "palHashMapImpl.h"
+#include "palListImpl.h"
 
 namespace vk
 {
@@ -81,7 +82,8 @@ SqttCmdBufferState::SqttCmdBufferState(
     m_pNextLayer(m_pSqttMgr->GetNextLayer()),
     m_currentEntryPoint(RgpSqttMarkerGeneralApiType::Invalid),
     m_currentEventId(0),
-    m_currentEventType(RgpSqttMarkerEventType::InternalUnknown)
+    m_currentEventType(RgpSqttMarkerEventType::InternalUnknown),
+    m_debugTags(pCmdBuf->VkInstance()->Allocator())
 {
     m_cbId.u32All       = 0;
     m_deviceId          = reinterpret_cast<uint64_t>(ApiDevice::FromObject(m_pCmdBuf->VkDevice()));
@@ -630,6 +632,35 @@ void SqttCmdBufferState::DebugMarkerInsert(
     const VkDebugMarkerMarkerInfoEXT* pMarkerInfo)
 {
     WriteUserEventMarker(RgpSqttMarkerUserEventTrigger, pMarkerInfo->pMarkerName);
+}
+
+// =====================================================================================================================
+void SqttCmdBufferState::AddDebugTag(uint64_t tag)
+{
+    if (HasDebugTag(tag) == false)
+    {
+        m_debugTags.PushBack(tag);
+    }
+}
+
+// =====================================================================================================================
+bool SqttCmdBufferState::HasDebugTag(
+    uint64_t tag
+    ) const
+{
+    auto it = m_debugTags.Begin();
+
+    while (it.Get() != nullptr)
+    {
+        if (tag == *it.Get())
+        {
+            return true;
+        }
+
+        it.Next();
+    }
+
+    return false;
 }
 
 // =====================================================================================================================
@@ -1643,6 +1674,120 @@ VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectNameEXT(
     return SQTT_CALL_NEXT_LAYER(vkDebugMarkerSetObjectNameEXT)(device, pNameInfo);
 }
 
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectTagEXT(
+    VkDevice                                    device,
+    const VkDebugMarkerObjectTagInfoEXT*        pTagInfo)
+{
+    Device* pDevice   = ApiDevice::ObjectFromHandle(device);
+    SqttMgr* pSqtt    = pDevice->GetSqttMgr();
+
+    if ((pTagInfo != nullptr) &&
+        (pTagInfo->objectType == VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT) &&
+        (pTagInfo->object != VK_NULL_HANDLE))
+    {
+        SqttCmdBufferState* pCmdBuf = ApiCmdBuffer::ObjectFromHandle(VkCommandBuffer(pTagInfo->object))->GetSqttState();
+
+        pCmdBuf->AddDebugTag(pTagInfo->tagName);
+    }
+
+    return SQTT_CALL_NEXT_LAYER(vkDebugMarkerSetObjectTagEXT)(device, pTagInfo);
+}
+
+// =====================================================================================================================
+// This function looks for specific tags in a submit's command buffers to identify when to force an RGP trace start
+// rather than during it during vkQueuePresent().  This is done for applications that explicitly do not make present
+// calls but still want to start/stop RGP tracing.
+static void CheckRGPFrameBegin(
+    Queue*              pQueue,
+    DevModeMgr*         pDevMode,
+    uint32_t            submitCount,
+    const VkSubmitInfo* pSubmits)
+{
+    uint64_t frameBeginTag;
+
+    // Check with developer mode whether there's a valid frame begin tag.  If there is, a trace is in progress
+    // and we need to check for matching command buffer tags in this submit.  If there's a match, notify
+    // developer mode of a frame begin boundary.
+    if (pDevMode->GetTraceFrameBeginTag(&frameBeginTag))
+    {
+        for (uint32_t si = 0; si < submitCount; ++si)
+        {
+            const VkSubmitInfo& submitInfo = pSubmits[si];
+
+            for (uint32_t ci = 0; ci < submitInfo.commandBufferCount; ++ci)
+            {
+                const SqttCmdBufferState* pCmdBuf =
+                    ApiCmdBuffer::ObjectFromHandle(submitInfo.pCommandBuffers[ci])->GetSqttState();
+
+                if (pCmdBuf->HasDebugTag(frameBeginTag))
+                {
+                    pDevMode->NotifyFrameBegin(pQueue, false);
+
+                    return;
+                }
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+// Looks for markers in a submitted command buffer to identify a forced end to an RGP trace.  See CheckRGPFrameBegin().
+static void CheckRGPFrameEnd(
+    Queue*              pQueue,
+    DevModeMgr*         pDevMode,
+    uint32_t            submitCount,
+    const VkSubmitInfo* pSubmits)
+{
+    uint64_t frameEndTag;
+
+    // Check with developer mode whether there's a valid frame end tag.  If there is, a trace is in progress
+    // and we need to check for matching command buffer tags in this submit.  If there's a match, notify
+    // developer mode of a frame end boundary.
+    if (pDevMode->GetTraceFrameEndTag(&frameEndTag))
+    {
+        for (uint32_t si = 0; si < submitCount; ++si)
+        {
+            const VkSubmitInfo& submitInfo = pSubmits[si];
+
+            for (uint32_t ci = 0; ci < submitInfo.commandBufferCount; ++ci)
+            {
+                const SqttCmdBufferState* pCmdBuf =
+                    ApiCmdBuffer::ObjectFromHandle(submitInfo.pCommandBuffers[ci])->GetSqttState();
+
+                if (pCmdBuf->HasDebugTag(frameEndTag))
+                {
+                    pDevMode->NotifyFrameEnd(pQueue, false);
+
+                    return;
+                }
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
+    VkQueue                                     queue,
+    uint32_t                                    submitCount,
+    const VkSubmitInfo*                         pSubmits,
+    VkFence                                     fence)
+{
+    Queue* pQueue        = ApiQueue::ObjectFromHandle(queue);
+    SqttMgr* pSqtt       = pQueue->VkDevice()->GetSqttMgr();
+    DevModeMgr* pDevMode = pQueue->VkDevice()->VkInstance()->GetDevModeMgr();
+
+    pDevMode->NotifyPreSubmit();
+
+    CheckRGPFrameBegin(pQueue, pDevMode, submitCount, pSubmits);
+
+    VkResult result = SQTT_CALL_NEXT_LAYER(vkQueueSubmit)(queue, submitCount, pSubmits, fence);
+
+    CheckRGPFrameEnd(pQueue, pDevMode, submitCount, pSubmits);
+
+    return result;
+}
+
 #define SQTT_DISPATCH_ENTRY(entry_name) VK_DISPATCH_ENTRY(entry_name, vk::entry::sqtt::entry_name)
 
 // This is the SQTT layer dispatch table.  It contains an entry for every Vulkan entry point that this layer shadows.
@@ -1701,6 +1846,8 @@ const DispatchTableEntry g_SqttDispatchTable[] =
     SQTT_DISPATCH_ENTRY(vkCreateGraphicsPipelines),
     SQTT_DISPATCH_ENTRY(vkCreateComputePipelines),
     SQTT_DISPATCH_ENTRY(vkDebugMarkerSetObjectNameEXT),
+    SQTT_DISPATCH_ENTRY(vkDebugMarkerSetObjectTagEXT),
+    SQTT_DISPATCH_ENTRY(vkQueueSubmit),
 
     VK_DISPATCH_TABLE_END()
 };

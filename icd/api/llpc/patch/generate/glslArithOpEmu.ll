@@ -423,7 +423,7 @@ define float @llpc.acosh.f32(float %x) #0
 define float @llpc.atanh.f32(float %x) #0
 {
     ; In((x + 1)/( 1 - x)) * 0.5f;
-    ; ¨Ox¨O <1, undefined ¨Ox¨O ¡Ý 1
+    ; "Ox"O <1, undefined "Ox"O >= 1
     %1 = fadd float %x, 1.0
     %2 = fsub float 1.0, %x
     %3 = fdiv float 1.0, %2

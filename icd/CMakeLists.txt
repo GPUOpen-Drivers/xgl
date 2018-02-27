@@ -209,9 +209,44 @@ target_sources(xgl PRIVATE
     api/utils/temp_mem_arena.cpp
     api/utils/json_reader.cpp
 )
+### ICD Auto-generated String Files ####################################################################################
+set(ICD_STRING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/strings)
+# ICD settings code generation main script
+set(ICD_GEN_STRINGS ${ICD_STRING_DIR}/generate_strings.py)
+
+set(ICD_GEN_STRINGS_OPT -w ${ICD_STRING_DIR})
+
+set(ICD_GEN_STRINGS_FILES ${ICD_GEN_STRINGS} ${ICD_STRING_DIR}/func_table_template.py)
+
+set(ICD_STRING_OUTPUT_FILES ${ICD_STRING_DIR}/g_entry_points_decl.h
+                            ${ICD_STRING_DIR}/g_entry_points_impl.h
+                            ${ICD_STRING_DIR}/g_extensions_decl.h
+                            ${ICD_STRING_DIR}/g_extensions_impl.h
+                            ${ICD_STRING_DIR}/g_func_table.cpp
+                            ${ICD_STRING_DIR}/g_func_table.h
+)
+
+set(ICD_STRING_SOURCE_FILES ${ICD_STRING_DIR}/base_entry_points.txt
+                            ${ICD_STRING_DIR}/base_extensions.txt
+)
+
+add_custom_command(
+    OUTPUT ${ICD_STRING_OUTPUT_FILES} ${ICD_STRING_DIR}/strings.cpp
+    COMMAND ${PYTHON_CMD} ${ICD_GEN_STRINGS} ${ICD_GEN_STRINGS_OPT}
+    DEPENDS ${ICD_GEN_STRINGS_FILES} ${ICD_STRING_SOURCE_FILES}
+    COMMENT "Generating Vulkan api strings ${ICD_GEN_STRINGS_OPT}"
+)
+
+add_custom_target(
+    RunVKStringsGenerator
+    DEPENDS ${ICD_GEN_STRINGS_FILES} ${ICD_STRING_SOURCE_FILES}
+    COMMENT "Checking if re-generation is required for strings"
+)
+
+add_dependencies(xgl RunVKStringsGenerator)
 
 if(ICD_OPEN_SOURCE)
-    target_sources(xgl PRIVATE api/open_strings/strings.cpp)
+    target_sources(xgl PRIVATE api/strings/strings.cpp)
 endif()
 
 # Or for a separate lib: icdapi

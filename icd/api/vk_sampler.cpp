@@ -49,12 +49,13 @@ VkResult Sampler::Create(
     {
         const VkStructHeader*          pHeader;
         const VkSamplerCreateInfo*     pSamplerInfo;
+        const VkSamplerReductionModeCreateInfoEXT* pVkSamplerReductionModeCreateInfoEXT;
     };
 
     // Parse the creation info.
     for (pSamplerInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
-        switch (pHeader->sType)
+        switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO:
             samplerInfo.filter   = VkToPalTexFilter(pSamplerInfo->anisotropyEnable,
@@ -97,7 +98,12 @@ VkResult Sampler::Create(
             samplerInfo.flags.seamlessCubeMapFiltering = 1;
             break;
 
+        case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
+            samplerInfo.filterMode = VkToPalTexFilterMode(pVkSamplerReductionModeCreateInfoEXT->reductionMode);
+            break;
+
         default:
+            // Skip any unknown extension structures
             break;
         }
     }

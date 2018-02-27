@@ -109,9 +109,9 @@ public:
         return m_palQueryType;
     }
 
-    VK_FORCEINLINE Pal::IQueryPool* PalPool() const
+    VK_FORCEINLINE Pal::IQueryPool* PalPool(uint32_t deviceIdx) const
     {
-        return m_pPalQueryPool;
+        return m_pPalQueryPool[deviceIdx];
     }
 
     static VkResult Create(
@@ -134,21 +134,21 @@ public:
 
 private:
     PalQueryPool(
-        Device*          pDevice,
-        VkQueryType      queryType,
-        Pal::QueryType   palQueryType,
-        Pal::IQueryPool* pPalQueryPool,
-        InternalMemory*  pInternalMem)
+        Device*           pDevice,
+        VkQueryType       queryType,
+        Pal::QueryType    palQueryType,
+        Pal::IQueryPool** ppPalQueryPools,
+        InternalMemory*   pInternalMem)
         :
         QueryPool(pDevice, queryType),
         m_palQueryType(palQueryType),
-        m_pPalQueryPool(pPalQueryPool),
         m_internalMem(*pInternalMem)
     {
+        memcpy(m_pPalQueryPool, ppPalQueryPools, sizeof(m_pPalQueryPool));
     }
 
     const Pal::QueryType    m_palQueryType;
-    Pal::IQueryPool* const  m_pPalQueryPool;
+    Pal::IQueryPool*        m_pPalQueryPool[MaxPalDevices];
     const InternalMemory    m_internalMem;
 };
 

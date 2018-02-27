@@ -134,7 +134,7 @@ VkResult DescriptorPool::Init(
 
             pDevice->MemMgr()->GetCommonPool(InternalPoolDescriptorTable, &allocInfo);
 
-            result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &m_internalMem);
+            result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &m_internalMem, pDevice->GetPalDeviceMask());
 
             if (result != VK_SUCCESS)
             {
@@ -185,7 +185,7 @@ VkResult DescriptorPool::Destroy(
     m_gpuMemHeap.Destroy(pDevice);
 
     // Free internal GPU memory allocation used by the object
-    if (m_internalMem.PalMemory() != nullptr)
+    if (m_internalMem.PalMemory(DefaultDeviceIndex) != nullptr)
     {
         pDevice->MemMgr()->FreeGpuMem(&m_internalMem);
     }

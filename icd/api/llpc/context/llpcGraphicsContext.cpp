@@ -538,7 +538,7 @@ bool GraphicsContext::CheckGsOnChipValidity()
         uint32_t esGsLdsSize = (esGsItemSize * worstCaseEsVertsPerSubgroup);
 
         // Total LDS use per subgroup aligned to the register granularity.
-        uint32_t onChipGsLdsSize =
+        uint32_t gsOnChipLdsSize =
             RoundUpToMultiple(esGsLdsSize + esGsExtraLdsDwords,
                               static_cast<uint32_t>(1 << m_pGpuProperty->ldsSizeDwordGranularityShift));
 
@@ -547,11 +547,12 @@ bool GraphicsContext::CheckGsOnChipValidity()
         // TODO: Accept DefaultLdsSizePerSubGroup from panel setting
         uint32_t maxLdsSize = Gfx9::DefaultLdsSizePerSubGroup;
 
-        // If total LDS usage is too big, refactor partitions based on ratio of ESGS item sizes.
-        if (onChipGsLdsSize > maxLdsSize)
+        // If total LDS usage is too big, refactor partitions based on ratio of ES-GS item sizes.
+        if (gsOnChipLdsSize > maxLdsSize)
         {
-            // Our target GS Prims Per Subgroup was too large.
-            // Calculate the maximum number of GS Prims per sub-group that will fit into LDS, capped
+            // Our target GS primitives per sub-group was too large
+
+            // Calculate the maximum number of GS primitives per sub-group that will fit into LDS, capped
             // by the maximum that the hardware can support.
             uint32_t availableLdsSize   = maxLdsSize - esGsExtraLdsDwords;
             gsPrimsPerSubgroup          = std::min((availableLdsSize / (esGsItemSize * esMinVertsPerSubgroup)),
@@ -561,10 +562,10 @@ bool GraphicsContext::CheckGsOnChipValidity()
             LLPC_ASSERT(gsPrimsPerSubgroup > 0);
 
             esGsLdsSize     = (esGsItemSize * worstCaseEsVertsPerSubgroup);
-            onChipGsLdsSize =
+            gsOnChipLdsSize =
                 RoundUpToMultiple(esGsLdsSize + esGsExtraLdsDwords,
                                   1u << static_cast<uint32_t>(1 << m_pGpuProperty->ldsSizeDwordGranularityShift));
-            LLPC_ASSERT(onChipGsLdsSize <= maxLdsSize);
+            LLPC_ASSERT(gsOnChipLdsSize <= maxLdsSize);
         }
 
         // TODO: Check GS -> VS ring on-chip validity
@@ -589,7 +590,7 @@ bool GraphicsContext::CheckGsOnChipValidity()
         pGsResUsage->inOutUsage.gs.calcFactor.esVertsPerSubgroup   = esVertsPerSubgroup;
         pGsResUsage->inOutUsage.gs.calcFactor.gsPrimsPerSubgroup   = gsPrimsPerSubgroup;
         pGsResUsage->inOutUsage.gs.calcFactor.esGsLdsSize          = esGsLdsSize;
-        pGsResUsage->inOutUsage.gs.calcFactor.gsOnChipLdsSize      = onChipGsLdsSize;
+        pGsResUsage->inOutUsage.gs.calcFactor.gsOnChipLdsSize      = gsOnChipLdsSize;
 
         pGsResUsage->inOutUsage.gs.calcFactor.esGsRingItemSize     = esGsItemSize;
         pGsResUsage->inOutUsage.gs.calcFactor.gsVsRingItemSize     = gsVsRingItemSize;
@@ -600,6 +601,27 @@ bool GraphicsContext::CheckGsOnChipValidity()
         LLPC_NOT_IMPLEMENTED();
 #endif
     }
+
+    LLPC_OUTS("===============================================================================\n");
+    LLPC_OUTS("// LLPC geometry calculation factor results\n\n");
+    LLPC_OUTS("ES vertices per sub-group: " << pGsResUsage->inOutUsage.gs.calcFactor.esVertsPerSubgroup << "\n");
+    LLPC_OUTS("GS primitives per sub-group: " << pGsResUsage->inOutUsage.gs.calcFactor.gsPrimsPerSubgroup << "\n");
+    LLPC_OUTS("\n");
+    LLPC_OUTS("ES-GS LDS size: " << pGsResUsage->inOutUsage.gs.calcFactor.esGsLdsSize << "\n");
+    LLPC_OUTS("On-chip GS LDS size: " << pGsResUsage->inOutUsage.gs.calcFactor.gsOnChipLdsSize << "\n");
+    LLPC_OUTS("\n");
+    LLPC_OUTS("ES-GS ring item size: " << pGsResUsage->inOutUsage.gs.calcFactor.esGsRingItemSize << "\n");
+    LLPC_OUTS("GS-VS ring item size: " << pGsResUsage->inOutUsage.gs.calcFactor.gsVsRingItemSize << "\n");
+    LLPC_OUTS("\n");
+    if (gsOnChip || (m_gfxIp.major >= 9))
+    {
+        LLPC_OUTS("GS is on-chip\n");
+    }
+    else
+    {
+        LLPC_OUTS("GS is off-chip\n");
+    }
+    LLPC_OUTS("\n");
 
     return gsOnChip;
 }

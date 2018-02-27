@@ -35,7 +35,7 @@
 #pragma once
 
 #include "khronos/vulkan.h"
-#include "open_strings/strings.h"
+#include "strings/strings.h"
 
 // Helper macros to specify extension parameters
 #define VK_XX_EXTENSION(type, id)       type##Extensions::id, vk::secure::ext::VK_##id##_name, VK_##id##_SPEC_VERSION
@@ -221,6 +221,7 @@ public:
         AMD_NEGATIVE_VIEWPORT_HEIGHT,
         AMD_GPU_SHADER_HALF_FLOAT,
         AMD_SHADER_INFO,
+        EXT_SAMPLER_FILTER_MINMAX,
         AMD_SHADER_FRAGMENT_MASK,
         AMD_TEXTURE_GATHER_BIAS_LOD,
         AMD_MIXED_ATTACHMENT_SAMPLES,
@@ -244,6 +245,7 @@ public:
         AMD_BUFFER_MARKER,
         AMD_SHADER_IMAGE_LOAD_STORE_LOD,
         EXT_EXTERNAL_MEMORY_HOST,
+        EXT_DEPTH_RANGE_UNRESTRICTED,
 
         Count
     };

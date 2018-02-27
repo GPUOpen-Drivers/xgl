@@ -198,7 +198,7 @@ FunctionType* ShaderMerger::GenerateLsHsEntryPointType(
 
     std::vector<Type*> argTys;
 
-    // First 8 system values (sGPRs)
+    // First 8 system values (SGPRs)
     for (uint32_t i = 0; i < LsHsSpecialSysValueCount; ++i)
     {
         argTys.push_back(m_pContext->Int32Ty());
@@ -266,7 +266,7 @@ void ShaderMerger::GenerateLsHsEntryPoint(
         }
     }
 
-    // define amdgpu_hs @main(
+    // define dllexport amdgpu_hs @_amdgpu_hs_main(
     //     inreg i32 %sgpr0..7, inreg <n x i32> %userData, i32 %vgpr0..5)
     // {
     // .entry
@@ -293,7 +293,7 @@ void ShaderMerger::GenerateLsHsEntryPoint(
     //     br i1 %lsEnable, label %beginls, label %endls
     //
     // .beginls:
-    //     call void @llpc.amdgpu.ls.main(%sgpr..., %userData..., %vgpr...)
+    //     call void @llpc.ls.main(%sgpr..., %userData..., %vgpr...)
     //     br label %endls
     //
     // .endls:
@@ -302,7 +302,7 @@ void ShaderMerger::GenerateLsHsEntryPoint(
     //     br i1 %hsEnable, label %beginhs, label %endhs
     //
     // .beginhs:
-    //     call void @llpc.amdgpu.hs.main(%sgpr..., %userData..., %vgpr...)
+    //     call void @llpc.hs.main(%sgpr..., %userData..., %vgpr...)
     //     br label %endhs
     //
     // .endhs:
@@ -596,7 +596,7 @@ FunctionType* ShaderMerger::GenerateEsGsEntryPointType(
 
     std::vector<Type*> argTys;
 
-    // First 8 system values (sGPRs)
+    // First 8 system values (SGPRs)
     for (uint32_t i = 0; i < EsGsSpecialSysValueCount; ++i)
     {
         argTys.push_back(m_pContext->Int32Ty());
@@ -689,7 +689,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
         }
     }
 
-    // define amdgpu_gs @main(
+    // define dllexport amdgpu_gs @_amdgpu_gs_main(
     //     inreg i32 %sgpr0..7, inreg <n x i32> %userData, i32 %vgpr0..8)
     // {
     // .entry
@@ -710,7 +710,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     //     br i1 %esEnable, label %begines, label %endes
     //
     // .begines:
-    //     call void @llpc.amdgpu.es.main(%sgpr..., %userData..., %vgpr...)
+    //     call void @llpc.es.main(%sgpr..., %userData..., %vgpr...)
     //     br label %endes
     //
     // .endes:
@@ -719,7 +719,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     //     br i1 %gsEnable, label %begings, label %endgs
     //
     // .begings:
-    //     call void @llpc.amdgpu.gs.main(%sgpr..., %userData..., %vgpr...)
+    //     call void @llpc.gs.main(%sgpr..., %userData..., %vgpr...)
     //     br label %endgs
     //
     // .endgs:
@@ -729,7 +729,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     std::vector<Value*> args;
     std::vector<Attribute::AttrKind> attribs;
 
-    const auto& gsInOutUsage = m_pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs;
+    const auto& calcFactor = m_pContext->GetShaderResourceUsage(ShaderStageGeometry)->inOutUsage.gs.calcFactor;
 
     auto pArg = pEntryPoint->arg_begin();
 
@@ -801,18 +801,14 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 24));
     args.push_back(ConstantInt::get(m_pContext->Int32Ty(), 4));
 
-    auto pEsGsOffset = EmitCall(pEsGsModule,
-                                    "llvm.amdgcn.ubfe.i32",
-                                    m_pContext->Int32Ty(),
-                                    args,
-                                    attribs,
-                                    pEntryBlock);
-    uint32_t gsOnChipLdsSize = gsInOutUsage.calcFactor.gsOnChipLdsSize;
+    auto pWaveInSubgroup =
+        EmitCall(pEsGsModule, "llvm.amdgcn.ubfe.i32", m_pContext->Int32Ty(), args, attribs, pEntryBlock);
 
-    pEsGsOffset = BinaryOperator::CreateMul(pEsGsOffset,
-                                            ConstantInt::get(m_pContext->Int32Ty(), gsOnChipLdsSize),
-                                            "",
-                                            pEntryBlock);
+    auto pEsGsOffset =
+        BinaryOperator::CreateMul(pWaveInSubgroup,
+                                  ConstantInt::get(m_pContext->Int32Ty(), 64 * 4 * calcFactor.esGsRingItemSize),
+                                  "",
+                                  pEntryBlock);
 
     auto pEsEnable = new ICmpInst(*pEntryBlock, ICmpInst::ICMP_ULT, pThreadId, pEsVertCount, "");
     BranchInst::Create(pBeginEsBlock, pEndEsBlock, pEsEnable, pEntryBlock);
@@ -820,7 +816,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     Value* pEsGsOffsets01 = pArg;
 
     Value* pEsGsOffsets23 = UndefValue::get(m_pContext->Int32Ty());
-    if (gsInOutUsage.calcFactor.inputVertices > 2)
+    if (calcFactor.inputVertices > 2)
     {
         // NOTE: ES to GS offset (vertex 2 and 3) is valid once the primitive type has more than 2 vertices.
         pEsGsOffsets23 = (pArg + 1);
@@ -830,7 +826,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     Value* pInvocationId  = (pArg + 3);
 
     Value* pEsGsOffsets45 = UndefValue::get(m_pContext->Int32Ty());
-    if (gsInOutUsage.calcFactor.inputVertices > 4)
+    if (calcFactor.inputVertices > 4)
     {
         // NOTE: ES to GS offset (vertex 4 and 5) is valid once the primitive type has more than 4 vertices.
         pEsGsOffsets45 = (pArg + 4);

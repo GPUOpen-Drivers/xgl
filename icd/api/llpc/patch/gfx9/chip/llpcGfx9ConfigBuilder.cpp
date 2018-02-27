@@ -33,6 +33,7 @@
 #include "SPIRVInternal.h"
 #include "llpcContext.h"
 #include "llpcCodeGenManager.h"
+#include "llpcCopyShader.h"
 #include "llpcElf.h"
 #include "llpcGfx9ConfigBuilder.h"
 
@@ -287,8 +288,8 @@ Result ConfigBuilder::BuildPipelineVsGsFsRegConfig(
         {
             regVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09 vgtGsMaxPrimsPerSubgroup = {};
             vgtGsMaxPrimsPerSubgroup.bits.MAX_PRIMS_PER_SUBGROUP =
-                pConfig->m_esGsRegs.VGT_GS_ONCHIP_CNTL_VAL.bits.GS_INST_PRIMS_IN_SUBGRP *
-                pConfig->m_esGsRegs.VGT_GS_MAX_VERT_OUT_VAL.bits.MAX_VERT_OUT;
+                GET_REG_FIELD(&pConfig->m_esGsRegs, VGT_GS_ONCHIP_CNTL, GS_INST_PRIMS_IN_SUBGRP) *
+                GET_REG_FIELD(&pConfig->m_esGsRegs, VGT_GS_MAX_VERT_OUT, MAX_VERT_OUT);
             SET_DYN_REG(pConfig, mmVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09, vgtGsMaxPrimsPerSubgroup.u32All);
         }
         else
@@ -414,8 +415,8 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
         {
             regVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09 vgtGsMaxPrimsPerSubgroup = {};
             vgtGsMaxPrimsPerSubgroup.bits.MAX_PRIMS_PER_SUBGROUP =
-                pConfig->m_esGsRegs.VGT_GS_ONCHIP_CNTL_VAL.bits.GS_INST_PRIMS_IN_SUBGRP *
-                pConfig->m_esGsRegs.VGT_GS_MAX_VERT_OUT_VAL.bits.MAX_VERT_OUT;
+                GET_REG_FIELD(&pConfig->m_esGsRegs, VGT_GS_ONCHIP_CNTL, GS_INST_PRIMS_IN_SUBGRP) *
+                GET_REG_FIELD(&pConfig->m_esGsRegs, VGT_GS_MAX_VERT_OUT, MAX_VERT_OUT);
             SET_DYN_REG(pConfig, mmVGT_GS_MAX_PRIMS_PER_SUBGROUP__GFX09, vgtGsMaxPrimsPerSubgroup.u32All);
         }
         else
@@ -449,7 +450,6 @@ Result ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(
 
     if (tcsBuiltInUsage.primitiveId || tesBuiltInUsage.primitiveId || gsBuiltInUsage.primitiveId)
     {
-        iaMultiVgtParam.bits.PARTIAL_ES_WAVE_ON = true;
         iaMultiVgtParam.bits.SWITCH_ON_EOI = true;
     }
 
@@ -537,7 +537,15 @@ Result ConfigBuilder::BuildVsRegConfig(
 
     if (gfxIp.major == 9)
     {
-        SET_REG_FIELD_GFX9(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, USER_SGPR, pIntfData->userDataCount);
+        if (shaderStage == ShaderStageCopyShader)
+        {
+            // NOTE: For copy shader, we use fixed number of user data registers.
+            SET_REG_FIELD_GFX9(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, USER_SGPR, Llpc::CopyShaderUserSgprCount);
+        }
+        else
+        {
+            SET_REG_FIELD_GFX9(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, USER_SGPR, pIntfData->userDataCount);
+        }
     }
     else
     {
@@ -1411,36 +1419,40 @@ Result ConfigBuilder::BuildUserDataConfig(
         SET_DYN_REG(pConfig, startUserData + 1, static_cast<uint32_t>(Util::Abi::UserDataMapping::PerShaderTable));
     }
 
-    uint32_t userDataLimit = 0;
-    uint32_t spillThreshold = UINT32_MAX;
-    uint32_t maxUserDataCount = pContext->GetGpuProperty()->maxUserDataCount;
-    for (uint32_t i = 0; i < maxUserDataCount; ++i)
+    // NOTE: For copy shader, we use fixed number of user data SGPRs. Thus, there is no need of building user data registers here.
+    if (shaderStage != ShaderStageCopyShader)
     {
-        if (pIntfData->userDataMap[i] != InterfaceData::UserDataUnmapped)
+        uint32_t userDataLimit = 0;
+        uint32_t spillThreshold = UINT32_MAX;
+        uint32_t maxUserDataCount = pContext->GetGpuProperty()->maxUserDataCount;
+        for (uint32_t i = 0; i < maxUserDataCount; ++i)
         {
-            SET_DYN_REG(pConfig, startUserData + i, pIntfData->userDataMap[i]);
-            userDataLimit = std::max(userDataLimit, pIntfData->userDataMap[i] + 1);
+            if (pIntfData->userDataMap[i] != InterfaceData::UserDataUnmapped)
+            {
+                SET_DYN_REG(pConfig, startUserData + i, pIntfData->userDataMap[i]);
+                userDataLimit = std::max(userDataLimit, pIntfData->userDataMap[i] + 1);
+            }
         }
-    }
 
-    if (pIntfData->userDataUsage.spillTable > 0)
-    {
-        SET_DYN_REG(pConfig,
-                    startUserData + pIntfData->userDataUsage.spillTable,
-                    static_cast<uint32_t>(Util::Abi::UserDataMapping::SpillTable));
-        userDataLimit = std::max(userDataLimit,
-                                 pIntfData->spillTable.offsetInDwords + pIntfData->spillTable.sizeInDwords);
-        spillThreshold = pIntfData->spillTable.offsetInDwords;
-    }
+        if (pIntfData->userDataUsage.spillTable > 0)
+        {
+            SET_DYN_REG(pConfig,
+                        startUserData + pIntfData->userDataUsage.spillTable,
+                        static_cast<uint32_t>(Util::Abi::UserDataMapping::SpillTable));
+            userDataLimit = std::max(userDataLimit,
+                                     pIntfData->spillTable.offsetInDwords + pIntfData->spillTable.sizeInDwords);
+            spillThreshold = pIntfData->spillTable.offsetInDwords;
+        }
 
-    if (userDataLimit > GET_REG(pConfig, USER_DATA_LIMIT))
-    {
-        SET_REG(pConfig, USER_DATA_LIMIT, userDataLimit)
-    }
+        if (userDataLimit > GET_REG(pConfig, USER_DATA_LIMIT))
+        {
+            SET_REG(pConfig, USER_DATA_LIMIT, userDataLimit)
+        }
 
-    if (spillThreshold < GET_REG(pConfig, SPILL_THRESHOLD))
-    {
-        SET_REG(pConfig, SPILL_THRESHOLD, spillThreshold)
+        if (spillThreshold < GET_REG(pConfig, SPILL_THRESHOLD))
+        {
+            SET_REG(pConfig, SPILL_THRESHOLD, spillThreshold)
+        }
     }
 
     return result;
