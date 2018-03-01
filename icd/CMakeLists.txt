@@ -148,7 +148,6 @@ target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 ### XGL Subprojects ####################################################################################################
 ### PAL ########################################################################
 add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
-target_link_libraries(xgl PRIVATE pal)
 
 ### XGL Sources ########################################################################################################
 
@@ -354,6 +353,7 @@ if (UNIX)
     endif()
 
 endif()
+target_link_libraries(xgl PRIVATE pal)
 
 ### Visual Studio Filters ##############################################################################################
 target_vs_filters(xgl)
