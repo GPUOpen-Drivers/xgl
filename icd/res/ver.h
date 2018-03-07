@@ -30,8 +30,12 @@
 #define MAKE_VERSION_STRING(x) MKSTR(x)
 
 #define VULKAN_API_MAJOR_VERSION    1
+#ifdef ICD_VULKAN_1_1
+#define VULKAN_API_MINOR_VERSION    1
+#else
 #define VULKAN_API_MINOR_VERSION    0
-#define VULKAN_API_BUILD_VERSION    65
+#endif
+#define VULKAN_API_BUILD_VERSION    70
 
 // This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
 #define VULKAN_ICD_MAJOR_VERSION    2
@@ -40,7 +44,7 @@
 #define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
 
 // Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION    16
+#define VULKAN_ICD_BUILD_VERSION    18
 
 // String version is needed with leading zeros and extra termination (unicode)
 #define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION

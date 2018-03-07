@@ -178,120 +178,153 @@ Util::Vector<Pal::Range, 16, Util::GenericAllocator> RangesOfOnesInBitMask(
 }
 
 // =====================================================================================================================
-// Returns PAL clear regions converted from Vulkan clear rects.
+// Populate a vector with PAL clear regions converted from Vulkan clear rects.
 // If multiview is enabled layer ranges are overridden according to viewMask.
-template <typename PalClearRegion>
-Util::Vector<PalClearRegion, 8, VirtualStackFrame> CreateClearRegions(
-    const uint32_t           rectCount,
-    const VkClearRect* const pRects,
-    const RenderPass&        renderPass,
-    const uint32_t           subpass,
-    VirtualStackFrame&       virtStackFrame)
+// Returns Pal::Result::Success if completed successfully.
+template <typename PalClearRegionVect>
+Pal::Result CreateClearRegions (
+    const uint32_t              rectCount,
+    const VkClearRect* const    pRects,
+    const RenderPass&           renderPass,
+    const uint32_t              subpass,
+    PalClearRegionVect* const   pOutClearRegions)
 {
-    static_assert(std::is_same<PalClearRegion, Pal::ClearBoundTargetRegion>::value ||
-                  std::is_same<PalClearRegion, Pal::Box>::value, "");
+    using ClearRegionType = typename std::remove_pointer<decltype(pOutClearRegions->Data())>::type;
 
-    Util::Vector<PalClearRegion, 8, VirtualStackFrame> clearRegions { &virtStackFrame };
+    static_assert(std::is_same<ClearRegionType, Pal::ClearBoundTargetRegion>::value ||
+                  std::is_same<ClearRegionType, Pal::Box>::value, "Wrong element type");
+    VK_ASSERT(pOutClearRegions != nullptr);
+
+    Pal::Result palResult = Pal::Result::Success;
+
+    pOutClearRegions->Clear();
 
     if (renderPass.IsMultiviewEnabled())
     {
-        const auto viewMask = renderPass.GetViewMask(subpass);
+        const auto viewMask    = renderPass.GetViewMask(subpass);
         const auto layerRanges = RangesOfOnesInBitMask(viewMask);
 
-        clearRegions.Reserve(rectCount * layerRanges.NumElements());
+        palResult = pOutClearRegions->Reserve(rectCount * layerRanges.NumElements());
 
-        for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
-        {
-            for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
-            {
-                clearRegions.PushBack(VkToPalClearRegion<PalClearRegion>(pRects[rectIndex]));
-                OverrideLayerRanges(clearRegions.Back(), layerRangeIt.Get());
-            }
-        }
-    }
-    else
-    {
-        clearRegions.Reserve(rectCount);
-
-        for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
-        {
-            clearRegions.PushBack(VkToPalClearRegion<PalClearRegion>(pRects[rectIndex]));
-        }
-    }
-
-    return clearRegions;
-}
-
-// =====================================================================================================================
-// Returns attachment's PAL subresource ranges defined by clearInfo with modified layer ranges
-// according to Vulkan clear rects (multiview disabled) or viewMask (multiview is enabled).
-Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> CreateClearSubresRanges(
-    const Framebuffer::Attachment& attachment,
-    const VkClearAttachment&       clearInfo,
-    const uint32_t                 rectCount,
-    const VkClearRect* const       pRects,
-    const RenderPass&              renderPass,
-    const uint32_t                 subpass,
-    VirtualStackFrame&             virtStackFrame)
-{
-    Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
-
-    const auto attachmentSubresRanges = attachment.FindSubresRanges(clearInfo.aspectMask);
-
-    if (renderPass.IsMultiviewEnabled())
-    {
-        const auto viewMask = renderPass.GetViewMask(subpass);
-        const auto layerRanges = RangesOfOnesInBitMask(viewMask);
-
-        clearSubresRanges.Reserve(attachmentSubresRanges.NumElements() * layerRanges.NumElements());
-
-        for (uint32_t rangeIndex = 0; rangeIndex < attachmentSubresRanges.NumElements(); ++rangeIndex)
+        if (palResult == Pal::Result::Success)
         {
             for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
             {
-                clearSubresRanges.PushBack(attachmentSubresRanges.At(rangeIndex));
-                clearSubresRanges.Back().startSubres.arraySlice += layerRangeIt.Get().offset;
-                clearSubresRanges.Back().numSlices               = layerRangeIt.Get().extent;
+                for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+                {
+                    pOutClearRegions->PushBack(VkToPalClearRegion<ClearRegionType>(pRects[rectIndex]));
+                    OverrideLayerRanges(pOutClearRegions->Back(), layerRangeIt.Get());
+                }
             }
         }
     }
     else
     {
-        clearSubresRanges.Reserve(attachmentSubresRanges.NumElements() * rectCount);
+        palResult = pOutClearRegions->Reserve(rectCount);
 
-        for (uint32_t rangeIndex = 0; rangeIndex < attachmentSubresRanges.NumElements(); ++rangeIndex)
+        if (palResult == Pal::Result::Success)
         {
             for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
             {
-                clearSubresRanges.PushBack(attachmentSubresRanges.At(rangeIndex));
-                clearSubresRanges.Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
-                clearSubresRanges.Back().numSlices               = pRects[rectIndex].layerCount;
+                pOutClearRegions->PushBack(VkToPalClearRegion<ClearRegionType>(pRects[rectIndex]));
             }
         }
     }
 
-    return clearSubresRanges;
+    return palResult;
 }
 
 // =====================================================================================================================
-// Creates PAL rects from Vulkan clear rects.
-Util::Vector<Pal::Rect, 8, VirtualStackFrame> CreateClearRects(
-    const uint32_t           rectCount,
-    const VkClearRect* const pRects,
-    VirtualStackFrame&       virtStackFrame)
+// Populate a vector with attachment's PAL subresource ranges defined by clearInfo with modified layer ranges
+// according to Vulkan clear rects (multiview disabled) or viewMask (multiview is enabled).
+// Returns Pal::Result::Success if completed successfully.
+template<typename PalSubresRangeVector>
+Pal::Result CreateClearSubresRanges(
+    const Framebuffer::Attachment&  attachment,
+    const VkClearAttachment&        clearInfo,
+    const uint32_t                  rectCount,
+    const VkClearRect* const        pRects,
+    const RenderPass&               renderPass,
+    const uint32_t                  subpass,
+    PalSubresRangeVector* const     pOutClearSubresRanges)
 {
-    Util::Vector<Pal::Rect, 8, VirtualStackFrame> clearRects { &virtStackFrame };
-    clearRects.Reserve(rectCount);
+    static_assert(std::is_same<decltype(pOutClearSubresRanges->Data()), Pal::SubresRange*>::value, "Wrong element type");
+    VK_ASSERT(pOutClearSubresRanges != nullptr);
 
-    for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+    Pal::Result palResult              = Pal::Result::Success;
+    const auto  attachmentSubresRanges = attachment.FindSubresRanges(clearInfo.aspectMask);
+
+    pOutClearSubresRanges->Clear();
+
+    if (renderPass.IsMultiviewEnabled())
     {
-        clearRects.PushBack(VkToPalRect(pRects[rectIndex].rect));
+        const auto viewMask    = renderPass.GetViewMask(subpass);
+        const auto layerRanges = RangesOfOnesInBitMask(viewMask);
+
+        palResult = pOutClearSubresRanges->Reserve(attachmentSubresRanges.NumElements() * layerRanges.NumElements());
+
+        if (palResult == Pal::Result::Success)
+        {
+            for (uint32_t rangeIndex = 0; rangeIndex < attachmentSubresRanges.NumElements(); ++rangeIndex)
+            {
+                for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
+                {
+                    pOutClearSubresRanges->PushBack(attachmentSubresRanges.At(rangeIndex));
+                    pOutClearSubresRanges->Back().startSubres.arraySlice += layerRangeIt.Get().offset;
+                    pOutClearSubresRanges->Back().numSlices               = layerRangeIt.Get().extent;
+                }
+            }
+        }
+    }
+    else
+    {
+        palResult = pOutClearSubresRanges->Reserve(attachmentSubresRanges.NumElements() * rectCount);
+
+        if (palResult == Pal::Result::Success)
+        {
+            for (uint32_t rangeIndex = 0; rangeIndex < attachmentSubresRanges.NumElements(); ++rangeIndex)
+            {
+                for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+                {
+                    pOutClearSubresRanges->PushBack(attachmentSubresRanges.At(rangeIndex));
+                    pOutClearSubresRanges->Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
+                    pOutClearSubresRanges->Back().numSlices               = pRects[rectIndex].layerCount;
+                }
+            }
+        }
     }
 
-    return clearRects;
+    return palResult;
 }
 
+// =====================================================================================================================
+// Populate a vector with PAL rects created from Vulkan clear rects.
+// Returns Pal::Result::Success if completed successfully.
+template<typename PalRectVector>
+Pal::Result CreateClearRects(
+    const uint32_t              rectCount,
+    const VkClearRect* const    pRects,
+    PalRectVector* const        pOutClearRects)
+{
+    static_assert(std::is_same<decltype(pOutClearRects->Data()), Pal::Rect*>::value, "Wrong element type");
+    VK_ASSERT(pOutClearRects != nullptr);
+
+    pOutClearRects->Clear();
+
+    const auto palResult = pOutClearRects->Reserve(rectCount);
+
+    if (palResult == Pal::Result::Success)
+    {
+        for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+        {
+            pOutClearRects->PushBack(VkToPalRect(pRects[rectIndex].rect));
+        }
+    }
+
+    return palResult;
 }
+
+} // anonymous ns
 
 // =====================================================================================================================
 CmdBuffer::CmdBuffer(
@@ -312,6 +345,7 @@ CmdBuffer::CmdBuffer(
     m_is2ndLvl(false),
     m_isRecording(false),
     m_needResetState(true),
+    m_recordingResult(VK_SUCCESS),
     m_pSqttState(nullptr),
     m_renderPassInstance(pDevice->VkInstance()->Allocator())
 {
@@ -1105,7 +1139,7 @@ VkResult CmdBuffer::Begin(
         //
         // Because secondary VkCommandBuffer will be called inside of a VkRenderPass
         // function setting ViewMask for a subpass during the VkRenderPass is called.
-        RPSetViewInstanceMask();
+        SetViewInstanceMask();
     }
 
     DbgBarrierPostCmd(DbgBarrierCmdBufStart);
@@ -1157,7 +1191,7 @@ VkResult CmdBuffer::End(void)
 
     m_isRecording = false;
 
-    return PalToVkResult(result);
+    return (m_recordingResult == VK_SUCCESS ? PalToVkResult(result) : m_recordingResult);
 }
 
 // =====================================================================================================================
@@ -1220,6 +1254,8 @@ void CmdBuffer::ResetState()
     m_renderPassInstance.pExecuteInfo = nullptr;
     m_renderPassInstance.subpass      = VK_SUBPASS_EXTERNAL;
     m_renderPassInstance.flags.u32All = 0;
+
+    m_recordingResult = VK_SUCCESS;
 }
 
 // =====================================================================================================================
@@ -1793,19 +1829,26 @@ void CmdBuffer::CopyBuffer(
     // Allocate space to store memory copy regions
     Pal::MemoryCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryCopyRegion>(regionCount);
 
-    Buffer* pSrcBuffer = Buffer::ObjectFromHandle(srcBuffer);
-    Buffer* pDstBuffer = Buffer::ObjectFromHandle(destBuffer);
-
-    for (uint32_t i = 0; i < regionCount; ++i)
+    if (pPalRegions != nullptr)
     {
-        pPalRegions[i].srcOffset    = pSrcBuffer->MemOffset() + pRegions[i].srcOffset;
-        pPalRegions[i].dstOffset    = pDstBuffer->MemOffset() + pRegions[i].dstOffset;
-        pPalRegions[i].copySize     = pRegions[i].size;
+        Buffer* pSrcBuffer = Buffer::ObjectFromHandle(srcBuffer);
+        Buffer* pDstBuffer = Buffer::ObjectFromHandle(destBuffer);
+
+        for (uint32_t i = 0; i < regionCount; ++i)
+        {
+            pPalRegions[i].srcOffset    = pSrcBuffer->MemOffset() + pRegions[i].srcOffset;
+            pPalRegions[i].dstOffset    = pDstBuffer->MemOffset() + pRegions[i].dstOffset;
+            pPalRegions[i].copySize     = pRegions[i].size;
+        }
+
+        PalCmdCopyBuffer(pSrcBuffer, pDstBuffer, regionCount, pPalRegions);
+
+        virtStackFrame.FreeArray(pPalRegions);
     }
-
-    PalCmdCopyBuffer(pSrcBuffer, pDstBuffer, regionCount, pPalRegions);
-
-    virtStackFrame.FreeArray(pPalRegions);
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
     DbgBarrierPostCmd(DbgBarrierCopyBuffer);
 }
@@ -1826,25 +1869,32 @@ void CmdBuffer::CopyImage(
     Pal::ImageCopyRegion* pPalRegions =
         virtStackFrame.AllocArray<Pal::ImageCopyRegion>(regionCount * MaxPalAspectsPerMask);
 
-    const Image* const pSrcImage    = Image::ObjectFromHandle(srcImage);
-    const Image* const pDstImage    = Image::ObjectFromHandle(destImage);
-
-    const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat());
-    const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat());
-
-    const Pal::ImageLayout palSrcImgLayout = pSrcImage->GetTransferLayout(srcImageLayout, this);
-    const Pal::ImageLayout palDstImgLayout = pDstImage->GetTransferLayout(destImageLayout, this);
-
-    uint32_t palRegionCount = 0;
-
-    for (uint32_t i = 0; i < regionCount; ++i)
+    if (pPalRegions != nullptr)
     {
-        VkToPalImageCopyRegion(pRegions[i], srcFormat.format, dstFormat.format, pPalRegions, palRegionCount);
+        const Image* const pSrcImage    = Image::ObjectFromHandle(srcImage);
+        const Image* const pDstImage    = Image::ObjectFromHandle(destImage);
+
+        const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat());
+        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat());
+
+        const Pal::ImageLayout palSrcImgLayout = pSrcImage->GetTransferLayout(srcImageLayout, this);
+        const Pal::ImageLayout palDstImgLayout = pDstImage->GetTransferLayout(destImageLayout, this);
+
+        uint32_t palRegionCount = 0;
+
+        for (uint32_t i = 0; i < regionCount; ++i)
+        {
+            VkToPalImageCopyRegion(pRegions[i], srcFormat.format, dstFormat.format, pPalRegions, palRegionCount);
+        }
+
+        PalCmdCopyImage(pSrcImage, palSrcImgLayout, pDstImage, palDstImgLayout, palRegionCount, pPalRegions);
+
+        virtStackFrame.FreeArray(pPalRegions);
     }
-
-    PalCmdCopyImage(pSrcImage, palSrcImgLayout, pDstImage, palDstImgLayout, palRegionCount, pPalRegions);
-
-    virtStackFrame.FreeArray(pPalRegions);
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
     DbgBarrierPostCmd(DbgBarrierCopyImage);
 }
@@ -1878,22 +1928,29 @@ void CmdBuffer::BlitImage(
     Pal::ImageScaledCopyRegion* pPalRegions =
         virtStackFrame.AllocArray<Pal::ImageScaledCopyRegion>(regionCount * MaxPalAspectsPerMask);
 
-    for (uint32_t i = 0; i < regionCount; ++i)
+    if (pPalRegions != nullptr)
     {
-        VkToPalImageScaledCopyRegion(pRegions[i], srcFormat.format, dstFormat.format, pPalRegions, palCopyInfo.regionCount);
+        for (uint32_t i = 0; i < regionCount; ++i)
+        {
+            VkToPalImageScaledCopyRegion(pRegions[i], srcFormat.format, dstFormat.format, pPalRegions, palCopyInfo.regionCount);
+        }
+
+        palCopyInfo.pRegions = pPalRegions;
+
+        // Maps blit filters to their PAL equivalent
+        palCopyInfo.filter = VkToPalTexFilter(VK_FALSE, filter, filter, VK_SAMPLER_MIPMAP_MODE_NEAREST);
+
+        palCopyInfo.rotation = Pal::ImageRotation::Ccw0;
+
+        // This will do a scaled blit
+        PalCmdScaledCopyImage(pSrcImage, pDstImage, palCopyInfo);
+
+        virtStackFrame.FreeArray(pPalRegions);
     }
-
-    palCopyInfo.pRegions = pPalRegions;
-
-    // Maps blit filters to their PAL equivalent
-    palCopyInfo.filter = VkToPalTexFilter(VK_FALSE, filter, filter, VK_SAMPLER_MIPMAP_MODE_NEAREST);
-
-    palCopyInfo.rotation = Pal::ImageRotation::Ccw0;
-
-    // This will do a scaled blit
-    PalCmdScaledCopyImage(pSrcImage, pDstImage, palCopyInfo);
-
-    virtStackFrame.FreeArray(pPalRegions);
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
     DbgBarrierPostCmd(DbgBarrierCopyImage);
 }
@@ -1941,34 +1998,41 @@ void CmdBuffer::CopyBufferToImage(
     // Allocate space to store memory image copy regions
     Pal::MemoryImageCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryImageCopyRegion>(regionCount);
 
-    const Buffer* pSrcBuffer         = Buffer::ObjectFromHandle(srcBuffer);
-    const Pal::gpusize srcMemOffset  = pSrcBuffer->MemOffset();
-    const Image* pDstImage           = Image::ObjectFromHandle(destImage);
-
-    const Pal::ImageLayout layout = pDstImage->GetTransferLayout(destImageLayout, this);
-
-    for (uint32_t i = 0; i < regionCount; ++i)
+    if (pPalRegions != nullptr)
     {
-        // For image-buffer copies we have to override the format for depth-only and stencil-only copies
-        Pal::SwizzledFormat dstFormat = VkToPalFormat(Formats::GetAspectFormat(
-            pDstImage->GetFormat(), pRegions[i].imageSubresource.aspectMask));
+        const Buffer* pSrcBuffer         = Buffer::ObjectFromHandle(srcBuffer);
+        const Pal::gpusize srcMemOffset  = pSrcBuffer->MemOffset();
+        const Image* pDstImage           = Image::ObjectFromHandle(destImage);
 
-        pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[i], dstFormat.format, srcMemOffset);
+        const Pal::ImageLayout layout = pDstImage->GetTransferLayout(destImageLayout, this);
 
-        if (!GpuUtil::ValidateMemoryImageRegion(
-            m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(),
-            m_palEngineType,
-            *pDstImage->PalImage(),
-            *pSrcBuffer->PalMemory(),
-            pPalRegions[i]))
+        for (uint32_t i = 0; i < regionCount; ++i)
         {
-            AlignMemoryImageCopyRegion(pDstImage->PalImage(), &pPalRegions[i]);
+            // For image-buffer copies we have to override the format for depth-only and stencil-only copies
+            Pal::SwizzledFormat dstFormat = VkToPalFormat(Formats::GetAspectFormat(
+                pDstImage->GetFormat(), pRegions[i].imageSubresource.aspectMask));
+
+            pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[i], dstFormat.format, srcMemOffset);
+
+            if (!GpuUtil::ValidateMemoryImageRegion(
+                m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(),
+                m_palEngineType,
+                *pDstImage->PalImage(),
+                *pSrcBuffer->PalMemory(),
+                pPalRegions[i]))
+            {
+                AlignMemoryImageCopyRegion(pDstImage->PalImage(), &pPalRegions[i]);
+            }
         }
+
+        PalCmdCopyMemoryToImage(pSrcBuffer, pDstImage, layout, regionCount, pPalRegions);
+
+        virtStackFrame.FreeArray(pPalRegions);
     }
-
-    PalCmdCopyMemoryToImage(pSrcBuffer, pDstImage, layout, regionCount, pPalRegions);
-
-    virtStackFrame.FreeArray(pPalRegions);
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
     DbgBarrierPostCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
 }
@@ -1989,28 +2053,35 @@ void CmdBuffer::CopyImageToBuffer(
     // Allocate space to store memory image copy regions
     Pal::MemoryImageCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryImageCopyRegion>(regionCount);
 
-    const Image* const pSrcImage      = Image::ObjectFromHandle(srcImage);
-    Buffer* pDstBuffer                = Buffer::ObjectFromHandle(destBuffer);
-    const Pal::IImage& palImage       = *pSrcImage->PalImage(DefaultDeviceIndex);
-    Pal::IGpuMemory* const pDstMemory = pDstBuffer->PalMemory(DefaultDeviceIndex);
-    const Pal::gpusize dstMemOffset   = pDstBuffer->MemOffset();
-
-    const Pal::ImageLayout layout = pSrcImage->GetTransferLayout(srcImageLayout, this);
-
-    uint32_t engineCopyCount = 0;
-
-    for (uint32_t i = 0; i < regionCount; ++i)
+    if (pPalRegions != nullptr)
     {
-        // For image-buffer copies we have to override the format for depth-only and stencil-only copies
-        Pal::SwizzledFormat srcFormat = VkToPalFormat(Formats::GetAspectFormat(pSrcImage->GetFormat(),
-            pRegions[i].imageSubresource.aspectMask));
+        const Image* const pSrcImage      = Image::ObjectFromHandle(srcImage);
+        Buffer* pDstBuffer                = Buffer::ObjectFromHandle(destBuffer);
+        const Pal::IImage& palImage       = *pSrcImage->PalImage(DefaultDeviceIndex);
+        Pal::IGpuMemory* const pDstMemory = pDstBuffer->PalMemory(DefaultDeviceIndex);
+        const Pal::gpusize dstMemOffset   = pDstBuffer->MemOffset();
 
-        pPalRegions[engineCopyCount++] = VkToPalMemoryImageCopyRegion(pRegions[i], srcFormat.format, dstMemOffset);
+        const Pal::ImageLayout layout = pSrcImage->GetTransferLayout(srcImageLayout, this);
+
+        uint32_t engineCopyCount = 0;
+
+        for (uint32_t i = 0; i < regionCount; ++i)
+        {
+            // For image-buffer copies we have to override the format for depth-only and stencil-only copies
+            Pal::SwizzledFormat srcFormat = VkToPalFormat(Formats::GetAspectFormat(pSrcImage->GetFormat(),
+                pRegions[i].imageSubresource.aspectMask));
+
+            pPalRegions[engineCopyCount++] = VkToPalMemoryImageCopyRegion(pRegions[i], srcFormat.format, dstMemOffset);
+        }
+
+        PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionCount, pPalRegions);
+
+        virtStackFrame.FreeArray(pPalRegions);
     }
-
-    PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionCount, pPalRegions);
-
-    virtStackFrame.FreeArray(pPalRegions);
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
     DbgBarrierPostCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
 }
@@ -2078,34 +2149,42 @@ void CmdBuffer::ClearColorImage(
 
     // Allocate space to store image subresource ranges
     Pal::SubresRange* pPalRanges = virtStackFrame.AllocArray<Pal::SubresRange>(rangeCount * MaxPalColorAspectsPerMask);
-    uint32_t palRangeCount = 0;
 
-    const Pal::ImageLayout layout = pImage->GetTransferLayout(imageLayout, this);
-
-    for (uint32_t i = 0; i < rangeCount; ++i)
+    if (pPalRanges != nullptr)
     {
-        // Only color aspect is allowed here
-        VK_ASSERT(pRanges[i].aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
+        uint32_t palRangeCount = 0;
 
-        VkToPalSubresRange(palFormat.format,
-                           pRanges[i],
-                           pImage->GetMipLevels(),
-                           pImage->GetArraySize(),
-                           pPalRanges,
-                           palRangeCount);
+        const Pal::ImageLayout layout = pImage->GetTransferLayout(imageLayout, this);
+
+        for (uint32_t i = 0; i < rangeCount; ++i)
+        {
+            // Only color aspect is allowed here
+            VK_ASSERT(pRanges[i].aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
+
+            VkToPalSubresRange(palFormat.format,
+                               pRanges[i],
+                               pImage->GetMipLevels(),
+                               pImage->GetArraySize(),
+                               pPalRanges,
+                               palRangeCount);
+        }
+
+        PalCmdClearColorImage(
+            *pImage,
+            layout,
+            VkToPalClearColor(pColor, palFormat.format),
+            palRangeCount,
+            pPalRanges,
+            0,
+            nullptr,
+            0);
+
+        virtStackFrame.FreeArray(pPalRanges);
     }
-
-    PalCmdClearColorImage(
-        *pImage,
-        layout,
-        VkToPalClearColor(pColor, palFormat.format),
-        palRangeCount,
-        pPalRanges,
-        0,
-        nullptr,
-        0);
-
-    virtStackFrame.FreeArray(pPalRanges);
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 }
 
 // =====================================================================================================================
@@ -2159,41 +2238,49 @@ void CmdBuffer::ClearDepthStencilImage(
 
     // Allocate space to store image subresource ranges (we need a separate region per PAL aspect)
     Pal::SubresRange* pPalRanges = virtStackFrame.AllocArray<Pal::SubresRange>(rangeCount * MaxPalDepthAspectsPerMask);
-    uint32_t palRangeCount = 0;
 
-    const Image* pImage           = Image::ObjectFromHandle(image);
-    const Pal::ImageLayout layout = pImage->GetTransferLayout(imageLayout, this);
-
-    for (uint32_t i = 0; i < rangeCount; ++i)
+    if (pPalRanges != nullptr)
     {
-        // Only depth or stencil aspect is allowed here
-        VK_ASSERT((pRanges[i].aspectMask & ~(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) == 0);
+        uint32_t palRangeCount = 0;
 
-        VkToPalSubresRange(VkToPalFormat(pImage->GetFormat()).format,
-                           pRanges[i],
-                           pImage->GetMipLevels(),
-                           pImage->GetArraySize(),
-                           pPalRanges,
-                           palRangeCount);
+        const Image* pImage           = Image::ObjectFromHandle(image);
+        const Pal::ImageLayout layout = pImage->GetTransferLayout(imageLayout, this);
+
+        for (uint32_t i = 0; i < rangeCount; ++i)
+        {
+            // Only depth or stencil aspect is allowed here
+            VK_ASSERT((pRanges[i].aspectMask & ~(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) == 0);
+
+            VkToPalSubresRange(VkToPalFormat(pImage->GetFormat()).format,
+                               pRanges[i],
+                               pImage->GetMipLevels(),
+                               pImage->GetArraySize(),
+                               pPalRanges,
+                               palRangeCount);
+        }
+
+        PalCmdClearDepthStencil(
+            *pImage,
+            layout,
+            layout,
+            VkToPalClearDepth(depth),
+            stencil,
+            palRangeCount,
+            pPalRanges,
+            0,
+            nullptr,
+            0);
+
+        virtStackFrame.FreeArray(pPalRanges);
     }
-
-    PalCmdClearDepthStencil(
-        *pImage,
-        layout,
-        layout,
-        VkToPalClearDepth(depth),
-        stencil,
-        palRangeCount,
-        pPalRanges,
-        0,
-        nullptr,
-        0);
-
-    virtStackFrame.FreeArray(pPalRanges);
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 }
 
 // =====================================================================================================================
-// Clears a set of depth/stencil attachment in the current subpass
+// Clears a set of attachments in the current subpass
 void CmdBuffer::ClearAttachments(
     uint32_t                 attachmentCount,
     const VkClearAttachment* pAttachments,
@@ -2211,28 +2298,38 @@ void CmdBuffer::ClearAttachments(
 }
 
 // =====================================================================================================================
-// Clears a set of depth/stencil attachment in the current subpass using PAL's CmdClearBound*Targets commands.
+// Clears a set of attachments in the current subpass using PAL's CmdClearBound*Targets commands.
 void CmdBuffer::ClearBoundAttachments(
     uint32_t                 attachmentCount,
     const VkClearAttachment* pAttachments,
     uint32_t                 rectCount,
     const VkClearRect*       pRects)
 {
+    // Note: Bound target clears are pipelined by the HW, so we do not have to insert any barriers
+
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
     // Get the current renderpass and subpass
     const RenderPass* pRenderPass = m_state.allGpuState.pRenderPass;
     const uint32_t subpass        = m_renderPassInstance.subpass;
 
-    // Note: Bound target clears are pipelined by the HW, so we do not have to insert any barriers
+    Util::Vector<Pal::ClearBoundTargetRegion, 8, VirtualStackFrame> clearRegions { &virtStackFrame };
+    Util::Vector<Pal::BoundColorTarget,       8, VirtualStackFrame> colorTargets { &virtStackFrame };
 
-    const auto clearRegions = CreateClearRegions<Pal::ClearBoundTargetRegion>(
+    const auto palResult1 = CreateClearRegions(
         rectCount, pRects,
         *pRenderPass, subpass,
-        virtStackFrame);
+        &clearRegions);
 
-    Util::Vector<Pal::BoundColorTarget, 8, VirtualStackFrame> colorTargets { &virtStackFrame };
-    colorTargets.Reserve(attachmentCount);
+    const auto palResult2 = colorTargets.Reserve(attachmentCount);
+
+    if ((palResult1 != Pal::Result::Success) ||
+        (palResult2 != Pal::Result::Success))
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+
+        return;
+    }
 
     for (uint32_t idx = 0; idx < attachmentCount; ++idx)
     {
@@ -2470,7 +2567,7 @@ template void CmdBuffer::PalCmdResolveImage<true>(
     const Pal::ImageResolveRegion* pRegions);
 
 // =====================================================================================================================
-// Clears a set of depth/stencil attachment in the current subpass using PAL's CmdClear*Image() commands.
+// Clears a set of attachments in the current subpass using PAL's CmdClear*Image() commands.
 void CmdBuffer::ClearImageAttachments(
     uint32_t                 attachmentCount,
     const VkClearAttachment* pAttachments,
@@ -2509,27 +2606,37 @@ void CmdBuffer::ClearImageAttachments(
                 // Get the layout that this color attachment is currently in within the render pass
                 const Pal::ImageLayout targetLayout = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Color);
 
-                const auto clearBoxes = CreateClearRegions<Pal::Box>(
+                Util::Vector<Pal::Box,         8, VirtualStackFrame> clearBoxes        { &virtStackFrame };
+                Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
+
+                const auto palResult1 = CreateClearRegions(
                     rectCount, pRects,
                     *pRenderPass, subpass,
-                    virtStackFrame);
+                    &clearBoxes);
 
-                const auto clearSubresRanges = CreateClearSubresRanges(
+                const auto palResult2 = CreateClearSubresRanges(
                     attachment, clearInfo,
                     rectCount, pRects,
                     *pRenderPass, subpass,
-                    virtStackFrame);
+                    &clearSubresRanges);
 
-                // Execute the clear
-                PalCmdClearColorImage(
-                    *attachment.pImage,
-                    targetLayout,
-                    VkToPalClearColor(&clearInfo.clearValue.color, attachment.viewFormat.format),
-                    clearSubresRanges.NumElements(),
-                    clearSubresRanges.Data(),
-                    clearBoxes.NumElements(),
-                    clearBoxes.Data(),
-                    Pal::ClearColorImageFlags::ColorClearAutoSync);
+                if ((palResult1 == Pal::Result::Success) &&
+                    (palResult2 == Pal::Result::Success))
+                {
+                    PalCmdClearColorImage(
+                        *attachment.pImage,
+                        targetLayout,
+                        VkToPalClearColor(&clearInfo.clearValue.color, attachment.viewFormat.format),
+                        clearSubresRanges.NumElements(),
+                        clearSubresRanges.Data(),
+                        clearBoxes.NumElements(),
+                        clearBoxes.Data(),
+                        Pal::ClearColorImageFlags::ColorClearAutoSync);
+                }
+                else
+                {
+                    m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
             }
         }
         else // Depth-stencil clear
@@ -2550,28 +2657,38 @@ void CmdBuffer::ClearImageAttachments(
                 const Pal::ImageLayout depthLayout   = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Depth);
                 const Pal::ImageLayout stencilLayout = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Stencil);
 
-                const auto clearRects = CreateClearRects(
-                    rectCount, pRects,
-                    virtStackFrame);
+                Util::Vector<Pal::Rect,        8, VirtualStackFrame> clearRects        { &virtStackFrame };
+                Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
 
-                const auto clearSubresRanges = CreateClearSubresRanges(
+                const auto palResult1 = CreateClearRects(
+                    rectCount, pRects,
+                    &clearRects);
+
+                const auto palResult2 = CreateClearSubresRanges(
                     attachment, clearInfo,
                     rectCount, pRects,
                     *pRenderPass, subpass,
-                    virtStackFrame);
+                    &clearSubresRanges);
 
-                // Execute a box clear
-                PalCmdClearDepthStencil(
-                    *attachment.pImage,
-                    depthLayout,
-                    stencilLayout,
-                    VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
-                    clearInfo.clearValue.depthStencil.stencil,
-                    clearSubresRanges.NumElements(),
-                    clearSubresRanges.Data(),
-                    clearRects.NumElements(),
-                    clearRects.Data(),
-                    Pal::ClearDepthStencilFlags::DsClearAutoSync);
+                if ((palResult1 == Pal::Result::Success) &&
+                    (palResult2 == Pal::Result::Success))
+                {
+                    PalCmdClearDepthStencil(
+                        *attachment.pImage,
+                        depthLayout,
+                        stencilLayout,
+                        VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
+                        clearInfo.clearValue.depthStencil.stencil,
+                        clearSubresRanges.NumElements(),
+                        clearSubresRanges.Data(),
+                        clearRects.NumElements(),
+                        clearRects.Data(),
+                        Pal::ClearDepthStencilFlags::DsClearAutoSync);
+                }
+                else
+                {
+                    m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
             }
         }
     }
@@ -2592,32 +2709,39 @@ void CmdBuffer::ResolveImage(
     Pal::ImageResolveRegion* pPalRegions =
         virtStackFrame.AllocArray<Pal::ImageResolveRegion>(rectCount * MaxPalAspectsPerMask);
 
-    const Image* const pSrcImage              = Image::ObjectFromHandle(srcImage);
-    const Image* const pDstImage              = Image::ObjectFromHandle(destImage);
-    const Pal::ImageLayout palSrcImageLayout  = pSrcImage->GetTransferLayout(srcImageLayout, this);
-    const Pal::ImageLayout palDestImageLayout = pDstImage->GetTransferLayout(destImageLayout, this);
-    const Pal::SwizzledFormat srcFormat       = VkToPalFormat(pSrcImage->GetFormat());
-    const Pal::SwizzledFormat dstFormat       = VkToPalFormat(pDstImage->GetFormat());
-
-    uint32_t palRegionCount = 0;
-
-    for (uint32_t i = 0; i < rectCount; ++i)
+    if (pPalRegions != nullptr)
     {
-        // We expect MSAA images to never have mipmaps
-        VK_ASSERT(pRects[i].srcSubresource.mipLevel == 0);
+        const Image* const pSrcImage              = Image::ObjectFromHandle(srcImage);
+        const Image* const pDstImage              = Image::ObjectFromHandle(destImage);
+        const Pal::ImageLayout palSrcImageLayout  = pSrcImage->GetTransferLayout(srcImageLayout, this);
+        const Pal::ImageLayout palDestImageLayout = pDstImage->GetTransferLayout(destImageLayout, this);
+        const Pal::SwizzledFormat srcFormat       = VkToPalFormat(pSrcImage->GetFormat());
+        const Pal::SwizzledFormat dstFormat       = VkToPalFormat(pDstImage->GetFormat());
 
-        VkToPalImageResolveRegion(pRects[i], srcFormat.format, dstFormat.format, pPalRegions, palRegionCount);
+        uint32_t palRegionCount = 0;
+
+        for (uint32_t i = 0; i < rectCount; ++i)
+        {
+            // We expect MSAA images to never have mipmaps
+            VK_ASSERT(pRects[i].srcSubresource.mipLevel == 0);
+
+            VkToPalImageResolveRegion(pRects[i], srcFormat.format, dstFormat.format, pPalRegions, palRegionCount);
+        }
+
+        PalCmdResolveImage<false>(
+            *pSrcImage,
+            palSrcImageLayout,
+            *pDstImage,
+            palDestImageLayout,
+            palRegionCount,
+            pPalRegions);
+
+        virtStackFrame.FreeArray(pPalRegions);
     }
-
-    PalCmdResolveImage<false>(
-        *pSrcImage,
-        palSrcImageLayout,
-        *pDstImage,
-        palDestImageLayout,
-        palRegionCount,
-        pPalRegions);
-
-    virtStackFrame.FreeArray(pPalRegions);
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 }
 
 // =====================================================================================================================
@@ -2916,6 +3040,13 @@ void CmdBuffer::ExecuteBarriers(
     Pal::BarrierTransition* pNextMain        = pTransitions;
     Pal::BarrierTransition* pNextPost        = pPostTransitions;
 
+    if (pTransitions == nullptr)
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+
+        return;
+    }
+
     const Image** pTransitionImages = (m_pDevice->NumPalDevices() > 1) && (imageMemoryBarrierCount > 0) ?
         virtStackFrame.AllocArray<const Image*>(MaxTransitionCount) : nullptr;
 
@@ -3153,7 +3284,7 @@ void CmdBuffer::ExecuteBarriers(
                 {
                        pDestTransition[transitionIdx].imageInfo.pQuadSamplePattern = 0;
                 }
-                else
+                else if (pLocations != nullptr)  // Could be null due to an OOM error
                 {
                     VK_ASSERT(static_cast<uint32_t>(pSampleLocationsInfoEXT->sType) == VK_STRUCTURE_TYPE_SAMPLE_LOCATIONS_INFO_EXT);
                     VK_ASSERT(pImage->IsSampleLocationsCompatibleDepth());
@@ -3243,38 +3374,45 @@ void CmdBuffer::WaitEvents(
     // Allocate space to store signaled event pointers (automatically rewound on unscope)
     const Pal::IGpuEvent** ppGpuEvents = virtStackFrame.AllocArray<const Pal::IGpuEvent*>(NumDeviceEvents(eventCount));
 
-    const uint32_t multiDeviceStride = eventCount;
-
-    for (uint32_t i = 0; i < eventCount; ++i)
+    if (ppGpuEvents != nullptr)
     {
-        const Event* pEvent = Event::ObjectFromHandle(pEvents[i]);
+        const uint32_t multiDeviceStride = eventCount;
 
-        InsertDeviceEvents(ppGpuEvents, pEvent, i, multiDeviceStride);
+        for (uint32_t i = 0; i < eventCount; ++i)
+        {
+            const Event* pEvent = Event::ObjectFromHandle(pEvents[i]);
+
+            InsertDeviceEvents(ppGpuEvents, pEvent, i, multiDeviceStride);
+        }
+
+        Pal::BarrierInfo barrier = {};
+
+        // Tell PAL to wait at a specific point until the given set of GpuEvent objects is signaled.
+        // We intentionally ignore the source stage flags as they are irrelevant in the presence of event objects
+        VK_IGNORE(srcStageMask);
+
+        barrier.flags.u32All          = 0;
+        barrier.reason                = RgpBarrierExternalCmdWaitEvents;
+        barrier.waitPoint             = VkToPalWaitPipePoint(dstStageMask);
+        barrier.gpuEventWaitCount     = eventCount;
+        barrier.ppGpuEvents           = ppGpuEvents;
+        barrier.pSplitBarrierGpuEvent = nullptr;
+
+        ExecuteBarriers(virtStackFrame,
+                        memoryBarrierCount,
+                        pMemoryBarriers,
+                        bufferMemoryBarrierCount,
+                        pBufferMemoryBarriers,
+                        imageMemoryBarrierCount,
+                        pImageMemoryBarriers,
+                        &barrier);
+
+        virtStackFrame.FreeArray(ppGpuEvents);
     }
-
-    Pal::BarrierInfo barrier = {};
-
-    // Tell PAL to wait at a specific point until the given set of GpuEvent objects is signaled.
-    // We intentionally ignore the source stage flags as they are irrelevant in the presence of event objects
-    VK_IGNORE(srcStageMask);
-
-    barrier.flags.u32All          = 0;
-    barrier.reason                = RgpBarrierExternalCmdWaitEvents;
-    barrier.waitPoint             = VkToPalWaitPipePoint(dstStageMask);
-    barrier.gpuEventWaitCount     = eventCount;
-    barrier.ppGpuEvents           = ppGpuEvents;
-    barrier.pSplitBarrierGpuEvent = nullptr;
-
-    ExecuteBarriers(virtStackFrame,
-                    memoryBarrierCount,
-                    pMemoryBarriers,
-                    bufferMemoryBarrierCount,
-                    pBufferMemoryBarriers,
-                    imageMemoryBarrierCount,
-                    pImageMemoryBarriers,
-                    &barrier);
-
-    virtStackFrame.FreeArray(ppGpuEvents);
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
     DbgBarrierPostCmd(DbgBarrierPipelineBarrierWaitEvents);
 }
@@ -4256,7 +4394,7 @@ void CmdBuffer::RPBeginSubpass()
     RPBindTargets(subpass.begin.bindTargets);
 
     // Set view instance mask
-    RPSetViewInstanceMask();
+    SetViewInstanceMask();
 }
 
 // =====================================================================================================================
@@ -4432,6 +4570,10 @@ void CmdBuffer::RPSyncPoint(
 
         barrier.pTransitions = pPalTransitions;
     }
+    else
+    {
+        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
     // Execute the barrier if it actually did anything
     if ((barrier.waitPoint != Pal::HwPipeBottom) ||
@@ -4442,8 +4584,15 @@ void CmdBuffer::RPSyncPoint(
         PalCmdBarrier(&barrier, pPalTransitions, ppImages);
     }
 
-    pVirtStack->FreeArray(pPalTransitions);
-    pVirtStack->FreeArray(ppImages);
+    if (pPalTransitions != nullptr)
+    {
+        pVirtStack->FreeArray(pPalTransitions);
+    }
+
+    if (ppImages != nullptr)
+    {
+        pVirtStack->FreeArray(ppImages);
+    }
 }
 
 // =====================================================================================================================
@@ -4737,19 +4886,47 @@ void CmdBuffer::RPBindTargets(
 
 // =====================================================================================================================
 // Sets view instance mask for a subpass during a render pass instance.
-void CmdBuffer::RPSetViewInstanceMask()
+void CmdBuffer::SetViewInstanceMask()
 {
-    const auto viewMask = m_state.allGpuState.pRenderPass->GetViewMask(m_renderPassInstance.subpass);
+    const uint32_t subpassViewMask = m_state.allGpuState.pRenderPass->GetViewMask(m_renderPassInstance.subpass);
 
-    //                       VK_KHR_device_group and VK_KHR_device_group_creation.
-    //                       When VkPipeline is created with flag
-    //                       VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT_KHR
-    //                       rendering to views is shared across multiple devices.
     utils::IterateMask deviceGroup(m_palDeviceMask);
 
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
+        const uint32_t deviceViewMask = uint32_t { 0x1 } << deviceIdx;
+
+        uint32_t viewMask = 0x0;
+
+        if (m_state.allGpuState.ViewIndexFromDeviceIndex)
+        {
+            // VK_KHR_multiview interaction with VK_KHR_device_group.
+            // When GraphicsPipeline is created with flag
+            // VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
+            // rendering to views is split across multiple devices.
+            // Essentially this flag allows application to divide work
+            // between devices when multiview rendering is enabled.
+            // Basically each device renders one view.
+
+            // Vulkan Spec: VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
+            // specifies that any shader input variables decorated as DeviceIndex
+            // will be assigned values as if they were decorated as ViewIndex.
+            // To satisfy above requirement DeviceMask and ViewMask has to match.
+            VK_ASSERT(m_palDeviceMask == viewMask);
+
+            // Currently Vulkan CTS lacks tests covering this functionality.
+            VK_NOT_TESTED();
+
+            viewMask = deviceViewMask;
+        }
+        else
+        {
+            // In default mode work is duplicated on each device,
+            // because the same viewMask is set for all devices.
+            // Basically each device renders all views.
+            viewMask = subpassViewMask;
+        }
 
         PalCmdBuffer(deviceIdx)->CmdSetViewInstanceMask(viewMask);
     }
@@ -5670,12 +5847,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage(
     uint32_t                                    regionCount,
     const VkImageResolve*                       pRegions)
 {
-        ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->ResolveImage(srcImage,
-                                                                srcImageLayout,
-                                                                dstImage,
-                                                                dstImageLayout,
-                                                                regionCount,
-                                                                pRegions);
+    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->ResolveImage(srcImage,
+                                                            srcImageLayout,
+                                                            dstImage,
+                                                            dstImageLayout,
+                                                            regionCount,
+                                                            pRegions);
 }
 
 // =====================================================================================================================
@@ -5899,6 +6076,30 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHX(
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDeviceMask(deviceMask);
 }
+
+#ifdef ICD_VULKAN_1_1
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHR(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    baseGroupX,
+    uint32_t                                    baseGroupY,
+    uint32_t                                    baseGroupZ,
+    uint32_t                                    groupCountX,
+    uint32_t                                    groupCountY,
+    uint32_t                                    groupCountZ)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->DispatchOffset(baseGroupX, baseGroupY, baseGroupZ,
+                                                                  groupCountX, groupCountY, groupCountZ);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHR(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    deviceMask)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDeviceMask(deviceMask);
+}
+#endif
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdSetViewport(

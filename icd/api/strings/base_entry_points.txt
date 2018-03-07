@@ -141,13 +141,56 @@ vkUnmapMemory                                   @core 1.0
 vkUpdateDescriptorSets                          @core 1.0
 vkWaitForFences                                 @core 1.0
 
+vkEnumerateInstanceVersion                      @none 1.1
+
+vkBindBufferMemory2                             @core 1.1
+vkBindImageMemory2                              @core 1.1
+vkCmdSetDeviceMask                              @core 1.1
+vkCmdDispatchBase                               @core 1.1
+vkCreateDescriptorUpdateTemplate                @core 1.1
+vkCreateSamplerYcbcrConversion                  @core 1.1
+vkDestroyDescriptorUpdateTemplate               @core 1.1
+vkDestroySamplerYcbcrConversion                 @core 1.1
+vkEnumeratePhysicalDeviceGroups                 @core 1.1
+vkGetBufferMemoryRequirements2                  @core 1.1
+vkGetDescriptorSetLayoutSupport                 @core 1.1
+vkGetDeviceGroupPeerMemoryFeatures              @core 1.1
+vkGetDeviceQueue2                               @core 1.1
+vkGetImageMemoryRequirements2                   @core 1.1
+vkGetImageSparseMemoryRequirements2             @core 1.1
+vkGetPhysicalDeviceExternalBufferProperties     @core 1.1
+vkGetPhysicalDeviceExternalFenceProperties      @core 1.1
+vkGetPhysicalDeviceExternalSemaphoreProperties  @core 1.1
+vkGetPhysicalDeviceFeatures2                    @core 1.1
+vkGetPhysicalDeviceFormatProperties2            @core 1.1
+vkGetPhysicalDeviceImageFormatProperties2       @core 1.1
+vkGetPhysicalDeviceMemoryProperties2            @core 1.1
+vkGetPhysicalDeviceProperties2                  @core 1.1
+vkGetPhysicalDeviceQueueFamilyProperties2       @core 1.1
+vkGetPhysicalDeviceSparseImageFormatProperties2 @core 1.1
+vkTrimCommandPool                               @core 1.1
+vkUpdateDescriptorSetWithTemplate               @core 1.1
+
 vkGetPhysicalDeviceFeatures2KHR                 @iext KHR_get_physical_device_properties2
 vkGetPhysicalDeviceProperties2KHR               @iext KHR_get_physical_device_properties2
 vkGetPhysicalDeviceFormatProperties2KHR         @iext KHR_get_physical_device_properties2
 vkGetPhysicalDeviceImageFormatProperties2KHR    @iext KHR_get_physical_device_properties2
 vkGetPhysicalDeviceQueueFamilyProperties2KHR    @iext KHR_get_physical_device_properties2
 vkGetPhysicalDeviceMemoryProperties2KHR         @iext KHR_get_physical_device_properties2
+
 vkGetPhysicalDeviceSparseImageFormatProperties2KHR @iext KHR_get_physical_device_properties2
+
+vkEnumeratePhysicalDeviceGroupsKHR              @iext KHR_device_group_creation
+
+vkGetDescriptorSetLayoutSupportKHR              @dext KHR_maintenance3
+
+vkGetPhysicalDevicePresentRectanglesKHR         @dext KHR_device_group
+vkGetDeviceGroupPeerMemoryFeaturesKHR           @dext KHR_device_group
+vkCmdSetDeviceMaskKHR                           @dext KHR_device_group
+vkGetDeviceGroupPresentCapabilitiesKHR          @dext KHR_device_group
+vkGetDeviceGroupSurfacePresentModesKHR          @dext KHR_device_group
+vkAcquireNextImage2KHR                          @dext KHR_device_group
+vkCmdDispatchBaseKHR                            @dext KHR_device_group
 
 vkBindBufferMemory2KHR                          @dext KHR_bind_memory2
 vkBindImageMemory2KHR                           @dext KHR_bind_memory2

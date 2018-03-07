@@ -30,6 +30,8 @@
  */
 #define DEBUG_TYPE "llpc-code-gen-manager"
 
+#include "llvm/Bitcode/BitcodeWriter.h"
+#include "llvm/CodeGen/CommandFlags.def"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
@@ -71,6 +73,11 @@ static opt<bool> DisableFp32Denormals("disable-fp32-denormals",
                                       desc("Disable target option fp32-denormals"),
                                       init(false));
 
+// -emit-llvm: emit LLVM bitcode instead of ISA
+static opt<bool> EmitLlvm("emit-llvm",
+                          desc("Emit LLVM bitcode instead of AMD GPU ISA"),
+                          init(false));
+
 } // cl
 
 } // llvm
@@ -111,10 +118,71 @@ class LlpcDiagnosticHandler: public llvm::DiagnosticHandler
 };
 
 // =====================================================================================================================
-// Generates GPU ISA codes.
+// Creates the TargetMachine if not already created, and stores it in the context. It then persists as long as
+// the context.
+Result CodeGenManager::CreateTargetMachine(
+    Context*           pContext)  // [in/out] Pipeline context
+{
+    if (pContext->GetTargetMachine() != nullptr)
+    {
+        return Result::Success;
+    }
+
+    Result result = Result::ErrorInvalidShader;
+
+    std::string triple("amdgcn--amdpal");
+
+    std::string errMsg;
+    auto pTarget = TargetRegistry::lookupTarget(triple, errMsg);
+    if (pTarget != nullptr)
+    {
+        TargetOptions targetOpts;
+        auto relocModel = Optional<Reloc::Model>();
+        std::string features = "+vgpr-spilling";
+
+        if (cl::EnablePipelineDump || EnableOuts())
+        {
+            features += ",+DumpCode";
+        }
+
+        if (cl::EnableSiScheduler)
+        {
+            features += ",+si-scheduler";
+        }
+
+        if (cl::DisableFp32Denormals)
+        {
+            features += ",-fp32-denormals";
+        }
+
+        // Allow no signed zeros - this enables omod modifiers (div:2, mul:2)
+        targetOpts.NoSignedZerosFPMath = true;
+
+        auto pTargetMachine = pTarget->createTargetMachine(triple,
+                                                           pContext->GetGpuNameString(),
+                                                           features,
+                                                           targetOpts,
+                                                           relocModel);
+        if (pTargetMachine != nullptr)
+        {
+            pContext->SetTargetMachine(pTargetMachine);
+            result = Result::Success;
+        }
+    }
+    if (result != Result::Success)
+    {
+        LLPC_ERRS("Fails to create AMDGPU target machine: " << errMsg << "\n");
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Generates GPU ISA codes (ELF binary, ISA assembly text, or LLVM bitcode, depending on "-filetype" and
+// "-emit-llvm" options)
 Result CodeGenManager::GenerateCode(
     Module*            pModule,   // [in] LLVM module
-    raw_pwrite_stream& outStream, // [out] Output stream (ELF)
+    raw_pwrite_stream& outStream, // [out] Output stream
     std::string&       errMsg)    // [out] Error message reported in code generation
 {
     Result result = Result::Success;
@@ -123,38 +191,13 @@ Result CodeGenManager::GenerateCode(
 
     result = AddAbiMetadata(pContext, pModule);
 
-    std::string triple("amdgcn--amdpal");
-    auto Target = TargetRegistry::lookupTarget(triple, errMsg);
-
-    TargetOptions targetOpts;
-    auto relocModel = Optional<Reloc::Model>();
-    std::string features = "+vgpr-spilling";
-
-    if (cl::EnablePipelineDump || EnableOuts())
+    if (cl::EmitLlvm)
     {
-        features += ",+DumpCode";
+        WriteBitcodeToFile(pModule, outStream);
+        return result;
     }
 
-    if (cl::EnableSiScheduler)
-    {
-        features += ",+si-scheduler";
-    }
-
-    if (cl::DisableFp32Denormals)
-    {
-        features += ",-fp32-denormals";
-    }
-
-    // Allow no signed zeros - this enables omod modifiers (div:2, mul:2)
-    targetOpts.NoSignedZerosFPMath = true;
-
-    std::unique_ptr<TargetMachine> targetMachine(Target->createTargetMachine(triple,
-                                                 pContext->GetGpuNameString(),
-                                                 features,
-                                                 targetOpts,
-                                                 relocModel));
-    pModule->setTargetTriple(triple);
-    pModule->setDataLayout(targetMachine->createDataLayout());
+    auto pTargetMachine = pContext->GetTargetMachine();
 
     pContext->setDiagnosticHandler(llvm::make_unique<LlpcDiagnosticHandler>());
     legacy::PassManager passMgr;
@@ -165,7 +208,7 @@ Result CodeGenManager::GenerateCode(
         try
 #endif
         {
-            if (targetMachine->addPassesToEmitFile(passMgr, outStream, TargetMachine::CGFT_ObjectFile))
+            if (pTargetMachine->addPassesToEmitFile(passMgr, outStream, FileType))
             {
                 success = false;
             }
@@ -238,9 +281,9 @@ Result CodeGenManager::AddAbiMetadata(
             abiMeta.push_back(ConstantAsMetadata::get(ConstantInt::get(
                     pContext->Int32Ty(), (reinterpret_cast<uint32_t*>(pConfig))[i], false)));
         }
-        auto abiMetaTuple = MDTuple::get(*pContext, abiMeta);
-        auto abiMetaNodes = pModule->getOrInsertNamedMetadata("amdgpu.pal.metadata");
-        abiMetaNodes->addOperand(abiMetaTuple);
+        auto pAbiMetaTuple = MDTuple::get(*pContext, abiMeta);
+        auto pAbiMetaNode = pModule->getOrInsertNamedMetadata("amdgpu.pal.metadata");
+        pAbiMetaNode->addOperand(pAbiMetaTuple);
         delete[] pConfig;
     }
     return result;

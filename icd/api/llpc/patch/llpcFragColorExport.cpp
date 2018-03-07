@@ -1198,6 +1198,8 @@ Value* FragColorExport::Run(
     }
 
     const uint32_t bitWidth = pOutputTy->getScalarSizeInBits();
+    BasicType outputType = pResUsage->inOutUsage.fs.outputTypes[location];
+    const bool signedness = ((outputType == BasicType::Int16) || (outputType == BasicType::Int));
 
     auto pCompTy = pOutputTy->isVectorTy() ? pOutputTy->getVectorElementType() : pOutputTy;
     uint32_t compCount = pOutputTy->isVectorTy() ? pOutputTy->getVectorNumElements() : 1;
@@ -1236,7 +1238,7 @@ Value* FragColorExport::Run(
     case EXP_FORMAT_32_R:
         {
             compCount = 1;
-            comps[0] = ConvertToFloat(comps[0], pInsertPos);
+            comps[0] = ConvertToFloat(comps[0], signedness, pInsertPos);
             comps[1] = pUndefFloat;
             comps[2] = pUndefFloat;
             comps[3] = pUndefFloat;
@@ -1247,15 +1249,15 @@ Value* FragColorExport::Run(
             if (compCount >= 2)
             {
                 compCount = 2;
-                comps[0] = ConvertToFloat(comps[0], pInsertPos);
-                comps[1] = ConvertToFloat(comps[1], pInsertPos);
+                comps[0] = ConvertToFloat(comps[0], signedness, pInsertPos);
+                comps[1] = ConvertToFloat(comps[1], signedness, pInsertPos);
                 comps[2] = pUndefFloat;
                 comps[3] = pUndefFloat;
             }
             else
             {
                 compCount = 1;
-                comps[0] = ConvertToFloat(comps[0], pInsertPos);
+                comps[0] = ConvertToFloat(comps[0], signedness, pInsertPos);
                 comps[1] = pUndefFloat;
                 comps[2] = pUndefFloat;
                 comps[3] = pUndefFloat;
@@ -1267,15 +1269,15 @@ Value* FragColorExport::Run(
             if (compCount == 4)
             {
                 compCount = 2;
-                comps[0] = ConvertToFloat(comps[0], pInsertPos);
-                comps[1] = ConvertToFloat(comps[3], pInsertPos);
+                comps[0] = ConvertToFloat(comps[0], signedness, pInsertPos);
+                comps[1] = ConvertToFloat(comps[3], signedness, pInsertPos);
                 comps[2] = pUndefFloat;
                 comps[3] = pUndefFloat;
             }
             else
             {
                 compCount = 1;
-                comps[0] = ConvertToFloat(comps[0], pInsertPos);
+                comps[0] = ConvertToFloat(comps[0], signedness, pInsertPos);
                 comps[1] = pUndefFloat;
                 comps[2] = pUndefFloat;
                 comps[3] = pUndefFloat;
@@ -1286,7 +1288,7 @@ Value* FragColorExport::Run(
        {
             for (uint32_t i = 0; i < compCount; ++i)
             {
-                comps[i] = ConvertToFloat(comps[i], pInsertPos);
+                comps[i] = ConvertToFloat(comps[i], signedness, pInsertPos);
             }
 
             for (uint32_t i = compCount; i < 4; ++i)
@@ -1378,7 +1380,7 @@ Value* FragColorExport::Run(
             for (uint32_t i = 0; i < compCount; ++i)
             {
                 // Convert the components to float value if necessary
-                comps[i] = ConvertToFloat(comps[i], pInsertPos);
+                comps[i] = ConvertToFloat(comps[i], signedness, pInsertPos);
 
                 if (expFmt == EXP_FORMAT_UNORM16_ABGR)
                 {
@@ -1492,7 +1494,7 @@ Value* FragColorExport::Run(
             for (uint32_t i = 0; i < compCount; ++i)
             {
                 // Convert the components to int value if necessary
-                comps[i] = ConvertToInt(comps[i], pInsertPos);
+                comps[i] = ConvertToInt(comps[i], signedness, pInsertPos);
 
                 if (expFmt == EXP_FORMAT_UINT16_ABGR)
                 {
@@ -1558,6 +1560,11 @@ Value* FragColorExport::Run(
                     // %comp = bitcast i16 %comp to half
                     comps[i] = new BitCastInst(comps[i], m_pContext->Float16Ty(), "", pInsertPos);
                 }
+            }
+
+            for (uint32_t i = compCount; i < 4; ++i)
+            {
+                comps[i] = pUndefFloat16;
             }
 
             break;
@@ -1983,8 +1990,9 @@ uint32_t FragColorExport::GetMaxComponentBitCount(
 // Converts an output component value to its floating-point representation. This function is a "helper" in computing
 // the export value based on shader export format.
 Value* FragColorExport::ConvertToFloat(
-    Value*       pValue,    // [in] Output component value
-    Instruction* pInsertPos // [in] Where to insert conversion instructions
+    Value*       pValue,        // [in] Output component value
+    bool         signedness,    // Whether the type is signed (valid for integer type)
+    Instruction* pInsertPos     // [in] Where to insert conversion instructions
     ) const
 {
     Type* pValueTy = pValue->getType();
@@ -1995,14 +2003,25 @@ Value* FragColorExport::ConvertToFloat(
     {
         if (pValueTy->isFloatingPointTy())
         {
-            // %value = bicast half %value to i16
-            pValue = new BitCastInst(pValue, m_pContext->Int16Ty(), "", pInsertPos);
+            // %value = fpext half %value to float
+            pValue = new FPExtInst(pValue, m_pContext->FloatTy(), "", pInsertPos);
         }
+        else
+        {
+            if (signedness)
+            {
+                // %value = sext i16 %value to i32
+                pValue = new SExtInst(pValue, m_pContext->Int32Ty(), "", pInsertPos);
+            }
+            else
+            {
+                // %value = zext i16 %value to i32
+                pValue = new ZExtInst(pValue, m_pContext->Int32Ty(), "", pInsertPos);
+            }
 
-        // %value = @llvm.convert.from.fp16.f32(i16 %value)
-        std::vector<Value*> args;
-        args.push_back(pValue);
-        pValue = EmitCall(m_pModule, "llvm.convert.from.fp16.f32", m_pContext->FloatTy(), args, NoAttrib, pInsertPos);
+            // %value = bitcast i32 %value to float
+            pValue = new BitCastInst(pValue, m_pContext->FloatTy(), "", pInsertPos);
+        }
     }
     else
     {
@@ -2021,8 +2040,9 @@ Value* FragColorExport::ConvertToFloat(
 // Converts an output component value to its integer representation. This function is a "helper" in computing the
 // export value based on shader export format.
 Value* FragColorExport::ConvertToInt(
-    Value*       pValue,    // [in] Output component value
-    Instruction* pInsertPos // [in] Where to insert conversion instructions
+    Value*       pValue,        // [in] Output component value
+    bool         signedness,    // Whether the type is signed (valid for integer type)
+    Instruction* pInsertPos     // [in] Where to insert conversion instructions
     ) const
 {
     Type* pValueTy = pValue->getType();
@@ -2037,13 +2057,16 @@ Value* FragColorExport::ConvertToInt(
             pValue = new BitCastInst(pValue, m_pContext->Int16Ty(), "", pInsertPos);
         }
 
-        // %value = @llvm.convert.from.fp16.f32(i16 %value)
-        std::vector<Value*> args;
-        args.push_back(pValue);
-        pValue = EmitCall(m_pModule, "llvm.convert.from.fp16.f32", m_pContext->FloatTy(), args, NoAttrib, pInsertPos);
-
-        // %value = bitcast float %value to i32
-        pValue = new BitCastInst(pValue, m_pContext->Int32Ty(), "", pInsertPos);
+        if (signedness)
+        {
+            // %value = sext i16 %value to i32
+            pValue = new SExtInst(pValue, m_pContext->Int32Ty(), "", pInsertPos);
+        }
+        else
+        {
+            // %value = zext i16 %value to i32
+            pValue = new ZExtInst(pValue, m_pContext->Int32Ty(), "", pInsertPos);
+        }
     }
     else
     {

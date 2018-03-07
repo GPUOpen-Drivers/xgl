@@ -47,6 +47,9 @@ static uint64_t GenerateRenderPassHash(const VkRenderPassCreateInfo* pIn);
 
 struct RenderPassExtCreateInfo
 {
+#ifdef ICD_VULKAN_1_1
+    const VkRenderPassMultiviewCreateInfo*               pMultiview;
+#endif
 };
 
 // =====================================================================================================================
@@ -75,7 +78,12 @@ static void ConvertRenderPassCreateInfo(
 
         pNextColorAttachments += pIn->pSubpasses[subIter].colorAttachmentCount;
 
+#ifdef ICD_VULKAN_1_1
+        pInfo->pSubpasses[subIter].viewMask = (renderPassExtCreateInfo.pMultiview != nullptr) ?
+                                               renderPassExtCreateInfo.pMultiview->pViewMasks[subIter] : 0;
+#else
         pInfo->pSubpasses[subIter].viewMask = 0;
+#endif
     }
 
     // pInfo->pSubpassSampleCounts will contain the color and depth sample counts per subpass.
@@ -258,6 +266,9 @@ VkResult RenderPass::Create(
     {
         const VkStructHeader*                                         pHeader;
         const VkRenderPassCreateInfo*                                 pRenderPassCreateInfo;
+#ifdef ICD_VULKAN_1_1
+        const VkRenderPassMultiviewCreateInfo*                        pMultiviewCreateInfo;
+#endif
     };
 
     for (pRenderPassCreateInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -271,6 +282,25 @@ VkResult RenderPass::Create(
                 pRenderPassHeader    = pRenderPassCreateInfo;
             }
             break;
+
+#ifdef ICD_VULKAN_1_1
+        case VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO:
+            {
+                VK_ASSERT(info.subpassCount == pMultiviewCreateInfo->subpassCount);
+
+                // The multiview implementation broadcasts 3D primities by
+                // issuing multiple draw calls (one per each view),
+                // therefore all view-local dependencies are treated as view-global.
+                VK_IGNORE(pMultiviewCreateInfo->pViewOffsets);
+
+                // The multiview implementation does not exploit any coherence between views.
+                VK_IGNORE(pMultiviewCreateInfo->correlationMaskCount);
+                VK_IGNORE(pMultiviewCreateInfo->pCorrelationMasks);
+
+                renderPassExt.pMultiview = pMultiviewCreateInfo;
+            }
+            break;
+#endif
 
         default:
             // Skip any unknown extension structures

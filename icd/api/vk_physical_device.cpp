@@ -1285,6 +1285,49 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     // flags - Need to take care of handling per-layer miptail and aligned miptail
 }
 
+#ifdef ICD_VULKAN_1_1
+// =====================================================================================================================
+// Returns the API version supported by this device.
+uint32_t PhysicalDevice::GetSupportedAPIVersion() const
+{
+    // Currently all of our HW supports Vulkan 1.1
+    uint32_t apiVersion = VK_MAKE_VERSION(VULKAN_API_MAJOR_VERSION,
+                                          VULKAN_API_MINOR_VERSION,
+                                          VULKAN_API_BUILD_VERSION);
+
+    // For sanity check we do at least want to make sure that all the necessary extensions are supported and exposed.
+    // The spec does not require Vulkan 1.1 implementations to expose the corresponding 1.0 extensions, but we'll
+    // continue doing so anyways to maximize application compatibility (which is why the spec allows this).
+    // NOTE: We intentionally exclude VK_KHR_variable_pointers from the list because while variable pointers in core
+    // Vulkan 1.1 are completely optional, the extension version does require support for at least storage buffer
+    // variable pointers, which we can't support at the moment.
+    VK_ASSERT( IsExtensionSupported(DeviceExtensions::KHR_16BIT_STORAGE)
+            && IsExtensionSupported(DeviceExtensions::KHR_BIND_MEMORY2)
+            && IsExtensionSupported(DeviceExtensions::KHR_DEDICATED_ALLOCATION)
+            && IsExtensionSupported(DeviceExtensions::KHR_DESCRIPTOR_UPDATE_TEMPLATE)
+            && IsExtensionSupported(DeviceExtensions::KHR_DEVICE_GROUP)
+            && IsExtensionSupported(InstanceExtensions::KHR_DEVICE_GROUP_CREATION)
+            && IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_MEMORY)
+            && IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_MEMORY_CAPABILITIES)
+            && IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_SEMAPHORE)
+            && IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_SEMAPHORE_CAPABILITIES)
+            && IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_FENCE)
+            && IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_FENCE_CAPABILITIES)
+            && IsExtensionSupported(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2)
+            && IsExtensionSupported(InstanceExtensions::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2)
+            && IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE1)
+            && IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE2)
+            && IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE3)
+            && IsExtensionSupported(DeviceExtensions::KHR_MULTIVIEW)
+            && IsExtensionSupported(DeviceExtensions::KHR_RELAXED_BLOCK_LAYOUT)
+//            && IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION)
+            && IsExtensionSupported(DeviceExtensions::KHR_SHADER_DRAW_PARAMETERS)
+            && IsExtensionSupported(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS));
+
+    return apiVersion;
+}
+#endif
+
 // =====================================================================================================================
 // Retrieve device properties. Called in response to vkGetPhysicalDeviceProperties.
 VkResult PhysicalDevice::GetDeviceProperties(
@@ -1297,9 +1340,13 @@ VkResult PhysicalDevice::GetDeviceProperties(
     // Get properties from PAL
     const Pal::DeviceProperties& palProps = PalProperties();
 
+#ifdef ICD_VULKAN_1_1
+    pProperties->apiVersion    = GetSupportedAPIVersion();
+#else
     pProperties->apiVersion    = VK_MAKE_VERSION(VULKAN_API_MAJOR_VERSION,
                                                  VULKAN_API_MINOR_VERSION,
                                                  VULKAN_API_BUILD_VERSION);
+#endif
 
     // Radeon Settings UI diplays driverVersion using sizes 10.10.12 like apiVersion, but our driverVersion uses 10.22.
     // If this assert ever triggers, verify that it and other driver info tools that parse the raw value have been
@@ -2418,6 +2465,18 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_STENCIL_EXPORT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_VIEWPORT_INDEX_LAYER));
 
+    if (pInstance->IsExtensionSupported(InstanceExtensions::KHX_DEVICE_GROUP_CREATION))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHX_DEVICE_GROUP));
+    }
+
+#ifdef ICD_VULKAN_1_1
+    if (pInstance->IsExtensionSupported(InstanceExtensions::KHR_DEVICE_GROUP_CREATION))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEVICE_GROUP));
+    }
+#endif
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_BIND_MEMORY2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEDICATED_ALLOCATION));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DESCRIPTOR_UPDATE_TEMPLATE));
@@ -2437,6 +2496,10 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SAMPLER_FILTER_MINMAX));
+
+#ifdef ICD_VULKAN_1_1
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE3));
+#endif
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
@@ -2473,6 +2536,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEBUG_MARKER));
     }
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_STORAGE_BUFFER_STORAGE_CLASS));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_16BIT_STORAGE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPA_INTERFACE));
 
     if ((pPhysicalDevice == nullptr) ||
@@ -2485,9 +2550,14 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     // TODO: Add this extension if the related implementation of Linux is done.
     // availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE_FD));
 
+#ifdef ICD_VULKAN_1_1
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MULTIVIEW));
+#endif
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTERNAL_MEMORY_HOST));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_RANGE_UNRESTRICTED));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES));
 
     return availableExtensions;
 }
@@ -2817,6 +2887,51 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+#ifdef ICD_VULKAN_1_1
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
+            {
+                VkPhysicalDeviceSamplerYcbcrConversionFeatures* pSamplerYcbcrConversionFeatures =
+                    reinterpret_cast<VkPhysicalDeviceSamplerYcbcrConversionFeatures*>(pHeader);
+
+                pSamplerYcbcrConversionFeatures->samplerYcbcrConversion = VK_FALSE;
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES:
+            {
+                VkPhysicalDeviceVariablePointerFeatures* pVariablePointerFeatures =
+                    reinterpret_cast<VkPhysicalDeviceVariablePointerFeatures*>(pHeader);
+
+                pVariablePointerFeatures->variablePointers              = VK_FALSE;
+                pVariablePointerFeatures->variablePointersStorageBuffer = VK_FALSE;
+
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
+            {
+                VkPhysicalDeviceProtectedMemoryFeatures* pProtectedMemory =
+                    reinterpret_cast<VkPhysicalDeviceProtectedMemoryFeatures*>(pHeader);
+
+                pProtectedMemory->protectedMemory = VK_FALSE;
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
+            {
+                VkPhysicalDeviceMultiviewFeatures* pMultiviewFeatures =
+                    reinterpret_cast<VkPhysicalDeviceMultiviewFeatures*>(pHeader);
+
+                pMultiviewFeatures->multiview                   = VK_TRUE;
+                //                       there are extra primitives rendered on the view 0.
+                pMultiviewFeatures->multiviewGeometryShader     = VK_FALSE;
+                pMultiviewFeatures->multiviewTessellationShader = VK_TRUE;
+
+                break;
+            }
+#endif
+
             default:
             {
                 // skip any unsupported extension structures
@@ -2927,14 +3042,21 @@ void PhysicalDevice::GetDeviceProperties2(
 
     union
     {
-        const VkStructHeader*                           pHeader;
-        VkPhysicalDeviceProperties2KHR*                 pProp;
-        VkPhysicalDevicePointClippingPropertiesKHR*     pPointClippingProperties;
-        VkPhysicalDeviceIDPropertiesKHR*                pIDProperties;
-        VkPhysicalDeviceSampleLocationsPropertiesEXT*   pSampleLocationsPropertiesEXT;
-        VkPhysicalDeviceGpaPropertiesAMD*               pGpaProperties;
-        VkPhysicalDeviceExternalMemoryHostPropertiesEXT*  pExternalMemoryHostProperties;
-        VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT* pSamplerFilterMinmaxPropertiesEXT;
+        const VkStructHeader*                                    pHeader;
+        VkPhysicalDeviceProperties2KHR*                          pProp;
+        VkPhysicalDevicePointClippingPropertiesKHR*              pPointClippingProperties;
+        VkPhysicalDeviceIDPropertiesKHR*                         pIDProperties;
+        VkPhysicalDeviceSampleLocationsPropertiesEXT*            pSampleLocationsPropertiesEXT;
+        VkPhysicalDeviceGpaPropertiesAMD*                        pGpaProperties;
+#ifdef ICD_VULKAN_1_1
+        VkPhysicalDeviceMaintenance3Properties*                  pMaintenance3Properties;
+        VkPhysicalDeviceMultiviewProperties*                     pMultiviewProperties;
+        VkPhysicalDeviceProtectedMemoryProperties*               pProtectedMemoryProperties;
+        VkPhysicalDeviceSubgroupProperties*                      pSubgroupProperties;
+#endif
+        VkPhysicalDeviceExternalMemoryHostPropertiesEXT*         pExternalMemoryHostProperties;
+        VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*        pSamplerFilterMinmaxPropertiesEXT;
+        VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -2974,6 +3096,54 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+#ifdef ICD_VULKAN_1_1
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES_KHR:
+        {
+            // We don't have limits on number of desc sets
+            pMaintenance3Properties->maxPerSetDescriptors    = UINT32_MAX;
+
+            // TODO: SWDEV-79454 - Get these limits from PAL
+            // Return 2GB in bytes as max allocation size
+            pMaintenance3Properties->maxMemoryAllocationSize = 2u * 1024u * 1024u * 1024u;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES:
+        {
+            pProtectedMemoryProperties->protectedNoFault = VK_FALSE;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES:
+        {
+            pMultiviewProperties->maxMultiviewViewCount     = Pal::MaxViewInstanceCount;
+            pMultiviewProperties->maxMultiviewInstanceIndex = UINT_MAX;
+
+            break;
+        }
+#endif
+
+#ifdef ICD_VULKAN_1_1
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES:
+        {
+            const Pal::DeviceProperties& palProps = PalProperties();
+
+            pSubgroupProperties->subgroupSize        = palProps.gfxipProperties.shaderCore.wavefrontSize;
+
+            pSubgroupProperties->supportedStages     = VK_SHADER_STAGE_VERTEX_BIT |
+                                                       VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                                                       VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+                                                       VK_SHADER_STAGE_GEOMETRY_BIT |
+                                                       VK_SHADER_STAGE_FRAGMENT_BIT |
+                                                       VK_SHADER_STAGE_COMPUTE_BIT;
+            pSubgroupProperties->supportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT;
+            pSubgroupProperties->quadOperationsInAllStages = VK_TRUE;
+
+            break;
+        }
+#endif
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT:
         {
             pSamplerFilterMinmaxPropertiesEXT->filterMinmaxImageComponentMapping  = VK_FALSE;
@@ -2987,6 +3157,32 @@ void PhysicalDevice::GetDeviceProperties2(
 
             pExternalMemoryHostProperties->minImportedHostPointerAlignment =
                 palProps.gpuMemoryProperties.realMemAllocGranularity;
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD:
+        {
+            const Pal::DeviceProperties& props = PalProperties();
+
+            pShaderCoreProperties->shaderEngineCount = props.gfxipProperties.shaderCore.numShaderEngines;
+            pShaderCoreProperties->shaderArraysPerEngineCount = props.gfxipProperties.shaderCore.numShaderArrays;
+            pShaderCoreProperties->computeUnitsPerShaderArray = props.gfxipProperties.shaderCore.numCusPerShaderArray;
+            pShaderCoreProperties->simdPerComputeUnit = props.gfxipProperties.shaderCore.numSimdsPerCu;
+            pShaderCoreProperties->wavefrontsPerSimd = props.gfxipProperties.shaderCore.numWavefrontsPerSimd;
+            pShaderCoreProperties->wavefrontSize = props.gfxipProperties.shaderCore.wavefrontSize;
+
+            // Scalar General Purpose Registers (SGPR)
+            pShaderCoreProperties->sgprsPerSimd = props.gfxipProperties.shaderCore.sgprsPerSimd;
+            pShaderCoreProperties->minSgprAllocation = props.gfxipProperties.shaderCore.minSgprAlloc;
+            pShaderCoreProperties->maxSgprAllocation = props.gfxipProperties.shaderCore.numAvailableSgprs;
+            pShaderCoreProperties->sgprAllocationGranularity = props.gfxipProperties.shaderCore.sgprAllocGranularity;
+
+            // Vector General Purpose Registers (VGPR)
+            pShaderCoreProperties->vgprsPerSimd = props.gfxipProperties.shaderCore.vgprsPerSimd;
+            pShaderCoreProperties->minVgprAllocation = props.gfxipProperties.shaderCore.minVgprAlloc;
+            pShaderCoreProperties->maxVgprAllocation = props.gfxipProperties.shaderCore.numAvailableVgprs;
+            pShaderCoreProperties->vgprAllocationGranularity = props.gfxipProperties.shaderCore.vgprAllocGranularity;
 
             break;
         }

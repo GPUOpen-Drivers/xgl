@@ -42,6 +42,7 @@
 #include "llpcInternal.h"
 #include "llpcPassDeadFuncRemove.h"
 #include "llpcPatch.h"
+#include "llpcPatchAddrSpaceMutate.h"
 #include "llpcPatchDescriptorLoad.h"
 #include "llpcPatchInOutImportExport.h"
 
@@ -362,6 +363,9 @@ Result CopyShader::DoPatch()
     // Do patching opertions
     legacy::PassManager passMgr;
 
+    // Convert SPIRAS address spaces to AMDGPU address spaces.
+    passMgr.add(PatchAddrSpaceMutate::Create());
+
     // Function inlining
     passMgr.add(createFunctionInliningPass(InlineThreshold));
 
@@ -451,7 +455,7 @@ Value* CopyShader::LoadValueFromGsVsRingBuffer(
         Value* pLoadPtr = GetElementPtrInst::Create(nullptr, m_pLds, idxs, "", pInsertPos);
         pLoadValue = new LoadInst(pLoadPtr, "", false, m_pLds->getAlignment(), pInsertPos);
 
-        pLoadValue = BitCastInst::Create(Instruction::BitCast, pLoadValue, m_pContext->FloatTy(), "", pInsertPos);
+        pLoadValue = new BitCastInst(pLoadValue, m_pContext->FloatTy(), "", pInsertPos);
     }
     else
     {

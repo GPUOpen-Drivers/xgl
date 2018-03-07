@@ -70,7 +70,9 @@ enum class BasicType : uint32_t
     Uint,                 // Unsigned integer
     Int64,                // 64-bit signed integer
     Uint64,               // 64-bit unsigned integer
-    Float16               // 16-bit floating-point
+    Float16,              // 16-bit floating-point
+    Int16,                // 16-bit signed integer
+    Uint16,               // 16-bit unsigned integer
 };
 
 // Represents the info of a descriptor binding
@@ -277,12 +279,14 @@ struct ResourceUsage
                 uint32_t numWorkgroups        : 1;      // Whether gl_NumWorkGroups is used
                 uint32_t localInvocationId    : 1;      // Whether gl_LocalInvocationID is used
                 uint32_t workgroupId          : 1;      // Whether gl_WorkGroupID is used
+                uint32_t numSubgroups         : 1;      // Whether gl_NumSubgroups is used
+                uint32_t subgroupId           : 1;      // Whether gl_SubgroupID is used
                 // Execution mode
                 uint32_t workgroupSizeX       : 16;     // X value of gl_WorkGroupSize
                 uint32_t workgroupSizeY       : 16;     // Y value of gl_WorkGroupSize
                 uint32_t workgroupSizeZ       : 16;     // Z value of gl_WorkGroupSize
 
-                uint64_t unused               : 45;
+                uint64_t unused               : 43;
             } cs;
 
             struct
@@ -303,8 +307,9 @@ struct ResourceUsage
                 uint32_t subgroupGtMask       : 1;      // Whether gl_SubGroupGtMask is used
                 uint32_t subgroupLeMask       : 1;      // Whether gl_SubGroupLeMask is used
                 uint32_t subgroupLtMask       : 1;      // Whether gl_SubGroupLtMask is used
+                uint32_t deviceIndex          : 1;      // Whether gl_DeviceIndex is used
 
-                uint64_t unused               : 57;
+                uint64_t unused               : 56;
             } common;
 
             struct
@@ -411,8 +416,8 @@ struct ResourceUsage
             std::unordered_map<uint32_t, uint32_t[4]> genericOutByteSizes;
 
             llvm::Value* pEsGsOffsets;          // ES -> GS offsets (GS in)
-            llvm::Value* pGsVsRingBufDesc;      // GS -> VS ring buffer descriptor (GS out);
-            llvm::Value* pEmitCounterPtr;
+            llvm::Value* pGsVsRingBufDesc;      // GS -> VS ring buffer descriptor (GS out)
+            llvm::Value* pEmitCounterPtr;       // Pointer to emit counter
 
             struct
             {
@@ -428,10 +433,11 @@ struct ResourceUsage
 
         struct
         {
-            std::vector<FsInterpInfo> interpInfo;   // Array of interpolation info
-            ExportFormat expFmts[MaxColorTargets];  // Shader export formats
-            uint32_t     cbShaderMask;              // CB shader channel mask (correspond to register CB_SHADER_MASK)
-            llvm::Value* pViewIndex;                // View Index
+            std::vector<FsInterpInfo> interpInfo;       // Array of interpolation info
+            ExportFormat expFmts[MaxColorTargets];      // Shader export formats
+            BasicType    outputTypes[MaxColorTargets];  // Array of basic types of fragment outputs
+            uint32_t     cbShaderMask;                  // CB shader channel mask (correspond to register CB_SHADER_MASK)
+            llvm::Value* pViewIndex;                    // View Index
         } fs;
     } inOutUsage;
 };

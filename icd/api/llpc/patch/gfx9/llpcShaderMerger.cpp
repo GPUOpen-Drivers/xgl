@@ -76,6 +76,7 @@ Result ShaderMerger::BuildLsHsMergedShader(
     {
         result = Result::ErrorOutOfMemory;
     }
+    m_pContext->SetModuleTargetMachine(pLsHsModule);
 
     if (result == Result::Success)
     {
@@ -141,6 +142,7 @@ Result ShaderMerger::BuildEsGsMergedShader(
     {
         result = Result::ErrorOutOfMemory;
     }
+    m_pContext->SetModuleTargetMachine(pEsGsModule);
 
     if (result == Result::Success)
     {

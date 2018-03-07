@@ -877,6 +877,20 @@ VkResult GraphicsPipeline::Create(
             // Create the PAL MSAA state object
             if (palResult == Pal::Result::Success)
             {
+                const auto& pMs = pCreateInfo->pMultisampleState;
+
+                // Force full sample shading if the app didn't enable it, but the shader wants
+                // per-sample shading by the use of SampleId or similar features.
+                if ((pMs != nullptr) && (pMs->sampleShadingEnable == false))
+                {
+                    const auto& info = pPalPipeline[deviceIdx]->GetInfo();
+
+                    if (info.ps.flags.perSampleShading == 1)
+                    {
+                        createInfo.msaa.pixelShaderSamples = createInfo.msaa.coverageSamples;
+                    }
+                }
+
                 palResult = pRSCache->CreateMsaaState(
                     createInfo.msaa,
                     pAllocator,
@@ -918,6 +932,10 @@ VkResult GraphicsPipeline::Create(
             pAllocator);
     }
 
+    const bool viewIndexFromDeviceIndex = Util::TestAnyFlagSet(
+        pCreateInfo->flags,
+        VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
+
     // On success, wrap it up in a Vulkan object.
     if (result == VK_SUCCESS)
     {
@@ -931,6 +949,7 @@ VkResult GraphicsPipeline::Create(
             pPalColorBlend,
             pPalDepthStencil,
             createInfo.sampleCoverage,
+            viewIndexFromDeviceIndex,
             pBinaryInfo);
 
         *pPipeline = GraphicsPipeline::HandleFromVoidPointer(pSystemMem);
@@ -984,13 +1003,17 @@ GraphicsPipeline::GraphicsPipeline(
     Pal::IColorBlendState**                pPalColorBlend,
     Pal::IDepthStencilState**              pPalDepthStencil,
     uint32_t                               coverageSamples,
+    bool                                   viewIndexFromDeviceIndex,
     PipelineBinaryInfo*                    pBinary)
     :
     Pipeline(pDevice, pPalPipeline, pLayout, pBinary),
     m_info(immedInfo),
     m_vbInfo(vbInfo),
-    m_coverageSamples(coverageSamples)
+    m_coverageSamples(coverageSamples),
+    m_flags()
 {
+    m_flags.viewIndexFromDeviceIndex = viewIndexFromDeviceIndex;
+
     memcpy(m_pPalMsaa,         pPalMsaa,         sizeof(pPalMsaa[0])         * pDevice->NumPalDevices());
     memcpy(m_pPalColorBlend,   pPalColorBlend,   sizeof(pPalColorBlend[0])   * pDevice->NumPalDevices());
     memcpy(m_pPalDepthStencil, pPalDepthStencil, sizeof(pPalDepthStencil[0]) * pDevice->NumPalDevices());
@@ -1291,6 +1314,22 @@ void GraphicsPipeline::BindToCmdBuffer(
         // Generate the PM4 if any of the Stencil state is to be statically bound
         // knowing we will likely overwrite it.
         pStencilCombiner->PalCmdSetStencilState(pCmdBuffer);
+    }
+
+    // Binding GraphicsPipeline affects ViewMask,
+    // because when VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT is specified
+    // ViewMask for each VkPhysicalDevice is defined by DeviceIndex
+    // not by current subpass during a render pass instance.
+    const bool oldViewIndexFromDeviceIndex = pRenderState->allGpuState.ViewIndexFromDeviceIndex;
+    const bool newViewIndexFromDeviceIndex = ViewIndexFromDeviceIndex();
+    const bool  isViewIndexFromDeviceIndexChanging = oldViewIndexFromDeviceIndex != newViewIndexFromDeviceIndex;
+    if (isViewIndexFromDeviceIndexChanging)
+    {
+        // Update value of ViewIndexFromDeviceIndex for currently bound pipeline.
+        pRenderState->allGpuState.ViewIndexFromDeviceIndex = newViewIndexFromDeviceIndex;
+
+        // Sync ViewMask state in CommandBuffer.
+        pCmdBuffer->SetViewInstanceMask();
     }
 }
 

@@ -377,6 +377,10 @@ public:
     VK_INLINE bool IsExtensionSupported(InstanceExtensions::ExtensionId id) const
         { return VkInstance()->IsExtensionSupported(id); }
 
+#ifdef ICD_VULKAN_1_1
+    uint32_t GetSupportedAPIVersion() const;
+#endif
+
 #ifdef ICD_BUILD_APPPROFILE
     VK_INLINE AppProfile GetAppProfile() const
         { return m_appProfile; }

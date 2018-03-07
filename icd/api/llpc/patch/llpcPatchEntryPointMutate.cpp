@@ -914,6 +914,11 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
     {
     case ShaderStageVertex:
         {
+            if (enableMultiView)
+            {
+                availUserDataCount -= 1;
+            }
+
             // Reserve register for "IndirectUserDataVaPtr"
             if (pIntfData->vbTable.resNodeIdx != InvalidValue)
             {
@@ -929,14 +934,7 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
             {
                 availUserDataCount -= 1;
             }
-            if (enableMultiView)
-            {
-                availUserDataCount -= 1;
-            }
-            break;
-        }
-    case ShaderStageTessControl:
-        {
+
             break;
         }
     case ShaderStageTessEval:
@@ -945,6 +943,7 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
             {
                 availUserDataCount -= 1;
             }
+
             break;
         }
     case ShaderStageGeometry:
@@ -953,14 +952,17 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
             {
                 availUserDataCount -= 1;
             }
+
             if (m_pContext->IsGsOnChip() && cl::InRegEsGsLdsSize)
             {
                 // NOTE: Add a dummy "inreg" argument for ES-GS LDS size, this is to keep consistent
                 // with PAL's GS on-chip behavior.
                 availUserDataCount -= 1;
             }
+
             break;
         }
+    case ShaderStageTessControl:
     case ShaderStageFragment:
         {
             // Do nothing
@@ -1104,6 +1106,17 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
     {
     case ShaderStageVertex:
         {
+            // NOTE: The user data to emulate gl_ViewIndex is somewhat common. To make it consistent for GFX9
+            // merged shader, we place it prior to any other special user data.
+            if (enableMultiView)
+            {
+                argTys.push_back(m_pContext->Int32Ty()); // View Index
+                entryArgIdxs.vs.viewIndex = argIdx;
+                *pInRegMask |= (1ull << (argIdx++));
+                pIntfData->userDataUsage.vs.viewIndex = userDataIdx;
+                ++userDataIdx;
+            }
+
             for (uint32_t i = 0; i < pShaderInfo->userDataNodeCount; ++i)
             {
                 auto pNode = &pShaderInfo->pUserDataNodes[i];
@@ -1144,18 +1157,12 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
                 ++userDataIdx;
             }
 
-            if (enableMultiView)
-            {
-                argTys.push_back(m_pContext->Int32Ty()); // View Index
-                entryArgIdxs.vs.viewIndex = argIdx;
-                *pInRegMask |= (1ull << (argIdx++));
-                pIntfData->userDataUsage.vs.viewIndex = userDataIdx;
-                ++userDataIdx;
-            }
             break;
         }
     case ShaderStageTessEval:
         {
+            // NOTE: The user data to emulate gl_ViewIndex is somewhat common. To make it consistent for GFX9
+            // merged shader, we place it prior to any other special user data.
             if (enableMultiView)
             {
                 argTys.push_back(m_pContext->Int32Ty()); // View Index
@@ -1168,15 +1175,8 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
         }
     case ShaderStageGeometry:
         {
-            if (m_pContext->IsGsOnChip() && cl::InRegEsGsLdsSize)
-            {
-                // NOTE: Add a dummy "inreg" argument for ES-GS LDS size, this is to keep consistent
-                // with PAL's GS on-chip behavior.
-                argTys.push_back(m_pContext->Int32Ty());
-                *pInRegMask |= (1ull << (argIdx++));
-                pIntfData->userDataUsage.gs.esGsLdsSize = userDataIdx;
-                ++userDataIdx;
-            }
+            // NOTE: The user data to emulate gl_ViewIndex is somewhat common. To make it consistent for GFX9
+            // merged shader, we place it prior to any other special user data.
             if (enableMultiView)
             {
                 argTys.push_back(m_pContext->Int32Ty()); // View Index
@@ -1185,6 +1185,21 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
                 pIntfData->userDataUsage.gs.viewIndex = userDataIdx;
                 ++userDataIdx;
             }
+
+            const auto gfxIp = m_pContext->GetGfxIpVersion();
+            if (gfxIp.major <= 8)
+            {
+                // NOTE: Add a dummy "inreg" argument for ES-GS LDS size, this is to keep consistent
+                // with PAL's GS on-chip behavior.
+                if (m_pContext->IsGsOnChip() && cl::InRegEsGsLdsSize)
+                {
+                    argTys.push_back(m_pContext->Int32Ty());
+                    *pInRegMask |= (1ull << (argIdx++));
+                    pIntfData->userDataUsage.gs.esGsLdsSize = userDataIdx;
+                    ++userDataIdx;
+                }
+            }
+
             break;
         }
     case ShaderStageCompute:

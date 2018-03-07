@@ -1053,6 +1053,9 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInSubgroupLtMaskKHR:
                     m_pResUsage->builtInUsage.common.subgroupLtMask = true;
                     break;
+                case BuiltInDeviceIndex:
+                    m_pResUsage->builtInUsage.common.deviceIndex = true;
+                    break;
                 default:
                     LLPC_NEVER_CALLED();
                     break;
@@ -1113,6 +1116,9 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                     break;
                 case BuiltInSubgroupLtMaskKHR:
                     m_pResUsage->builtInUsage.common.subgroupLtMask = true;
+                    break;
+                case BuiltInDeviceIndex:
+                    m_pResUsage->builtInUsage.common.deviceIndex = true;
                     break;
                 default:
                     LLPC_NEVER_CALLED();
@@ -1183,6 +1189,9 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                     break;
                 case BuiltInSubgroupLtMaskKHR:
                     m_pResUsage->builtInUsage.common.subgroupLtMask = true;
+                    break;
+                case BuiltInDeviceIndex:
+                    m_pResUsage->builtInUsage.common.deviceIndex = true;
                     break;
                 default:
                     LLPC_NEVER_CALLED();
@@ -1259,6 +1268,9 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInSubgroupLtMaskKHR:
                     m_pResUsage->builtInUsage.common.subgroupLtMask = true;
                     break;
+                case BuiltInDeviceIndex:
+                    m_pResUsage->builtInUsage.common.deviceIndex = true;
+                    break;
                 default:
                     LLPC_NEVER_CALLED();
                     break;
@@ -1334,6 +1346,9 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInSubgroupLtMaskKHR:
                     m_pResUsage->builtInUsage.common.subgroupLtMask = true;
                     break;
+                case BuiltInDeviceIndex:
+                    m_pResUsage->builtInUsage.common.deviceIndex = true;
+                    break;
                 default:
                     LLPC_NEVER_CALLED();
                     break;
@@ -1360,6 +1375,15 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                     m_pResUsage->builtInUsage.cs.workgroupId = true;
                     m_pResUsage->builtInUsage.cs.localInvocationId = true;
                     break;
+                case BuiltInNumSubgroups:
+                    m_pResUsage->builtInUsage.cs.numSubgroups = true;
+                    m_pResUsage->builtInUsage.common.subgroupSize = true;
+                    break;
+                case BuiltInSubgroupId:
+                    m_pResUsage->builtInUsage.cs.workgroupId = true;
+                    m_pResUsage->builtInUsage.cs.localInvocationId = true;
+                    m_pResUsage->builtInUsage.common.subgroupSize = true;
+                    break;
                 case BuiltInSubgroupSize:
                     m_pResUsage->builtInUsage.common.subgroupSize = true;
                     break;
@@ -1380,6 +1404,9 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                     break;
                 case BuiltInSubgroupLtMaskKHR:
                     m_pResUsage->builtInUsage.common.subgroupLtMask = true;
+                    break;
+                case BuiltInDeviceIndex:
+                    m_pResUsage->builtInUsage.common.deviceIndex = true;
                     break;
                 default:
                     LLPC_NEVER_CALLED();
@@ -1485,16 +1512,56 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 {
                     LLPC_ASSERT(addrSpace == SPIRAS_Output);
 
-                    // Collect CB shader mask
+                    LLPC_ASSERT((startLoc < MaxColorTargets) && (locCount == 1)); // Should not be 64-bit data type
+
+                    // Collect basic types of fragment outputs
+                    BasicType basicTy = BasicType::Unknown;
+
+                    const auto pCompTy = pBaseTy->isVectorTy() ? pBaseTy->getVectorElementType() : pBaseTy;
+                    const uint32_t bitWidth = pCompTy->getScalarSizeInBits();
+                    const bool signedness = (inOutMeta.Signedness != 0);
+
+                    if (pCompTy->isIntegerTy())
+                    {
+                        // Integer type
+                        if (bitWidth == 16)
+                        {
+                            basicTy = signedness ? BasicType::Int16 : BasicType::Uint16;
+                        }
+                        else
+                        {
+                            LLPC_ASSERT(bitWidth == 32);
+                            basicTy = signedness ? BasicType::Int : BasicType::Uint;
+                        }
+                    }
+                    else if (pCompTy->isFloatingPointTy())
+                    {
+                        // Floating-point type
+                        if (bitWidth == 16)
+                        {
+                            basicTy = BasicType::Float16;
+                        }
+                        else
+                        {
+                            LLPC_ASSERT(bitWidth == 32);
+                            basicTy = BasicType::Float;
+                        }
+                    }
+                    else
+                    {
+                        LLPC_NEVER_CALLED();
+                    }
+
+                    m_pResUsage->inOutUsage.fs.outputTypes[startLoc] = basicTy;
+
+                    // Collect CB shader mask (will be revised in LLVM patching operations)
                     LLPC_ASSERT(pBaseTy->isSingleValueType());
                     const uint32_t compCount = pBaseTy->isVectorTy() ? pBaseTy->getVectorNumElements() : 1;
-                    const uint32_t channelMask = ((1 << compCount) - 1);
+                    const uint32_t compIdx = inOutMeta.Component;
+                    LLPC_ASSERT(compIdx + compCount <= 4);
 
-                    LLPC_ASSERT(startLoc + locCount <= MaxColorTargets);
-                    for (uint32_t i = 0; i < locCount; ++i)
-                    {
-                        m_pResUsage->inOutUsage.fs.cbShaderMask |= (channelMask << 4 * (startLoc + i));
-                    }
+                    const uint32_t channelMask = (((1 << compCount) - 1) << compIdx);
+                    m_pResUsage->inOutUsage.fs.cbShaderMask |= (channelMask << 4 * startLoc);
                 }
             }
         }
@@ -1517,7 +1584,11 @@ void SpirvLowerResourceCollect::CollectVertexInputUsage(
     if (pCompTy->isIntegerTy())
     {
         // Integer type
-        if (bitWidth == 32)
+        if (bitWidth == 16)
+        {
+            basicTy = signedness ? BasicType::Int16 : BasicType::Uint16;
+        }
+        else if (bitWidth == 32)
         {
             basicTy = signedness ? BasicType::Int : BasicType::Uint;
         }

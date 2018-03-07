@@ -31,9 +31,11 @@
 #define DEBUG_TYPE "llpc-spirv-lower-opt"
 
 #include "llvm/IR/Instructions.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
 #include "SPIRVInternal.h"
 #include "llpcSpirvLowerOpt.h"
@@ -72,12 +74,29 @@ bool SpirvLowerOpt::runOnModule(
 
     SpirvLower::Init(&module);
 
-    // Invoke optimization
-    changed = OptimizeModule(&module);
+    // Set up standard optimization passes.
+    // NOTE: Doing this here is temporary; really the whole of LLPC should be using the
+    // PassManagerBuilder mechanism, adding its own passes at the provided hook points.
+    legacy::PassManager passMgr;
+    legacy::FunctionPassManager functionPassMgr(&module);
+    PassManagerBuilder passBuilder;
+    passBuilder.OptLevel = 3; // -O3
+    passBuilder.SLPVectorize = true;
+    passBuilder.populateFunctionPassManager(functionPassMgr);
+    passBuilder.populateModulePassManager(passMgr);
 
-    LLPC_VERIFY_MODULE_FOR_PASS(module);
+    // Run the preliminary function passes.
+    functionPassMgr.doInitialization();
+    for (Function &function : module)
+    {
+        functionPassMgr.run(function);
+    }
+    functionPassMgr.doFinalization();
 
-    return changed;
+    // Run the other passes.
+    passMgr.run(module);
+
+    return true;
 }
 
 } // Llpc

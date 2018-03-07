@@ -194,6 +194,13 @@ public:
         return ((m_info.staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0);
     }
 
+    // Returns value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
+    // defined by flags member of VkGraphicsPipelineCreateInfo.
+    bool ViewIndexFromDeviceIndex() const
+    {
+        return m_flags.viewIndexFromDeviceIndex;
+    }
+
 protected:
     // Immediate state info that will be written during Bind() but is not
     // encapsulated within a state object.
@@ -248,6 +255,7 @@ protected:
         Pal::IColorBlendState**                pPalColorBlend,
         Pal::IDepthStencilState**              pPalDepthStencil,
         uint32_t                               coverageSamples,
+        bool                                   viewIndexFromDeviceIndex,
         PipelineBinaryInfo*                    pBinary);
 
     void CreateStaticState();
@@ -301,6 +309,16 @@ private:
     VbBindingInfo             m_vbInfo;                           // Information about vertex buffer bindings
 
     uint32_t                  m_coverageSamples;
+
+    union
+    {
+        uint8_t value;
+        struct
+        {
+            uint8_t viewIndexFromDeviceIndex : 1;
+            uint8_t reserved                 : 7;
+        };
+    } m_flags;
 };
 
 } // namespace vk

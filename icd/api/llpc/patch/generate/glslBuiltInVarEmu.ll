@@ -21,12 +21,6 @@ target triple = "spir64-unknown-unknown"
 ; >>>  Common Built-in Variables
 ; =====================================================================================================================
 
-; GLSL: in uint gl_SubGroupSize
-define i32 @llpc.input.import.builtin.SubgroupSize(i32 %builtInId) #0
-{
-    ret i32 64
-}
-
 ; GLSL: in uint gl_SubGroupInvocation
 define i32 @llpc.input.import.builtin.SubgroupLocalInvocationId(i32 %builtInId) #0
 {
@@ -162,6 +156,17 @@ define i32 @llpc.input.import.builtin.LocalInvocationIndex(i32 %builtInId) #0
     ret i32 %11
 }
 
+; GLSL: in uint gl_SubgroupID
+define i32 @llpc.input.import.builtin.SubgroupId(i32 %builtInId) #0
+{
+    ; gl_SubgroupID = gl_LocationInvocationIndex / gl_SubgroupSize
+    %1 = call i32 @llpc.input.import.builtin.LocalInvocationIndex(i32 29)
+    %2 = call i32 @llpc.input.import.builtin.SubgroupSize(i32 36)
+    %3 = udiv i32 %1, %2
+
+    ret i32 %3
+}
+
 ; =====================================================================================================================
 ; >>>  Fragment Shader Built-in Variables
 ; =====================================================================================================================
@@ -199,6 +204,7 @@ define <2 x float> @llpc.input.import.builtin.SamplePosition(i32 %builtInId) #0
 declare <3 x i32> @llpc.input.import.builtin.WorkgroupSize(i32) #0
 declare <3 x i32> @llpc.input.import.builtin.WorkgroupId(i32) #0
 declare <3 x i32> @llpc.input.import.builtin.LocalInvocationId(i32) #0
+declare i32 @llpc.input.import.builtin.SubgroupSize(i32) #0
 declare i32 @llpc.input.import.builtin.NumSamples(i32) #0
 declare i32 @llpc.input.import.builtin.SamplePatternIdx(i32) #0
 declare i32 @llpc.input.import.builtin.SampleId(i32) #0

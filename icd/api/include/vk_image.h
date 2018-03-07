@@ -74,6 +74,12 @@ public:
         const VkAllocationCallbacks*            pAllocator,
         VkImage*                                pImage);
 
+    static VkResult CreateImageInternal(
+        Device*                         pDevice,
+        Pal::ImageCreateInfo*           pPalCreateInfo,
+        const VkAllocationCallbacks*    pAllocator,
+        Pal::IImage**                   pPalImage);
+
     static VkResult CreatePresentableImage(
         Device*                                 pDevice,
         const Pal::PresentableImageCreateInfo*  pCreateInfo,

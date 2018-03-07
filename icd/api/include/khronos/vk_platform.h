@@ -32,8 +32,13 @@
 #ifndef __VK_PLATFORM_H_PROXY__
 #define __VK_PLATFORM_H_PROXY__
 
+#ifdef ICD_VULKAN_1_1
+// Vulkan SDK 1.1
+#include "sdk-1.1/vk_platform.h"
+#else
 // Vulkan SDK 1.0
 #include "sdk-1.0/vk_platform.h"
+#endif
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 #ifdef None

@@ -98,7 +98,6 @@ const char* PipelineContext::GetGpuNameString() const
         { { 9, 0, 1 }, "gfx901"   },  // [9.0.1] gfx901
         { { 9, 0, 2 }, "gfx902"   },  // [9.0.2] gfx902
         { { 9, 0, 3 }, "gfx903"   },  // [9.0.3] gfx903
-        { { 9, 0, 4 }, "gfx904"   },  // [9.0.4] gfx904, vega12
     };
 
     const GpuNameStringMap* pNameMap = nullptr;
@@ -195,6 +194,8 @@ void PipelineContext::AutoLayoutDescriptor(
         static_assert(static_cast<uint32_t>(BasicType::Int64)   == 5, "Unexpected value!");
         static_assert(static_cast<uint32_t>(BasicType::Uint64)  == 6, "Unexpected value!");
         static_assert(static_cast<uint32_t>(BasicType::Float16) == 7, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Int16)   == 8, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Uint16)  == 9, "Unexpected value!");
 
         static const VkFormat DummyVertexFormat[] =
         {
@@ -206,6 +207,8 @@ void PipelineContext::AutoLayoutDescriptor(
             VK_FORMAT_R64G64_SINT,          // BasicType::Int64
             VK_FORMAT_R64G64_UINT,          // BasicType::Uint64
             VK_FORMAT_R16G16B16A16_SFLOAT,  // BasicType::Float16
+            VK_FORMAT_R16G16B16A16_SINT,    // BasicType::Int16
+            VK_FORMAT_R16G16B16A16_UINT,    // BasicType::Uint16
         };
 
         for (size_t loc = 0; loc < vsInputTypeCount; ++loc)
@@ -309,11 +312,114 @@ void PipelineContext::AutoLayoutDescriptor(
         auto pPipelineInfo = static_cast<const GraphicsPipelineBuildInfo*>(GetPipelineBuildInfo());
         auto pCbState = &(const_cast<GraphicsPipelineBuildInfo*>(pPipelineInfo)->cbState);
 
+        const uint32_t cbShaderMask = pResUsage->inOutUsage.fs.cbShaderMask;
+
+        static_assert(static_cast<uint32_t>(BasicType::Unknown) == 0, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Float)   == 1, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Double)  == 2, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Int)     == 3, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Uint)    == 4, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Int64)   == 5, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Uint64)  == 6, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Float16) == 7, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Int16)   == 8, "Unexpected value!");
+        static_assert(static_cast<uint32_t>(BasicType::Uint16)  == 9, "Unexpected value!");
+
+        static const VkFormat DummyFragColorFormat[][4] =
+        {
+            // BasicType::Unknown
+            {
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+            },
+            // BasicType::Float
+            {
+                VK_FORMAT_R32_SFLOAT,
+                VK_FORMAT_R32G32_SFLOAT,
+                VK_FORMAT_R32G32B32_SFLOAT,
+                VK_FORMAT_R32G32B32A32_SFLOAT,
+            },
+            // BasicType::Double
+            {
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+            },
+            // BasicType::Int
+            {
+                VK_FORMAT_R32_SINT,
+                VK_FORMAT_R32G32_SINT,
+                VK_FORMAT_R32G32B32_SINT,
+                VK_FORMAT_R32G32B32A32_SINT,
+            },
+            // BasicType::Uint
+            {
+                VK_FORMAT_R32_UINT,
+                VK_FORMAT_R32G32_UINT,
+                VK_FORMAT_R32G32B32_UINT,
+                VK_FORMAT_R32G32B32A32_UINT,
+            },
+            // BasicType::Int64
+            {
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+            },
+            // BasicType::Uint64
+            {
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+                VK_FORMAT_UNDEFINED,
+            },
+            // BasicType::Float16
+            {
+                VK_FORMAT_R16_SFLOAT,
+                VK_FORMAT_R16G16_SFLOAT,
+                VK_FORMAT_R16G16B16_SFLOAT,
+                VK_FORMAT_R16G16B16A16_SFLOAT,
+            },
+            // BasicType::Int16
+            {
+                VK_FORMAT_R16_SINT,
+                VK_FORMAT_R16G16_SINT,
+                VK_FORMAT_R16G16B16_SINT,
+                VK_FORMAT_R16G16B16A16_SINT,
+            },
+            // BasicType::Uint16
+            {
+                VK_FORMAT_R16_UINT,
+                VK_FORMAT_R16G16_UINT,
+                VK_FORMAT_R16G16B16_UINT,
+                VK_FORMAT_R16G16B16A16_UINT,
+            },
+        };
+
         for (uint32_t i = 0; i < MaxColorTargets; ++i)
         {
             if (pCbState->target[i].format == VK_FORMAT_UNDEFINED)
             {
-                pCbState->target[i].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+                const BasicType basicTy = pResUsage->inOutUsage.fs.outputTypes[i];
+                if (basicTy != BasicType::Unknown)
+                {
+                    const uint32_t channelMask = ((cbShaderMask >> (4 * i)) & 0xF);
+                    const uint32_t compCount = Log2(Pow2Align(channelMask, 2));
+                    LLPC_ASSERT(compCount >= 1);
+
+                    VkFormat format = DummyFragColorFormat[static_cast<uint32_t>(basicTy)][compCount - 1];
+                    LLPC_ASSERT(format != VK_FORMAT_UNDEFINED);
+
+                    pCbState->target[i].format = format;
+                }
+                else
+                {
+                    // This color target is not used, set R32G32B32A32_SFLOAT as default format
+                    pCbState->target[i].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+                }
             }
         }
     }
@@ -415,6 +521,10 @@ void PipelineContext::InitShaderResourceUsage(
 
     memset(&pResUsage->builtInUsage, 0, sizeof(pResUsage->builtInUsage));
 
+    pResUsage->pushConstSizeInBytes = 0;
+    pResUsage->imageWrite = false;
+    pResUsage->perShaderTable = false;
+
     pResUsage->inOutUsage.inputMapLocCount = 0;
     pResUsage->inOutUsage.outputMapLocCount = 0;
     pResUsage->inOutUsage.perPatchInputMapLocCount = 0;
@@ -422,15 +532,7 @@ void PipelineContext::InitShaderResourceUsage(
 
     pResUsage->inOutUsage.expCount = 0;
 
-    for (uint32_t i = 0; i < MaxColorTargets; ++i)
-    {
-        pResUsage->inOutUsage.fs.expFmts[i] = EXP_FORMAT_ZERO;
-    }
-    pResUsage->inOutUsage.fs.cbShaderMask = 0;
-
-    pResUsage->pushConstSizeInBytes = 0;
-    pResUsage->imageWrite = false;
-    pResUsage->perShaderTable = false;
+    pResUsage->inOutUsage.pEsGsRingBufDesc = nullptr;
 
     if (shaderStage == ShaderStageVertex)
     {
@@ -452,6 +554,37 @@ void PipelineContext::InitShaderResourceUsage(
         calcFactor.onChip.patchConstStart   = InvalidValue;
         calcFactor.outPatchSize             = InvalidValue;
         calcFactor.patchConstSize           = InvalidValue;
+
+        pResUsage->inOutUsage.tcs.pTessFactorBufDesc    = nullptr;
+        pResUsage->inOutUsage.tcs.pPrimitiveId          = nullptr;
+        pResUsage->inOutUsage.tcs.pInvocationId         = nullptr;
+        pResUsage->inOutUsage.tcs.pRelativeId           = nullptr;
+        pResUsage->inOutUsage.tcs.pOffChipLdsDesc       = nullptr;
+    }
+    else if (shaderStage == ShaderStageTessEval)
+    {
+        pResUsage->inOutUsage.tes.pTessCoord            = nullptr;
+        pResUsage->inOutUsage.tes.pOffChipLdsDesc       = nullptr;
+    }
+    else if (shaderStage == ShaderStageGeometry)
+    {
+        pResUsage->inOutUsage.gs.pEsGsOffsets           = nullptr;
+        pResUsage->inOutUsage.gs.pGsVsRingBufDesc       = nullptr;
+        pResUsage->inOutUsage.gs.pEmitCounterPtr        = nullptr;
+
+        auto& calcFactor = pResUsage->inOutUsage.gs.calcFactor;
+        memset(&calcFactor, 0, sizeof(calcFactor));
+    }
+    else if (shaderStage == ShaderStageFragment)
+    {
+        for (uint32_t i = 0; i < MaxColorTargets; ++i)
+        {
+            pResUsage->inOutUsage.fs.expFmts[i] = EXP_FORMAT_ZERO;
+            pResUsage->inOutUsage.fs.outputTypes[i] = BasicType::Unknown;
+        }
+
+        pResUsage->inOutUsage.fs.cbShaderMask = 0;
+        pResUsage->inOutUsage.fs.pViewIndex = nullptr;
     }
 }
 

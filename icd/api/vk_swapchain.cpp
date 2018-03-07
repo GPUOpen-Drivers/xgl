@@ -481,6 +481,12 @@ VkResult SwapChain::AcquireNextImage(
         const VkAcquireNextImageInfoKHX*  pVkAcquireNextImageInfoKHX;
     };
 
+#ifdef ICD_VULKAN_1_1
+    // KHX structure has the same definition as KHR or Vulkan 1.1 core structures
+    static_assert(VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR == VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHX,
+                  "Mismatched KHR and KHX structure defines");
+#endif
+
     uint32_t presentationDeviceIdx = DefaultDeviceIndex;
 
     for (pHeader = pAcquireInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -1321,6 +1327,25 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHX(
 
     return SwapChain::ObjectFromHandle(pAcquireInfo->swapchain)->AcquireNextImage(pHeader, pImageIndex);
 }
+
+#ifdef ICD_VULKAN_1_1
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHR(
+    VkDevice                                    device,
+    const VkAcquireNextImageInfoKHR*            pAcquireInfo,
+    uint32_t*                                   pImageIndex)
+{
+    union
+    {
+        const VkStructHeader*             pHeader;
+        const VkAcquireNextImageInfoKHR*  pAcquireInfoKHR;
+    };
+
+    pAcquireInfoKHR = pAcquireInfo;
+
+    return SwapChain::ObjectFromHandle(pAcquireInfo->swapchain)->AcquireNextImage(pHeader, pImageIndex);
+}
+#endif
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkSetHdrMetadataEXT(

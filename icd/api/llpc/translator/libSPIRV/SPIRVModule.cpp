@@ -301,7 +301,8 @@ public:
   virtual SPIRVInstruction *addSelectInst(SPIRVValue *, SPIRVValue *, SPIRVValue *,
       SPIRVBasicBlock *);
   virtual SPIRVInstruction *addLoopMergeInst(SPIRVId MergeBlock,
-      SPIRVId ContinueTarget, SPIRVWord LoopControl, SPIRVBasicBlock *BB);
+      SPIRVId ContinueTarget, SPIRVWord LoopControl,
+      std::vector<SPIRVWord> LoopControlParameters, SPIRVBasicBlock *BB);
   virtual SPIRVInstruction *addSelectionMergeInst(SPIRVId MergeBlock,
       SPIRVWord SelectionControl, SPIRVBasicBlock *BB);
   virtual SPIRVInstruction *addStoreInst(SPIRVValue *, SPIRVValue *,
@@ -1176,9 +1177,10 @@ SPIRVModuleImpl::addSelectionMergeInst(SPIRVId MergeBlock,
 
 SPIRVInstruction *
 SPIRVModuleImpl::addLoopMergeInst(SPIRVId MergeBlock, SPIRVId ContinueTarget,
-    SPIRVWord LoopControl, SPIRVBasicBlock *BB) {
+    SPIRVWord LoopControl, std::vector<SPIRVWord> LoopControlParameters,
+    SPIRVBasicBlock *BB) {
   return addInstruction(new SPIRVLoopMerge(MergeBlock, ContinueTarget,
-      LoopControl, BB), BB);
+      LoopControl, LoopControlParameters, BB), BB);
 }
 
 SPIRVInstruction *

@@ -132,16 +132,6 @@ target_sources(llpc PRIVATE
     context/llpcShaderCacheManager.cpp
 )
 
-# llpc/imported/llvm/opt
-target_sources(llpc PRIVATE
-    imported/llvm/opt/AnalysisWrappers.cpp
-    imported/llvm/opt/GraphPrinters.cpp
-    imported/llvm/opt/NewPMDriver.cpp
-    imported/llvm/opt/opt.cpp
-    imported/llvm/opt/PassPrinters.cpp
-    imported/llvm/opt/PrintSCC.cpp
-)
-
 # llpc/imported/metrohash/src
 target_sources(llpc PRIVATE
     imported/metrohash/src/metrohash128.cpp
@@ -173,6 +163,7 @@ target_sources(llpc PRIVATE
     patch/llpcCodeGenManager.cpp
     patch/llpcFragColorExport.cpp
     patch/llpcPatch.cpp
+    patch/llpcPatchAddrSpaceMutate.cpp
     patch/llpcPatchDescriptorLoad.cpp
     patch/llpcPatchEntryPointMutate.cpp
     patch/llpcPatchInOutImportExport.cpp

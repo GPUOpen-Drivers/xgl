@@ -473,4 +473,19 @@ int64_t GetPerfCpuTime()
     return time;
 }
 
+// =====================================================================================================================
+// Checks whether the input data is actually a ELF binary
+bool IsElfBinary(
+    const void* pData,    // [in] Input data to check
+    size_t      dataSize) // Size of the input data
+{
+    bool isElfBin = false;
+    if (dataSize >= sizeof(Elf64::FormatHeader))
+    {
+        auto pHeader = reinterpret_cast<const Elf64::FormatHeader*>(pData);
+        isElfBin = pHeader->e_ident32[EI_MAG0] == ElfMagic;
+    }
+    return isElfBin;
+}
+
 } // Llpc

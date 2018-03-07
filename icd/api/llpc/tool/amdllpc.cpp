@@ -106,7 +106,7 @@ static cl::list<std::string> InFiles(cl::Positional, cl::OneOrMore, cl::ValueReq
               ));
 
 // -o: output
-static cl::opt<std::string> OutFile("o", cl::desc("Output file"), cl::value_desc("filename"));
+static cl::opt<std::string> OutFile("o", cl::desc("Output file"), cl::value_desc("filename (\"-\" for stdout)"));
 
 // -l: link pipeline
 static cl::opt<bool>        ToLink("l", cl::desc("Link pipeline and generate ISA codes"), cl::init(true));
@@ -209,12 +209,12 @@ static Result Init(
         {
             // Name                      Option
             "-gfxip",                    "-gfxip=8.0.0",
-            "-O",                        "-O3",
             "-pragma-unroll-threshold",  "-pragma-unroll-threshold=4096",
             "-unroll-allow-partial",     "-unroll-allow-partial",
             "-lower-dyn-index",          "-lower-dyn-index",
             "-simplifycfg-sink-common",  "-simplifycfg-sink-common=false",
             "-amdgpu-vgpr-index-mode",   "-amdgpu-vgpr-index-mode",         // force VGPR indexing on GFX8
+            "-filetype",                 "-filetype=obj",   // target = obj, ELF binary; target = asm, ISA assembly text
         };
 
         // Build new arguments, starting with those supplied in command line
@@ -697,20 +697,18 @@ static Result DecodePipelineBinary(
     CompileInfo*      pCompileInfo, // [in,out] Compilation info of LLPC standalone tool
     bool              isGraphics)   // Whether it is graphics pipeline
 {
-    Result result = Result::Success;
-
+    // Ignore failure from ElfReader. It fails if pPipelineBin is not ELF, as happens with
+    // -filetype=asm.
     ElfReader<Elf64> reader(pCompileInfo->gfxIp);
     size_t readSize = 0;
-    result = reader.ReadFromBuffer(pPipelineBin->pCode, &readSize);
-
-    if (result == Result::Success)
+    if (reader.ReadFromBuffer(pPipelineBin->pCode, &readSize) == Result::Success)
     {
         LLPC_OUTS("===============================================================================\n");
         LLPC_OUTS("// LLPC final ELF info\n");
         LLPC_OUTS(reader);
     }
 
-    return result;
+    return Result::Success;
 }
 
 // =====================================================================================================================
@@ -837,34 +835,62 @@ static Result BuildPipeline(
 }
 
 // =====================================================================================================================
-// Outputs ELF binary to the specified file.
+// Output LLPC resulting binary (ELF binary, ISA assembly text, or LLVM bitcode) to the specified target file.
 static Result OutputElf(
     CompileInfo*       pCompileInfo,  // [in] Compilation info of LLPC standalone tool
-    const std::string& outFile)       // [in] Name of the file to output ELF binary
+    const std::string& outFile)       // [in] Name of the file to output ELF binary (specify "" to use base name of
+                                      //     first input file with appropriate extension; specify "-" to use stdout)
 {
     Result result = Result::Success;
-    FILE* pOutFile = fopen(outFile.c_str(), "wb");
+    const BinaryData* pPipelineBin = (pCompileInfo->stageMask & ShaderStageToMask(ShaderStageCompute)) ?
+                                         &pCompileInfo->compPipelineOut.pipelineBin :
+                                         &pCompileInfo->gfxPipelineOut.pipelineBin;
+    SmallString<64> outFileName(outFile);
+    if (outFileName.empty())
+    {
+        // NOTE: The output file name was not specified, so we construct a default file name.  We detect the
+        // output file type and determine the file extension according to it. We are unable to access the
+        // values of the options "-filetype" and "-emit-llvm".
+        const char* pExt = ".s";
+        if (IsElfBinary(pPipelineBin->pCode, pPipelineBin->codeSize))
+        {
+            pExt = ".elf";
+        }
+        if (IsLlvmBitcode(pPipelineBin))
+        {
+            pExt = ".bc";
+        }
+        outFileName = sys::path::filename(InFiles[0]);
+        sys::path::replace_extension(outFileName, pExt);
+    }
+
+    FILE* pOutFile = stdout;
+    if (outFileName != "-")
+    {
+        pOutFile = fopen(outFileName.c_str(), "wb");
+    }
+
     if (pOutFile == nullptr)
     {
-        LLPC_ERRS("Failed to open output file: " << outFile << "\n");
+        LLPC_ERRS("Failed to open output file: " << outFileName << "\n");
         result = Result::ErrorUnavailable;
     }
+
     if (result == Result::Success)
     {
-        const BinaryData* pPipelineBin = (pCompileInfo->stageMask & ShaderStageToMask(ShaderStageCompute)) ?
-                                             &pCompileInfo->compPipelineOut.pipelineBin :
-                                             &pCompileInfo->gfxPipelineOut.pipelineBin;
         if (fwrite(pPipelineBin->pCode, 1, pPipelineBin->codeSize, pOutFile) != pPipelineBin->codeSize)
         {
             result = Result::ErrorUnavailable;
         }
-        if (fclose(pOutFile))
+
+        if ((pOutFile != stdout) && (fclose(pOutFile) != 0))
         {
             result = Result::ErrorUnavailable;
         }
+
         if (result != Result::Success)
         {
-            LLPC_ERRS("Failed to write output file: " << outFile << "\n");
+            LLPC_ERRS("Failed to write output file: " << outFileName << "\n");
         }
     }
     return result;
@@ -1154,7 +1180,7 @@ int32_t main(
     if ((result == Result::Success) && ToLink)
     {
         result = BuildPipeline(pCompiler, &compileInfo);
-        if ((result == Result::Success) && (OutFile.empty() == false))
+        if (result == Result::Success)
         {
             result = OutputElf(&compileInfo, OutFile);
         }

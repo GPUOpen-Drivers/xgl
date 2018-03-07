@@ -150,6 +150,7 @@ define float @llpc.fwidthCoarse.f32(float %p) #0
 ; =====================================================================================================================
 ; >>>  Geometry Shader Functions
 ; =====================================================================================================================
+
 ; GLSL: void EmitStreamVertex(int)
 define spir_func void @_Z16EmitStreamVertexi(i32 %stream) #0
 {
@@ -254,18 +255,25 @@ define spir_func void @_Z9mem_fencej(i32 %semantics) #0
 ; =====================================================================================================================
 
 ; GLSL: uint64_t ballot(bool)
+define i64 @llpc.ballot(i1 %value) #0
+{
+    %1 = select i1 %value, i32 1, i32 0
+    ; Prevent optimization of backend compiler on the control flow
+    %2 = call i32 asm sideeffect "; %1", "=v,0"(i32 %1)
+    ; 33 = predicate NE
+    %3 = call i64 @llvm.amdgcn.icmp.i32(i32 %2, i32 0, i32 33)
+
+    ret i64 %3
+}
+
+; GLSL: uvec4 ballot(bool)
 define spir_func <4 x i32> @_Z17SubgroupBallotKHRb(i1 %value) #0
 {
-    ; TODO: Add real support for ballot()
-    %1 = select i1 %value, i64 -1, i64 0
+    %1 = call i64 @llpc.ballot(i1 %value)
+    %2 = bitcast i64 %1 to <2 x i32>
+    %3 = shufflevector <2 x i32> %2, <2 x i32> undef, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
 
-    %2 = trunc i64 %1 to i32
-    %3 = lshr i64 %1, 32
-    %4 = trunc i64 %3 to i32
-    %5 = insertelement <4 x i32> undef, i32 %2, i32 0
-    %6 = insertelement <4 x i32> %5, i32 %4, i32 1
-
-    ret <4 x i32> %6
+    ret <4 x i32> %3
 }
 
 ; GLSL: float readInvocation(float, uint)
@@ -307,9 +315,7 @@ define spir_func i32 @_Z26SubgroupFirstInvocationKHRi(i32 %value)
 ; GLSL: bool anyInvocation(bool)
 define spir_func i1 @_Z14SubgroupAnyKHRb(i1 %value)
 {
-    ; TODO: Add real support for ballot()
-    %1 = select i1 %value, i64 -1, i64 0
-
+    %1 = call i64 @llpc.ballot(i1 %value)
     %2 = icmp ne i64 %1, 0
 
     ret i1 %2
@@ -318,10 +324,8 @@ define spir_func i1 @_Z14SubgroupAnyKHRb(i1 %value)
 ; GLSL: bool allInvocations(bool)
 define spir_func i1 @_Z14SubgroupAllKHRb(i1 %value)
 {
-    ; TODO: Add real support for ballot()
-    %1 = select i1 %value, i64 -1, i64 0
-    %2 = select i1 true, i64 -1, i64 0
-
+    %1 = call i64 @llpc.ballot(i1 %value)
+    %2 = call i64 @llpc.ballot(i1 true)
     %3 = icmp eq i64 %1, %2
 
     ret i1 %3
@@ -330,10 +334,8 @@ define spir_func i1 @_Z14SubgroupAllKHRb(i1 %value)
 ; GLSL: bool allInvocationsEqual(bool)
 define spir_func i1 @_Z19SubgroupAllEqualKHRb(i1 %value)
 {
-    ; TODO: Add real support for ballot()
-    %1 = select i1 %value, i64 -1, i64 0
-    %2 = select i1 true, i64 -1, i64 0
-
+    %1 = call i64 @llpc.ballot(i1 %value)
+    %2 = call i64 @llpc.ballot(i1 true)
     %3 = icmp eq i64 %1, %2
     %4 = icmp eq i64 %1, 0
     %5 = or i1 %3, %4
@@ -356,6 +358,20 @@ define spir_func i32 @_Z18WriteInvocationAMDiii(i32 %inputValue, i32 %writeValue
 {
     %1 = call i32 @llvm.amdgcn.writelane(i32 %writeValue, i32 %invocationIndex, i32 %inputValue)
     ret i32 %1
+}
+
+; GLSL: bool subgroupElect()
+define spir_func i1 @_Z20GroupNonUniformElecti(i32 %scope)
+{
+    %1 = call i64 @llpc.ballot(i1 true)
+    %2 = call i64 @llvm.cttz.i64(i64 %1, i1 true)
+    %3 = trunc i64 %2 to i32
+
+    %4 = call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #1
+    %5 = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %4) #1
+
+    %6 = icmp eq i32 %3, %5
+    ret i1 %6
 }
 
 ; =====================================================================================================================
@@ -463,9 +479,13 @@ declare i32 @llpc.input.import.builtin.GsWaveId(i32) #0
 declare i32 @llvm.amdgcn.readlane(i32, i32) #2
 declare i32 @llvm.amdgcn.readfirstlane(i32) #2
 declare i32 @llvm.amdgcn.writelane(i32, i32, i32) #2
+declare i64 @llvm.amdgcn.icmp.i32(i32, i32, i32) #2
+declare i32 @llvm.amdgcn.mbcnt.lo(i32, i32) #1
+declare i32 @llvm.amdgcn.mbcnt.hi(i32, i32) #1
+declare i64 @llvm.cttz.i64(i64, i1) #0
 
 attributes #0 = { nounwind }
-attributes #1 = { nounwind readonly }
+attributes #1 = { nounwind readnone }
 attributes #2 = { nounwind readnone convergent }
 attributes #3 = { convergent nounwind }
 

@@ -926,7 +926,16 @@ VertexFetch::VertexFetch(
     std::vector<Constant*> defaults;
     auto pZero = ConstantInt::get(m_pContext->Int32Ty(), 0);
 
+    // Int16 (0, 0, 0, 1)
+    defaults.clear();
+    defaults.push_back(pZero);
+    defaults.push_back(pZero);
+    defaults.push_back(pZero);
+    defaults.push_back(ConstantInt::get(m_pContext->Int32Ty(), 1));
+    m_fetchDefaults.pInt16 = ConstantVector::get(defaults);
+
     // Int (0, 0, 0, 1)
+    defaults.clear();
     defaults.push_back(pZero);
     defaults.push_back(pZero);
     defaults.push_back(pZero);
@@ -944,6 +953,16 @@ VertexFetch::VertexFetch(
     defaults.push_back(pZero);
     defaults.push_back(ConstantInt::get(m_pContext->Int32Ty(), 1));
     m_fetchDefaults.pInt64 = ConstantVector::get(defaults);
+
+    // Float16 (0, 0, 0, 1.0)
+    const uint16_t float16One = 0x3C00;
+
+    defaults.clear();
+    defaults.push_back(pZero);
+    defaults.push_back(pZero);
+    defaults.push_back(pZero);
+    defaults.push_back(ConstantInt::get(m_pContext->Int32Ty(), float16One));
+    m_fetchDefaults.pFloat16 = ConstantVector::get(defaults);
 
     // Float (0.0, 0.0, 0.0, 1.0)
     union
@@ -1016,9 +1035,12 @@ Value* VertexFetch::Run(
 
     const VertexFormatInfo* pFormatInfo = GetVertexFormatInfo(pAttrib->format);
 
+    const bool is16bitFetch = (pInputTy->getScalarSizeInBits() == 16);
+
     // Do the first vertex fetch operation
     AddVertexFetchInst(pVbDesc,
                        pFormatInfo->numChannels,
+                       is16bitFetch,
                        pVbIndex,
                        pAttrib->offset,
                        pBinding->stride,
@@ -1164,6 +1186,7 @@ Value* VertexFetch::Run(
 
         AddVertexFetchInst(pVbDesc,
                            numChannels,
+                           is16bitFetch,
                            pVbIndex,
                            pAttrib->offset + SizeOfVec4,
                            pBinding->stride,
@@ -1222,14 +1245,18 @@ Value* VertexFetch::Run(
     // Finalize vertex fetch
     Type* pBasicTy = pInputTy->isVectorTy() ? pInputTy->getVectorElementType() : pInputTy;
     const uint32_t bitWidth = pBasicTy->getScalarSizeInBits();
-    LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
+    LLPC_ASSERT((bitWidth == 16) || (bitWidth == 32) || (bitWidth == 64));
 
     // Get default fetch values
     Constant* pDefaults = nullptr;
 
     if (pBasicTy->isIntegerTy())
     {
-        if (bitWidth == 32)
+        if (bitWidth == 16)
+        {
+            pDefaults = m_fetchDefaults.pInt16;
+        }
+        else if (bitWidth == 32)
         {
             pDefaults = m_fetchDefaults.pInt;
         }
@@ -1241,7 +1268,11 @@ Value* VertexFetch::Run(
     }
     else if (pBasicTy->isFloatingPointTy())
     {
-        if (bitWidth == 32)
+        if (bitWidth == 16)
+        {
+            pDefaults = m_fetchDefaults.pFloat16;
+        }
+        else if (bitWidth == 32)
         {
             pDefaults = m_fetchDefaults.pFloat;
         }
@@ -1287,9 +1318,27 @@ Value* VertexFetch::Run(
         }
     }
 
+    // TODO: Support 16-bit vertex fetch.
+    if (is16bitFetch)
+    {
+        // NOTE: Since tbuffer_load_d16 is not supported, we have to convert the resulting float fetch values to
+        // float16 values manually. The fetch values are represented by <n x i32>, so we will bitcast the float16
+        // values to int32 eventually.
+        if (pBasicTy->isFloatingPointTy())
+        {
+            for (uint32_t i = 0; i < fetchCompCount; ++i)
+            {
+                fetchValues[i] = new BitCastInst(fetchValues[i], m_pContext->FloatTy(), "", pInsertPos);
+                fetchValues[i] = new FPTruncInst(fetchValues[i], m_pContext->Float16Ty(), "", pInsertPos);
+                fetchValues[i] = new BitCastInst(fetchValues[i], m_pContext->Int16Ty(), "", pInsertPos);
+                fetchValues[i] = new ZExtInst(fetchValues[i], m_pContext->Int32Ty(), "", pInsertPos);
+            }
+        }
+    }
+
     // Construct vertex fetch results
     const uint32_t inputCompCount = pInputTy->isVectorTy() ? pInputTy->getVectorNumElements() : 1;
-    const uint32_t vertexCompCount = inputCompCount * bitWidth / 32;
+    const uint32_t vertexCompCount = inputCompCount * ((bitWidth == 64) ? 2 : 1);
 
     std::vector<Value*> vertexValues(vertexCompCount);
 
@@ -1331,6 +1380,17 @@ Value* VertexFetch::Run(
                                                 "",
                                                 pInsertPos);
         }
+    }
+
+    // NOTE: The vertex fetch results are represented as <n x i32> now. For 16-bit vertex fetch, we have to
+    // convert them to <n x i16> and the 16 high bits is truncated.
+    if (is16bitFetch)
+    {
+        Type* pVertexTy = pVertex->getType();
+        pVertexTy = pVertexTy->isVectorTy() ?
+                        VectorType::get(m_pContext->Int16Ty(), pVertexTy->getVectorNumElements()) :
+                        m_pContext->Int16Ty();
+        pVertex = new TruncInst(pVertex, pVertexTy, "", pInsertPos);
     }
 
     return pVertex;
@@ -1421,15 +1481,16 @@ void VertexFetch::ExtractVertexInputInfo(
 // =====================================================================================================================
 // Inserts instructions to do vertex fetch operations.
 void VertexFetch::AddVertexFetchInst(
-    Value*       pVbDesc,     // [in] Vertex buffer descriptor
-    uint32_t     numChannels, // Valid number of channels
-    Value*       pVbIndex,    // [in] Index of vertex fetch in buffer
-    uint32_t     offset,      // Vertex attribute offset (in bytes)
-    uint32_t     stride,      // Vertex attribute stride (in bytes)
-    uint32_t     dfmt,        // Date format of vertex buffer
-    uint32_t     nfmt,        // Numeric format of vertex buffer
-    Instruction* pInsertPos,  // [in] Where to insert instructions
-    Value**      ppFetch      // [out] Destination of vertex fetch
+    Value*       pVbDesc,       // [in] Vertex buffer descriptor
+    uint32_t     numChannels,   // Valid number of channels
+    bool         is16bitFetch,  // Whether it is 16-bit vertex fetch
+    Value*       pVbIndex,      // [in] Index of vertex fetch in buffer
+    uint32_t     offset,        // Vertex attribute offset (in bytes)
+    uint32_t     stride,        // Vertex attribute stride (in bytes)
+    uint32_t     dfmt,          // Date format of vertex buffer
+    uint32_t     nfmt,          // Numeric format of vertex buffer
+    Instruction* pInsertPos,    // [in] Where to insert instructions
+    Value**      ppFetch        // [out] Destination of vertex fetch
     ) const
 {
     const VertexCompFormatInfo* pFormatInfo = GetVertexComponentFormatInfo(dfmt);
@@ -1484,6 +1545,7 @@ void VertexFetch::AddVertexFetchInst(
             break;
         }
 
+        // TODO: Support 16-bit vertex fetch.
         auto pFetch = EmitCall(m_pModule,
                                ("llvm.amdgcn.tbuffer.load" + suffix).str(),
                                pFetchTy,
@@ -1505,7 +1567,6 @@ void VertexFetch::AddVertexFetchInst(
         {
             *ppFetch = pFetch;
         }
-
     }
     else
     {
@@ -1556,6 +1617,7 @@ void VertexFetch::AddVertexFetchInst(
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));                  // glc
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));                  // slc
 
+            // TODO: Support 16-bit vertex fetch.
             auto pCompFetch = EmitCall(m_pModule,
                                        "llvm.amdgcn.tbuffer.load.i32",
                                        m_pContext->Int32Ty(),
@@ -1569,6 +1631,7 @@ void VertexFetch::AddVertexFetchInst(
                                                "",
                                                pInsertPos);
         }
+
         *ppFetch = pFetch;
     }
 }

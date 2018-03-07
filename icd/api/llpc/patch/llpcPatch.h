@@ -40,6 +40,7 @@ namespace llvm
 
 class PassRegistry;
 
+void initializePatchAddrSpaceMutatePass(PassRegistry&);
 void initializePatchBufferOpPass(PassRegistry&);
 void initializePatchDeadFuncRemovePass(PassRegistry&);
 void initializePatchDescriptorLoadPass(PassRegistry&);

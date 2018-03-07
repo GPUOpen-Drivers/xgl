@@ -439,10 +439,25 @@ enum BuiltIn {
     BuiltInSubgroupLocalInvocationId = 41,
     BuiltInVertexIndex = 42,
     BuiltInInstanceIndex = 43,
+#ifdef ICD_VULKAN_1_1
+    BuiltInSubgroupEqMask = 4416,
+#endif
     BuiltInSubgroupEqMaskKHR = 4416,
+#ifdef ICD_VULKAN_1_1
+    BuiltInSubgroupGeMask = 4417,
+#endif
     BuiltInSubgroupGeMaskKHR = 4417,
+#ifdef ICD_VULKAN_1_1
+    BuiltInSubgroupGtMask = 4418,
+#endif
     BuiltInSubgroupGtMaskKHR = 4418,
+#ifdef ICD_VULKAN_1_1
+    BuiltInSubgroupLeMask = 4419,
+#endif
     BuiltInSubgroupLeMaskKHR = 4419,
+#ifdef ICD_VULKAN_1_1
+    BuiltInSubgroupLtMask = 4420,
+#endif
     BuiltInSubgroupLtMaskKHR = 4420,
     BuiltInBaseVertex = 4424,
     BuiltInBaseInstance = 4425,
@@ -462,6 +477,9 @@ enum BuiltIn {
     BuiltInSecondaryViewportMaskNV = 5258,
     BuiltInPositionPerViewNV = 5261,
     BuiltInViewportMaskPerViewNV = 5262,
+#ifdef ICD_VULKAN_1_1
+    BuiltInFullyCoveredEXT = 5264,
+#endif
     BuiltInPerVertex = 1024, /* internal use only */
     BuiltInMax = 0x7fffffff,
 };
@@ -565,6 +583,9 @@ enum GroupOperation {
     GroupOperationReduce = 0,
     GroupOperationInclusiveScan = 1,
     GroupOperationExclusiveScan = 2,
+#ifdef ICD_VULKAN_1_1
+    GroupOperationClusteredReduce = 3,
+#endif
     GroupOperationMax = 0x7fffffff,
 };
 
@@ -645,6 +666,16 @@ enum Capability {
     CapabilitySubgroupDispatch = 58,
     CapabilityNamedBarrier = 59,
     CapabilityPipeStorage = 60,
+#ifdef ICD_VULKAN_1_1
+    CapabilityGroupNonUniform = 61,
+    CapabilityGroupNonUniformVote = 62,
+    CapabilityGroupNonUniformArithmetic = 63,
+    CapabilityGroupNonUniformBallot = 64,
+    CapabilityGroupNonUniformShuffle = 65,
+    CapabilityGroupNonUniformShuffleRelative = 66,
+    CapabilityGroupNonUniformClustered = 67,
+    CapabilityGroupNonUniformQuad = 68,
+#endif
     CapabilitySubgroupBallotKHR = 4423,
     CapabilityDrawParameters = 4427,
     CapabilitySubgroupVoteKHR = 4431,
@@ -671,6 +702,9 @@ enum Capability {
     CapabilityShaderViewportMaskNV = 5255,
     CapabilityShaderStereoViewNV = 5259,
     CapabilityPerViewAttributesNV = 5260,
+#ifdef ICD_VULKAN_1_1
+    CapabilityFragmentFullyCoveredEXT = 5265,
+#endif
     CapabilitySubgroupShuffleINTEL = 5568,
     CapabilitySubgroupBufferBlockIOINTEL = 5569,
     CapabilitySubgroupImageBlockIOINTEL = 5570,
@@ -984,6 +1018,42 @@ enum Op {
     OpModuleProcessed = 330,
     OpExecutionModeId = 331,
     OpDecorateId = 332,
+#ifdef ICD_VULKAN_1_1
+    OpGroupNonUniformElect = 333,
+    OpGroupNonUniformAll = 334,
+    OpGroupNonUniformAny = 335,
+    OpGroupNonUniformAllEqual = 336,
+    OpGroupNonUniformBroadcast = 337,
+    OpGroupNonUniformBroadcastFirst = 338,
+    OpGroupNonUniformBallot = 339,
+    OpGroupNonUniformInverseBallot = 340,
+    OpGroupNonUniformBallotBitExtract = 341,
+    OpGroupNonUniformBallotBitCount = 342,
+    OpGroupNonUniformBallotFindLSB = 343,
+    OpGroupNonUniformBallotFindMSB = 344,
+    OpGroupNonUniformShuffle = 345,
+    OpGroupNonUniformShuffleXor = 346,
+    OpGroupNonUniformShuffleUp = 347,
+    OpGroupNonUniformShuffleDown = 348,
+    OpGroupNonUniformIAdd = 349,
+    OpGroupNonUniformFAdd = 350,
+    OpGroupNonUniformIMul = 351,
+    OpGroupNonUniformFMul = 352,
+    OpGroupNonUniformSMin = 353,
+    OpGroupNonUniformUMin = 354,
+    OpGroupNonUniformFMin = 355,
+    OpGroupNonUniformSMax = 356,
+    OpGroupNonUniformUMax = 357,
+    OpGroupNonUniformFMax = 358,
+    OpGroupNonUniformBitwiseAnd = 359,
+    OpGroupNonUniformBitwiseOr = 360,
+    OpGroupNonUniformBitwiseXor = 361,
+    OpGroupNonUniformLogicalAnd = 362,
+    OpGroupNonUniformLogicalOr = 363,
+    OpGroupNonUniformLogicalXor = 364,
+    OpGroupNonUniformQuadBroadcast = 365,
+    OpGroupNonUniformQuadSwap = 366,
+#endif
     OpSubgroupBallotKHR = 4421,
     OpSubgroupFirstInvocationKHR = 4422,
     OpSubgroupAllKHR = 4428,

@@ -108,10 +108,10 @@ endif()
 # Configure Vulkan SDK version definitions
 if(USE_NEXT_SDK)
     set(VULKAN_SDK_VERSION sdk-1.1)
-    target_compile_definitions(xgl PRIVATE SDK_1_1)
+    target_compile_definitions(xgl PRIVATE ICD_VULKAN_1_1)
+    target_compile_definitions(llpc PRIVATE ICD_VULKAN_1_1)
 else()
     set(VULKAN_SDK_VERSION sdk-1.0)
-    target_compile_definitions(xgl PRIVATE SDK_1_0)
 endif()
 
 # Enable relevant GPUOpen preprocessor definitions
@@ -342,7 +342,7 @@ if (UNIX)
 
     if(CMAKE_BUILD_TYPE_RELEASE)
         execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
-        if ((GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3) AND GCC_VERSION VERSION_LESS 7.0)
+        if (GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
             target_link_libraries(xgl PRIVATE -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/src/libpal.a -Wl,--no-whole-archive)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/metrohash/libmetrohash.a -Wl,--no-whole-archive)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/gpuopen/libgpuopen.a -Wl,--no-whole-archive)
@@ -353,7 +353,7 @@ if (UNIX)
     endif()
 
 endif()
-target_link_libraries(xgl PRIVATE pal)
 
+target_link_libraries(xgl PRIVATE pal)
 ### Visual Studio Filters ##############################################################################################
 target_vs_filters(xgl)

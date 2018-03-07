@@ -1522,15 +1522,15 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
         if (inOutMeta.IsBuiltIn)
         {
             BuiltIn builtInId = static_cast<BuiltIn>(inOutMeta.Value);
-            if ((builtInId == BuiltInSubgroupSize)              ||
-                (builtInId == BuiltInSubgroupLocalInvocationId) ||
+            if ((builtInId == BuiltInSubgroupLocalInvocationId) ||
                 (builtInId == BuiltInSubgroupEqMaskKHR)         ||
                 (builtInId == BuiltInSubgroupGeMaskKHR)         ||
                 (builtInId == BuiltInSubgroupGtMaskKHR)         ||
                 (builtInId == BuiltInSubgroupLeMaskKHR)         ||
                 (builtInId == BuiltInSubgroupLtMaskKHR))
             {
-                // NOTE: For those common built-ins that are stage independent, the import calls could be simplified.
+                // NOTE: For those common built-ins that are stage independent and the implementation body is in the
+                // external GLSL emulation libarary (.ll files), the import calls could be simplified.
                 args.clear();
                 args.push_back(ConstantInt::get(m_pContext->Int32Ty(), builtInId));
             }

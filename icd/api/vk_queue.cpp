@@ -1037,6 +1037,10 @@ VkResult Queue::BindSparse(
             // Signal any semaphores depending on the preceding remap operations
             if (result == VK_SUCCESS)
             {
+#ifdef ICD_VULKAN_1_1
+                // TODO - implement device group support for sparse resources
+                // SWDEV - 120869 [Vulkan1.1] - VK_KHX_device group - spare resource support
+#endif
 
                 result = PalSignalSemaphores(
                     bindInfo.signalSemaphoreCount,

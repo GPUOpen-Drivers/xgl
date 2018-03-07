@@ -210,4 +210,13 @@ std::unique_ptr<Module> Context::LoadLibary(
     return std::move(pLibModule);
 }
 
+// =====================================================================================================================
+// Sets triple and data layout in specified module from the context's target machine.
+void Context::SetModuleTargetMachine(
+    Module* pModule)  // [in/out] Module to modify
+{
+    pModule->setTargetTriple(GetTargetMachine()->getTargetTriple().getTriple());
+    pModule->setDataLayout(GetTargetMachine()->createDataLayout());
+}
+
 } // Llpc

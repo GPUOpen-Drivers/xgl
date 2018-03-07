@@ -139,6 +139,27 @@ inline T RoundDownToMultiple(
     return ((operand / alignment) * alignment);
 }
 
+// =====================================================================================================================
+// Computes the base-2 logarithm of an unsigned 64-bit integer.
+//
+// If the given integer is not a power of 2, this function will not provide an exact answer.
+//
+// Returns log2(u)
+template< typename T>
+inline uint32_t Log2(
+    T u)  // Value to compute the logarithm of.
+{
+    uint32_t logValue = 0;
+
+    while (u > 1)
+    {
+        ++logValue;
+        u >>= 1;
+    }
+
+    return logValue;
+}
+
 // ===================================================================================
 // Returns the bits of a floating point value as an unsigned integer.
 inline uint32_t FloatToBits(

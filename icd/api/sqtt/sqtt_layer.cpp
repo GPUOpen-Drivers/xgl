@@ -1694,6 +1694,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectTagEXT(
     return SQTT_CALL_NEXT_LAYER(vkDebugMarkerSetObjectTagEXT)(device, pTagInfo);
 }
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
 // =====================================================================================================================
 // This function looks for specific tags in a submit's command buffers to identify when to force an RGP trace start
 // rather than during it during vkQueuePresent().  This is done for applications that explicitly do not make present
@@ -1765,6 +1766,7 @@ static void CheckRGPFrameEnd(
         }
     }
 }
+#endif
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
@@ -1777,13 +1779,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
     SqttMgr* pSqtt       = pQueue->VkDevice()->GetSqttMgr();
     DevModeMgr* pDevMode = pQueue->VkDevice()->VkInstance()->GetDevModeMgr();
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
     pDevMode->NotifyPreSubmit();
 
     CheckRGPFrameBegin(pQueue, pDevMode, submitCount, pSubmits);
+#endif
 
     VkResult result = SQTT_CALL_NEXT_LAYER(vkQueueSubmit)(queue, submitCount, pSubmits, fence);
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
     CheckRGPFrameEnd(pQueue, pDevMode, submitCount, pSubmits);
+#endif
 
     return result;
 }

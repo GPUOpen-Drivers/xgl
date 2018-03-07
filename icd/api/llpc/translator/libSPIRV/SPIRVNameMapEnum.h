@@ -401,6 +401,7 @@ SPIRVMap<BuiltIn, std::string>::init() {
   add(BuiltInSubgroupGtMaskKHR, "BuiltInSubgroupGtMaskKHR");
   add(BuiltInSubgroupLeMaskKHR, "BuiltInSubgroupLeMaskKHR");
   add(BuiltInSubgroupLtMaskKHR, "BuiltInSubgroupLtMaskKHR");
+  add(BuiltInDeviceIndex, "BuiltInDeviceIndex");
 }
 SPIRV_DEF_NAMEMAP(BuiltIn, SPIRVBuiltInNameMap)
 
@@ -419,6 +420,9 @@ SPIRVMap<GroupOperation, std::string>::init() {
   add(GroupOperationReduce, "Reduce");
   add(GroupOperationInclusiveScan, "InclusiveScan");
   add(GroupOperationExclusiveScan, "ExclusiveScan");
+#ifdef ICD_VULKAN_1_1
+  add(GroupOperationClusteredReduce, "ClusteredReduce");
+#endif
 }
 SPIRV_DEF_NAMEMAP(GroupOperation, SPIRVGroupOperationNameMap)
 
@@ -492,12 +496,23 @@ SPIRVMap<Capability, std::string>::init() {
   add(CapabilityStencilExportEXT, "StencilExportEXT");
   add(CapabilityShaderViewportIndexLayerEXT, "ShaderViewportIndexLayerEXT");
   add(CapabilityMultiView, "MultiView");
+  add(CapabilityDeviceGroup, "DeviceGroup");
   add(CapabilitySubgroupBallotKHR, "SubgroupBallotKHR");
   add(CapabilitySubgroupVoteKHR, "SubgroupVoteKHR");
   add(CapabilityStorageBuffer16BitAccess, "StorageBuffer16BitAccess");
   add(CapabilityUniformAndStorageBuffer16BitAccess, "UniformAndStorageBuffer16BitAccess");
   add(CapabilityStoragePushConstant16, "StoragePushConstant16");
   add(CapabilityStorageInputOutput16, "StorageInputOutput16");
+#ifdef ICD_VULKAN_1_1
+  add(CapabilityGroupNonUniform, "GroupNonUniform");
+  add(CapabilityGroupNonUniformVote, "GroupNonUniformVote");
+  add(CapabilityGroupNonUniformArithmetic, "GroupNonUniformArithmetic");
+  add(CapabilityGroupNonUniformBallot, "GroupNonUniformBallot");
+  add(CapabilityGroupNonUniformShuffle, "GroupNonUniformShuffle");
+  add(CapabilityGroupNonUniformShuffleRelative, "GroupNonUniformShuffleRelative");
+  add(CapabilityGroupNonUniformClustered, "GroupNonUniformClustered");
+  add(CapabilityGroupNonUniformQuad, "GroupNonUniformQuad");
+#endif
 }
 SPIRV_DEF_NAMEMAP(Capability, SPIRVCapabilityNameMap)
 

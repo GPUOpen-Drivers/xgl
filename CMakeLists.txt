@@ -53,7 +53,7 @@ if(ICD_BUILD_LLPCONLY)
     set(ICD_BUILD_SPVONLY OFF CACHE BOOL "ICD_BUILD_LLPCONLY override." FORCE)
 endif()
 
-option(USE_NEXT_SDK "Use next SDK?" OFF)
+option(USE_NEXT_SDK "Use next SDK?" ON)
 
 option(ICD_BUILD_VIDEO "Build Video Support?" OFF)
 

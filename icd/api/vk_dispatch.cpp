@@ -210,6 +210,9 @@ const DispatchTableEntry g_GlobalDispatchTable[] =
     PRIMARY_DISPATCH_ENTRY(vkCreateInstance),
     PRIMARY_DISPATCH_ENTRY(vkEnumerateInstanceExtensionProperties),
     PRIMARY_DISPATCH_ENTRY(vkEnumerateInstanceLayerProperties),
+#ifdef ICD_VULKAN_1_1
+    PRIMARY_DISPATCH_ENTRY(vkEnumerateInstanceVersion),
+#endif
     VK_DISPATCH_TABLE_END()
 };
 
@@ -407,6 +410,16 @@ const DispatchTableEntry g_StandardDispatchTable[] =
     PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupPresentCapabilitiesKHX          ),
     PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupSurfacePresentModesKHX          ),
 
+#ifdef ICD_VULKAN_1_1
+    PRIMARY_DISPATCH_ENTRY( vkAcquireNextImage2KHR                          ),
+    PRIMARY_DISPATCH_ENTRY( vkCmdDispatchBaseKHR                            ),
+    PRIMARY_DISPATCH_ENTRY( vkCmdSetDeviceMaskKHR                           ),
+    PRIMARY_DISPATCH_ENTRY( vkEnumeratePhysicalDeviceGroupsKHR              ),
+    PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupPeerMemoryFeaturesKHR           ),
+    PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupPresentCapabilitiesKHR          ),
+    PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupSurfacePresentModesKHR          ),
+#endif
+
     PRIMARY_DISPATCH_ENTRY( vkQueueBindSparse                               ),
     PRIMARY_DISPATCH_ENTRY( vkQueuePresentKHR                               ),
     PRIMARY_DISPATCH_ENTRY( vkQueueSubmit                                   ),
@@ -447,7 +460,42 @@ const DispatchTableEntry g_StandardDispatchTable[] =
     PRIMARY_DISPATCH_ENTRY( vkCmdSetSampleLocationsEXT                      ),
     PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceMultisamplePropertiesEXT     ),
 
+#ifdef ICD_VULKAN_1_1
+    PRIMARY_DISPATCH_ENTRY( vkGetDescriptorSetLayoutSupportKHR              ),
+#endif
+
     PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceExternalFencePropertiesKHR   ),
+#ifdef ICD_VULKAN_1_1
+    PRIMARY_DISPATCH_ENTRY( vkEnumerateInstanceVersion                      ),
+
+    PRIMARY_DISPATCH_ALIAS( vkBindBufferMemory2                             , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkBindImageMemory2                              , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkCmdSetDeviceMask                              , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkCmdDispatchBase                               , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkCreateDescriptorUpdateTemplate                , KHR ),
+    PRIMARY_DISPATCH_ENTRY( vkCreateSamplerYcbcrConversion                  ),
+    PRIMARY_DISPATCH_ALIAS( vkDestroyDescriptorUpdateTemplate               , KHR ),
+    PRIMARY_DISPATCH_ENTRY( vkDestroySamplerYcbcrConversion                 ),
+    PRIMARY_DISPATCH_ALIAS( vkEnumeratePhysicalDeviceGroups                 , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetBufferMemoryRequirements2                  , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetDescriptorSetLayoutSupport                 , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetDeviceGroupPeerMemoryFeatures              , KHR ),
+    PRIMARY_DISPATCH_ENTRY( vkGetDeviceQueue2                               ),
+    PRIMARY_DISPATCH_ALIAS( vkGetImageMemoryRequirements2                   , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetImageSparseMemoryRequirements2             , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceExternalBufferProperties     , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceExternalFenceProperties      , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceExternalSemaphoreProperties  , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceFeatures2                    , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceFormatProperties2            , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceImageFormatProperties2       , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceMemoryProperties2            , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceProperties2                  , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceQueueFamilyProperties2       , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceSparseImageFormatProperties2 , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkTrimCommandPool                               , KHR ),
+    PRIMARY_DISPATCH_ALIAS( vkUpdateDescriptorSetWithTemplate               , KHR ),
+#endif
     PRIMARY_DISPATCH_ENTRY( vkCreateDebugReportCallbackEXT                  ),
     PRIMARY_DISPATCH_ENTRY( vkDestroyDebugReportCallbackEXT                 ),
     PRIMARY_DISPATCH_ENTRY( vkDebugReportMessageEXT                         ),

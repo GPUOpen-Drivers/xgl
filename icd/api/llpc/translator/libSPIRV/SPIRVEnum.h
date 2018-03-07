@@ -400,6 +400,8 @@ SPIRVMap<BuiltIn, SPIRVCapVec>::init() {
   ADD_VEC_INIT(BuiltInSubgroupGtMaskKHR, { CapabilitySubgroupBallotKHR });
   ADD_VEC_INIT(BuiltInSubgroupLeMaskKHR, { CapabilitySubgroupBallotKHR });
   ADD_VEC_INIT(BuiltInSubgroupLtMaskKHR, { CapabilitySubgroupBallotKHR });
+  ADD_VEC_INIT(BuiltInDeviceIndex, { CapabilityDeviceGroup });
+  ADD_VEC_INIT(BuiltInViewIndex, { CapabilityMultiView });
 }
 
 template<> inline void

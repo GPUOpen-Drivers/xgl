@@ -255,8 +255,8 @@ VkResult Device::Create(
     Pal::Result palResult = Pal::Result::Success;
     uint32_t queueCounts[Queue::MaxQueueFamilies] = {};
 
-    // VK_QUEUE_GLOBAL_PRIORITY_MEDIUM is the default value.
-    VkQueueGlobalPriorityEXT queuePriority[Queue::MaxQueueFamilies] = { VK_QUEUE_GLOBAL_PRIORITY_MEDIUM };
+    // VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT is the default value.
+    VkQueueGlobalPriorityEXT queuePriority[Queue::MaxQueueFamilies] = { VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT };
 
     VkResult vkResult = VK_SUCCESS;
     void*    pMemory  = nullptr;
@@ -267,6 +267,30 @@ VkResult Device::Create(
     };
 
     DeviceExtensions::Enabled enabledDeviceExtensions;
+
+#ifdef ICD_VULKAN_1_1
+    // Implicitly enable device extensions that are core in the API version
+    if (pPhysicalDevice->VkInstance()->GetAPIVersion() >= VK_MAKE_VERSION(1, 1, 0))
+    {
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_16BIT_STORAGE);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_BIND_MEMORY2);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_DEDICATED_ALLOCATION);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_DESCRIPTOR_UPDATE_TEMPLATE);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_DEVICE_GROUP);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_EXTERNAL_FENCE);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_EXTERNAL_MEMORY);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_EXTERNAL_SEMAPHORE);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_MAINTENANCE1);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_MAINTENANCE2);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_MAINTENANCE3);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_MULTIVIEW);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_RELAXED_BLOCK_LAYOUT);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_SHADER_DRAW_PARAMETERS);
+//        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION);
+        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS);
+    }
+#endif
 
     VK_ASSERT(pCreateInfo != nullptr);
 
@@ -380,6 +404,22 @@ VkResult Device::Create(
                     }
                 }
                 break;
+
+#ifdef ICD_VULKAN_1_1
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
+            {
+                const VkPhysicalDeviceMultiviewFeatures* pMultiviewFeatures =
+                    reinterpret_cast<const VkPhysicalDeviceMultiviewFeatures*>(pHeader);
+
+                // The implementation of multiview does not require special handling,
+                // therefore the multview features can be ignored.
+                VK_IGNORE(pMultiviewFeatures->multiview);
+                VK_IGNORE(pMultiviewFeatures->multiviewGeometryShader);
+                VK_IGNORE(pMultiviewFeatures->multiviewTessellationShader);
+
+                break;
+            }
+#endif
 
             default:
                 // Skip any unknown extension structures
@@ -1600,6 +1640,12 @@ VkResult Device::GetDeviceGroupPresentCapabilities(
         VkDeviceGroupPresentCapabilitiesKHX* pVkDeviceGroupPresentCapabilitiesKHX;
     };
 
+#ifdef ICD_VULKAN_1_1
+    // KHX structure has the same definition as KHR or Vulkan 1.1 core structures
+    static_assert(VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHR == VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHX,
+                  "Mismatched KHR and KHX structure defines");
+#endif
+
     for (pTemplatedCaps = pDeviceGroupPresentCapabilities; pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32_t>(pHeader->sType))
@@ -1703,6 +1749,14 @@ VkResult Device::BindImageMemory(
         const VkBindImageMemorySwapchainInfoKHX*     pVkBindImageMemorySwapchainInfoKHX;
         const VkBindImageMemoryDeviceGroupInfoKHX*   pVkBindImageMemoryDeviceGroupInfoKHX;
     };
+
+#ifdef ICD_VULKAN_1_1
+    // KHX structures have the same definition as KHR or Vulkan 1.1 core structures
+    static_assert(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO_KHR == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO_KHX,
+                  "Mismatched KHR and KHX structure defines");
+    static_assert(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHX,
+                  "Mismatched KHR and KHX structure defines");
+#endif
 
     for (uint32_t bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
@@ -1961,6 +2015,9 @@ VkResult Device::CreateLlpcCompiler(
     // Identify for Icd and stanalone compiler
     llpcOptions[numOptions++] = Llpc::VkIcdName;
 
+    // Generate ELF binary, not assembly text
+    llpcOptions[numOptions++] = "-filetype=obj";
+
     // LLPC log options
     llpcOptions[numOptions++] = (settings.enableLog & 1) ? "-enable-errs=1" : "-enable-errs=0";
     llpcOptions[numOptions++] = (settings.enableLog & 2) ? "-enable-outs=1" : "-enable-outs=0";
@@ -2033,7 +2090,6 @@ VkResult Device::CreateLlpcCompiler(
 
     // NOTE: For testing consistency, these options should be kept the same as those of
     // "amdllpc" (Init()).
-    llpcOptions[numOptions++] = "-O3";
     llpcOptions[numOptions++] = "-pragma-unroll-threshold=4096";
     llpcOptions[numOptions++] = "-unroll-allow-partial";
     llpcOptions[numOptions++] = "-lower-dyn-index";
@@ -2217,6 +2273,24 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue(
 {
     ApiDevice::ObjectFromHandle(device)->GetQueue(queueFamilyIndex, queueIndex, pQueue);
 }
+
+#ifdef ICD_VULKAN_1_1
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue2(
+    VkDevice                                    device,
+    const VkDeviceQueueInfo2*                   pQueueInfo,
+    VkQueue*                                    pQueue)
+{
+    // For now we assume we don't get any additional information here compared to vkGetDeviceQueue.
+    // If that changes due to having new structs added to the chain, adding support for protected queues, or other
+    // queue creation flags then this code needs to be updated.
+    VK_ASSERT(pQueueInfo->sType == VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2);
+    VK_ASSERT(pQueueInfo->pNext == nullptr);
+    VK_ASSERT(pQueueInfo->flags == 0);
+
+    ApiDevice::ObjectFromHandle(device)->GetQueue(pQueueInfo->queueFamilyIndex, pQueueInfo->queueIndex, pQueue);
+}
+#endif
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSemaphore(
@@ -2478,6 +2552,29 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(
     return pDevice->CreateSampler(pCreateInfo, pAllocCB, pSampler);
 }
 
+#ifdef ICD_VULKAN_1_1
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateSamplerYcbcrConversion(
+    VkDevice                                    device,
+    const VkSamplerYcbcrConversionCreateInfo*   pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSamplerYcbcrConversion*                   pYcbcrConversion)
+{
+    VK_NOT_IMPLEMENTED;
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkDestroySamplerYcbcrConversion(
+    VkDevice                                    device,
+    VkSamplerYcbcrConversion                    ycbcrConversion,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    VK_NOT_IMPLEMENTED;
+}
+#endif
+
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSwapchainKHR(
     VkDevice                                     device,
@@ -2578,6 +2675,40 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorUpdateTemplateKHR(
     return pDevice->CreateDescriptorUpdateTemplate(pCreateInfo, pAllocCB, pDescriptorUpdateTemplate);
 }
 
+#ifdef ICD_VULKAN_1_1
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHR(
+    VkDevice                                    device,
+    uint32_t                                    heapIndex,
+    uint32_t                                    localDeviceIndex,
+    uint32_t                                    remoteDeviceIndex,
+    VkPeerMemoryFeatureFlagsKHR*                pPeerMemoryFeatures)
+{
+    ApiDevice::ObjectFromHandle(device)->GetDeviceGroupPeerMemoryFeatures(
+        heapIndex,
+        localDeviceIndex,
+        remoteDeviceIndex,
+        pPeerMemoryFeatures);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupPresentCapabilitiesKHR(
+    VkDevice                                    device,
+    VkDeviceGroupPresentCapabilitiesKHR*        pDeviceGroupPresentCapabilities)
+{
+    return ApiDevice::ObjectFromHandle(device)->GetDeviceGroupPresentCapabilities(pDeviceGroupPresentCapabilities);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupSurfacePresentModesKHR(
+    VkDevice                                    device,
+    VkSurfaceKHR                                surface,
+    VkDeviceGroupPresentModeFlagsKHX*           pModes)
+{
+    return ApiDevice::ObjectFromHandle(device)->GetDeviceGroupSurfacePresentModes(surface, pModes);
+}
+#endif
+
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHX(
     VkDevice                                    device,
@@ -2673,6 +2804,21 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
 
     return PalToVkResult(palResult);
 }
+
+#ifdef ICD_VULKAN_1_1
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupportKHR(
+    VkDevice                                    device,
+    const VkDescriptorSetLayoutCreateInfo*      pCreateInfo,
+    VkDescriptorSetLayoutSupportKHR*            pSupport)
+{
+    // No descriptor set layout validation is required beyond what is expressed with existing limits.
+    VK_ASSERT(pSupport->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT);
+    VK_ASSERT(pSupport->pNext == nullptr);
+
+    pSupport->supported = VK_TRUE;
+}
+#endif
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(

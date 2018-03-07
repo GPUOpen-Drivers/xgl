@@ -98,7 +98,8 @@ private:
 
     template <typename T>
     static Result BuildUserDataConfig(Context*    pContext,
-                                      ShaderStage shaderStage,
+                                      ShaderStage shaderStage1,
+                                      ShaderStage shaderStage2,
                                       uint32_t    startUserData,
                                       T*          pConfig);
 

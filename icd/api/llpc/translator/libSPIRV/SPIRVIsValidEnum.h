@@ -474,6 +474,8 @@ isValid(spv::BuiltIn V) {
     case BuiltInSubgroupGtMaskKHR:
     case BuiltInSubgroupLeMaskKHR:
     case BuiltInSubgroupLtMaskKHR:
+    case BuiltInDeviceIndex:
+    case BuiltInViewIndex:
       return true;
     default:
       return false;
@@ -500,6 +502,9 @@ isValid(spv::GroupOperation V) {
     case GroupOperationReduce:
     case GroupOperationInclusiveScan:
     case GroupOperationExclusiveScan:
+#ifdef ICD_VULKAN_1_1
+    case GroupOperationClusteredReduce:
+#endif
       return true;
     default:
       return false;
@@ -580,6 +585,16 @@ isValid(spv::Capability V) {
     case CapabilitySubgroupDispatch:
     case CapabilityNamedBarrier:
     case CapabilityPipeStorage:
+#ifdef ICD_VULKAN_1_1
+    case CapabilityGroupNonUniform:
+    case CapabilityGroupNonUniformVote:
+    case CapabilityGroupNonUniformArithmetic:
+    case CapabilityGroupNonUniformBallot:
+    case CapabilityGroupNonUniformShuffle:
+    case CapabilityGroupNonUniformShuffleRelative:
+    case CapabilityGroupNonUniformClustered:
+    case CapabilityGroupNonUniformQuad:
+#endif
     case CapabilityStencilExportEXT:
     case CapabilityShaderViewportIndexLayerEXT:
     case CapabilitySubgroupBallotKHR:
@@ -588,6 +603,8 @@ isValid(spv::Capability V) {
     case CapabilityUniformAndStorageBuffer16BitAccess:
     case CapabilityStoragePushConstant16:
     case CapabilityStorageInputOutput16:
+    case CapabilityDeviceGroup:
+    case CapabilityMultiView:
       return true;
     default:
       return false;
@@ -901,6 +918,44 @@ isValid(spv::Op V) {
     case OpNamedBarrierInitialize:
     case OpMemoryNamedBarrier:
     case OpModuleProcessed:
+    case OpExecutionModeId:
+    case OpDecorateId:
+#ifdef ICD_VULKAN_1_1
+    case OpGroupNonUniformElect:
+    case OpGroupNonUniformAll:
+    case OpGroupNonUniformAny:
+    case OpGroupNonUniformAllEqual:
+    case OpGroupNonUniformBroadcast:
+    case OpGroupNonUniformBroadcastFirst:
+    case OpGroupNonUniformBallot:
+    case OpGroupNonUniformInverseBallot:
+    case OpGroupNonUniformBallotBitExtract:
+    case OpGroupNonUniformBallotBitCount:
+    case OpGroupNonUniformBallotFindLSB:
+    case OpGroupNonUniformBallotFindMSB:
+    case OpGroupNonUniformShuffle:
+    case OpGroupNonUniformShuffleXor:
+    case OpGroupNonUniformShuffleUp:
+    case OpGroupNonUniformShuffleDown:
+    case OpGroupNonUniformIAdd:
+    case OpGroupNonUniformFAdd:
+    case OpGroupNonUniformIMul:
+    case OpGroupNonUniformFMul:
+    case OpGroupNonUniformSMin:
+    case OpGroupNonUniformUMin:
+    case OpGroupNonUniformFMin:
+    case OpGroupNonUniformSMax:
+    case OpGroupNonUniformUMax:
+    case OpGroupNonUniformFMax:
+    case OpGroupNonUniformBitwiseAnd:
+    case OpGroupNonUniformBitwiseOr:
+    case OpGroupNonUniformBitwiseXor:
+    case OpGroupNonUniformLogicalAnd:
+    case OpGroupNonUniformLogicalOr:
+    case OpGroupNonUniformLogicalXor:
+    case OpGroupNonUniformQuadBroadcast:
+    case OpGroupNonUniformQuadSwap:
+#endif
     case OpForward:
     case OpSubgroupBallotKHR:
     case OpSubgroupFirstInvocationKHR:

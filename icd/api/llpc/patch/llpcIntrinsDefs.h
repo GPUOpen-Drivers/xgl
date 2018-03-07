@@ -48,6 +48,7 @@ static const uint32_t GS_EMIT_STREAM0 = 0x22; // [3:0] = 2 (GS), [5:4] = 2 (emit
 // Enumerates address spaces valid for AMD GPU (similar to LLVM header AMDGPU.h)
 enum AddrSpace
 {
+    ADDR_SPACE_GLOBAL           = 1,            // Global memory
     ADDR_SPACE_CONST            = 2,            // Constant memory
     ADDR_SPACE_LOCAL            = 3,            // Local memory
 };

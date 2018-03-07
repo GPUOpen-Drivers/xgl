@@ -33,6 +33,7 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/Metadata.h"
 #include "llvm/IR/Type.h"
+#include "llvm/Target/TargetMachine.h"
 
 #include <unordered_map>
 #include <unordered_set>
@@ -79,6 +80,18 @@ public:
     llvm::Module* GetNativeGlslEmuLibrary() const
     {
         return m_pNativeGlslEmuLib.get();
+    }
+
+    // Sets the target machine.
+    void SetTargetMachine(llvm::TargetMachine* pTargetMachine)
+    {
+        m_pTargetMachine.reset(pTargetMachine);
+    }
+
+    // Gets the target machine.
+    llvm::TargetMachine* GetTargetMachine()
+    {
+        return m_pTargetMachine.get();
     }
 
     // Gets pre-constructed LLVM types
@@ -227,6 +240,9 @@ public:
         return m_pPipelineContext->GetShaderHashCode(shaderStage);
     }
 
+    // Sets triple and data layout in specified module from the context's target machine.
+    void SetModuleTargetMachine(llvm::Module* pModule);
+
 private:
     LLPC_DISALLOW_DEFAULT_CTOR(Context);
     LLPC_DISALLOW_COPY_AND_ASSIGN(Context);
@@ -238,6 +254,8 @@ private:
      std::unique_ptr<llvm::Module> m_pGlslEmuLib;       // LLVM library for GLSL emulation
      std::unique_ptr<llvm::Module> m_pNativeGlslEmuLib; // Native LLVM library for GLSL emulation
      volatile  bool                m_isInUse;           // Whether this context is in use
+
+     std::unique_ptr<llvm::TargetMachine> m_pTargetMachine; // Target machine
 
     llvm::MDNode*       m_pEmptyMetaNode;   // Empty metadata node
 

@@ -254,9 +254,9 @@ void PatchResourceCollect::visitCallInst(
                     }
                     else
                     {
-                        // NOTE: For 32-bit vector/scalar, one location is sufficient regardless of vector component
+                        // NOTE: For 16-bit/32-bit vector/scalar, one location is sufficient regardless of vector component
                         // addressing.
-                        LLPC_ASSERT(bitWidth == 32);
+                        LLPC_ASSERT((bitWidth == 16) || (bitWidth == 32));
                         m_activeInputLocs.insert(loc);
                     }
                 }
@@ -363,9 +363,9 @@ void PatchResourceCollect::visitCallInst(
             }
             else
             {
-                // NOTE: For 32-bit vector/scalar, one location is sufficient regardless of vector component
+                // NOTE: For 16-bit/32-bit vector/scalar, one location is sufficient regardless of vector component
                 // addressing.
-                LLPC_ASSERT(bitWidth == 32);
+                LLPC_ASSERT((bitWidth == 16) || (bitWidth == 32));
                 m_importedOutputLocs.insert(loc);
             }
         }
@@ -400,8 +400,6 @@ void PatchResourceCollect::visitCallInst(
             {
                 // Location offset is constant
                 auto bitWidth = pOutputTy->getScalarSizeInBits();
-                LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
-
                 if ((bitWidth == 64) && (isa<ConstantInt>(pCompIdx) == false))
                 {
                     // NOTE: If vector component index is not constant and it is vector component addressing for
@@ -738,7 +736,8 @@ void PatchResourceCollect::ClearInactiveInput()
             if (builtInUsage.cs.localInvocationId &&
                 ((m_activeInputBuiltIns.find(BuiltInLocalInvocationId) == m_activeInputBuiltIns.end()) &&
                  (m_activeInputBuiltIns.find(BuiltInGlobalInvocationId) == m_activeInputBuiltIns.end()) &&
-                 (m_activeInputBuiltIns.find(BuiltInLocalInvocationIndex) == m_activeInputBuiltIns.end())))
+                 (m_activeInputBuiltIns.find(BuiltInLocalInvocationIndex) == m_activeInputBuiltIns.end()) &&
+                 (m_activeInputBuiltIns.find(BuiltInSubgroupId) == m_activeInputBuiltIns.end())))
             {
                 builtInUsage.cs.localInvocationId = false;
             }
@@ -746,15 +745,30 @@ void PatchResourceCollect::ClearInactiveInput()
             if (builtInUsage.cs.workgroupId &&
                 ((m_activeInputBuiltIns.find(BuiltInWorkgroupId) == m_activeInputBuiltIns.end()) &&
                  (m_activeInputBuiltIns.find(BuiltInGlobalInvocationId) == m_activeInputBuiltIns.end()) &&
-                 (m_activeInputBuiltIns.find(BuiltInLocalInvocationIndex) == m_activeInputBuiltIns.end())))
+                 (m_activeInputBuiltIns.find(BuiltInLocalInvocationIndex) == m_activeInputBuiltIns.end()) &&
+                 (m_activeInputBuiltIns.find(BuiltInSubgroupId) == m_activeInputBuiltIns.end())))
             {
                 builtInUsage.cs.workgroupId = false;
+            }
+
+            if (builtInUsage.cs.subgroupId &&
+                (m_activeInputBuiltIns.find(BuiltInSubgroupId) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.cs.subgroupId = false;
+            }
+
+            if (builtInUsage.cs.numSubgroups &&
+                (m_activeInputBuiltIns.find(BuiltInNumSubgroups) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.cs.numSubgroups = false;
             }
         }
 
         // Check common built-in usage
         if (builtInUsage.common.subgroupSize &&
-            (m_activeInputBuiltIns.find(BuiltInSubgroupSize) == m_activeInputBuiltIns.end()))
+            ((m_activeInputBuiltIns.find(BuiltInSubgroupSize) == m_activeInputBuiltIns.end()) &&
+             (m_activeInputBuiltIns.find(BuiltInNumSubgroups) == m_activeInputBuiltIns.end()) &&
+             (m_activeInputBuiltIns.find(BuiltInSubgroupId) == m_activeInputBuiltIns.end())))
         {
             builtInUsage.common.subgroupSize = false;
         }
@@ -793,6 +807,12 @@ void PatchResourceCollect::ClearInactiveInput()
             (m_activeInputBuiltIns.find(BuiltInSubgroupLtMaskKHR) == m_activeInputBuiltIns.end()))
         {
             builtInUsage.common.subgroupLtMask = false;
+        }
+
+        if (builtInUsage.common.deviceIndex &&
+            (m_activeInputBuiltIns.find(BuiltInDeviceIndex) == m_activeInputBuiltIns.end()))
+        {
+            builtInUsage.common.deviceIndex = false;
         }
     }
 }

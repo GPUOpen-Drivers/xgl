@@ -763,7 +763,11 @@ Result ConfigBuilder::BuildVsRegConfig(
     // Set shader user data maping
     if (result == Result::Success)
     {
-        result = ConfigBuilder::BuildUserDataConfig<T>(pContext, shaderStage, mmSPI_SHADER_USER_DATA_VS_0, pConfig);
+        result = ConfigBuilder::BuildUserDataConfig<T>(pContext,
+                                                       shaderStage,
+                                                       ShaderStageInvalid,
+                                                       mmSPI_SHADER_USER_DATA_VS_0,
+                                                       pConfig);
     }
 
     return result;
@@ -851,27 +855,14 @@ Result ConfigBuilder::BuildLsHsRegConfig(
     // Set up VGT_TF_PARAM
     SetupVgtTfParam(pContext, &pConfig->m_lsHsRegs);
 
-    // NOTE: After user data nodes are merged together, VS and TCS are ought to have the same user data configuration
-    // except the usages of vertex buffer table, base vertex and base instance in VS. In this sense, when VS is
-    // present, we use it as input shader to build user data register settings. If VS is absent, choose TCS as the
-    // input shader.
-    ShaderStage shaderStage = ShaderStageInvalid;
-    if (shaderStage1 == ShaderStageVertex)
-    {
-        shaderStage = shaderStage1;
-    }
-    else
-    {
-        LLPC_ASSERT(shaderStage2 == ShaderStageTessControl);
-        shaderStage = shaderStage2;
-    }
-
     if (gfxIp.major == 9)
     {
-        result = ConfigBuilder::BuildUserDataConfig<T>(pContext,
-                                                       shaderStage,
-                                                       mmSPI_SHADER_USER_DATA_LS_0__GFX09,
-                                                       pConfig);
+        result = ConfigBuilder::BuildUserDataConfig<T>(
+                     pContext,
+                     (shaderStage1 != ShaderStageInvalid) ? shaderStage1 : shaderStage2,
+                     (shaderStage1 != ShaderStageInvalid) ? shaderStage2 : ShaderStageInvalid,
+                     mmSPI_SHADER_USER_DATA_LS_0__GFX09,
+                     pConfig);
     }
     else
     {
@@ -1068,25 +1059,12 @@ Result ConfigBuilder::BuildEsGsRegConfig(
 
     SET_REG_FIELD(&pConfig->m_esGsRegs, VGT_ESGS_RING_ITEMSIZE, ITEMSIZE, calcFactor.esGsRingItemSize);
 
-    // NOTE: After user data nodes are merged together, VS/TES and GS are ought to have the same user data
-    // configuration except the usages of vertex buffer table, base vertex and base instance in VS. In this sense,
-    // when VS/TES is present, we use it as input shader to build user data register settings. If VS/TES is absent,
-    // choose GS as the input shader.
-    ShaderStage shaderStage = ShaderStageInvalid;
-    if ((shaderStage1 == ShaderStageVertex) || (shaderStage1 == ShaderStageTessEval))
-    {
-        shaderStage = shaderStage1;
-    }
-    else
-    {
-        LLPC_ASSERT(shaderStage2 == ShaderStageGeometry);
-        shaderStage = shaderStage2;
-    }
-
-    result = ConfigBuilder::BuildUserDataConfig<T>(pContext,
-                                                   shaderStage,
-                                                   mmSPI_SHADER_USER_DATA_ES_0,
-                                                   pConfig);
+    result = ConfigBuilder::BuildUserDataConfig<T>(
+                 pContext,
+                 (shaderStage1 != ShaderStageInvalid) ? shaderStage1 : shaderStage2,
+                 (shaderStage1 != ShaderStageInvalid) ? shaderStage2 : ShaderStageInvalid,
+                 mmSPI_SHADER_USER_DATA_ES_0,
+                 pConfig);
 
     return result;
 }
@@ -1276,7 +1254,11 @@ Result ConfigBuilder::BuildPsRegConfig(
     // Set shader user data mapping
     if (result == Result::Success)
     {
-        result = ConfigBuilder::BuildUserDataConfig<T>(pContext, shaderStage, mmSPI_SHADER_USER_DATA_PS_0, pConfig);
+        result = ConfigBuilder::BuildUserDataConfig<T>(pContext,
+                                                       shaderStage,
+                                                       ShaderStageInvalid,
+                                                       mmSPI_SHADER_USER_DATA_PS_0,
+                                                       pConfig);
     }
 
     return result;
@@ -1318,6 +1300,7 @@ Result ConfigBuilder::BuildCsRegConfig(
     {
         result = ConfigBuilder::BuildUserDataConfig<PipelineCsRegConfig>(pContext,
                                                                          shaderStage,
+                                                                         ShaderStageInvalid,
                                                                          mmCOMPUTE_USER_DATA_0,
                                                                          pConfig);
     }
@@ -1330,11 +1313,24 @@ Result ConfigBuilder::BuildCsRegConfig(
 template <typename T>
 Result ConfigBuilder::BuildUserDataConfig(
     Context*    pContext,       // [in] LLPC context
-    ShaderStage shaderStage,    // Current shader stage (from API side)
+    ShaderStage shaderStage1,   // Current first shader stage (from API side)
+    ShaderStage shaderStage2,   // Current second shader stage (from API side)
     uint32_t    startUserData,  // Starting user data
     T*          pConfig)        // [out] Register configuration for the associated pipeline
 {
     Result result = Result::Success;
+
+    LLPC_ASSERT(shaderStage1 != ShaderStageInvalid); // The first shader stage must be a valid one
+
+    // NOTE: For merged shader, the second shader stage should be tessellation control shader (LS-HS) or geometry
+    // shader (ES-GS).
+    LLPC_ASSERT((shaderStage2 == ShaderStageTessControl) || (shaderStage2 == ShaderStageGeometry) ||
+                (shaderStage2 == ShaderStageInvalid));
+
+    uint32_t stageMask = pContext->GetShaderStageMask();
+    const bool hasTs = ((stageMask & (ShaderStageToMask(ShaderStageTessControl) |
+                                      ShaderStageToMask(ShaderStageTessEval))) != 0);
+    const bool hasGs = ((stageMask & ShaderStageToMask(ShaderStageGeometry)) != 0);
 
     bool enableMultiView = false;
     if (pContext->IsGraphics())
@@ -1343,105 +1339,152 @@ Result ConfigBuilder::BuildUserDataConfig(
             pContext->GetPipelineBuildInfo())->iaState.enableMultiView;
     }
 
-    const auto nextStage = pContext->GetNextShaderStage(shaderStage);
-    bool isLastVertexProcessingStage = ((nextStage == ShaderStageInvalid) || (nextStage == ShaderStageFragment));
+    const auto pIntfData1 = pContext->GetShaderInterfaceData(shaderStage1);
+    const auto& entryArgIdxs1 = pIntfData1->entryArgIdxs;
 
-    const auto pIntfData = pContext->GetShaderInterfaceData(shaderStage);
-    const auto&entryArgIdxs = pIntfData->entryArgIdxs;
+    const auto pResUsage1 = pContext->GetShaderResourceUsage(shaderStage1);
+    const auto& builtInUsage1 = pResUsage1->builtInUsage;
 
-    const auto pResUsage = pContext->GetShaderResourceUsage(shaderStage);
-    const auto& builtInUsage = pResUsage->builtInUsage;
+    const auto pIntfData2 = (shaderStage2 != ShaderStageInvalid) ?
+                                pContext->GetShaderInterfaceData(shaderStage2) : nullptr;
+    const auto pResUsage2 = (shaderStage2 != ShaderStageInvalid) ?
+                                pContext->GetShaderResourceUsage(shaderStage2) : nullptr;
 
     // Stage-specific processing
-    if (shaderStage == ShaderStageVertex)
+    if (shaderStage1 == ShaderStageVertex)
     {
         // TODO: PAL only check BaseVertex now, we need update code once PAL check them separately.
-        if (builtInUsage.vs.baseVertex || builtInUsage.vs.baseInstance)
+        if (builtInUsage1.vs.baseVertex || builtInUsage1.vs.baseInstance)
         {
-            LLPC_ASSERT(entryArgIdxs.vs.baseVertex > 0);
+            LLPC_ASSERT(entryArgIdxs1.vs.baseVertex > 0);
             SET_DYN_REG(pConfig,
-                        startUserData + pIntfData->userDataUsage.vs.baseVertex,
+                        startUserData + pIntfData1->userDataUsage.vs.baseVertex,
                         static_cast<uint32_t>(Util::Abi::UserDataMapping::BaseVertex));
 
-            LLPC_ASSERT(entryArgIdxs.vs.baseInstance > 0);
+            LLPC_ASSERT(entryArgIdxs1.vs.baseInstance > 0);
             SET_DYN_REG(pConfig,
-                        startUserData + pIntfData->userDataUsage.vs.baseInstance,
+                        startUserData + pIntfData1->userDataUsage.vs.baseInstance,
                         static_cast<uint32_t>(Util::Abi::UserDataMapping::BaseInstance));
         }
 
-        if (builtInUsage.vs.drawIndex)
+        if (builtInUsage1.vs.drawIndex)
         {
-            LLPC_ASSERT(entryArgIdxs.vs.drawIndex > 0);
+            LLPC_ASSERT(entryArgIdxs1.vs.drawIndex > 0);
             SET_DYN_REG(pConfig,
-                        startUserData + pIntfData->userDataUsage.vs.drawIndex,
+                        startUserData + pIntfData1->userDataUsage.vs.drawIndex,
                         static_cast<uint32_t>(Util::Abi::UserDataMapping::DrawIndex));
         }
 
-        if (enableMultiView && isLastVertexProcessingStage)
+        if (enableMultiView)
         {
-            SET_DYN_REG(pConfig,
-                startUserData + pIntfData->userDataUsage.vs.viewIndex,
-                static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+            if ((shaderStage2 == ShaderStageInvalid) || (shaderStage2 == ShaderStageTessControl))
+            {
+                // Act as hardware VS or LS-HS merged shader
+                LLPC_ASSERT(entryArgIdxs1.vs.viewIndex > 0);
+                SET_DYN_REG(pConfig,
+                            startUserData + pIntfData1->userDataUsage.vs.viewIndex,
+                            static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+            }
+            else if (shaderStage2 == ShaderStageGeometry)
+            {
+                // Act as hardware ES-GS merged shader
+                const auto& entryArgIdxs2 = pIntfData2->entryArgIdxs;
+
+                LLPC_ASSERT((entryArgIdxs1.vs.viewIndex > 0) && (entryArgIdxs2.gs.viewIndex > 0));
+                LLPC_ASSERT(pIntfData1->userDataUsage.vs.viewIndex == pIntfData2->userDataUsage.gs.viewIndex);
+                SET_DYN_REG(pConfig,
+                            startUserData + pIntfData1->userDataUsage.vs.viewIndex,
+                            static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+            }
+            else
+            {
+                LLPC_NEVER_CALLED();
+            }
         }
     }
-    else if (shaderStage == ShaderStageTessEval)
-    {
-        if (enableMultiView && isLastVertexProcessingStage)
-        {
-            SET_DYN_REG(pConfig,
-                startUserData + pIntfData->userDataUsage.tes.viewIndex,
-                static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
-        }
-    }
-    else if (shaderStage == ShaderStageGeometry)
+    else if (shaderStage1 == ShaderStageTessEval)
     {
         if (enableMultiView)
         {
-            SET_DYN_REG(pConfig,
-                startUserData + pIntfData->userDataUsage.gs.viewIndex,
-                static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+            if (shaderStage2 == ShaderStageInvalid)
+            {
+                // Act as hardware VS
+                LLPC_ASSERT(entryArgIdxs1.tes.viewIndex > 0);
+                SET_DYN_REG(pConfig,
+                            startUserData + pIntfData1->userDataUsage.tes.viewIndex,
+                            static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+            }
+            else if (shaderStage2 == ShaderStageGeometry)
+            {
+                // Act as hardware ES-GS merged shader
+                const auto& entryArgIdxs2 = pIntfData2->entryArgIdxs;
+
+                LLPC_ASSERT((entryArgIdxs1.tes.viewIndex > 0) && (entryArgIdxs2.gs.viewIndex > 0));
+                LLPC_ASSERT(pIntfData1->userDataUsage.tes.viewIndex == pIntfData2->userDataUsage.gs.viewIndex);
+                SET_DYN_REG(pConfig,
+                            startUserData + pIntfData1->userDataUsage.tes.viewIndex,
+                            static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+            }
         }
     }
-    else if (shaderStage == ShaderStageCompute)
+    else if (shaderStage1 == ShaderStageGeometry)
     {
-        if (builtInUsage.cs.numWorkgroups > 0)
+        LLPC_ASSERT(shaderStage2 == ShaderStageInvalid);
+
+        if (enableMultiView)
+        {
+            LLPC_ASSERT(entryArgIdxs1.gs.viewIndex > 0);
+            SET_DYN_REG(pConfig,
+                        startUserData + pIntfData1->userDataUsage.gs.viewIndex,
+                        static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+        }
+    }
+    else if (shaderStage1 == ShaderStageCompute)
+    {
+        LLPC_ASSERT(shaderStage2 == ShaderStageInvalid);
+
+        if (builtInUsage1.cs.numWorkgroups > 0)
         {
             SET_DYN_REG(pConfig,
-                        startUserData + pIntfData->userDataUsage.cs.numWorkgroupsPtr,
+                        startUserData + pIntfData1->userDataUsage.cs.numWorkgroupsPtr,
                         static_cast<uint32_t>(Util::Abi::UserDataMapping::Workgroup));
         }
     }
 
+    // NOTE: After user data nodes are merged together, any stage of merged shader are ought to have the same
+    // configuration for general user data (apart from those special). In this sense, we are safe to use the first
+    // shader stage to build user data register settings here.
     SET_DYN_REG(pConfig, startUserData, static_cast<uint32_t>(Util::Abi::UserDataMapping::GlobalTable));
 
-    if (pResUsage->perShaderTable)
+    if (pResUsage1->perShaderTable)
     {
         SET_DYN_REG(pConfig, startUserData + 1, static_cast<uint32_t>(Util::Abi::UserDataMapping::PerShaderTable));
     }
 
-    // NOTE: For copy shader, we use fixed number of user data SGPRs. Thus, there is no need of building user data registers here.
-    if (shaderStage != ShaderStageCopyShader)
+    // NOTE: For copy shader, we use fixed number of user data SGPRs. Thus, there is no need of building user data
+    // registers here.
+    if (shaderStage1 != ShaderStageCopyShader)
     {
         uint32_t userDataLimit = 0;
         uint32_t spillThreshold = UINT32_MAX;
         uint32_t maxUserDataCount = pContext->GetGpuProperty()->maxUserDataCount;
         for (uint32_t i = 0; i < maxUserDataCount; ++i)
         {
-            if (pIntfData->userDataMap[i] != InterfaceData::UserDataUnmapped)
+            if (pIntfData1->userDataMap[i] != InterfaceData::UserDataUnmapped)
             {
-                SET_DYN_REG(pConfig, startUserData + i, pIntfData->userDataMap[i]);
-                userDataLimit = std::max(userDataLimit, pIntfData->userDataMap[i] + 1);
+                SET_DYN_REG(pConfig, startUserData + i, pIntfData1->userDataMap[i]);
+                userDataLimit = std::max(userDataLimit, pIntfData1->userDataMap[i] + 1);
             }
         }
 
-        if (pIntfData->userDataUsage.spillTable > 0)
+        if (pIntfData1->userDataUsage.spillTable > 0)
         {
             SET_DYN_REG(pConfig,
-                        startUserData + pIntfData->userDataUsage.spillTable,
+                        startUserData + pIntfData1->userDataUsage.spillTable,
                         static_cast<uint32_t>(Util::Abi::UserDataMapping::SpillTable));
             userDataLimit = std::max(userDataLimit,
-                                     pIntfData->spillTable.offsetInDwords + pIntfData->spillTable.sizeInDwords);
-            spillThreshold = pIntfData->spillTable.offsetInDwords;
+                                     pIntfData1->spillTable.offsetInDwords + pIntfData1->spillTable.sizeInDwords);
+            spillThreshold = pIntfData1->spillTable.offsetInDwords;
         }
 
         if (userDataLimit > GET_REG(pConfig, USER_DATA_LIMIT))
@@ -1543,6 +1586,7 @@ void ConfigBuilder::SetupVgtTfParam(
     }
 }
 
+// =====================================================================================================================
 // Builds metadata API_HW_SHADER_MAPPING_HI/LO.
 void ConfigBuilder::BuildApiHwShaderMapping(
     uint32_t           vsHwShader,    // Hardware shader mapping for vertex shader

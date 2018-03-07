@@ -804,13 +804,25 @@ const char* VkResultName(
         errName = "VK_ERROR_FRAGMENTED_POOL";
         break;
 
+#ifdef ICD_VULKAN_1_1
+    case VkResult::VK_ERROR_OUT_OF_POOL_MEMORY:
+        errName = "VK_ERROR_OUT_OF_POOL_MEMORY";
+        break;
+#else
     case VkResult::VK_ERROR_OUT_OF_POOL_MEMORY_KHR:
         errName = "VK_ERROR_OUT_OF_POOL_MEMORY_KHR";
         break;
+#endif
 
+#ifdef ICD_VULKAN_1_1
+    case VkResult::VK_ERROR_INVALID_EXTERNAL_HANDLE:
+        errName = "VK_ERROR_INVALID_EXTERNAL_HANDLE";
+        break;
+#else
     case VkResult::VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR:
         errName = "VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR";
         break;
+#endif
 
     case VkResult::VK_ERROR_SURFACE_LOST_KHR:
         errName = "VK_ERROR_SURFACE_LOST_KHR";

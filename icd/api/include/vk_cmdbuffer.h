@@ -154,6 +154,10 @@ struct AllGpuRenderState
         uint32_t samplePattern;
     } staticTokens;
 
+    // Value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
+    // defined by the last bound GraphicsPipeline, which was not nullptr.
+    bool ViewIndexFromDeviceIndex;
+
 // =====================================================================================================================
 // The first part of the structure will be cleared with a memset in CmdBuffer::ResetState().
 // The second part of the structure contains the larger members that are selectively reset in CmdBuffer::ResetState().
@@ -414,6 +418,8 @@ public:
     void SetDepthBounds(
         float                                       minDepthBounds,
         float                                       maxDepthBounds);
+
+    void SetViewInstanceMask();
 
     void SetStencilCompareMask(
         VkStencilFaceFlags                          faceMask,
@@ -837,7 +843,6 @@ private:
     void RPLoadOpClearDepthStencil(uint32_t count, const RPLoadOpClearInfo* pClears);
     void RPBindTargets(const RPBindTargetsInfo& targets);
     void RPInitSamplePattern();
-    void RPSetViewInstanceMask();
 
     VK_INLINE Pal::ImageLayout RPGetAttachmentLayout(uint32_t attachment, Pal::ImageAspect aspect);
     VK_INLINE void RPSetAttachmentLayout(uint32_t attachment, Pal::ImageAspect aspect, Pal::ImageLayout layout);
@@ -870,6 +875,7 @@ private:
     bool                          m_is2ndLvl;        // is this command buffer secondary or primary
     bool                          m_isRecording;
     bool                          m_needResetState;
+    VkResult                      m_recordingResult; // Tracks the result of recording commands to capture OOM errors
 
     SqttCmdBufferState*           m_pSqttState; // Per-cmdbuf state for handling SQ thread-tracing annotations
 
@@ -1166,6 +1172,21 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHX(
 VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHX(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    deviceMask);
+
+#ifdef ICD_VULKAN_1_1
+VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHR(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    baseGroupX,
+    uint32_t                                    baseGroupY,
+    uint32_t                                    baseGroupZ,
+    uint32_t                                    groupCountX,
+    uint32_t                                    groupCountY,
+    uint32_t                                    groupCountZ);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHR(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    deviceMask);
+#endif
 
 VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer(
     VkCommandBuffer                             commandBuffer,

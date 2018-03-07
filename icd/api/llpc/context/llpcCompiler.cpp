@@ -292,7 +292,6 @@ Compiler::Compiler(
         LLVMInitializeAMDGPUAsmParser();
         LLVMInitializeAMDGPUDisassembler();
 
-        InitOptimizer();
 #ifdef LLPC_ENABLE_SPIRV_OPT
         InitSpvGen();
 #endif
@@ -617,6 +616,9 @@ Result Compiler::BuildGraphicsPipeline(
         Context* pContext = AcquireContext();
         pContext->AttachPipelineContext(&graphicsContext);
 
+        // Create the AMDGPU TargetMachine.
+        result = CodeGenManager::CreateTargetMachine(pContext);
+
         // Translate SPIR-V binary to machine-independent LLVM module
         for (uint32_t stage = 0; (stage < ShaderStageGfxCount) && (result == Result::Success); ++stage)
         {
@@ -894,10 +896,13 @@ Result Compiler::BuildGraphicsPipeline(
             LLPC_OUTS(*pPipelineModule);
             LLPC_OUTS("\n");
 
-            // Generate GPU ISA codes.
+            // Generate GPU ISA binary. If "filetype=asm" is specified, generate ISA assembly text instead.
+            // If "-emit-llvm" is specified, generate LLVM bitcode. These options are used through LLPC
+            // standalone compiler tool "amdllpc".
             raw_svector_ostream elfStream(pipelineElf);
             std::string errMsg;
             TimeProfiler timeProfiler(&g_timeProfileResult.codeGenTime);
+
             result = CodeGenManager::GenerateCode(pPipelineModule, elfStream, errMsg);
             if (result != Result::Success)
             {
@@ -1110,6 +1115,9 @@ Result Compiler::BuildComputePipeline(
         Context* pContext = AcquireContext();
         pContext->AttachPipelineContext(&computeContext);
 
+        // Create the AMDGPU target machine.
+        result = CodeGenManager::CreateTargetMachine(pContext);
+
         // Translate SPIR-V binary to machine-independent LLVM module
         const ShaderModuleData* pModuleData = reinterpret_cast<const ShaderModuleData*>(pPipelineInfo->cs.pModuleData);
         if (pModuleData != nullptr)
@@ -1226,6 +1234,9 @@ Result Compiler::BuildComputePipeline(
             if (result == Result::Success)
             {
                 TimeProfiler timeProfiler(&g_timeProfileResult.codeGenTime);
+                // Generate GPU ISA binary. If "filetype=asm" is specified, generate ISA assembly text
+                // instead.  If "-emit-llvm" is specified, generate LLVM bitcode. These options are used
+                // through LLPC standalone compiler tool "amdllpc".
                 raw_svector_ostream elfStream(pipelineElf);
                 std::string errMsg;
                 result = CodeGenManager::GenerateCode(pModule, elfStream, errMsg);
@@ -1630,6 +1641,8 @@ Result Compiler::BuildNullFs(
     if (result == Result::Success)
     {
         pNullFsModule = std::move(*moduleOrErr);
+        pContext->SetModuleTargetMachine(pNullFsModule.get());
+
         GraphicsContext* pGraphicsContext = static_cast<GraphicsContext*>(pContext->GetPipelineContext());
         pGraphicsContext->InitShaderInfoForNullFs();
     }

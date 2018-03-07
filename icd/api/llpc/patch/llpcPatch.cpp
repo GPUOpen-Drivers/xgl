@@ -49,6 +49,7 @@
 #include "llpcPassDeadFuncRemove.h"
 #include "llpcPassExternalLibLink.h"
 #include "llpcPatch.h"
+#include "llpcPatchAddrSpaceMutate.h"
 #include "llpcPatchBufferOp.h"
 #include "llpcPatchDescriptorLoad.h"
 #include "llpcPatchEntryPointMutate.h"
@@ -118,6 +119,9 @@ Result Patch::Run(
     Context* pContext = static_cast<Context*>(&pModule->getContext());
     // Do patching opertions
     legacy::PassManager passMgr;
+
+    // Lower SPIRAS address spaces to AMDGPU address spaces.
+    passMgr.add(PatchAddrSpaceMutate::Create());
 
     // Patch entry-point mutation (should be done before external library link)
     passMgr.add(PatchEntryPointMutate::Create());

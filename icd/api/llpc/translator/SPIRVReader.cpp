@@ -961,6 +961,8 @@ SPIRVToLLVM::setLLVMLoopMetadata(SPIRVLoopMerge* LM, BranchInst* BI) {
   SmallVector<llvm::Metadata *, 2> OpValues;
   llvm::Metadata *MD = nullptr;
 
+  // TODO: Support "LoopControlDependencyInfiniteMask" and
+  // "LoopControlDependencyLengthMask". Currently, they are safely ignored.
   if (LM->getLoopControl() == LoopControlMaskNone) {
     if (EnableLoopUnroll) {
       Name = llvm::MDString::get(*Context, "llvm.loop.unroll.count");
@@ -970,8 +972,7 @@ SPIRVToLLVM::setLLVMLoopMetadata(SPIRVLoopMerge* LM, BranchInst* BI) {
       BI->setMetadata("llvm.loop", Self);
       return;
     }
-  }
-  else if (LM->getLoopControl() == LoopControlUnrollMask)
+  } else if (LM->getLoopControl() == LoopControlUnrollMask)
     Name = llvm::MDString::get(*Context, "llvm.loop.unroll.full");
   else if (LM->getLoopControl() == LoopControlDontUnrollMask)
     Name = llvm::MDString::get(*Context, "llvm.loop.unroll.disable");

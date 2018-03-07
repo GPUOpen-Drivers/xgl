@@ -34,8 +34,13 @@
 
 #include "vk_platform.h"
 
+#ifdef ICD_VULKAN_1_1
+// Vulkan SDK 1.1
+#include "sdk-1.1/vulkan.h"
+#else
 // Vulkan SDK 1.0
 #include "sdk-1.0/vulkan.h"
+#endif
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 #ifdef None
@@ -54,9 +59,15 @@
 
 // Internal (under development) extension definitions
 
+#ifdef ICD_VULKAN_1_1
+// Experimental extensions (should be eventually replaced by KHR or removed)
+#include "devext/vk_khx_device_group.h"
+#include "devext/vk_khx_device_group_creation.h"
+#include "devext/vk_khx_multiview.h"
+#endif
+
 #include "devext/vk_amd_gpa_interface.h"
-#include "devext/vk_amd_buffer_marker.h"
-#include "devext/vk_ext_external_memory_host.h"
+#include "devext/vk_amd_shader_core_properties.h"
 
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,

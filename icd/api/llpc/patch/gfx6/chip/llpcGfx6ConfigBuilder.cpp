@@ -1246,9 +1246,6 @@ Result ConfigBuilder::BuildUserDataConfig(
             pContext->GetPipelineBuildInfo())->iaState.enableMultiView;
     }
 
-    const auto nextStage = pContext->GetNextShaderStage(shaderStage);
-    bool isLastVertexProcessingStage = ((nextStage == ShaderStageInvalid) || (nextStage == ShaderStageFragment));
-
     const auto pIntfData = pContext->GetShaderInterfaceData(shaderStage);
     const auto& entryArgIdxs = pIntfData->entryArgIdxs;
 
@@ -1282,29 +1279,33 @@ Result ConfigBuilder::BuildUserDataConfig(
                         startUserData + pIntfData->userDataUsage.vs.drawIndex,
                         static_cast<uint32_t>(Util::Abi::UserDataMapping::DrawIndex));
         }
-        if (enableMultiView && isLastVertexProcessingStage)
+
+        if (enableMultiView)
         {
+            LLPC_ASSERT(entryArgIdxs.vs.viewIndex > 0);
             SET_DYN_REG(pConfig,
-                startUserData + pIntfData->userDataUsage.vs.viewIndex,
-                static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+                        startUserData + pIntfData->userDataUsage.vs.viewIndex,
+                        static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
         }
     }
     else if (shaderStage == ShaderStageTessEval)
     {
-        if (enableMultiView && isLastVertexProcessingStage)
+        if (enableMultiView)
         {
+            LLPC_ASSERT(entryArgIdxs.tes.viewIndex > 0);
             SET_DYN_REG(pConfig,
-                startUserData + pIntfData->userDataUsage.tes.viewIndex,
-                static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+                        startUserData + pIntfData->userDataUsage.tes.viewIndex,
+                        static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
         }
     }
     else if (shaderStage == ShaderStageGeometry)
     {
-        if (enableMultiView)
+        if (builtInUsage.gs.viewIndex)
         {
+            LLPC_ASSERT(entryArgIdxs.gs.viewIndex > 0);
             SET_DYN_REG(pConfig,
-                startUserData + pIntfData->userDataUsage.gs.viewIndex,
-                static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
+                        startUserData + pIntfData->userDataUsage.gs.viewIndex,
+                        static_cast<uint32_t>(Util::Abi::UserDataMapping::ViewId));
         }
     }
     else if (shaderStage == ShaderStageCompute)

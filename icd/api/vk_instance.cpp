@@ -97,6 +97,21 @@ Instance::Instance(
     memset(m_pScreens, 0, sizeof(m_pScreens));
 }
 
+#ifdef ICD_VULKAN_1_1
+// =====================================================================================================================
+// Returns supported instance API version.
+VkResult Instance::EnumerateVersion(
+    uint32_t*                       pApiVersion)
+{
+    // Report 1.1 support
+    *pApiVersion = VK_MAKE_VERSION(VULKAN_API_MAJOR_VERSION,
+                                   VULKAN_API_MINOR_VERSION,
+                                   VULKAN_API_BUILD_VERSION);
+
+    return VK_SUCCESS;
+}
+#endif
+
 // =====================================================================================================================
 // Creates a new instance of Vulkan.
 VkResult Instance::Create(
@@ -141,13 +156,20 @@ VkResult Instance::Create(
         }
     }
 
+#ifdef ICD_VULKAN_1_1
+    // According to the Vulkan 1.1 spec, if pApplicationInfo is not provided or if the apiVersion requested is 0
+    // it is equivalent of providing an apiVersion of 1.0.0
+    uint32_t apiVersion = VK_MAKE_VERSION(1,0,0);
+#else
     // Default to the highest supported API version
     uint32_t apiVersion = VK_MAKE_VERSION(VULKAN_API_MAJOR_VERSION,
                                           VULKAN_API_MINOR_VERSION,
                                           VULKAN_API_BUILD_VERSION);
+#endif
 
     if ((pAppInfo != nullptr) && (pAppInfo->apiVersion != 0))
     {
+#ifndef ICD_VULKAN_1_1
         // Check if the requested API version is valid. Zero indicates we should ignore the field, non-zero values
         // must be validated.
         if (!(VK_VERSION_MAJOR(pAppInfo->apiVersion) == 1 &&
@@ -155,9 +177,22 @@ VkResult Instance::Create(
         {
             return VK_ERROR_INCOMPATIBLE_DRIVER;
         }
+#endif
 
         apiVersion = pAppInfo->apiVersion;
     }
+
+#ifdef ICD_VULKAN_1_1
+    // Implicitly enable instance extensions that are core in the API version
+    if (apiVersion >= VK_MAKE_VERSION(1, 1, 0))
+    {
+        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_DEVICE_GROUP_CREATION);
+        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_EXTERNAL_FENCE_CAPABILITIES);
+        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_EXTERNAL_MEMORY_CAPABILITIES);
+        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_EXTERNAL_SEMAPHORE_CAPABILITIES);
+        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2);
+    };
+#endif
 
     // pAllocCb is never NULL here because the entry point will fill it in if the
     // application doesn't.
@@ -589,6 +624,10 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHX_DEVICE_GROUP_CREATION));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_SURFACE_CAPABILITIES2));
+
+#ifdef ICD_VULKAN_1_1
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_DEVICE_GROUP_CREATION));
+#endif
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_SEMAPHORE_CAPABILITIES));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_FENCE_CAPABILITIES));
@@ -1034,6 +1073,14 @@ void Instance::CallExternalCallbacks(
 namespace entry
 {
 
+#ifdef ICD_VULKAN_1_1
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceVersion(
+    uint32_t*                                   pApiVersion)
+{
+    return Instance::EnumerateVersion(pApiVersion);
+}
+#endif
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
     const VkInstanceCreateInfo*                 pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1072,6 +1119,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHX(
         pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
 }
 
+#ifdef ICD_VULKAN_1_1
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupPropertiesKHR*         pPhysicalDeviceGroupProperties)
+{
+    return Instance::ObjectFromHandle(instance)->EnumeratePhysicalDeviceGroups(
+        pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
+}
+#endif
+
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(
     const char*                                 pLayerName,
     uint32_t*                                   pPropertyCount,
@@ -1106,6 +1164,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(
 extern "C"
 {
 // =====================================================================================================================
+
+#ifdef ICD_VULKAN_1_1
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceVersion(
+    uint32_t*                                   pApiVersion)
+{
+    return vk::entry::vkEnumerateInstanceVersion(pApiVersion);
+}
+#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
     const VkInstanceCreateInfo*                 pCreateInfo,

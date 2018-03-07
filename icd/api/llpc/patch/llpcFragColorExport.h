@@ -124,8 +124,8 @@ private:
 
     uint32_t GetMaxComponentBitCount(VkFormat format) const;
 
-    llvm::Value* ConvertToFloat(llvm::Value* pValue, llvm::Instruction* pInsertPos) const;
-    llvm::Value* ConvertToInt(llvm::Value* pValue, llvm::Instruction* pInsertPos) const;
+    llvm::Value* ConvertToFloat(llvm::Value* pValue, bool signedness, llvm::Instruction* pInsertPos) const;
+    llvm::Value* ConvertToInt(llvm::Value* pValue, bool signedness, llvm::Instruction* pInsertPos) const;
 
     // -----------------------------------------------------------------------------------------------------------------
 

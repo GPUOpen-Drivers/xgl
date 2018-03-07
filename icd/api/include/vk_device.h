@@ -600,6 +600,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue(
     uint32_t                                    queueIndex,
     VkQueue*                                    pQueue);
 
+#ifdef ICD_VULKAN_1_1
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue2(
+    VkDevice                                    device,
+    const VkDeviceQueueInfo2*                   pQueueInfo,
+    VkQueue*                                    pQueue);
+#endif
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSemaphore(
     VkDevice                                    device,
     const VkSemaphoreCreateInfo*                pCreateInfo,
@@ -730,6 +737,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(
     const VkAllocationCallbacks*                pAllocator,
     VkSampler*                                  pSampler);
 
+#ifdef ICD_VULKAN_1_1
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateSamplerYcbcrConversion(
+    VkDevice                                    device,
+    const VkSamplerYcbcrConversionCreateInfo*   pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSamplerYcbcrConversion*                   pYcbcrConversion);
+
+VKAPI_ATTR void VKAPI_CALL vkDestroySamplerYcbcrConversion(
+    VkDevice                                    device,
+    VkSamplerYcbcrConversion                    ycbcrConversion,
+    const VkAllocationCallbacks*                pAllocator);
+#endif
+
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSwapchainKHR(
     VkDevice                                    device,
     const VkSwapchainCreateInfoKHR*             pCreateInfo,
@@ -756,6 +776,24 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorUpdateTemplateKHR(
     const VkDescriptorUpdateTemplateCreateInfoKHR*  pCreateInfo,
     const VkAllocationCallbacks*                    pAllocator,
     VkDescriptorUpdateTemplateKHR*                  pDescriptorUpdateTemplate);
+
+#ifdef ICD_VULKAN_1_1
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHR(
+    VkDevice                                    device,
+    uint32_t                                    heapIndex,
+    uint32_t                                    localDeviceIndex,
+    uint32_t                                    remoteDeviceIndex,
+    VkPeerMemoryFeatureFlagsKHR*                pPeerMemoryFeatures);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupPresentCapabilitiesKHR(
+    VkDevice                                    device,
+    VkDeviceGroupPresentCapabilitiesKHR*        pDeviceGroupPresentCapabilities);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupSurfacePresentModesKHR(
+    VkDevice                                    device,
+    VkSurfaceKHR                                surface,
+    VkDeviceGroupPresentModeFlagsKHR*           pModes);
+#endif
 
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHX(
     VkDevice                                    device,
@@ -788,6 +826,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
 VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
     VkDevice                                    device,
     VkGpaDeviceClockModeInfoAMD*                pInfo);
+
+#ifdef ICD_VULKAN_1_1
+VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupportKHR(
+    VkDevice                                    device,
+    const VkDescriptorSetLayoutCreateInfo*      pCreateInfo,
+    VkDescriptorSetLayoutSupportKHR*            pSupport);
+#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     VkDevice                                    device,

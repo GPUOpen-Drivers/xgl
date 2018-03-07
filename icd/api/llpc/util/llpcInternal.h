@@ -201,6 +201,9 @@ int64_t GetPerfFrequency();
 // Retrieves the current value of the performance counter.
 int64_t GetPerfCpuTime();
 
+// Checks whether the input data is actually a ELF binary
+bool IsElfBinary(const void* pData, size_t dataSize);
+
 // =====================================================================================================================
 // Represents the result of CPU time profiling.
 struct TimeProfileResult

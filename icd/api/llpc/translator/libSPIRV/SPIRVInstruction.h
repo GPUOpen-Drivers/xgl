@@ -1105,8 +1105,10 @@ public:
   static const SPIRVWord FixedWordCount = 4;
 
   SPIRVLoopMerge(SPIRVId TheMergeBlock, SPIRVId TheContinueTarget,
-      SPIRVWord TheLoopControl, SPIRVBasicBlock *BB)
-      :SPIRVInstruction(FixedWordCount, OC, BB), MergeBlock(TheMergeBlock),
+      SPIRVWord TheLoopControl,  const std::vector<SPIRVWord>
+      &TheLoopControlParameters, SPIRVBasicBlock *BB)
+      :SPIRVInstruction(TheLoopControlParameters.size() + FixedWordCount,
+         OC, BB), MergeBlock(TheMergeBlock),
       ContinueTarget(TheContinueTarget), LoopControl(TheLoopControl) {
     validate();
     assert(BB && "Invalid BB");
@@ -1121,12 +1123,21 @@ public:
   SPIRVId getMergeBlock() { return MergeBlock; }
   SPIRVId getContinueTarget() { return ContinueTarget; }
   SPIRVWord getLoopControl() { return LoopControl; }
-  _SPIRV_DEF_ENCDEC3(MergeBlock, ContinueTarget, LoopControl)
+  std::vector<SPIRVWord>& getLoopControlParameters() {
+    return LoopControlParameters;
+  }
+  void setWordCount(SPIRVWord TheWordCount) {
+    SPIRVEntry::setWordCount(TheWordCount);
+    LoopControlParameters.resize(TheWordCount - FixedWordCount);
+  }
+  _SPIRV_DEF_ENCDEC4(MergeBlock, ContinueTarget, LoopControl,
+     LoopControlParameters)
 
 protected:
   SPIRVId MergeBlock;
   SPIRVId ContinueTarget;
   SPIRVWord LoopControl;
+  std::vector<SPIRVWord> LoopControlParameters;
 };
 
 class SPIRVSwitch: public SPIRVInstruction {
@@ -2199,6 +2210,9 @@ _SPIRV_OP(GroupReserveReadPipePackets, true, 8)
 _SPIRV_OP(GroupReserveWritePipePackets, true, 8)
 _SPIRV_OP(GroupCommitReadPipe, false, 6)
 _SPIRV_OP(GroupCommitWritePipe, false, 6)
+#ifdef ICD_VULKAN_1_1
+_SPIRV_OP(GroupNonUniformElect, true, 4)
+#endif
 #undef _SPIRV_OP
 
 class SPIRVAtomicInstBase:public SPIRVInstTemplateBase {

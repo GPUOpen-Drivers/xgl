@@ -41,6 +41,8 @@
 #include "SPIRVModule.h"
 #include "SPIRVDecorate.h"
 #include "SPIRVValue.h"
+#include "SPIRVFunction.h"
+#include "SPIRVInstruction.h"
 
 #include <cassert>
 
@@ -340,12 +342,21 @@ SPIRVTypeArray::validate()const {
   SPIRVEntry::validate();
   ElemType->validate();
   assert(getValue(Length)->getType()->isTypeInt() &&
-      get<SPIRVConstant>(Length)->getZExtIntValue() > 0);
+      getLength()->getZExtIntValue() > 0);
 }
 
 SPIRVConstant*
 SPIRVTypeArray::getLength() const {
-  return get<SPIRVConstant>(Length);
+  auto BV = getValue(Length);
+  if (BV->getOpCode() == OpSpecConstantOp) {
+    // NOTE: If the "length" is not a normal constant and is defined through
+    // "OpSpecConstantOp", we have to get its literal value from the mapped
+    // constant.
+    auto MappedConst =
+      static_cast<SPIRVSpecConstantOp *>(BV)->getMappedConstant();
+    return static_cast<SPIRVConstant *>(MappedConst);
+  } else
+    return get<SPIRVConstant>(Length);
 }
 
 _SPIRV_IMP_ENCDEC3(SPIRVTypeArray, Id, ElemType, Length)

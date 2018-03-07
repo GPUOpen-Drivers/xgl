@@ -2599,16 +2599,16 @@ VK_INLINE Pal::QueuePriority VkToPalGlobalPriority(
     Pal::QueuePriority palPriority = Pal::QueuePriority::Low;
     switch (static_cast<int32_t>(vkPriority))
     {
-    case VK_QUEUE_GLOBAL_PRIORITY_LOW:
+    case VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT:
         palPriority = Pal::QueuePriority::VeryLow;
         break;
-    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM:
+    case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT:
         palPriority = Pal::QueuePriority::Low;
         break;
-    case VK_QUEUE_GLOBAL_PRIORITY_HIGH:
+    case VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT:
         palPriority = Pal::QueuePriority::Medium;
         break;
-    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME:
+    case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT:
         palPriority = Pal::QueuePriority::High;
         break;
     default:

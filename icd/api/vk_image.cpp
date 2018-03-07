@@ -499,6 +499,54 @@ static VkResult BindNullSparseMemory(
 }
 
 // =====================================================================================================================
+// Create a new PAL image object (internal function)
+VkResult Image::CreateImageInternal(
+    Device*                         pDevice,
+    Pal::ImageCreateInfo*           pPalCreateInfo,
+    const VkAllocationCallbacks*    pAllocator,
+    Pal::IImage**                   pPalImage)
+{
+    VkResult     result = VkResult::VK_SUCCESS;
+    void*        pMemory = nullptr;
+    Pal::Result  palResult = Pal::Result::Success;
+
+    // Calculate required system memory size
+    const size_t palImgSize = pDevice->PalDevice()->GetImageSize(*pPalCreateInfo, &palResult);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    // Allocate system memory for objects
+    pMemory = pAllocator->pfnAllocation(
+        pAllocator->pUserData,
+        palImgSize,
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    // Create PAL image
+    if (pMemory != nullptr)
+    {
+        const void*  pPalImgAddr = Util::VoidPtrInc(pMemory, 0);
+
+        palResult = pDevice->PalDevice()->CreateImage(
+            *pPalCreateInfo,
+            Util::VoidPtrInc(pPalImgAddr, 0),
+            pPalImage);
+
+        if (palResult != Pal::Result::Success)
+        {
+            // Failure in creating the PAL image object. Free system memory and return error.
+            pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+            result = VK_ERROR_INITIALIZATION_FAILED;
+        }
+    }
+    else
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 // Create a new image object
 VkResult Image::Create(
     Device*                         pDevice,
