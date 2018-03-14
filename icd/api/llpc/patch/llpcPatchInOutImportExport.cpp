@@ -2659,6 +2659,7 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
                                   pFrontFacing,
                                   ConstantInt::get(m_pContext->Int32Ty(),
                                   0));
+            pInput = CastInst::Create(Instruction::ZExt, pInput, m_pContext->Int8Ty(), "", pInsertPos);
             break;
         }
     case BuiltInPointCoord:

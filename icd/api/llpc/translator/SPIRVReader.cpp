@@ -536,6 +536,11 @@ private:
   CallInst *transOCLMemFence(BasicBlock *BB,
                              SPIRVWord MemSema, SPIRVWord MemScope);
   void truncConstantIndex(std::vector<Value*> &Indices);
+
+  Type *widenBoolType(Type *Ty);
+  Value *widenBoolValue(Value *V, BasicBlock *BB);
+  Constant *widenBoolConstant(Constant *C);
+  Value *narrowBoolValue(Value *V, SPIRVType *BT, BasicBlock *BB);
 };
 
 Type *
@@ -751,20 +756,23 @@ SPIRVToLLVM::transType(SPIRVType *T, bool IsClassMember) {
   case OpTypeFloat:
     return mapType(T, transFPType(T));
   case OpTypeArray:
-    return mapType(T, ArrayType::get(transType(T->getArrayElementType()),
+    return mapType(T, ArrayType::get(
+        widenBoolType(transType(T->getArrayElementType())),
         T->getArrayLength()));
   case OpTypeRuntimeArray:
-    return mapType(T, ArrayType::get(transType(T->getArrayElementType()),
+    return mapType(T, ArrayType::get(widenBoolType(
+            transType(T->getArrayElementType())),
         SPIRVWORD_MAX));
   case OpTypePointer:
-    return mapType(T, PointerType::get(transType(
-        T->getPointerElementType(), IsClassMember),
+    return mapType(T, PointerType::get(widenBoolType(transType(
+        T->getPointerElementType(), IsClassMember)),
         SPIRSPIRVAddrSpaceMap::rmap(T->getPointerStorageClass())));
   case OpTypeVector:
     return mapType(T, VectorType::get(transType(T->getVectorComponentType()),
         T->getVectorComponentCount()));
   case OpTypeMatrix:
-    return mapType(T, ArrayType::get(transType(T->getMatrixColumnType()),
+    return mapType(T, ArrayType::get(widenBoolType(
+            transType(T->getMatrixColumnType())),
         T->getMatrixColumnCount()));
   case OpTypeOpaque:
     return mapType(T, StructType::create(*Context, T->getName()));
@@ -802,7 +810,7 @@ SPIRVToLLVM::transType(SPIRVType *T, bool IsClassMember) {
     }
     SmallVector<Type *, 4> MT;
     for (size_t I = 0, E = ST->getMemberCount(); I != E; ++I)
-      MT.push_back(transType(ST->getMemberType(I), true));
+      MT.push_back(widenBoolType(transType(ST->getMemberType(I), true)));
 
     StructType *StructTy = nullptr;
     if (ST->isLiteral())
@@ -1508,9 +1516,13 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
     case OpTypeVector:
       return mapValue(BV, ConstantVector::get(CV));
     case OpTypeArray:
+      for (auto &C : CV)
+        C = widenBoolConstant(C);
       return mapValue(BV, ConstantArray::get(
           dyn_cast<ArrayType>(transType(BCC->getType())), CV));
     case OpTypeStruct: {
+      for (auto &C : CV)
+        C = widenBoolConstant(C);
       auto BCCTy = dyn_cast<StructType>(transType(BCC->getType()));
       auto Members = BCCTy->getNumElements();
       auto Constants = CV.size();
@@ -1567,7 +1579,7 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
 
   case OpVariable: {
     auto BVar = static_cast<SPIRVVariable *>(BV);
-    auto Ty = transType(BVar->getType()->getPointerElementType());
+    auto Ty = widenBoolType(transType(BVar->getType()->getPointerElementType()));
     bool IsConst = BVar->isConstant();
     llvm::GlobalValue::LinkageTypes LinkageTy = transLinkageType(BVar);
     Constant *Initializer = nullptr;
@@ -1751,6 +1763,7 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
     SPIRVStore *BS = static_cast<SPIRVStore*>(BV);
     Instruction *SI = nullptr;
     auto Src = transValue(BS->getSrc(), F, BB);
+    Src = widenBoolValue(Src, BB);
     auto Dst = transValue(BS->getDst(), F, BB);
 
     // NOTE: This is to workaround a glslang bug. Bool variable defined
@@ -1801,7 +1814,8 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
                                 BL->SPIRVMemoryAccess::getAlignment(), BB);
     if (BL->SPIRVMemoryAccess::isNonTemporal())
       transNonTemporalMetadata(LI);
-    return mapValue(BV, LI);
+    return mapValue(BV,
+        narrowBoolValue(LI, BL->getSrc()->getType()->getPointerElementType(), BB));
   }
 
   case OpCopyMemory: {
@@ -1976,7 +1990,8 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
       auto CCTy = transType(CC->getType());
       Value *V = UndefValue::get(CCTy);
       for (size_t I = 0, E = Constituents.size(); I < E; ++I) {
-        V = InsertValueInst::Create(V, Constituents[I], I, "", BB);
+        V = InsertValueInst::Create(V, widenBoolValue(Constituents[I], BB),
+            I, "", BB);
       }
       return mapValue(BV, V);
     }
@@ -1989,7 +2004,8 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
       auto MatCountVal = ConstantInt::get(*Context, APInt(32, MatCount));
       Value* V = UndefValue::get(MatTy);
       for (uint32_t I = 0, E = Constituents.size(); I < E; ++I) {
-          V = InsertValueInst::Create(V, Constituents[I], I, "", BB);
+          V = InsertValueInst::Create(V, widenBoolValue(Constituents[I], BB),
+              I, "", BB);
       }
       return mapValue(BV, V);
       }
@@ -2023,12 +2039,12 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
 
         Value* V = ExtractValueInst::Create(CV, Idxs, "", BB);
         assert(V->getType()->isVectorTy());
-        return mapValue(BV, ExtractElementInst::Create(
+        return mapValue(BV, narrowBoolValue(ExtractElementInst::Create(
           V, ConstantInt::get(*Context, APInt(32, LastIdx)),
-          BV->getName(), BB));
+          BV->getName(), BB), CE->getType(), BB));
       } else
-        return mapValue(BV, ExtractValueInst::Create(
-          CV, CE->getIndices(), BV->getName(), BB));
+        return mapValue(BV, narrowBoolValue(ExtractValueInst::Create(
+          CV, CE->getIndices(), BV->getName(), BB), CE->getType(), BB));
     }
   }
 
@@ -2070,11 +2086,12 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
                 V, transValue(CI->getObject(), F, BB),
                 ConstantInt::get(*Context, APInt(32, LastIdx)), "", BB);
         return mapValue(
-            BV, InsertValueInst::Create(CV, V, Idxs, BV->getName(), BB));
+            BV, InsertValueInst::Create(CV, widenBoolValue(V, BB),
+              Idxs, BV->getName(), BB));
       } else
         return mapValue(
             BV, InsertValueInst::Create(
-                    CV, transValue(CI->getObject(), F, BB),
+                    CV, widenBoolValue(transValue(CI->getObject(), F, BB), BB),
                     CI->getIndices(), BV->getName(), BB));
     }
   }
@@ -4538,7 +4555,50 @@ Instruction *SPIRVToLLVM::transOCLRelational(SPIRVInstruction *I, BasicBlock *BB
              },
              &Attrs)));
 }
+
+// Widen i1 or vector of i1 type to i8 or vector of i8.
+// We use this to represent bool or vector of bool as i1 normally, but as i8
+// if it is stored in memory or in a struct or array, to avoid the problem that
+// LLVM does not support GEP into vector of i1.
+Type *SPIRVToLLVM::widenBoolType(Type *Ty) {
+  if (auto ITy = dyn_cast<IntegerType>(Ty))
+    if (ITy->getBitWidth() == 1)
+      return Type::getInt8Ty(*Context);
+  if (auto VTy = dyn_cast<VectorType>(Ty))
+    if (auto ITy = dyn_cast<IntegerType>(VTy->getElementType()))
+      if (ITy->getBitWidth() == 1)
+        return VectorType::get(Type::getInt8Ty(*Context), VTy->getNumElements());
+  return Ty;
 }
+
+// Widen i1 or vector of i1 value to i8 or vector of i8.
+Value *SPIRVToLLVM::widenBoolValue(Value *V, BasicBlock *BB) {
+  auto Ty = V->getType();
+  auto WideTy = widenBoolType(V->getType());
+  if (WideTy == Ty)
+    return V;
+  return CastInst::Create(Instruction::ZExt, V, WideTy, "", BB);
+}
+
+// Widen constant i1 or vector of i1 value to i8 or vector of i8.
+Constant *SPIRVToLLVM::widenBoolConstant(Constant *C) {
+  auto Ty = C->getType();
+  auto WideTy = widenBoolType(C->getType());
+  if (WideTy == Ty)
+    return C;
+  return ConstantExpr::getCast(Instruction::ZExt, C, WideTy);
+}
+
+// Narrow i8 or vector of i8 representing a bool value to i1 or vector of i1.
+Value *SPIRVToLLVM::narrowBoolValue(Value *V, SPIRVType *BT, BasicBlock *BB) {
+  auto Ty = V->getType();
+  auto NarrowTy = transType(BT);
+  if (Ty == NarrowTy)
+    return V;
+  return CastInst::Create(Instruction::Trunc, V, NarrowTy, "", BB);
+}
+
+} // namespace SPIRV
 
 bool
 llvm::ReadSPIRV(LLVMContext &C, std::istream &IS,
