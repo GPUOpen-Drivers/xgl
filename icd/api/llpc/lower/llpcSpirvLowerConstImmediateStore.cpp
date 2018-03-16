@@ -188,7 +188,7 @@ void SpirvLowerConstImmediateStore::ConvertAllocaToReadOnlyGlobal(
                                       "",
                                       nullptr,
                                       GlobalValue::NotThreadLocal,
-                                      ADDR_SPACE_CONST);
+                                      SPIRAS_Constant);
     pGlobal->takeName(pAlloca);
     // Change all uses of pAlloca to use pGlobal. We need to do it manually, as there is a change
     // of address space, and we also need to recreate "getelementptr"s.

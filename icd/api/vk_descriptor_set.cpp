@@ -77,51 +77,36 @@ void DescriptorSet::Reassign(
     Pal::gpusize*               gpuBaseAddress,
     uint32_t**                  cpuBaseAddress,
     uint32_t                    numPalDevices,
-    const InternalMemory* const pInternalMem,
-    void*                       pAllocHandle,
-    VkDescriptorSet*            pHandle)
+    void*                       pAllocHandle)
 {
     m_pLayout = pLayout;
     m_pAllocHandle = pAllocHandle;
 
-    if (pInternalMem != nullptr)
+    for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
     {
-        for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
-        {
-            m_gpuAddress[deviceIdx] = gpuBaseAddress[deviceIdx] + gpuMemOffset;
-        }
+        m_gpuAddress[deviceIdx] = gpuBaseAddress[deviceIdx] + gpuMemOffset;
+
+        // When memory is assigned to this descriptor set let's cache its mapped CPU address as we anyways use
+        // persistent mapped memory for descriptor pools.
+        m_pCpuAddress[deviceIdx] =
+            static_cast<uint32_t*>(Util::VoidPtrInc(cpuBaseAddress[deviceIdx], static_cast<intptr_t>(gpuMemOffset)));
+        VK_ASSERT(Util::IsPow2Aligned(reinterpret_cast<uint64_t>(m_pCpuAddress[deviceIdx]), sizeof(uint32_t)));
     }
 
-    if (pHandle != nullptr)
-    {
-        if (pInternalMem != nullptr)
-        {
-            // When memory is assigned to this descriptor set let's cache its mapped CPU address as we anyways use
-            // persistent mapped memory for descriptor pools.
-            for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
-            {
-                m_pCpuAddress[deviceIdx] = static_cast<uint32_t*>(Util::VoidPtrInc(cpuBaseAddress[deviceIdx], static_cast<intptr_t>(gpuMemOffset)));
-                VK_ASSERT(Util::IsPow2Aligned(reinterpret_cast<uint64_t>(m_pCpuAddress[deviceIdx]), sizeof(uint32_t)));
-            }
+    // In this case we also have to copy the immutable sampler data from the descriptor set layout to the
+    // descriptor set's appropriate memory locations.
+    InitImmutableDescriptors(pLayout, numPalDevices);
 
-            // In this case we also have to copy the immutable sampler data from the descriptor set layout to the
-            // descriptor set's appropriate memory locations.
-            InitImmutableDescriptors(pLayout, numPalDevices);
-        }
-        else
-        {
-            // This path can only be hit if the set doesn't need GPU memory
-            // i.e. it doesn't have static section and fmask section data
-            VK_ASSERT((pLayout->Info().sta.dwSize + pLayout->Info().fmask.dwSize) == 0);
+}
 
-            memset(m_pCpuAddress, 0, sizeof(m_pCpuAddress[0]) * numPalDevices);
-        }
-    }
-    else
-    {
-        memset(m_pCpuAddress, 0, sizeof(m_pCpuAddress[0]) * numPalDevices);
-    }
+// =====================================================================================================================
+// Resets a DescriptorSet to an intial state
+void DescriptorSet::Reset()
+{
+    m_pLayout = nullptr;
+    m_pAllocHandle = nullptr;
 
+    memset(m_pCpuAddress, 0, sizeof(m_pCpuAddress));
 }
 
 // =====================================================================================================================
@@ -132,57 +117,62 @@ void DescriptorSet::InitImmutableDescriptors(
 {
     VK_ASSERT(m_pLayout == pLayout);
 
-    const size_t imageDescDwSize = pLayout->VkDevice()->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
-    const size_t samplerDescSize = pLayout->VkDevice()->GetProperties().descriptorSizes.sampler;
-
     uint32_t immutableSamplersLeft = pLayout->Info().imm.numImmutableSamplers;
-    uint32_t binding = 0;
 
-    uint32_t* pSrcData  = pLayout->Info().imm.pImmutableSamplerData;
-
-    while (immutableSamplersLeft > 0)
+    if (immutableSamplersLeft > 0)
     {
-        const DescriptorSetLayout::BindingInfo& bindingInfo = pLayout->Binding(binding);
-        uint32_t desCount = bindingInfo.info.descriptorCount;
+        const size_t imageDescDwSize = pLayout->VkDevice()->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
+        const size_t samplerDescSize = pLayout->VkDevice()->GetProperties().descriptorSizes.sampler;
 
-        if (bindingInfo.imm.dwSize > 0)
+        uint32_t binding = 0;
+
+        uint32_t* pSrcData  = pLayout->Info().imm.pImmutableSamplerData;
+
+        do
         {
-            for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
-            {
-                if (bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER)
-                {
-                    // If it's a pure immutable sampler descriptor binding then we can copy all descriptors in one shot.
-                    memcpy(m_pCpuAddress[deviceIdx] + bindingInfo.sta.dwOffset,
-                           pSrcData  + bindingInfo.imm.dwOffset,
-                           bindingInfo.imm.dwSize * sizeof(uint32_t));
-                }
-                else
-                {
-                    // Otherwise, if it's a combined image sampler descriptor with immutable sampler then we have to
-                    // copy each element individually because the source and destination strides don't match.
-                    VK_ASSERT(bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+            const DescriptorSetLayout::BindingInfo& bindingInfo = pLayout->Binding(binding);
+            uint32_t desCount = bindingInfo.info.descriptorCount;
 
-                    for (uint32_t i = 0; i < desCount; ++i)
+            if (bindingInfo.imm.dwSize > 0)
+            {
+                for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
+                {
+                    if (bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER)
                     {
-                        memcpy(m_pCpuAddress[deviceIdx] + bindingInfo.sta.dwOffset +
-                                                                (i * bindingInfo.sta.dwArrayStride) + imageDescDwSize,
-                               pSrcData + bindingInfo.imm.dwOffset + (i * bindingInfo.imm.dwArrayStride),
-                               samplerDescSize);
+                        // If it's a pure immutable sampler descriptor binding then we can copy all descriptors in one shot.
+                        memcpy(m_pCpuAddress[deviceIdx] + bindingInfo.sta.dwOffset,
+                                pSrcData  + bindingInfo.imm.dwOffset,
+                                bindingInfo.imm.dwSize * sizeof(uint32_t));
+                    }
+                    else
+                    {
+                        // Otherwise, if it's a combined image sampler descriptor with immutable sampler then we have to
+                        // copy each element individually because the source and destination strides don't match.
+                        VK_ASSERT(bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+
+                        for (uint32_t i = 0; i < desCount; ++i)
+                        {
+                            memcpy(m_pCpuAddress[deviceIdx] + bindingInfo.sta.dwOffset +
+                                                                    (i * bindingInfo.sta.dwArrayStride) + imageDescDwSize,
+                                    pSrcData + bindingInfo.imm.dwOffset + (i * bindingInfo.imm.dwArrayStride),
+                                    samplerDescSize);
+                        }
                     }
                 }
+                // Update the remaining number of immutable samplers to copy.
+                immutableSamplersLeft -= desCount;
             }
-            // Update the remaining number of immutable samplers to copy.
-            immutableSamplersLeft -= desCount;
-        }
 
-        binding++;
+            binding++;
+        }
+        while (immutableSamplersLeft > 0);
     }
 }
 
 // =====================================================================================================================
 // Write sampler descriptors
-VK_INLINE void DescriptorSet::WriteSamplerDescriptors(
-    const Device::Properties&    deviceProperties,
+template <size_t samplerDescSize>
+void DescriptorSet::WriteSamplerDescriptors(
     const VkDescriptorImageInfo* pDescriptors,
     uint32_t*                    pDestAddr,
     uint32_t                     count,
@@ -192,7 +182,6 @@ VK_INLINE void DescriptorSet::WriteSamplerDescriptors(
     const VkDescriptorImageInfo* pImageInfo      = pDescriptors;
     const size_t                 imageInfoStride = (descriptorStrideInBytes != 0) ? descriptorStrideInBytes :
                                                                                     sizeof(VkDescriptorImageInfo);
-    const size_t                 samplerDescSize = deviceProperties.descriptorSizes.sampler;
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
@@ -206,8 +195,8 @@ VK_INLINE void DescriptorSet::WriteSamplerDescriptors(
 
 // =====================================================================================================================
 // Write combined image-sampler descriptors
-VK_INLINE void DescriptorSet::WriteImageSamplerDescriptors(
-    const Device::Properties&       deviceProperties,
+template <size_t imageDescSize, size_t samplerDescSize>
+void DescriptorSet::WriteImageSamplerDescriptors(
     const VkDescriptorImageInfo*    pDescriptors,
     uint32_t                        deviceIdx,
     uint32_t*                       pDestAddr,
@@ -218,8 +207,6 @@ VK_INLINE void DescriptorSet::WriteImageSamplerDescriptors(
     const VkDescriptorImageInfo* pImageInfo      = pDescriptors;
     const size_t                 imageInfoStride = (descriptorStrideInBytes != 0) ? descriptorStrideInBytes
                                                                                   : sizeof(VkDescriptorImageInfo);
-    const size_t                 imageDescSize   = deviceProperties.descriptorSizes.imageView;
-    const size_t                 samplerDescSize = deviceProperties.descriptorSizes.sampler;
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
@@ -236,9 +223,8 @@ VK_INLINE void DescriptorSet::WriteImageSamplerDescriptors(
 
 // =====================================================================================================================
 // Write image view descriptors (including input attachments)
-VK_INLINE void DescriptorSet::WriteImageDescriptors(
-    VkDescriptorType                descType,
-    const Device::Properties&       deviceProperties,
+template <size_t imageDescSize>
+void DescriptorSet::WriteImageDescriptors(
     const VkDescriptorImageInfo*    pDescriptors,
     uint32_t                        deviceIdx,
     uint32_t*                       pDestAddr,
@@ -249,7 +235,6 @@ VK_INLINE void DescriptorSet::WriteImageDescriptors(
     const VkDescriptorImageInfo* pImageInfo      = pDescriptors;
     const size_t                 imageInfoStride = (descriptorStrideInBytes != 0) ? descriptorStrideInBytes
                                                                                   : sizeof(VkDescriptorImageInfo);
-    const size_t                 imageDescSize   = deviceProperties.descriptorSizes.imageView;
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
@@ -264,8 +249,8 @@ VK_INLINE void DescriptorSet::WriteImageDescriptors(
 
 // =====================================================================================================================
 // Write fmask descriptors
-VK_INLINE void DescriptorSet::WriteFmaskDescriptors(
-    const Device*                   pDevice,
+template <size_t imageDescSize>
+void DescriptorSet::WriteFmaskDescriptors(
     const VkDescriptorImageInfo*    pDescriptors,
     uint32_t                        deviceIdx,
     uint32_t*                       pDestAddr,
@@ -276,15 +261,11 @@ VK_INLINE void DescriptorSet::WriteFmaskDescriptors(
     const VkDescriptorImageInfo* pImageInfo      = pDescriptors;
     const size_t                 imageInfoStride = (descriptorStrideInBytes != 0) ? descriptorStrideInBytes
                                                                                   : sizeof(VkDescriptorImageInfo);
-    const size_t                 imageDescSize   = pDevice->GetProperties().descriptorSizes.imageView;
-    VK_ASSERT((pDevice->GetProperties().descriptorSizes.fmaskView / sizeof(uint32_t)) == dwStride);
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
         const ImageView* const pImageView = ImageView::ObjectFromHandle(pImageInfo->imageView);
         const void*            pImageDesc = pImageView->Descriptor(pImageInfo->imageLayout, deviceIdx, 0);
-
-        VK_ASSERT(FmaskBasedMsaaReadEnabled() == true);
 
         if (pImageView->NeedsFmaskViewSrds())
         {
@@ -306,9 +287,8 @@ VK_INLINE void DescriptorSet::WriteFmaskDescriptors(
 
 // =====================================================================================================================
 // Write buffer descriptors
-VK_INLINE void DescriptorSet::WriteBufferDescriptors(
-    const Device::Properties&           deviceProperties,
-    VkDescriptorType                    type,
+template <size_t bufferDescSize, VkDescriptorType type>
+void DescriptorSet::WriteBufferDescriptors(
     const VkBufferView*                 pDescriptors,
     uint32_t                            deviceIdx,
     uint32_t*                           pDestAddr,
@@ -319,7 +299,6 @@ VK_INLINE void DescriptorSet::WriteBufferDescriptors(
     const VkBufferView* pBufferView      = pDescriptors;
     const size_t        bufferViewStride = (descriptorStrideInBytes != 0) ? descriptorStrideInBytes
                                                                           : sizeof(VkBufferView);
-    const size_t        bufferDescSize   = deviceProperties.descriptorSizes.bufferView;
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
@@ -333,9 +312,9 @@ VK_INLINE void DescriptorSet::WriteBufferDescriptors(
 
 // =====================================================================================================================
 // Write buffer descriptors using bufferInfo field used with uniform and storage buffers
-VK_INLINE void DescriptorSet::WriteBufferInfoDescriptors(
+template <VkDescriptorType type>
+void DescriptorSet::WriteBufferInfoDescriptors(
     const Device*                   pDevice,
-    VkDescriptorType                type,
     const VkDescriptorBufferInfo*   pDescriptors,
     uint32_t                        deviceIdx,
     uint32_t*                       pDestAddr,
@@ -349,20 +328,14 @@ VK_INLINE void DescriptorSet::WriteBufferInfoDescriptors(
 
     Pal::BufferViewInfo info = {};
 
-    switch (type)
-    {
-    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-    case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-        // Setup and create SRD for storage buffer case
-        info.swizzledFormat = Pal::UndefinedSwizzledFormat;
-        info.stride         = 0; // Raw buffers have a zero byte stride
-        break;
-    default:
-        VK_NEVER_CALLED();
-        break;
-    }
+    VK_ASSERT((type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)         ||
+              (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
+              (type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)         ||
+              (type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC));
+
+    // Setup and create SRD for storage buffer case
+    info.swizzledFormat = Pal::UndefinedSwizzledFormat;
+    info.stride         = 0; // Raw buffers have a zero byte stride
 
     Pal::IDevice* pPalDevice = pDevice->PalDevice(deviceIdx);
 
@@ -401,10 +374,10 @@ VK_INLINE void DescriptorSet::WriteBufferInfoDescriptors(
 //
 // NOTE: descriptorStrideInBytes is used for VK_KHR_descriptor_update_template's sparsely packed imageInfo, bufferInfo,
 //       or bufferView array elements and defaults to 0, i.e. vkUpdateDescriptorSets behavior
+template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize>
 void DescriptorSet::WriteDescriptorSets(
     const Device*                pDevice,
     uint32_t                     deviceIdx,
-    const Device::Properties&    deviceProperties,
     uint32_t                     descriptorWriteCount,
     const VkWriteDescriptorSet*  pDescriptorWrites,
     size_t                       descriptorStrideInBytes)
@@ -418,11 +391,11 @@ void DescriptorSet::WriteDescriptorSets(
 
         DescriptorSet* pDestSet  = DescriptorSet::ObjectFromHandle(params.dstSet);
         const DescriptorSetLayout::BindingInfo& destBinding = pDestSet->Layout()->Binding(params.dstBinding);
-        uint32_t* pDestAddr = pDestSet->CpuAddress(deviceIdx) + destBinding.sta.dwOffset
-                            + (params.dstArrayElement * destBinding.sta.dwArrayStride);
+        uint32_t* pDestAddr = pDestSet->CpuAddress(deviceIdx) +
+                              pDestSet->Layout()->GetDstStaOffset(destBinding, params.dstArrayElement);
 
-        uint32_t* pDestFmaskAddr = pDestSet->CpuAddress(deviceIdx) + pDestSet->Layout()->Info().sta.dwSize
-                                 + destBinding.fmask.dwOffset + (params.dstArrayElement * destBinding.fmask.dwArrayStride);
+        uint32_t* pDestFmaskAddr = pDestSet->CpuAddress(deviceIdx) +
+                                   pDestSet->Layout()->GetDstFmaskOffset(destBinding, params.dstArrayElement);
 
         // Determine whether the binding has immutable sampler descriptors.
         bool hasImmutableSampler = (destBinding.imm.dwSize != 0);
@@ -436,8 +409,7 @@ void DescriptorSet::WriteDescriptorSets(
             }
             else
             {
-                pDestSet->WriteSamplerDescriptors(
-                    deviceProperties,
+                WriteSamplerDescriptors<samplerDescSize>(
                     params.pImageInfo,
                     pDestAddr,
                     params.descriptorCount,
@@ -451,9 +423,7 @@ void DescriptorSet::WriteDescriptorSets(
             {
                 // If the sampler part of the combined image sampler is immutable then we should only update the image
                 // descriptors, but have to make sure to still use the appropriate stride.
-                pDestSet->WriteImageDescriptors(
-                    params.descriptorType,
-                    deviceProperties,
+                WriteImageDescriptors<imageDescSize>(
                     params.pImageInfo,
                     deviceIdx,
                     pDestAddr,
@@ -463,8 +433,7 @@ void DescriptorSet::WriteDescriptorSets(
             }
             else
             {
-                pDestSet->WriteImageSamplerDescriptors(
-                    deviceProperties,
+                WriteImageSamplerDescriptors<imageDescSize, samplerDescSize>(
                     params.pImageInfo,
                     deviceIdx,
                     pDestAddr,
@@ -475,8 +444,7 @@ void DescriptorSet::WriteDescriptorSets(
 
             if (pDestSet->FmaskBasedMsaaReadEnabled() && (destBinding.fmask.dwSize > 0))
             {
-                pDestSet->WriteFmaskDescriptors(
-                    pDevice,
+                WriteFmaskDescriptors<imageDescSize>(
                     params.pImageInfo,
                     deviceIdx,
                     pDestFmaskAddr,
@@ -490,9 +458,7 @@ void DescriptorSet::WriteDescriptorSets(
         case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-            pDestSet->WriteImageDescriptors(
-                params.descriptorType,
-                deviceProperties,
+            WriteImageDescriptors<imageDescSize>(
                 params.pImageInfo,
                 deviceIdx,
                 pDestAddr,
@@ -502,8 +468,7 @@ void DescriptorSet::WriteDescriptorSets(
 
             if (pDestSet->FmaskBasedMsaaReadEnabled() && (destBinding.fmask.dwSize > 0))
             {
-                pDestSet->WriteFmaskDescriptors(
-                    pDevice,
+                pDestSet->WriteFmaskDescriptors<imageDescSize>(
                     params.pImageInfo,
                     deviceIdx,
                     pDestFmaskAddr,
@@ -514,51 +479,79 @@ void DescriptorSet::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
-        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-            pDestSet->WriteBufferDescriptors(
-                deviceProperties,
-                params.descriptorType,
+            pDestSet->WriteBufferDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER>(
                 params.pTexelBufferView,
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
                 destBinding.sta.dwArrayStride,
                 descriptorStrideInBytes);
+            break;
 
+        case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            WriteBufferDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER>(
+                params.pTexelBufferView,
+                deviceIdx,
+                pDestAddr,
+                params.descriptorCount,
+                destBinding.sta.dwArrayStride,
+                descriptorStrideInBytes);
             break;
 
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-            pDestSet->WriteBufferInfoDescriptors(
+            WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(
                 pDevice,
-                params.descriptorType,
                 params.pBufferInfo,
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
                 destBinding.sta.dwArrayStride,
                 descriptorStrideInBytes);
+            break;
 
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER>(
+                pDevice,
+                params.pBufferInfo,
+                deviceIdx,
+                pDestAddr,
+                params.descriptorCount,
+                destBinding.sta.dwArrayStride,
+                descriptorStrideInBytes);
             break;
 
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
             // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
             // client memory.
             // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
-            pDestAddr = pDestSet->DynamicDescriptorData() + destBinding.dyn.dwOffset
-                      + params.dstArrayElement * destBinding.dyn.dwArrayStride;
+            pDestAddr = pDestSet->DynamicDescriptorData() +
+                        pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
 
-            pDestSet->WriteBufferInfoDescriptors(
+            WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC>(
                 pDevice,
-                params.descriptorType,
                 params.pBufferInfo,
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
                 destBinding.dyn.dwArrayStride,
                 descriptorStrideInBytes);
+            break;
 
+        case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+            // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
+            // client memory.
+            // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
+            pDestAddr = pDestSet->DynamicDescriptorData() +
+                        pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
+
+            WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC>(
+                pDevice,
+                params.pBufferInfo,
+                deviceIdx,
+                pDestAddr,
+                params.descriptorCount,
+                destBinding.dyn.dwArrayStride,
+                descriptorStrideInBytes);
             break;
 
         default:
@@ -570,10 +563,10 @@ void DescriptorSet::WriteDescriptorSets(
 
 // =====================================================================================================================
 // Copy from one descriptor set to another
+template <size_t imageDescSize>
 void DescriptorSet::CopyDescriptorSets(
     const Device*                pDevice,
     uint32_t                     deviceIdx,
-    const Device::Properties&    deviceProperties,
     uint32_t                     descriptorCopyCount,
     const VkCopyDescriptorSet*   pDescriptorCopies)
 {
@@ -636,7 +629,6 @@ void DescriptorSet::CopyDescriptorSets(
             {
                 // If we have immutable samplers inline with the image data to copy then we have to do a per array
                 // element copy to ensure we don't overwrite the immutable sampler data
-                const size_t imageDescSize = deviceProperties.descriptorSizes.imageView;
 
                 for (uint32_t j = 0; j < count; ++j)
                 {
@@ -669,6 +661,85 @@ void DescriptorSet::CopyDescriptorSets(
     }
 }
 
+// =====================================================================================================================
+template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, uint32_t numPalDevices>
+VKAPI_ATTR void VKAPI_CALL DescriptorSet::UpdateDescriptorSets(
+    VkDevice                                    device,
+    uint32_t                                    descriptorWriteCount,
+    const VkWriteDescriptorSet*                 pDescriptorWrites,
+    uint32_t                                    descriptorCopyCount,
+    const VkCopyDescriptorSet*                  pDescriptorCopies)
+{
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
+    {
+        WriteDescriptorSets<imageDescSize, samplerDescSize, bufferDescSize>(
+                            pDevice,
+                            deviceIdx,
+                            descriptorWriteCount,
+                            pDescriptorWrites);
+
+        CopyDescriptorSets<imageDescSize>(pDevice,
+                           deviceIdx,
+                           descriptorCopyCount,
+                           pDescriptorCopies);
+    }
+}
+
+// =====================================================================================================================
+PFN_vkUpdateDescriptorSets DescriptorSet::GetUpdateDescriptorSetsFunc(
+    const Device* pDevice)
+{
+    PFN_vkUpdateDescriptorSets pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+        case 1:
+            pFunc = GetUpdateDescriptorSetsFunc<1>(pDevice);
+            break;
+        case 2:
+            pFunc = GetUpdateDescriptorSetsFunc<2>(pDevice);
+            break;
+        case 3:
+            pFunc = GetUpdateDescriptorSetsFunc<3>(pDevice);
+            break;
+        case 4:
+            pFunc = GetUpdateDescriptorSetsFunc<4>(pDevice);
+            break;
+        default:
+            break;
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+PFN_vkUpdateDescriptorSets DescriptorSet::GetUpdateDescriptorSetsFunc(
+    const Device* pDevice)
+{
+    const size_t imageDescSize      = pDevice->GetProperties().descriptorSizes.imageView;
+    const size_t samplerDescSize    = pDevice->GetProperties().descriptorSizes.sampler;
+    const size_t bufferDescSize     = pDevice->GetProperties().descriptorSizes.bufferView;
+
+    PFN_vkUpdateDescriptorSets pFunc = nullptr;
+
+    if ((imageDescSize == 32) &&
+        (samplerDescSize == 16) &&
+        (bufferDescSize == 16))
+    {
+        pFunc = &UpdateDescriptorSets<32, 16, 16, numPalDevices>;
+    }
+    else
+    {
+        VK_NEVER_CALLED();
+        pFunc = nullptr;
+    }
+
+    return pFunc;
+}
+
 namespace entry
 {
 
@@ -681,24 +752,108 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(
     const VkCopyDescriptorSet*                  pDescriptorCopies)
 {
     const Device*             pDevice          = ApiDevice::ObjectFromHandle(device);
-    const Device::Properties& deviceProperties = pDevice->GetProperties();
 
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-    {
-        DescriptorSet::WriteDescriptorSets(pDevice,
-                                           deviceIdx,
-                                           deviceProperties,
-                                           descriptorWriteCount,
-                                           pDescriptorWrites);
+    PFN_vkUpdateDescriptorSets pFunc = pDevice->GetUpdateDescriptorSetsFunc();
 
-        DescriptorSet::CopyDescriptorSets(pDevice,
-                                          deviceIdx,
-                                          deviceProperties,
-                                          descriptorCopyCount,
-                                          pDescriptorCopies);
-    }
+    (*pFunc)(device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies);
 }
 
 } // namespace entry
+
+// =====================================================================================================================
+// Template instantiation needed for references in other files.  Linux complains if we don't do this.
+
+template
+void DescriptorSet::WriteFmaskDescriptors<32>(
+    const VkDescriptorImageInfo*    pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
+
+template
+void DescriptorSet::WriteSamplerDescriptors<16>(
+    const VkDescriptorImageInfo* pDescriptors,
+    uint32_t*                    pDestAddr,
+    uint32_t                     count,
+    uint32_t                     dwStride,
+    size_t                       descriptorStrideInBytes);
+
+template
+void DescriptorSet::WriteImageSamplerDescriptors<32, 16>(
+    const VkDescriptorImageInfo*    pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
+
+template
+void DescriptorSet::WriteImageDescriptors<32>(
+    const VkDescriptorImageInfo*    pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
+
+template
+void DescriptorSet::WriteBufferDescriptors<16, VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER>(
+    const VkBufferView*                 pDescriptors,
+    uint32_t                            deviceIdx,
+    uint32_t*                           pDestAddr,
+    uint32_t                            count,
+    uint32_t                            dwStride,
+    size_t                              descriptorStrideInBytes);
+
+template
+void DescriptorSet::WriteBufferDescriptors<16, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER>(
+    const VkBufferView*                 pDescriptors,
+    uint32_t                            deviceIdx,
+    uint32_t*                           pDestAddr,
+    uint32_t                            count,
+    uint32_t                            dwStride,
+    size_t                              descriptorStrideInBytes);
+
+template
+void DescriptorSet::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(
+    const Device*                   pDevice,
+    const VkDescriptorBufferInfo*   pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
+
+template
+void DescriptorSet::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER>(
+    const Device*                   pDevice,
+    const VkDescriptorBufferInfo*   pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
+
+template
+void DescriptorSet::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC>(
+    const Device*                   pDevice,
+    const VkDescriptorBufferInfo*   pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
+
+template
+void DescriptorSet::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC>(
+    const Device*                   pDevice,
+    const VkDescriptorBufferInfo*   pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
 
 } // namespace vk

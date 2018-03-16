@@ -1771,8 +1771,6 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
     // load/store when we visit this bool variable. This issue exists in
     // DOOM4 released version, we have to keep the workaround.
     if (Dst->getType()->getPointerElementType() != Src->getType()) {
-      assert(Src->getType()->isAggregateType() &&
-             Dst->getType()->getPointerElementType()->isAggregateType());
       SI = transSPIRVBuiltinFromInst(BS, BB);
     } else {
       // NOTE: For those storage classes that will not involve memory
@@ -2305,7 +2303,19 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
   case OpImageQueryLevels:
   case OpImageQuerySamples:
   case OpImageRead:
-  case OpImageWrite: {
+  case OpImageWrite:
+  case OpImageSparseSampleImplicitLod:
+  case OpImageSparseSampleExplicitLod:
+  case OpImageSparseSampleDrefImplicitLod:
+  case OpImageSparseSampleDrefExplicitLod:
+  case OpImageSparseSampleProjImplicitLod:
+  case OpImageSparseSampleProjExplicitLod:
+  case OpImageSparseSampleProjDrefImplicitLod:
+  case OpImageSparseSampleProjDrefExplicitLod:
+  case OpImageSparseFetch:
+  case OpImageSparseGather:
+  case OpImageSparseDrefGather:
+  case OpImageSparseRead: {
     return mapValue(BV,
         transSPIRVImageOpFromInst(
             static_cast<SPIRVInstruction *>(BV),
@@ -2346,6 +2356,27 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
     LoadInst *LI = new LoadInst(transValue(ImagePointer, F, BB), BV->getName(),
         false, 0, BB);
     return mapValue(BV, LI);
+  }
+  case OpImageSparseTexelsResident: {
+    SPIRVImageSparseTexelsResident *BI = static_cast<SPIRVImageSparseTexelsResident *>(BV);
+    auto ResidentCode = transValue(BI->getResidentCode(), F, BB);
+
+    std::string FuncName("llpc.imagesparse.texel.resident");
+    SmallVector<Value *, 1> Arg;
+    Arg.push_back(ResidentCode);
+
+    Function *Func = M->getFunction(FuncName);
+    if (!Func) {
+      SmallVector<Type *, 1> ArgTy;
+      ArgTy.push_back(Type::getInt32Ty(*Context));
+      FunctionType *FuncTy = FunctionType::get(Type::getInt1Ty(*Context), ArgTy, false);
+      Func = Function::Create(FuncTy, GlobalValue::ExternalLinkage, FuncName, M);
+      Func->setCallingConv(CallingConv::SPIR_FUNC);
+      if (isFuncNoUnwind())
+        Func->addFnAttr(Attribute::NoUnwind);
+    }
+
+    return mapValue(BV, CallInst::Create(Func, Arg, "", BB));
   }
   default: {
     auto OC = BV->getOpCode();
@@ -2676,12 +2707,18 @@ SPIRVToLLVM::transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB)
 
   if (Info.OpKind != ImageOpQueryNonLod) {
     // Generate name strings for image calls:
-    //    Format: prefix.op.[f32|i32|u32].dim[.proj][.dref][.bias][.lod][.grad]
-    //                                       [.constoffset][.offset]
-    //                                       [.constoffsets][.sample][.minlod]
+    //    Format: prefix.image[sparse].op.[f32|i32|u32].dim[.proj][.dref][.bias][.lod][.grad]
+    //                                                      [.constoffset][.offset]
+    //                                                      [.constoffsets][.sample][.minlod]
 
     // Add call prefix
     SS << gSPIRVName::ImageCallPrefix;
+
+    // Add sparse modifier
+    if (Info.IsSparse)
+      SS << gSPIRVName::ImageCallModSparse;
+
+    SS << ".";
 
     // Add image operation kind
     std::string S;
@@ -2853,7 +2890,7 @@ SPIRVToLLVM::transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB)
     //    Format: prefix.query.op.dim[.cubearray][.buffer].returntype
 
     // Add call prefix
-    SS << gSPIRVName::ImageCallPrefix;
+    SS << gSPIRVName::ImageCallPrefix << ".";
 
     // Add image operation kind: query
     std::string S;

@@ -853,6 +853,8 @@ private:
         const uint32_t            queryCount,
         const uint32_t            timestampChunk);
 
+    VK_INLINE uint32_t EstimateMaxObjectsOnVirtualStack(size_t objectSize) const;
+
 #if VK_ENABLE_DEBUG_BARRIERS
     void DbgCmdBarrier(bool preCmd);
 #endif

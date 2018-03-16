@@ -370,16 +370,72 @@ void SpirvLowerGlobal::visitLoadInst(
         LLPC_ASSERT(pMetaNode != nullptr);
         auto pInOutMeta = mdconst::dyn_extract<Constant>(pMetaNode->getOperand(0));
 
-        auto pLoadValue = AddCallInstForInOutImport(pInOutTy,
-                                                    addrSpace,
-                                                    pInOutMeta,
-                                                    nullptr,
-                                                    nullptr,
-                                                    nullptr,
-                                                    InterpLocUnknown,
-                                                    nullptr,
-                                                    nullptr,
-                                                    &loadInst);
+        Value* pLoadValue = UndefValue::get(pInOutTy);
+        bool hasVertexIdx = false;
+
+        if (pInOutTy->isArrayTy())
+        {
+            // Arrayed input/output
+            LLPC_ASSERT(pInOutMeta->getNumOperands() == 3);
+            ShaderInOutMetadata inOutMeta = {};
+            inOutMeta.U32All = cast<ConstantInt>(pInOutMeta->getOperand(1))->getZExtValue();
+
+            // If the input/output is arrayed, the outermost dimension might for vertex indexing
+            if (inOutMeta.IsBuiltIn)
+            {
+                BuiltIn builtInId = static_cast<BuiltIn>(inOutMeta.Value);
+                hasVertexIdx = ((builtInId == BuiltInPerVertex)    || // GLSL style per-vertex data
+                                (builtInId == BuiltInPosition)     || // HLSL style per-vertex data
+                                (builtInId == BuiltInPointSize)    ||
+                                (builtInId == BuiltInClipDistance) ||
+                                (builtInId == BuiltInCullDistance));
+            }
+            else
+            {
+                hasVertexIdx = (inOutMeta.PerPatch == false);
+            }
+        }
+
+        if (hasVertexIdx)
+        {
+            LLPC_ASSERT(pInOutTy->isArrayTy());
+
+            auto pElemTy = pInOutTy->getArrayElementType();
+            auto pElemMeta = cast<Constant>(pInOutMeta->getOperand(2));
+
+            const uint32_t elemCount = pInOutTy->getArrayNumElements();
+            for (uint32_t i = 0; i < elemCount; ++i)
+            {
+                Value* pVertexIdx = ConstantInt::get(m_pContext->Int32Ty(), i);
+                auto pElemValue = AddCallInstForInOutImport(pElemTy,
+                                                            addrSpace,
+                                                            pElemMeta,
+                                                            nullptr,
+                                                            nullptr,
+                                                            pVertexIdx,
+                                                            InterpLocUnknown,
+                                                            nullptr,
+                                                            nullptr,
+                                                            &loadInst);
+
+                std::vector<uint32_t> idxs;
+                idxs.push_back(i);
+                pLoadValue = InsertValueInst::Create(pLoadValue, pElemValue, idxs, "", &loadInst);
+            }
+        }
+        else
+        {
+            pLoadValue = AddCallInstForInOutImport(pInOutTy,
+                                                   addrSpace,
+                                                   pInOutMeta,
+                                                   nullptr,
+                                                   nullptr,
+                                                   nullptr,
+                                                   InterpLocUnknown,
+                                                   nullptr,
+                                                   nullptr,
+                                                   &loadInst);
+        }
 
         m_loadInsts.insert(&loadInst);
         loadInst.replaceAllUsesWith(pLoadValue);
@@ -478,7 +534,56 @@ void SpirvLowerGlobal::visitStoreInst(
         LLPC_ASSERT(pMetaNode != nullptr);
         auto pOutputMeta = mdconst::dyn_extract<Constant>(pMetaNode->getOperand(0));
 
-        AddCallInstForOutputExport(pStoreValue, pOutputMeta, nullptr, nullptr, nullptr, InvalidValue, &storeInst);
+        bool hasVertexIdx = false;
+
+        // If the input/output is arrayed, the outermost dimension might for vertex indexing
+        if (pOutputy->isArrayTy())
+        {
+            LLPC_ASSERT(pOutputMeta->getNumOperands() == 3);
+            ShaderInOutMetadata outputMeta = {};
+            outputMeta.U32All = cast<ConstantInt>(pOutputMeta->getOperand(1))->getZExtValue();
+
+            if (outputMeta.IsBuiltIn)
+            {
+                BuiltIn builtInId = static_cast<BuiltIn>(outputMeta.Value);
+                hasVertexIdx = ((builtInId == BuiltInPerVertex)    || // GLSL style per-vertex data
+                                (builtInId == BuiltInPosition)     || // HLSL style per-vertex data
+                                (builtInId == BuiltInPointSize)    ||
+                                (builtInId == BuiltInClipDistance) ||
+                                (builtInId == BuiltInCullDistance));
+            }
+            else
+            {
+                hasVertexIdx = (outputMeta.PerPatch == false);
+            }
+        }
+
+        if (hasVertexIdx)
+        {
+            LLPC_ASSERT(pOutputy->isArrayTy());
+            auto pElemMeta = cast<Constant>(pOutputMeta->getOperand(2));
+
+            const uint32_t elemCount = pOutputy->getArrayNumElements();
+            for (uint32_t i = 0; i < elemCount; ++i)
+            {
+                std::vector<uint32_t> idxs;
+                idxs.push_back(i);
+                auto pElemValue = ExtractValueInst::Create(pStoreValue, idxs, "", &storeInst);
+
+                Value* pVertexIdx = ConstantInt::get(m_pContext->Int32Ty(), i);
+                AddCallInstForOutputExport(pElemValue,
+                                           pElemMeta,
+                                           nullptr,
+                                           nullptr,
+                                           pVertexIdx,
+                                           InvalidValue,
+                                           &storeInst);
+            }
+        }
+        else
+        {
+            AddCallInstForOutputExport(pStoreValue, pOutputMeta, nullptr, nullptr, nullptr, InvalidValue, &storeInst);
+        }
 
         m_storeInsts.insert(&storeInst);
     }
@@ -861,10 +966,6 @@ void SpirvLowerGlobal::LowerInput()
 // Does lowering opertions for SPIR-V outputs, replaces outputs with proxy variables.
 void SpirvLowerGlobal::LowerOutput()
 {
-    // NOTE: For tessellation control shader, we invoke handling of "load"/"store" instructions and replace all those
-    // instructions with import/export calls in-place.
-    LLPC_ASSERT(m_shaderStage != ShaderStageTessControl);
-
     m_pRetBlock = BasicBlock::Create(*m_pContext, "", m_pEntryPoint);
 
     // Invoke handling of "return" instructions or "emit" calls
@@ -886,6 +987,16 @@ void SpirvLowerGlobal::LowerOutput()
         retInst->dropAllReferences();
         retInst->eraseFromParent();
     }
+
+    if (m_outputProxyMap.empty())
+    {
+        // Skip lowering if there is no output
+        return;
+    }
+
+    // NOTE: For tessellation control shader, we invoke handling of "load"/"store" instructions and replace all those
+    // instructions with import/export calls in-place.
+    LLPC_ASSERT(m_shaderStage != ShaderStageTessControl);
 
     // Export output from the proxy variable prior to "return" instruction or "emit" calls
     for (auto outputMap : m_outputProxyMap)
@@ -1523,6 +1634,7 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
         {
             BuiltIn builtInId = static_cast<BuiltIn>(inOutMeta.Value);
             if ((builtInId == BuiltInSubgroupLocalInvocationId) ||
+                (builtInId == BuiltInSubgroupSize)              ||
                 (builtInId == BuiltInSubgroupEqMaskKHR)         ||
                 (builtInId == BuiltInSubgroupGeMaskKHR)         ||
                 (builtInId == BuiltInSubgroupGtMaskKHR)         ||

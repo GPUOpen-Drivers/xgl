@@ -42,6 +42,7 @@
 #include "include/vk_extensions.h"
 #include "include/vk_formats.h"
 #include "include/vk_queue.h"
+#include "include/pipeline_compiler.h"
 #include "settings/settings.h"
 
 #include "palDevice.h"
@@ -381,6 +382,15 @@ public:
     uint32_t GetSupportedAPIVersion() const;
 #endif
 
+    VK_INLINE uint32_t GetEnabledAPIVersion() const
+    {
+#ifdef ICD_VULKAN_1_1
+        return Util::Min(GetSupportedAPIVersion(), VkInstance()->GetAPIVersion());
+#else
+        return VkInstance()->GetAPIVersion();
+#endif
+    }
+
 #ifdef ICD_BUILD_APPPROFILE
     VK_INLINE AppProfile GetAppProfile() const
         { return m_appProfile; }
@@ -391,6 +401,10 @@ public:
 
     void LateInitialize();
 
+    VK_FORCEINLINE PipelineCompiler* GetCompiler()
+    {
+        return &m_compiler;
+    }
 protected:
     PhysicalDevice(PhysicalDeviceManager* pPhysicalDeviceManager,
                    Pal::IDevice*          pPalDevice,
@@ -405,6 +419,11 @@ protected:
     void PopulateLimits();
     void PopulateExtensions();
     void PopulateGpaProperties();
+
+    VK_FORCEINLINE bool IsPerChannelMinMaxFilteringSupported() const
+    {
+        return m_properties.gfxipProperties.flags.supportPerChannelMinMaxFilter;
+    }
 
     PhysicalDeviceManager*           m_pPhysicalDeviceManager;
     Pal::IDevice*                    m_pPalDevice;
@@ -436,6 +455,8 @@ protected:
 
     // Device properties related to the VK_AMD_gpu_perf_api_interface extension
     PhysicalDeviceGpaProperties      m_gpaProps;
+
+    PipelineCompiler                         m_compiler;
 };
 
 VK_DEFINE_DISPATCHABLE(PhysicalDevice);

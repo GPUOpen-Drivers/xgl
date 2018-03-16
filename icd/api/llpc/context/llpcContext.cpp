@@ -66,12 +66,10 @@ const uint8_t Context::GlslEmuLibGfx8[] =
 #include "./generate/gfx8/g_llpcGlslEmuLibGfx8.h"
 };
 
-#ifdef LLPC_BUILD_GFX9
 const uint8_t Context::GlslEmuLibGfx9[]=
 {
     #include "./generate/gfx9/g_llpcGlslEmuLibGfx9.h"
 };
-#endif
 
 // =====================================================================================================================
 Context::Context(
@@ -134,7 +132,6 @@ Context::Context(
 
     if (gfxIp.major >= 9)
     {
-#ifdef LLPC_BUILD_GFX9
         libBin.codeSize = sizeof(GlslEmuLibGfx9);
         libBin.pCode    = GlslEmuLibGfx9;
         pGlslEmuLibGfx = LoadLibary(&libBin);
@@ -143,9 +140,6 @@ Context::Context(
         {
             LLPC_ERRS("Fails to link LLVM libraries together\n");
         }
-#else
-        LLPC_NOT_IMPLEMENTED();
-#endif
     }
 
     // Do function inlining
@@ -162,7 +156,7 @@ Context::Context(
 
     // Remove non-native function for native lib
     {
-        m_pNativeGlslEmuLib = CloneModule(m_pGlslEmuLib.get());
+        m_pNativeGlslEmuLib = CloneModule(*m_pGlslEmuLib.get());
         legacy::PassManager passMgr;
         passMgr.add(PassNonNativeFuncRemove::Create());
 

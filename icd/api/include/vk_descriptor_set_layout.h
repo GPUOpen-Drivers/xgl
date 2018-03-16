@@ -126,6 +126,29 @@ public:
     static uint32_t GetDescImmutableSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDynamicBufferDescDwSize(const Device* pDevice);
 
+    size_t GetDstStaOffset(const BindingInfo& dstBinding, uint32_t dstArrayElement) const
+    {
+        size_t offset = dstBinding.sta.dwOffset + (dstArrayElement * dstBinding.sta.dwArrayStride);
+
+        return offset;
+    }
+
+    size_t GetDstFmaskOffset(const BindingInfo& dstBinding, uint32_t dstArrayElement) const
+    {
+        size_t offset = Info().sta.dwSize +
+                        dstBinding.fmask.dwOffset +
+                        (dstArrayElement * dstBinding.fmask.dwArrayStride);
+
+        return offset;
+    }
+
+    size_t GetDstDynOffset(const BindingInfo& dstBinding, uint32_t dstArrayElement) const
+    {
+        size_t offset = dstBinding.dyn.dwOffset + dstArrayElement * dstBinding.dyn.dwArrayStride;
+
+        return offset;
+    }
+
 protected:
     DescriptorSetLayout(
         const Device*     pDevice,

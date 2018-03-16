@@ -40,6 +40,7 @@
 #include "include/vk_dispatch.h"
 #include "include/vk_memory.h"
 #include "include/internal_mem_mgr.h"
+#include "include/vk_descriptor_set.h"
 
 namespace vk
 {
@@ -158,9 +159,13 @@ public:
     void Reset();
 
 private:
+
+    size_t SetSize() const { return Util::Pow2Align(sizeof(DescriptorSet), VK_DEFAULT_MEM_ALIGN); }
+
+    VkDescriptorSet DescriptorSetHandleFromIndex(uint32_t idx) const;
+
     uint32_t             m_nextFreeHandle;
     uint32_t             m_maxSets;
-    VkDescriptorSet*     m_pHandles;
 
     uint32_t*            m_pFreeIndexStack;
     uint32_t             m_freeIndexStackCount;

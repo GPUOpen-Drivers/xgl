@@ -68,26 +68,16 @@ union DescriptorSetFlags
 class DescriptorSet : public NonDispatchable<VkDescriptorSet, DescriptorSet>
 {
 public:
-    VK_INLINE void WriteSamplerDescriptors(
-        const Device::Properties&       deviceProperties,
+    template <size_t samplerDescSize>
+    static void WriteSamplerDescriptors(
         const VkDescriptorImageInfo*    pDescriptors,
         uint32_t*                       pDestAddr,
         uint32_t                        count,
         uint32_t                        dwStride,
         size_t                          descriptorStrideInBytes);
 
-    VK_INLINE void WriteImageSamplerDescriptors(
-        const Device::Properties&       deviceProperties,
-        const VkDescriptorImageInfo*    pDescriptors,
-        uint32_t                        deviceIdx,
-        uint32_t*                       pDestAddr,
-        uint32_t                        count,
-        uint32_t                        dwStride,
-        size_t                          descriptorStrideInBytes);
-
-    VK_INLINE void WriteImageDescriptors(
-        VkDescriptorType                descType,
-        const Device::Properties&       deviceProperties,
+    template <size_t imageDescSize, size_t samplerDescSize>
+    static void WriteImageSamplerDescriptors(
         const VkDescriptorImageInfo*    pDescriptors,
         uint32_t                        deviceIdx,
         uint32_t*                       pDestAddr,
@@ -95,18 +85,27 @@ public:
         uint32_t                        dwStride,
         size_t                          descriptorStrideInBytes);
 
-    VK_INLINE void WriteFmaskDescriptors(
+    template <size_t imageDescSize>
+    static void WriteImageDescriptors(
+        const VkDescriptorImageInfo*    pDescriptors,
+        uint32_t                        deviceIdx,
+        uint32_t*                       pDestAddr,
+        uint32_t                        count,
+        uint32_t                        dwStride,
+        size_t                          descriptorStrideInBytes);
+
+    template <size_t imageDescSize>
+    static void WriteFmaskDescriptors(
+        const VkDescriptorImageInfo*    pDescriptors,
+        uint32_t                        deviceIdx,
+        uint32_t*                       pDestAddr,
+        uint32_t                        count,
+        uint32_t                        dwStride,
+        size_t                          descriptorStrideInBytes);
+
+    template <VkDescriptorType type>
+    static void WriteBufferInfoDescriptors(
         const Device*                   pDevice,
-        const VkDescriptorImageInfo*    pDescriptors,
-        uint32_t                        deviceIdx,
-        uint32_t*                       pDestAddr,
-        uint32_t                        count,
-        uint32_t                        dwStride,
-        size_t                          descriptorStrideInBytes);
-
-    VK_INLINE void WriteBufferInfoDescriptors(
-        const Device*                   pDevice,
-        VkDescriptorType                type,
         const VkDescriptorBufferInfo*   pDescriptors,
         uint32_t                        deviceIdx,
         uint32_t*                       pDestAddr,
@@ -114,9 +113,8 @@ public:
         uint32_t                        dwStride,
         size_t                          descriptorStrideInBytes);
 
-    VK_INLINE void WriteBufferDescriptors(
-        const Device::Properties&       deviceProperties,
-        VkDescriptorType                type,
+    template <size_t bufferDescSize, VkDescriptorType type>
+    static void WriteBufferDescriptors(
         const VkBufferView*             pDescriptors,
         uint32_t                        deviceIdx,
         uint32_t*                       pDestAddr,
@@ -161,20 +159,7 @@ public:
         const uint32_t* pDynamicOffsets,
         uint32_t        numDynamicDescriptors);
 
-    static void WriteDescriptorSets(
-        const Device*                pDevice,
-        uint32_t                     deviceIdx,
-        const Device::Properties&    deviceProperties,
-        uint32_t                     descriptorWriteCount,
-        const VkWriteDescriptorSet*  pDescriptorWrites,
-        size_t                       descriptorStrideInBytes = 0);
-
-    static void CopyDescriptorSets(
-        const Device*                pDevice,
-        uint32_t                     deviceIdx,
-        const Device::Properties&    deviceProperties,
-        uint32_t                     descriptorCopyCount,
-        const VkCopyDescriptorSet*   pDescriptorCopies);
+    static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
 
 protected:
     DescriptorSet(
@@ -185,15 +170,41 @@ protected:
     ~DescriptorSet()
         { PAL_NEVER_CALLED(); }
 
+    template <uint32_t numPalDevices>
+    static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
+
+    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, uint32_t numPalDevices>
+    static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(
+        VkDevice                                    device,
+        uint32_t                                    descriptorWriteCount,
+        const VkWriteDescriptorSet*                 pDescriptorWrites,
+        uint32_t                                    descriptorCopyCount,
+        const VkCopyDescriptorSet*                  pDescriptorCopies);
+
+    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize>
+    static void WriteDescriptorSets(
+        const Device*                pDevice,
+        uint32_t                     deviceIdx,
+        uint32_t                     descriptorWriteCount,
+        const VkWriteDescriptorSet*  pDescriptorWrites,
+         size_t                      descriptorStrideInBytes = 0);
+
+    template <size_t imageDescSize>
+    static void CopyDescriptorSets(
+        const Device*                pDevice,
+        uint32_t                     deviceIdx,
+        uint32_t                     descriptorCopyCount,
+        const VkCopyDescriptorSet*   pDescriptorCopies);
+
     void Reassign(
         const DescriptorSetLayout*  pLayout,
         Pal::gpusize                gpuMemOffset,
         Pal::gpusize*               gpuBaseAddress,
         uint32_t**                  cpuBaseAddress,
         uint32_t                    numPalDevices,
-        const InternalMemory* const pInternalMem,
-        void*                       pAllocHandle,
-        VkDescriptorSet*            pHandle);
+        void*                       pAllocHandle);
+
+    void Reset();
 
     void InitImmutableDescriptors(
         const DescriptorSetLayout*  pLayout,

@@ -469,7 +469,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2KHR(
     VkMemoryRequirements2KHR*                   pMemoryRequirements)
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
-    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2));
+    VK_ASSERT((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
+              pDevice->IsExtensionEnabled(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2));
 
     union
     {

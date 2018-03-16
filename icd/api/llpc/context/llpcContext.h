@@ -223,12 +223,10 @@ public:
         m_pPipelineContext->SetGsOnChip(gsOnChip);
     }
 
-#ifdef LLPC_BUILD_GFX9
     void DoUserDataNodeMerge()
     {
         m_pPipelineContext->DoUserDataNodeMerge();
     }
-#endif
 
     uint64_t GetPiplineHashCode() const
     {
@@ -294,10 +292,7 @@ private:
     // GLSL emulation libraries
     static const uint8_t GlslEmuLib[];
     static const uint8_t GlslEmuLibGfx8[];
-#ifdef LLPC_BUILD_GFX9
     static const uint8_t GlslEmuLibGfx9[];
-#endif
-
 };
 
 } // Llpc

@@ -36,6 +36,7 @@
 #include "include/vk_buffer.h"
 #include "include/vk_buffer_view.h"
 #include "include/vk_descriptor_pool.h"
+#include "include/vk_descriptor_set.h"
 #include "include/vk_descriptor_set_layout.h"
 #include "include/vk_descriptor_update_template.h"
 #include "include/vk_device.h"
@@ -178,7 +179,8 @@ Device::Device(
     m_renderStateCache(this),
     m_enabledExtensions(enabledExtensions),
     m_pSqttMgr(nullptr),
-    m_pipelineCacheCount(0)
+    m_pipelineCacheCount(0),
+    m_pfnUpdateDescriptorSets(nullptr)
 {
     memcpy(m_pPhysicalDevices, pPhysicalDevices, sizeof(pPhysicalDevices[DefaultDeviceIndex]) * palDeviceCount);
     memcpy(m_pPalDevices, pPalDevices, sizeof(pPalDevices[0]) * palDeviceCount);
@@ -202,8 +204,6 @@ Device::Device(
 
     m_allocatedCount = 0;
     m_maxAllocations = pPhysicalDevices[DefaultDeviceIndex]->GetLimits().maxMemoryAllocationCount;
-
-    memset(m_pLlpcCompiler, 0, sizeof(m_pLlpcCompiler));
 
 }
 
@@ -267,30 +267,6 @@ VkResult Device::Create(
     };
 
     DeviceExtensions::Enabled enabledDeviceExtensions;
-
-#ifdef ICD_VULKAN_1_1
-    // Implicitly enable device extensions that are core in the API version
-    if (pPhysicalDevice->VkInstance()->GetAPIVersion() >= VK_MAKE_VERSION(1, 1, 0))
-    {
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_16BIT_STORAGE);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_BIND_MEMORY2);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_DEDICATED_ALLOCATION);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_DESCRIPTOR_UPDATE_TEMPLATE);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_DEVICE_GROUP);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_EXTERNAL_FENCE);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_EXTERNAL_MEMORY);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_EXTERNAL_SEMAPHORE);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_MAINTENANCE1);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_MAINTENANCE2);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_MAINTENANCE3);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_MULTIVIEW);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_RELAXED_BLOCK_LAYOUT);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_SHADER_DRAW_PARAMETERS);
-//        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION);
-        enabledDeviceExtensions.EnableExtension(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS);
-    }
-#endif
 
     VK_ASSERT(pCreateInfo != nullptr);
 
@@ -444,7 +420,7 @@ VkResult Device::Create(
 
     vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
 
-    if (pMemory != nullptr)
+    if ((pCreateInfo != nullptr) && (pMemory != nullptr))
     {
         vkResult = PalToVkResult(palResult);
 
@@ -627,7 +603,7 @@ VkResult Device::Initialize(
     uint8_t*            pPalQueueMemory)
 {
     // Initialize the internal memory manager
-    VkResult  result = m_internalMemMgr.Init();
+    VkResult result = m_internalMemMgr.Init();
 
     // Initialize the render state cache
     if (result == VK_SUCCESS)
@@ -739,19 +715,6 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        for (uint32_t i = 0; i < m_palDeviceCount; ++i)
-        {
-            result = CreateLlpcCompiler(i);
-
-            if (result != VK_SUCCESS)
-            {
-                break;
-            }
-        }
-    }
-
-    if (result == VK_SUCCESS)
-    {
         result = CreateLlpcInternalPipelines();
     }
 
@@ -798,7 +761,19 @@ VkResult Device::Initialize(
     }
 #endif
 
+    if (result == VK_SUCCESS)
+    {
+        InitEntryPointFuncs();
+    }
+
     return result;
+}
+
+// =====================================================================================================================
+// Initialize the entry point functions for paths known at device init time
+void Device::InitEntryPointFuncs()
+{
+    m_pfnUpdateDescriptorSets = DescriptorSet::GetUpdateDescriptorSetsFunc(this);
 }
 
 // =====================================================================================================================
@@ -1012,15 +987,6 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
     DestroyInternalPipelines();
 
-    for (uint32_t i = 0; i < MaxPalDevices; ++i)
-    {
-        if (m_pLlpcCompiler[i] != nullptr)
-        {
-            m_pLlpcCompiler[i]->Destroy();
-            m_pLlpcCompiler[i] = nullptr;
-        }
-    }
-
     if (m_settings.useSharedCmdAllocator)
     {
         for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
@@ -1071,7 +1037,7 @@ VkResult Device::CreateLlpcInternalComputePipeline(
     shaderInfo.shaderBin.pCode    = pCode;
     shaderInfo.shaderBin.codeSize = codeByteSize;
 
-    llpcResult = GetLlpcCompiler()->BuildShaderModule(&shaderInfo, &shaderOut);
+    llpcResult = GetCompiler()->GetLlpcCompiler()->BuildShaderModule(&shaderInfo, &shaderOut);
     if ((llpcResult != Llpc::Result::Success) && (llpcResult != Llpc::Result::Delayed))
     {
         result = VK_ERROR_INITIALIZATION_FAILED;
@@ -1091,7 +1057,7 @@ VkResult Device::CreateLlpcInternalComputePipeline(
         pShaderInfo->pEntryTarget        = "main";
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
-        llpcResult = GetLlpcCompiler()->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut);
+        llpcResult = GetCompiler()->GetLlpcCompiler()->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut);
         if (llpcResult != Llpc::Result::Success)
         {
             result = VK_ERROR_INITIALIZATION_FAILED;
@@ -1413,7 +1379,7 @@ VkResult Device::CreateDescriptorUpdateTemplate(
     const VkAllocationCallbacks*                    pAllocator,
     VkDescriptorUpdateTemplateKHR*                  pDescriptorUpdateTemplate)
 {
-    return DescriptorUpdateTemplate::Create(pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
+    return DescriptorUpdateTemplate::Create(this, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
 }
 
 // =====================================================================================================================
@@ -1831,6 +1797,8 @@ VkResult Device::BindImageMemory(
 }
 
 // =====================================================================================================================
+
+// =====================================================================================================================
 VkResult Device::CreateSampler(
     const VkSamplerCreateInfo*                  pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
@@ -1949,216 +1917,6 @@ VkDeviceSize Device::GetMemoryBaseAddrAlignment(
     }
 
     return minAlignment;
-}
-
-// =====================================================================================================================
-// Create LLPC compiler handle
-VkResult Device::CreateLlpcCompiler(
-    int32_t deviceIdx)  // Device index
-{
-    const uint32_t     OptionBufferSize = 4096;
-    const uint32_t     MaxLlpcOptions   = 32;
-    Llpc::GfxIpVersion gfxIp            = {};
-    Llpc::ICompiler*   pCompiler        = nullptr;
-
-    // Initialzie GfxIpVersion according to PAL gfxLevel
-    Pal::DeviceProperties info;
-    PalDevice(deviceIdx)->GetProperties(&info);
-
-    switch (info.gfxLevel)
-    {
-    case Pal::GfxIpLevel::GfxIp6:
-        gfxIp.major = 6;
-        gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp7:
-        gfxIp.major = 7;
-        gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8:
-        gfxIp.major = 8;
-        gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8_1:
-        gfxIp.major = 8;
-        gfxIp.minor = 1;
-        break;
-    case Pal::GfxIpLevel::GfxIp9:
-        gfxIp.major = 9;
-        gfxIp.minor = 0;
-        break;
-    default:
-        VK_NEVER_CALLED();
-        break;
-    }
-
-    gfxIp.stepping = info.gfxStepping;
-
-    // Get the executable name and path
-    char  executableNameBuffer[PATH_MAX];
-
-    char* pExecutablePtr;
-    Pal::Result palResult = Util::GetExecutableName(&executableNameBuffer[0],
-                                                    &pExecutablePtr,
-                                                    sizeof(executableNameBuffer));
-    VK_ASSERT(palResult == Pal::Result::Success);
-
-    // Initialize LLPC options according to runtime settings
-    auto               settings                        = GetRuntimeSettings();
-    const char*        llpcOptions[MaxLlpcOptions]     = {};
-    char               optionBuffers[OptionBufferSize] = {};
-
-    char*              pOptionBuffer                   = &optionBuffers[0];
-    size_t             bufSize                         = OptionBufferSize;
-    int                optionLength                    = 0;
-    uint32_t           numOptions                      = 0;
-    // Identify for Icd and stanalone compiler
-    llpcOptions[numOptions++] = Llpc::VkIcdName;
-
-    // Generate ELF binary, not assembly text
-    llpcOptions[numOptions++] = "-filetype=obj";
-
-    // LLPC log options
-    llpcOptions[numOptions++] = (settings.enableLog & 1) ? "-enable-errs=1" : "-enable-errs=0";
-    llpcOptions[numOptions++] = (settings.enableLog & 2) ? "-enable-outs=1" : "-enable-outs=0";
-
-    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-log-file-outs=%s", settings.logFileName);
-    ++optionLength;
-    llpcOptions[numOptions++] = pOptionBuffer;
-    pOptionBuffer += optionLength;
-    bufSize -= optionLength;
-
-    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-log-file-dbgs=%s", settings.debugLogFileName);
-    ++optionLength;
-    llpcOptions[numOptions++] = pOptionBuffer;
-    pOptionBuffer += optionLength;
-    bufSize -= optionLength;
-
-    // LLPC debug options
-    if (settings.enableDebug)
-    {
-        llpcOptions[numOptions++] = "-debug";
-    }
-
-    if (settings.llpcOptions[0] != '\0')
-    {
-        const char* pOptions = &settings.llpcOptions[0];
-        VK_ASSERT(pOptions[0] == '-');
-
-        // Split options
-        while (pOptions)
-        {
-            const char* pNext = strchr(pOptions, ' ');
-            if (pNext)
-            {
-                // Copy options to option buffer
-                optionLength = static_cast<int32_t>(pNext - pOptions);
-                memcpy(pOptionBuffer, pOptions, optionLength);
-                pOptionBuffer[optionLength] = 0;
-
-                llpcOptions[numOptions++] = pOptionBuffer;
-                pOptionBuffer += (optionLength + 1);
-
-                bufSize -= (optionLength + 1);
-                pOptions = strchr(pOptions + optionLength, '-');
-            }
-            else
-            {
-                // Use pOptions directly for last option
-                llpcOptions[numOptions++] = pOptions;
-                pOptions = nullptr;
-            }
-        }
-    }
-
-    // LLPC pipeline dump options
-    if (settings.enablePipelineDump)
-    {
-        llpcOptions[numOptions++] = "-enable-pipeline-dump";
-    }
-
-    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-pipeline-dump-dir=%s", settings.pipelineDumpDir);
-    ++optionLength;
-    llpcOptions[numOptions++] = pOptionBuffer;
-    pOptionBuffer += optionLength;
-    bufSize -= optionLength;
-
-    if (settings.enableLlpc == LlpcModeAutoFallback)
-    {
-        llpcOptions[numOptions++] = "-disable-WIP-features=1";
-    }
-
-    // NOTE: For testing consistency, these options should be kept the same as those of
-    // "amdllpc" (Init()).
-    llpcOptions[numOptions++] = "-pragma-unroll-threshold=4096";
-    llpcOptions[numOptions++] = "-unroll-allow-partial";
-    llpcOptions[numOptions++] = "-lower-dyn-index";
-    llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
-    llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
-
-    ShaderCacheMode shaderCacheMode = m_settings.shaderCacheMode;
-#ifdef ICD_BUILD_APPPROFILE
-    const AppProfile appProfile = GetAppProfile();
-    if ((appProfile == AppProfile::Talos) ||
-        (appProfile == AppProfile::MadMax) ||
-        (appProfile == AppProfile::SeriousSamFusion))
-    {
-        llpcOptions[numOptions++] = "-enable-si-scheduler";
-    }
-
-    // Force enable cache to disk to improve user experience
-    if ((shaderCacheMode == ShaderCacheEnableRuntimeOnly) &&
-         ((appProfile == AppProfile::MadMax) ||
-          (appProfile == AppProfile::SeriousSamFusion) ||
-          (appProfile == AppProfile::F1_2017)))
-    {
-        // Force to use internal disk cache.
-        shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
-    }
-#endif
-
-    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);
-    ++optionLength;
-    llpcOptions[numOptions++] = pOptionBuffer;
-    pOptionBuffer += optionLength;
-    bufSize -= optionLength;
-
-    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-cache-mode=%d", shaderCacheMode);
-    ++optionLength;
-    llpcOptions[numOptions++] = pOptionBuffer;
-    pOptionBuffer += optionLength;
-    bufSize -= optionLength;
-
-    if (settings.shaderReplaceMode != 0)
-    {
-        optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-replace-mode=%d", settings.shaderReplaceMode);
-        ++optionLength;
-        llpcOptions[numOptions++] = pOptionBuffer;
-        pOptionBuffer += optionLength;
-        bufSize -= optionLength;
-
-        optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-replace-dir=%s", settings.shaderReplaceDir);
-        ++optionLength;
-        llpcOptions[numOptions++] = pOptionBuffer;
-        pOptionBuffer += optionLength;
-        bufSize -= optionLength;
-
-        optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-replace-pipeline-hashes=%s", settings.shaderReplacePipelineHashes);
-        ++optionLength;
-        llpcOptions[numOptions++] = pOptionBuffer;
-        pOptionBuffer += optionLength;
-        bufSize -= optionLength;
-    }
-
-    VK_ASSERT(numOptions <= MaxLlpcOptions);
-
-    // Create LLPC compiler
-    Llpc::Result llpcResult = Llpc::ICompiler::Create(gfxIp, numOptions, llpcOptions, &pCompiler);
-    VK_ASSERT(llpcResult == Llpc::Result::Success);
-
-    m_pLlpcCompiler[deviceIdx] = pCompiler;
-
-    return (llpcResult == Llpc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
 }
 
 // =====================================================================================================================
@@ -2819,6 +2577,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupportKHR(
     pSupport->supported = VK_TRUE;
 }
 #endif
+
+// =====================================================================================================================
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(

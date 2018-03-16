@@ -51,16 +51,12 @@
 #include "llpcContext.h"
 #include "llpcCopyShader.h"
 #include "llpcGfx6Chip.h"
-#ifdef LLPC_BUILD_GFX9
 #include "llpcGfx9Chip.h"
-#endif
 #include "llpcGraphicsContext.h"
 #include "llpcElf.h"
 #include "llpcFile.h"
 #include "llpcPatch.h"
-#ifdef LLPC_BUILD_GFX9
 #include "llpcShaderMerger.h"
-#endif
 #include "llpcPipelineDumper.h"
 #include "llpcSpirvLower.h"
 #include "llpcVertexFetch.h"
@@ -278,9 +274,7 @@ Compiler::Compiler(
             }
             else
             {
-#ifdef LLPC_BUILD_GFX9
                 Gfx9::InitRegisterNameMap(gfxIp);
-#endif
             }
         }
 
@@ -749,13 +743,11 @@ Result Compiler::BuildGraphicsPipeline(
             pContext->SetGsOnChip(gsOnChip);
         }
 
-#ifdef LLPC_BUILD_GFX9
         // Do user data node merge for merged shader
         if ((result == Result::Success) && (m_gfxIp.major >= 9))
         {
             pContext->DoUserDataNodeMerge();
         }
-#endif
 
         // Do LLVM module patching (main patch work)
         for (int32_t stage = ShaderStageGfxCount - 1; (stage >= 0) && (result == Result::Success); --stage)
@@ -783,7 +775,6 @@ Result Compiler::BuildGraphicsPipeline(
             }
         }
 
-#ifdef LLPC_BUILD_GFX9
         // Do shader merge operations
         if ((result == Result::Success) && (m_gfxIp.major >= 9))
         {
@@ -854,7 +845,6 @@ Result Compiler::BuildGraphicsPipeline(
                 modules[ShaderStageGeometry] = pEsGsModule;
             }
         }
-#endif
 
         // Build copy shader if necessary (has geometry shader)
         if ((result == Result::Success) && (modules[ShaderStageGeometry] != nullptr))
@@ -1757,14 +1747,10 @@ void Compiler::InitGpuProperty()
     }
     else if (m_gfxIp.major == 9)
     {
-#ifdef LLPC_BUILD_GFX9
         if (m_gfxIp.stepping == 0)
         {
             m_gpuProperty.numShaderEngines = 4;
         }
-#else
-        LLPC_NOT_IMPLEMENTED();
-#endif
     }
     else
     {

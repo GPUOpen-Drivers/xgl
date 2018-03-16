@@ -65,10 +65,8 @@ PatchInOutImportExport::PatchInOutImportExport()
     m_pFragDepth(nullptr),
     m_pFragStencilRef(nullptr),
     m_pSampleMask(nullptr),
-#ifdef LLPC_BUILD_GFX9
     m_pViewportIndex(nullptr),
     m_pLayer(nullptr),
-#endif
     m_hasTs(false),
     m_hasGs(false),
     m_pLds(nullptr),
@@ -1290,7 +1288,6 @@ void PatchInOutImportExport::visitReturnInst(
         // Export gl_Layer and gl_ViewportIndex before entry-point returns
         if ((m_gfxIp.major >= 9) && (useLayer || useViewportIndex))
         {
-#ifdef LLPC_BUILD_GFX9
             Value* pViewportIndexAndLayer = ConstantInt::get(m_pContext->Int32Ty(), 0);
 
             if (useViewportIndex)
@@ -1425,7 +1422,6 @@ void PatchInOutImportExport::visitReturnInst(
                     ++inOutUsage.expCount;
                 }
             }
-#endif
         }
 
         // NOTE: If no generic outputs are present in this shader, we have to export a dummy one
@@ -2174,11 +2170,6 @@ Value* PatchInOutImportExport::PatchVsBuiltInInputImport(
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
             break;
         }
-    case BuiltInSubgroupSize:
-        {
-            pInput = ConstantInt::get(m_pContext->Int32Ty(), m_pContext->GetGpuProperty()->waveSize);
-            break;
-        }
     case BuiltInDeviceIndex:
         {
             auto pPipelineInfo = reinterpret_cast<const GraphicsPipelineBuildInfo*>(m_pContext->GetPipelineBuildInfo());
@@ -2279,11 +2270,6 @@ Value* PatchInOutImportExport::PatchTcsBuiltInInputImport(
     case BuiltInInvocationId:
         {
             pInput = inoutUsage.tcs.pInvocationId;
-            break;
-        }
-    case BuiltInSubgroupSize:
-        {
-            pInput = ConstantInt::get(m_pContext->Int32Ty(), m_pContext->GetGpuProperty()->waveSize);
             break;
         }
     case BuiltInDeviceIndex:
@@ -2447,11 +2433,6 @@ Value* PatchInOutImportExport::PatchTesBuiltInInputImport(
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
             break;
         }
-    case BuiltInSubgroupSize:
-        {
-            pInput = ConstantInt::get(m_pContext->Int32Ty(), m_pContext->GetGpuProperty()->waveSize);
-            break;
-        }
     case BuiltInDeviceIndex:
         {
             auto pPipelineInfo = reinterpret_cast<const GraphicsPipelineBuildInfo*>(m_pContext->GetPipelineBuildInfo());
@@ -2540,11 +2521,6 @@ Value* PatchInOutImportExport::PatchGsBuiltInInputImport(
     case BuiltInViewIndex:
         {
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.viewIndex);
-            break;
-        }
-    case BuiltInSubgroupSize:
-        {
-            pInput = ConstantInt::get(m_pContext->Int32Ty(), m_pContext->GetGpuProperty()->waveSize);
             break;
         }
     case BuiltInDeviceIndex:
@@ -2848,11 +2824,6 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
 
             break;
         }
-    case BuiltInSubgroupSize:
-        {
-            pInput = ConstantInt::get(m_pContext->Int32Ty(), m_pContext->GetGpuProperty()->waveSize);
-            break;
-        }
     case BuiltInDeviceIndex:
         {
             auto pPipelineInfo = reinterpret_cast<const GraphicsPipelineBuildInfo*>(m_pContext->GetPipelineBuildInfo());
@@ -2967,11 +2938,6 @@ Value* PatchInOutImportExport::PatchCsBuiltInInputImport(
     case BuiltInLocalInvocationId:
         {
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.localInvocationId);
-            break;
-        }
-    case BuiltInSubgroupSize:
-        {
-            pInput = ConstantInt::get(m_pContext->Int32Ty(), m_pContext->GetGpuProperty()->waveSize);
             break;
         }
     case BuiltInDeviceIndex:
@@ -3368,10 +3334,8 @@ void PatchInOutImportExport::PatchVsBuiltInOutputExport(
                 }
                 else
                 {
-#ifdef LLPC_BUILD_GFX9
                     // NOTE: The export of gl_Layer is delayed and is done before entry-point returns.
                     m_pLayer = pOutput;
-#endif
                 }
             }
 
@@ -3393,10 +3357,8 @@ void PatchInOutImportExport::PatchVsBuiltInOutputExport(
                 }
                 else
                 {
-#ifdef LLPC_BUILD_GFX9
                     // NOTE: The export of gl_ViewportIndex is delayed and is done before entry-point returns.
                     m_pViewportIndex = pOutput;
-#endif
                 }
             }
 
@@ -3820,10 +3782,8 @@ void PatchInOutImportExport::PatchTesBuiltInOutputExport(
                 }
                 else
                 {
-#ifdef LLPC_BUILD_GFX9
                     // NOTE: The export of gl_Layer is delayed and is done before entry-point returns.
                     m_pLayer = pOutput;
-#endif
                 }
             }
 
@@ -3845,10 +3805,8 @@ void PatchInOutImportExport::PatchTesBuiltInOutputExport(
                 }
                 else
                 {
-#ifdef LLPC_BUILD_GFX9
                     // NOTE: The export of gl_ViewportIndex is delayed and is done before entry-point returns.
                     m_pViewportIndex = pOutput;
-#endif
                 }
             }
 
@@ -4137,10 +4095,8 @@ void PatchInOutImportExport::PatchCopyShaderBuiltInOutputExport(
             }
             else
             {
-#ifdef LLPC_BUILD_GFX9
                 // NOTE: The export of gl_Layer is delayed and is done before entry-point returns.
                 m_pLayer = pOutput;
-#endif
             }
 
             break;
@@ -4153,10 +4109,8 @@ void PatchInOutImportExport::PatchCopyShaderBuiltInOutputExport(
             }
             else
             {
-#ifdef LLPC_BUILD_GFX9
                 // NOTE: The export of gl_ViewportIndex is delayed and is done before entry-point returns.
                 m_pViewportIndex = pOutput;
-#endif
             }
 
             break;
@@ -5445,12 +5399,9 @@ uint32_t PatchInOutImportExport::CalcPatchCountPerThreadGroup(
 
     // NOTE: Performance analysis shows that 16 patches per thread group is an optimal upper-bound. The value is only
     // an experimental number. For GFX9. 64 is an optimal number instead.
-#ifdef LLPC_BUILD_GFX9
     const auto gfxIp = m_pContext->GetGfxIpVersion();
     const uint32_t optimalPatchCountPerThreadGroup = (gfxIp.major >= 9) ? 64 : 16;
-#else
-    const uint32_t optimalPatchCountPerThreadGroup = 16;
-#endif
+
     patchCountPerThreadGroup = std::min(patchCountPerThreadGroup, optimalPatchCountPerThreadGroup);
 
     if (m_pContext->IsTessOffChip())

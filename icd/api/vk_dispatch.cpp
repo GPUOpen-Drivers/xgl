@@ -103,7 +103,8 @@ void* GetIcdProcAddr(
                         pFunc = pEntry->pFunc;
                         break;
                     }
-                case vk::secure::entry::ENTRY_POINT_CORE:
+                case vk::secure::entry::ENTRY_POINT_CORE_INSTANCE:
+                case vk::secure::entry::ENTRY_POINT_CORE_DEVICE:
                     {
                         // Check version requested against the required version.
                         if ((pInstance != nullptr) && (pInstance->GetAPIVersion() >= pEntry->conditionValue))
@@ -591,7 +592,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(
     return vk::entry::vkGetDeviceProcAddr(device, pName);
 }
 
-} // namespace vk
+} // extern "C"
 
 struct VK_LAYER_DISPATCH_TABLE
 {

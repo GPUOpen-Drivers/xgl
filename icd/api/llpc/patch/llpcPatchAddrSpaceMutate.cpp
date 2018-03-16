@@ -83,20 +83,48 @@ bool PatchAddrSpaceMutate::runOnModule(
     m_addrSpaceMap[SPIRAS_Constant] = ADDR_SPACE_CONST;
     m_addrSpaceMap[SPIRAS_Local] = ADDR_SPACE_LOCAL;
 
-    // We are not expecting any global variables that need their types mutating, other than unused ones
-    // left behind by previous passes.
-#ifndef NDEBUG
+    // Gather the globals and then process them. We do not want to reprocess globals that we create
+    // here. Ignore unused globals left behind by lowering passes.
+    SmallVector<GlobalVariable*, 8> globalVars;
     for (auto globalIt = module.global_begin(), globalItEnd = module.global_end();
           globalIt != globalItEnd; ++globalIt)
     {
         auto pGlobalVar = dyn_cast<GlobalVariable>(&*globalIt);
         if ((pGlobalVar != nullptr) && (pGlobalVar->use_empty() == false))
         {
-            auto pGlobalType = globalIt->getType();
-            LLPC_ASSERT(pGlobalType == MapType(pGlobalType));
+            globalVars.push_back(pGlobalVar);
         }
     }
-#endif // NDEBUG
+
+    // For any global variable whose type needs to change, create a new one. We only cope with the
+    // case where the top level address space changes, so we do not need to worry about modifying
+    // any initializer.
+    for (uint32_t globalVarIdx = 0; globalVarIdx != globalVars.size(); ++globalVarIdx)
+    {
+        auto pOldGlobalVar = globalVars[globalVarIdx];
+        auto pOldGlobalVarType = cast<PointerType>(pOldGlobalVar->getType());
+        auto pNewGlobalVarType = cast<PointerType>(MapType(pOldGlobalVarType));
+
+        if (pOldGlobalVarType != pNewGlobalVarType)
+        {
+            LLPC_ASSERT(pOldGlobalVarType->getElementType() == pNewGlobalVarType->getElementType());
+
+            auto pNewGlobalVar = new GlobalVariable(module,
+                                                    pOldGlobalVarType->getElementType(),
+                                                    pOldGlobalVar->isConstant(),
+                                                    pOldGlobalVar->getLinkage(),
+                                                    pOldGlobalVar->hasInitializer() ?
+                                                        pOldGlobalVar->getInitializer() : nullptr,
+                                                    "",
+                                                    nullptr,
+                                                    pOldGlobalVar->getThreadLocalMode(),
+                                                    pNewGlobalVarType->getAddressSpace(),
+                                                    pOldGlobalVar->isExternallyInitialized());
+
+            pNewGlobalVar->takeName(pOldGlobalVar);
+            m_globalMap[pOldGlobalVar] = pNewGlobalVar;
+        }
+    }
 
     // Gather the functions and then process them. We do not want to reprocess functions that we create here.
     SmallVector<Function*, 8> funcs;

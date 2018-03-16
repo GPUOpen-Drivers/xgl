@@ -110,8 +110,6 @@ protected:
         ImmedInfo                              immedInfo;
         Pal::ComputePipelineCreateInfo         pipeline;
         const PipelineLayout*                  pLayout;
-        const VkPipelineShaderStageCreateInfo* pStage;
-        VkPipelineCreateFlags                  flags;
     };
 
     static void ConvertComputePipelineInfo(

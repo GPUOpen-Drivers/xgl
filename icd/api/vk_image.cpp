@@ -1745,7 +1745,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2KHR(
     VkMemoryRequirements2KHR*                   pMemoryRequirements)
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
-    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2));
+    VK_ASSERT((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
+              pDevice->IsExtensionEnabled(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2));
 
     union
     {
@@ -1785,7 +1786,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2KHR(
     VkSparseImageMemoryRequirements2KHR*            pSparseMemoryRequirements)
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
-    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2));
+    VK_ASSERT((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
+              pDevice->IsExtensionEnabled(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2));
 
     union
     {

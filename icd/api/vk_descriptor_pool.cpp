@@ -228,7 +228,7 @@ VkResult DescriptorPool::AllocDescriptorSets(
                 DescriptorSet* pSet = DescriptorSet::StateFromHandle(pDescriptorSets[allocCount]);
 
                 pSet->Reassign(pLayout, setGpuMemOffset, m_gpuAddressCached, m_pCpuAddressCached, m_pDevice->NumPalDevices(),
-                    &m_internalMem, pSetAllocHandle, &pDescriptorSets[allocCount]);
+                    pSetAllocHandle);
             }
             else
             {
@@ -838,7 +838,6 @@ void* DescriptorGpuMemHeap::GetDescriptorSetMappedAddress(
 DescriptorSetHeap::DescriptorSetHeap() :
 m_nextFreeHandle(0),
 m_maxSets(0),
-m_pHandles(nullptr),
 m_pFreeIndexStack(nullptr),
 m_freeIndexStackCount(0),
 m_pSetMemory(nullptr)
@@ -859,7 +858,7 @@ VkResult DescriptorSetHeap::Init(
     m_maxSets = maxSets;
 
     // Allocate memory for all sets
-    size_t setSize = Util::Pow2Align(sizeof(DescriptorSet), VK_DEFAULT_MEM_ALIGN);
+    size_t setSize = SetSize();
 
     bool oneShot = (poolUsage & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT) == 0;
 
@@ -869,17 +868,6 @@ VkResult DescriptorSetHeap::Init(
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
     if (m_pSetMemory == nullptr)
-    {
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    // Allocate memory for all handles
-    m_pHandles = reinterpret_cast<VkDescriptorSet*>(pDevice->VkInstance()->AllocMem(
-        sizeof(VkDescriptorSet) * maxSets,
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-
-    if (m_pHandles == nullptr)
     {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
@@ -908,8 +896,6 @@ VkResult DescriptorSetHeap::Init(
         flags.robustBufferAccess        = pDevice->GetEnabledFeatures().robustBufferAccess ? 1 : 0;
 
         VK_PLACEMENT_NEW (pSetMem) DescriptorSet(pPool, index, flags);
-
-        m_pHandles[index] = DescriptorSet::HandleFromVoidPointer(pSetMem);
     }
 
     return VK_SUCCESS;
@@ -921,8 +907,17 @@ void DescriptorSetHeap::Destroy(
     Device* pDevice)
 {
     pDevice->VkInstance()->FreeMem(m_pSetMemory);
-    pDevice->VkInstance()->FreeMem(m_pHandles);
     pDevice->VkInstance()->FreeMem(m_pFreeIndexStack);
+}
+
+// =====================================================================================================================
+// Compute a descriptor set handle from an index in the heap
+VkDescriptorSet DescriptorSetHeap::DescriptorSetHandleFromIndex(
+    uint32_t idx) const
+{
+    void* pMem = Util::VoidPtrInc(m_pSetMemory, (SetSize() * idx));
+
+    return DescriptorSet::HandleFromVoidPointer(pMem);
 }
 
 // =====================================================================================================================
@@ -933,7 +928,7 @@ bool DescriptorSetHeap::AllocSetState(
     // First try to allocate through free range start index since it is by far fastest
     if (m_nextFreeHandle < m_maxSets)
     {
-        *pSet = m_pHandles[m_nextFreeHandle++];
+        *pSet = DescriptorSetHandleFromIndex(m_nextFreeHandle++);
 
         return true;
     }
@@ -943,7 +938,7 @@ bool DescriptorSetHeap::AllocSetState(
     {
         --m_freeIndexStackCount;
 
-        *pSet = m_pHandles[m_pFreeIndexStack[m_freeIndexStackCount]];
+        *pSet = DescriptorSetHandleFromIndex(m_pFreeIndexStack[m_freeIndexStackCount]);
 
         return true;
     }
@@ -962,13 +957,14 @@ void DescriptorSetHeap::FreeSetState(
     {
         DescriptorSet* pSet = DescriptorSet::StateFromHandle(set);
 
+        // We can compute this, but a divide might be a bad idea.
         uint32_t heapIndex = pSet->HeapIndex();
 
-        VK_ASSERT((heapIndex < m_maxSets) && DescriptorSet::StateFromHandle(m_pHandles[heapIndex]) == pSet);
+        VK_ASSERT(heapIndex < m_maxSets);
 
 #if DEBUG
         // Clear the descriptor set state for debugging purposes
-        pSet->Reassign(nullptr, 0, 0, 0, MaxPalDevices, nullptr, nullptr, nullptr);
+        pSet->Reset();
 #endif
 
         m_pFreeIndexStack[m_freeIndexStackCount++] = heapIndex;
@@ -987,14 +983,14 @@ void DescriptorSetHeap::Reset()
 
 #if DEBUG
     // Clear the descriptor set states for debugging purposes
-    size_t setSize = Util::Pow2Align(sizeof(DescriptorSet), VK_DEFAULT_MEM_ALIGN);
+    size_t setSize = SetSize();
 
     for (uint32_t index = 0; index < m_maxSets; ++index)
     {
         VkDescriptorSet setHandle =
             DescriptorSet::HandleFromVoidPointer(Util::VoidPtrInc(m_pSetMemory, index * setSize));
 
-        DescriptorSet::ObjectFromHandle(setHandle)->Reassign(nullptr, 0, 0, 0, MaxPalDevices, nullptr, nullptr, nullptr);
+        DescriptorSet::ObjectFromHandle(setHandle)->Reset();
     }
 #endif
 }

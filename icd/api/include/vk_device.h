@@ -465,8 +465,8 @@ public:
     VK_INLINE Util::Mutex* GetTimerQueueMutex()
         { return &m_timerQueueMutex; }
 
-    VK_INLINE Llpc::ICompiler* GetLlpcCompiler(uint32_t idx = DefaultDeviceIndex) const
-        { return m_pLlpcCompiler[idx]; }
+    VK_INLINE PipelineCompiler* GetCompiler(uint32_t idx = DefaultDeviceIndex) const
+        { return m_pPhysicalDevices[idx]->GetCompiler(); }
 
     static const Pal::MsaaQuadSamplePattern* GetDefaultQuadSamplePattern(uint32_t sampleCount);
     static uint32_t GetDefaultSamplePatternIndex(uint32_t sampleCount);
@@ -484,6 +484,9 @@ public:
     uint32_t GetExternalHostMemoryTypes(
         VkExternalMemoryHandleTypeFlagBitsKHR handleType,
         const void*                           pExternalPtr) const;
+
+    PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc() const
+        { return m_pfnUpdateDescriptorSets; }
 
 protected:
     Device(
@@ -507,7 +510,7 @@ protected:
 
     void InitSamplePatternPalette(Pal::SamplePatternPalette* pPalette) const;
 
-    VkResult CreateLlpcCompiler(int32_t idx = DefaultDeviceIndex);
+    void InitEntryPointFuncs();
 
     Instance* const                     m_pInstance;
     const RuntimeSettings&              m_settings;
@@ -547,11 +550,11 @@ protected:
     // The maximum allocations that can be created from the logical device
     uint32_t                             m_maxAllocations;
 
-    Llpc::ICompiler*                    m_pLlpcCompiler[MaxPalDevices];
-
     // Record pipeline cache count created on this device. Note this may be dropped once there isn't any test creating
     // excessive pipeline caches.
     volatile uint32_t                   m_pipelineCacheCount;
+
+    PFN_vkUpdateDescriptorSets          m_pfnUpdateDescriptorSets;
 };
 
 // =====================================================================================================================

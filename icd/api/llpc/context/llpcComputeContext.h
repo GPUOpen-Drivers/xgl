@@ -75,10 +75,8 @@ public:
     // Enables GS on-chip mode
     virtual void SetGsOnChip(bool gsOnChip) { LLPC_NEVER_CALLED(); }
 
-#ifdef LLPC_BUILD_GFX9
     // Does user data node merge for merged shader
     virtual void DoUserDataNodeMerge() { LLPC_NEVER_CALLED(); }
-#endif
 
 protected:
     virtual std::vector<ResourceMappingNode>* GetDummyResourceMapNodes(ShaderStage shaderStage);

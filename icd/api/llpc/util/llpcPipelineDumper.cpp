@@ -136,7 +136,7 @@ void VKAPI_CALL IPipelineDumper::DumpPipelineBinary(
 
 // =====================================================================================================================
 // Calculates graphics pipeline hash code.
-uint64_t VKAPI_CALL IPipelineDumper::GetGraphicsPipelineHash(
+uint64_t VKAPI_CALL IPipelineDumper::GetPipelineHash(
     const GraphicsPipelineBuildInfo* pPipelineInfo) // [in] Info to build this graphics pipeline
 {
     return PipelineDumper::GetGraphicsPipelineHash(pPipelineInfo);
@@ -144,7 +144,7 @@ uint64_t VKAPI_CALL IPipelineDumper::GetGraphicsPipelineHash(
 
 // =====================================================================================================================
 // Calculates compute pipeline hash code.
-uint64_t VKAPI_CALL IPipelineDumper::GetComputePipelineHash(
+uint64_t VKAPI_CALL IPipelineDumper::GetPipelineHash(
     const ComputePipelineBuildInfo* pPipelineInfo) // [in] Info to build this compute pipeline
 {
     return PipelineDumper::GetComputePipelineHash(pPipelineInfo);
@@ -655,7 +655,7 @@ MetroHash::Hash PipelineDumper::GenerateHashForComputePipeline(
     MetroHash64 hasher;
 
     UpdateHashForPipelineShaderInfo(ShaderStageCompute, &pPipeline->cs, &hasher);
-
+    hasher.Update(pPipeline->deviceIndex);
     MetroHash::Hash hash = {};
     hasher.Finalize(hash.bytes);
 
@@ -924,11 +924,7 @@ OStream& operator<<(
                             }
                             else
                             {
-#ifdef LLPC_BUILD_GFX9
                                 pRegName = Gfx9::GetRegisterNameString(gfxIp, pConfig[i].key * 4);
-#else
-                                pRegName = "UNKNOWN";
-#endif
                             }
                             auto length = snprintf(formatBuf,
                                                    sizeof(formatBuf),
@@ -981,11 +977,7 @@ OStream& operator<<(
                 }
                 else
                 {
-#ifdef LLPC_BUILD_GFX9
                     pRegName = Gfx9::GetRegisterNameString(gfxIp, pConfig[2 * i]);
-#else
-                    pRegName = "UNKNOWN";
-#endif
                 }
                 auto length = snprintf(formatBuf, sizeof(formatBuf), "        %-45s = 0x%08X\n", pRegName, pConfig[2 * i + 1]);
                 out << formatBuf;

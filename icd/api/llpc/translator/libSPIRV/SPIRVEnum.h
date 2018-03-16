@@ -190,6 +190,15 @@ SPIRVMap<SPIRVCapabilityKind, SPIRVCapVec>::init() {
   ADD_VEC_INIT(CapabilityStencilExportEXT, { CapabilityShader });
   ADD_VEC_INIT(CapabilityShaderViewportIndexLayerEXT, { CapabilityMultiViewport });
   ADD_VEC_INIT(CapabilityUniformAndStorageBuffer16BitAccess, { CapabilityStorageBuffer16BitAccess });
+#ifdef ICD_VULKAN_1_1
+  ADD_VEC_INIT(CapabilityGroupNonUniformVote, { CapabilityGroupNonUniform });
+  ADD_VEC_INIT(CapabilityGroupNonUniformArithmetic, { CapabilityGroupNonUniform });
+  ADD_VEC_INIT(CapabilityGroupNonUniformBallot, { CapabilityGroupNonUniform });
+  ADD_VEC_INIT(CapabilityGroupNonUniformShuffle, { CapabilityGroupNonUniform });
+  ADD_VEC_INIT(CapabilityGroupNonUniformShuffleRelative, { CapabilityGroupNonUniform });
+  ADD_VEC_INIT(CapabilityGroupNonUniformClustered, { CapabilityGroupNonUniform });
+  ADD_VEC_INIT(CapabilityGroupNonUniformQuad, { CapabilityGroupNonUniform });
+#endif
 }
 
 template<> inline void

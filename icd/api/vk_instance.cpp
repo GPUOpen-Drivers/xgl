@@ -104,9 +104,7 @@ VkResult Instance::EnumerateVersion(
     uint32_t*                       pApiVersion)
 {
     // Report 1.1 support
-    *pApiVersion = VK_MAKE_VERSION(VULKAN_API_MAJOR_VERSION,
-                                   VULKAN_API_MINOR_VERSION,
-                                   VULKAN_API_BUILD_VERSION);
+    *pApiVersion = (VK_API_VERSION_1_1 | VK_HEADER_VERSION);
 
     return VK_SUCCESS;
 }
@@ -162,9 +160,7 @@ VkResult Instance::Create(
     uint32_t apiVersion = VK_MAKE_VERSION(1,0,0);
 #else
     // Default to the highest supported API version
-    uint32_t apiVersion = VK_MAKE_VERSION(VULKAN_API_MAJOR_VERSION,
-                                          VULKAN_API_MINOR_VERSION,
-                                          VULKAN_API_BUILD_VERSION);
+    uint32_t apiVersion = (VK_API_VERSION_1_0 | VK_HEADER_VERSION);
 #endif
 
     if ((pAppInfo != nullptr) && (pAppInfo->apiVersion != 0))
@@ -181,18 +177,6 @@ VkResult Instance::Create(
 
         apiVersion = pAppInfo->apiVersion;
     }
-
-#ifdef ICD_VULKAN_1_1
-    // Implicitly enable instance extensions that are core in the API version
-    if (apiVersion >= VK_MAKE_VERSION(1, 1, 0))
-    {
-        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_DEVICE_GROUP_CREATION);
-        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_EXTERNAL_FENCE_CAPABILITIES);
-        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_EXTERNAL_MEMORY_CAPABILITIES);
-        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_EXTERNAL_SEMAPHORE_CAPABILITIES);
-        enabledInstanceExtensions.EnableExtension(InstanceExtensions::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2);
-    };
-#endif
 
     // pAllocCb is never NULL here because the entry point will fill it in if the
     // application doesn't.

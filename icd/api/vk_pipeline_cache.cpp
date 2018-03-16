@@ -151,7 +151,7 @@ VkResult PipelineCache::Create(
             Llpc::ShaderCacheCreateInfo createInfo = {};
             for (uint32_t i = 0; i < numPalDevices; i++)
             {
-                auto pCompiler = pDevice->GetLlpcCompiler();
+                auto pCompiler = pDevice->GetCompiler()->GetLlpcCompiler();
 
                 if (useInitialData)
                 {

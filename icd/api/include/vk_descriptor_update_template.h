@@ -36,11 +36,11 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/vk_dispatch.h"
+#include "include/vk_descriptor_set_layout.h"
 
 namespace vk
 {
 
-class DescriptorSet;
 class Device;
 
 // =====================================================================================================================
@@ -50,6 +50,7 @@ class DescriptorUpdateTemplate : public NonDispatchable<VkDescriptorUpdateTempla
 {
 public:
     static VkResult Create(
+        const Device*                                   pDevice,
         const VkDescriptorUpdateTemplateCreateInfoKHR*  pCreateInfo,
         const VkAllocationCallbacks*                    pAllocator,
         VkDescriptorUpdateTemplateKHR*                  pDescriptorUpdateTemplate);
@@ -59,20 +60,98 @@ public:
         const VkAllocationCallbacks* pAllocator);
 
     void Update(
-        Device*         pDevice,
+        const Device*   pDevice,
         uint32_t        deviceIdx,
         VkDescriptorSet descriptorSet,
         const void*     pData);
 
-protected:
+private:
+
     DescriptorUpdateTemplate(
-        const VkDescriptorUpdateTemplateEntryKHR* pEntries,
-        uint32_t                                  numEntries);
+        uint32_t                    numEntries);
 
-    virtual ~DescriptorUpdateTemplate();
+    ~DescriptorUpdateTemplate();
 
-    const VkDescriptorUpdateTemplateEntryKHR* m_pEntries;
-    uint32_t                                  m_numEntries;
+    struct TemplateUpdateInfo;
+
+    typedef void(*PfnUpdateEntry)(
+        const Device*               pDevice,
+        VkDescriptorSet             descriptorSet,
+        uint32_t                    deviceIdx,
+        const void*                 pDescriptorInfo,
+        const TemplateUpdateInfo&   entry);
+
+    struct TemplateUpdateInfo
+    {
+        PfnUpdateEntry  pFunc;
+        size_t          srcOffset;
+        size_t          srcStride;
+        size_t          dstStaOffset;
+        uint32_t        descriptorCount;
+        uint32_t        dstBindStaDwArrayStride;
+        size_t          dstFmaskOffset;
+        uint32_t        dstBindFmaskDwArrayStride;
+        uint32_t        dstBindDynDataDwArrayStride;
+        size_t          dstDynOffset;
+    };
+
+    TemplateUpdateInfo* GetEntries() const
+    {
+        return static_cast<TemplateUpdateInfo*>(Util::VoidPtrInc(this, sizeof(*this)));
+    }
+
+    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize>
+    static PfnUpdateEntry GetUpdateEntryFunc(
+        const Device*                           pDevice,
+        VkDescriptorType                        descriptorType,
+        const DescriptorSetLayout::BindingInfo& dstBinding);
+
+    static PfnUpdateEntry GetUpdateEntryFunc(
+        const Device*                           pDevice,
+        VkDescriptorType                        descriptorType,
+        const DescriptorSetLayout::BindingInfo& dstBinding);
+
+    template <size_t imageDescSize, bool updateFmask>
+    static void UpdateEntrySampledImage(
+            const Device*               pDevice,
+            VkDescriptorSet             descriptorSet,
+            uint32_t                    deviceIdx,
+            const void*                 pDescriptorInfo,
+            const TemplateUpdateInfo&   entry);
+
+    template <size_t samplerDescSize>
+    static void UpdateEntrySampler(
+            const Device*               pDevice,
+            VkDescriptorSet             descriptorSet,
+            uint32_t                    deviceIdx,
+            const void*                 pDescriptorInfo,
+            const TemplateUpdateInfo&   entry);
+
+    template <VkDescriptorType descriptorType>
+    static void UpdateEntryBuffer(
+            const Device*               pDevice,
+            VkDescriptorSet             descriptorSet,
+            uint32_t                    deviceIdx,
+            const void*                 pDescriptorInfo,
+            const TemplateUpdateInfo&   entry);
+
+    template <size_t bufferDescSize, VkDescriptorType descriptorType>
+    static void UpdateEntryTexelBuffer(
+            const Device*               pDevice,
+            VkDescriptorSet             descriptorSet,
+            uint32_t                    deviceIdx,
+            const void*                 pDescriptorInfo,
+            const TemplateUpdateInfo&   entry);
+
+    template <size_t imageDescSize, size_t samplerDescSize, bool updateFmask, bool immutable>
+    static void UpdateEntryCombinedImageSampler(
+            const Device*               pDevice,
+            VkDescriptorSet             descriptorSet,
+            uint32_t                    deviceIdx,
+            const void*                 pDescriptorInfo,
+            const TemplateUpdateInfo&   entry);
+
+    uint32_t                    m_numEntries;
 };
 
 namespace entry

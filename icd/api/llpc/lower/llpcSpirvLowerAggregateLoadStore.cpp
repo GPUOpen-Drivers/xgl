@@ -152,7 +152,6 @@ void SpirvLowerAggregateLoadStore::visitCallInst(
         if (pStoreDest->getType()->getPointerAddressSpace() == SPIRAS_Private)
         {
             auto pStoreTy = pStoreDest->getType()->getPointerElementType();
-            LLPC_ASSERT (pStoreTy->isArrayTy() || pStoreTy->isStructTy());
 
             std::vector<uint32_t> idxs;
             ExpandStoreInst(pStoreValue, pStoreDest, pStoreTy, idxs, &callInst);
@@ -193,15 +192,27 @@ void SpirvLowerAggregateLoadStore::ExpandStoreInst(
     }
     else
     {
-        Value* pElemValue = ExtractValueInst::Create(pStoreValue, idxStack, "", pInsertPos);
-        std::vector<Value*> idxs;
-        idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
-        for (uint32_t i = 0, idxCount = idxStack.size(); i < idxCount; ++i)
+        Value* pElemValue = nullptr;
+        Value* pElemPtr = nullptr;
+
+        if (idxStack.empty())
         {
-            idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), idxStack[i]));
+            pElemValue = pStoreValue;
+            pElemPtr = pStorePtr;
+        }
+        else
+        {
+            pElemValue = ExtractValueInst::Create(pStoreValue, idxStack, "", pInsertPos);
+            std::vector<Value*> idxs;
+            idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
+            for (uint32_t i = 0, idxCount = idxStack.size(); i < idxCount; ++i)
+            {
+                idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), idxStack[i]));
+            }
+
+            pElemPtr = GetElementPtrInst::CreateInBounds(pStorePtr, idxs,"", pInsertPos);
         }
 
-        auto pElemPtr = GetElementPtrInst::CreateInBounds(pStorePtr, idxs,"", pInsertPos);
         if (pElemPtr->getType()->getPointerElementType() != pElemValue->getType())
         {
             // Type mismatch (only occurs for the store of uint32 <-> bool)

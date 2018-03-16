@@ -148,8 +148,10 @@ def generate_string_file_pass(string_file_prefix, header_file_prefix, gentype):
             if gentype == 'decl':
                 if type == 'none':
                     generate_entry_point_condition(f, name, "NONE", 0)
-                elif type == 'core':
-                    generate_entry_point_condition(f, name, "CORE", make_version(value))
+                elif type == 'icore':
+                    generate_entry_point_condition(f, name, "CORE_INSTANCE", make_version(value))
+                elif type == 'dcore':
+                    generate_entry_point_condition(f, name, "CORE_DEVICE", make_version(value))
                 elif type == 'iext':
                     generate_entry_point_condition(f, name, "INSTANCE_EXTENSION", "vk::InstanceExtensions::%s" % value.upper())
                 elif type == 'dext':

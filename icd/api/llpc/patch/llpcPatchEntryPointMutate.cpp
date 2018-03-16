@@ -38,9 +38,7 @@
 #include "SPIRVInternal.h"
 #include "llpcContext.h"
 #include "llpcGfx6Chip.h"
-#ifdef LLPC_BUILD_GFX9
 #include "llpcGfx9Chip.h"
-#endif
 #include "llpcIntrinsDefs.h"
 #include "llpcPatchEntryPointMutate.h"
 

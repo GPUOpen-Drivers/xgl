@@ -298,6 +298,46 @@ Pal::Result CreateClearSubresRanges(
 }
 
 // =====================================================================================================================
+// Returns attachment's PAL subresource ranges defined by clearInfo for LoadOp Clear.
+// When multiview is enabled, layer ranges are modified according active views during a renderpass.
+Util::Vector<Pal::SubresRange, MaxRangePerAttachment * Pal::MaxViewInstanceCount, Util::GenericAllocator>
+LoadOpClearSubresRanges(
+    const Framebuffer::Attachment& attachment,
+    const RPLoadOpClearInfo&       clearInfo,
+    const RenderPass&              renderPass)
+{
+    // Note that no allocation will be performed, so Util::Vector allocator is nullptr.
+    Util::Vector<Pal::SubresRange, MaxRangePerAttachment * Pal::MaxViewInstanceCount, Util::GenericAllocator> clearSubresRanges { nullptr };
+
+    const auto attachmentSubresRanges = attachment.FindSubresRanges(clearInfo.aspect);
+
+    if (renderPass.IsMultiviewEnabled())
+    {
+        const auto activeViews = renderPass.GetActiveViewsBitMask();
+        const auto layerRanges = RangesOfOnesInBitMask(activeViews);
+
+        for (uint32_t rangeIndex = 0; rangeIndex < attachmentSubresRanges.NumElements(); ++rangeIndex)
+        {
+            for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
+            {
+                clearSubresRanges.PushBack(attachmentSubresRanges.At(rangeIndex));
+                clearSubresRanges.Back().startSubres.arraySlice += layerRangeIt.Get().offset;
+                clearSubresRanges.Back().numSlices               = layerRangeIt.Get().extent;
+            }
+        }
+    }
+    else
+    {
+        for (uint32_t rangeIndex = 0; rangeIndex < attachmentSubresRanges.NumElements(); ++rangeIndex)
+        {
+            clearSubresRanges.PushBack(attachmentSubresRanges.At(rangeIndex));
+        }
+    }
+
+    return clearSubresRanges;
+}
+
+// =====================================================================================================================
 // Populate a vector with PAL rects created from Vulkan clear rects.
 // Returns Pal::Result::Success if completed successfully.
 template<typename PalRectVector>
@@ -1826,22 +1866,30 @@ void CmdBuffer::CopyBuffer(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
+    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
+    auto       regionBatch = Util::Min(regionCount, maxRegions);
+
     // Allocate space to store memory copy regions
-    Pal::MemoryCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryCopyRegion>(regionCount);
+    Pal::MemoryCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryCopyRegion>(regionBatch);
 
     if (pPalRegions != nullptr)
     {
         Buffer* pSrcBuffer = Buffer::ObjectFromHandle(srcBuffer);
         Buffer* pDstBuffer = Buffer::ObjectFromHandle(destBuffer);
 
-        for (uint32_t i = 0; i < regionCount; ++i)
+        for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx += regionBatch)
         {
-            pPalRegions[i].srcOffset    = pSrcBuffer->MemOffset() + pRegions[i].srcOffset;
-            pPalRegions[i].dstOffset    = pDstBuffer->MemOffset() + pRegions[i].dstOffset;
-            pPalRegions[i].copySize     = pRegions[i].size;
-        }
+            regionBatch = Util::Min(regionCount - regionIdx, maxRegions);
 
-        PalCmdCopyBuffer(pSrcBuffer, pDstBuffer, regionCount, pPalRegions);
+            for (uint32_t i = 0; i < regionBatch; ++i)
+            {
+                pPalRegions[i].srcOffset    = pSrcBuffer->MemOffset() + pRegions[regionIdx + i].srcOffset;
+                pPalRegions[i].dstOffset    = pDstBuffer->MemOffset() + pRegions[regionIdx + i].dstOffset;
+                pPalRegions[i].copySize     = pRegions[regionIdx + i].size;
+            }
+
+            PalCmdCopyBuffer(pSrcBuffer, pDstBuffer, regionBatch, pPalRegions);
+        }
 
         virtStackFrame.FreeArray(pPalRegions);
     }
@@ -1866,8 +1914,11 @@ void CmdBuffer::CopyImage(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
+    const auto maxRegions  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions)), MaxPalAspectsPerMask);
+    auto       regionBatch = Util::Min(regionCount * MaxPalAspectsPerMask, maxRegions);
+
     Pal::ImageCopyRegion* pPalRegions =
-        virtStackFrame.AllocArray<Pal::ImageCopyRegion>(regionCount * MaxPalAspectsPerMask);
+        virtStackFrame.AllocArray<Pal::ImageCopyRegion>(regionBatch);
 
     if (pPalRegions != nullptr)
     {
@@ -1880,14 +1931,21 @@ void CmdBuffer::CopyImage(
         const Pal::ImageLayout palSrcImgLayout = pSrcImage->GetTransferLayout(srcImageLayout, this);
         const Pal::ImageLayout palDstImgLayout = pDstImage->GetTransferLayout(destImageLayout, this);
 
-        uint32_t palRegionCount = 0;
-
-        for (uint32_t i = 0; i < regionCount; ++i)
+        for (uint32_t regionIdx = 0; regionIdx < regionCount;)
         {
-            VkToPalImageCopyRegion(pRegions[i], srcFormat.format, dstFormat.format, pPalRegions, palRegionCount);
-        }
+            uint32_t palRegionCount = 0;
 
-        PalCmdCopyImage(pSrcImage, palSrcImgLayout, pDstImage, palDstImgLayout, palRegionCount, pPalRegions);
+            while ((regionIdx < regionCount) &&
+                   (palRegionCount <= (regionBatch - MaxPalAspectsPerMask)))
+            {
+                VkToPalImageCopyRegion(pRegions[regionIdx], srcFormat.format, dstFormat.format,
+                    pPalRegions, palRegionCount);
+
+                ++regionIdx;
+            }
+
+            PalCmdCopyImage(pSrcImage, palSrcImgLayout, pDstImage, palDstImgLayout, palRegionCount, pPalRegions);
+        }
 
         virtStackFrame.FreeArray(pPalRegions);
     }
@@ -1911,39 +1969,50 @@ void CmdBuffer::BlitImage(
 {
     DbgBarrierPreCmd(DbgBarrierCopyImage);
 
-    const Image* const pSrcImage    = Image::ObjectFromHandle(srcImage);
-    const Image* const pDstImage    = Image::ObjectFromHandle(destImage);
-
-    const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat());
-    const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat());
-
-    Pal::ScaledCopyInfo palCopyInfo = {};
-
-    palCopyInfo.srcImageLayout = pSrcImage->GetTransferLayout(srcImageLayout, this);
-    palCopyInfo.dstImageLayout = pDstImage->GetTransferLayout(destImageLayout, this);
-
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
+
+    const auto maxRegions  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions)), MaxPalAspectsPerMask);
+    auto       regionBatch = Util::Min(regionCount * MaxPalAspectsPerMask, maxRegions);
 
     // Allocate space to store scaled image copy regions (we need a separate region per PAL aspect)
     Pal::ImageScaledCopyRegion* pPalRegions =
-        virtStackFrame.AllocArray<Pal::ImageScaledCopyRegion>(regionCount * MaxPalAspectsPerMask);
+        virtStackFrame.AllocArray<Pal::ImageScaledCopyRegion>(regionBatch);
 
     if (pPalRegions != nullptr)
     {
-        for (uint32_t i = 0; i < regionCount; ++i)
-        {
-            VkToPalImageScaledCopyRegion(pRegions[i], srcFormat.format, dstFormat.format, pPalRegions, palCopyInfo.regionCount);
-        }
+        const Image* const pSrcImage    = Image::ObjectFromHandle(srcImage);
+        const Image* const pDstImage    = Image::ObjectFromHandle(destImage);
+
+        const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat());
+        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat());
+
+        Pal::ScaledCopyInfo palCopyInfo = {};
+
+        palCopyInfo.srcImageLayout = pSrcImage->GetTransferLayout(srcImageLayout, this);
+        palCopyInfo.dstImageLayout = pDstImage->GetTransferLayout(destImageLayout, this);
+
+        // Maps blit filters to their PAL equivalent
+        palCopyInfo.filter   = VkToPalTexFilter(VK_FALSE, filter, filter, VK_SAMPLER_MIPMAP_MODE_NEAREST);
+        palCopyInfo.rotation = Pal::ImageRotation::Ccw0;
 
         palCopyInfo.pRegions = pPalRegions;
 
-        // Maps blit filters to their PAL equivalent
-        palCopyInfo.filter = VkToPalTexFilter(VK_FALSE, filter, filter, VK_SAMPLER_MIPMAP_MODE_NEAREST);
+        for (uint32_t regionIdx = 0; regionIdx < regionCount;)
+        {
+            palCopyInfo.regionCount = 0;
 
-        palCopyInfo.rotation = Pal::ImageRotation::Ccw0;
+            while ((regionIdx < regionCount) &&
+                   (palCopyInfo.regionCount <= (regionBatch - MaxPalAspectsPerMask)))
+            {
+                VkToPalImageScaledCopyRegion(pRegions[regionIdx], srcFormat.format, dstFormat.format,
+                    pPalRegions, palCopyInfo.regionCount);
 
-        // This will do a scaled blit
-        PalCmdScaledCopyImage(pSrcImage, pDstImage, palCopyInfo);
+                ++regionIdx;
+            }
+
+            // This will do a scaled blit
+            PalCmdScaledCopyImage(pSrcImage, pDstImage, palCopyInfo);
+        }
 
         virtStackFrame.FreeArray(pPalRegions);
     }
@@ -1955,6 +2024,9 @@ void CmdBuffer::BlitImage(
     DbgBarrierPostCmd(DbgBarrierCopyImage);
 }
 
+// PAL version 391.1 adds support for mis-aligned buffer-image/image-buffer copies
+#if (PAL_CLIENT_INTERFACE_MAJOR_VERSION < 391) || \
+    ((PAL_CLIENT_INTERFACE_MAJOR_VERSION == 391) && (PAL_CLIENT_INTERFACE_MINOR_VERSION < 1))
 // =====================================================================================================================
 // Align memory to image copy region
 void CmdBuffer::AlignMemoryImageCopyRegion(
@@ -1981,6 +2053,7 @@ void CmdBuffer::AlignMemoryImageCopyRegion(
     const uint32_t copySizePixelsHeight = copySizeBytesHeight  / bytesPerPixel;
     pRegion->imageExtent.height = copySizePixelsHeight;
 }
+#endif
 
 // =====================================================================================================================
 // Copies from a buffer of linear data to a region of an image (vkCopyBufferToImage)
@@ -1995,8 +2068,11 @@ void CmdBuffer::CopyBufferToImage(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
+    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
+    auto       regionBatch = Util::Min(regionCount, maxRegions);
+
     // Allocate space to store memory image copy regions
-    Pal::MemoryImageCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryImageCopyRegion>(regionCount);
+    Pal::MemoryImageCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryImageCopyRegion>(regionBatch);
 
     if (pPalRegions != nullptr)
     {
@@ -2006,26 +2082,35 @@ void CmdBuffer::CopyBufferToImage(
 
         const Pal::ImageLayout layout = pDstImage->GetTransferLayout(destImageLayout, this);
 
-        for (uint32_t i = 0; i < regionCount; ++i)
+        for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx += regionBatch)
         {
-            // For image-buffer copies we have to override the format for depth-only and stencil-only copies
-            Pal::SwizzledFormat dstFormat = VkToPalFormat(Formats::GetAspectFormat(
-                pDstImage->GetFormat(), pRegions[i].imageSubresource.aspectMask));
+            regionBatch = Util::Min(regionCount - regionIdx, maxRegions);
 
-            pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[i], dstFormat.format, srcMemOffset);
-
-            if (!GpuUtil::ValidateMemoryImageRegion(
-                m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(),
-                m_palEngineType,
-                *pDstImage->PalImage(),
-                *pSrcBuffer->PalMemory(),
-                pPalRegions[i]))
+            for (uint32_t i = 0; i < regionBatch; ++i)
             {
-                AlignMemoryImageCopyRegion(pDstImage->PalImage(), &pPalRegions[i]);
-            }
-        }
+                // For image-buffer copies we have to override the format for depth-only and stencil-only copies
+                Pal::SwizzledFormat dstFormat = VkToPalFormat(Formats::GetAspectFormat(
+                    pDstImage->GetFormat(), pRegions[regionIdx + i].imageSubresource.aspectMask));
 
-        PalCmdCopyMemoryToImage(pSrcBuffer, pDstImage, layout, regionCount, pPalRegions);
+                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, srcMemOffset);
+
+                // PAL version 391.1 adds support for mis-aligned buffer-image/image-buffer copies
+#if (PAL_CLIENT_INTERFACE_MAJOR_VERSION < 391) || \
+    ((PAL_CLIENT_INTERFACE_MAJOR_VERSION == 391) && (PAL_CLIENT_INTERFACE_MINOR_VERSION < 1))
+                if (!GpuUtil::ValidateMemoryImageRegion(
+                    m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(),
+                    m_palEngineType,
+                    *pDstImage->PalImage(),
+                    *pSrcBuffer->PalMemory(),
+                    pPalRegions[i]))
+                {
+                     AlignMemoryImageCopyRegion(pDstImage->PalImage(), &pPalRegions[i]);
+                }
+#endif
+            }
+
+            PalCmdCopyMemoryToImage(pSrcBuffer, pDstImage, layout, regionBatch, pPalRegions);
+        }
 
         virtStackFrame.FreeArray(pPalRegions);
     }
@@ -2050,8 +2135,11 @@ void CmdBuffer::CopyImageToBuffer(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
+    const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
+    auto       regionBatch = Util::Min(regionCount, maxRegions);
+
     // Allocate space to store memory image copy regions
-    Pal::MemoryImageCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryImageCopyRegion>(regionCount);
+    Pal::MemoryImageCopyRegion* pPalRegions = virtStackFrame.AllocArray<Pal::MemoryImageCopyRegion>(regionBatch);
 
     if (pPalRegions != nullptr)
     {
@@ -2063,18 +2151,21 @@ void CmdBuffer::CopyImageToBuffer(
 
         const Pal::ImageLayout layout = pSrcImage->GetTransferLayout(srcImageLayout, this);
 
-        uint32_t engineCopyCount = 0;
-
-        for (uint32_t i = 0; i < regionCount; ++i)
+        for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx += regionBatch)
         {
-            // For image-buffer copies we have to override the format for depth-only and stencil-only copies
-            Pal::SwizzledFormat srcFormat = VkToPalFormat(Formats::GetAspectFormat(pSrcImage->GetFormat(),
-                pRegions[i].imageSubresource.aspectMask));
+            regionBatch = Util::Min(regionCount - regionIdx, maxRegions);
 
-            pPalRegions[engineCopyCount++] = VkToPalMemoryImageCopyRegion(pRegions[i], srcFormat.format, dstMemOffset);
+            for (uint32_t i = 0; i < regionBatch; ++i)
+            {
+                // For image-buffer copies we have to override the format for depth-only and stencil-only copies
+                Pal::SwizzledFormat srcFormat = VkToPalFormat(Formats::GetAspectFormat(pSrcImage->GetFormat(),
+                    pRegions[regionIdx + i].imageSubresource.aspectMask));
+
+                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], srcFormat.format, dstMemOffset);
+            }
+
+            PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionBatch, pPalRegions);
         }
-
-        PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionCount, pPalRegions);
 
         virtStackFrame.FreeArray(pPalRegions);
     }
@@ -2147,37 +2238,46 @@ void CmdBuffer::ClearColorImage(
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
+    const auto maxRanges  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRanges)), MaxPalColorAspectsPerMask);
+    auto       rangeBatch = Util::Min(rangeCount * MaxPalColorAspectsPerMask, maxRanges);
+
     // Allocate space to store image subresource ranges
-    Pal::SubresRange* pPalRanges = virtStackFrame.AllocArray<Pal::SubresRange>(rangeCount * MaxPalColorAspectsPerMask);
+    Pal::SubresRange* pPalRanges = virtStackFrame.AllocArray<Pal::SubresRange>(rangeBatch);
 
     if (pPalRanges != nullptr)
     {
-        uint32_t palRangeCount = 0;
-
         const Pal::ImageLayout layout = pImage->GetTransferLayout(imageLayout, this);
 
-        for (uint32_t i = 0; i < rangeCount; ++i)
+        for (uint32_t rangeIdx = 0; rangeIdx < rangeCount;)
         {
-            // Only color aspect is allowed here
-            VK_ASSERT(pRanges[i].aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
+            uint32_t palRangeCount = 0;
 
-            VkToPalSubresRange(palFormat.format,
-                               pRanges[i],
-                               pImage->GetMipLevels(),
-                               pImage->GetArraySize(),
-                               pPalRanges,
-                               palRangeCount);
+            while ((rangeIdx < rangeCount) &&
+                   (palRangeCount <= (rangeBatch - MaxPalColorAspectsPerMask)))
+            {
+                // Only color aspect is allowed here
+                VK_ASSERT(pRanges[rangeIdx].aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
+
+                VkToPalSubresRange(palFormat.format,
+                                   pRanges[rangeIdx],
+                                   pImage->GetMipLevels(),
+                                   pImage->GetArraySize(),
+                                   pPalRanges,
+                                   palRangeCount);
+
+                ++rangeIdx;
+            }
+
+            PalCmdClearColorImage(
+                *pImage,
+                layout,
+                VkToPalClearColor(pColor, palFormat.format),
+                palRangeCount,
+                pPalRanges,
+                0,
+                nullptr,
+                0);
         }
-
-        PalCmdClearColorImage(
-            *pImage,
-            layout,
-            VkToPalClearColor(pColor, palFormat.format),
-            palRangeCount,
-            pPalRanges,
-            0,
-            nullptr,
-            0);
 
         virtStackFrame.FreeArray(pPalRanges);
     }
@@ -2236,40 +2336,49 @@ void CmdBuffer::ClearDepthStencilImage(
 {
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
+    const auto maxRanges  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRanges)), MaxPalDepthAspectsPerMask);
+    auto       rangeBatch = Util::Min(rangeCount * MaxPalDepthAspectsPerMask, maxRanges);
+
     // Allocate space to store image subresource ranges (we need a separate region per PAL aspect)
-    Pal::SubresRange* pPalRanges = virtStackFrame.AllocArray<Pal::SubresRange>(rangeCount * MaxPalDepthAspectsPerMask);
+    Pal::SubresRange* pPalRanges = virtStackFrame.AllocArray<Pal::SubresRange>(rangeBatch);
 
     if (pPalRanges != nullptr)
     {
-        uint32_t palRangeCount = 0;
-
         const Image* pImage           = Image::ObjectFromHandle(image);
         const Pal::ImageLayout layout = pImage->GetTransferLayout(imageLayout, this);
 
-        for (uint32_t i = 0; i < rangeCount; ++i)
+        for (uint32_t rangeIdx = 0; rangeIdx < rangeCount;)
         {
-            // Only depth or stencil aspect is allowed here
-            VK_ASSERT((pRanges[i].aspectMask & ~(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) == 0);
+            uint32_t palRangeCount = 0;
 
-            VkToPalSubresRange(VkToPalFormat(pImage->GetFormat()).format,
-                               pRanges[i],
-                               pImage->GetMipLevels(),
-                               pImage->GetArraySize(),
-                               pPalRanges,
-                               palRangeCount);
+            while ((rangeIdx < rangeCount) &&
+                   (palRangeCount <= (rangeBatch - MaxPalDepthAspectsPerMask)))
+            {
+                // Only depth or stencil aspect is allowed here
+                VK_ASSERT((pRanges[rangeIdx].aspectMask & ~(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) == 0);
+
+                VkToPalSubresRange(VkToPalFormat(pImage->GetFormat()).format,
+                                   pRanges[rangeIdx],
+                                   pImage->GetMipLevels(),
+                                   pImage->GetArraySize(),
+                                   pPalRanges,
+                                   palRangeCount);
+
+                ++rangeIdx;
+            }
+
+            PalCmdClearDepthStencil(
+                *pImage,
+                layout,
+                layout,
+                VkToPalClearDepth(depth),
+                stencil,
+                palRangeCount,
+                pPalRanges,
+                0,
+                nullptr,
+                0);
         }
-
-        PalCmdClearDepthStencil(
-            *pImage,
-            layout,
-            layout,
-            VkToPalClearDepth(depth),
-            stencil,
-            palRangeCount,
-            pPalRanges,
-            0,
-            nullptr,
-            0);
 
         virtStackFrame.FreeArray(pPalRanges);
     }
@@ -2316,11 +2425,9 @@ void CmdBuffer::ClearBoundAttachments(
     Util::Vector<Pal::ClearBoundTargetRegion, 8, VirtualStackFrame> clearRegions { &virtStackFrame };
     Util::Vector<Pal::BoundColorTarget,       8, VirtualStackFrame> colorTargets { &virtStackFrame };
 
-    const auto palResult1 = CreateClearRegions(
-        rectCount, pRects,
-        *pRenderPass, subpass,
-        &clearRegions);
-
+    const auto maxRects   = EstimateMaxObjectsOnVirtualStack(sizeof(*pRects));
+    auto       rectBatch  = Util::Min(rectCount, maxRects);
+    const auto palResult1 = clearRegions.Reserve(rectBatch);
     const auto palResult2 = colorTargets.Reserve(attachmentCount);
 
     if ((palResult1 != Pal::Result::Success) ||
@@ -2373,15 +2480,25 @@ void CmdBuffer::ClearBoundAttachments(
 
                 DbgBarrierPreCmd(DbgBarrierClearDepth);
 
-                // Clear the bound depth stencil target immediately
-                PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundDepthStencilTargets(
-                    VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
-                    clearInfo.clearValue.depthStencil.stencil,
-                    pRenderPass->GetDepthStencilAttachmentSamples(subpass),
-                    pRenderPass->GetDepthStencilAttachmentSamples(subpass),
-                    selectFlags,
-                    clearRegions.NumElements(),
-                    clearRegions.Data());
+                for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+                {
+                    rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+
+                    CreateClearRegions(
+                        rectBatch, pRects + rectIdx,
+                        *pRenderPass, subpass,
+                        &clearRegions);
+
+                    // Clear the bound depth stencil target immediately
+                    PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundDepthStencilTargets(
+                        VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
+                        clearInfo.clearValue.depthStencil.stencil,
+                        pRenderPass->GetDepthStencilAttachmentSamples(subpass),
+                        pRenderPass->GetDepthStencilAttachmentSamples(subpass),
+                        selectFlags,
+                        clearRegions.NumElements(),
+                        clearRegions.Data());
+                }
 
                 DbgBarrierPostCmd(DbgBarrierClearDepth);
             }
@@ -2392,12 +2509,22 @@ void CmdBuffer::ClearBoundAttachments(
     {
         DbgBarrierPreCmd(DbgBarrierClearColor);
 
-        // Clear the bound color targets
-        PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundColorTargets(
-            colorTargets.NumElements(),
-            colorTargets.Data(),
-            clearRegions.NumElements(),
-            clearRegions.Data());
+        for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+        {
+            rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+
+            CreateClearRegions(
+                rectBatch, pRects + rectIdx,
+                *pRenderPass, subpass,
+                &clearRegions);
+
+            // Clear the bound color targets
+            PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundColorTargets(
+                colorTargets.NumElements(),
+                colorTargets.Data(),
+                clearRegions.NumElements(),
+                clearRegions.Data());
+        }
 
         DbgBarrierPostCmd(DbgBarrierClearColor);
     }
@@ -2578,7 +2705,8 @@ void CmdBuffer::ClearImageAttachments(
 
     // Get the current renderpass and subpass
     const RenderPass* pRenderPass = m_state.allGpuState.pRenderPass;
-    const uint32_t subpass        = m_renderPassInstance.subpass;
+    const uint32_t    subpass     = m_renderPassInstance.subpass;
+    const auto        maxRects    = EstimateMaxObjectsOnVirtualStack(sizeof(*pRects));
 
     // Go through each of the clear attachment infos
     for (uint32_t idx = 0; idx < attachmentCount; ++idx)
@@ -2609,29 +2737,38 @@ void CmdBuffer::ClearImageAttachments(
                 Util::Vector<Pal::Box,         8, VirtualStackFrame> clearBoxes        { &virtStackFrame };
                 Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
 
-                const auto palResult1 = CreateClearRegions(
-                    rectCount, pRects,
-                    *pRenderPass, subpass,
-                    &clearBoxes);
-
-                const auto palResult2 = CreateClearSubresRanges(
-                    attachment, clearInfo,
-                    rectCount, pRects,
-                    *pRenderPass, subpass,
-                    &clearSubresRanges);
+                auto       rectBatch  = Util::Min(rectCount, maxRects);
+                const auto palResult1 = clearBoxes.Reserve(rectBatch);
+                const auto palResult2 = clearSubresRanges.Reserve(rectBatch);
 
                 if ((palResult1 == Pal::Result::Success) &&
                     (palResult2 == Pal::Result::Success))
                 {
-                    PalCmdClearColorImage(
-                        *attachment.pImage,
-                        targetLayout,
-                        VkToPalClearColor(&clearInfo.clearValue.color, attachment.viewFormat.format),
-                        clearSubresRanges.NumElements(),
-                        clearSubresRanges.Data(),
-                        clearBoxes.NumElements(),
-                        clearBoxes.Data(),
-                        Pal::ClearColorImageFlags::ColorClearAutoSync);
+                    for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+                    {
+                        rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+
+                        CreateClearRegions(
+                            rectCount, pRects + rectIdx,
+                            *pRenderPass, subpass,
+                            &clearBoxes);
+
+                        CreateClearSubresRanges(
+                            attachment, clearInfo,
+                            rectCount, pRects + rectIdx,
+                            *pRenderPass, subpass,
+                            &clearSubresRanges);
+
+                        PalCmdClearColorImage(
+                            *attachment.pImage,
+                            targetLayout,
+                            VkToPalClearColor(&clearInfo.clearValue.color, attachment.viewFormat.format),
+                            clearSubresRanges.NumElements(),
+                            clearSubresRanges.Data(),
+                            clearBoxes.NumElements(),
+                            clearBoxes.Data(),
+                            Pal::ClearColorImageFlags::ColorClearAutoSync);
+                    }
                 }
                 else
                 {
@@ -2660,30 +2797,39 @@ void CmdBuffer::ClearImageAttachments(
                 Util::Vector<Pal::Rect,        8, VirtualStackFrame> clearRects        { &virtStackFrame };
                 Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
 
-                const auto palResult1 = CreateClearRects(
-                    rectCount, pRects,
-                    &clearRects);
-
-                const auto palResult2 = CreateClearSubresRanges(
-                    attachment, clearInfo,
-                    rectCount, pRects,
-                    *pRenderPass, subpass,
-                    &clearSubresRanges);
+                auto       rectBatch  = Util::Min(rectCount, maxRects);
+                const auto palResult1 = clearRects.Reserve(rectBatch);
+                const auto palResult2 = clearSubresRanges.Reserve(rectBatch);
 
                 if ((palResult1 == Pal::Result::Success) &&
                     (palResult2 == Pal::Result::Success))
                 {
-                    PalCmdClearDepthStencil(
-                        *attachment.pImage,
-                        depthLayout,
-                        stencilLayout,
-                        VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
-                        clearInfo.clearValue.depthStencil.stencil,
-                        clearSubresRanges.NumElements(),
-                        clearSubresRanges.Data(),
-                        clearRects.NumElements(),
-                        clearRects.Data(),
-                        Pal::ClearDepthStencilFlags::DsClearAutoSync);
+                    for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+                    {
+                        rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+
+                        CreateClearRects(
+                            rectCount, pRects + rectIdx,
+                            &clearRects);
+
+                        CreateClearSubresRanges(
+                            attachment, clearInfo,
+                            rectCount, pRects + rectIdx,
+                            *pRenderPass, subpass,
+                            &clearSubresRanges);
+
+                        PalCmdClearDepthStencil(
+                            *attachment.pImage,
+                            depthLayout,
+                            stencilLayout,
+                            VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
+                            clearInfo.clearValue.depthStencil.stencil,
+                            clearSubresRanges.NumElements(),
+                            clearSubresRanges.Data(),
+                            clearRects.NumElements(),
+                            clearRects.Data(),
+                            Pal::ClearDepthStencilFlags::DsClearAutoSync);
+                    }
                 }
                 else
                 {
@@ -2705,9 +2851,12 @@ void CmdBuffer::ResolveImage(
 {
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
+    const auto maxRects  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRects)), MaxPalAspectsPerMask);
+    auto       rectBatch = Util::Min(rectCount * MaxPalAspectsPerMask, maxRects);
+
     // Allocate space to store image resolve regions (we need a separate region per PAL aspect)
     Pal::ImageResolveRegion* pPalRegions =
-        virtStackFrame.AllocArray<Pal::ImageResolveRegion>(rectCount * MaxPalAspectsPerMask);
+        virtStackFrame.AllocArray<Pal::ImageResolveRegion>(rectBatch);
 
     if (pPalRegions != nullptr)
     {
@@ -2718,23 +2867,29 @@ void CmdBuffer::ResolveImage(
         const Pal::SwizzledFormat srcFormat       = VkToPalFormat(pSrcImage->GetFormat());
         const Pal::SwizzledFormat dstFormat       = VkToPalFormat(pDstImage->GetFormat());
 
-        uint32_t palRegionCount = 0;
-
-        for (uint32_t i = 0; i < rectCount; ++i)
+        for (uint32_t rectIdx = 0; rectIdx < rectCount;)
         {
-            // We expect MSAA images to never have mipmaps
-            VK_ASSERT(pRects[i].srcSubresource.mipLevel == 0);
+            uint32_t palRegionCount = 0;
 
-            VkToPalImageResolveRegion(pRects[i], srcFormat.format, dstFormat.format, pPalRegions, palRegionCount);
+            while ((rectIdx < rectCount) &&
+                   (palRegionCount <= (rectBatch - MaxPalAspectsPerMask)))
+            {
+                // We expect MSAA images to never have mipmaps
+                VK_ASSERT(pRects[rectIdx].srcSubresource.mipLevel == 0);
+
+                VkToPalImageResolveRegion(pRects[rectIdx], srcFormat.format, dstFormat.format, pPalRegions, palRegionCount);
+
+                ++rectIdx;
+            }
+
+            PalCmdResolveImage<false>(
+                *pSrcImage,
+                palSrcImageLayout,
+                *pDstImage,
+                palDestImageLayout,
+                palRegionCount,
+                pPalRegions);
         }
-
-        PalCmdResolveImage<false>(
-            *pSrcImage,
-            palSrcImageLayout,
-            *pDstImage,
-            palDestImageLayout,
-            palRegionCount,
-            pPalRegions);
 
         virtStackFrame.FreeArray(pPalRegions);
     }
@@ -4622,6 +4777,10 @@ void CmdBuffer::RPLoadOpClearColor(
             &m_renderPassInstance.pAttachments[clear.attachment].clearValue.color,
             attachment.viewFormat.format);
 
+        const auto clearSubresRanges = LoadOpClearSubresRanges(
+            attachment, clear,
+            *m_state.allGpuState.pRenderPass);
+
         utils::IterateMask deviceGroup(GetDeviceMask());
 
         while (deviceGroup.Iterate())
@@ -4634,8 +4793,8 @@ void CmdBuffer::RPLoadOpClearColor(
                 *attachment.pImage->PalImage(deviceIdx),
                 clearLayout,
                 clearColor,
-                attachment.subresRangeCount,
-                attachment.subresRange,
+                clearSubresRanges.NumElements(),
+                clearSubresRanges.Data(),
                 1, &clearBox,
                 Pal::ColorClearAutoSync);
         }
@@ -4676,24 +4835,9 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
         float clearDepth        = VkToPalClearDepth(clearValue.depthStencil.depth);
         Pal::uint8 clearStencil = clearValue.depthStencil.stencil;
 
-        Pal::SubresRange clearRanges[2];
-        uint32_t clearRangeCount = 0;
-
-        for (uint32_t sr = 0; sr < attachment.subresRangeCount; ++sr)
-        {
-            VK_ASSERT(clearRangeCount < 2);
-
-            if ((clear.aspect & VK_IMAGE_ASPECT_DEPTH_BIT) &&
-                (attachment.subresRange[sr].startSubres.aspect == Pal::ImageAspect::Depth))
-            {
-                clearRanges[clearRangeCount++] = attachment.subresRange[sr];
-            }
-            else if ((clear.aspect & VK_IMAGE_ASPECT_STENCIL_BIT) &&
-                (attachment.subresRange[sr].startSubres.aspect == Pal::ImageAspect::Stencil))
-            {
-                clearRanges[clearRangeCount++] = attachment.subresRange[sr];
-            }
-        }
+        const auto clearSubresRanges = LoadOpClearSubresRanges(
+            attachment, clear,
+            *m_state.allGpuState.pRenderPass);
 
         utils::IterateMask deviceGroup(GetDeviceMask());
 
@@ -4709,8 +4853,8 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
                 stencilLayout,
                 clearDepth,
                 clearStencil,
-                clearRangeCount,
-                clearRanges,
+                clearSubresRanges.NumElements(),
+                clearSubresRanges.Data(),
                 1, &clearRect,
                 Pal::DsClearAutoSync);
         }
@@ -5099,7 +5243,8 @@ void CmdBuffer::SetViewport(
 
     DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
-    const bool khrMaintenance1 = m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1);
+    const bool khrMaintenance1 = ((m_pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
+                                  m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1));
 
     for (uint32_t i = 0; i < viewportCount; ++i)
     {
@@ -5354,6 +5499,14 @@ void CmdBuffer::SetStencilReference(
     m_stencilCombiner.PalCmdSetStencilState(this);
 
     DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+}
+
+// =====================================================================================================================
+// Get a safe number of objects that can be allocated by the virtual stack frame allocator without risking OOM error.
+uint32_t CmdBuffer::EstimateMaxObjectsOnVirtualStack(size_t objectSize) const
+{
+    // Return at least 1 and use only 50% of the remaining space.
+    return 1 + static_cast<uint32_t>((m_pStackAllocator->Remaining() / objectSize) >> 1);
 }
 
 #if VK_ENABLE_DEBUG_BARRIERS

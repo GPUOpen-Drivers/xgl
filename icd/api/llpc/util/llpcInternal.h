@@ -99,7 +99,7 @@ namespace LlpcName
     const static char DescriptorLoadSpillTable[]      = "llpc.descriptor.load.spilltable";
     const static char DescriptorLoadGsVsRingBuffer[]  = "llpc.descriptor.load.gsvsringbuffer";
 
-    const static char ImageCallPrefix[]               = "llpc.image.";
+    const static char ImageCallPrefix[]               = "llpc.image";
 
     const static char GlobalProxyPrefix[]             = "__llpc_global_proxy_";
     const static char InputProxyPrefix[]              = "__llpc_input_proxy_";

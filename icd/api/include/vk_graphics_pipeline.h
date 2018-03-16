@@ -268,18 +268,13 @@ protected:
     struct CreateInfo
     {
         Pal::GraphicsPipelineCreateInfo             pipeline;
-        Llpc::GraphicsPipelineBuildInfo             pipelineLlpc;
         Pal::MsaaStateCreateInfo                    msaa;
         Pal::ColorBlendStateCreateInfo              blend;
         Pal::DepthStencilStateCreateInfo            ds;
         ImmedInfo                                   immedInfo;
         const PipelineLayout*                       pLayout;
-        void*                                       pShaderMem;
         uint32_t                                    sampleCoverage;
-        const VkPipelineVertexInputStateCreateInfo* pVertexInput;
-        uint32_t                                    activeStageCount;
-        const VkPipelineShaderStageCreateInfo*      pActiveStages;
-        bool                                        isMultiviewEnabled;
+        VkShaderStageFlagBits                       activeStages;
     };
 
     static void ConvertGraphicsPipelineInfo(
@@ -292,14 +287,6 @@ protected:
         const VkPipelineRasterizationStateCreateInfo* pIn,
         CreateInfo*                                   pInfo,
         const bool                                    dynamicStateFlags[]);
-
-    static VkResult CreateGraphicsPipelineBinaries(
-        Device*                             pDevice,
-        PipelineCache*                      pPipelineCache,
-        CreateInfo*                         pInfo,
-        VbBindingInfo*                      pVbInfo,
-        size_t                              pipelineBinarySizes[MaxPalDevices],
-        void*                               pPipelineBinaries[MaxPalDevices]);
 
 private:
     ImmedInfo                 m_info;                             // Immediate state that will go in CmdSet* functions

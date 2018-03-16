@@ -55,137 +55,6 @@ void ComputePipeline::ConvertComputePipelineInfo(
         pOutInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
 
-    pOutInfo->flags  = pIn->flags;
-    pOutInfo->pStage = &pIn->stage;
-
-}
-
-// =====================================================================================================================
-// Creates a compute pipeline binary for each PAL device
-VkResult ComputePipeline::CreateComputePipelineBinaries(
-    Device*        pDevice,
-    PipelineCache* pPipelineCache,
-    CreateInfo*    pCreateInfo,
-    size_t         pipelineBinarySizes[MaxPalDevices],
-    void*          pPipelineBinaries[MaxPalDevices])
-{
-    VkResult               result   = VK_SUCCESS;
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-    const ShaderModule*    pShader  = ShaderModule::ObjectFromHandle(pCreateInfo->pStage->module);
-
-    // Allocate space to create the LLPC/SCPC pipeline resource mappings
-    void* pMappingBuffer = nullptr;
-
-    if (pCreateInfo->pLayout != nullptr)
-    {
-        size_t tempBufferSize = pCreateInfo->pLayout->GetPipelineInfo()->tempBufferSize;
-
-        // Allocate the temp buffer
-        if (tempBufferSize > 0)
-        {
-            pMappingBuffer = pDevice->VkInstance()->AllocMem(
-                tempBufferSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-            if (pMappingBuffer == nullptr)
-            {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-            }
-        }
-    }
-
-    // Build the LLPC pipeline
-    Llpc::ComputePipelineBuildInfo pipelineBuildInfo   = {};
-    Llpc::ComputePipelineBuildOut  pipelineOut         = {};
-    void*                          pLlpcPipelineBuffer = nullptr;
-
-    if ((result == VK_SUCCESS)
-        )
-    {
-        // Fill pipeline create info for LLPC
-        pipelineBuildInfo.pInstance      = pDevice->VkPhysicalDevice()->VkInstance();
-        pipelineBuildInfo.pfnOutputAlloc = AllocateShaderOutput;
-        pipelineBuildInfo.pUserData      = &pLlpcPipelineBuffer;
-        auto pShaderInfo = &pipelineBuildInfo.cs;
-
-        pShaderInfo->pModuleData         = pShader->GetShaderData(true);
-        pShaderInfo->pSpecializatonInfo  = pCreateInfo->pStage->pSpecializationInfo;
-        pShaderInfo->pEntryTarget        = pCreateInfo->pStage->pName;
-
-        // Build the resource mapping description for LLPC.  This data contains things about how shader
-        // inputs like descriptor set bindings interact with this pipeline in a form that LLPC can
-        // understand.
-        if (pCreateInfo->pLayout != nullptr)
-        {
-            result = pCreateInfo->pLayout->BuildLlpcPipelineMapping(
-                ShaderStageCompute,
-                pMappingBuffer,
-                nullptr,
-                pShaderInfo,
-                nullptr);
-        }
-    }
-
-    uint64_t pipeHash = 0;
-
-    bool enableLlpc = false;
-    enableLlpc = true;
-
-    if (result == VK_SUCCESS)
-    {
-        if (enableLlpc)
-        {
-            if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCacheType() == PipelineCacheTypeLlpc))
-            {
-                pipelineBuildInfo.pShaderCache = pPipelineCache->GetShaderCache(DefaultDeviceIndex).pLlpcShaderCache;
-            }
-
-            auto llpcResult = pDevice->GetLlpcCompiler()->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut);
-            if (llpcResult != Llpc::Result::Success)
-            {
-                // There shouldn't be anything to free for the failure case
-                VK_ASSERT(pLlpcPipelineBuffer == nullptr);
-
-                {
-                    result = VK_ERROR_INITIALIZATION_FAILED;
-                }
-            }
-        }
-        else
-        if (settings.enablePipelineDump)
-        {
-            // LLPC isn't enabled but pipeline dump is required, call LLPC dump interface explicitly
-            void* pHandle = Llpc::IPipelineDumper::BeginPipelineDump(settings.pipelineDumpDir, &pipelineBuildInfo, nullptr);
-            Llpc::IPipelineDumper::EndPipelineDump(pHandle);
-        }
-    }
-
-    // Update PAL pipeline create info with LLPC output
-    if (enableLlpc)
-    {
-        if (result == VK_SUCCESS)
-        {
-
-            // Make sure that this is the same pointer we will free once the PAL pipeline is created
-            VK_ASSERT(pLlpcPipelineBuffer == pipelineOut.pipelineBin.pCode);
-
-            pPipelineBinaries[DefaultDeviceIndex]   = pLlpcPipelineBuffer;
-            pipelineBinarySizes[DefaultDeviceIndex] = pipelineOut.pipelineBin.codeSize;
-        }
-    }
-    else
-    {
-        result = VK_SUCCESS;
-    }
-
-    // Free the memory for the LLPC/SCPC pipeline resource mappings
-    if (pMappingBuffer != nullptr)
-    {
-        pDevice->VkInstance()->FreeMem(pMappingBuffer);
-    }
-
-    return result;
 }
 
 // =====================================================================================================================
@@ -242,20 +111,31 @@ VkResult ComputePipeline::Create(
     // Setup PAL create info from Vulkan inputs
     CreateInfo  createInfo                         = {};
     size_t      pipelineBinarySizes[MaxPalDevices] = {};
-    void*       pPipelineBinaries[MaxPalDevices]   = {};
+    const void* pPipelineBinaries[MaxPalDevices]   = {};
+    PipelineCompiler*   pDefaultCompiler = pDevice->GetCompiler();
+    PipelineCompiler::ComputePipelineCreateInfo binaryCreateInfo = {};
+    VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(pCreateInfo, &binaryCreateInfo);
 
-    ConvertComputePipelineInfo(pDevice, pCreateInfo, &createInfo);
-
-    VkResult result = CreateComputePipelineBinaries(
-        pDevice,
-        pPipelineCache,
-        &createInfo,
-        pipelineBinarySizes,
-        pPipelineBinaries);
+    for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < pDevice->NumPalDevices()); deviceIdx++)
+    {
+        result = pDevice->GetCompiler(deviceIdx)->CreateComputePipelineBinary(
+            pDevice,
+            deviceIdx,
+            pPipelineCache,
+            &binaryCreateInfo,
+            &pipelineBinarySizes[deviceIdx],
+            &pPipelineBinaries[deviceIdx]);
+    }
 
     if (result != VK_SUCCESS)
     {
         return result;
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        ConvertComputePipelineInfo(pDevice, pCreateInfo, &createInfo);
+
     }
 
     size_t pipelineSize = 0;
@@ -347,11 +227,11 @@ VkResult ComputePipeline::Create(
     {
         if (pPipelineBinaries[deviceIdx] != nullptr)
         {
-            {
-                pDevice->VkInstance()->FreeMem(pPipelineBinaries[deviceIdx]);
-            }
+            pDevice->GetCompiler(deviceIdx)->FreeComputePipelineBinary(
+                &binaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
         }
     }
+    pDefaultCompiler->FreeComputePipelineCreateInfo(&binaryCreateInfo);
 
     // Something went wrong with creating the PAL object. Free memory and return error.
     if (result != VK_SUCCESS)

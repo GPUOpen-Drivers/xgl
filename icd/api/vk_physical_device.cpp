@@ -256,14 +256,15 @@ PhysicalDevice::PhysicalDevice(
 #ifdef ICD_BUILD_APPPROFILE
     m_appProfile(appProfile),
 #endif
-    m_supportedExtensions()
+    m_supportedExtensions(),
+    m_compiler(this)
 {
     memset(&m_limits, 0, sizeof(m_limits));
     memset(m_formatFeatureMsaaTarget, 0, sizeof(m_formatFeatureMsaaTarget));
     memset(&m_queueFamilies, 0, sizeof(m_queueFamilies));
     memset(&m_memoryProperties, 0, sizeof(m_memoryProperties));
     memset(&m_gpaProps, 0, sizeof(m_gpaProps));
-    for (uint32_t i = 0; i< VK_MEMORY_TYPE_NUM; i++)
+    for (uint32_t i = 0; i < VK_MEMORY_TYPE_NUM; i++)
     {
         m_memoryPalHeapToVkIndex[i] = VK_MEMORY_TYPE_NUM; // invalid index
         m_memoryVkIndexToPalHeap[i] = Pal::GpuHeapCount; // invalid index
@@ -353,37 +354,18 @@ static void GetFormatFeatureFlags(
         VkFormatFeatureFlags depthFlags = PalToVkFormatFeatureFlags(
             formatProperties.features[depthFormatIdx][tilingIdx]);
 
-        if (depthFlags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT)
+        if ((depthFlags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0)
         {
             retFlags |= (depthFlags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT);
         }
-    }
 
-    const uint32_t minMaxFeatureBits = VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
-
-    // Handle the various special cases for Min\Max Image Filtering support
-    if ((retFlags & minMaxFeatureBits) != 0)
-    {
-        const auto& info = Pal::Formats::FormatInfoTable[static_cast<size_t>(swizzledFormat.format)];
-
-        // min/max filtering is supported only for single-component formats unless multiChannelMinMaxFilter == true
-        // Depth-stencil is considered a single-component format because stencil and depth are separate, single
-        // channel images and in Hw, you can only sample from one of them at a time.
-        bool supported = (info.componentCount == 1)             ||
-                         Formats::IsDepthStencilFormat(format)  ||
-                         (multiChannelMinMaxFilter == true);
-
-        if ((Formats::IsDepthStencilFormat(format) == false) &&
-            ((info.numericSupport == Pal::Formats::NumericSupportFlags::Uint) ||
-             (info.numericSupport == Pal::Formats::NumericSupportFlags::Sint)))
+        // According to the Vulkan Spec (section 32.2.0)
+        // Re: VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT - If the format is a depth / stencil format,
+        // this bit only indicates that the depth aspect(not the stencil aspect) of an image of this format
+        // supports min/max filtering.
+        if ((depthFlags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT) != 0)
         {
-            // TODO: Disable Uint and Sint via Pal.
-            supported = false;
-        }
-
-        if (supported == false)
-        {
-            retFlags &= ~minMaxFeatureBits;
+            retFlags |= VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT;
         }
     }
 
@@ -586,7 +568,13 @@ VkResult PhysicalDevice::Initialize()
         PopulateGpaProperties();
     }
 
-    return PalToVkResult(result);
+    VkResult vkResult = PalToVkResult(result);
+    if (vkResult == VK_SUCCESS)
+    {
+        vkResult = m_compiler.Initialize();
+    }
+
+    return vkResult;
 }
 
 // =====================================================================================================================
@@ -648,7 +636,7 @@ void PhysicalDevice::PopulateFormatProperties()
     Pal::MergedFormatPropertiesTable fmtProperties = {};
     m_pPalDevice->GetFormatProperties(&fmtProperties);
 
-    const bool multiChannelMinMaxFilter = m_properties.gfxipProperties.flags.supportPerChannelMinMaxFilter != 0;
+    const bool multiChannelMinMaxFilter = IsPerChannelMinMaxFilteringSupported();
 
     for (uint32_t i = 0; i < VK_SUPPORTED_FORMAT_COUNT; i++)
     {
@@ -732,6 +720,7 @@ void PhysicalDevice::LateInitialize()
 // =====================================================================================================================
 VkResult PhysicalDevice::Destroy(void)
 {
+    m_compiler.Destroy();
     this->~PhysicalDevice();
 
     VkInstance()->FreeMem(ApiPhysicalDevice::FromObject(this));
@@ -1291,9 +1280,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 uint32_t PhysicalDevice::GetSupportedAPIVersion() const
 {
     // Currently all of our HW supports Vulkan 1.1
-    uint32_t apiVersion = VK_MAKE_VERSION(VULKAN_API_MAJOR_VERSION,
-                                          VULKAN_API_MINOR_VERSION,
-                                          VULKAN_API_BUILD_VERSION);
+    uint32_t apiVersion = (VK_API_VERSION_1_1 | VK_HEADER_VERSION);
 
     // For sanity check we do at least want to make sure that all the necessary extensions are supported and exposed.
     // The spec does not require Vulkan 1.1 implementations to expose the corresponding 1.0 extensions, but we'll
@@ -1343,9 +1330,7 @@ VkResult PhysicalDevice::GetDeviceProperties(
 #ifdef ICD_VULKAN_1_1
     pProperties->apiVersion    = GetSupportedAPIVersion();
 #else
-    pProperties->apiVersion    = VK_MAKE_VERSION(VULKAN_API_MAJOR_VERSION,
-                                                 VULKAN_API_MINOR_VERSION,
-                                                 VULKAN_API_BUILD_VERSION);
+    pProperties->apiVersion    = (VK_API_VERSION_1_0 | VK_HEADER_VERSION);
 #endif
 
     // Radeon Settings UI diplays driverVersion using sizes 10.10.12 like apiVersion, but our driverVersion uses 10.22.
@@ -2461,7 +2446,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_RASTERIZATION_ORDER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DRAW_INDIRECT_COUNT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_NEGATIVE_VIEWPORT_HEIGHT));
-
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_BALLOT));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_VOTE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_STENCIL_EXPORT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_VIEWPORT_INDEX_LAYER));
 
@@ -2636,11 +2622,11 @@ void PhysicalDevice::PopulateQueueFamilies()
     }
 
     // Determine the queue family to PAL engine type mapping and populate its properties
-    for (uint32_t i = 0; i < Pal::EngineTypeCount; ++i)
+    for (uint32_t engineType = 0; engineType < Pal::EngineTypeCount; ++engineType)
     {
         // Only add queue families for PAL engine types that have at least one queue present and that supports some
         // functionality exposed in Vulkan.
-        const auto& engineProps = m_properties.engineProperties[i];
+        const auto& engineProps = m_properties.engineProperties[engineType];
 
         // Update supportedQueueFlags based on what is enabled, as well as specific engine properties.
         // In particular, sparse binding support requires the engine to support virtual memory remap.
@@ -2650,35 +2636,52 @@ void PhysicalDevice::PopulateQueueFamilies()
             supportedQueueFlags &= ~VK_QUEUE_SPARSE_BINDING_BIT;
         }
 
-        if ((engineProps.engineCount != 0) && ((vkQueueFlags[i] & supportedQueueFlags) != 0))
+        if ((engineProps.engineCount != 0) && ((vkQueueFlags[engineType] & supportedQueueFlags) != 0))
         {
-            m_queueFamilies[m_queueFamilyCount].palEngineType = static_cast<Pal::EngineType>(i);
+            m_queueFamilies[m_queueFamilyCount].palEngineType = static_cast<Pal::EngineType>(engineType);
 
             const Pal::QueueType primaryQueueType = palQueueTypes[GetQueueFamilyPalEngineType(m_queueFamilyCount)];
             VK_ASSERT((engineProps.queueSupport & (1 << primaryQueueType)) != 0);
             m_queueFamilies[m_queueFamilyCount].palQueueType = primaryQueueType;
 
             uint32_t palImageLayoutFlag = 0;
-            switch (i)
+            uint32_t transferGranularityOverride = 0;
+
+            switch (engineType)
             {
-            case Pal::EngineTypeUniversal:        palImageLayoutFlag = Pal::LayoutUniversalEngine;     break;
-            case Pal::EngineTypeCompute:          palImageLayoutFlag = Pal::LayoutComputeEngine;       break;
-            case Pal::EngineTypeExclusiveCompute: palImageLayoutFlag = Pal::LayoutComputeEngine;       break;
-            case Pal::EngineTypeDma:              palImageLayoutFlag = Pal::LayoutDmaEngine;           break;
-            default: break; // no-op
+            case Pal::EngineTypeUniversal:
+                palImageLayoutFlag          = Pal::LayoutUniversalEngine;
+                transferGranularityOverride = m_settings.transferGranularityUniversalOverride;
+                break;
+            case Pal::EngineTypeCompute:
+            case Pal::EngineTypeExclusiveCompute:
+                palImageLayoutFlag          = Pal::LayoutComputeEngine;
+                transferGranularityOverride = m_settings.transferGranularityComputeOverride;
+                break;
+            case Pal::EngineTypeDma:
+                palImageLayoutFlag          = Pal::LayoutDmaEngine;
+                transferGranularityOverride = m_settings.transferGranularityDmaOverride;
+                break;
+            default:
+                break; // no-op
             }
 
             m_queueFamilies[m_queueFamilyCount].palImageLayoutFlag = palImageLayoutFlag;
 
-            VkQueueFamilyProperties& queueFamilyProps = m_queueFamilies[m_queueFamilyCount].properties;
+            VkQueueFamilyProperties* pQueueFamilyProps     = &m_queueFamilies[m_queueFamilyCount].properties;
 
-            queueFamilyProps.queueFlags = (vkQueueFlags[i] & supportedQueueFlags);
+            pQueueFamilyProps->queueFlags                  = (vkQueueFlags[engineType] & supportedQueueFlags);
+            pQueueFamilyProps->queueCount                  = engineProps.engineCount;
+            pQueueFamilyProps->timestampValidBits          = (engineProps.flags.supportsTimestamps != 0) ? 64 : 0;
+            pQueueFamilyProps->minImageTransferGranularity = PalToVkExtent3d(engineProps.minTiledImageCopyAlignment);
 
-            queueFamilyProps.queueCount = engineProps.engineCount;
-
-            queueFamilyProps.timestampValidBits = (engineProps.flags.supportsTimestamps != 0) ? 64 : 0;
-
-            queueFamilyProps.minImageTransferGranularity = PalToVkExtent3d(engineProps.minTiledImageCopyAlignment);
+            // Override reported transfer granularity via panel setting
+            if ((transferGranularityOverride & 0xf0000000) != 0)
+            {
+                pQueueFamilyProps->minImageTransferGranularity.width  = ((transferGranularityOverride >> 0)  & 0xff);
+                pQueueFamilyProps->minImageTransferGranularity.height = ((transferGranularityOverride >> 8)  & 0xff);
+                pQueueFamilyProps->minImageTransferGranularity.depth  = ((transferGranularityOverride >> 16) & 0xff);
+            }
 
             m_queueFamilyCount++;
         }
@@ -3055,7 +3058,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceSubgroupProperties*                      pSubgroupProperties;
 #endif
         VkPhysicalDeviceExternalMemoryHostPropertiesEXT*         pExternalMemoryHostProperties;
-        VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*        pSamplerFilterMinmaxPropertiesEXT;
+        VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*        pMinMaxProperties;
         VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
     };
 
@@ -3137,7 +3140,9 @@ void PhysicalDevice::GetDeviceProperties2(
                                                        VK_SHADER_STAGE_GEOMETRY_BIT |
                                                        VK_SHADER_STAGE_FRAGMENT_BIT |
                                                        VK_SHADER_STAGE_COMPUTE_BIT;
-            pSubgroupProperties->supportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT;
+            pSubgroupProperties->supportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
+                                                       VK_SUBGROUP_FEATURE_VOTE_BIT |
+                                                       VK_SUBGROUP_FEATURE_BALLOT_BIT;
             pSubgroupProperties->quadOperationsInAllStages = VK_TRUE;
 
             break;
@@ -3146,8 +3151,8 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT:
         {
-            pSamplerFilterMinmaxPropertiesEXT->filterMinmaxImageComponentMapping  = VK_FALSE;
-            pSamplerFilterMinmaxPropertiesEXT->filterMinmaxSingleComponentFormats = VK_TRUE;
+            pMinMaxProperties->filterMinmaxImageComponentMapping  = IsPerChannelMinMaxFilteringSupported();
+            pMinMaxProperties->filterMinmaxSingleComponentFormats = VK_TRUE;
             break;
         }
 

@@ -33,9 +33,7 @@
 #include "SPIRVInternal.h"
 #include "llpcCompiler.h"
 #include "llpcGfx6Chip.h"
-#ifdef LLPC_BUILD_GFX9
 #include "llpcGfx9Chip.h"
-#endif
 #include "llpcGraphicsContext.h"
 
 #include "llpcInternal.h"
@@ -80,13 +78,11 @@ GraphicsContext::GraphicsContext(
     m_tessOffchip(cl::EnableTessOffChip),
     m_gsOnChip(false)
 {
-#ifdef LLPC_BUILD_GFX9
     if (gfxIp.major >= 9)
     {
         // For GFX9+, always enable tessellation off-chip mode
         m_tessOffchip = true;
     }
-#endif
 
     const PipelineShaderInfo* shaderInfo[ShaderStageGfxCount] =
     {
@@ -124,12 +120,10 @@ GraphicsContext::GraphicsContext(
 // =====================================================================================================================
 GraphicsContext::~GraphicsContext()
 {
-#ifdef LLPC_BUILD_GFX9
     for (auto pAllocNodes : m_allocUserDataNodes)
     {
         delete pAllocNodes;
     }
-#endif
 }
 
 // =====================================================================================================================
@@ -500,7 +494,6 @@ bool GraphicsContext::CheckGsOnChipValidity()
     }
     else
     {
-#ifdef LLPC_BUILD_GFX9
         uint32_t gsPrimsPerSubgroup = m_pGpuProperty->gsOnChipDefaultPrimsPerSubgroup;
 
         // NOTE: Make esGsItemSize odd by "| 1", to optimize ES -> GS ring layout for LDS bank conflicts
@@ -597,9 +590,6 @@ bool GraphicsContext::CheckGsOnChipValidity()
 
         // TODO: GFX9 GS -> VS ring on chip is not supported yet
         gsOnChip = false;
-#else
-        LLPC_NOT_IMPLEMENTED();
-#endif
     }
 
     LLPC_OUTS("===============================================================================\n");
@@ -626,7 +616,6 @@ bool GraphicsContext::CheckGsOnChipValidity()
     return gsOnChip;
 }
 
-#ifdef LLPC_BUILD_GFX9
 // =====================================================================================================================
 // Does user data node merging for merged shader
 void GraphicsContext::DoUserDataNodeMerge()
@@ -842,6 +831,5 @@ void GraphicsContext::MergeUserDataNode(
     *pMergedNodeCount = mergedNodeCount;
     *ppMergedNodes = pMergedNodes;
 }
-#endif
 
 } // Llpc

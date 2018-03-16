@@ -670,10 +670,8 @@ public:
     // Enables GS on-chip mode
     virtual void SetGsOnChip(bool gsOnChip) = 0;
 
-#ifdef LLPC_BUILD_GFX9
     // Does user data node merge for merged shader
     virtual void DoUserDataNodeMerge() = 0;
-#endif
 
     const char* GetGpuNameString() const;
     const char* GetGpuNameAbbreviation() const;

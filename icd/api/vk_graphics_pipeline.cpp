@@ -101,7 +101,6 @@ void GraphicsPipeline::BuildRasterizationState(
     };
 
     // By default rasterization is disabled, unless rasterization creation info is present
-    pInfo->pipelineLlpc.rsState.rasterizerDiscardEnable = true;
 
     const VkPhysicalDeviceLimits& limits = pDevice->VkPhysicalDevice()->GetLimits();
 
@@ -116,9 +115,6 @@ void GraphicsPipeline::BuildRasterizationState(
             {
                 pInfo->pipeline.rsState.depthClampDisable = (pRs->depthClampEnable == VK_FALSE);
                 // When depth clamping is enabled, depth clipping should be disabled, and vice versa
-                pInfo->pipelineLlpc.vpState.depthClipEnable         = (pRs->depthClampEnable == VK_FALSE);
-                pInfo->pipelineLlpc.rsState.rasterizerDiscardEnable = (pRs->rasterizerDiscardEnable != VK_FALSE);
-
                 pInfo->immedInfo.triangleRasterState.fillMode  = VkToPalFillMode(pRs->polygonMode);
                 pInfo->immedInfo.triangleRasterState.cullMode  = VkToPalCullMode(pRs->cullMode);
                 pInfo->immedInfo.triangleRasterState.frontFace = VkToPalFaceOrientation(pRs->frontFace);
@@ -208,21 +204,19 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
     if (pGraphicsPipelineCreateInfo != nullptr)
     {
-        pInfo->activeStageCount = pGraphicsPipelineCreateInfo->stageCount;
-        pInfo->pActiveStages    = pGraphicsPipelineCreateInfo->pStages;
-
+        for (uint32_t i = 0; i < pGraphicsPipelineCreateInfo->stageCount; ++i)
+        {
+            pInfo->activeStages = static_cast<VkShaderStageFlagBits>(
+                pInfo->activeStages | pGraphicsPipelineCreateInfo->pStages[i].stage);
+        }
         VK_IGNORE(pGraphicsPipelineCreateInfo->flags & VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT);
 
         pRenderPass = RenderPass::ObjectFromHandle(pGraphicsPipelineCreateInfo->renderPass);
-
-        pInfo->isMultiviewEnabled = pRenderPass->IsMultiviewEnabled();
 
         if (pGraphicsPipelineCreateInfo->layout != VK_NULL_HANDLE)
         {
             pInfo->pLayout = PipelineLayout::ObjectFromHandle(pGraphicsPipelineCreateInfo->layout);
         }
-
-        pInfo->pVertexInput = pGraphicsPipelineCreateInfo->pVertexInputState;
 
         const VkPipelineInputAssemblyStateCreateInfo* pIa = pGraphicsPipelineCreateInfo->pInputAssemblyState;
 
@@ -239,35 +233,16 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             &pInfo->pipeline.iaState.topologyInfo.primitiveType,
             &pInfo->pipeline.iaState.topologyInfo.adjacency);
 
-        pInfo->pipelineLlpc.iaState.topology           = pIa->topology;
-        pInfo->pipelineLlpc.iaState.disableVertexReuse = false;
-
-        EXTRACT_VK_STRUCTURES_1(
+        EXTRACT_VK_STRUCTURES_0(
             Tess,
             PipelineTessellationStateCreateInfo,
-            PipelineTessellationDomainOriginStateCreateInfoKHR,
             pGraphicsPipelineCreateInfo->pTessellationState,
-            PIPELINE_TESSELLATION_STATE_CREATE_INFO,
-            PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO_KHR)
+            PIPELINE_TESSELLATION_STATE_CREATE_INFO)
 
             if (pPipelineTessellationStateCreateInfo != nullptr)
             {
                 pInfo->pipeline.iaState.topologyInfo.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
-
-                pInfo->pipelineLlpc.iaState.patchControlPoints = pInfo->pipeline.iaState.topologyInfo.patchControlPoints;
             }
-
-        if (pPipelineTessellationDomainOriginStateCreateInfoKHR)
-        {
-            // Vulkan 1.0 incorrectly specified the tessellation u,v coordinate origin as lower left even though
-            // framebuffer and image coordinate origins are in the upper left.  This has since been fixed, but
-            // an extension exists to use the previous behavior.  Doing so with flat shading would likely appear
-            // incorrect, but Vulkan specifies that the provoking vertex is undefined when tessellation is active.
-            if (pPipelineTessellationDomainOriginStateCreateInfoKHR->domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT_KHR)
-            {
-                pInfo->pipelineLlpc.iaState.switchWinding = true;
-            }
-        }
 
         pInfo->immedInfo.staticStateMask = 0;
 
@@ -313,12 +288,16 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             {
                 VK_ASSERT(pVp->pViewports != nullptr);
 
+                const bool khrMaintenance1 =
+                    ((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
+                     pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1));
+
                 for (uint32_t i = 0; i < pVp->viewportCount; ++i)
                 {
                     VkToPalViewport(
                         pVp->pViewports[i],
                         i,
-                        pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1),
+                        khrMaintenance1,
                         &pInfo->immedInfo.viewportParams);
                 }
 
@@ -410,14 +389,6 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                     pInfo->msaa.pixelShaderSamples = 1;
                 }
 
-                pInfo->pipelineLlpc.rsState.numSamples = rasterizationSampleCount;
-
-                // NOTE: The sample pattern index here is actually the offset of sample position pair. This is
-                // different from the field of creation info of image view. For image view, the sample pattern
-                // index is really table index of the sample pattern.
-                pInfo->pipelineLlpc.rsState.samplePatternIdx =
-                    Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
-
                 pInfo->msaa.depthStencilSamples = subpassDepthSampleCount;
                 pInfo->msaa.shaderExportMaskSamples = subpassCoverageSampleCount;
                 pInfo->msaa.sampleMask = (pMs->pSampleMask != nullptr)
@@ -476,7 +447,6 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             }
 
             pInfo->pipeline.cbState.alphaToCoverageEnable     = (pMs->alphaToCoverageEnable == VK_TRUE);
-            pInfo->pipelineLlpc.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE);
         }
 
         const VkPipelineColorBlendStateCreateInfo* pCb = pGraphicsPipelineCreateInfo->pColorBlendState;
@@ -500,7 +470,6 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
 
                 auto pCbDst     = &pInfo->pipeline.cbState.target[i];
-                auto pLlpcCbDst = &pInfo->pipelineLlpc.cbState.target[i];
                 auto pBlendDst  = &pInfo->blend.targets[i];
 
                 if (pRenderPass)
@@ -515,20 +484,10 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 if (pCbDst->swizzledFormat.format != Pal::ChNumFormat::Undefined)
                 {
                     pCbDst->channelWriteMask         = src.colorWriteMask;
-                    pLlpcCbDst->format               = cbFormat[i];
-                    pLlpcCbDst->blendEnable          = (src.blendEnable == VK_TRUE);
-                    pLlpcCbDst->blendSrcAlphaToColor = IsSrcAlphaUsedInBlend(src.srcAlphaBlendFactor) ||
-                                                       IsSrcAlphaUsedInBlend(src.dstAlphaBlendFactor) ||
-                                                       IsSrcAlphaUsedInBlend(src.srcColorBlendFactor) ||
-                                                       IsSrcAlphaUsedInBlend(src.dstColorBlendFactor);
-                    blendingEnabled |= pLlpcCbDst->blendEnable;
-                }
-                else
-                {
-                    pLlpcCbDst->blendEnable = false;
+                    blendingEnabled |= (src.blendEnable == VK_TRUE);
                 }
 
-                pBlendDst->blendEnable    = pLlpcCbDst->blendEnable;
+                pBlendDst->blendEnable    = (src.blendEnable == VK_TRUE);
                 pBlendDst->srcBlendColor  = VkToPalBlend(src.srcColorBlendFactor);
                 pBlendDst->dstBlendColor  = VkToPalBlend(src.dstColorBlendFactor);
                 pBlendDst->blendFuncColor = VkToPalBlendFunc(src.colorBlendOp);
@@ -544,7 +503,6 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         }
 
         pInfo->pipeline.cbState.dualSourceBlendEnable     = dualSourceBlend;
-        pInfo->pipelineLlpc.cbState.dualSourceBlendEnable = dualSourceBlend;
 
         if (blendingEnabled == true && dynamicStateFlags[VK_DYNAMIC_STATE_BLEND_CONSTANTS] == false)
         {
@@ -651,147 +609,6 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 }
 
 // =====================================================================================================================
-// Creates a graphics pipeline binary for each PAL device
-VkResult GraphicsPipeline::CreateGraphicsPipelineBinaries(
-    Device*                             pDevice,
-    PipelineCache*                      pPipelineCache,
-    CreateInfo*                         pInfo,
-    VbBindingInfo*                      pVbInfo,
-    size_t                              pipelineBinarySizes[MaxPalDevices],
-    void*                               pPipelineBinaries[MaxPalDevices])
-{
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-
-    VkResult result         = VK_SUCCESS;
-    void*    pMappingBuffer = nullptr;
-
-    // Allocate space to create the LLPC/SCPC pipeline resource mappings
-    if (pInfo->pLayout != nullptr)
-    {
-        size_t tempBufferSize = pInfo->pLayout->GetPipelineInfo()->tempBufferSize;
-
-        // Allocate the temp buffer
-        if (tempBufferSize > 0)
-        {
-            pMappingBuffer = pDevice->VkInstance()->AllocMem(
-                tempBufferSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-            if (pMappingBuffer == nullptr)
-            {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-            }
-        }
-    }
-
-    bool enableLlpc = false;
-
-    if (result == VK_SUCCESS)
-    {
-        // Build the LLPC pipeline
-        Llpc::GraphicsPipelineBuildOut pipelineOut         = {};
-        void*                          pLlpcPipelineBuffer = nullptr;
-        {
-            Llpc::PipelineShaderInfo* shaderInfos[] =
-            {
-                &pInfo->pipelineLlpc.vs,
-                &pInfo->pipelineLlpc.tcs,
-                &pInfo->pipelineLlpc.tes,
-                &pInfo->pipelineLlpc.gs,
-                &pInfo->pipelineLlpc.fs
-            };
-
-            // Apply patches
-            pInfo->pipelineLlpc.pInstance      = pDevice->VkPhysicalDevice()->VkInstance();
-            pInfo->pipelineLlpc.pfnOutputAlloc = AllocateShaderOutput;
-            pInfo->pipelineLlpc.pUserData      = &pLlpcPipelineBuffer;
-            pInfo->pipelineLlpc.pVertexInput   = pInfo->pVertexInput;
-
-            pInfo->pipelineLlpc.iaState.enableMultiView = pInfo->pipeline.viewInstancingDesc.enableMasking;
-            pInfo->pipelineLlpc.rsState.perSampleShading   = (pInfo->msaa.pixelShaderSamples > 1);
-
-            for (uint32_t stage = 0; stage < pInfo->activeStageCount; ++stage)
-            {
-                auto pStage      = &pInfo->pActiveStages[stage];
-                auto pShader     = ShaderModule::ObjectFromHandle(pStage->module);
-                auto shaderStage = ShaderFlagBitToStage(pStage->stage);
-                auto pShaderInfo = shaderInfos[shaderStage];
-
-                pShaderInfo->pModuleData         = pShader->GetShaderData(true);
-                pShaderInfo->pSpecializatonInfo  = pStage->pSpecializationInfo;
-                pShaderInfo->pEntryTarget        = pStage->pName;
-
-                // Build the resource mapping description for LLPC.  This data contains things about how shader
-                // inputs like descriptor set bindings are communicated to this pipeline in a form that LLPC can
-                // understand.
-                if (pInfo->pLayout != nullptr)
-                {
-                    const bool vertexShader = (shaderStage == ShaderStageVertex);
-                    result = pInfo->pLayout->BuildLlpcPipelineMapping(
-                        shaderStage,
-                        pMappingBuffer,
-                        vertexShader ? pInfo->pVertexInput : nullptr,
-                        pShaderInfo,
-                        vertexShader ? pVbInfo : nullptr);
-                }
-            }
-        }
-
-        uint64_t pipeHash = 0;
-        enableLlpc = true;
-
-        if (result == VK_SUCCESS)
-        {
-            if (enableLlpc)
-            {
-                if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCacheType() == PipelineCacheTypeLlpc))
-                {
-                    pInfo->pipelineLlpc.pShaderCache = pPipelineCache->GetShaderCache(DefaultDeviceIndex).pLlpcShaderCache;
-                }
-                Llpc::Result llpcResult = pDevice->GetLlpcCompiler()->BuildGraphicsPipeline(&pInfo->pipelineLlpc, &pipelineOut);
-                if (llpcResult != Llpc::Result::Success)
-                {
-                    // There shouldn't be anything to free for the failure case
-                    VK_ASSERT(pLlpcPipelineBuffer == nullptr);
-
-                    {
-                        result = VK_ERROR_INITIALIZATION_FAILED;
-                    }
-                }
-            }
-            else
-            if (settings.enablePipelineDump)
-            {
-                // LLPC isn't enabled but pipeline dump is required, call LLPC dump interface explicitly
-                void* pHandle = Llpc::IPipelineDumper::BeginPipelineDump(settings.pipelineDumpDir, nullptr, &pInfo->pipelineLlpc);
-                Llpc::IPipelineDumper::EndPipelineDump(pHandle);
-            }
-
-            if (enableLlpc)
-            {
-                if (result == VK_SUCCESS)
-                {
-                    // Make sure that this is the same pointer we will free once the PAL pipeline is created
-                    VK_ASSERT(pLlpcPipelineBuffer == pipelineOut.pipelineBin.pCode);
-
-                    // Update pipeline create info with the pipeline binary
-                    pPipelineBinaries[DefaultDeviceIndex]   = pLlpcPipelineBuffer;
-                    pipelineBinarySizes[DefaultDeviceIndex] = pipelineOut.pipelineBin.codeSize;
-                }
-            }
-        }
-    }
-
-    if (pMappingBuffer != nullptr)
-    {
-        pDevice->VkInstance()->FreeMem(pMappingBuffer);
-    }
-
-    return result;
-}
-
-// =====================================================================================================================
 // Create a graphics pipeline object.
 VkResult GraphicsPipeline::Create(
     Device*                                 pDevice,
@@ -803,21 +620,30 @@ VkResult GraphicsPipeline::Create(
     // Parse the create info and build patched AMDIL shaders
     CreateInfo    createInfo                         = {};
     VbBindingInfo vbInfo                             = {};
+    PipelineCompiler::GraphicsPipelineCreateInfo binaryCreateInfo = {};
     size_t        pipelineBinarySizes[MaxPalDevices] = {};
-    void*         pPipelineBinaries[MaxPalDevices]   = {};
+    const void*   pPipelineBinaries[MaxPalDevices]   = {};
     Pal::Result   palResult                          = Pal::Result::Success;
+    PipelineCompiler*     pDefaultCompiler = pDevice->GetCompiler();
 
-    ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &createInfo);
-
-    VkResult result = CreateGraphicsPipelineBinaries(
-        pDevice,
-        pPipelineCache,
-        &createInfo,
-        &vbInfo,
-        pipelineBinarySizes,
-        pPipelineBinaries);
-
+    VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo);
     const uint32_t numPalDevices = pDevice->NumPalDevices();
+    for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices); ++i)
+    {
+        result = pDevice->GetCompiler(i)->CreateGraphicsPipelineBinary(
+        pDevice,
+        i,
+        pPipelineCache,
+        &binaryCreateInfo,
+        &pipelineBinarySizes[i],
+        &pPipelineBinaries[i]);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &createInfo);
+
+    }
 
     RenderStateCache* pRSCache = pDevice->GetRenderStateCache();
 
@@ -934,7 +760,7 @@ VkResult GraphicsPipeline::Create(
 
     const bool viewIndexFromDeviceIndex = Util::TestAnyFlagSet(
         pCreateInfo->flags,
-        VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
+        VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT_KHX);
 
     // On success, wrap it up in a Vulkan object.
     if (result == VK_SUCCESS)
@@ -960,11 +786,11 @@ VkResult GraphicsPipeline::Create(
     {
         if (pPipelineBinaries[deviceIdx] != nullptr)
         {
-            {
-                pDevice->VkInstance()->FreeMem(pPipelineBinaries[deviceIdx]);
-            }
+            pDevice->GetCompiler(deviceIdx)->FreeGraphicsPipelineBinary(
+                &binaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
         }
     }
+    pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfo);
 
     if (result != VK_SUCCESS)
     {

@@ -41,9 +41,7 @@
 #include "llpcDebug.h"
 #include "llpcElf.h"
 #include "llpcGfx6Chip.h"
-#ifdef LLPC_BUILD_GFX9
 #include "llpcGfx9Chip.h"
-#endif
 #include "llpcInternal.h"
 #include "llpcMetroHash.h"
 

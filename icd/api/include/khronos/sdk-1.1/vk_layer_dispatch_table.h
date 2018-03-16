@@ -499,6 +499,9 @@ typedef struct VkLayerDispatchTable_ {
 
     // ---- VK_EXT_external_memory_host extension commands
     PFN_vkGetMemoryHostPointerPropertiesEXT GetMemoryHostPointerPropertiesEXT;
+
+    // ---- VK_AMD_buffer_marker extension commands
+    PFN_vkCmdWriteBufferMarkerAMD CmdWriteBufferMarkerAMD;
 } VkLayerDispatchTable;
 
 

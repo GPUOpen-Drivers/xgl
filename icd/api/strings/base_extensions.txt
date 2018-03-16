@@ -48,6 +48,7 @@ VK_AMD_texture_gather_bias_lod
 VK_AMD_mixed_attachment_samples
 VK_EXT_debug_marker
 VK_AMD_gpu_shader_int16
+VK_EXT_shader_subgroup_ballot
 VK_EXT_shader_subgroup_vote
 VK_KHR_16bit_storage
 VK_KHR_storage_buffer_storage_class

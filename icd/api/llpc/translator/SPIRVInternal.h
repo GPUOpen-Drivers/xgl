@@ -346,7 +346,8 @@ namespace kSPIRVName {
 }
 
 namespace gSPIRVName {
-  const static char ImageCallPrefix[]                     = "spirv.image.";
+  const static char ImageCallPrefix[]                     = "spirv.image";
+  const static char ImageCallModSparse[]                  = "sparse";
   const static char ImageCallModDref[]                    = ".dref";
   const static char ImageCallModProj[]                    = ".proj";
   const static char ImageCallModBias[]                    = ".bias";

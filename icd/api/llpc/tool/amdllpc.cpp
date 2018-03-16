@@ -1149,8 +1149,7 @@ int32_t main(
                 // Translate LLVM module to LLVM bitcode
                 llvm::SmallString<1024> bitcodeBuf;
                 raw_svector_ostream bitcodeStream(bitcodeBuf);
-                WriteBitcodeToFile(pModule.get(), bitcodeStream);
-
+                WriteBitcodeToFile(*pModule.get(), bitcodeStream);
                 void* pCode = new uint8_t[bitcodeBuf.size()];
                 memcpy(pCode, bitcodeBuf.data(), bitcodeBuf.size());
                 compileInfo.spirvBin[shaderStage].codeSize = bitcodeBuf.size();

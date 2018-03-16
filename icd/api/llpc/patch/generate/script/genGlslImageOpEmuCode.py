@@ -40,7 +40,9 @@ LLVM_ATTRIBUTES = \
 LLVM_DECLS = {}
 
 # Image opcode traits are encoded in function name using these tokens
-SPIRV_IMAGE_PREFIX                          = "llpc.image"
+SPIRV_IMAGE_PREFIX                          = "llpc"
+SPIRV_IMAGE_MODIFIER                        = "image"
+SPIRV_IMAGE_SPARSE_MODIFIER                 = "sparse"
 SPIRV_IMAGE_OPERAND_DREF_MODIFIER           = "dref"
 SPIRV_IMAGE_OPERAND_PROJ_MODIFIER           = "proj"
 SPIRV_IMAGE_OPERAND_BIAS_MODIFIER           = "bias"
@@ -259,7 +261,8 @@ class FuncDef(object):
         self._cubeId            = other._cubeId
         self._atomicData        = other._atomicData
 
-        self._lzOptimization    = other._lzOptimization
+        self._supportLzOptimization    = other._supportLzOptimization
+        self._supportSparse     = other._supportSparse
         self._mangledName       = other._mangledName
         pass
 
@@ -303,7 +306,8 @@ class FuncDef(object):
 
         # For zero-LOD optimization, will generate 2 version of function, a lz optimized version which uses
         # zero-LOD instruction, and a normal version uses lod instruction.
-        self._lzOptimization    = (mangledName.find(SPIRV_IMAGE_OPERAND_LODLODZ_MODIFIER) != -1)
+        self._supportLzOptimization    = (mangledName.find(SPIRV_IMAGE_OPERAND_LODLODZ_MODIFIER) != -1)
+        self._supportSparse     = (mangledName.find(SPIRV_IMAGE_SPARSE_MODIFIER) != -1)
         self._mangledName       = mangledName
         pass
 
@@ -312,13 +316,13 @@ class FuncDef(object):
         # Gets each image opcode trait token from function's mangled name
         tokens         = self._mangledName.split('.')
         # Parses SpirvImageOpKind
-        opKind         = tokens[1]
+        opKind         = tokens[2]
         assert opKind in SPIRV_IMAGE_INST_KIND_DICT, "Error: " + self._mangledName
         self._opKind = SPIRV_IMAGE_INST_KIND_DICT[opKind]
         self._attr = SPIRV_IMAGE_INST_KIND_ATTR_DICT[self._opKind]
 
         # Parses dimension
-        dimName        = tokens[2]
+        dimName        = tokens[3]
         arrayed        = False
         if dimName.find(SPIRV_IMAGE_ARRAY_MODIFIER) != -1:
             arrayed    = True
@@ -328,7 +332,7 @@ class FuncDef(object):
         self._arrayed       = arrayed
 
         # Parses other traits
-        for t in tokens[3:]:
+        for t in tokens[4:]:
             if t == SPIRV_IMAGE_OPERAND_DREF_MODIFIER:
                 self._hasDref           = True
             elif t == SPIRV_IMAGE_OPERAND_PROJ_MODIFIER:
@@ -400,10 +404,29 @@ class CodeGen(FuncDef):
         self._gfxLevel = gfxLevel
         pass
 
-    # Generates image function implementation, will detect zero-LOD optimization and generate both normal
-    # and optimized version.
+    # Start code generation
     def gen(self, irOut):
-        if self._lzOptimization:
+        self._genWithSparse(irOut)
+        pass
+
+    # Generate both normal and sparse version
+    def _genWithSparse(self, irOut):
+        if self._supportSparse:
+            # Generate sparse version
+            codeGen = CodeGen(self, self._gfxLevel)
+            codeGen._genWithLzOptimization(irOut)
+
+            # Turn off sparse support
+            self._supportSparse = False
+
+        # Generate normal version
+        codeGen = CodeGen(self, self._gfxLevel)
+        codeGen._genWithLzOptimization(irOut)
+        pass
+
+    # Generate both normal and zero-LOD optimized version
+    def _genWithLzOptimization(self, irOut):
+        if self._supportLzOptimization:
             # Generate zero-LOD optimized version
             self._mangledName = self._mangledName.replace(SPIRV_IMAGE_OPERAND_LODLODZ_MODIFIER,
                                                           SPIRV_IMAGE_OPERAND_LODZ_MODIFIER)
@@ -411,21 +434,21 @@ class CodeGen(FuncDef):
             codeGen._genInternal(irOut)
 
             # Turn off zero-LOD optimization
-            self._lzOptimization = False
+            self._supportLzOptimization = False
             self._mangledName = self._mangledName.replace(SPIRV_IMAGE_OPERAND_LODZ_MODIFIER,
                                                           SPIRV_IMAGE_OPERAND_LOD_MODIFIER)
-
+        # Generate normal version
         codeGen = CodeGen(self, self._gfxLevel)
         codeGen._genInternal(irOut)
         pass
 
     # Generates image function implementation.
     def _genInternal(self, irOut):
-        retType = self._opKind == SpirvImageOpKind.write and "void" or self.getReturnType()
+        retType = self._supportSparse and self.getSparseReturnType(self.getReturnType()) or self.getReturnType()
         irFuncDef = "define %s @%s(%s) %s\n" % (retType,
-                                                 self.getFunctionName(),
-                                                 self.getParamList(),
-                                                 self._attr)
+                                                self.getFunctionName(),
+                                                self.getParamList(),
+                                                self._attr)
         irOut.write(irFuncDef)
         irOut.write('{\n')
         self.genLoadSamplerAndResource(irOut)
@@ -478,31 +501,46 @@ class CodeGen(FuncDef):
 
     # Gets return type of image operation, which is type of texel.
     def getReturnType(self):
-        if self.isAtomicOp():
-            return self._sampledType == SpirvSampledType.f32 and "float" or "i32"
+        ret = "void"
+        if self._opKind == SpirvImageOpKind.write:
+            pass
+        elif self.isAtomicOp():
+            ret = self._sampledType == SpirvSampledType.f32 and "float" or "i32"
         elif self._opKind == SpirvImageOpKind.querylod:
-            return "<2 x float>"
+            ret = "<2 x float>"
         elif self._hasDref and self._opKind != SpirvImageOpKind.gather:
             assert self._sampledType == SpirvSampledType.f32
-            return "float"
+            ret = "float"
         else:
             if self._sampledType == SpirvSampledType.f32:
-                return "<4 x float>"
+                ret = "<4 x float>"
             elif self._sampledType == SpirvSampledType.i32:
-                return "<4 x i32>"
+                ret = "<4 x i32>"
             elif self._sampledType == SpirvSampledType.u32:
-                return "<4 x i32>"
+                ret = "<4 x i32>"
             else:
                 shouldNeverCall()
+
+        return ret
+
+    def getSparseReturnType(self, dataReturnType):
+        assert self._supportSparse
+        return "{ i32, %s }" % (dataReturnType)
 
     # Gets image function name.
     def getFunctionName(self):
         tokens = self._mangledName.split('.')
-        tokens[0] = SPIRV_IMAGE_PREFIX
-        assert tokens[2].startswith(SPIRV_IMAGE_DIM_PREFIX)
-        tokens[2] = tokens[2][len(SPIRV_IMAGE_DIM_PREFIX):]
+        assert tokens[0] == SPIRV_IMAGE_PREFIX
+        assert tokens[3].startswith(SPIRV_IMAGE_DIM_PREFIX)
+
+        # Setup image sparse modifier in function name
+        tokens[1] = self._supportSparse and SPIRV_IMAGE_MODIFIER + SPIRV_IMAGE_SPARSE_MODIFIER \
+                                        or  SPIRV_IMAGE_MODIFIER
+
+        # Remove dim prefix in function name
+        tokens[3] = tokens[3][len(SPIRV_IMAGE_DIM_PREFIX):]
         sampledTypeName = rFind(SPIRV_SAMPLED_TYPE_DICT, self._sampledType)
-        tokens.insert(2, sampledTypeName)
+        tokens.insert(3, sampledTypeName)
         funcName = '.'.join(tokens)
 
         # For atomic operations, atomic.xxx has been changed to atomic_xxx to ease python process,
@@ -652,8 +690,21 @@ class CodeGen(FuncDef):
             irOut.write("    %s = extractelement %s %s, i32 0\n" % (retVal, \
                                                                     intrinGen.getBackendRetType(), \
                                                                     oldRetVal))
-        retType = self._opKind == SpirvImageOpKind.write and "void" or self.getReturnType()
-        irOut.write("    ret %s %s\n" % (retType, retVal))
+        retType = self.getReturnType()
+
+        if self._supportSparse:
+            # Return value of sparse instruction is struct
+            sparseRetType = self.getSparseReturnType(retType)
+            tempRetVal = self.acquireLocalVar()
+            irOut.write("    %s = insertvalue %s undef, i32 1, 0\n" % (tempRetVal, sparseRetType))
+            dataRetVal = retVal
+            retVal = self.acquireLocalVar()
+            irOut.write("    %s = insertvalue %s %s, %s %s, 1\n" % (retVal, sparseRetType, tempRetVal, retType, dataRetVal))
+            irOut.write("    ret %s %s\n" % (sparseRetType, retVal))
+            pass
+        else:
+            irOut.write("    ret %s %s\n" % (retType, retVal))
+            pass
 
     # Generates coordinate parameters.
     def genCoord(self, irOut):
@@ -1154,7 +1205,7 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
                 index += 1
                 irOut.write(ret[1])
 
-        if self._hasLod and not self._lzOptimization:
+        if self._hasLod and not self._supportLzOptimization:
             ret = self.getInsertElement(vaddrReg, vaddrRegType, vaddrRegCompType, self._lod, index)
             vaddrReg = ret[0]
             index += 1
@@ -1168,7 +1219,7 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
             size += 1
         if self._hasBias:
             size += 1
-        if self._hasLod and not self._lzOptimization:
+        if self._hasLod and not self._supportLzOptimization:
             size += 1
         if self._hasGrad:
             size += self.getCoordNumComponents(False, False, False) * 2
@@ -1839,9 +1890,9 @@ class ImageSampleGen(CodeGen):
 
         if self._hasBias:
             funcName += ".b"
-        elif self._hasLod and not self._lzOptimization:
+        elif self._hasLod and not self._supportLzOptimization:
             funcName += ".l"
-        elif self._hasLod and self._lzOptimization:
+        elif self._hasLod and self._supportLzOptimization:
             funcName += ".lz"
         elif self._hasGrad:
             funcName += ".d"
@@ -1870,7 +1921,11 @@ def processLine(irOut, funcConfig, gfxLevel):
     # A mangled function configuration looks like:
     # llpc.image.sample.Dim1D|2D|3D|Rect.proj.dref.bias.constoffset
     # Supported configuration tokens:   (All tokens must follow this order)
-    # 1.  One of:                                           (mandatory)
+    # 0.  llpc                                              (mandatory)
+    # 1.  image or image|sparse                             (mandatory)
+    #         image|sparse means sparse instruction is supported for this function, an additional sparse version
+    #         will be generated.
+    # 2.  One of:                                           (mandatory)
     #       sample
     #       fetch
     #       gather
@@ -1879,7 +1934,7 @@ def processLine(irOut, funcConfig, gfxLevel):
     #       write
     #       atomic.exchange
     #       atomic.compExchange
-    #       atomic_iincrement
+    #       atomic.iincrement
     #       atomic.idecrement
     #       atomic.iadd
     #       atomic.isub
@@ -1890,40 +1945,47 @@ def processLine(irOut, funcConfig, gfxLevel):
     #       atomic.and
     #       atomic.or
     #       atomic.xor
-    # 2.  Dimension string                                  (mandatory, see below)
-    # 3.  proj                                              (optional)
-    # 4.  dref                                              (optional)
-    # 5.  bias                                              (optional)
-    # 6.  lod                                               (optional)
-    # 7.  grad                                              (optional)
-    # 8.  constoffset                                       (optional)
-    # 9.  offset                                            (optional)
-    # 10. constoffsets                                      (optional)
-    # 11. sample                                            (optional)
-    # 12. minlod                                            (optional)
-    # 13. fmaskbased                                        (optional)
-    # 14. fmaskonly                                         (optional)
+    # 3.  Dimension string                                  (mandatory, see below)
+    # 4.  proj                                              (optional)
+    # 5.  dref                                              (optional)
+    # 6.  bias                                              (optional)
+    # 7.  lod or lod|lodz                                   (optional)
+    #         lod|lodz means lz optimization is enabled for this function, besides normal lod version, an additional
+    #         lodz version will also be generated, which leverages hardware lz instructions.
+    # 8.  grad                                              (optional)
+    # 9.  constoffset                                       (optional)
+    # 10.  offset                                            (optional)
+    # 11. constoffsets                                      (optional)
+    # 12. sample                                            (optional)
+    # 13. minlod                                            (optional)
+    # 14. fmaskbased                                        (optional)
+    # 15. fmaskonly                                         (optional)
     # Dimension string: All supported dimensions are packed in a dimension string, as a configuration token.
     # Dimension string format:
-    # Dim1D|2D|3D|1DArray|2DArray|Cube|CubeArray|Rect|Buffer
+    # Dim1D|2D|3D|1DArray|2DArray|Cube|CubeArray|Rect|Buffer|SubpassData
 
     print(">>>  %s" % (funcConfig))
-    assert funcConfig.startswith(SPIRV_IMAGE_PREFIX), "Error: " + funcConfig
 
     # For atomic operations, replace atomic.xxx to atomic_xxx to ease python process
     funcConfig = funcConfig.replace('atomic.', 'atomic_')
 
-    funcConfig = funcConfig[(len(SPIRV_IMAGE_PREFIX)):]
     mangledTokens  = funcConfig.split('.')
+    # check token 0
+    assert funcConfig.startswith(SPIRV_IMAGE_PREFIX), "Error prefix: " + funcConfig
+
+    # check token 1
+    assert mangledTokens[1] in (SPIRV_IMAGE_MODIFIER, SPIRV_IMAGE_MODIFIER + '|' + SPIRV_IMAGE_SPARSE_MODIFIER), \
+            "Error image modifier" + funcConfig
+
     # Extract dimensions from dimension string
-    dimString = mangledTokens[2]
+    dimString = mangledTokens[3]
     assert dimString.startswith(SPIRV_IMAGE_DIM_PREFIX), "" + dimString
     dims = dimString[3:].split('|')
-    opKind = SPIRV_IMAGE_INST_KIND_DICT[mangledTokens[1]]
+    opKind = SPIRV_IMAGE_INST_KIND_DICT[mangledTokens[2]]
 
     # Generate function definition for each dimension
     for dim in dims:
-        mangledTokens[2] = SPIRV_IMAGE_DIM_PREFIX + dim
+        mangledTokens[3] = SPIRV_IMAGE_DIM_PREFIX + dim
         mangledName = '.'.join(mangledTokens)
         if opKind in (SpirvImageOpKind.sample, SpirvImageOpKind.fetch, SpirvImageOpKind.gather, \
                       SpirvImageOpKind.querylod, SpirvImageOpKind.read, SpirvImageOpKind.write, \

@@ -45,13 +45,10 @@
 
 #include "spirv.hpp"
 #include "llpcCodeGenManager.h"
-#include "llpcGfx6ConfigBuilder.h"
-#ifdef LLPC_BUILD_GFX9
-#include "llpcGfx9ConfigBuilder.h"
-#endif
 #include "llpcContext.h"
 #include "llpcElf.h"
-#include "llpcGfx6Chip.h"
+#include "llpcGfx6ConfigBuilder.h"
+#include "llpcGfx9ConfigBuilder.h"
 #include "llpcInternal.h"
 
 namespace llvm
@@ -193,7 +190,7 @@ Result CodeGenManager::GenerateCode(
 
     if (cl::EmitLlvm)
     {
-        WriteBitcodeToFile(pModule, outStream);
+        WriteBitcodeToFile(*pModule, outStream);
         return result;
     }
 
@@ -316,11 +313,7 @@ Result CodeGenManager::BuildGraphicsPipelineRegConfig(
         }
         else
         {
-#ifdef LLPC_BUILD_GFX9
             result = Gfx9::ConfigBuilder::BuildPipelineVsFsRegConfig(pContext, ppConfig, pConfigSize);
-#else
-            result = Result::Unsupported;
-#endif
         }
     }
     else if (hasTs && (hasGs == false))
@@ -332,11 +325,7 @@ Result CodeGenManager::BuildGraphicsPipelineRegConfig(
         }
         else
         {
-#ifdef LLPC_BUILD_GFX9
             result = Gfx9::ConfigBuilder::BuildPipelineVsTsFsRegConfig(pContext, ppConfig, pConfigSize);
-#else
-            result = Result::Unsupported;
-#endif
         }
     }
     else if ((hasTs == false) && hasGs)
@@ -348,11 +337,7 @@ Result CodeGenManager::BuildGraphicsPipelineRegConfig(
         }
         else
         {
-#ifdef LLPC_BUILD_GFX9
             result = Gfx9::ConfigBuilder::BuildPipelineVsGsFsRegConfig(pContext, ppConfig, pConfigSize);
-#else
-            result = Result::Unsupported;
-#endif
         }
     }
     else
@@ -364,11 +349,7 @@ Result CodeGenManager::BuildGraphicsPipelineRegConfig(
         }
         else
         {
-#ifdef LLPC_BUILD_GFX9
             result = Gfx9::ConfigBuilder::BuildPipelineVsTsGsFsRegConfig(pContext, ppConfig, pConfigSize);
-#else
-            result = Result::Unsupported;
-#endif
         }
     }
 
@@ -393,11 +374,7 @@ Result CodeGenManager::BuildComputePipelineRegConfig(
     }
     else
     {
-#ifdef LLPC_BUILD_GFX9
         result = Gfx9::ConfigBuilder::BuildPipelineCsRegConfig(pContext, ppConfig, pConfigSize);
-#else
-        result = Result::Unsupported;
-#endif
     }
 
     return result;

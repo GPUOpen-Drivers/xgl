@@ -128,6 +128,20 @@ public:
     VK_INLINE uint32_t GetViewMask(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].viewMask; }
 
+    VK_INLINE uint32_t GetActiveViewsBitMask() const
+    {
+        uint32_t activeViewsBitMask = 0;
+
+        // View is considered active when it is used in any subpass defined by RenderPass.
+        for (uint32_t subpass = 0; subpass < GetSubpassCount(); ++subpass)
+        {
+            activeViewsBitMask |= GetViewMask(subpass);
+        }
+
+        // ActiveViewsBitMask can be understood as RenderPass ViewMask.
+        return activeViewsBitMask;
+    }
+
     VK_INLINE bool IsMultiviewEnabled() const
     {
         // When a subpass uses a non-zero view mask,

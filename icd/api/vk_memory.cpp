@@ -719,7 +719,8 @@ VkResult Memory::OpenExternalMemory(
 // Returns the external shared handle of the memory object.
 Pal::OsExternalHandle Memory::GetShareHandle(VkExternalMemoryHandleTypeFlagBitsKHR handleType)
 {
-    VK_ASSERT(m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_EXTERNAL_MEMORY_FD) ||
+    VK_ASSERT((m_pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
+              m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_EXTERNAL_MEMORY_FD)             ||
               m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_EXTERNAL_MEMORY_WIN32));
 
     return PalMemory()->GetSharedExternalHandle();

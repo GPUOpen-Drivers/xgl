@@ -553,6 +553,28 @@ protected:
   SPIRVId Sample;
 };
 
+class SPIRVImageSparseTexelsResident : public SPIRVInstruction {
+public:
+  const static Op OC = OpImageSparseTexelsResident;
+
+  // Incomplete constructor
+  SPIRVImageSparseTexelsResident() :SPIRVInstruction(OC), ResidentCode(SPIRVID_INVALID)
+    {}
+
+  SPIRVValue *getResidentCode() { return getValue(ResidentCode); }
+protected:
+  _SPIRV_DEF_ENCDEC3(Type, Id, ResidentCode)
+
+  void validate()const {
+    assert(Type->isTypeBool() && Type->isTypeScalar());
+
+    auto ResidentCodeTy = getValueType(ResidentCode);
+    assert(ResidentCodeTy->isTypeInt() && ResidentCodeTy->isTypeScalar());
+  }
+
+  SPIRVId ResidentCode;
+};
+
 class SPIRVStore:public SPIRVInstruction, public SPIRVMemoryAccess {
 public:
   const static SPIRVWord FixedWords = 3;
@@ -2212,6 +2234,39 @@ _SPIRV_OP(GroupCommitReadPipe, false, 6)
 _SPIRV_OP(GroupCommitWritePipe, false, 6)
 #ifdef ICD_VULKAN_1_1
 _SPIRV_OP(GroupNonUniformElect, true, 4)
+_SPIRV_OP(GroupNonUniformAll, true, 5)
+_SPIRV_OP(GroupNonUniformAny, true, 5)
+_SPIRV_OP(GroupNonUniformAllEqual, true, 5)
+_SPIRV_OP(GroupNonUniformBroadcast, true, 6)
+_SPIRV_OP(GroupNonUniformBroadcastFirst, true, 5)
+_SPIRV_OP(GroupNonUniformBallot, true, 5)
+_SPIRV_OP(GroupNonUniformInverseBallot, true, 5)
+_SPIRV_OP(GroupNonUniformBallotBitExtract, true, 6)
+_SPIRV_OP(GroupNonUniformBallotBitCount, true, 6, false, 1)
+_SPIRV_OP(GroupNonUniformBallotFindLSB, true, 5)
+_SPIRV_OP(GroupNonUniformBallotFindMSB, true, 5)
+_SPIRV_OP(GroupNonUniformShuffle, true, 6)
+_SPIRV_OP(GroupNonUniformShuffleXor, true, 6)
+_SPIRV_OP(GroupNonUniformShuffleUp, true, 6)
+_SPIRV_OP(GroupNonUniformShuffleDown, true, 6)
+_SPIRV_OP(GroupNonUniformIAdd, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformFAdd, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformIMul, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformFMul, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformSMin, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformUMin, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformFMin, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformSMax, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformUMax, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformFMax, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformBitwiseAnd, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformBitwiseOr, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformBitwiseXor, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformLogicalAnd, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformLogicalOr, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformLogicalXor, true, 6, true, 1)
+_SPIRV_OP(GroupNonUniformQuadBroadcast, true, 6)
+_SPIRV_OP(GroupNonUniformQuadSwap, true, 6)
 #endif
 #undef _SPIRV_OP
 
@@ -2280,6 +2335,18 @@ _SPIRV_OP(ImageQuerySize, true, 4)
 _SPIRV_OP(ImageQueryLod, true, 5)
 _SPIRV_OP(ImageQueryLevels, true, 4)
 _SPIRV_OP(ImageQuerySamples, true, 4)
+_SPIRV_OP(ImageSparseSampleImplicitLod, true, 5, true)
+_SPIRV_OP(ImageSparseSampleExplicitLod, true, 7, true, 2)
+_SPIRV_OP(ImageSparseSampleDrefImplicitLod, true, 6, true, 3)
+_SPIRV_OP(ImageSparseSampleDrefExplicitLod, true, 7, true, 3)
+_SPIRV_OP(ImageSparseSampleProjImplicitLod, true, 5, true, 2)
+_SPIRV_OP(ImageSparseSampleProjExplicitLod, true, 7, true, 2)
+_SPIRV_OP(ImageSparseSampleProjDrefImplicitLod, true, 6, true, 3)
+_SPIRV_OP(ImageSparseSampleProjDrefExplicitLod, true, 7, true, 3)
+_SPIRV_OP(ImageSparseFetch, true, 4, true, 2)
+_SPIRV_OP(ImageSparseGather, true, 6, true, 3)
+_SPIRV_OP(ImageSparseDrefGather, true, 6, true, 3)
+_SPIRV_OP(ImageSparseRead, true, 5, true, 2)
 #undef _SPIRV_OP
 
 // SpecConstantOp instruction

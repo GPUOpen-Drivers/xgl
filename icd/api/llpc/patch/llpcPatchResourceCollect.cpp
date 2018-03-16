@@ -167,8 +167,6 @@ void PatchResourceCollect::visitCallInst(
     else if (mangledName.startswith(LlpcName::ImageCallPrefix))
     {
         // Image operations
-        auto opName = mangledName.substr(strlen(LlpcName::ImageCallPrefix));
-
         ShaderImageCallMetadata imageCallMeta = {};
         LLPC_ASSERT(callInst.getNumArgOperands() >= 2);
         uint32_t metaOperandIndex = callInst.getNumArgOperands() - 1;
@@ -187,18 +185,11 @@ void PatchResourceCollect::visitCallInst(
         DescriptorPair descPair = { descSet, binding };
         m_pResUsage->descPairs.insert(descPair.u64All);
 
-        std::string imageSampleName;
-        std::string imageGatherName;
-        std::string imageQueryLodName;
-        SPIRV::SPIRVImageOpKindNameMap::find(ImageOpSample, &imageSampleName);
-        SPIRV::SPIRVImageOpKindNameMap::find(ImageOpGather, &imageGatherName);
-        SPIRV::SPIRVImageOpKindNameMap::find(ImageOpQueryLod, &imageQueryLodName);
-
         // NOTE: For image sampling operations, we have to add both resource descriptor and sampler descriptor info
         // to descriptor usages, operand 0 and 1 are sampler descriptor, 3 and 4 are resource descriptor
-        if (opName.startswith(imageSampleName) ||
-            opName.startswith(imageGatherName) ||
-            opName.startswith(imageQueryLodName))
+        if ((imageOp == ImageOpSample) ||
+            (imageOp == ImageOpGather) ||
+            (imageOp == ImageOpQueryLod))
         {
             uint32_t descSet = cast<ConstantInt>(callInst.getOperand(3))->getZExtValue();
             uint32_t binding = cast<ConstantInt>(callInst.getOperand(4))->getZExtValue();

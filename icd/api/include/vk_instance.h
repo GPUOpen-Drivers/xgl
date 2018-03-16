@@ -243,8 +243,6 @@ private:
     void DevModeEarlyInitialize();
     void DevModeLateInitialize();
 
-    VkResult EnumerateScreens();
-
     static void PAL_STDCALL PalDeveloperCallback(
         void*                        pPrivateData,
         const Pal::uint32            deviceIndex,
