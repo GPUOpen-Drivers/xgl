@@ -93,15 +93,14 @@ Pal::Result VertBufBindingMgr::Initialize(
         for (uint32_t i = 0; i < MaxVertexBuffers; ++i)
         {
             // Format needs to be set to invalid for struct srv SRDs
-            m_bindings[deviceIdx][i].view.swizzledFormat = Pal::UndefinedSwizzledFormat;
+            m_bindings[deviceIdx][i].swizzledFormat = Pal::UndefinedSwizzledFormat;
 
             // These are programmed during BindVertexBuffers()
-            m_bindings[deviceIdx][i].size = 0;
-            m_bindings[deviceIdx][i].view.gpuAddr = 0;
-            m_bindings[deviceIdx][i].view.range = 0;
+            m_bindings[deviceIdx][i].gpuAddr = 0;
+            m_bindings[deviceIdx][i].range = 0;
 
             // Stride is programmed during GraphicsPipelineChanged()
-            m_bindings[deviceIdx][i].view.stride = 0;
+            m_bindings[deviceIdx][i].stride = 0;
         }
     }
 
@@ -136,8 +135,8 @@ void VertBufBindingMgr::BindVertexBuffers(
         const VkBuffer*     pBuffers = pInBuffers;
         const VkDeviceSize* pOffsets = pInOffsets;
 
-        Binding* pBinding    = &m_bindings[deviceIdx][firstBinding];
-        Binding* pEndBinding = pBinding + bindingCount;
+        Pal::BufferViewInfo* pBinding    = &m_bindings[deviceIdx][firstBinding];
+        Pal::BufferViewInfo* pEndBinding = pBinding + bindingCount;
 
         while (pBinding != pEndBinding)
         {
@@ -148,21 +147,10 @@ void VertBufBindingMgr::BindVertexBuffers(
             {
                 const Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
 
-                pBinding->view.gpuAddr = pBuffer->GpuVirtAddr(deviceIdx) + offset;
-                pBinding->size         = pBuffer->GetSize() - offset;
+                pBinding->gpuAddr = pBuffer->GpuVirtAddr(deviceIdx) + offset;
+                pBinding->range   = pBuffer->GetSize() - offset;
 
-                // PAL requires that the range be a multiple of the stride. We must round the range if it has space for
-                // a final partial element. Rounding down matches our current behavior for buffer views.
-                if (pBinding->view.stride > 1)
-                {
-                    pBinding->view.range = Util::RoundDownToMultiple(pBinding->size, pBinding->view.stride);
-                }
-                else
-                {
-                    pBinding->view.range = pBinding->size;
-                }
-
-                m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &pBinding->view, pDestSrd);
+                m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, pBinding, pDestSrd);
             }
             else
             {
@@ -205,30 +193,19 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
 
         for (uint32_t bindex = 0; bindex < bindingInfo.bindingCount; ++bindex)
         {
-            const uint32_t slot       = bindingInfo.bindings[bindex].slot;
-            const uint32_t byteStride = bindingInfo.bindings[bindex].byteStride;
-            Binding*const  pBinding   = &m_bindings[deviceIdx][slot];
+            const uint32_t slot                 = bindingInfo.bindings[bindex].slot;
+            const uint32_t byteStride           = bindingInfo.bindings[bindex].byteStride;
+            Pal::BufferViewInfo*const  pBinding = &m_bindings[deviceIdx][slot];
 
-            if (pBinding->view.stride != byteStride)
+            if (pBinding->stride != byteStride)
             {
-                pBinding->view.stride = byteStride;
+                pBinding->stride = byteStride;
 
                 uint32_t* pDestSrd = &m_pVbTblSysMem[(strideDw * deviceIdx) + (slot * m_vbSrdDwSize)];
 
-                if (pBinding->view.gpuAddr != 0)
+                if (pBinding->gpuAddr != 0)
                 {
-                    // PAL requires that the range be a multiple of the stride. We must round the range if it has space
-                    // for a final partial element. Rounding down matches our current behavior for buffer views.
-                    if (pBinding->view.stride > 1)
-                    {
-                        pBinding->view.range = Util::RoundDownToMultiple(pBinding->size, pBinding->view.stride);
-                    }
-                    else
-                    {
-                        pBinding->view.range = pBinding->size;
-                    }
-
-                    m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &pBinding->view, pDestSrd);
+                    m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, pBinding, pDestSrd);
                 }
                 else
                 {

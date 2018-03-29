@@ -176,6 +176,13 @@ private:
         Ending              // Tracing is no longer active, but all results are not yet ready.
     };
 
+    // Various trigger modes supported for RGP traces
+    enum class TriggerMode
+    {
+        Present = 0, // Traces triggered by presents
+        Tag          // Traces triggered by command buffer tags
+    };
+
     // Queue family (type)-specific state to support RGP tracing (part of device state)
     struct TraceQueueFamilyState
     {
@@ -210,6 +217,7 @@ private:
     struct TraceState
     {
         TraceStatus           status;             // Current trace status (idle, running, etc.)
+        TriggerMode           triggerMode;        // Current trigger mode for RGP frame trace
 
         Device*               pDevice;            // The device currently doing the tracing
         Pal::ICmdAllocator*   pCmdAllocator;      // Command allocator for creating trace-begin/end buffers

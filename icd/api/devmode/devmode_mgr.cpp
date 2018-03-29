@@ -305,52 +305,64 @@ void DevModeMgr::AdvanceActiveTraceStep(
 {
     VK_ASSERT(pState->status != TraceStatus::Idle);
 
-    if (m_trace.status == TraceStatus::Pending)
-    {
-        // Attempt to start preparing for a trace
-        if (TracePendingToPreparingStep(&m_trace, pQueue, actualPresent) != Pal::Result::Success)
-        {
-            FinishOrAbortTrace(&m_trace, true);
-        }
-    }
+    // Only advance the trace step if we're processing the right type of trigger.
+    // In present trigger mode, we should only advance when a real present occurs.
+    // In tag trigger mode, we should only advance when a tag trigger is encountered.
+    // We only support two trigger modes, so any time this is called with actualPresent set to false, we can safely
+    // assume this is being called because of a tag trigger.
+    const bool isPresentTrigger = actualPresent;
+    const bool isTagTrigger     = (actualPresent == false);
+    const bool isValidTrigger   = ((m_trace.triggerMode == TriggerMode::Present) ? isPresentTrigger : isTagTrigger);
 
-    if (m_trace.status == TraceStatus::Preparing)
+    if (isValidTrigger)
     {
-        if (TracePreparingToRunningStep(&m_trace, pQueue) != Pal::Result::Success)
+        if (m_trace.status == TraceStatus::Pending)
         {
-            FinishOrAbortTrace(&m_trace, true);
+            // Attempt to start preparing for a trace
+            if (TracePendingToPreparingStep(&m_trace, pQueue, actualPresent) != Pal::Result::Success)
+            {
+                FinishOrAbortTrace(&m_trace, true);
+            }
         }
-    }
 
-    if (m_trace.status == TraceStatus::Running)
-    {
-        if (TraceRunningToWaitingForSqttStep(&m_trace, pQueue) != Pal::Result::Success)
+        if (m_trace.status == TraceStatus::Preparing)
         {
-            FinishOrAbortTrace(&m_trace, true);
+            if (TracePreparingToRunningStep(&m_trace, pQueue) != Pal::Result::Success)
+            {
+                FinishOrAbortTrace(&m_trace, true);
+            }
         }
-    }
 
-    if (m_trace.status == TraceStatus::WaitingForSqtt)
-    {
-        if (TraceWaitingForSqttToEndingStep(&m_trace, pQueue) != Pal::Result::Success)
+        if (m_trace.status == TraceStatus::Running)
         {
-            FinishOrAbortTrace(&m_trace, true);
+            if (TraceRunningToWaitingForSqttStep(&m_trace, pQueue) != Pal::Result::Success)
+            {
+                FinishOrAbortTrace(&m_trace, true);
+            }
         }
-    }
 
-    if (m_trace.status == TraceStatus::Ending)
-    {
-        Pal::Result result = TraceEndingToIdleStep(&m_trace);
-
-        // Results ready: finish trace
-        if (result == Pal::Result::Success)
+        if (m_trace.status == TraceStatus::WaitingForSqtt)
         {
-            FinishOrAbortTrace(&m_trace, false);
+            if (TraceWaitingForSqttToEndingStep(&m_trace, pQueue) != Pal::Result::Success)
+            {
+                FinishOrAbortTrace(&m_trace, true);
+            }
         }
-        // Error while computing results: abort trace
-        else if (result != Pal::Result::NotReady)
+
+        if (m_trace.status == TraceStatus::Ending)
         {
-            FinishOrAbortTrace(&m_trace, true);
+            Pal::Result result = TraceEndingToIdleStep(&m_trace);
+
+            // Results ready: finish trace
+            if (result == Pal::Result::Success)
+            {
+                FinishOrAbortTrace(&m_trace, false);
+            }
+            // Error while computing results: abort trace
+            else if (result != Pal::Result::NotReady)
+            {
+                FinishOrAbortTrace(&m_trace, true);
+            }
         }
     }
 }
@@ -517,6 +529,11 @@ void DevModeMgr::TraceIdleToPendingStep(
             m_traceFrameBeginTag = traceParameters.beginTag;
             m_traceFrameEndTag   = traceParameters.endTag;
 
+            // If we have valid frame begin/end tags, use the tag triggered trace mode.
+            const TriggerMode triggerMode =
+                ((m_traceFrameBeginTag != 0) && (m_traceFrameEndTag != 0)) ? TriggerMode::Tag
+                                                                           : TriggerMode::Present;
+
             // Override some parameters via panel
             const RuntimeSettings& settings = pState->pDevice->GetRuntimeSettings();
 
@@ -535,6 +552,7 @@ void DevModeMgr::TraceIdleToPendingStep(
             pState->preparedFrameCount = 0;
             pState->sqttFrameCount     = 0;
             pState->status             = TraceStatus::Pending;
+            pState->triggerMode        = triggerMode;
         }
     }
 }
@@ -1105,6 +1123,7 @@ void DevModeMgr::FinishOrAbortTrace(
     pState->sqttFrameCount     = 0;
     pState->gpaSampleId        = 0;
     pState->status             = TraceStatus::Idle;
+    pState->triggerMode        = TriggerMode::Present;
     pState->pTracePrepareQueue = nullptr;
     pState->pTraceBeginQueue   = nullptr;
     pState->pTraceEndQueue     = nullptr;

@@ -350,24 +350,6 @@ define spir_func i1 @_Z19SubgroupAllEqualKHRb(i1 %value)
     ret i1 %5
 }
 
-; GLSL: int/uint writeInvocation(int/uint, int/uint, int/uint)
-define spir_func i32 @_Z18WriteInvocationAMDiii(i32 %inputValue, i32 %writeValue, i32 %invocationIndex)
-{
-    %1 = call i32 @llvm.amdgcn.writelane(i32 %writeValue, i32 %invocationIndex, i32 %inputValue)
-    ret i32 %1
-}
-
-; GLSL: float writeInvocation(float, float, uint)
-define spir_func float @_Z18WriteInvocationAMDffi(float %inputValue, float %writeValue, i32 %invocationIndex)
-{
-    %1 = bitcast float %writeValue to i32
-    %2 = bitcast float %inputValue to i32
-    %3 = call i32 @_Z18WriteInvocationAMDiii(i32 %1, i32 %invocationIndex, i32 %2)
-    %4 = bitcast i32 %3 to float
-
-    ret float %4
-}
-
 ; GLSL: bool subgroupElect()
 define spir_func i1 @_Z20GroupNonUniformElecti(i32 %scope)
 {
@@ -1078,10 +1060,8 @@ define spir_func i32 @_Z28GroupNonUniformBallotFindMSBiDv4_i(i32 %scope, <4 x i3
 ; GLSL: int/uint subgroupShuffle(int/uint, uint)
 define spir_func i32 @_Z22GroupNonUniformShuffleiii(i32 %scope, i32 %value, i32 %id)
 {
-    %1 = mul i32 %id, 4
-    %2 = call i32 @llvm.amdgcn.ds.bpermute(i32 %1, i32 %value)
-
-    ret i32 %2
+    %1 = call i32 @llvm.amdgcn.readlane(i32 %value, i32 %id)
+    ret i32 %1
 }
 
 ; GLSL: ivec2/uvec2 subgroupShuffle(ivec2/uvec2, uint)
@@ -1945,18 +1925,851 @@ define spir_func <4 x i1> @_Z26GroupNonUniformShuffleDowniDv4_bi(i32 %scope, <4 
 ;       bvec subgroupInclusiveXor(bvec)
 ;       bvec subgroupExclusiveXor(bvec)
 
-; GLSL: gvec subgroupQuadBroadcast(gvec, uint)
+; GLSL: int/uint subgroupQuadBroadcast(int/uint, uint)
+define spir_func i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %value, i32 %id)
+{
+    ; id should be constant of 0 ~ 3
+.entry:
+    switch i32 %id, label %.end [ i32 0, label %.id0
+                                  i32 1, label %.id1
+                                  i32 2, label %.id2
+                                  i32 3, label %.id3 ]
+.id0:
+    ; QUAD_PERM 0,0,0,0
+    %value.id0 = call i32 @llvm.amdgcn.ds.swizzle(i32 %value, i32 32768)
+    br label %.end
+.id1:
+    ; QUAD_PERM 1,1,1,1
+    %value.id1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %value, i32 32853)
+    br label %.end
+.id2:
+    ; QUAD_PERM 2,2,2,2
+    %value.id2 = call i32 @llvm.amdgcn.ds.swizzle(i32 %value, i32 32938)
+    br label %.end
+.id3:
+    ; QUAD_PERM 3,3,3,3
+    %value.id3 = call i32 @llvm.amdgcn.ds.swizzle(i32 %value, i32 33023)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry],[%value.id0, %.id0],[%value.id1, %.id1], [%value.id2, %.id2], [%value.id3, %.id3]
+    ret i32 %result
+}
 
-; GLSL: gvec subgroupQuadSwapHorizontal(gvec)
-;       gvec subgroupQuadSwapVertical(gvec)
-;       gvec subgroupQuadSwapDiagonal(gvec)
+; GLSL: ivec2/uvec2 subgroupQuadBroadcast(ivec2/uvec2, uint)
+define spir_func <2 x i32> @_Z28GroupNonUniformQuadBroadcastiDv2_ii(i32 %scope, <2 x i32> %value, i32 %id)
+{
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %1, i32 %id)
+    %4 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %2, i32 %id)
+
+    %5 = insertelement <2 x i32> undef, i32 %3, i32 0
+    %6 = insertelement <2 x i32> %5, i32 %4, i32 1
+
+    ret <2 x i32> %6
+}
+
+; GLSL: ivec3/uvec3 subgroupQuadBroadcast(ivec3/uvec3, uint)
+define spir_func <3 x i32> @_Z28GroupNonUniformQuadBroadcastiDv3_ii(i32 %scope, <3 x i32> %value, i32 %id)
+{
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %1, i32 %id)
+    %5 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %2, i32 %id)
+    %6 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %3, i32 %id)
+
+    %7 = insertelement <3 x i32> undef, i32 %4, i32 0
+    %8 = insertelement <3 x i32> %7, i32 %5, i32 1
+    %9 = insertelement <3 x i32> %8, i32 %6, i32 2
+
+    ret <3 x i32> %9
+}
+
+; GLSL: ivec4/uvec4 subgroupQuadBroadcast(ivec4/uvec4, uint)
+define spir_func <4 x i32> @_Z28GroupNonUniformQuadBroadcastiDv4_ii(i32 %scope, <4 x i32> %value, i32 %id)
+{
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %1, i32 %id)
+    %6 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %2, i32 %id)
+    %7 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %3, i32 %id)
+    %8 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %4, i32 %id)
+
+    %9 = insertelement <4 x i32> undef, i32 %5, i32 0
+    %10 = insertelement <4 x i32> %9, i32 %6, i32 1
+    %11 = insertelement <4 x i32> %10, i32 %7, i32 2
+    %12 = insertelement <4 x i32> %11, i32 %8, i32 3
+
+    ret <4 x i32> %12
+}
+
+; GLSL: float subgroupQuadBroadcast(float, uint)
+define spir_func float @_Z28GroupNonUniformQuadBroadcastifi(i32 %scope, float %value, i32 %id)
+{
+    %1 = bitcast float %value to i32
+    %2 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %1, i32 %id)
+    %3 = bitcast i32 %2 to float
+
+    ret float %3
+}
+
+; GLSL: vec2 subgroupQuadBroadcast(vec2, uint)
+define spir_func <2 x float> @_Z28GroupNonUniformQuadBroadcastiDv2_fi(i32 %scope, <2 x float> %value, i32 %id)
+{
+    %1 = bitcast <2 x float> %value to <2 x i32>
+    %2 = call <2 x i32> @_Z28GroupNonUniformQuadBroadcastiDv2_ii(i32 %scope, <2 x i32> %1, i32 %id)
+    %3 = bitcast <2 x i32> %2 to <2 x float>
+
+    ret <2 x float> %3
+}
+
+; GLSL: vec3 subgroupQuadBroadcast(vec3, uint)
+define spir_func <3 x float> @_Z28GroupNonUniformQuadBroadcastiDv3_fi(i32 %scope, <3 x float> %value, i32 %id)
+{
+    %1 = bitcast <3 x float> %value to <3 x i32>
+    %2 = call <3 x i32> @_Z28GroupNonUniformQuadBroadcastiDv3_ii(i32 %scope, <3 x i32> %1, i32 %id)
+    %3 = bitcast <3 x i32> %2 to <3 x float>
+
+    ret <3 x float> %3
+}
+
+; GLSL: vec4 subgroupQuadBroadcast(vec4, uint)
+define spir_func <4 x float> @_Z28GroupNonUniformQuadBroadcastiDv4_fi(i32 %scope, <4 x float> %value, i32 %id)
+{
+    %1 = bitcast <4 x float> %value to <4 x i32>
+    %2 = call <4 x i32> @_Z28GroupNonUniformQuadBroadcastiDv4_ii(i32 %scope, <4 x i32> %1, i32 %id)
+    %3 = bitcast <4 x i32> %2 to <4 x float>
+
+    ret <4 x float> %3
+}
+
+; GLSL: double subgroupQuadBroadcast(double, uint)
+define spir_func double @_Z28GroupNonUniformQuadBroadcastidi(i32 %scope, double %value, i32 %id)
+{
+    %1 = bitcast double %value to <2 x i32>
+    %2 = call <2 x i32> @_Z28GroupNonUniformQuadBroadcastiDv2_ii(i32 %scope, <2 x i32> %1, i32 %id)
+    %3 = bitcast <2 x i32> %2 to double
+
+    ret double %3
+}
+
+; GLSL: dvec2 subgroupQuadBroadcast(dvec2, uint)
+define spir_func <2 x double> @_Z28GroupNonUniformQuadBroadcastiDv2_di(i32 %scope, <2 x double> %value, i32 %id)
+{
+    %1 = bitcast <2 x double> %value to <4 x i32>
+    %2 = call <4 x i32> @_Z28GroupNonUniformQuadBroadcastiDv4_ii(i32 %scope, <4 x i32> %1, i32 %id)
+    %3 = bitcast <4 x i32> %2 to <2 x double>
+
+    ret <2 x double> %3
+}
+
+; GLSL: dvec3 subgroupQuadBroadcast(dvec3, uint)
+define spir_func <3 x double> @_Z28GroupNonUniformQuadBroadcastiDv3_di(i32 %scope, <3 x double> %value, i32 %id)
+{
+    %1 = bitcast <3 x double> %value to <6 x i32>
+    %2 = shufflevector <6 x i32> %1, <6 x i32> %1, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+    %3 = shufflevector <6 x i32> %1, <6 x i32> %1, <2 x i32> <i32 4, i32 5>
+
+    %4 = call <4 x i32> @_Z28GroupNonUniformQuadBroadcastiDv4_ii(i32 %scope, <4 x i32> %2, i32 %id)
+    %5 = call <2 x i32> @_Z28GroupNonUniformQuadBroadcastiDv2_ii(i32 %scope, <2 x i32> %3, i32 %id)
+    %6 = shufflevector <2 x i32> %5, <2 x i32> <i32 0, i32 0>, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+
+    %7 = shufflevector <4 x i32> %4, <4 x i32> %6, <6 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5>
+    %8 = bitcast <6 x i32> %7 to <3 x double>
+
+    ret <3 x double> %8
+}
+
+; GLSL: dvec4 subgroupQuadBroadcast(dvec4, uint)
+define spir_func <4 x double> @_Z28GroupNonUniformQuadBroadcastiDv4_di(i32 %scope, <4 x double> %value, i32 %id)
+{
+    %1 = bitcast <4 x double> %value to <8 x i32>
+    %2 = shufflevector <8 x i32> %1, <8 x i32> %1, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+    %3 = shufflevector <8 x i32> %1, <8 x i32> %1, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
+
+    %4 = call <4 x i32> @_Z28GroupNonUniformQuadBroadcastiDv4_ii(i32 %scope, <4 x i32> %2, i32 %id)
+    %5 = call <4 x i32> @_Z28GroupNonUniformQuadBroadcastiDv4_ii(i32 %scope, <4 x i32> %3, i32 %id)
+
+    %6 = shufflevector <4 x i32> %4, <4 x i32> %5, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+    %7 = bitcast <8 x i32> %6 to <4 x double>
+
+    ret <4 x double> %7
+}
+
+; GLSL: bool subgroupQuadBroadcast(bool, uint)
+define spir_func i1 @_Z28GroupNonUniformQuadBroadcastibi(i32 %scope, i1 %value, i32 %id)
+{
+    %1 = zext i1 %value to i32
+    %2 = call i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %1, i32 %id)
+    %3 = trunc i32 %2 to i1
+
+    ret i1 %3
+}
+
+; GLSL: bvec2 subgroupQuadBroadcast(bvec2, uint)
+define spir_func <2 x i1> @_Z28GroupNonUniformQuadBroadcastiDv2_bi(i32 %scope, <2 x i1> %value, i32 %id)
+{
+    %1 = zext <2 x i1> %value to <2 x i32>
+    %2 = call <2 x i32> @_Z28GroupNonUniformQuadBroadcastiDv2_ii(i32 %scope, <2 x i32> %1, i32 %id)
+    %3 = trunc <2 x i32> %2 to <2 x i1>
+
+    ret <2 x i1> %3
+}
+
+; GLSL: bvec3 subgroupQuadBroadcast(bvec3, uint)
+define spir_func <3 x i1> @_Z28GroupNonUniformQuadBroadcastiDv3_bi(i32 %scope, <3 x i1> %value, i32 %id)
+{
+    %1 = zext <3 x i1> %value to <3 x i32>
+    %2 = call <3 x i32> @_Z28GroupNonUniformQuadBroadcastiDv3_ii(i32 %scope, <3 x i32> %1, i32 %id)
+    %3 = trunc <3 x i32> %2 to <3 x i1>
+
+    ret <3 x i1> %3
+}
+
+; GLSL: bvec4 subgroupQuadBroadcast(bvec4, uint)
+define spir_func <4 x i1> @_Z28GroupNonUniformQuadBroadcastiDv4_bi(i32 %scope, <4 x i1> %value, i32 %id)
+{
+    %1 = zext <4 x i1> %value to <4 x i32>
+    %2 = call <4 x i32> @_Z28GroupNonUniformQuadBroadcastiDv4_ii(i32 %scope, <4 x i32> %1, i32 %id)
+    %3 = trunc <4 x i32> %2 to <4 x i1>
+
+    ret <4 x i1> %3
+}
+
+; GLSL: int/uint subgroupQuadSwapHorizontal(int/uint)
+;       int/uint subgroupQuadSwapVertical(int/uint)
+;       int/uint subgroupQuadSwapDiagonal(int/uint)
+define spir_func i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %value, i32 %direction)
+{
+    ; direction 0 is Horizontal
+    ; direction 1 is Vertical
+    ; direction 2 is Diagonal
+.entry:
+    switch i32 %direction, label %.end [ i32 0, label %.horizonal
+                                         i32 1, label %.vertical
+                                         i32 2, label %.diagonal ]
+.horizonal:
+    ; QUAD_PERM [ 0->1, 1->0, 2->3, 3->2], 0b1011,0001
+    %value.dir0 = call i32 @llvm.amdgcn.ds.swizzle(i32 %value, i32 32945)
+    br label %.end
+.vertical:
+    ; QUAD_PERM [ 0->2, 1->3, 2->0, 3->1], 0b0100,1110
+    %value.dir1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %value, i32 32846)
+    br label %.end
+.diagonal:
+    ; QUAD_PERM [ 0->3, 1->2, 2->1, 3->0], 0b0001,1011
+    %value.dir2 = call i32 @llvm.amdgcn.ds.swizzle(i32 %value, i32 32795)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%value.dir0, %.horizonal], [%value.dir1, %.vertical], [%value.dir2, %.diagonal]
+    ret i32 %result
+}
+
+; GLSL: ivec2/uvec2 subgroupQuadSwapHorizontal(ivec2/uvec2)
+;       ivec2/uvec2 subgroupQuadSwapVertical(ivec2/uvec2)
+;       ivec2/uvec2 subgroupQuadSwapDiagonal(ivec2/uvec2)
+define spir_func <2 x i32> @_Z23GroupNonUniformQuadSwapiDv2_ii(i32 %scope, <2 x i32> %value, i32 %direction)
+{
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %1, i32 %direction)
+    %4 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %2, i32 %direction)
+
+    %5 = insertelement <2 x i32> undef, i32 %3, i32 0
+    %6 = insertelement <2 x i32> %5, i32 %4, i32 1
+
+    ret <2 x i32> %6
+}
+
+; GLSL: ivec3/uvec3 subgroupQuadSwapHorizontal(ivec3/uvec3)
+;       ivec3/uvec3 subgroupQuadSwapVertical(ivec3/uvec3)
+;       ivec3/uvec3 subgroupQuadSwapDiagonal(ivec3/uvec3)
+define spir_func <3 x i32> @_Z23GroupNonUniformQuadSwapiDv3_ii(i32 %scope, <3 x i32> %value, i32 %direction)
+{
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %1, i32 %direction)
+    %5 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %2, i32 %direction)
+    %6 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %3, i32 %direction)
+
+    %7 = insertelement <3 x i32> undef, i32 %4, i32 0
+    %8 = insertelement <3 x i32> %7, i32 %5, i32 1
+    %9 = insertelement <3 x i32> %8, i32 %6, i32 2
+
+    ret <3 x i32> %9
+}
+
+; GLSL: ivec4/uvec4 subgroupQuadSwapHorizontal(ivec4/uvec4)
+;       ivec4/uvec4 subgroupQuadSwapVertical(ivec4/uvec4)
+;       ivec4/uvec4 subgroupQuadSwapDiagonal(ivec4/uvec4)
+define spir_func <4 x i32> @_Z23GroupNonUniformQuadSwapiDv4_ii(i32 %scope, <4 x i32> %value, i32 %direction)
+{
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %1, i32 %direction)
+    %6 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %2, i32 %direction)
+    %7 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %3, i32 %direction)
+    %8 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %4, i32 %direction)
+
+    %9 = insertelement <4 x i32> undef, i32 %5, i32 0
+    %10 = insertelement <4 x i32> %9, i32 %6, i32 1
+    %11 = insertelement <4 x i32> %10, i32 %7, i32 2
+    %12 = insertelement <4 x i32> %11, i32 %8, i32 3
+
+    ret <4 x i32> %12
+}
+
+; GLSL: float subgroupQuadSwapHorizontal(float)
+;       float subgroupQuadSwapVertical(float)
+;       float subgroupQuadSwapDiagonal(float)
+define spir_func float @_Z23GroupNonUniformQuadSwapifi(i32 %scope, float %value, i32 %direction)
+{
+    %1 = bitcast float %value to i32
+    %2 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %1, i32 %direction)
+    %3 = bitcast i32 %2 to float
+
+    ret float %3
+}
+
+; GLSL: vec2 subgroupQuadSwapHorizontal(vec2)
+;       vec2 subgroupQuadSwapVertical(vec2)
+;       vec2 subgroupQuadSwapDiagonal(vec2)
+define spir_func <2 x float> @_Z23GroupNonUniformQuadSwapiDv2_fi(i32 %scope, <2 x float> %value, i32 %direction)
+{
+    %1 = bitcast <2 x float> %value to <2 x i32>
+    %2 = call <2 x i32> @_Z23GroupNonUniformQuadSwapiDv2_ii(i32 %scope, <2 x i32> %1, i32 %direction)
+    %3 = bitcast <2 x i32> %2 to <2 x float>
+
+    ret <2 x float> %3
+}
+
+; GLSL: vec3 subgroupQuadSwapHorizontal(vec3)
+;       vec3 subgroupQuadSwapVertical(vec3)
+;       vec3 subgroupQuadSwapDiagonal(vec3)
+define spir_func <3 x float> @_Z23GroupNonUniformQuadSwapiDv3_fi(i32 %scope, <3 x float> %value, i32 %direction)
+{
+    %1 = bitcast <3 x float> %value to <3 x i32>
+    %2 = call <3 x i32> @_Z23GroupNonUniformQuadSwapiDv3_ii(i32 %scope, <3 x i32> %1, i32 %direction)
+    %3 = bitcast <3 x i32> %2 to <3 x float>
+
+    ret <3 x float> %3
+}
+
+; GLSL: vec4 subgroupQuadSwapHorizontal(vec4)
+;       vec4 subgroupQuadSwapVertical(vec4)
+;       vec4 subgroupQuadSwapDiagonal(vec4)
+define spir_func <4 x float> @_Z23GroupNonUniformQuadSwapiDv4_fi(i32 %scope, <4 x float> %value, i32 %direction)
+{
+    %1 = bitcast <4 x float> %value to <4 x i32>
+    %2 = call <4 x i32> @_Z23GroupNonUniformQuadSwapiDv4_ii(i32 %scope, <4 x i32> %1, i32 %direction)
+    %3 = bitcast <4 x i32> %2 to <4 x float>
+
+    ret <4 x float> %3
+}
+
+; GLSL: double subgroupQuadSwapHorizontal(double)
+;       double subgroupQuadSwapVertical(double)
+;       double subgroupQuadSwapDiagonal(double)
+define spir_func double @_Z23GroupNonUniformQuadSwapidi(i32 %scope, double %value, i32 %direction)
+{
+    %1 = bitcast double %value to <2 x i32>
+    %2 = call <2 x i32> @_Z23GroupNonUniformQuadSwapiDv2_ii(i32 %scope, <2 x i32> %1, i32 %direction)
+    %3 = bitcast <2 x i32> %2 to double
+
+    ret double %3
+}
+
+; GLSL: dvec2 subgroupQuadSwapHorizontal(dvec2)
+;       dvec2 subgroupQuadSwapVertical(dvec2)
+;       dvec2 subgroupQuadSwapDiagonal(dvec2)
+define spir_func <2 x double> @_Z23GroupNonUniformQuadSwapiDv2_di(i32 %scope, <2 x double> %value, i32 %direction)
+{
+    %1 = bitcast <2 x double> %value to <4 x i32>
+    %2 = call <4 x i32> @_Z23GroupNonUniformQuadSwapiDv4_ii(i32 %scope, <4 x i32> %1, i32 %direction)
+    %3 = bitcast <4 x i32> %2 to <2 x double>
+
+    ret <2 x double> %3
+}
+
+; GLSL: dvec3 subgroupQuadSwapHorizontal(dvec3)
+;       dvec3 subgroupQuadSwapVertical(dvec3)
+;       dvec3 subgroupQuadSwapDiagonal(dvec3)
+define spir_func <3 x double> @_Z23GroupNonUniformQuadSwapiDv3_di(i32 %scope, <3 x double> %value, i32 %direction)
+{
+    %1 = bitcast <3 x double> %value to <6 x i32>
+    %2 = shufflevector <6 x i32> %1, <6 x i32> %1, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+    %3 = shufflevector <6 x i32> %1, <6 x i32> %1, <2 x i32> <i32 4, i32 5>
+
+    %4 = call <4 x i32> @_Z23GroupNonUniformQuadSwapiDv4_ii(i32 %scope, <4 x i32> %2, i32 %direction)
+    %5 = call <2 x i32> @_Z23GroupNonUniformQuadSwapiDv2_ii(i32 %scope, <2 x i32> %3, i32 %direction)
+    %6 = shufflevector <2 x i32> %5, <2 x i32> <i32 0, i32 0>, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+
+    %7 = shufflevector <4 x i32> %4, <4 x i32> %6, <6 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5>
+    %8 = bitcast <6 x i32> %7 to <3 x double>
+
+    ret <3 x double> %8
+}
+
+; GLSL: dvec4 subgroupQuadSwapHorizontal(dvec4)
+;       dvec4 subgroupQuadSwapVertical(dvec4)
+;       dvec4 subgroupQuadSwapDiagonal(dvec4)
+define spir_func <4 x double> @_Z23GroupNonUniformQuadSwapiDv4_di(i32 %scope, <4 x double> %value, i32 %direction)
+{
+    %1 = bitcast <4 x double> %value to <8 x i32>
+    %2 = shufflevector <8 x i32> %1, <8 x i32> %1, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+    %3 = shufflevector <8 x i32> %1, <8 x i32> %1, <4 x i32> <i32 4, i32 5, i32 6, i32 7>
+
+    %4 = call <4 x i32> @_Z23GroupNonUniformQuadSwapiDv4_ii(i32 %scope, <4 x i32> %2, i32 %direction)
+    %5 = call <4 x i32> @_Z23GroupNonUniformQuadSwapiDv4_ii(i32 %scope, <4 x i32> %3, i32 %direction)
+
+    %6 = shufflevector <4 x i32> %4, <4 x i32> %5, <8 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7>
+    %7 = bitcast <8 x i32> %6 to <4 x double>
+
+    ret <4 x double> %7
+}
+
+; GLSL: bool subgroupQuadSwapHorizontal(bool)
+;       bool subgroupQuadSwapVertical(bool)
+;       bool subgroupQuadSwapDiagonal(bool)
+define spir_func i1 @_Z23GroupNonUniformQuadSwapibi(i32 %scope, i1 %value, i32 %direction)
+{
+    %1 = zext i1 %value to i32
+    %2 = call i32 @_Z23GroupNonUniformQuadSwapiii(i32 %scope, i32 %1, i32 %direction)
+    %3 = trunc i32 %2 to i1
+
+    ret i1 %3
+}
+
+; GLSL: bvec2 subgroupQuadSwapHorizontal(bvec2)
+;       bvec2 subgroupQuadSwapVertical(bvec2)
+;       bvec2 subgroupQuadSwapDiagonal(bvec2)
+define spir_func <2 x i1> @_Z23GroupNonUniformQuadSwapiDv2_bi(i32 %scope, <2 x i1> %value, i32 %direction)
+{
+    %1 = zext <2 x i1> %value to <2 x i32>
+    %2 = call <2 x i32> @_Z23GroupNonUniformQuadSwapiDv2_ii(i32 %scope, <2 x i32> %1, i32 %direction)
+    %3 = trunc <2 x i32> %2 to <2 x i1>
+
+    ret <2 x i1> %3
+}
+
+; GLSL: bvec3 subgroupQuadSwapHorizontal(bvec3)
+;       bvec3 subgroupQuadSwapVertical(bvec3)
+;       bvec3 subgroupQuadSwapDiagonal(bvec3)
+define spir_func <3 x i1> @_Z23GroupNonUniformQuadSwapiDv3_bi(i32 %scope, <3 x i1> %value, i32 %direction)
+{
+    %1 = zext <3 x i1> %value to <3 x i32>
+    %2 = call <3 x i32> @_Z23GroupNonUniformQuadSwapiDv3_ii(i32 %scope, <3 x i32> %1, i32 %direction)
+    %3 = trunc <3 x i32> %2 to <3 x i1>
+
+    ret <3 x i1> %3
+}
+
+; GLSL: bvec4 subgroupQuadSwapHorizontal(bvec4)
+;       bvec4 subgroupQuadSwapVertical(bvec4)
+;       bvec4 subgroupQuadSwapDiagonal(bvec4)
+define spir_func <4 x i1> @_Z23GroupNonUniformQuadSwapiDv4_bi(i32 %scope, <4 x i1> %value, i32 %direction)
+{
+    %1 = zext <4 x i1> %value to <4 x i32>
+    %2 = call <4 x i32> @_Z23GroupNonUniformQuadSwapiDv4_ii(i32 %scope, <4 x i32> %1, i32 %direction)
+    %3 = trunc <4 x i32> %2 to <4 x i1>
+    ret <4 x i1> %3
+}
+
+; GLSL: int/uint swizzleInvocations(int/uint, uvec4)
+define spir_func i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %data, <4 x i32> %offset)
+{
+    %1 = extractelement <4 x i32> %offset, i32 0
+    %2 = extractelement <4 x i32> %offset, i32 1
+    %3 = extractelement <4 x i32> %offset, i32 2
+    %4 = extractelement <4 x i32> %offset, i32 3
+
+    %5 = and i32 %1, 3
+    %6 = and i32 %2, 3
+    %7 = and i32 %3, 3
+    %8 = and i32 %4, 3
+
+    ; [7:6] = offset[3], [5:4] = offset[2], [3:2] = offset[1], [1:0] = offset[0]
+    %9  = shl i32 %6, 2
+    %10 = shl i32 %7, 4
+    %11 = shl i32 %8, 6
+
+    %12 = or i32 %5,  %9
+    %13 = or i32 %12, %10
+    %14 = or i32 %13, %11
+
+    ; 32768 = 0x8000, [15] = 1 (QUAD_PERMUTE)
+    %15 = or i32 %14, 32768
+    %16 = call i32 @llvm.amdgcn.ds.swizzle(i32 %data, i32 %15)
+
+    ret i32 %16
+}
+
+; GLSL: ivec2/uvec2 swizzleInvocations(ivec2/uvec2, uvec4)
+define spir_func <2 x i32> @_Z21SwizzleInvocationsAMDDv2_iDv4_i(<2 x i32> %data, <4 x i32> %offset)
+{
+    %1 = extractelement <2 x i32> %data, i32 0
+    %2 = extractelement <2 x i32> %data, i32 1
+
+    %3 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %1, <4 x i32> %offset)
+    %4 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %2, <4 x i32> %offset)
+
+    %5 = insertelement <2 x i32> undef, i32 %3, i32 0
+    %6 = insertelement <2 x i32> %5, i32 %4, i32 1
+
+    ret <2 x i32> %6
+}
+
+; GLSL: ivec3/uvec3 swizzleInvocations(ivec3/uvec3, uvec4)
+define spir_func <3 x i32> @_Z21SwizzleInvocationsAMDDv3_iDv4_i(<3 x i32> %data, <4 x i32> %offset)
+{
+    %1 = extractelement <3 x i32> %data, i32 0
+    %2 = extractelement <3 x i32> %data, i32 1
+    %3 = extractelement <3 x i32> %data, i32 2
+
+    %4 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %1, <4 x i32> %offset)
+    %5 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %2, <4 x i32> %offset)
+    %6 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %3, <4 x i32> %offset)
+
+    %7 = insertelement <3 x i32> undef, i32 %4, i32 0
+    %8 = insertelement <3 x i32> %7, i32 %5, i32 1
+    %9 = insertelement <3 x i32> %8, i32 %6, i32 2
+
+    ret <3 x i32> %9
+}
+
+; GLSL: ivec4/uvec4 swizzleInvocations(ivec4/uvec4, uvec4)
+define spir_func <4 x i32> @_Z21SwizzleInvocationsAMDDv4_iDv4_i(<4 x i32> %data, <4 x i32> %offset)
+{
+    %1 = extractelement <4 x i32> %data, i32 0
+    %2 = extractelement <4 x i32> %data, i32 1
+    %3 = extractelement <4 x i32> %data, i32 2
+    %4 = extractelement <4 x i32> %data, i32 3
+
+    %5 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %1, <4 x i32> %offset)
+    %6 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %2, <4 x i32> %offset)
+    %7 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %3, <4 x i32> %offset)
+    %8 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %4, <4 x i32> %offset)
+
+    %9 = insertelement <4 x i32> undef, i32 %5, i32 0
+    %10 = insertelement <4 x i32> %9, i32 %6, i32 1
+    %11 = insertelement <4 x i32> %10, i32 %7, i32 2
+    %12 = insertelement <4 x i32> %11, i32 %8, i32 3
+
+    ret <4 x i32> %12
+}
+
+; GLSL: float swizzleInvocations(float, uvec4)
+define spir_func float @_Z21SwizzleInvocationsAMDfDv4_i(float %data, <4 x i32> %offset)
+{
+    %1 = bitcast float %data to i32
+    %2 = call i32 @_Z21SwizzleInvocationsAMDiDv4_i(i32 %1, <4 x i32> %offset)
+    %3 = bitcast i32 %2 to float
+
+    ret float %3
+}
+
+; GLSL: vec2 swizzleInvocations(vec2, uvec4)
+define spir_func <2 x float> @_Z21SwizzleInvocationsAMDDv2_fDv4_i(<2 x float> %data, <4 x i32> %offset)
+{
+    %1 = bitcast <2 x float> %data to <2 x i32>
+    %2 = call <2 x i32> @_Z21SwizzleInvocationsAMDDv2_iDv4_i(<2 x i32> %1, <4 x i32> %offset)
+    %3 = bitcast <2 x i32> %2 to <2 x float>
+
+    ret <2 x float> %3
+}
+
+; GLSL: vec3 swizzleInvocations(vec3, uvec4)
+define spir_func <3 x float> @_Z21SwizzleInvocationsAMDDv3_fDv4_i(<3 x float> %data, <4 x i32> %offset)
+{
+    %1 = bitcast <3 x float> %data to <3 x i32>
+    %2 = call <3 x i32> @_Z21SwizzleInvocationsAMDDv3_iDv4_i(<3 x i32> %1, <4 x i32> %offset)
+    %3 = bitcast <3 x i32> %2 to <3 x float>
+
+    ret <3 x float> %3
+}
+
+; GLSL: vec4 swizzleInvocations(vec4, uvec4)
+define spir_func <4 x float> @_Z21SwizzleInvocationsAMDDv4_fDv4_i(<4 x float> %data, <4 x i32> %offset)
+{
+    %1 = bitcast <4 x float> %data to <4 x i32>
+    %2 = call <4 x i32> @_Z21SwizzleInvocationsAMDDv4_iDv4_i(<4 x i32> %1, <4 x i32> %offset)
+    %3 = bitcast <4 x i32> %2 to <4 x float>
+
+    ret <4 x float> %3
+}
+
+; GLSL: int/uint swizzleInvocationsMasked(int/uint, uvec3)
+define spir_func i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %data, <3 x i32> %mask)
+{
+    %1 = extractelement <3 x i32> %mask, i32 0 ; AND mask
+    %2 = extractelement <3 x i32> %mask, i32 1 ; OR mask
+    %3 = extractelement <3 x i32> %mask, i32 2 ; XOR mask
+
+    %4 = and i32 %1, 31
+    %5 = and i32 %2, 31
+    %6 = and i32 %3, 31
+
+    ; [14:10] = XOR mask, [9:5] = OR mask, [4:0] = AND mask, [15] = 0 (BITMASK_PERMUTE)
+    %7 = shl i32 %5, 5
+    %8 = shl i32 %6, 10
+
+    %9  = or i32 %4, %7
+    %10 = or i32 %9, %8
+
+    %11 = call i32 @llvm.amdgcn.ds.swizzle(i32 %data, i32 %10)
+
+    ret i32 %11
+}
+
+; GLSL: ivec2/uvec2 swizzleInvocationsMasked(ivec2/uvec2, uvec3)
+define spir_func <2 x i32> @_Z27SwizzleInvocationsMaskedAMDDv2_iDv3_i(<2 x i32> %data, <3 x i32> %mask)
+{
+    %1 = extractelement <2 x i32> %data, i32 0
+    %2 = extractelement <2 x i32> %data, i32 1
+
+    %3 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %1, <3 x i32> %mask)
+    %4 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %2, <3 x i32> %mask)
+
+    %5 = insertelement <2 x i32> undef, i32 %3, i32 0
+    %6 = insertelement <2 x i32> %5, i32 %4, i32 1
+
+    ret <2 x i32> %6
+}
+
+; GLSL: ivec3/uvec3 swizzleInvocationsMasked(ivec3/uvec3, uvec3)
+define spir_func <3 x i32> @_Z27SwizzleInvocationsMaskedAMDDv3_iDv3_i(<3 x i32> %data, <3 x i32> %mask)
+{
+    %1 = extractelement <3 x i32> %data, i32 0
+    %2 = extractelement <3 x i32> %data, i32 1
+    %3 = extractelement <3 x i32> %data, i32 2
+
+    %4 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %1, <3 x i32> %mask)
+    %5 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %2, <3 x i32> %mask)
+    %6 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %3, <3 x i32> %mask)
+
+    %7 = insertelement <3 x i32> undef, i32 %4, i32 0
+    %8 = insertelement <3 x i32> %7, i32 %5, i32 1
+    %9 = insertelement <3 x i32> %8, i32 %6, i32 2
+
+    ret <3 x i32> %9
+}
+
+; GLSL: ivec4/uvec4 swizzleInvocationsMasked(ivec4/uvec4, uvec3)
+define spir_func <4 x i32> @_Z27SwizzleInvocationsMaskedAMDDv4_iDv3_i(<4 x i32> %data, <3 x i32> %mask)
+{
+    %1 = extractelement <4 x i32> %data, i32 0
+    %2 = extractelement <4 x i32> %data, i32 1
+    %3 = extractelement <4 x i32> %data, i32 2
+    %4 = extractelement <4 x i32> %data, i32 3
+
+    %5 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %1, <3 x i32> %mask)
+    %6 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %2, <3 x i32> %mask)
+    %7 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %3, <3 x i32> %mask)
+    %8 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %4, <3 x i32> %mask)
+
+    %9 = insertelement <4 x i32> undef, i32 %5, i32 0
+    %10 = insertelement <4 x i32> %9, i32 %6, i32 1
+    %11 = insertelement <4 x i32> %10, i32 %7, i32 2
+    %12 = insertelement <4 x i32> %11, i32 %8, i32 3
+
+    ret <4 x i32> %12
+}
+
+; GLSL: float swizzleInvocationsMasked(float, uvec3)
+define spir_func float @_Z27SwizzleInvocationsMaskedAMDfDv3_i(float %data, <3 x i32> %mask)
+{
+    %1 = bitcast float %data to i32
+    %2 = call i32 @_Z27SwizzleInvocationsMaskedAMDiDv3_i(i32 %1, <3 x i32> %mask)
+    %3 = bitcast i32 %2 to float
+
+    ret float %3
+}
+
+; GLSL: vec2 swizzleInvocationsMasked(vec2, uvec3)
+define spir_func <2 x float> @_Z27SwizzleInvocationsMaskedAMDDv2_fDv3_i(<2 x float> %data, <3 x i32> %mask)
+{
+    %1 = bitcast <2 x float> %data to <2 x i32>
+    %2 = call <2 x i32> @_Z27SwizzleInvocationsMaskedAMDDv2_iDv3_i(<2 x i32> %1, <3 x i32> %mask)
+    %3 = bitcast <2 x i32> %2 to <2 x float>
+
+    ret <2 x float> %3
+}
+
+; GLSL: vec3 swizzleInvocationsMasked(vec3, uvec3)
+define spir_func <3 x float> @_Z27SwizzleInvocationsMaskedAMDDv3_fDv3_i(<3 x float> %data, <3 x i32> %mask)
+{
+    %1 = bitcast <3 x float> %data to <3 x i32>
+    %2 = call <3 x i32> @_Z27SwizzleInvocationsMaskedAMDDv3_iDv3_i(<3 x i32> %1, <3 x i32> %mask)
+    %3 = bitcast <3 x i32> %2 to <3 x float>
+
+    ret <3 x float> %3
+}
+
+; GLSL: vec4 swizzleInvocationsMasked(vec4, uvec3)
+define spir_func <4 x float> @_Z27SwizzleInvocationsMaskedAMDDv4_fDv3_i(<4 x float> %data, <3 x i32> %mask)
+{
+    %1 = bitcast <4 x float> %data to <4 x i32>
+    %2 = call <4 x i32> @_Z27SwizzleInvocationsMaskedAMDDv4_iDv3_i(<4 x i32> %1, <3 x i32> %mask)
+    %3 = bitcast <4 x i32> %2 to <4 x float>
+
+    ret <4 x float> %3
+}
+
+; GLSL: int/uint writeInvocation(int/uint, int/uint, uint)
+define spir_func i32 @_Z18WriteInvocationAMDiii(i32 %inputValue, i32 %writeValue, i32 %invocationIndex)
+{
+    %1 = call i32 @llvm.amdgcn.writelane(i32 %writeValue, i32 %invocationIndex, i32 %inputValue)
+    ret i32 %1
+}
+
+; GLSL: ivec2/uvec2 writeInvocation(ivec2/uvec2, ivec2/uvec2, uint)
+define spir_func <2 x i32> @_Z18WriteInvocationAMDDv2_iDv2_ii(
+    <2 x i32> %inputValue, <2 x i32> %writeValue, i32 %invocationIndex)
+{
+    %1 = extractelement <2 x i32> %inputValue, i32 0
+    %2 = extractelement <2 x i32> %inputValue, i32 1
+
+    %3 = extractelement <2 x i32> %writeValue, i32 0
+    %4 = extractelement <2 x i32> %writeValue, i32 1
+
+    %5 = call i32 @_Z18WriteInvocationAMDiii(i32 %1, i32 %3, i32 %invocationIndex)
+    %6 = call i32 @_Z18WriteInvocationAMDiii(i32 %2, i32 %4, i32 %invocationIndex)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 writeInvocation(ivec3/uvec3, ivec3/uvec3, uint)
+define spir_func <3 x i32> @_Z18WriteInvocationAMDDv3_iDv3_ii(
+    <3 x i32> %inputValue, <3 x i32> %writeValue, i32 %invocationIndex)
+{
+    %1 = extractelement <3 x i32> %inputValue, i32 0
+    %2 = extractelement <3 x i32> %inputValue, i32 1
+    %3 = extractelement <3 x i32> %inputValue, i32 2
+
+    %4 = extractelement <3 x i32> %writeValue, i32 0
+    %5 = extractelement <3 x i32> %writeValue, i32 1
+    %6 = extractelement <3 x i32> %writeValue, i32 2
+
+    %7 = call i32 @_Z18WriteInvocationAMDiii(i32 %1, i32 %4, i32 %invocationIndex)
+    %8 = call i32 @_Z18WriteInvocationAMDiii(i32 %2, i32 %5, i32 %invocationIndex)
+    %9 = call i32 @_Z18WriteInvocationAMDiii(i32 %3, i32 %6, i32 %invocationIndex)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 writeInvocation(ivec4/uvec4, ivec4/uvec4, uint)
+define spir_func <4 x i32> @_Z18WriteInvocationAMDDv4_iDv4_ii(
+    <4 x i32> %inputValue, <4 x i32> %writeValue, i32 %invocationIndex)
+{
+    %1 = extractelement <4 x i32> %inputValue, i32 0
+    %2 = extractelement <4 x i32> %inputValue, i32 1
+    %3 = extractelement <4 x i32> %inputValue, i32 2
+    %4 = extractelement <4 x i32> %inputValue, i32 3
+
+    %5 = extractelement <4 x i32> %writeValue, i32 0
+    %6 = extractelement <4 x i32> %writeValue, i32 1
+    %7 = extractelement <4 x i32> %writeValue, i32 2
+    %8 = extractelement <4 x i32> %writeValue, i32 3
+
+    %9  = call i32 @_Z18WriteInvocationAMDiii(i32 %1, i32 %5, i32 %invocationIndex)
+    %10 = call i32 @_Z18WriteInvocationAMDiii(i32 %2, i32 %6, i32 %invocationIndex)
+    %11 = call i32 @_Z18WriteInvocationAMDiii(i32 %3, i32 %7, i32 %invocationIndex)
+    %12 = call i32 @_Z18WriteInvocationAMDiii(i32 %4, i32 %8, i32 %invocationIndex)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: float writeInvocation(float, float, uint)
+define spir_func float @_Z18WriteInvocationAMDffi(float %inputValue, float %writeValue, i32 %invocationIndex)
+{
+    %1 = bitcast float %inputValue to i32
+    %2 = bitcast float %writeValue to i32
+    %3 = call i32 @_Z18WriteInvocationAMDiii(i32 %1, i32 %2, i32 %invocationIndex)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 writeInvocation(vec2, vec2, uint)
+define spir_func <2 x float> @_Z18WriteInvocationAMDDv2_fDv2_fi(
+    <2 x float> %inputValue, <2 x float> %writeValue, i32 %invocationIndex)
+{
+    %1 = bitcast <2 x float> %inputValue to <2 x i32>
+    %2 = bitcast <2 x float> %writeValue to <2 x i32>
+    %3 = call <2 x i32> @_Z18WriteInvocationAMDDv2_iDv2_ii(<2 x i32> %1, <2 x i32> %2, i32 %invocationIndex)
+    %4 = bitcast <2 x i32> %3 to <2 x float>
+
+    ret <2 x float> %4
+}
+
+; GLSL: vec3 writeInvocation(vec3, vec3, uint)
+define spir_func <3 x float> @_Z18WriteInvocationAMDDv3_fDv3_fi(
+    <3 x float> %inputValue, <3 x float> %writeValue, i32 %invocationIndex)
+{
+    %1 = bitcast <3 x float> %inputValue to <3 x i32>
+    %2 = bitcast <3 x float> %writeValue to <3 x i32>
+    %3 = call <3 x i32> @_Z18WriteInvocationAMDDv3_iDv3_ii(<3 x i32> %1, <3 x i32> %2, i32 %invocationIndex)
+    %4 = bitcast <3 x i32> %3 to <3 x float>
+
+    ret <3 x float> %4
+}
+
+; GLSL: vec4 writeInvocation(vec4, vec4, uint)
+define spir_func <4 x float> @_Z18WriteInvocationAMDDv4_fDv4_fi(
+    <4 x float> %inputValue, <4 x float> %writeValue, i32 %invocationIndex)
+{
+    %1 = bitcast <4 x float> %inputValue to <4 x i32>
+    %2 = bitcast <4 x float> %writeValue to <4 x i32>
+    %3 = call <4 x i32> @_Z18WriteInvocationAMDDv4_iDv4_ii(<4 x i32> %1, <4 x i32> %2, i32 %invocationIndex)
+    %4 = bitcast <4 x i32> %3 to <4 x float>
+
+    ret <4 x float> %4
+}
+
+; GLSL: uint mbcnt(uint64_t)
+define spir_func i32 @_Z8MbcntAMDl(i64 %mask)
+{
+    %1 = bitcast i64 %mask to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llvm.amdgcn.mbcnt.lo(i32 %2, i32 0)
+    %5 = call i32 @llvm.amdgcn.mbcnt.hi(i32 %3, i32 %4)
+
+    ret i32 %5
+}
 
 ; =====================================================================================================================
 ; >>>  Interpolation Functions
 ; =====================================================================================================================
 
 ; Adjust interpolation I/J according to specified offsets X/Y
-define float @llpc.input.interpolate.adjustij(float %ij, float %offsetX, float %offsetY)
+define float @llpc.input.interpolate.adjustij.f32(float %ij, float %offsetX, float %offsetY)
 {
     ; Calculate DpDx, DpDy for %ij
     %1 = call float @llpc.dpdxFine.f32(float %ij)
@@ -1972,7 +2785,7 @@ define float @llpc.input.interpolate.adjustij(float %ij, float %offsetX, float %
 }
 
 ; Evaluate interpolation I/J for GLSL function interpolateAtOffset()
-define <2 x float> @llpc.input.interpolate.evalij.offset(<2 x float> %offset) #0
+define <2 x float> @llpc.input.interpolate.evalij.offset.v2f32(<2 x float> %offset) #0
 {
     ; BuiltInInterpPullMode 268435459 = 0x10000003
     %1 = call <3 x float> @llpc.input.import.builtin.InterpPullMode(i32 268435459)
@@ -1986,9 +2799,9 @@ define <2 x float> @llpc.input.interpolate.evalij.offset(<2 x float> %offset) #0
     %6 = extractelement <2 x float> %offset, i32 1
 
     ; Adjust each coefficient by offset
-    %7 = call float @llpc.input.interpolate.adjustij(float %2, float %5, float %6)
-    %8 = call float @llpc.input.interpolate.adjustij(float %3, float %5, float %6)
-    %9 = call float @llpc.input.interpolate.adjustij(float %4, float %5, float %6)
+    %7 = call float @llpc.input.interpolate.adjustij.f32(float %2, float %5, float %6)
+    %8 = call float @llpc.input.interpolate.adjustij.f32(float %3, float %5, float %6)
+    %9 = call float @llpc.input.interpolate.adjustij.f32(float %4, float %5, float %6)
 
     ; Get final I, J
     %10 = fmul float %7, %9
@@ -2002,7 +2815,7 @@ define <2 x float> @llpc.input.interpolate.evalij.offset(<2 x float> %offset) #0
 
 ; Evaluate interpolation I/J for GLSL function interpolateAtOffset() with "noperspective" qualifier specified
 ; on interpolant
-define <2 x float> @llpc.input.interpolate.evalij.offset.noperspective(<2 x float> %offset) #0
+define <2 x float> @llpc.input.interpolate.evalij.offset.noperspective.v2f32(<2 x float> %offset) #0
 {
     ; BuiltInInterpLinearCenter 268435461 = 0x10000005
     %1 = call <2 x float> @llpc.input.import.builtin.InterpLinearCenter(i32 268435461)
@@ -2015,8 +2828,8 @@ define <2 x float> @llpc.input.interpolate.evalij.offset.noperspective(<2 x floa
     %5 = extractelement <2 x float> %offset, i32 1
 
     ; Adjust I,J by offset
-    %6 = call float @llpc.input.interpolate.adjustij(float %2, float %4, float %5)
-    %7 = call float @llpc.input.interpolate.adjustij(float %3, float %4, float %5)
+    %6 = call float @llpc.input.interpolate.adjustij.f32(float %2, float %4, float %5)
+    %7 = call float @llpc.input.interpolate.adjustij.f32(float %3, float %4, float %5)
 
     %8 = insertelement <2 x float> undef, float %6, i32 0
     %9 = insertelement <2 x float> %8, float %7, i32 1
@@ -2029,7 +2842,7 @@ define <2 x float> @llpc.input.interpolate.evalij.sample(i32 %sample) #0
 {
     ; BuiltInSamplePosOffset 268435463 = 0x10000007
     %1 = call <2 x float> @llpc.input.import.builtin.SamplePosOffset(i32 268435463, i32 %sample)
-    %2 = call <2 x float> @llpc.input.interpolate.evalij.offset(<2 x float> %1)
+    %2 = call <2 x float> @llpc.input.interpolate.evalij.offset.v2f32(<2 x float> %1)
     ret <2 x float> %2
 }
 
@@ -2039,8 +2852,54 @@ define <2 x float> @llpc.input.interpolate.evalij.sample.noperspective(i32 %samp
 {
     ; BuiltInSamplePosOffset 268435463 = 0x10000007
     %1 = call <2 x float> @llpc.input.import.builtin.SamplePosOffset(i32 268435463, i32 %sample)
-    %2 = call <2 x float> @llpc.input.interpolate.evalij.offset.noperspective(<2 x float> %1)
+    %2 = call <2 x float> @llpc.input.interpolate.evalij.offset.noperspective.v2f32(<2 x float> %1)
     ret <2 x float> %2
+}
+
+; =====================================================================================================================
+; >>>  Functions of Extension AMD_gcn_shader
+; =====================================================================================================================
+
+; GLSL: float cubeFaceIndex(vec3)
+define spir_func float @_Z16CubeFaceIndexAMDDv3_f(<3 x float> %coord)
+{
+    %1 = extractelement <3 x float> %coord, i32 0
+    %2 = extractelement <3 x float> %coord, i32 1
+    %3 = extractelement <3 x float> %coord, i32 2
+
+    %4 = call float @llvm.amdgcn.cubeid(float %1, float %2, float %3)
+    ret float %4
+}
+
+; GLSL: vec2 cubeFaceCoord(vec3)
+define spir_func <2 x float> @_Z16CubeFaceCoordAMDDv3_f(<3 x float> %coord)
+{
+    %1 = extractelement <3 x float> %coord, i32 0
+    %2 = extractelement <3 x float> %coord, i32 1
+    %3 = extractelement <3 x float> %coord, i32 2
+
+    %4 = call float @llvm.amdgcn.cubema(float %1, float %2, float %3)
+    %5 = fdiv float 1.0, %4
+
+    %6 = call float @llvm.amdgcn.cubesc(float %1, float %2, float %3)
+    %7 = fmul float %5, %6
+    %8 = fadd float %7, 0.5
+
+    %9  = call float @llvm.amdgcn.cubetc(float %1, float %2, float %3)
+    %10 = fmul float %5, %9
+    %11 = fadd float %10, 0.5
+
+    %12 = insertelement <2 x float> undef, float %8, i32 0
+    %13 = insertelement <2 x float> %12, float %11, i32 1
+
+    ret <2 x float> %13
+}
+
+; GLSL: uint64_t time()
+define spir_func i64 @_Z7TimeAMDv()
+{
+    %1 = call i64 @llvm.amdgcn.s.memtime()
+    ret i64 %1
 }
 
 declare void @llvm.AMDGPU.kilp() #0
@@ -2062,10 +2921,15 @@ declare i32 @llvm.amdgcn.mbcnt.hi(i32, i32) #1
 declare i64 @llvm.cttz.i64(i64, i1) #0
 declare i64 @llvm.ctlz.i64(i64, i1) #0
 declare i64 @llvm.ctpop.i64(i64) #0
-declare i32 @llvm.amdgcn.ds.bpermute(i32, i32) #2
+declare float @llvm.amdgcn.cubeid(float, float, float) #1
+declare float @llvm.amdgcn.cubesc(float, float, float) #1
+declare float @llvm.amdgcn.cubema(float, float, float) #1
+declare float @llvm.amdgcn.cubetc(float, float, float) #1
+declare i64 @llvm.amdgcn.s.memtime() #4
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readnone }
 attributes #2 = { nounwind readnone convergent }
 attributes #3 = { convergent nounwind }
+attributes #4 = { nounwind readonly }
 

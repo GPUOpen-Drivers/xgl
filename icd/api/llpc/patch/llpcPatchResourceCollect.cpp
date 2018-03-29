@@ -715,6 +715,48 @@ void PatchResourceCollect::ClearInactiveInput()
             {
                 builtInUsage.fs.helperInvocation = false;
             }
+
+            if (builtInUsage.fs.baryCoordNoPersp &&
+                (m_activeInputBuiltIns.find(BuiltInBaryCoordNoPerspAMD) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.fs.baryCoordNoPersp = false;
+            }
+
+            if (builtInUsage.fs.baryCoordNoPerspCentroid &&
+                (m_activeInputBuiltIns.find(BuiltInBaryCoordNoPerspCentroidAMD) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.fs.baryCoordNoPerspCentroid = false;
+            }
+
+            if (builtInUsage.fs.baryCoordNoPerspSample &&
+                (m_activeInputBuiltIns.find(BuiltInBaryCoordNoPerspSampleAMD) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.fs.baryCoordNoPerspSample = false;
+            }
+
+            if (builtInUsage.fs.baryCoordSmooth &&
+                (m_activeInputBuiltIns.find(BuiltInBaryCoordSmoothAMD) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.fs.baryCoordSmooth = false;
+            }
+
+            if (builtInUsage.fs.baryCoordSmoothCentroid &&
+                (m_activeInputBuiltIns.find(BuiltInBaryCoordSmoothCentroidAMD) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.fs.baryCoordSmoothCentroid = false;
+            }
+
+            if (builtInUsage.fs.baryCoordSmoothSample &&
+                (m_activeInputBuiltIns.find(BuiltInBaryCoordSmoothSampleAMD) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.fs.baryCoordNoPerspSample = false;
+            }
+
+            if (builtInUsage.fs.baryCoordPullModel &&
+                (m_activeInputBuiltIns.find(BuiltInBaryCoordPullModelAMD) == m_activeInputBuiltIns.end()))
+            {
+                builtInUsage.fs.baryCoordPullModel = false;
+            }
         }
         else if (m_shaderStage == ShaderStageCompute)
         {

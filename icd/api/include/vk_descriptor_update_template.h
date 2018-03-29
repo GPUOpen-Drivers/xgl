@@ -95,9 +95,9 @@ private:
         size_t          dstDynOffset;
     };
 
-    TemplateUpdateInfo* GetEntries() const
+    const TemplateUpdateInfo* GetEntries() const
     {
-        return static_cast<TemplateUpdateInfo*>(Util::VoidPtrInc(this, sizeof(*this)));
+        return static_cast<const TemplateUpdateInfo*>(Util::VoidPtrInc(this, sizeof(*this)));
     }
 
     template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize>

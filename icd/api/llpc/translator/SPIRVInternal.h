@@ -360,7 +360,9 @@ namespace gSPIRVName {
   const static char ImageCallModSample[]                  = ".sample";
   const static char ImageCallModMinLod[]                  = ".minlod";
   const static char ImageCallModFmaskBased[]              = ".fmaskbased";
-  const static char ImageCallModFmaskOnly[]               = ".fmaskonly";
+  const static char ImageCallModFmaskId[]                 = ".fmaskid";
+  const static char ImageCallModFmaskValue[]              = ".fmaskvalue";
+  const static char ImageCallModPatchFmaskUsage[]         = ".patchfmaskusage";
   const static char ImageCallQueryNonLodPrefix[]          = ".querynonlod";
   const static char ImageCallQueryLodPrefix[]             = ".querylod";
 }
@@ -422,6 +424,7 @@ enum SPIRVInterpModeKind {
   InterpModeSmooth,
   InterpModeFlat,
   InterpModeNoPersp,
+  InterpModeCustom,
 };
 
 enum SPIRVInterpLocKind {
@@ -429,6 +432,7 @@ enum SPIRVInterpLocKind {
   InterpLocCenter,
   InterpLocCentroid,
   InterpLocSample,
+  InterpLocCustom,
 };
 
 enum SPIRVVertexSpacingKind {
@@ -524,19 +528,19 @@ SPIRVMap<SPIRVImageOpKind, std::string>::init() {
   add(ImageOpQueryLod,              "querylod");
   add(ImageOpRead,                  "read");
   add(ImageOpWrite,                 "write");
-  add(ImageOpAtomicExchange,        "atomic.exchange");
-  add(ImageOpAtomicCompareExchange, "atomic.compexchange");
-  add(ImageOpAtomicIIncrement,      "atomic.iincrement");
-  add(ImageOpAtomicIDecrement,      "atomic.idecrement");
-  add(ImageOpAtomicIAdd,            "atomic.iadd");
-  add(ImageOpAtomicISub,            "atomic.isub");
-  add(ImageOpAtomicSMin,            "atomic.smin");
-  add(ImageOpAtomicUMin,            "atomic.umin");
-  add(ImageOpAtomicSMax,            "atomic.smax");
-  add(ImageOpAtomicUMax,            "atomic.umax");
-  add(ImageOpAtomicAnd,             "atomic.and");
-  add(ImageOpAtomicOr,              "atomic.or");
-  add(ImageOpAtomicXor,             "atomic.xor");
+  add(ImageOpAtomicExchange,        "atomicexchange");
+  add(ImageOpAtomicCompareExchange, "atomiccompexchange");
+  add(ImageOpAtomicIIncrement,      "atomiciincrement");
+  add(ImageOpAtomicIDecrement,      "atomicidecrement");
+  add(ImageOpAtomicIAdd,            "atomiciadd");
+  add(ImageOpAtomicISub,            "atomicisub");
+  add(ImageOpAtomicSMin,            "atomicsmin");
+  add(ImageOpAtomicUMin,            "atomicumin");
+  add(ImageOpAtomicSMax,            "atomicsmax");
+  add(ImageOpAtomicUMax,            "atomicumax");
+  add(ImageOpAtomicAnd,             "atomicand");
+  add(ImageOpAtomicOr,              "atomicor");
+  add(ImageOpAtomicXor,             "atomicxor");
 }
 typedef SPIRVMap<SPIRVImageOpKind, std::string> SPIRVImageOpKindNameMap;
 
@@ -1215,13 +1219,13 @@ union ShaderInOutMetadata {
     uint32_t Signedness         : 1;  // Signedness of the input/output, valid
                                       // for integer (0 - unsigned, 1 - signed)
     uint32_t InterpMode         : 2;  // Interpolation mode (fragment shader)
-    uint32_t InterpLoc          : 2;  // Interpolation location (fragment
+    uint32_t InterpLoc          : 3;  // Interpolation location (fragment
                                       // shader)
     uint32_t PerPatch           : 1;  // Whether this is a per-patch input/
                                       // output (tessellation shader)
     uint32_t StreamId           : 2;  // ID of output stream (geometry shader)
 
-    uint32_t Unused             : 6;
+    uint32_t Unused             : 5;
   };
   uint32_t U32All;
 };
@@ -1290,8 +1294,7 @@ union ShaderImageCallMetadata {
     uint32_t          Dim           : 3;  // Image dimension
     uint32_t          Arrayed       : 1;  // Whether image is arrayed
     uint32_t          Multisampled  : 1;  // Whether image is multisampled
-
-    uint32_t          Unused        : 14;
+    uint32_t          Unused        : 21;
   };
   uint32_t U32All;
 };

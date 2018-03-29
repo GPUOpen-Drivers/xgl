@@ -75,18 +75,17 @@ public:
     {
         // If both SCPC and LLPC build are defined, select module by input flag
         // Otherwise, the input flag is ignored.
-        return m_llpcConvertOut.pModuleData;
+        return m_pLlpcShaderModule;
     }
 
 protected:
-    VkResult Init(const Device* pDevice);
-
     ShaderModule(size_t codeSize, const void* pCode);
+    VkResult Init(const Device* pDevice);
 
     size_t                     m_codeSize;
     const void*                m_pCode;
-    Llpc::ShaderModuleBuildOut m_llpcConvertOut;
-    void*                      m_pLlpcShaderMemory;
+
+    void*                      m_pLlpcShaderModule;
 
     Pal::ShaderHash            m_codeHash;
 };

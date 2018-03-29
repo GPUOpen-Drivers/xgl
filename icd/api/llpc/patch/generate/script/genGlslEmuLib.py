@@ -99,9 +99,9 @@ for f in os.listdir("./"):
         cmd = LLVM_AS + " " + f
         print(">>>  (LL-as) " + cmd)
         if OS_TYPE == "win" :
-            subprocess.call(cmd)
+            subprocess.check_call(cmd)
         else :
-            subprocess.call(cmd, shell = True)
+            subprocess.check_call(cmd, shell = True)
 
 # Link special emulation .bc files to libraries (null fragment shader, copy shader)
 SPECIAL_EMUS = ["NullFs", "CopyShader"]
@@ -120,9 +120,9 @@ for feature in SPECIAL_EMUS:
     cmd = LLVM_LINK + " -o=" + libFile + " " + bcFile
     print(">>>  (LL-link) " + cmd)
     if OS_TYPE == "win" :
-        subprocess.call(cmd)
+        subprocess.check_call(cmd)
     else :
-        subprocess.call(cmd, shell = True)
+        subprocess.check_call(cmd, shell = True)
 
     # Convert .lib file to a hex file
     hFile = "g_llpcGlsl" + feature + "EmuLib.h"
@@ -165,9 +165,9 @@ libFile = "glslEmu.lib"
 cmd = LLVM_LINK + " -o=" + libFile + " " + bcFiles
 print(">>>  (LL-link) " + cmd)
 if OS_TYPE == "win" :
-    subprocess.call(cmd)
+    subprocess.check_call(cmd)
 else :
-    subprocess.call(cmd, shell = True)
+    subprocess.check_call(cmd, shell = True)
 
 # Convert .lib file to a hex file
 hFile = "g_llpcGlslEmuLib.h"
@@ -218,9 +218,9 @@ for gfx in GFX_EMUS:
             cmd = LLVM_AS + " " + gfx + "/" + f
             print(">>>  (LL-as) " + cmd)
             if OS_TYPE == "win" :
-                subprocess.call(cmd)
+                subprocess.check_call(cmd)
             else :
-                subprocess.call(cmd, shell = True)
+                subprocess.check_call(cmd, shell = True)
 
     # Search for the .bc file
     bcFiles = ""
@@ -233,9 +233,9 @@ for gfx in GFX_EMUS:
     cmd = LLVM_LINK + " -o=" + libFile + " " + bcFiles
     print(">>>  (LL-link) " + cmd)
     if OS_TYPE == "win" :
-        subprocess.call(cmd)
+        subprocess.check_call(cmd)
     else :
-        subprocess.call(cmd, shell = True)
+        subprocess.check_call(cmd, shell = True)
 
     # Convert .lib file to a hex file
     hFile = gfx + "/g_llpcGlslEmuLib" + gfx.capitalize() + ".h"

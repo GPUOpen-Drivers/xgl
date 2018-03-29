@@ -338,6 +338,7 @@ public:
   Instruction *transSPIRVBuiltinFromInst(SPIRVInstruction *BI, BasicBlock *BB);
   Instruction *transOCLBarrierFence(SPIRVInstruction* BI, BasicBlock *BB);
   Instruction *transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB);
+  Instruction *transSPIRVFragmentMaskOpFromInst(SPIRVInstruction *BI, BasicBlock*BB);
   void transOCLVectorLoadStore(std::string& UnmangledName,
       std::vector<SPIRVWord> &BArgs);
 
@@ -2162,8 +2163,12 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
   case OpExtInst: {
     SPIRVExtInst* BC = static_cast<SPIRVExtInst *>(BV);
     SPIRVExtInstSetKind Set = BM->getBuiltinSet(BC->getExtSetId());
-    assert(Set == SPIRVEIS_OpenCL || Set == SPIRVEIS_GLSL ||
-      Set == SPIRVEIS_ShaderBallotAMD);
+    assert(Set == SPIRVEIS_OpenCL ||
+           Set == SPIRVEIS_GLSL ||
+           Set == SPIRVEIS_ShaderBallotAMD ||
+           Set == SPIRVEIS_ShaderExplicitVertexParameterAMD ||
+           Set == SPIRVEIS_GcnShaderAMD ||
+           Set == SPIRVEIS_ShaderTrinaryMinMaxAMD);
 
     if (Set == SPIRVEIS_OpenCL)
       return mapValue(BV, transOCLBuiltinFromExtInst(BC, BB));
@@ -2349,6 +2354,12 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
     return mapValue(BV,
       transBuiltinFromInst(OpName, BI, BB));
   }
+  case OpFragmentMaskFetchAMD:
+  case OpFragmentFetchAMD:
+    return mapValue(BV,
+        transSPIRVFragmentMaskOpFromInst(
+            static_cast<SPIRVInstruction *>(BV),
+            BB));
   case OpImageTexelPointer: {
     auto ImagePointer = static_cast<SPIRVImageTexelPointer *>(BV)->getImage();
     assert((ImagePointer->getOpCode() == OpAccessChain) ||
@@ -2689,6 +2700,122 @@ SPIRVToLLVM::transSPIRVBuiltinFromInst(SPIRVInstruction *BI, BasicBlock *BB) {
     return transBuiltinFromInst(getSPIRVFuncName(BI->getOpCode(), Suffix), BI, BB);
 }
 
+// Translates SPIR-V fragment mask operations to LLVM function calls
+Instruction *
+SPIRVToLLVM::transSPIRVFragmentMaskOpFromInst(SPIRVInstruction *BI, BasicBlock*BB)
+{
+  Op OC = BI->getOpCode();
+
+  const SPIRVTypeImageDescriptor *Desc = nullptr;
+  std::vector<SPIRVValue *> Ops;
+  std::vector<Type *> ArgTys;
+  std::stringstream SS;
+
+  // Generate name strings for image calls:
+  // OpFragmentMaskFetchAMD:
+  //    prefix.image.fetch.u32.dim.fmaskvalue
+  // OpFragmentFetchAMD
+  //    prefix.image.fetch.[f32|i32|u32].dim[.sample]
+
+  // Add call prefix
+  SS << gSPIRVName::ImageCallPrefix;
+  SS << ".";
+
+  // Add image operation kind
+  std::string S;
+  SPIRVImageOpKindNameMap::find(ImageOpFetch, &S);
+  SS << S;
+
+  // Collect operands
+  Ops = BI->getOperands();
+  std::vector<SPIRVType *> BTys = SPIRVInstruction::getOperandTypes(Ops);
+  if (Ops[0]->getOpCode() == OpImageTexelPointer) {
+      // Get image type from "ImageTexelPointer"
+      BTys[0] = static_cast<SPIRVImageTexelPointer *>(Ops[0])->getImage()
+      ->getType()->getPointerElementType();
+  }
+  ArgTys = transTypeVector(BTys);
+
+  // Get image type info
+  SPIRVType *BTy = BTys[0]; // Image operand
+  if (BTy->isTypePointer())
+    BTy = BTy->getPointerElementType();
+  const SPIRVTypeImage *ImageTy = nullptr;
+
+  OC = BTy->getOpCode();
+  if (OC == OpTypeSampledImage) {
+    ImageTy = static_cast<SPIRVTypeSampledImage *>(BTy)->getImageType();
+    Desc    = &ImageTy->getDescriptor();
+  } else if (OC == OpTypeImage) {
+    ImageTy = static_cast<SPIRVTypeImage *>(BTy);
+    Desc    = &ImageTy->getDescriptor();
+  } else
+    llvm_unreachable("Invalid image type");
+
+  // Add sampled type
+  if (BI->getOpCode() == OpFragmentMaskFetchAMD)
+    SS << ".u32";
+  else {
+    SPIRVType *SampledTy = ImageTy->getSampledType();
+    OC = SampledTy->getOpCode();
+    if (OC == OpTypeFloat)
+      SS << ".f32";
+    else if (OC == OpTypeInt) {
+      if (static_cast<SPIRVTypeInt*>(SampledTy)->isSigned())
+        SS << ".i32";
+      else
+        SS << ".u32";
+    } else
+      llvm_unreachable("Invalid sampled type");
+  }
+
+  // Add image dimension
+  assert((Desc->Dim == Dim2D) || (Desc->Dim == DimSubpassData));
+  assert(Desc->MS);
+  SS << "." << SPIRVDimNameMap::map(Desc->Dim);
+  if (Desc->Arrayed)
+      SS << "Array";
+
+  if (BI->getOpCode() == OpFragmentMaskFetchAMD)
+    SS << gSPIRVName::ImageCallModFmaskValue;
+  else if (BI->getOpCode() == OpFragmentFetchAMD)
+    SS << gSPIRVName::ImageCallModSample;
+
+  std::vector<Value *> Args = transValue(Ops, BB->getParent(), BB);
+  auto Int32Ty = Type::getInt32Ty(*Context);
+
+  // Add image call metadata as argument
+  ShaderImageCallMetadata ImageCallMD = {};
+  ImageCallMD.OpKind        = ImageOpFetch;
+  ImageCallMD.Dim           = Desc->Dim;
+  ImageCallMD.Arrayed       = Desc->Arrayed;
+  ImageCallMD.Multisampled  = Desc->MS;
+
+  ArgTys.push_back(Int32Ty);
+  Args.push_back(ConstantInt::get(Int32Ty, ImageCallMD.U32All));
+
+  Function *F = M->getFunction(SS.str());
+  Type *RetTy = Type::getVoidTy(*Context);
+  assert(BI->hasType());
+  RetTy = transType(BI->getType());
+  FunctionType *FT = FunctionType::get(RetTy, ArgTys, false);
+
+  if (!F) {
+    F = Function::Create(FT, GlobalValue::ExternalLinkage, SS.str(), M);
+    F->setCallingConv(CallingConv::SPIR_FUNC);
+    if (isFuncNoUnwind())
+      F->addFnAttr(Attribute::NoUnwind);
+  }
+
+  assert(F->getFunctionType() == FT);
+
+  auto Call = CallInst::Create(F, Args, "", BB);
+  setName(Call, BI);
+  setAttrByCalledFunc(Call);
+
+  return Call;
+}
+
 // Translates SPIR-V image operations to LLVM function calls
 Instruction *
 SPIRVToLLVM::transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB)
@@ -2796,9 +2923,12 @@ SPIRVToLLVM::transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB)
       // Add sampled type
       SPIRVType *SampledTy = ImageTy->getSampledType();
       OC = SampledTy->getOpCode();
-      if (OC == OpTypeFloat)
-        SS << ".f32";
-      else if (OC == OpTypeInt) {
+      if (OC == OpTypeFloat) {
+        if (SampledTy->getBitWidth() == 16)
+          SS << ".f16";
+        else
+          SS << ".f32";
+      } else if (OC == OpTypeInt) {
         if (static_cast<SPIRVTypeInt*>(SampledTy)->isSigned())
           SS << ".i32";
         else
@@ -2835,46 +2965,44 @@ SPIRVToLLVM::transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB)
     if (Info.OperMask < OpWords.size()) {
       // Optional image operands are present
       SPIRVWord Mask = OpWords[Info.OperMask];
-      if (Mask & ImageOperandsBiasMask) {
-        // Bias operand
+
+      // Bias operand
+      if (Mask & ImageOperandsBiasMask)
         SS << gSPIRVName::ImageCallModBias;
-      }
 
-      if (Mask & ImageOperandsLodMask) {
-        // Lod operand
+      // Lod operand
+      if (Mask & ImageOperandsLodMask)
         SS << gSPIRVName::ImageCallModLod;
-      }
 
-      if (Mask & ImageOperandsGradMask) {
-        // Grad operands
+      // Grad operands
+      if (Mask & ImageOperandsGradMask)
         SS << gSPIRVName::ImageCallModGrad;
-      }
 
-      if (Mask & ImageOperandsConstOffsetMask) {
-        // ConstOffset operands
+      // ConstOffset operands
+      if (Mask & ImageOperandsConstOffsetMask)
         SS << gSPIRVName::ImageCallModConstOffset;
-      }
 
-      if (Mask & ImageOperandsOffsetMask) {
-        // Offset operand
+      // Offset operand
+      if (Mask & ImageOperandsOffsetMask)
         SS << gSPIRVName::ImageCallModOffset;
-      }
 
-      if (Mask & ImageOperandsConstOffsetsMask) {
-        // ConstOffsets operand
+      // ConstOffsets operand
+      if (Mask & ImageOperandsConstOffsetsMask)
         SS << gSPIRVName::ImageCallModConstOffsets;
-      }
 
-      if (Mask & ImageOperandsSampleMask) {
-        // Sample operand
+      // Sample operand
+      if (Mask & ImageOperandsSampleMask)
         SS << gSPIRVName::ImageCallModSample;
-      }
 
-      if (Mask & ImageOperandsMinLodMask) {
-        // MinLod operand
+      // MinLod operand
+      if (Mask & ImageOperandsMinLodMask)
         SS << gSPIRVName::ImageCallModMinLod;
-      }
     }
+
+    // Fmask usage is determined by resource node binding
+    if (Desc->MS)
+        SS << gSPIRVName::ImageCallModPatchFmaskUsage;
+
   } else {
     Ops = BI->getOperands();
     assert(BI->hasType());
@@ -3542,6 +3670,11 @@ SPIRVToLLVM::transShaderDecoration(SPIRVValue *BV, Value *V) {
       if (BV->hasDecorate(DecorationSample))
         InOutDec.Interp.Loc = InterpLocSample;
 
+      if (BV->hasDecorate(DecorationExplicitInterpAMD)) {
+        InOutDec.Interp.Mode = InterpModeCustom;
+        InOutDec.Interp.Loc = InterpLocCustom;
+      }
+
       if (BV->hasDecorate(DecorationPatch))
         InOutDec.PerPatch = true;
 
@@ -3805,6 +3938,11 @@ SPIRVToLLVM::buildShaderInOutMetadata(SPIRVType *BT,
   if (BT->hasDecorate(DecorationSample))
     InOutDec.Interp.Loc = InterpLocSample;
 
+  if (BT->hasDecorate(DecorationExplicitInterpAMD)) {
+    InOutDec.Interp.Mode = InterpModeCustom;
+    InOutDec.Interp.Loc = InterpLocCustom;
+  }
+
   if (BT->hasDecorate(DecorationPatch))
     InOutDec.PerPatch = true;
 
@@ -3948,6 +4086,11 @@ SPIRVToLLVM::buildShaderInOutMetadata(SPIRVType *BT,
 
       if (BT->hasMemberDecorate(MemberIdx, DecorationSample))
         MemberDec.Interp.Loc = InterpLocSample;
+
+      if (BT->hasMemberDecorate(MemberIdx, DecorationExplicitInterpAMD)) {
+        MemberDec.Interp.Mode = InterpModeCustom;
+        MemberDec.Interp.Loc = InterpLocCustom;
+      }
 
       if (BT->hasMemberDecorate(MemberIdx, DecorationPatch))
         MemberDec.PerPatch = true;
@@ -4224,8 +4367,12 @@ SPIRVToLLVM::transGLSLBuiltinFromExtInst(SPIRVExtInst *BC, BasicBlock *BB)
   assert(BB && "Invalid BB");
 
   SPIRVExtInstSetKind Set = BM->getBuiltinSet(BC->getExtSetId());
-  assert((Set == SPIRVEIS_GLSL || Set == SPIRVEIS_ShaderBallotAMD)
-    && "Not valid extended instruction");
+  assert((Set == SPIRVEIS_GLSL ||
+          Set == SPIRVEIS_ShaderBallotAMD ||
+          Set == SPIRVEIS_ShaderExplicitVertexParameterAMD ||
+          Set == SPIRVEIS_GcnShaderAMD ||
+          Set == SPIRVEIS_ShaderTrinaryMinMaxAMD)
+         && "Not valid extended instruction");
 
   SPIRVWord EntryPoint = BC->getExtOp();
   auto BArgs = BC->getArguments();
@@ -4237,6 +4384,15 @@ SPIRVToLLVM::transGLSLBuiltinFromExtInst(SPIRVExtInst *BC, BasicBlock *BB)
   else if (Set == SPIRVEIS_ShaderBallotAMD)
     UnmangledName = ShaderBallotAMDExtOpMap::map(
       static_cast<ShaderBallotAMDExtOpKind>(EntryPoint));
+  else if (Set == SPIRVEIS_ShaderExplicitVertexParameterAMD)
+    UnmangledName = ShaderExplicitVertexParameterAMDExtOpMap::map(
+      static_cast<ShaderExplicitVertexParameterAMDExtOpKind>(EntryPoint));
+  else if (Set == SPIRVEIS_GcnShaderAMD)
+    UnmangledName = GcnShaderAMDExtOpMap::map(
+      static_cast<GcnShaderAMDExtOpKind>(EntryPoint));
+  else if (Set == SPIRVEIS_ShaderTrinaryMinMaxAMD)
+    UnmangledName = ShaderTrinaryMinMaxAMDExtOpMap::map(
+      static_cast<ShaderTrinaryMinMaxAMDExtOpKind>(EntryPoint));
 
   string MangledName;
   MangleGLSLBuiltin(UnmangledName, ArgTys, MangledName);

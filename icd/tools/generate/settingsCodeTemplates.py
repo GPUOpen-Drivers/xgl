@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -23,18 +23,11 @@
  #
  #######################################################################################################################
 
-CopyrightAndWarning = "/*\n\
-***********************************************************************************************************************\n\
-*\n\
-*  Trade secret of Advanced Micro Devices, Inc.\n\
-*  Copyright (c) 2015 Advanced Micro Devices, Inc., (unpublished)\n\
-*\n\
-*  All rights reserved.  This notice is intended as a precaution against inadvertent publication and does not imply\n\
-*  publication or any waiver of confidentiality.  The year included in the foregoing notice is the year of creation of\n\
-*  the work.\n\
-*\n\
-***********************************************************************************************************************\n\
-*/\n\
+import os
+CopyrightFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../xgl-copyright-template.txt"
+FileHeaderCopyright = open(CopyrightFilePath, 'r').read()
+
+FileHeaderWarning = "\
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n\
 //\n\
 // WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!\n\
@@ -46,6 +39,8 @@ CopyrightAndWarning = "/*\n\
 // WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING!  WARNING! WARNING!  WARNING!  WARNING!  WARNING!\n\
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n\
 \n"
+
+CopyrightAndWarning = FileHeaderCopyright + FileHeaderWarning
 
 HeaderFileDoxComment = "\n\
 /**\n\

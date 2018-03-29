@@ -552,7 +552,7 @@ void PatchInOutImportExport::visitCallInst(
                     Value* pElemIdx = callInst.getOperand(1);
                     LLPC_ASSERT(IsDontCareValue(pElemIdx) == false);
 
-                    Value* pIJ = nullptr;
+                    Value* pAuxInterpValue = nullptr;
 
                     if (isGenericInputImport)
                     {
@@ -569,14 +569,14 @@ void PatchInOutImportExport::visitCallInst(
                         interpMode = cast<ConstantInt>(callInst.getOperand(3))->getZExtValue();
                         interpLoc = InterpLocUnknown;
 
-                        pIJ = callInst.getOperand(4);
+                        pAuxInterpValue = callInst.getOperand(4);
                     }
 
                     pInput = PatchFsGenericInputImport(pInputTy,
                                                        loc,
                                                        pLocOffset,
                                                        pElemIdx,
-                                                       pIJ,
+                                                       pAuxInterpValue,
                                                        interpMode,
                                                        interpLoc,
                                                        &callInst);
@@ -1685,14 +1685,16 @@ Value* PatchInOutImportExport::PatchGsGenericInputImport(
 // =====================================================================================================================
 // Patches import calls for generic inputs of fragment shader.
 Value* PatchInOutImportExport::PatchFsGenericInputImport(
-    Type*        pInputTy,       // [in] Type of input value
-    uint32_t     location,       // Base location of the input
-    Value*       pLocOffset,     // [in] Relative location offset
-    Value*       pCompIdx,       // [in] Index used for vector element indexing (could be null)
-    Value*       pIJ,            // [in] Explicitly-calculated I/J for interpolation (could be null)
-    uint32_t     interpMode,     // Interpolation mode
-    uint32_t     interpLoc,      // Interpolation location
-    Instruction* pInsertPos)     // [in] Where to insert the patch instruction
+    Type*        pInputTy,        // [in] Type of input value
+    uint32_t     location,        // Base location of the input
+    Value*       pLocOffset,      // [in] Relative location offset
+    Value*       pCompIdx,        // [in] Index used for vector element indexing (could be null)
+    Value*       pAuxInterpValue, // [in] Auxiliary value of interpolation: for non "custom" interpolation, it is the
+                                  // explicitly calculated I/J; for "custom" interpolation, it is vertex no. (could be
+                                  // null)
+    uint32_t     interpMode,      // Interpolation mode
+    uint32_t     interpLoc,       // Interpolation location
+    Instruction* pInsertPos)      // [in] Where to insert the patch instruction
 {
     Value* pInput = UndefValue::get(pInputTy);
 
@@ -1704,13 +1706,13 @@ Value* PatchInOutImportExport::PatchFsGenericInputImport(
     {
         interpInfo.push_back(InvalidFsInterpInfo);
     }
-    interpInfo[location] = { location, (interpMode == InterpModeFlat) };
+    interpInfo[location] = { location, (interpMode == InterpModeFlat), (interpMode == InterpModeCustom) };
 
     if (locCount > 1)
     {
         // The input occupies two consecutive locations
         LLPC_ASSERT(locCount == 2);
-        interpInfo[location + 1] = { location + 1, (interpMode == InterpModeFlat) };
+        interpInfo[location + 1] = { location + 1, (interpMode == InterpModeFlat), (interpMode == InterpModeCustom) };
     }
 
     auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageFragment)->entryArgIdxs.fs;
@@ -1719,9 +1721,10 @@ Value* PatchInOutImportExport::PatchFsGenericInputImport(
     Value* pI  = nullptr;
     Value* pJ  = nullptr;
 
-    // Note "flat" interpolation
-    if (interpMode != InterpModeFlat)
+    // Not "flat" and "custom" interpolation
+    if ((interpMode != InterpModeFlat) && (interpMode != InterpModeCustom))
     {
+        auto pIJ = pAuxInterpValue;
         if (pIJ == nullptr)
         {
             if (interpMode == InterpModeSmooth)
@@ -1804,7 +1807,7 @@ Value* PatchInOutImportExport::PatchFsGenericInputImport(
     {
         Value* pCompValue = nullptr;
 
-        if (interpMode != InterpModeFlat)
+        if ((interpMode != InterpModeFlat) && (interpMode != InterpModeCustom))
         {
             LLPC_ASSERT((pBasicTy->isHalfTy() || pBasicTy->isFloatTy()) && (numChannels <= 4));
 
@@ -1845,9 +1848,36 @@ Value* PatchInOutImportExport::PatchFsGenericInputImport(
         }
         else
         {
-            // NOTE: Besides "float", input with other types should be specified with "flat" qualifier.
+            InterpParam interpParam = INTERP_PARAM_P0;
+
+            if (interpMode == InterpModeCustom)
+            {
+                LLPC_ASSERT(isa<ConstantInt>(pAuxInterpValue));
+                uint32_t vertexNo = cast<ConstantInt>(pAuxInterpValue)->getZExtValue();
+
+                switch (vertexNo)
+                {
+                case 0:
+                    interpParam = INTERP_PARAM_P0;
+                    break;
+                case 1:
+                    interpParam = INTERP_PARAM_P10;
+                    break;
+                case 2:
+                    interpParam = INTERP_PARAM_P20;
+                    break;
+                default:
+                    LLPC_NEVER_CALLED();
+                    break;
+                }
+            }
+            else
+            {
+                LLPC_ASSERT(interpMode == InterpModeFlat);
+            }
+
             args.clear();
-            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), INTERP_PARAM_P0));   // param
+            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), interpParam));       // param
             args.push_back(ConstantInt::get(m_pContext->Int32Ty(), i % 4));             // attr_chan
             args.push_back((pLocOffset != nullptr) ?
                             pLoc :
@@ -2648,7 +2678,7 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
             {
                 interpInfo.push_back(InvalidFsInterpInfo);
             }
-            interpInfo[loc] = { loc, false };
+            interpInfo[loc] = { loc, false, false };
 
             // Emulation for "in vec2 gl_PointCoord"
             pInput = PatchFsGenericInputImport(pInputTy,
@@ -2668,6 +2698,8 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
 
             pInput = EmitCall(m_pModule, "llvm.amdgcn.ps.live", m_pContext->BoolTy(), args, attribs, pInsertPos);
             pInput = BinaryOperator::CreateNot(pInput, "", pInsertPos);
+
+            pInput = new ZExtInst(pInput, m_pContext->Int8Ty(), "", pInsertPos);
             break;
         }
     case BuiltInPrimitiveId:
@@ -2707,7 +2739,7 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
             {
                 interpInfo.push_back(InvalidFsInterpInfo);
             }
-            interpInfo[loc] = { loc, true }; // Flat interpolation
+            interpInfo[loc] = { loc, true, false }; // Flat interpolation
 
             // Emulation for "in int gl_PrimitiveID" or "in int gl_Layer" or "in int gl_ViewportIndex"
             // or "in int gl_ViewIndex"
@@ -2755,10 +2787,10 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
                 interpInfo.push_back(InvalidFsInterpInfo);
             }
 
-            interpInfo[loc] = { loc, false };
+            interpInfo[loc] = { loc, false, false };
             if (locCount > 1)
             {
-                interpInfo[loc + 1] = { loc + 1, false };
+                interpInfo[loc + 1] = { loc + 1, false, false };
             }
 
             // Emulation for "in float gl_ClipDistance[]" or "in float gl_CullDistance[]"
@@ -2843,44 +2875,51 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
             pInput = ConstantInt::get(m_pContext->Int32Ty(), pPipelineInfo->rsState.samplePatternIdx);
             break;
         }
-    // Handle internal-use built-ins for interpolation functions
+    // Handle internal-use built-ins for interpolation functions and AMD extension (AMD_shader_explicit_vertex_parameter)
     case BuiltInInterpPerspSample:
+    case BuiltInBaryCoordSmoothSampleAMD:
         {
             LLPC_ASSERT(entryArgIdxs.perspInterp.sample != 0);
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.perspInterp.sample);
             break;
         }
     case BuiltInInterpPerspCenter:
+    case BuiltInBaryCoordSmoothAMD:
         {
             LLPC_ASSERT(entryArgIdxs.perspInterp.center != 0);
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.perspInterp.center);
             break;
         }
     case BuiltInInterpPerspCentroid:
+    case BuiltInBaryCoordSmoothCentroidAMD:
         {
             LLPC_ASSERT(entryArgIdxs.perspInterp.centroid != 0);
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.perspInterp.centroid);
             break;
         }
     case BuiltInInterpPullMode:
+    case BuiltInBaryCoordPullModelAMD:
         {
             LLPC_ASSERT(entryArgIdxs.perspInterp.pullMode != 0);
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.perspInterp.pullMode);
             break;
         }
     case BuiltInInterpLinearSample:
+    case BuiltInBaryCoordNoPerspSampleAMD:
         {
             LLPC_ASSERT(entryArgIdxs.linearInterp.sample != 0);
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.linearInterp.sample);
             break;
         }
     case BuiltInInterpLinearCenter:
+    case BuiltInBaryCoordNoPerspAMD:
         {
             LLPC_ASSERT(entryArgIdxs.linearInterp.center != 0);
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.linearInterp.center);
             break;
         }
     case BuiltInInterpLinearCentroid:
+    case BuiltInBaryCoordNoPerspCentroidAMD:
         {
             LLPC_ASSERT(entryArgIdxs.linearInterp.centroid != 0);
             pInput = GetFunctionArgument(m_pEntryPoint, entryArgIdxs.linearInterp.centroid);

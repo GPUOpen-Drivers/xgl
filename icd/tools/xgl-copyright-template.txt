@@ -22,22 +22,3 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
-
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
-
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
-
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
-
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
-
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION    21
-
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"

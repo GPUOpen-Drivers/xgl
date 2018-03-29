@@ -179,7 +179,6 @@ Device::Device(
     m_renderStateCache(this),
     m_enabledExtensions(enabledExtensions),
     m_pSqttMgr(nullptr),
-    m_pipelineCacheCount(0),
     m_pfnUpdateDescriptorSets(nullptr)
 {
     memcpy(m_pPhysicalDevices, pPhysicalDevices, sizeof(pPhysicalDevices[DefaultDeviceIndex]) * palDeviceCount);
@@ -715,7 +714,7 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        result = CreateLlpcInternalPipelines();
+        result = CreateInternalPipelines();
     }
 
     if (result == VK_SUCCESS)
@@ -1009,7 +1008,7 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 }
 
 // =====================================================================================================================
-VkResult Device::CreateLlpcInternalComputePipeline(
+VkResult Device::CreateInternalComputePipeline(
     size_t                           codeByteSize,
     const uint8_t*                   pCode,
     uint32_t                         numUserDataNodes,
@@ -1018,58 +1017,49 @@ VkResult Device::CreateLlpcInternalComputePipeline(
 {
     VK_ASSERT(numUserDataNodes <= VK_ARRAY_SIZE(pInternalPipeline->userDataNodeOffsets));
 
-    VkResult result = VK_SUCCESS;
-    Llpc::Result llpcResult = Llpc::Result::Success;
-    Pal::IPipeline* pPipeline[MaxPalDevices] = {};
+    VkResult             result              = VK_SUCCESS;
+    PipelineCompiler*    pCompiler           = GetCompiler();
+    void*                pLlpcShaderModule   = nullptr;
+    const void*          pPipelineBinary     = nullptr;
+    size_t               pipelineBinarySize  = 0;
 
-    void* pShaderMemory = nullptr;
-    void* pPipelineBinaryMemory = nullptr;
-    void* pPipelineMem = nullptr;
+    void*                pPipelineMem        = nullptr;
 
-    Llpc::ShaderModuleBuildInfo shaderInfo = {};
-    Llpc::ShaderModuleBuildOut shaderOut = {};
-    Llpc::ComputePipelineBuildOut pipelineOut = {};
+    PipelineCompiler::ComputePipelineCreateInfo pipelineBuildInfo = {};
 
     // Build shader module
-    shaderInfo.pInstance = VkPhysicalDevice()->VkInstance();
-    shaderInfo.pfnOutputAlloc = AllocateShaderOutput;
-    shaderInfo.pUserData = &pShaderMemory;
-    shaderInfo.shaderBin.pCode    = pCode;
-    shaderInfo.shaderBin.codeSize = codeByteSize;
-
-    llpcResult = GetCompiler()->GetLlpcCompiler()->BuildShaderModule(&shaderInfo, &shaderOut);
-    if ((llpcResult != Llpc::Result::Success) && (llpcResult != Llpc::Result::Delayed))
-    {
-        result = VK_ERROR_INITIALIZATION_FAILED;
-    }
+    auto settings = GetRuntimeSettings();
+    result = pCompiler->BuildShaderModule(
+        codeByteSize,
+        pCode
+        , &pLlpcShaderModule
+    );
 
     if (result == VK_SUCCESS)
     {
         // Build pipeline binary
-        Llpc::ComputePipelineBuildInfo pipelineBuildInfo = {};
-        pipelineBuildInfo.pInstance      = VkPhysicalDevice()->VkInstance();
-        pipelineBuildInfo.pfnOutputAlloc = AllocateShaderOutput;
-        pipelineBuildInfo.pUserData      = &pPipelineBinaryMemory;
-
-        auto pShaderInfo = &pipelineBuildInfo.cs;
-        pShaderInfo->pModuleData         = shaderOut.pModuleData;
-        pShaderInfo->pSpecializatonInfo  = nullptr;
+        auto pShaderInfo = &pipelineBuildInfo.pipelineInfo.cs;
+        pShaderInfo->pModuleData         = pLlpcShaderModule;
+        pShaderInfo->pSpecializationInfo = nullptr;
         pShaderInfo->pEntryTarget        = "main";
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
-        llpcResult = GetCompiler()->GetLlpcCompiler()->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut);
-        if (llpcResult != Llpc::Result::Success)
-        {
-            result = VK_ERROR_INITIALIZATION_FAILED;
-        }
+        result = pCompiler->CreateComputePipelineBinary(this,
+                                                        0,
+                                                        nullptr,
+                                                        &pipelineBuildInfo,
+                                                        &pipelineBinarySize,
+                                                        &pPipelineBinary);
+        pipelineBuildInfo.pMappingBuffer = nullptr;
     }
 
+    Pal::IPipeline*      pPipeline[MaxPalDevices] = {};
     if (result == VK_SUCCESS)
     {
         Pal::ComputePipelineCreateInfo pipelineInfo = {};
         pipelineInfo.flags.clientInternal = true;
-        pipelineInfo.pPipelineBinary = pipelineOut.pipelineBin.pCode;
-        pipelineInfo.pipelineBinarySize = pipelineOut.pipelineBin.codeSize;
+        pipelineInfo.pPipelineBinary      = pPipelineBinary;
+        pipelineInfo.pipelineBinarySize   = pipelineBinarySize;
 
         const size_t pipelineSize = PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(pipelineInfo, nullptr);
 
@@ -1090,14 +1080,12 @@ VkResult Device::CreateLlpcInternalComputePipeline(
     }
 
     // Cleanup
-    if (pShaderMemory)
-    {
-        VkInstance()->FreeMem(pShaderMemory);
-    }
+    pCompiler->FreeShaderModule(pLlpcShaderModule);
 
-    if (pPipelineBinaryMemory)
+    if (pPipelineBinary)
     {
-        VkInstance()->FreeMem(pPipelineBinaryMemory);
+        pCompiler->FreeComputePipelineBinary(&pipelineBuildInfo, pPipelineBinary, pipelineBinarySize);
+        pCompiler->FreeComputePipelineCreateInfo(&pipelineBuildInfo);
     }
 
     if (result == VK_SUCCESS)
@@ -1127,7 +1115,7 @@ VkResult Device::CreateLlpcInternalComputePipeline(
 }
 
 // =====================================================================================================================
-VkResult Device::CreateLlpcInternalPipelines()
+VkResult Device::CreateInternalPipelines()
 {
     VkResult result = VK_SUCCESS;
 
@@ -1160,7 +1148,7 @@ VkResult Device::CreateLlpcInternalPipelines()
     userDataNodes[2].offsetInDwords = 2 * uavViewSize;
     userDataNodes[2].sizeInDwords = 4;
 
-    result = CreateLlpcInternalComputePipeline(
+    result = CreateInternalComputePipeline(
         sizeof(CopyTimestampQueryPoolIl),
         CopyTimestampQueryPoolIl,
         VK_ARRAY_SIZE(userDataNodes),
@@ -1920,26 +1908,6 @@ VkDeviceSize Device::GetMemoryBaseAddrAlignment(
 }
 
 // =====================================================================================================================
-// Gets default pipeline cache expected entry count based on current existing pipeline cache count.
-uint32_t Device::GetPipelineCacheExpectedEntryCount()
-{
-    uint32_t expectedEntries = 0;
-    // It's supposed to be protected by a Mutex, but the number doesn't really count much and using AtomicIncrement is
-    // enough.
-    const uint32_t excessivePipelineCacheCount = GetRuntimeSettings().excessivePipelineCacheCountThreshold;
-    if (Util::AtomicIncrement(&m_pipelineCacheCount) > excessivePipelineCacheCount / NumPalDevices())
-    {
-#if ICD_X86_BUILD
-        expectedEntries = 1024;
-#else
-        expectedEntries = 4096;
-#endif
-    }
-
-    return expectedEntries;
-}
-
-// =====================================================================================================================
 // Returns the memory types compatible with pinned system memory.
 uint32_t Device::GetPinnedSystemMemoryTypes() const
 {
@@ -1968,14 +1936,7 @@ uint32_t Device::GetExternalHostMemoryTypes(
     {
         memoryTypes = GetPinnedSystemMemoryTypes();
     }
-
     return memoryTypes;
-}
-
-// =====================================================================================================================
-void Device::DecreasePipelineCacheCount()
-{
-    Util::AtomicDecrement(&m_pipelineCacheCount);
 }
 
 /**

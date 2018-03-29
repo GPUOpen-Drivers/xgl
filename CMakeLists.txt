@@ -67,6 +67,8 @@ option(ICD_GPUOPEN_DEVMODE_BUILD "Build ${PROJECT_NAME} with GPU Open Developer 
 
 option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})
 
+option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" OFF)
+
 # Option Overrides #################################################################################
 # These are options that override XGL subproject options.  As these overrides are managed and force
 # set by XGL, mark_as_advanced is used to hide them from the CMake GUI.
@@ -114,6 +116,13 @@ set(PAL_BUILD_VIDEO ${ICD_BUILD_VIDEO} CACHE BOOL "${PROJECT_NAME} override." FO
 
 # LLVM
 set(XGL_LLVM_SRC_PATH ${PROJECT_SOURCE_DIR}/../llvm CACHE PATH "Specify the path to the LLVM.")
+
+# Wayland
+if (BUILD_WAYLAND_SUPPORT)
+    set(PAL_BUILD_WAYLAND ON CACHE BOOL "Build PAL with Wayland support" FORCE)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(WAYLAND REQUIRED wayland-client)
+endif()
 
 ### Generator Dependencies #############################################################################################
 find_package(PythonInterp 3)
@@ -168,3 +177,17 @@ if(NOT ICD_BUILD_SPVONLY)
     endif()
 endif()
 
+#build wsa
+option(BUILD_WSA "Build wsa" OFF)
+
+if (BUILD_WSA)
+    add_subdirectory(${PROJECT_SOURCE_DIR}/../wsa ${PROJECT_BINARY_DIR}/wsa)
+endif()
+
+#build wayland support
+option(BUILD_WAYLAND_SUPPORT "Build wayland support" OFF)
+if (BUILD_WAYLAND_SUPPORT)
+    set(PAL_HAVE_WAYLAND_PLATFORM ON)
+    target_compile_definitions(xgl PRIVATE PAL_HAVE_WAYLAND_PLATFORM=1)
+    target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
+endif()

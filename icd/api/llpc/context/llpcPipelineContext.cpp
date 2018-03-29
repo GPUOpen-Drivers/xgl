@@ -501,14 +501,14 @@ void PipelineContext::UpdateShaderHashForPipelineShaderInfo(
         pHasher->Update(reinterpret_cast<const uint8_t*>(pShaderInfo->pEntryTarget), entryNameLen);
     }
 
-    if ((pShaderInfo->pSpecializatonInfo) && (pShaderInfo->pSpecializatonInfo->mapEntryCount > 0))
+    if ((pShaderInfo->pSpecializationInfo) && (pShaderInfo->pSpecializationInfo->mapEntryCount > 0))
     {
-        auto pSpecializatonInfo = pShaderInfo->pSpecializatonInfo;
-        pHasher->Update(pSpecializatonInfo->mapEntryCount);
-        pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pMapEntries),
-                        sizeof(VkSpecializationMapEntry) * pSpecializatonInfo->mapEntryCount);
-        pHasher->Update(pSpecializatonInfo->dataSize);
-        pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pData), pSpecializatonInfo->dataSize);
+        auto pSpecializationInfo = pShaderInfo->pSpecializationInfo;
+        pHasher->Update(pSpecializationInfo->mapEntryCount);
+        pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializationInfo->pMapEntries),
+                        sizeof(VkSpecializationMapEntry) * pSpecializationInfo->mapEntryCount);
+        pHasher->Update(pSpecializationInfo->dataSize);
+        pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializationInfo->pData), pSpecializationInfo->dataSize);
     }
 }
 

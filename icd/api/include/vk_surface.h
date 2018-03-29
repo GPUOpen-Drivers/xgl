@@ -49,6 +49,9 @@ public:
 
         VkIcdSurfaceXcb*   GetXcbSurface() { return &m_xcbSurface; }
         VkIcdSurfaceXlib*  GetXlibSurface() { return &m_xlibSurface; }
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+        VkIcdSurfaceWayland*  GetWaylandSurface() { return &m_waylandSurface; }
+#endif
 
     Pal::OsDisplayHandle GetOSDisplayHandle() { return m_osDisplayHandle; }
 
@@ -80,11 +83,24 @@ protected:
         m_osDisplayHandle(osDisplayHandle)
     {
     }
-
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    Surface(Instance*            pInstance,
+        Pal::OsDisplayHandle     osDisplayHandle,
+        const VkIcdSurfaceWayland&  waylandSurface)
+        :
+        m_waylandSurface(waylandSurface),
+        m_pInstance(pInstance),
+        m_osDisplayHandle(osDisplayHandle)
+    {
+    }
+#endif
     union
     {
         VkIcdSurfaceXcb     m_xcbSurface;
         VkIcdSurfaceXlib    m_xlibSurface;
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+        VkIcdSurfaceWayland m_waylandSurface;
+#endif
     };
 
     Instance*            m_pInstance;
@@ -105,6 +121,13 @@ namespace entry
         const VkXlibSurfaceCreateInfoKHR*           pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
         VkSurfaceKHR*                               pSurface);
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    VKAPI_ATTR VkResult VKAPI_CALL vkCreateWaylandSurfaceKHR(
+        VkInstance                                  instance,
+        const VkWaylandSurfaceCreateInfoKHR*           pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator,
+        VkSurfaceKHR*                               pSurface);
+#endif
 
 VKAPI_ATTR void VKAPI_CALL vkDestroySurfaceKHR(
     VkInstance                                  instance,

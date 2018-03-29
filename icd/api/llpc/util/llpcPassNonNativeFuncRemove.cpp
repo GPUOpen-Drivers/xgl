@@ -89,8 +89,8 @@ bool PassNonNativeFuncRemove::runOnModule(
         {
             auto funcName = pFunc->getName();
 
-            // TODO: "llvm.fabs." is to pass CTS dEQP-VK.ssbo.layout.single_basic_type.std430/std140.row_major_lowp_mat4.
-            // we should it once the bug in LLVM back-end is fixed.
+            // TODO: "llvm.fabs." is to pass CTS dEQP-VK.ssbo.layout.single_basic_type.std430/std140.row_major_lowp_
+            // mat4. we should remove it once the bug in LLVM back-end is fixed.
             if (funcName.startswith("llpc.") ||
                 funcName.startswith("llvm.amdgcn.") ||
                 ((cl::DisableLLVMPatch == false) && funcName.startswith("llvm.fabs.")))

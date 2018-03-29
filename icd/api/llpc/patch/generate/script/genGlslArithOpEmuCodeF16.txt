@@ -51,3 +51,8 @@ genF16Type FwidthFine genF16Type p : llpc.fwidthFine.f16 #0
 genF16Type DPdxCoarse genF16Type p : llpc.dpdxCoarse.f16 #0
 genF16Type DPdyCoarse genF16Type p : llpc.dpdyCoarse.f16 #0
 genF16Type FwidthCoarse genF16Type p : llpc.fwidthCoarse.f16 #0
+
+# Functions of extension AMD_shader_trinary_minmax
+genF16Type FMin3AMD genF16Type x genF16Type y genF16Type z : llpc.fmin3.f16 #0
+genF16Type FMax3AMD genF16Type x genF16Type y genF16Type z : llpc.fmax3.f16 #0
+genF16Type FMid3AMD genF16Type x genF16Type y genF16Type z : llpc.fmid3.f16 #0

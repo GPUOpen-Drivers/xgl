@@ -90,7 +90,7 @@ private:
                                            uint32_t           location,
                                            Value*             pLocOffset,
                                            Value*             pCompIdx,
-                                           Value*             pIJ,
+                                           Value*             pAuxInterpValue,
                                            uint32_t           interpMode,
                                            uint32_t           interpLoc,
                                            llvm::Instruction* pInsertPos);

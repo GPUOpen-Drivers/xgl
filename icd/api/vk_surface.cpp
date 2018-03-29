@@ -47,6 +47,9 @@ VkResult Surface::Create(
 
     VkIcdSurfaceXcb  xcbSurface  = {};
     VkIcdSurfaceXlib xlibSurface = {};
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    VkIcdSurfaceWayland waylandSurface = {};
+#endif
 
     union
     {
@@ -54,6 +57,9 @@ VkResult Surface::Create(
 
         const VkXcbSurfaceCreateInfoKHR*             pVkXcbSurfaceCreateInfoKHR;
         const VkXlibSurfaceCreateInfoKHR*            pVkXlibSurfaceCreateInfoKHR;
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+        const VkWaylandSurfaceCreateInfoKHR*     pVkWaylandSurfaceCreateInfoKHR;
+#endif
     };
 
     VkResult result = VK_SUCCESS;
@@ -78,6 +84,15 @@ VkResult Surface::Create(
             xlibSurface.window        = pVkXlibSurfaceCreateInfoKHR->window;
             break;
         }
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+        case VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR:
+        {
+            waylandSurface.base.platform = VK_ICD_WSI_PLATFORM_WAYLAND;
+            waylandSurface.display = pVkWaylandSurfaceCreateInfoKHR->display;
+            waylandSurface.surface = pVkWaylandSurfaceCreateInfoKHR->surface;
+            break;
+        }
+#endif
         default:
             break;
         };
@@ -107,6 +122,12 @@ VkResult Surface::Create(
         {
             pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, osDisplayHandle, xcbSurface);
         }
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+        else if (waylandSurface.base.platform == VK_ICD_WSI_PLATFORM_WAYLAND)
+        {
+            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, osDisplayHandle, waylandSurface);
+        }
+#endif
         else
         {
             pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, osDisplayHandle, xlibSurface);
@@ -149,6 +170,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateXlibSurfaceKHR(
     return Surface::Create(Instance::ObjectFromHandle(instance),
         reinterpret_cast<const VkStructHeader*>(pCreateInfo), pAllocator, pSurface);
 }
+// =====================================================================================================================
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateWaylandSurfaceKHR(
+    VkInstance                          instance,
+    const VkWaylandSurfaceCreateInfoKHR*   pCreateInfo,
+    const VkAllocationCallbacks*        pAllocator,
+    VkSurfaceKHR*                       pSurface)
+{
+    return Surface::Create(Instance::ObjectFromHandle(instance),
+        reinterpret_cast<const VkStructHeader*>(pCreateInfo), pAllocator, pSurface);
+}
+#endif
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkDestroySurfaceKHR(

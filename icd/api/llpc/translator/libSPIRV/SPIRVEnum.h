@@ -41,6 +41,7 @@
 #define SPIRVENUM_HPP_
 
 #include "spirv.hpp"
+#include "GLSL.ext.AMD.h"
 #include "SPIRVOpCode.h"
 #include <cstdint>
 using namespace spv;
@@ -81,6 +82,9 @@ enum SPIRVExtInstSetKind {
   SPIRVEIS_OpenCL,
   SPIRVEIS_GLSL,
   SPIRVEIS_ShaderBallotAMD,
+  SPIRVEIS_ShaderExplicitVertexParameterAMD,
+  SPIRVEIS_GcnShaderAMD,
+  SPIRVEIS_ShaderTrinaryMinMaxAMD,
   SPIRVEIS_Count,
 };
 
@@ -120,7 +124,11 @@ template<> inline void
 SPIRVMap<SPIRVExtInstSetKind, std::string>::init() {
   add(SPIRVEIS_OpenCL, "OpenCL.std");
   add(SPIRVEIS_GLSL, "GLSL.std.450");
-  add(SPIRVEIS_ShaderBallotAMD, "SPV_AMD_shader_ballot");
+  add(SPIRVEIS_ShaderBallotAMD, E_SPV_AMD_shader_ballot);
+  add(SPIRVEIS_ShaderExplicitVertexParameterAMD,
+    E_SPV_AMD_shader_explicit_vertex_parameter);
+  add(SPIRVEIS_GcnShaderAMD, E_SPV_AMD_gcn_shader);
+  add(SPIRVEIS_ShaderTrinaryMinMaxAMD, E_SPV_AMD_shader_trinary_minmax);
 }
 typedef SPIRVMap<SPIRVExtInstSetKind, std::string> SPIRVBuiltinSetNameMap;
 
@@ -199,6 +207,8 @@ SPIRVMap<SPIRVCapabilityKind, SPIRVCapVec>::init() {
   ADD_VEC_INIT(CapabilityGroupNonUniformClustered, { CapabilityGroupNonUniform });
   ADD_VEC_INIT(CapabilityGroupNonUniformQuad, { CapabilityGroupNonUniform });
 #endif
+  ADD_VEC_INIT(CapabilityImageGatherBiasLodAMD, { CapabilityShader });
+  ADD_VEC_INIT(CapabilityFragmentMaskAMD, { CapabilityShader });
 }
 
 template<> inline void

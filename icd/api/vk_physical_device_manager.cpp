@@ -300,9 +300,14 @@ uint32_t PhysicalDeviceManager::GetDeviceGroupIndices(
         {
             // Group the devices if they have matching Pal::DeviceProperties::deviceIds.
             // Note: We could allow non-matching devices to be grouped in future, perhaps via App-detect
-
-            // Device group is not supported on Linux yet. So just make sure only one device every group.
-            // This should be removed as soon as mGPU is supported on Linux.
+            if (deviceGroupIds[groupIdx] == info.deviceId)
+            {
+                if (pDeviceGroupIndices != nullptr)
+                {
+                    pDeviceGroupIndices[deviceIndex] = groupIdx;
+                }
+                break;
+            }
         }
 
         if (groupIdx == deviceGroupCount)

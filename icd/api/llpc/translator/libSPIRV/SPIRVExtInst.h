@@ -379,12 +379,51 @@ typedef ShaderBallotAMD ShaderBallotAMDExtOpKind;
 
 template<> inline void
 SPIRVMap<ShaderBallotAMDExtOpKind, std::string>::init() {
-    add(SwizzleInvocationsAMD, "SwizzleInvocationsAMD");
-    add(SwizzleInvocationsMaskedAMD, "SwizzleInvocationsMaskedAMD");
-    add(WriteInvocationAMD, "WriteInvocationAMD");
-    add(MbcntAMD, "MbcntAMD");
+  add(SwizzleInvocationsAMD, "SwizzleInvocationsAMD");
+  add(SwizzleInvocationsMaskedAMD, "SwizzleInvocationsMaskedAMD");
+  add(WriteInvocationAMD, "WriteInvocationAMD");
+  add(MbcntAMD, "MbcntAMD");
 }
 SPIRV_DEF_NAMEMAP(ShaderBallotAMDExtOpKind, ShaderBallotAMDExtOpMap)
+
+typedef ShaderExplicitVertexParameterAMD
+  ShaderExplicitVertexParameterAMDExtOpKind;
+
+template<> inline void
+SPIRVMap<ShaderExplicitVertexParameterAMDExtOpKind, std::string>::init() {
+  add(InterpolateAtVertexAMD, "InterpolateAtVertexAMD");
+}
+SPIRV_DEF_NAMEMAP(ShaderExplicitVertexParameterAMDExtOpKind,
+  ShaderExplicitVertexParameterAMDExtOpMap)
+
+typedef GcnShaderAMD GcnShaderAMDExtOpKind;
+
+template<> inline void
+SPIRVMap<GcnShaderAMDExtOpKind, std::string>::init() {
+  add(CubeFaceIndexAMD, "CubeFaceIndexAMD");
+  add(CubeFaceCoordAMD, "CubeFaceCoordAMD");
+  add(TimeAMD, "TimeAMD");
+}
+
+SPIRV_DEF_NAMEMAP(GcnShaderAMDExtOpKind, GcnShaderAMDExtOpMap)
+
+typedef ShaderTrinaryMinMaxAMD ShaderTrinaryMinMaxAMDExtOpKind;
+
+template<> inline void
+SPIRVMap<ShaderTrinaryMinMaxAMDExtOpKind, std::string>::init() {
+  add(FMin3AMD, "FMin3AMD");
+  add(UMin3AMD, "UMin3AMD");
+  add(SMin3AMD, "SMin3AMD");
+  add(FMax3AMD, "FMax3AMD");
+  add(UMax3AMD, "UMax3AMD");
+  add(SMax3AMD, "SMax3AMD");
+  add(FMid3AMD, "FMid3AMD");
+  add(UMid3AMD, "UMid3AMD");
+  add(SMid3AMD, "SMid3AMD");
+}
+
+SPIRV_DEF_NAMEMAP(ShaderTrinaryMinMaxAMDExtOpKind,
+  ShaderTrinaryMinMaxAMDExtOpMap)
 
 }
 

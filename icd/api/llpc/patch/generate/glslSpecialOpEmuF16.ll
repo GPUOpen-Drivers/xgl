@@ -158,9 +158,89 @@ define half @llpc.fwidthCoarse.f16(half %p) #0
     ret half %5
 }
 
+; =====================================================================================================================
+; >>>  Interpolation Functions
+; =====================================================================================================================
+
+; Adjust interpolation I/J according to specified offsets X/Y
+define float @llpc.input.interpolate.adjustij.f16(float %ij, half %offsetX, half %offsetY)
+{
+    ; Calculate DpDx, DpDy for %ij
+    %1 = call float @llpc.dpdxFine.f32(float %ij)
+    %2 = call float @llpc.dpdyFine.f32(float %ij)
+
+    ; Adjust %ij by offset
+    %3 = fpext half %offsetX to float
+    %4 = fpext half %offsetY to float
+
+    %5 = fmul float %3, %1
+    %6 = fadd float %ij, %5
+    %7 = fmul float %4, %2
+    %8 = fadd float %6, %7
+
+    ret float %8
+}
+
+; Evaluate interpolation I/J for GLSL function interpolateAtOffset()
+define <2 x float> @llpc.input.interpolate.evalij.offset.v2f16(<2 x half> %offset) #0
+{
+    ; BuiltInInterpPullMode 268435459 = 0x10000003
+    %1 = call <3 x float> @llpc.input.import.builtin.InterpPullMode(i32 268435459)
+    ; Extract Pull Model I/W, J/W, 1/W
+    %2 = extractelement <3 x float> %1, i32 0
+    %3 = extractelement <3 x float> %1, i32 1
+    %4 = extractelement <3 x float> %1, i32 2
+
+    ; Extract offset to scalar
+    %5 = extractelement <2 x half> %offset, i32 0
+    %6 = extractelement <2 x half> %offset, i32 1
+
+    ; Adjust each coefficient by offset
+    %7 = call float @llpc.input.interpolate.adjustij.f16(float %2, half %5, half %6)
+    %8 = call float @llpc.input.interpolate.adjustij.f16(float %3, half %5, half %6)
+    %9 = call float @llpc.input.interpolate.adjustij.f16(float %4, half %5, half %6)
+
+    ; Get final I, J
+    %10 = fmul float %7, %9
+    %11 = fmul float %8, %9
+
+    %12 = insertelement <2 x float> undef, float %10, i32 0
+    %13 = insertelement <2 x float> %12, float %11, i32 1
+
+    ret <2 x float> %13
+}
+
+; Evaluate interpolation I/J for GLSL function interpolateAtOffset() with "noperspective" qualifier specified
+; on interpolant
+define <2 x float> @llpc.input.interpolate.evalij.offset.noperspective.v2f16(<2 x half> %offset) #0
+{
+    ; BuiltInInterpLinearCenter 268435461 = 0x10000005
+    %1 = call <2 x float> @llpc.input.import.builtin.InterpLinearCenter(i32 268435461)
+    ; Extract I, J
+    %2 = extractelement <2 x float> %1, i32 0
+    %3 = extractelement <2 x float> %1, i32 1
+
+    ; Extract offset to scalar
+    %4 = extractelement <2 x half> %offset, i32 0
+    %5 = extractelement <2 x half> %offset, i32 1
+
+    ; Adjust I,J by offset
+    %6 = call float @llpc.input.interpolate.adjustij.f16(float %2, half %4, half %5)
+    %7 = call float @llpc.input.interpolate.adjustij.f16(float %3, half %4, half %5)
+
+    %8 = insertelement <2 x float> undef, float %6, i32 0
+    %9 = insertelement <2 x float> %8, float %7, i32 1
+
+    ret <2 x float> %9
+}
+
 declare half @llvm.fabs.f16(half) #0
-declare i32 @llvm.amdgcn.mov.dpp.i32(i32 , i32 , i32 , i32 , i1 ) #2
-declare i32 @llvm.amdgcn.wqm.i32(i32 ) #3
+declare i32 @llvm.amdgcn.mov.dpp.i32(i32, i32, i32, i32, i1 ) #2
+declare i32 @llvm.amdgcn.wqm.i32(i32) #3
+declare float @llpc.dpdxFine.f32(float) #0
+declare float @llpc.dpdyFine.f32(float) #0
+declare <3 x float> @llpc.input.import.builtin.InterpPullMode(i32) #0
+declare <2 x float> @llpc.input.import.builtin.InterpLinearCenter(i32) #0
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readonly }

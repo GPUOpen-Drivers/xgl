@@ -31,24 +31,21 @@
 #include "include/vk_physical_device.h"
 #include "include/vk_pipeline_cache.h"
 #include "palAutoBuffer.h"
-#include "llpc.h"
 
 namespace vk
 {
 
 // =====================================================================================================================
 PipelineCache::PipelineCache(
-    const Device*       pDevice,
-    PipelineCacheType   cacheType,
-    IShaderCachePtr*    pShaderCaches)
+    const Device*   pDevice,
+    ShaderCache*    pShaderCaches)
     :
-    m_pDevice(pDevice),
-    m_cacheType(cacheType)
+    m_pDevice(pDevice)
 {
-    memcpy(m_pShaderCaches, pShaderCaches, sizeof(m_pShaderCaches[0]) * pDevice->NumPalDevices());
-    memset(m_pShaderCaches + pDevice->NumPalDevices(),
+    memcpy(m_shaderCaches, pShaderCaches, sizeof(m_shaderCaches[0]) * pDevice->NumPalDevices());
+    memset(m_shaderCaches + pDevice->NumPalDevices(),
            0,
-           sizeof(m_pShaderCaches[0]) * (MaxPalDevices - pDevice->NumPalDevices()));
+           sizeof(m_shaderCaches[0]) * (MaxPalDevices - pDevice->NumPalDevices()));
 }
 
 // =====================================================================================================================
@@ -56,13 +53,7 @@ PipelineCache::~PipelineCache()
 {
     for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); i++)
     {
-        if (m_cacheType == PipelineCacheTypeLlpc)
-        {
-            m_pShaderCaches[i].pLlpcShaderCache->Destroy();
-        }
-        else
-        {
-        }
+        m_shaderCaches[i].Destroy(m_pDevice->GetCompiler(i));
     }
 }
 
@@ -73,23 +64,20 @@ VkResult PipelineCache::Create(
     const VkAllocationCallbacks*     pAllocator,
     VkPipelineCache*                 pPipelineCache)
 {
-    VkResult result = VK_SUCCESS;
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+    VkResult                result           = VK_SUCCESS;
+    const RuntimeSettings&  settings         = pDevice->GetRuntimeSettings();
+    uint32_t                numPalDevices    = pDevice->NumPalDevices();
+    bool                    useInitialData   = false;
+    size_t                  shaderCacheSize  = 0;
+    size_t                  pipelineCacheSize[MaxPalDevices];
 
-    uint32_t numPalDevices = pDevice->NumPalDevices();
+    PipelineCacheType       cacheType = pDevice->GetCompiler()->GetShaderCacheType();
 
-    size_t            scpcSize  = 0;
-    PipelineCacheType cacheType = PipelineCacheTypeScpc;
-
-    if ((settings.enableLlpc == LlpcModeEnable) || (settings.enableLlpc == LlpcModeAutoFallback))
+    for (uint32_t i = 0; i < numPalDevices; i++)
     {
-        cacheType = PipelineCacheTypeLlpc;
+        pipelineCacheSize[i] = pDevice->GetCompiler()->GetShaderCacheSize(cacheType);
+        shaderCacheSize += pipelineCacheSize[i];
     }
-    else
-    {
-    }
-
-    bool useInitialData = false;
 
     if (pCreateInfo->initialDataSize > 0)
     {
@@ -119,8 +107,7 @@ VkResult PipelineCache::Create(
     }
 
     // Allocate system memory for all objects
-    const size_t objSize = sizeof(PipelineCache) + scpcSize;
-
+    const size_t objSize = sizeof(PipelineCache) + shaderCacheSize;
     void* pMemory = pDevice->AllocApiObject(objSize, pAllocator);
 
     if (pMemory == nullptr)
@@ -130,8 +117,7 @@ VkResult PipelineCache::Create(
     else
     {
         const PipelineCachePrivateHeaderData* pPrivateDataHeader = nullptr;
-
-        void* pBlobs[MaxPalDevices] = {};
+        const void* pBlobs[MaxPalDevices] = {};
 
         if (useInitialData)
         {
@@ -145,50 +131,50 @@ VkResult PipelineCache::Create(
             }
         }
 
-        IShaderCachePtr shaderCaches[MaxPalDevices] = {};
-        if (cacheType == PipelineCacheTypeLlpc)
+        ShaderCache shaderCaches[MaxPalDevices];
+        size_t shaderCacheOffset = sizeof(PipelineCache);
+
+        for (uint32_t i = 0; i < numPalDevices; i++)
         {
-            Llpc::ShaderCacheCreateInfo createInfo = {};
+            const void* pInitialData = nullptr;
+            size_t initialDataSize = 0;
+
+            if (useInitialData)
+            {
+                pInitialData    = pBlobs[i];
+                initialDataSize = static_cast<size_t>(pPrivateDataHeader->blobSize[i]);
+            }
+
+            if (result == VK_SUCCESS)
+            {
+                result = pDevice->GetCompiler()->CreateShaderCache(
+                    pInitialData,
+                    initialDataSize,
+                    Util::VoidPtrInc(pMemory, shaderCacheOffset),
+                    false,
+                    &shaderCaches[i]);
+            }
+            else
+            {
+                break;
+            }
+
+            // Move to next shader cache object
+            shaderCacheOffset += pipelineCacheSize[i];
+        }
+
+        // Something went wrong with creating the PAL object. Free memory
+        if (result != VK_SUCCESS)
+        {
             for (uint32_t i = 0; i < numPalDevices; i++)
             {
-                auto pCompiler = pDevice->GetCompiler()->GetLlpcCompiler();
-
-                if (useInitialData)
-                {
-                    createInfo.pInitialData    = pBlobs[i];
-                    createInfo.initialDataSize = static_cast<size_t>(pPrivateDataHeader->blobSize[i]);
-                }
-
-                Llpc::Result llpcResult = pCompiler->CreateShaderCache(
-                    &createInfo,
-                    &shaderCaches[i].pLlpcShaderCache);
-
-                if (llpcResult != Llpc::Result::Success)
-                {
-                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
-                    break;
-                }
+                shaderCaches[i].Destroy(pDevice->GetCompiler(i));
             }
-
-            // Something went wrong with creating the LLPC object. Free memory
-            if (result != VK_SUCCESS)
-            {
-                for (uint32_t i = 0; i < numPalDevices; i++)
-                {
-                    if (shaderCaches[i].pLlpcShaderCache != nullptr)
-                    {
-                        shaderCaches[i].pLlpcShaderCache->Destroy();
-                    }
-                }
-            }
-        }
-        else
-        {
         }
 
         if (result == VK_SUCCESS)
         {
-            PipelineCache* pCache = VK_PLACEMENT_NEW(pMemory) PipelineCache(pDevice, cacheType, shaderCaches);
+            PipelineCache* pCache = VK_PLACEMENT_NEW(pMemory) PipelineCache(pDevice, shaderCaches);
             *pPipelineCache = PipelineCache::HandleFromVoidPointer(pMemory);
         }
         else
@@ -208,8 +194,6 @@ VkResult PipelineCache::Destroy(
     this->~PipelineCache();
 
     pAllocator->pfnFree(pAllocator->pUserData, this);
-
-    const_cast<Device*>(pDevice)->DecreasePipelineCacheCount();
 
     return VK_SUCCESS;
 }
@@ -242,18 +226,12 @@ VkResult PipelineCache::GetData(
     size_t allBlobSize = sizeof(PipelineCachePrivateHeaderData);
     PipelineCachePrivateHeaderData headerData = {};
 
-    headerData.cacheType = m_cacheType;
+    headerData.cacheType = m_shaderCaches[0].GetCacheType();
     for (uint32_t i = 0; i < numPalDevices; i++)
     {
         size_t blobSize = 0;
-        if (m_cacheType == PipelineCacheTypeLlpc)
-        {
-            auto llpcResult = m_pShaderCaches[i].pLlpcShaderCache->Serialize(nullptr, &blobSize);
-            VK_ASSERT(llpcResult == Llpc::Result::Success);
-        }
-        else
-        {
-        }
+        result = m_shaderCaches[i].Serialize(nullptr, &blobSize);
+        VK_ASSERT(result == VK_SUCCESS);
         headerData.blobSize[i] = blobSize;
         allBlobSize += blobSize;
     }
@@ -272,20 +250,11 @@ VkResult PipelineCache::GetData(
         for (uint32_t i = 0; i < numPalDevices; i++)
         {
             size_t blobSize = static_cast<size_t>(headerData.blobSize[i]);
-
-            if (m_cacheType == PipelineCacheTypeLlpc)
+            result = m_shaderCaches[i].Serialize(pBlob, &blobSize);
+            if (result != VK_SUCCESS)
             {
-                auto llpcResult = m_pShaderCaches[i].pLlpcShaderCache->Serialize(pBlob, &blobSize);
-                if (llpcResult != Llpc::Result::Success)
-                {
-                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
-                    break;
-                }
+                break;
             }
-            else
-            {
-            }
-
             pBlob = Util::VoidPtrInc(pBlob, blobSize);
         }
     }
@@ -298,7 +267,7 @@ VkResult PipelineCache::Merge(
     uint32_t              srcCacheCount,
     const PipelineCache** ppSrcCaches)
 {
-    Util::AutoBuffer<IShaderCachePtr, 16, PalAllocator> shaderCaches(
+    Util::AutoBuffer<ShaderCache::ShaderCachePtr, 16, PalAllocator> shaderCaches(
         srcCacheCount * m_pDevice->NumPalDevices(),
         m_pDevice->VkInstance()->Allocator());
 
@@ -306,25 +275,22 @@ VkResult PipelineCache::Merge(
     {
         for (uint32_t cacheIdx = 0; cacheIdx < srcCacheCount; cacheIdx++)
         {
-            VK_ASSERT(ppSrcCaches[cacheIdx]->GetPipelineCacheType() == GetPipelineCacheType());
+            VK_ASSERT(ppSrcCaches[cacheIdx]->GetShaderCache(deviceIdx).GetCacheType() ==
+                GetShaderCache(deviceIdx).GetCacheType());
             // Store all PAL caches like this d0c0,d0c1,d0c2...,d1c0,d1c2,d1c3...
-            shaderCaches[deviceIdx * srcCacheCount + cacheIdx] = ppSrcCaches[cacheIdx]->GetShaderCache(deviceIdx);
+            shaderCaches[deviceIdx * srcCacheCount + cacheIdx] =
+                ppSrcCaches[cacheIdx]->GetShaderCache(deviceIdx).GetCachePtr();
         }
     }
 
     VkResult result = VK_SUCCESS;
     for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); i++)
     {
-        {
-            auto llpcResult = m_pShaderCaches[i].pLlpcShaderCache->Merge(
-                srcCacheCount,
-                const_cast<const Llpc::IShaderCache **>(&shaderCaches[i * srcCacheCount].pLlpcShaderCache));
+        result = m_shaderCaches[i].Merge(srcCacheCount, &shaderCaches[i * srcCacheCount]);
 
-            if (llpcResult != Llpc::Result::Success)
-            {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-                break;
-            }
+        if (result != VK_SUCCESS)
+        {
+            break;
         }
     }
 

@@ -121,6 +121,13 @@ void SqttCmdBufferState::Begin(
 
     m_cbId = m_pSqttMgr->GetNextCmdBufID(m_pCmdBuf->GetQueueFamilyIndex(), pBeginInfo);
 
+    // Clear the list of debug tags whenever a new command buffer is started.
+    auto it = m_debugTags.Begin();
+    while (it.Get() != nullptr)
+    {
+        m_debugTags.Erase(&it);
+    }
+
     WriteCbStartMarker();
 }
 

@@ -28,13 +28,7 @@
 #include "include/vk_utils.h"
 #include "include/vk_defines.h"
 #include "include/vk_dispatch.h"
-
-namespace Llpc
-{
-
-class IShaderCache;
-
-}
+#include "include/pipeline_compiler.h"
 
 namespace vk
 {
@@ -51,13 +45,6 @@ struct PipelineCacheHeaderData
     uint8_t  UUID[VK_UUID_SIZE]; // A pipeline cache ID equal to VkPhysicalDeviceProperties::pipelineCacheUUID.
 };
 
-// Enumerates the cache type in the pipeline cache
-enum PipelineCacheType : uint32_t
-{
-    PipelineCacheTypeScpc,  // Use shader cache provided by SCPC
-    PipelineCacheTypeLlpc   // Use shader cache provided by LLPC
-};
-
 // Layout for pipeline cache private header, all fields are written with LSB first.
 struct PipelineCachePrivateHeaderData
 {
@@ -65,17 +52,10 @@ struct PipelineCachePrivateHeaderData
     uint64_t blobSize[MaxPalDevices];   // Blob data size for each device
 };
 
-// Unified shader cache interface
-union IShaderCachePtr
-{
-    Llpc::IShaderCache* pLlpcShaderCache; // Pointer to LLPC shader cache object
-};
-
 // =====================================================================================================================
 // Implementation of Vulkan pipeline cache object
 class PipelineCache : public NonDispatchable<VkPipelineCache, PipelineCache>
 {
-
 public:
     static VkResult Create(
         const Device*                       pDevice,
@@ -89,24 +69,21 @@ public:
 
     VkResult GetData(void* pData, size_t* pSize);
 
-    IShaderCachePtr GetShaderCache(uint32_t deviceIdx) const
+    ShaderCache GetShaderCache(uint32_t deviceIdx) const
     {
         VK_ASSERT(deviceIdx < MaxPalDevices);
-        return m_pShaderCaches[deviceIdx];
+        return m_shaderCaches[deviceIdx];
     }
-
-    PipelineCacheType GetPipelineCacheType() const { return m_cacheType; }
 
     VkResult Merge(uint32_t srcCacheCount, const PipelineCache** ppSrcCaches);
 
 protected:
-    PipelineCache(const Device* pDevice, PipelineCacheType cacheType, IShaderCachePtr* pShaderCaches);
+    PipelineCache(const Device* pDevice, ShaderCache* pShaderCaches);
 
     virtual ~PipelineCache();
 
     const Device*const  m_pDevice;
-    PipelineCacheType   m_cacheType;
-    IShaderCachePtr     m_pShaderCaches[MaxPalDevices];
+    ShaderCache         m_shaderCaches[MaxPalDevices];
 };
 
 namespace entry

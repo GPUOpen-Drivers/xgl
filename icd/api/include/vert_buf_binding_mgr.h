@@ -82,17 +82,12 @@ public:
     void GraphicsPipelineChanged(CmdBuffer* pCmdBuf, const GraphicsPipeline* pPipeline);
 
 private:
-    struct Binding
-    {
-        Pal::gpusize        size; // The bound VB size in bytes.
-        Pal::BufferViewInfo view; // The PAL info used to create this VB's SRD.
-    };
 
-    uint32_t      m_vbSrdDwSize;                               // Size of a VB SRD in bytes
-    Binding       m_bindings[MaxPalDevices][MaxVertexBuffers]; // VB bindings in source non-SRD form
-    uint32_t*     m_pVbTblSysMem;                              // VB bindings in SRD form in system memory
-    Device*       m_pDevice;                                   // Device pointer
-    uint32_t      m_bindingTableSize;                          // Current size of the active VB table in slots
+    uint32_t            m_vbSrdDwSize;                               // Size of a VB SRD in bytes
+    Pal::BufferViewInfo m_bindings[MaxPalDevices][MaxVertexBuffers]; // VB bindings in source non-SRD form
+    uint32_t*           m_pVbTblSysMem;                              // VB bindings in SRD form in system memory
+    Device*             m_pDevice;                                   // Device pointer
+    uint32_t            m_bindingTableSize;                          // Current size of the active VB table in slots
 
     PAL_DISALLOW_COPY_AND_ASSIGN(VertBufBindingMgr);
 };

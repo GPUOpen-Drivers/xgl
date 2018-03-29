@@ -121,7 +121,7 @@ public:
         // Total number of user data registers used in this pipeline layout
         uint32_t                   userDataRegCount;
         // Original descriptor set layout pointers
-        const DescriptorSetLayout* pSetLayouts[MaxDescriptorSets];
+        DescriptorSetLayout* pSetLayouts[MaxDescriptorSets];
     };
 
     // This information is specific for pipeline construction:
@@ -136,13 +136,8 @@ public:
         uint32_t            numRsrcMapNodes;
         // Number of resource mapping nodes used for the user data nodes
         uint32_t            numUserDataNodes;
-        // Number of immutable sampler descriptors
         // Number of DescriptorRangeValue needed by all layouts in the chain
         uint32_t            numDescRangeValueNodes;
-        // Number of immutable samplers used for all descriptor range value node
-        uint32_t            numImmutableSamplers;
-        // Immutable sampler descriptor data pointer
-        uint32_t*           pImmutableSamplerData;
     };
 
     typedef VkPipelineLayout ApiType;

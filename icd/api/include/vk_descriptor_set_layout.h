@@ -105,14 +105,33 @@ public:
         const VkAllocationCallbacks*                pAllocator,
         VkDescriptorSetLayout*                      pLayout);
 
+    void Copy(
+        const Device*                               pDevice,
+        DescriptorSetLayout*                        pOutLayout) const;
+
     VkResult Destroy(
         Device*                                     pDevice,
-        const VkAllocationCallbacks*                pAllocator);
+        const VkAllocationCallbacks*                pAllocator,
+        bool                                        freeMemory);
+
+    uint32_t GetBindingInfoArrayByteSize() const
+    {
+        return m_info.count * sizeof(DescriptorSetLayout::BindingInfo);
+    }
+
+    uint32_t GetImmSamplerArrayByteSize() const;
+
+    uint32_t GetObjectSize() const
+    {
+        const uint32_t apiSize = sizeof(DescriptorSetLayout);
+
+        return apiSize + GetBindingInfoArrayByteSize() + GetImmSamplerArrayByteSize();
+    }
 
     const BindingInfo& Binding(uint32_t bindingIndex) const
     {
         // The bindings are allocated immediately after the object.  See DescriptorSetLayout::Create().
-        BindingInfo* pBindings = static_cast<BindingInfo*>(Util::VoidPtrInc(this, sizeof(*this)));
+        const BindingInfo* pBindings = static_cast<const BindingInfo*>(Util::VoidPtrInc(this, sizeof(*this)));
         return pBindings[bindingIndex];
     }
 

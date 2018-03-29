@@ -241,6 +241,9 @@ vkGetPhysicalDeviceXcbPresentationSupportKHR        @iext KHR_xcb_surface
 vkCreateXlibSurfaceKHR                              @iext KHR_xlib_surface
 vkGetPhysicalDeviceXlibPresentationSupportKHR       @iext KHR_xlib_surface
 
+vkCreateWaylandSurfaceKHR                           @iext KHR_wayland_surface
+vkGetPhysicalDeviceWaylandPresentationSupportKHR    @iext KHR_wayland_surface
+
 vkAcquireNextImageKHR                               @dext KHR_swapchain
 vkCreateSwapchainKHR                                @dext KHR_swapchain
 vkDestroySwapchainKHR                               @dext KHR_swapchain

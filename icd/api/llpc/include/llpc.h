@@ -195,7 +195,7 @@ struct DescriptorRangeValue
 struct PipelineShaderInfo
 {
     const void*                     pModuleData;            ///< Shader module data used for pipeline building (opaque)
-    const VkSpecializationInfo*     pSpecializatonInfo;     ///< Specialization constant info
+    const VkSpecializationInfo*     pSpecializationInfo;    ///< Specialization constant info
     const char*                     pEntryTarget;           ///< Name of the target entry point (for multi-entry)
 
     uint32_t                        descriptorRangeValueCount; ///< Count of static descriptors

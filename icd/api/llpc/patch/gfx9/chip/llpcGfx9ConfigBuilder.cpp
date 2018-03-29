@@ -1207,18 +1207,28 @@ Result ConfigBuilder::BuildPsRegConfig(
 
     for (uint32_t i = 0; i < interpInfo.size(); ++i)
     {
-        LLPC_ASSERT(((interpInfo[i].loc  == InvalidFsInterpInfo.loc) &&
-                        (interpInfo[i].flat == InvalidFsInterpInfo.flat)) == false);
+        LLPC_ASSERT(((interpInfo[i].loc     == InvalidFsInterpInfo.loc) &&
+                     (interpInfo[i].flat    == InvalidFsInterpInfo.flat) &&
+                     (interpInfo[i].custom  == InvalidFsInterpInfo.custom)) == false);
 
         regSPI_PS_INPUT_CNTL_0 spiPsInputCntl = {};
         spiPsInputCntl.bits.FLAT_SHADE = interpInfo[i].flat;
         spiPsInputCntl.bits.OFFSET = interpInfo[i].loc;
 
+        if (interpInfo[i].custom)
+        {
+            // NOTE: Force parameter cache data to be read in passthrough mode.
+            static const uint32_t PassThroughMode = (1 << 5);
+            spiPsInputCntl.bits.FLAT_SHADE = true;
+            spiPsInputCntl.bitfields.OFFSET |= PassThroughMode;
+        }
+
         if (pointCoordLoc == i)
         {
             spiPsInputCntl.bits.PT_SPRITE_TEX = true;
+
             // NOTE: Set the offset value to force hardware to select input defaults (no VS match).
-            constexpr uint32_t UseDefaultVal = (1 << 5);
+            static const uint32_t UseDefaultVal = (1 << 5);
             spiPsInputCntl.bitfields.OFFSET = UseDefaultVal;
         }
 

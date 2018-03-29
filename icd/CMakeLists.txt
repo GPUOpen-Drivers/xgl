@@ -122,6 +122,11 @@ endif()
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION_SUPPORTS_SHADER_CACHE_EXPECTED_ENTRIES=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
 
+if (BUILD_WAYLAND_SUPPORT)
+    target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
+    target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
+endif()
+
 if(UNIX)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XCB_KHR)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_KHR)

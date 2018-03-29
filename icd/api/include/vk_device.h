@@ -100,6 +100,7 @@ public:
         uint32_t  userDataNodeOffsets[16];
         Pal::IPipeline*  pPipeline[MaxPalDevices];
     };
+    static const uint32_t MaxInternalPipelineUserNodeCount = 16;
 
     typedef VkDevice ApiType;
 
@@ -476,9 +477,6 @@ public:
     VK_INLINE RenderStateCache* GetRenderStateCache()
         { return &m_renderStateCache; }
 
-    uint32_t GetPipelineCacheExpectedEntryCount();
-    void DecreasePipelineCacheCount();
-
     uint32_t GetPinnedSystemMemoryTypes() const;
 
     uint32_t GetExternalHostMemoryTypes(
@@ -495,13 +493,13 @@ protected:
         Pal::IDevice**                   pPalDevices,
         const DeviceExtensions::Enabled& enabledExtensions,
         const VkPhysicalDeviceFeatures*  pFeatures);
-    VkResult CreateLlpcInternalComputePipeline(
+    VkResult CreateInternalComputePipeline(
         size_t                           codeByteSize,
         const uint8_t*                   pCode,
         uint32_t                         numUserDataNodes,
         const Llpc::ResourceMappingNode* pUserDataNodes,
         InternalPipeline*                pInternalPipeline);
-    VkResult CreateLlpcInternalPipelines();
+    VkResult CreateInternalPipelines();
 
     void DestroyInternalPipeline(InternalPipeline* pPipeline);
 
@@ -549,10 +547,6 @@ protected:
 
     // The maximum allocations that can be created from the logical device
     uint32_t                             m_maxAllocations;
-
-    // Record pipeline cache count created on this device. Note this may be dropped once there isn't any test creating
-    // excessive pipeline caches.
-    volatile uint32_t                   m_pipelineCacheCount;
 
     PFN_vkUpdateDescriptorSets          m_pfnUpdateDescriptorSets;
 };

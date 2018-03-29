@@ -83,8 +83,7 @@ private:
                                            llvm::Value*       pCompIdx,
                                            llvm::Value*       pVertexIdx,
                                            uint32_t           interpLoc,
-                                           Value*             pSampleId,
-                                           Value*             pPixelOffset,
+                                           Value*             pInterpInfo,
                                            llvm::Instruction* pInsertPos);
 
     void AddCallInstForOutputExport(llvm::Value*       pOutputValue,
@@ -103,8 +102,7 @@ private:
                                  llvm::Value*                     pLocOffset,
                                  llvm::Value*                     pVertexIdx,
                                  uint32_t                         interpLoc,
-                                 llvm::Value*                     pSampleId,
-                                 llvm::Value*                     pPixelOffset,
+                                 llvm::Value*                     pInterpInfo,
                                  llvm::Instruction*               pInsertPos);
 
     void StoreOutputMember(llvm::Type*                      pOutputTy,

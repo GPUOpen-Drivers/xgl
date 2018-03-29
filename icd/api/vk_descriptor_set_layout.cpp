@@ -472,14 +472,51 @@ VkResult DescriptorSetLayout::Create(
 }
 
 // =====================================================================================================================
+// Copy descriptor set layout object
+void DescriptorSetLayout::Copy(
+    const Device*                   pDevice,
+    DescriptorSetLayout*            pOutLayout) const
+{
+    const size_t apiSize = sizeof(DescriptorSetLayout);
+
+    CreateInfo info = Info();
+
+    // Copy the bindings array
+    void* pBindings = Util::VoidPtrInc(pOutLayout, apiSize);
+
+    memcpy(pBindings, Util::VoidPtrInc(this, apiSize), GetBindingInfoArrayByteSize());
+
+    // Copy the immutable sampler data
+    void* pImmutableSamplerData = Util::VoidPtrInc(pOutLayout, apiSize + GetBindingInfoArrayByteSize());
+
+    memcpy(pImmutableSamplerData, Util::VoidPtrInc(this, apiSize + GetBindingInfoArrayByteSize()), GetImmSamplerArrayByteSize());
+
+    // Set the base pointer of the immutable sampler data to the appropriate location within the allocated memory
+    info.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(pImmutableSamplerData);
+
+    VK_PLACEMENT_NEW(pOutLayout) DescriptorSetLayout(pDevice, info);
+}
+
+// =====================================================================================================================
+// Get the size in bytes of immutable samplers array
+uint32_t DescriptorSetLayout::GetImmSamplerArrayByteSize() const
+{
+    return m_info.imm.numImmutableSamplers * m_pDevice->GetProperties().descriptorSizes.sampler;
+}
+
+// =====================================================================================================================
 // Destroy descriptor set layout object
 VkResult DescriptorSetLayout::Destroy(
     Device*                         pDevice,
-    const VkAllocationCallbacks*    pAllocator)
+    const VkAllocationCallbacks*    pAllocator,
+    bool                            freeMemory)
 {
     this->~DescriptorSetLayout();
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    if (freeMemory)
+    {
+        pAllocator->pfnFree(pAllocator->pUserData, this);
+    }
 
     return VK_SUCCESS;
 }
@@ -497,7 +534,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorSetLayout(
         Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
-        DescriptorSetLayout::ObjectFromHandle(descriptorSetLayout)->Destroy(pDevice, pAllocCB);
+        DescriptorSetLayout::ObjectFromHandle(descriptorSetLayout)->Destroy(pDevice, pAllocCB, true);
     }
 }
 

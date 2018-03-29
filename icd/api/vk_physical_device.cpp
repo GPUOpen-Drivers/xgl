@@ -2314,8 +2314,19 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
         pInfo->icdPlatform   = pXcbSurface->base.platform;
         pInfo->palPlatform   = VkToPalWsiPlatform(pXcbSurface->base.platform);
         pInfo->displayHandle = pXcbSurface->connection;
-        pInfo->windowHandle  = pXcbSurface->window;
+        pInfo->windowHandle.win  = pXcbSurface->window;
     }
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    else if (pSurface->GetWaylandSurface()->base.platform == VK_ICD_WSI_PLATFORM_WAYLAND)
+    {
+        const VkIcdSurfaceWayland* pWaylandSurface = pSurface->GetWaylandSurface();
+
+        pInfo->icdPlatform   = pWaylandSurface->base.platform;
+        pInfo->palPlatform   = VkToPalWsiPlatform(pWaylandSurface->base.platform);
+        pInfo->displayHandle = pWaylandSurface->display;
+        pInfo->windowHandle.pSurface  = pWaylandSurface->surface;
+    }
+#endif
     else if (pSurface->GetXlibSurface()->base.platform == VK_ICD_WSI_PLATFORM_XLIB)
     {
         const VkIcdSurfaceXlib* pXlibSurface = pSurface->GetXlibSurface();
@@ -2323,7 +2334,7 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
         pInfo->icdPlatform   = pXlibSurface->base.platform;
         pInfo->palPlatform   = VkToPalWsiPlatform(pXlibSurface->base.platform);
         pInfo->displayHandle = pXlibSurface->dpy;
-        pInfo->windowHandle  = pXlibSurface->window;
+        pInfo->windowHandle.win  = pXlibSurface->window;
     }
     else
     {
@@ -2445,11 +2456,16 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SWAPCHAIN));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_RASTERIZATION_ORDER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DRAW_INDIRECT_COUNT));
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_NEGATIVE_VIEWPORT_HEIGHT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_BALLOT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_VOTE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_STENCIL_EXPORT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_VIEWPORT_INDEX_LAYER));
+
+    // Don't report VK_AMD_negative_viewport_height in Vulkan 1.1, it must not be used.
+    if (pInstance->GetAPIVersion() < VK_MAKE_VERSION(1, 1, 0))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_NEGATIVE_VIEWPORT_HEIGHT));
+    }
 
     if (pInstance->IsExtensionSupported(InstanceExtensions::KHX_DEVICE_GROUP_CREATION))
     {
@@ -2813,12 +2829,25 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
 
     if (isSparse == false)
     {
+        const Pal::DeviceProperties& props = PalProperties();
         if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR))
         {
             pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR |
                                                                 VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR     |
                                                                 VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR;
         }
+        else if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
+        {
+            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR;
+        }
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 393
+        else if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT) &&
+                 props.gpuMemoryProperties.flags.supportHostMappedForeignMemory)
+        {
+            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR;
+        }
+#endif
+
     }
 
     if (pExternalMemoryProperties->externalMemoryFeatures == 0)
@@ -3142,7 +3171,8 @@ void PhysicalDevice::GetDeviceProperties2(
                                                        VK_SHADER_STAGE_COMPUTE_BIT;
             pSubgroupProperties->supportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
                                                        VK_SUBGROUP_FEATURE_VOTE_BIT |
-                                                       VK_SUBGROUP_FEATURE_BALLOT_BIT;
+                                                       VK_SUBGROUP_FEATURE_BALLOT_BIT |
+                                                       VK_SUBGROUP_FEATURE_QUAD_BIT;
             pSubgroupProperties->quadOperationsInAllStages = VK_TRUE;
 
             break;
@@ -4202,6 +4232,24 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXlibPresentationSupportKHR(
                                                                                                visual,
                                                                                                queueFamilyIndex);
 }
+
+// =====================================================================================================================
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t                                    queueFamilyIndex,
+    struct wl_display*                          display)
+{
+
+    Pal::OsDisplayHandle displayHandle = display;
+    VkIcdWsiPlatform     platform      = VK_ICD_WSI_PLATFORM_WAYLAND;
+
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->DeterminePresentationSupported(displayHandle,
+                                                                                               platform,
+                                                                                               0,
+                                                                                               queueFamilyIndex);
+}
+#endif
 
 }
 

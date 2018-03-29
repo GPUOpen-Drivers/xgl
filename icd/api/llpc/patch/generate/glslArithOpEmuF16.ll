@@ -175,7 +175,7 @@ define spir_func <4 x half> @_Z17convert_half4_rtnDv4_f(<4 x float> %x) #0
 ; >>>  Angle and Trigonometry Functions
 ; =====================================================================================================================
 
-; GLSL: float16_t  radians(float16_t)
+; GLSL: float16_t radians(float16_t)
 define spir_func half @_Z7radiansDh(half %degrees) #0
 {
     ; 0x3F91DC0000000000: PI/180, 0.01744080
@@ -222,7 +222,7 @@ define spir_func <4 x half> @_Z7radiansDv4_Dh(<4 x half> %degrees) #0
     ret <4 x half> %7
 }
 
-; GLSL: float16_t  degrees(float16_t)
+; GLSL: float16_t degrees(float16_t)
 define spir_func half @_Z7degreesDh(half %radians) #0
 {
     ; 0x404CA40000000000 is 57.28125000
@@ -269,7 +269,7 @@ define spir_func <4 x half> @_Z7degreesDv4_Dh(<4 x half> %radians) #0
     ret <4 x half> %7
 }
 
-; GLSL: float16_t  tan(float16_t)
+; GLSL: float16_t tan(float16_t)
 define half @llpc.tan.f16(half %angle) #0
 {
     %1 = call half @llvm.sin.f16(half %angle)
@@ -279,7 +279,7 @@ define half @llpc.tan.f16(half %angle) #0
     ret half %4
 }
 
-; GLSL: float16_t  asin(float16_t)
+; GLSL: float16_t asin(float16_t)
 define half @llpc.asin.f16(half %x)
 {
     ; asin(x) = sgn(x) * (PI/2 - sqrt(1 - |x|) * (PI/2 + |x| * (PI/4 - 1 + |x| * (p0 + |x| * p1))))
@@ -309,7 +309,7 @@ define half @llpc.asin.f16(half %x)
     ret half %16
 }
 
-; GLSL: float16_t  acos(float16_t)
+; GLSL: float16_t acos(float16_t)
 define half @llpc.acos.f16(half %x)
 {
     ; acos(x) = PI/2 - sgn(x) * (PI/2 - sqrt(1 - |x|) * (PI/2 + |x| * (PI/4 - 1 + |x| * (p0 + |x| * p1))))
@@ -341,7 +341,7 @@ define half @llpc.acos.f16(half %x)
     ret half %17
 }
 
-; GLSL: float16_t  atan(float16_t)
+; GLSL: float16_t atan(float16_t)
 define half @llpc.atan.f16(half %x)
 {
     ; atan(x) = x - x^3 / 3 + x^5 / 5 - x^7 / 7 + x^9 / 9 - x^11 / 11, x <= 1.0
@@ -392,7 +392,7 @@ define half @llpc.atan.f16(half %x)
     ret half %33
 }
 
-; GLSL: float16_t  atan(half, float16_t)
+; GLSL: float16_t atan(half, float16_t)
 define half @llpc.atan2.f16(half %y, half %x)
 {
     ; yox = (|x| == |y|) ? ((x == y) ? 1.0 : -1.0) : y/x
@@ -411,31 +411,31 @@ define half @llpc.atan2.f16(half %y, half %x)
     %3 = call half @llpc.fsign.f16(half %y)   ; %3 = syn(y)
 
     ; 0x3FF9200000000000: PI/2 = 1.57079637
-    %4 = fmul half %3, 0x3FF9200000000000      ; %4 = p0 = syn(y) * PI/2
+    %4 = fmul half %3, 0x3FF9200000000000     ; %4 = p0 = syn(y) * PI/2
     ; 0x4009200000000000: PI = 3.14159274
-    %5 = fmul half %3, 0x4009200000000000      ; %5 = p1 = syn(y) * PI
+    %5 = fmul half %3, 0x4009200000000000     ; %5 = p1 = syn(y) * PI
 
-    %6 = fcmp oeq half %1, %2                  ; %6 = (|x| == |y|)
-    %7 = fcmp oeq half %x, %y                  ; %7 = (x == y)
+    %6 = fcmp oeq half %1, %2                 ; %6 = (|x| == |y|)
+    %7 = fcmp oeq half %x, %y                 ; %7 = (x == y)
     %8 = select i1 %7, half 1.0, half -1.0    ; %8 = (x == y) ? 1.0 : -1.0
 
     ; NOTE: "atan" is very sensitive to the value of y_over_x, so we have to use high accuracy division.
     %9 = fdiv half %y, %x
-                                                ; %9  = y/x
+                                              ; %9  = y/x
     %10 = select i1 %6, half %8, half %9      ; %10 = yox = (|x| == |y|) ? ((x == y) ? 1.0 : -1.0) : y/x
     %11 = call half @llpc.atan.f16(half %10)  ; %11 = atanyox = atan(yox)
 
-    %12 = fadd half %11, %5                    ; %12 = atanyox + p1
-    %13 = fcmp olt half %x, 0.0                ; %13 = (x < 0.0)
+    %12 = fadd half %11, %5                   ; %12 = atanyox + p1
+    %13 = fcmp olt half %x, 0.0               ; %13 = (x < 0.0)
     %14 = select i1 %13, half %12, half %11   ; %14 = (x < 0.0) ? atanyox + p1 : atanyox
 
-    %15 = fcmp one half %x, 0.0                ; %15 = (x != 0.0)
+    %15 = fcmp one half %x, 0.0               ; %15 = (x != 0.0)
     %16 = select i1 %15, half %14, half %4    ; %16 = atan(y, x)
 
     ret half %16
 }
 
-; GLSL: float16_t  sinh(float16_t)
+; GLSL: float16_t sinh(float16_t)
 define half @llpc.sinh.f16(half %x) #0
 {
     ; (e^x - e^(-x)) / 2.0
@@ -451,7 +451,7 @@ define half @llpc.sinh.f16(half %x) #0
     ret half %6
 }
 
-; GLSL: float16_t  cosh(float16_t)
+; GLSL: float16_t cosh(float16_t)
 define half @llpc.cosh.f16(half %x) #0
 {
     ; (e^x + e^(-x)) / 2.0
@@ -467,7 +467,7 @@ define half @llpc.cosh.f16(half %x) #0
     ret half %6
 }
 
-; GLSL: float16_t  tanh(float16_t)
+; GLSL: float16_t tanh(float16_t)
 define half @llpc.tanh.f16(half %x) #0
 {
     ; sinh(x) / cosh(x)
@@ -484,7 +484,7 @@ define half @llpc.tanh.f16(half %x) #0
     ret half %7
 }
 
-; GLSL: float16_t  asinh(float16_t)
+; GLSL: float16_t asinh(float16_t)
 define half @llpc.asinh.f16(half %x) #0
 {
     ; ln(x + sqrt(x*x + 1))
@@ -506,7 +506,7 @@ define half @llpc.asinh.f16(half %x) #0
     ret half %10
 }
 
-; GLSL: float16_t  acosh(float16_t)
+; GLSL: float16_t acosh(float16_t)
 define half @llpc.acosh.f16(half %x) #0
 {
     ; ln(x + sqrt(x*x - 1))
@@ -522,7 +522,7 @@ define half @llpc.acosh.f16(half %x) #0
     ret half %6
 }
 
-; GLSL: float16_t  atanh(float16_t)
+; GLSL: float16_t atanh(float16_t)
 define half @llpc.atanh.f16(half %x) #0
 {
     ; In((x + 1)/( 1 - x)) * 0.5f;
@@ -543,7 +543,7 @@ define half @llpc.atanh.f16(half %x) #0
 ; >>>  Exponential Functions
 ; =====================================================================================================================
 
-; GLSL: float16_t  pow(float16_t, float16_t)
+; GLSL: float16_t pow(float16_t, float16_t)
 define half @llpc.pow.f16(half %x, half %y) #0
 {
     %1 = call half @llvm.log2.f16(half %x)
@@ -552,7 +552,7 @@ define half @llpc.pow.f16(half %x, half %y) #0
     ret half %3
 }
 
-; GLSL: float16_t  exp(float16_t)
+; GLSL: float16_t exp(float16_t)
 define half @llpc.exp.f16(half %x) #0
 {
     ; 0x3FF7140000000000: 1.442695
@@ -561,7 +561,7 @@ define half @llpc.exp.f16(half %x) #0
     ret half %2
 }
 
-; GLSL: float16_t  log(float16_t)
+; GLSL: float16_t log(float16_t)
 define half @llpc.log.f16(half %x) #0
 {
     ; 0x3FE62C0000000000: 0.6931471824646
@@ -1551,20 +1551,21 @@ define spir_func <4 x half> @_Z7refractDv4_DhDv4_DhDh(<4 x half> %I, <4 x half> 
     ret <4 x half> %10
 }
 
-; GLSL: half frexp(float16_t, out int)
+; GLSL: float16_t frexp(float16_t, out int)
 define spir_func {half, i32} @_Z11frexpStructDh(
     half %x) #0
 {
     %1 = call half @llvm.amdgcn.frexp.mant.f16(half %x)
-    %2 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x)
+    %2 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x)
+    %3 = sext i16 %2 to i32
 
-    %3 = insertvalue {half, i32} undef, half %1, 0
-    %4 = insertvalue {half, i32} %3, i32 %2, 1
+    %4 = insertvalue {half, i32} undef, half %1, 0
+    %5 = insertvalue {half, i32} %4, i32 %3, 1
 
-    ret {half, i32} %4
+    ret {half, i32} %5
 }
 
-; GLSL: f16vec2 frexp(f16vec2, out if16vec2)
+; GLSL: f16vec2 frexp(f16vec2, out ivec2)
 define spir_func {<2 x half>, <2 x i32>} @_Z11frexpStructDv2_Dh(
     <2 x half> %x) #0
 {
@@ -1572,24 +1573,26 @@ define spir_func {<2 x half>, <2 x i32>} @_Z11frexpStructDv2_Dh(
     %x1 = extractelement <2 x half> %x, i32 1
 
     %1 = call half @llvm.amdgcn.frexp.mant.f16(half %x0)
-    %2 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x0)
+    %2 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x0)
+    %3 = sext i16 %2 to i32
 
-    %3 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
-    %4 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x1)
+    %4 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
+    %5 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x1)
+    %6 = sext i16 %5 to i32
 
-    %5 = insertelement <2 x half> undef, half %1, i32 0
-    %6 = insertelement <2 x half> %5, half %3, i32 1
+    %7 = insertelement <2 x half> undef, half %1, i32 0
+    %8 = insertelement <2 x half> %7, half %4, i32 1
 
-    %7 = insertelement <2 x i32> undef, i32 %2, i32 0
-    %8 = insertelement <2 x i32> %7, i32 %4, i32 1
+    %9 = insertelement <2 x i32> undef, i32 %3, i32 0
+    %10 = insertelement <2 x i32> %9, i32 %6, i32 1
 
-    %9 = insertvalue {<2 x half>, <2 x i32>} undef, <2 x half> %6, 0
-    %10 = insertvalue {<2 x half>, <2 x i32>} %9, <2 x i32> %8, 1
+    %11 = insertvalue {<2 x half>, <2 x i32>} undef, <2 x half> %8, 0
+    %12 = insertvalue {<2 x half>, <2 x i32>} %11, <2 x i32> %10, 1
 
-    ret {<2 x half>, <2 x i32>} %10
+    ret {<2 x half>, <2 x i32>} %12
 }
 
-; GLSL: f16vec3 frexp(f16vec3, out if16vec3)
+; GLSL: f16vec3 frexp(f16vec3, out ivec3)
 define spir_func {<3 x half>, <3 x i32>} @_Z11frexpStructDv3_Dh(
     <3 x half> %x) #0
 {
@@ -1598,29 +1601,32 @@ define spir_func {<3 x half>, <3 x i32>} @_Z11frexpStructDv3_Dh(
     %x2 = extractelement <3 x half> %x, i32 2
 
     %1 = call half @llvm.amdgcn.frexp.mant.f16(half %x0)
-    %2 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x0)
+    %2 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x0)
+    %3 = sext i16 %2 to i32
 
-    %3 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
-    %4 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x1)
+    %4 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
+    %5 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x1)
+    %6 = sext i16 %5 to i32
 
-    %5 = call half @llvm.amdgcn.frexp.mant.f16(half %x2)
-    %6 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x2)
+    %7 = call half @llvm.amdgcn.frexp.mant.f16(half %x2)
+    %8 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x2)
+    %9 = sext i16 %8 to i32
 
-    %7 = insertelement <3 x half> undef, half %1, i32 0
-    %8 = insertelement <3 x half> %7, half %3, i32 1
-    %9 = insertelement <3 x half> %8, half %5, i32 2
+    %10 = insertelement <3 x half> undef, half %1, i32 0
+    %11 = insertelement <3 x half> %10, half %4, i32 1
+    %12 = insertelement <3 x half> %11, half %7, i32 2
 
-    %10 = insertelement <3 x i32> undef, i32 %2, i32 0
-    %11 = insertelement <3 x i32> %10, i32 %4, i32 1
-    %12 = insertelement <3 x i32> %11, i32 %6, i32 2
+    %13 = insertelement <3 x i32> undef, i32 %3, i32 0
+    %14 = insertelement <3 x i32> %13, i32 %6, i32 1
+    %15 = insertelement <3 x i32> %14, i32 %9, i32 2
 
-    %13 = insertvalue {<3 x half>, <3 x i32>} undef, <3 x half> %9, 0
-    %14 = insertvalue {<3 x half>, <3 x i32>} %13, <3 x i32> %12, 1
+    %16 = insertvalue {<3 x half>, <3 x i32>} undef, <3 x half> %12, 0
+    %17 = insertvalue {<3 x half>, <3 x i32>} %16, <3 x i32> %15, 1
 
-    ret {<3 x half>, <3 x i32>} %14
+    ret {<3 x half>, <3 x i32>} %17
 }
 
-; GLSL: f16vec4 frexp(f16vec4, out if16vec4)
+; GLSL: f16vec4 frexp(f16vec4, out ivec4)
 define spir_func {<4 x half>, <4 x i32>} @_Z11frexpStructDv4_Dh(
     <4 x half> %x) #0
 {
@@ -1630,34 +1636,73 @@ define spir_func {<4 x half>, <4 x i32>} @_Z11frexpStructDv4_Dh(
     %x3 = extractelement <4 x half> %x, i32 3
 
     %1 = call half @llvm.amdgcn.frexp.mant.f16(half %x0)
-    %2 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x0)
+    %2 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x0)
+    %3 = sext i16 %2 to i32
 
-    %3 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
-    %4 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x1)
+    %4 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
+    %5 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x1)
+    %6 = sext i16 %5 to i32
 
-    %5 = call half @llvm.amdgcn.frexp.mant.f16(half %x2)
-    %6 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x2)
+    %7 = call half @llvm.amdgcn.frexp.mant.f16(half %x2)
+    %8 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x2)
+    %9 = sext i16 %8 to i32
 
-    %7 = call half @llvm.amdgcn.frexp.mant.f16(half %x3)
-    %8 = call i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x3)
+    %10 = call half @llvm.amdgcn.frexp.mant.f16(half %x3)
+    %11 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x3)
+    %12 = sext i16 %11 to i32
 
-    %9 = insertelement <4 x half> undef, half %1, i32 0
-    %10 = insertelement <4 x half> %9, half %3, i32 1
-    %11 = insertelement <4 x half> %10, half %5, i32 2
-    %12 = insertelement <4 x half> %11, half %7, i32 3
+    %13 = insertelement <4 x half> undef, half %1, i32 0
+    %14 = insertelement <4 x half> %13, half %4, i32 1
+    %15 = insertelement <4 x half> %14, half %7, i32 2
+    %16 = insertelement <4 x half> %15, half %10, i32 3
 
-    %13 = insertelement <4 x i32> undef, i32 %2, i32 0
-    %14 = insertelement <4 x i32> %13, i32 %4, i32 1
-    %15 = insertelement <4 x i32> %14, i32 %6, i32 2
-    %16 = insertelement <4 x i32> %15, i32 %8, i32 3
+    %17 = insertelement <4 x i32> undef, i32 %3, i32 0
+    %18 = insertelement <4 x i32> %17, i32 %6, i32 1
+    %19 = insertelement <4 x i32> %18, i32 %9, i32 2
+    %20 = insertelement <4 x i32> %19, i32 %12, i32 3
 
-    %17 = insertvalue {<4 x half>, <4 x i32>} undef, <4 x half> %12, 0
-    %18 = insertvalue {<4 x half>, <4 x i32>} %17, <4 x i32> %16, 1
+    %21 = insertvalue {<4 x half>, <4 x i32>} undef, <4 x half> %16, 0
+    %22 = insertvalue {<4 x half>, <4 x i32>} %21, <4 x i32> %20, 1
 
-    ret {<4 x half>, <4 x i32>} %18
+    ret {<4 x half>, <4 x i32>} %22
 }
 
-declare half @llvm.trunc.f16(half ) #0
+; =====================================================================================================================
+; >>>  Functions of Extension AMD_shader_trinary_minmax
+; =====================================================================================================================
+
+; GLSL: float16_t min3(float16_t, float16_t, float16_t)
+define half @llpc.fmin3.f16(half %x, half %y, half %z)
+{
+    ; min(x, y)
+    %1 = call half @llvm.minnum.f16(half %x, half %y)
+
+    ; min(min(x, y), z)
+    %2 = call half @llvm.minnum.f16(half %1, half %z)
+
+    ret half %2
+}
+
+; GLSL: float16_t max3(float16_t, float16_t, float16_t)
+define half @llpc.fmax3.f16(half %x, half %y, half %z)
+{
+    ; max(x, y)
+    %1 = call half @llvm.maxnum.f16(half %x, half %y)
+
+    ; max(max(x, y), z)
+    %2 = call half @llvm.maxnum.f16(half %1, half %z)
+
+    ret half %2
+}
+
+; GLSL: float16_t mid3(float16_t, float16_t, float16_t)
+define half @llpc.fmid3.f16(half %x, half %y, half %z)
+{
+    %1 = call half @llvm.amdgcn.fmed3.f16(half %x, half %y, half %z)
+    ret half %1
+}
+
+declare half @llvm.trunc.f16(half) #0
 declare half @llvm.fabs.f16(half) #0
 declare half @llvm.sqrt.f16(half) #0
 declare half @llvm.floor.f16(half) #0
@@ -1683,9 +1728,9 @@ declare <4 x half> @llvm.fmuladd.v4f16(<4 x half>, <4 x half>, <4 x half>) #0
 
 declare i1 @llvm.amdgcn.class.f16(half, i32) #1
 declare half @llvm.amdgcn.fract.f16(half) #1
-declare half @llvm.amdgcn.fmed3.f16(half %x, half %minVal, half %maxVal) #1
+declare half @llvm.amdgcn.fmed3.f16(half, half, half) #1
 declare half @llvm.rint.f16(half) #0
-declare i32 @llvm.amdgcn.frexp.exp.i32.f16(half %x) #1
+declare i16 @llvm.amdgcn.frexp.exp.i16.f16(half) #1
 declare half @llvm.amdgcn.frexp.mant.f16(half) #1
 declare <2 x half> @llvm.amdgcn.cvt.pkrtz(float, float) #1
 

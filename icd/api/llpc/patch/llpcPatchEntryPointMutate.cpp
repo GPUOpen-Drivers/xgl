@@ -132,13 +132,20 @@ bool PatchEntryPointMutate::runOnModule(
 
         SpiPsInputAddr spiPsInputAddr = {};
 
-        spiPsInputAddr.PERSP_SAMPLE_ENA     = (builtInUsage.smooth && builtInUsage.sample);
-        spiPsInputAddr.PERSP_CENTER_ENA     = (builtInUsage.smooth && builtInUsage.center);
-        spiPsInputAddr.PERSP_CENTROID_ENA   = (builtInUsage.smooth && builtInUsage.centroid);
-        spiPsInputAddr.PERSP_PULL_MODEL_ENA = (builtInUsage.smooth && builtInUsage.pullMode);
-        spiPsInputAddr.LINEAR_SAMPLE_ENA    = (builtInUsage.noperspective && builtInUsage.sample);
-        spiPsInputAddr.LINEAR_CENTER_ENA    = (builtInUsage.noperspective && builtInUsage.center);
-        spiPsInputAddr.LINEAR_CENTROID_ENA  = (builtInUsage.noperspective && builtInUsage.centroid);
+        spiPsInputAddr.PERSP_SAMPLE_ENA     = ((builtInUsage.smooth && builtInUsage.sample) ||
+                                               builtInUsage.baryCoordSmoothSample);
+        spiPsInputAddr.PERSP_CENTER_ENA     = ((builtInUsage.smooth && builtInUsage.center) ||
+                                               builtInUsage.baryCoordSmooth);
+        spiPsInputAddr.PERSP_CENTROID_ENA   = ((builtInUsage.smooth && builtInUsage.centroid) ||
+                                               builtInUsage.baryCoordSmoothCentroid);
+        spiPsInputAddr.PERSP_PULL_MODEL_ENA = ((builtInUsage.smooth && builtInUsage.pullMode) ||
+                                               builtInUsage.baryCoordPullModel);
+        spiPsInputAddr.LINEAR_SAMPLE_ENA    = ((builtInUsage.noperspective && builtInUsage.sample) ||
+                                               builtInUsage.baryCoordNoPerspSample);
+        spiPsInputAddr.LINEAR_CENTER_ENA    = ((builtInUsage.noperspective && builtInUsage.center) ||
+                                               builtInUsage.baryCoordNoPersp);
+        spiPsInputAddr.LINEAR_CENTROID_ENA  = ((builtInUsage.noperspective && builtInUsage.centroid) ||
+                                               builtInUsage.baryCoordNoPerspCentroid);
         spiPsInputAddr.POS_X_FLOAT_ENA      = builtInUsage.fragCoord;
         spiPsInputAddr.POS_Y_FLOAT_ENA      = builtInUsage.fragCoord;
         spiPsInputAddr.POS_Z_FLOAT_ENA      = builtInUsage.fragCoord;

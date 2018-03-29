@@ -90,10 +90,11 @@ struct FsInterpInfo
 {
     uint32_t loc;     // Mapped input location (tightly packed)
     bool     flat;    // Whether it is "flat" interpolation
+    bool     custom;  // Whether it is "custom" interpolation
 };
 
 // Invalid interpolation info
-static const FsInterpInfo InvalidFsInterpInfo = {InvalidValue, false};
+static const FsInterpInfo InvalidFsInterpInfo = { InvalidValue, false, false };
 
 // Represents descriptor set/binding pair.
 union DescriptorPair
@@ -256,6 +257,13 @@ struct ResourceUsage
                 uint32_t viewportIndex        : 1;      // Whether gl_ViewportIndex is used
                 uint32_t helperInvocation     : 1;      // Whether gl_HelperInvocation is used
                 uint32_t viewIndex            : 1;      // Whether gl_ViewIndex is used
+                uint32_t baryCoordNoPersp     : 1;      // Whether gl_BaryCoordNoPersp is used (AMD extension)
+                uint32_t baryCoordNoPerspCentroid: 1;   // Whether gl_BaryCoordNoPerspCentroid is used (AMD extension)
+                uint32_t baryCoordNoPerspSample  : 1;   // Whether gl_BaryCoordNoPerspSample is used (AMD extension)
+                uint32_t baryCoordSmooth      : 1;      // Whether gl_BaryCoordSmooth is used (AMD extension)
+                uint32_t baryCoordSmoothCentroid : 1;   // Whether gl_BaryCoordSmoothCentroid is used (AMD extension)
+                uint32_t baryCoordSmoothSample: 1;      // Whether gl_BaryCoordSmoothSample is used (AMD extension)
+                uint32_t baryCoordPullModel   : 1;      // Whether gl_BaryCoordPullModel is used (AMD extension)
                 // Output
                 uint32_t fragDepth            : 1;      // Whether gl_FragDepth is used
                 uint32_t sampleMask           : 1;      // Whether gl_SampleMask[] is used

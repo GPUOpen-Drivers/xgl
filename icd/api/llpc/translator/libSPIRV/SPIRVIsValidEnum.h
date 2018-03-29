@@ -415,6 +415,7 @@ isValid(spv::Decoration V) {
     case DecorationInputAttachmentIndex:
     case DecorationAlignment:
     case DecorationMaxByteOffset:
+    case DecorationExplicitInterpAMD:
       return true;
     default:
       return false;
@@ -476,6 +477,13 @@ isValid(spv::BuiltIn V) {
     case BuiltInSubgroupLtMaskKHR:
     case BuiltInDeviceIndex:
     case BuiltInViewIndex:
+    case BuiltInBaryCoordNoPerspAMD:
+    case BuiltInBaryCoordNoPerspCentroidAMD:
+    case BuiltInBaryCoordNoPerspSampleAMD:
+    case BuiltInBaryCoordSmoothAMD:
+    case BuiltInBaryCoordSmoothCentroidAMD:
+    case BuiltInBaryCoordSmoothSampleAMD:
+    case BuiltInBaryCoordPullModelAMD:
       return true;
     default:
       return false;
@@ -605,6 +613,8 @@ isValid(spv::Capability V) {
     case CapabilityStorageInputOutput16:
     case CapabilityDeviceGroup:
     case CapabilityMultiView:
+    case CapabilityImageGatherBiasLodAMD:
+    case CapabilityFragmentMaskAMD:
       return true;
     default:
       return false;
@@ -963,6 +973,8 @@ isValid(spv::Op V) {
     case OpSubgroupAllKHR:
     case OpSubgroupAnyKHR:
     case OpSubgroupAllEqualKHR:
+    case OpFragmentMaskFetchAMD:
+    case OpFragmentFetchAMD:
       return true;
     default:
       return false;

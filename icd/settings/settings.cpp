@@ -61,11 +61,13 @@ static void OverrideProfiledSettings(
         pPalSettings->useGraphicsFastDepthStencilClear = true;
         pPalSettings->hintDisableSmallSurfColorCompressionSize = 511;
 
-        pSettings->preciseAnisoMode    = DisablePreciseAnisoAll;
-        pSettings->useAnisoThreshold   = true;
-        pSettings->anisoThreshold      = 1.0f;
+        pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;
+        pSettings->useAnisoThreshold = true;
+        pSettings->anisoThreshold    = 1.0f;
 
         pSettings->disableDeviceOnlyMemoryTypeWithoutHeap = true;
+
+        pSettings->prefetchShaders = true;
     }
 
     if (appProfile == AppProfile::Talos)
@@ -74,12 +76,20 @@ static void OverrideProfiledSettings(
         pSettings->optImgMaskToApplyShaderReadUsageForTransferSrc = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     }
 
-    if ((appProfile == AppProfile::SeriousSamFusion) ||
-        (appProfile == AppProfile::MadMax))
+    if (appProfile == AppProfile::SeriousSamFusion)
     {
-        pSettings->preciseAnisoMode = DisablePreciseAnisoAll;
-        pSettings->useAnisoThreshold   = true;
-        pSettings->anisoThreshold      = 1.0f;
+        pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;
+        pSettings->useAnisoThreshold = true;
+        pSettings->anisoThreshold    = 1.0f;
+
+        pSettings->prefetchShaders = true;
+    }
+
+    if (appProfile == AppProfile::MadMax)
+    {
+        pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;
+        pSettings->useAnisoThreshold = true;
+        pSettings->anisoThreshold    = 1.0f;
     }
 
 }

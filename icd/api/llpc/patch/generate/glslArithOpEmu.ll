@@ -2529,11 +2529,146 @@ define spir_func {<4 x i32>, <4 x i32>} @_Z12SMulExtendedDv4_iDv4_i(
     ret {<4 x i32>, <4 x i32>} %34
 }
 
+; =====================================================================================================================
+; >>>  Functions of Extension AMD_shader_trinary_minmax
+; =====================================================================================================================
+
+; GLSL: int min3(int, int, int)
+define i32 @llpc.smin3.i32(i32 %x, i32 %y, i32 %z)
+{
+    ; min(x, y)
+    %1 = icmp slt i32 %x, %y
+    %2 = select i1 %1, i32 %x, i32 %y
+
+    ; min(min(x, y), z)
+    %3 = icmp slt i32 %2, %z
+    %4 = select i1 %3, i32 %2, i32 %z
+
+    ret i32 %4
+}
+
+; GLSL: int max3(int, int, int)
+define i32 @llpc.smax3.i32(i32 %x, i32 %y, i32 %z)
+{
+    ; max(x, y)
+    %1 = icmp sgt i32 %x, %y
+    %2 = select i1 %1, i32 %x, i32 %y
+
+    ; max(max(x, y), z)
+    %3 = icmp sgt i32 %2, %z
+    %4 = select i1 %3, i32 %2, i32 %z
+
+    ret i32 %4
+}
+
+; GLSL: int mid3(int, int, int)
+define i32 @llpc.smid3.i32(i32 %x, i32 %y, i32 %z)
+{
+    ; min(x, y)
+    %1 = icmp slt i32 %x, %y
+    %2 = select i1 %1, i32 %x, i32 %y
+
+    ; max(x, y)
+    %3 = icmp sgt i32 %x, %y
+    %4 = select i1 %3, i32 %x, i32 %y
+
+    ; min(max(x, y), z)
+    %5 = icmp slt i32 %4, %z
+    %6 = select i1 %5, i32 %4, i32 %z
+
+    ; max(min(x, y), min(max(x, y), z))
+    %7 = icmp sgt i32 %2, %6
+    %8 = select i1 %7, i32 %2, i32 %6
+
+    ret i32 %8
+}
+
+; GLSL: uint min3(uint, uint, uint)
+define i32 @llpc.umin3.i32(i32 %x, i32 %y, i32 %z)
+{
+    ; min(x, y)
+    %1 = icmp ult i32 %x, %y
+    %2 = select i1 %1, i32 %x, i32 %y
+
+    ; min(min(x, y), z)
+    %3 = icmp ult i32 %2, %z
+    %4 = select i1 %3, i32 %2, i32 %z
+
+    ret i32 %4
+}
+
+; GLSL: uint max3(uint, uint, uint)
+define i32 @llpc.umax3.i32(i32 %x, i32 %y, i32 %z)
+{
+    ; max(x, y)
+    %1 = icmp ugt i32 %x, %y
+    %2 = select i1 %1, i32 %x, i32 %y
+
+    ; max(max(x, y), z)
+    %3 = icmp ugt i32 %2, %z
+    %4 = select i1 %3, i32 %2, i32 %z
+
+    ret i32 %4
+}
+
+; GLSL: uint mid3(uint, uint, uint)
+define i32 @llpc.umid3.i32(i32 %x, i32 %y, i32 %z)
+{
+    ; min(x, y)
+    %1 = icmp ult i32 %x, %y
+    %2 = select i1 %1, i32 %x, i32 %y
+
+    ; max(x, y)
+    %3 = icmp ugt i32 %x, %y
+    %4 = select i1 %3, i32 %x, i32 %y
+
+    ; min(max(x, y), z)
+    %5 = icmp ult i32 %4, %z
+    %6 = select i1 %5, i32 %4, i32 %z
+
+    ; max(min(x, y), min(max(x, y), z))
+    %7 = icmp ugt i32 %2, %6
+    %8 = select i1 %7, i32 %2, i32 %6
+
+    ret i32 %8
+}
+
+; GLSL: float min3(float, float, float)
+define float @llpc.fmin3.f32(float %x, float %y, float %z)
+{
+    ; min(x, y)
+    %1 = call float @llvm.minnum.f32(float %x, float %y)
+
+    ; min(min(x, y), z)
+    %2 = call float @llvm.minnum.f32(float %1, float %z)
+
+    ret float %2
+}
+
+; GLSL: float max3(float, float, float)
+define float @llpc.fmax3.f32(float %x, float %y, float %z)
+{
+    ; max(x, y)
+    %1 = call float @llvm.maxnum.f32(float %x, float %y)
+
+    ; max(max(x, y), z)
+    %2 = call float @llvm.maxnum.f32(float %1, float %z)
+
+    ret float %2
+}
+
+; GLSL: float mid3(float, float, float)
+define float @llpc.fmid3.f32(float %x, float %y, float %z)
+{
+    %1 = call float @llvm.amdgcn.fmed3.f32(float %x, float %y, float %z)
+    ret float %1
+}
+
 declare float @llvm.amdgcn.fmul.legacy(float, float) #1
 declare i32 @llvm.amdgcn.sbfe.i32(i32, i32, i32) #1
 declare i32 @llvm.amdgcn.ubfe.i32(i32, i32, i32) #1
 declare float @llvm.trunc.f32(float ) #0
-declare { i32, i1 } @llvm.uadd.with.overflow.i32(i32, i32 ) #0
+declare { i32, i1 } @llvm.uadd.with.overflow.i32(i32, i32) #0
 declare { i32, i1 } @llvm.usub.with.overflow.i32(i32, i32) #0
 declare float @llvm.exp2.f32(float) #0
 declare float @llvm.log2.f32(float) #0
@@ -2544,16 +2679,16 @@ declare float @llvm.floor.f32(float) #0
 declare float @llvm.minnum.f32(float, float) #0
 declare float @llvm.maxnum.f32(float, float) #0
 declare float @llvm.fabs.f32(float) #0
-declare i32 @llvm.cttz.i32(i32 , i1) #0
-declare i32 @llvm.ctlz.i32(i32 , i1) #0
+declare i32 @llvm.cttz.i32(i32, i1) #0
+declare i32 @llvm.ctlz.i32(i32, i1) #0
 declare i32 @llvm.amdgcn.sffbh.i32(i32) #1
 declare i1 @llvm.amdgcn.class.f32(float, i32) #1
 declare float @llvm.amdgcn.frexp.mant.f32(float) #1
 declare i32 @llvm.amdgcn.frexp.exp.i32.f32(float) #1
 declare i32 @llvm.amdgcn.cvt.pk.u8.f32(float, i32, i32) #1
 declare float @llvm.amdgcn.fdiv.fast(float, float) #1
-declare float @llvm.amdgcn.fract.f32(float %src) #1
-declare float @llvm.amdgcn.fmed3.f32(float %x, float %minVal, float %maxVal) #1
+declare float @llvm.amdgcn.fract.f32(float) #1
+declare float @llvm.amdgcn.fmed3.f32(float, float, float) #1
 declare float @llvm.rint.f32(float) #0
 
 attributes #0 = { nounwind }

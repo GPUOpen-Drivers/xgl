@@ -524,7 +524,7 @@ VkResult Image::CreateImageInternal(
     // Create PAL image
     if (pMemory != nullptr)
     {
-        const void*  pPalImgAddr = Util::VoidPtrInc(pMemory, 0);
+        void* pPalImgAddr = Util::VoidPtrInc(pMemory, 0);
 
         palResult = pDevice->PalDevice()->CreateImage(
             *pPalCreateInfo,
@@ -733,7 +733,7 @@ VkResult Image::Create(
 
     // Create PAL images
     Pal::IImage* pPalImages[MaxPalDevices] = {};
-    const void*  pPalImgAddr  = Util::VoidPtrInc(pMemory, apiSize);
+    void*        pPalImgAddr  = Util::VoidPtrInc(pMemory, apiSize);
     size_t       palImgOffset = 0;
 
     if (result == VK_SUCCESS)

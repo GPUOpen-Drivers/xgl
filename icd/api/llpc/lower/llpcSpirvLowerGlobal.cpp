@@ -185,13 +185,13 @@ void SpirvLowerGlobal::visitCallInst(
 
         if (mangledName.startswith("_Z21interpolateAtCentroid") ||
             mangledName.startswith("_Z19interpolateAtSample") ||
-            mangledName.startswith("_Z19interpolateAtOffset"))
+            mangledName.startswith("_Z19interpolateAtOffset") ||
+            mangledName.startswith("_Z22InterpolateAtVertexAMD"))
         {
             // Translate interpolation functions to LLPC intrinsic calls
             auto pLoadSrc = callInst.getArgOperand(0);
             uint32_t interpLoc = InterpLocUnknown;
-            Value* pSampleId = nullptr;
-            Value* pPixelOffset = nullptr;
+            Value* pAuxInterpValue = nullptr;
 
             if (mangledName.startswith("_Z21interpolateAtCentroid"))
             {
@@ -200,12 +200,18 @@ void SpirvLowerGlobal::visitCallInst(
             else if (mangledName.startswith("_Z19interpolateAtSample"))
             {
                 interpLoc = InterpLocSample;
-                pSampleId = callInst.getArgOperand(1);
+                pAuxInterpValue = callInst.getArgOperand(1); // Sample ID
+            }
+            else if (mangledName.startswith("_Z19interpolateAtOffset"))
+            {
+                interpLoc = InterpLocCenter;
+                pAuxInterpValue = callInst.getArgOperand(1); // Offset from pixel center
             }
             else
             {
-                interpLoc = InterpLocCenter;
-                pPixelOffset = callInst.getArgOperand(1);
+                LLPC_ASSERT(mangledName.startswith("_Z22InterpolateAtVertexAMD"));
+                interpLoc = InterpLocCustom;
+                pAuxInterpValue = callInst.getArgOperand(1); // Vertex no.
             }
 
             if (isa<GetElementPtrInst>(pLoadSrc))
@@ -235,8 +241,7 @@ void SpirvLowerGlobal::visitCallInst(
                                                   nullptr,
                                                   nullptr,
                                                   interpLoc,
-                                                  pSampleId,
-                                                  pPixelOffset,
+                                                  pAuxInterpValue,
                                                   &callInst);
 
                 m_interpCalls.insert(&callInst);
@@ -261,8 +266,7 @@ void SpirvLowerGlobal::visitCallInst(
                                                             nullptr,
                                                             nullptr,
                                                             interpLoc,
-                                                            pSampleId,
-                                                            pPixelOffset,
+                                                            pAuxInterpValue,
                                                             &callInst);
 
                 m_interpCalls.insert(&callInst);
@@ -353,7 +357,6 @@ void SpirvLowerGlobal::visitLoadInst(
                                           pVertexIdx,
                                           InterpLocUnknown,
                                           nullptr,
-                                          nullptr,
                                           &loadInst);
 
         m_loadInsts.insert(&loadInst);
@@ -415,7 +418,6 @@ void SpirvLowerGlobal::visitLoadInst(
                                                             pVertexIdx,
                                                             InterpLocUnknown,
                                                             nullptr,
-                                                            nullptr,
                                                             &loadInst);
 
                 std::vector<uint32_t> idxs;
@@ -432,7 +434,6 @@ void SpirvLowerGlobal::visitLoadInst(
                                                    nullptr,
                                                    nullptr,
                                                    InterpLocUnknown,
-                                                   nullptr,
                                                    nullptr,
                                                    &loadInst);
         }
@@ -650,7 +651,6 @@ void SpirvLowerGlobal::MapInputToProxy(
                                                  nullptr,
                                                  nullptr,
                                                  InterpLocUnknown,
-                                                 nullptr,
                                                  nullptr,
                                                  &*pInsertPos);
     new StoreInst(pInputValue, pProxy, &*pInsertPos);
@@ -1170,22 +1170,22 @@ void SpirvLowerGlobal::LowerInOutInPlace()
 // =====================================================================================================================
 // Inserts LLVM call instruction to import input/output.
 Value* SpirvLowerGlobal::AddCallInstForInOutImport(
-    Type*        pInOutTy,     // [in] Type of value imported from input/output
-    uint32_t     addrSpace,    // Address space
-    Constant*    pInOutMeta,   // [in] Metadata of this input/output
-    Value*       pLocOffset,   // [in] Relative location offset, passed from aggregate type
-    Value*       pElemIdx,     // [in] Element index used for element indexing, valid for tessellation shader (usually,
-                               // it is vector component index, for built-in input/output, it could be element index
-                               // of scalar array)
-    Value*       pVertexIdx,   // [in] Input array outermost index used for vertex indexing, valid for tessellation
-                               // shader and geometry shader
-    uint32_t     interpLoc,    // Interpolation location, valid for fragment shader
-                               // (use "InterpLocUnknown" as don't-care value)
-    Value*       pSampleId,    // [in] Sample ID, used when the interpolation location is "InterpLocSample", valid for
-                               // fragment shader
-    Value*       pPixelOffset, // [in] Offset from the center of the pixel, used when interpolation location is
-                               // "InterpLocCenter", valid for fragment shader
-    Instruction* pInsertPos)   // [in] Where to insert this call
+    Type*        pInOutTy,          // [in] Type of value imported from input/output
+    uint32_t     addrSpace,         // Address space
+    Constant*    pInOutMeta,        // [in] Metadata of this input/output
+    Value*       pLocOffset,        // [in] Relative location offset, passed from aggregate type
+    Value*       pElemIdx,          // [in] Element index used for element indexing, valid for tessellation shader
+                                    // (usually, it is vector component index, for built-in input/output, it could be
+                                    // element index of scalar array)
+    Value*       pVertexIdx,        // [in] Input array outermost index used for vertex indexing, valid for
+                                    // tessellation shader and geometry shader
+    uint32_t     interpLoc,         // Interpolation location, valid for fragment shader (use "InterpLocUnknown" as
+                                    // don't-care value)
+    Value*       pAuxInterpValue,   // [in] Auxiliary value of interpolation (valid for fragment shader)
+                                    //   - Value is sample ID for "InterpLocSample"
+                                    //   - Value is offset from the center of the pixel for "InterpLocCenter"
+                                    //   - Value is vertex no. (0 ~ 2) for "InterpLocCustom"
+    Instruction* pInsertPos)        // [in] Where to insert this call
 {
     LLPC_ASSERT((addrSpace == SPIRAS_Input) ||
                 ((addrSpace == SPIRAS_Output) && (m_shaderStage == ShaderStageTessControl)));
@@ -1239,8 +1239,7 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
                                                            nullptr,
                                                            pVertexIdx,
                                                            interpLoc,
-                                                           pSampleId,
-                                                           pPixelOffset,
+                                                           pAuxInterpValue,
                                                            pInsertPos);
 
                     std::vector<uint32_t> idxs;
@@ -1311,7 +1310,6 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
                                                            pVertexIdx,
                                                            InterpLocUnknown,
                                                            nullptr,
-                                                           nullptr,
                                                            pInsertPos);
 
                     std::vector<uint32_t> idxs;
@@ -1346,7 +1344,6 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
                                                            pVertexIdx,
                                                            InterpLocUnknown,
                                                            nullptr,
-                                                           nullptr,
                                                            pInsertPos);
 
                     std::vector<uint32_t> idxs;
@@ -1376,7 +1373,6 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
                                                      pVertexIdx,
                                                      InterpLocUnknown,
                                                      nullptr,
-                                                     nullptr,
                                                      pInsertPos);
 
             std::vector<uint32_t> idxs;
@@ -1393,67 +1389,78 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
         LLPC_ASSERT(inOutMeta.IsLoc || inOutMeta.IsBuiltIn);
 
         std::string instName;
-        Value* pIJ = nullptr;
 
         if (interpLoc != InterpLocUnknown)
         {
             LLPC_ASSERT(m_shaderStage == ShaderStageFragment);
 
-            // Add intrinsic to calculate I/J for interpolation function
-            std::string evalInstName;
-            std::vector<Value*> evalArgs;
-            auto pResUsage = m_pContext->GetShaderResourceUsage(ShaderStageFragment);
-
-            if (interpLoc == InterpLocCentroid)
+            if (interpLoc != InterpLocCustom)
             {
-                evalInstName = LlpcName::InputImportBuiltIn;
-                if (inOutMeta.InterpMode == InterpModeNoPersp)
+                // Add intrinsic to calculate I/J for interpolation function
+                std::string evalInstName;
+                std::vector<Value*> evalArgs;
+                auto pResUsage = m_pContext->GetShaderResourceUsage(ShaderStageFragment);
+
+                if (interpLoc == InterpLocCentroid)
                 {
-                    evalInstName += "InterpLinearCentroid";
-                    evalArgs.push_back(ConstantInt::get(m_pContext->Int32Ty(), BuiltInInterpLinearCentroid));
-                    pResUsage->builtInUsage.fs.noperspective = true;
-                    pResUsage->builtInUsage.fs.centroid = true;
+                    evalInstName = LlpcName::InputImportBuiltIn;
+                    if (inOutMeta.InterpMode == InterpModeNoPersp)
+                    {
+                        evalInstName += "InterpLinearCentroid";
+                        evalArgs.push_back(ConstantInt::get(m_pContext->Int32Ty(), BuiltInInterpLinearCentroid));
+                        pResUsage->builtInUsage.fs.noperspective = true;
+                        pResUsage->builtInUsage.fs.centroid = true;
+                    }
+                    else
+                    {
+                        evalInstName += "InterpPerspCentroid";
+                        evalArgs.push_back(ConstantInt::get(m_pContext->Int32Ty(), BuiltInInterpPerspCentroid));
+                        pResUsage->builtInUsage.fs.smooth = true;
+                        pResUsage->builtInUsage.fs.centroid = true;
+                    }
                 }
                 else
                 {
-                    evalInstName += "InterpPerspCentroid";
-                    evalArgs.push_back(ConstantInt::get(m_pContext->Int32Ty(), BuiltInInterpPerspCentroid));
-                    pResUsage->builtInUsage.fs.smooth = true;
-                    pResUsage->builtInUsage.fs.centroid = true;
-                }
-            }
-            else
-            {
-                evalInstName = LlpcName::InputInterpEval;
-                if (interpLoc == InterpLocCenter)
-                {
-                    evalInstName += "offset";
-                    evalArgs.push_back(pPixelOffset);
-                }
-                else
-                {
-                    evalInstName += "sample";
-                    evalArgs.push_back(pSampleId);
-                    pResUsage->builtInUsage.fs.runAtSampleRate = true;
+                    evalInstName = LlpcName::InputInterpEval;
+                    std::string suffix;
+
+                    if (interpLoc == InterpLocCenter)
+                    {
+                        evalInstName += "offset";
+                        evalArgs.push_back(pAuxInterpValue);
+
+                        // NOTE: Here we add suffix to differentiate the type of "offset" (could be 16-bit or 32-bit
+                        // floating-point type)
+                        suffix = "." + GetTypeNameForScalarOrVector(pAuxInterpValue->getType());
+                    }
+                    else
+                    {
+                        evalInstName += "sample";
+                        evalArgs.push_back(pAuxInterpValue);
+                        pResUsage->builtInUsage.fs.runAtSampleRate = true;
+                    }
+
+                    if (inOutMeta.InterpMode == InterpModeNoPersp)
+                    {
+                        evalInstName += ".noperspective";
+                        pResUsage->builtInUsage.fs.noperspective = true;
+                        pResUsage->builtInUsage.fs.center = true;
+                    }
+                    else
+                    {
+                        pResUsage->builtInUsage.fs.smooth = true;
+                        pResUsage->builtInUsage.fs.pullMode = true;
+                    }
+
+                    evalInstName += suffix;
                 }
 
-                if (inOutMeta.InterpMode == InterpModeNoPersp)
-                {
-                    evalInstName += ".noperspective";
-                    pResUsage->builtInUsage.fs.noperspective = true;
-                    pResUsage->builtInUsage.fs.center = true;
-                }
-                else
-                {
-                    pResUsage->builtInUsage.fs.smooth = true;
-                    pResUsage->builtInUsage.fs.pullMode = true;
-                }
+                auto pIJ = EmitCall(m_pModule, evalInstName, m_pContext->Floatx2Ty(), evalArgs, NoAttrib, pInsertPos);
+                pAuxInterpValue = pIJ;
             }
-
-            pIJ = EmitCall(m_pModule, evalInstName, m_pContext->Floatx2Ty(), evalArgs, NoAttrib, pInsertPos);
 
             // Prepare arguments for input import call
-            instName =  LlpcName::InputImportInterpolant;
+            instName  = LlpcName::InputImportInterpolant;
             instName += GetTypeNameForScalarOrVector(pInOutTy);
 
             auto pLoc = ConstantInt::get(m_pContext->Int32Ty(), inOutMeta.Value);
@@ -1592,9 +1599,10 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
 
         if (interpLoc != InterpLocUnknown)
         {
-            // Add interpolation mode and calculated I/J for interpolant inputs of fragment shader
+            // Add interpolation mode and auxiliary value of interpolation (calcuated I/J or vertex no.) for
+            // interpolant inputs of fragment shader
             args.push_back(ConstantInt::get(m_pContext->Int32Ty(), inOutMeta.InterpMode));
-            args.push_back(pIJ);
+            args.push_back(pAuxInterpValue);
         }
         else if ((m_shaderStage == ShaderStageFragment) && (inOutMeta.IsBuiltIn == false))
         {
@@ -1623,7 +1631,7 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
         // FS:  @llpc.input.import.generic.%Type%(i32 location, i32 elemIdx, i32 interpMode, i32 interpLoc)
         //      @llpc.input.import.builtin.%BuiltIn%(i32 builtInId)
         //      @llpc.input.import.interpolant.%Type%(i32 location, i32 locOffset, i32 elemIdx,
-        //                                            i32 interpMode, <2 x float> ij)
+        //                                            i32 interpMode, <2 x float> | i32 auxInterpValue)
         //
         // CS:  @llpc.input.import.builtin.%BuiltIn%(i32 builtInId)
         //
@@ -1977,10 +1985,10 @@ Value* SpirvLowerGlobal::LoadInOutMember(
     Value*                     pVertexIdx,      // [in] Input array outermost index used for vertex indexing
     uint32_t                   interpLoc,       // Interpolation location, valid for fragment shader
                                                 // (use "InterpLocUnknown" as don't-care value)
-    Value*                     pSampleId,       // [in] Sample ID, used when the interpolation location is
-                                                // "InterpLocSample", valid for fragment shader
-    Value*                     pPixelOffset,    // [in] Offset from the center of the pixel, used when interpolation
-                                                //  location is "InterpLocCenter", valid for fragment shader
+    Value*                     pAuxInterpValue, // [in] Auxiliary value of interpolation (valid for fragment shader):
+                                                //   - Sample ID for "InterpLocSample"
+                                                //   - Offset from the center of the pixel for "InterpLocCenter"
+                                                //   - Vertex no. (0 ~ 2) for "InterpLocCustom"
     Instruction*               pInsertPos)      // [in] Where to insert calculation instructions
 {
     LLPC_ASSERT((m_shaderStage == ShaderStageTessControl) || (m_shaderStage == ShaderStageTessEval));
@@ -2010,8 +2018,7 @@ Value* SpirvLowerGlobal::LoadInOutMember(
                                                  pElemIdx,
                                                  pVertexIdx,
                                                  interpLoc,
-                                                 pSampleId,
-                                                 pPixelOffset,
+                                                 pAuxInterpValue,
                                                  pInsertPos);
             }
             else
@@ -2039,8 +2046,7 @@ Value* SpirvLowerGlobal::LoadInOutMember(
                                        pElemLocOffset,
                                        pVertexIdx,
                                        interpLoc,
-                                       pSampleId,
-                                       pPixelOffset,
+                                       pAuxInterpValue,
                                        pInsertPos);
             }
         }
@@ -2060,8 +2066,7 @@ Value* SpirvLowerGlobal::LoadInOutMember(
                                    pLocOffset,
                                    pVertexIdx,
                                    interpLoc,
-                                   pSampleId,
-                                   pPixelOffset,
+                                   pAuxInterpValue,
                                    pInsertPos);
         }
         else if (pInOutTy->isVectorTy())
@@ -2079,8 +2084,7 @@ Value* SpirvLowerGlobal::LoadInOutMember(
                                              pCompIdx,
                                              pVertexIdx,
                                              interpLoc,
-                                             pSampleId,
-                                             pPixelOffset,
+                                             pAuxInterpValue,
                                              pInsertPos);
         }
     }
@@ -2095,8 +2099,7 @@ Value* SpirvLowerGlobal::LoadInOutMember(
                                          nullptr,
                                          pVertexIdx,
                                          interpLoc,
-                                         pSampleId,
-                                         pPixelOffset,
+                                         pAuxInterpValue,
                                          pInsertPos);
     }
 

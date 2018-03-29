@@ -345,6 +345,7 @@ SPIRVMap<Decoration, std::string>::init() {
   add(DecorationInputAttachmentIndex, "InputAttachmentIndex");
   add(DecorationAlignment, "Alignment");
   add(DecorationMaxByteOffset, "MaxByteOffset");
+  add(DecorationExplicitInterpAMD, "ExplicitInterpAMD");
 }
 SPIRV_DEF_NAMEMAP(Decoration, SPIRVDecorationNameMap)
 
@@ -402,6 +403,13 @@ SPIRVMap<BuiltIn, std::string>::init() {
   add(BuiltInSubgroupLeMaskKHR, "BuiltInSubgroupLeMaskKHR");
   add(BuiltInSubgroupLtMaskKHR, "BuiltInSubgroupLtMaskKHR");
   add(BuiltInDeviceIndex, "BuiltInDeviceIndex");
+  add(BuiltInBaryCoordNoPerspAMD, "BuiltInBaryCoordNoPerspAMD");
+  add(BuiltInBaryCoordNoPerspCentroidAMD, "BuiltInBaryCoordNoPerspCentroidAMD");
+  add(BuiltInBaryCoordNoPerspSampleAMD, "BuiltInBaryCoordNoPerspSampleAMD");
+  add(BuiltInBaryCoordSmoothAMD, "BuiltInBaryCoordSmoothAMD");
+  add(BuiltInBaryCoordSmoothCentroidAMD, "BuiltInBaryCoordSmoothCentroidAMD");
+  add(BuiltInBaryCoordSmoothSampleAMD, "BuiltInBaryCoordSmoothSampleAMD");
+  add(BuiltInBaryCoordPullModelAMD, "BuiltInBaryCoordPullModelAMD");
 }
 SPIRV_DEF_NAMEMAP(BuiltIn, SPIRVBuiltInNameMap)
 
@@ -513,6 +521,8 @@ SPIRVMap<Capability, std::string>::init() {
   add(CapabilityGroupNonUniformClustered, "GroupNonUniformClustered");
   add(CapabilityGroupNonUniformQuad, "GroupNonUniformQuad");
 #endif
+  add(CapabilityImageGatherBiasLodAMD, "ImageGatherBiasLodAMD");
+  add(CapabilityFragmentMaskAMD, "FragmentMaskAMD");
 }
 SPIRV_DEF_NAMEMAP(Capability, SPIRVCapabilityNameMap)
 

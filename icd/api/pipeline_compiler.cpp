@@ -42,6 +42,73 @@ namespace vk
 extern bool IsSrcAlphaUsedInBlend(VkBlendFactor blend);
 
 // =====================================================================================================================
+ShaderCache::ShaderCache()
+    :
+    m_cacheType(),
+    m_cache()
+{
+
+}
+
+// =====================================================================================================================
+// Initializes shader cache object.
+void ShaderCache::Init(
+    PipelineCacheType  cacheType,  // Shader cache type
+    ShaderCachePtr     cachePtr)   // Pointer of the shader cache implementation
+{
+    m_cacheType = cacheType;
+    m_cache = cachePtr;
+}
+
+// =====================================================================================================================
+// Serializes the shader cache data or queries the size required for serialization.
+VkResult ShaderCache::Serialize(
+    void*   pBlob,
+    size_t* pSize)
+{
+    VkResult result = VK_SUCCESS;
+
+    {
+        Llpc::Result llpcResult = m_cache.pLlpcShaderCache->Serialize(pBlob, pSize);
+        result = (llpcResult == Llpc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Merges the provided source shader caches' content into this shader cache.
+VkResult ShaderCache::Merge(
+    uint32_t              srcCacheCount,
+    const ShaderCachePtr* ppSrcCaches)
+{
+    VkResult result = VK_SUCCESS;
+
+    {
+        Llpc::Result llpcResult = m_cache.pLlpcShaderCache->Merge(srcCacheCount,
+            const_cast<const Llpc::IShaderCache **>(&ppSrcCaches->pLlpcShaderCache));
+        result = (llpcResult == Llpc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Frees all resources associated with this object.
+void ShaderCache::Destroy(
+    PipelineCompiler* pCompiler)
+{
+    VkResult result = VK_SUCCESS;
+
+    {
+        if (m_cache.pLlpcShaderCache)
+        {
+            m_cache.pLlpcShaderCache->Destroy();
+        }
+    }
+}
+
+// =====================================================================================================================
 PipelineCompiler::PipelineCompiler(PhysicalDevice* pPhysicalDevice)
     :
     m_pPhysicalDevice(pPhysicalDevice)
@@ -291,6 +358,115 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
 }
 
 // =====================================================================================================================
+// Creates shader cache object.
+VkResult PipelineCompiler::CreateShaderCache(
+    const void*   pInitialData,
+    size_t        initialDataSize,
+    void*         pShaderCacheMem,
+    bool          isScpcInternalCache,
+    ShaderCache*  pShaderCache)
+{
+    VkResult                     result         = VK_SUCCESS;
+    const RuntimeSettings        settings       = m_pPhysicalDevice->GetRuntimeSettings();
+    PipelineCacheType            cacheType      = GetShaderCacheType();
+    ShaderCache::ShaderCachePtr  shaderCachePtr = {};
+
+    {
+        // Create shader cache for LLPC
+        Llpc::ShaderCacheCreateInfo llpcCacheCreateInfo = {};
+
+        llpcCacheCreateInfo.pInitialData    = pInitialData;
+        llpcCacheCreateInfo.initialDataSize = initialDataSize;
+
+        Llpc::Result llpcResult = m_pLlpc->CreateShaderCache(
+            &llpcCacheCreateInfo,
+            &shaderCachePtr.pLlpcShaderCache);
+
+        if (llpcResult == Llpc::Result::Success)
+        {
+            pShaderCache->Init(PipelineCacheTypeLlpc, shaderCachePtr);
+        }
+        else
+        {
+            result = VK_ERROR_INITIALIZATION_FAILED;
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Gets the size of shader cache object.
+size_t PipelineCompiler::GetShaderCacheSize(PipelineCacheType cacheType)
+{
+    size_t shaderCacheSize = 0;
+    return shaderCacheSize;
+}
+
+// =====================================================================================================================
+// Gets shader cache type.
+PipelineCacheType PipelineCompiler::GetShaderCacheType()
+{
+    PipelineCacheType cacheType;
+    cacheType = PipelineCacheTypeLlpc;
+    return cacheType;
+}
+
+// =====================================================================================================================
+// Builds shader module from SPIR-V binary code.
+VkResult PipelineCompiler::BuildShaderModule(
+    size_t          codeSize,            ///< Size of shader binary data
+    const void*     pCode                ///< Shader binary data
+    , void**          ppLlpcShaderModule ///< [out] LLPC shader module
+    )
+{
+    const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
+    auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
+    VkResult result = VK_SUCCESS;
+    {
+        if (ppLlpcShaderModule != nullptr)
+        {
+            // Build LLPC shader module
+            Llpc::ShaderModuleBuildInfo  moduleInfo = {};
+            Llpc::ShaderModuleBuildOut   buildOut = {};
+            void* pShaderMemory = nullptr;
+
+            moduleInfo.pInstance      = pInstance;
+            moduleInfo.pfnOutputAlloc = AllocateShaderOutput;
+            moduleInfo.pUserData      = &pShaderMemory;
+            moduleInfo.shaderBin.pCode    = pCode;
+            moduleInfo.shaderBin.codeSize = codeSize;
+
+            Llpc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
+
+            if ((llpcResult == Llpc::Result::Success) || (llpcResult == Llpc::Result::Delayed))
+            {
+                *ppLlpcShaderModule = buildOut.pModuleData;
+                VK_ASSERT(pShaderMemory == *ppLlpcShaderModule);
+            }
+            else
+            {
+                // Clean up if fail
+                pInstance->FreeMem(pShaderMemory);
+                result = VK_ERROR_INITIALIZATION_FAILED;
+            }
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Frees shader module memory
+void PipelineCompiler::FreeShaderModule(
+    void* pShaderModule)
+{
+    auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    pInstance->FreeMem(pShaderModule);
+}
+
+// =====================================================================================================================
 // Creates graphics pipeline binary.
 VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     Device*                             pDevice,
@@ -316,9 +492,13 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
         pPipelineBuildInfo->iaState.deviceIndex = deviceIdx;
 
-        if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCacheType() == PipelineCacheTypeLlpc))
+        if (pPipelineCache != nullptr)
         {
-            pPipelineBuildInfo->pShaderCache = pPipelineCache->GetShaderCache(deviceIdx).pLlpcShaderCache;
+            if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCacheTypeLlpc)
+            {
+                pPipelineBuildInfo->pShaderCache =
+                    pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
+            }
         }
 
         auto llpcResult = m_pLlpc->BuildGraphicsPipeline(pPipelineBuildInfo, &pipelineOut);
@@ -354,7 +534,6 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     VkResult               result    = VK_SUCCESS;
     const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-    const ShaderModule*    pShader   = ShaderModule::ObjectFromHandle(pCreateInfo->pStage->module);
 
     // Build the LLPC pipeline
     Llpc::ComputePipelineBuildOut  pipelineOut         = {};
@@ -369,9 +548,13 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
         pPipelineBuildInfo->deviceIndex    = deviceIdx;
 
-        if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCacheType() == PipelineCacheTypeLlpc))
+        if (pPipelineCache != nullptr)
         {
-            pPipelineBuildInfo->pShaderCache = pPipelineCache->GetShaderCache(deviceIdx).pLlpcShaderCache;
+            if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCacheTypeLlpc)
+            {
+                pPipelineBuildInfo->pShaderCache =
+                    pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
+            }
         }
 
         // Build pipline binary
@@ -416,6 +599,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     // Fill in necessary non-zero defaults in case some information is missing
     const RenderPass* pRenderPass = nullptr;
+    const PipelineLayout* pLayout = nullptr;
+    const VkPipelineShaderStageCreateInfo* pStageInfos[ShaderGfxStageCount] = {};
 
     if (pGraphicsPipelineCreateInfo != nullptr)
     {
@@ -423,7 +608,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         {
             ShaderStage stage = ShaderFlagBitToStage(pGraphicsPipelineCreateInfo->pStages[i].stage);
             VK_ASSERT(stage < ShaderGfxStageCount);
-            pCreateInfo->pStages[stage] = &pGraphicsPipelineCreateInfo->pStages[i];
+            pStageInfos[stage] = &pGraphicsPipelineCreateInfo->pStages[i];
         }
 
         VK_IGNORE(pGraphicsPipelineCreateInfo->flags & VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT);
@@ -432,7 +617,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
         if (pGraphicsPipelineCreateInfo->layout != VK_NULL_HANDLE)
         {
-            pCreateInfo->pLayout = PipelineLayout::ObjectFromHandle(pGraphicsPipelineCreateInfo->layout);
+            pLayout = PipelineLayout::ObjectFromHandle(pGraphicsPipelineCreateInfo->layout);
         }
 
         pCreateInfo->pipelineInfo.pVertexInput = pGraphicsPipelineCreateInfo->pVertexInputState;
@@ -567,9 +752,10 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     }
 
     // Allocate space to create the LLPC/SCPC pipeline resource mappings
-    if (pCreateInfo->pLayout != nullptr)
+    if (pLayout != nullptr)
     {
-        size_t tempBufferSize = pCreateInfo->pLayout->GetPipelineInfo()->tempBufferSize;
+        pCreateInfo->tempBufferStageSize = pLayout->GetPipelineInfo()->tempStageSize;
+        size_t tempBufferSize = pLayout->GetPipelineInfo()->tempBufferSize;
 
         // Allocate the temp buffer
         if (tempBufferSize > 0)
@@ -582,6 +768,13 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             if (pCreateInfo->pMappingBuffer == nullptr)
             {
                 result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            else
+            {
+                // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
+                // fields of resource mapping nodes are unused for certain node types. We must initialize
+                // them to zeroes.
+                memset(pCreateInfo->pMappingBuffer, 0, tempBufferSize);
             }
         }
     }
@@ -602,23 +795,25 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     for (uint32_t stage = 0; stage < ShaderGfxStageCount; ++stage)
     {
-        auto pStage      = pCreateInfo->pStages[stage];
-        if (pStage == nullptr)
-            continue;
-        auto pScpcShader     = ShaderModule::ObjectFromHandle(pStage->module);
+        auto pStage = pStageInfos[stage];
         auto pShaderInfo = shaderInfos[stage];
 
-        pShaderInfo->pModuleData         = pScpcShader->GetShaderData(true);
-        pShaderInfo->pSpecializatonInfo  = pStage->pSpecializationInfo;
-        pShaderInfo->pEntryTarget        = pStage->pName;
+        if (pStage == nullptr)
+            continue;
+
+        auto pShaderModule = ShaderModule::ObjectFromHandle(pStage->module);
+        pCreateInfo->pShaderModules[stage] = pShaderModule;
+        pShaderInfo->pModuleData           = pShaderModule->GetShaderData(true);
+        pShaderInfo->pSpecializationInfo   = pStage->pSpecializationInfo;
+        pShaderInfo->pEntryTarget          = pStage->pName;
 
         // Build the resource mapping description for LLPC.  This data contains things about how shader
         // inputs like descriptor set bindings are communicated to this pipeline in a form that LLPC can
         // understand.
-        if (pCreateInfo->pLayout != nullptr)
+        if (pLayout != nullptr)
         {
             const bool vertexShader = (stage == ShaderStageVertex);
-            result = pCreateInfo->pLayout->BuildLlpcPipelineMapping(
+            result = pLayout->BuildLlpcPipelineMapping(
                 static_cast<ShaderStage>(stage),
                 pCreateInfo->pMappingBuffer,
                 vertexShader ? pCreateInfo->pipelineInfo.pVertexInput : nullptr,
@@ -659,20 +854,20 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 {
     VkResult result    = VK_SUCCESS;
     auto     pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-
+    PipelineLayout* pLayout = nullptr;
     VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO);
 
     if (pIn->layout != VK_NULL_HANDLE)
     {
-        pCreateInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
+        pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
-
     pCreateInfo->flags  = pIn->flags;
-    pCreateInfo->pStage = &pIn->stage;
+
     // Allocate space to create the LLPC/SCPC pipeline resource mappings
-    if (pCreateInfo->pLayout != nullptr)
+    if (pLayout != nullptr)
     {
-        size_t tempBufferSize = pCreateInfo->pLayout->GetPipelineInfo()->tempBufferSize;
+        pCreateInfo->tempBufferStageSize = pLayout->GetPipelineInfo()->tempStageSize;
+        size_t tempBufferSize = pLayout->GetPipelineInfo()->tempBufferSize;
 
         // Allocate the temp buffer
         if (tempBufferSize > 0)
@@ -686,20 +881,28 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             {
                 result = VK_ERROR_OUT_OF_HOST_MEMORY;
             }
+            else
+            {
+                // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
+                // fields of resource mapping nodes are unused for certain node types. We must initialize
+                // them to zeroes.
+                memset(pCreateInfo->pMappingBuffer, 0, tempBufferSize);
+            }
         }
     }
 
-     const ShaderModule* pScpcShader = ShaderModule::ObjectFromHandle(pCreateInfo->pStage->module);
-     pCreateInfo->pipelineInfo.cs.pModuleData         = pScpcShader->GetShaderData(true);
-     pCreateInfo->pipelineInfo.cs.pSpecializatonInfo  = pCreateInfo->pStage->pSpecializationInfo;
-     pCreateInfo->pipelineInfo.cs.pEntryTarget        = pCreateInfo->pStage->pName;
+     ShaderModule* pShaderModule = ShaderModule::ObjectFromHandle(pIn->stage.module);
+     pCreateInfo->pShaderModule = pShaderModule;
+     pCreateInfo->pipelineInfo.cs.pModuleData         = pShaderModule->GetShaderData(true);
+     pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
+     pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
 
     // Build the resource mapping description for LLPC.  This data contains things about how shader
     // inputs like descriptor set bindings interact with this pipeline in a form that LLPC can
     // understand.
-    if (pCreateInfo->pLayout != nullptr)
+    if (pLayout != nullptr)
     {
-        result = pCreateInfo->pLayout->BuildLlpcPipelineMapping(
+        result = pLayout->BuildLlpcPipelineMapping(
             ShaderStageCompute,
             pCreateInfo->pMappingBuffer,
             nullptr,

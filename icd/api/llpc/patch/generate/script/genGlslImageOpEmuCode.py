@@ -56,7 +56,7 @@ SPIRV_IMAGE_OPERAND_CONSTOFFSETS_MODIFIER   = "constoffsets"
 SPIRV_IMAGE_OPERAND_SAMPLE_MODIFIER         = "sample"
 SPIRV_IMAGE_OPERAND_MINLOD_MODIFIER         = "minlod"
 SPIRV_IMAGE_OPERAND_FMASKBASED_MODIFIER     = "fmaskbased"
-SPIRV_IMAGE_OPERAND_FMASKONLY_MODIFIER      = "fmaskonly"
+SPIRV_IMAGE_OPERAND_FMASKID_MODIFIER        = "fmaskid"
 SPIRV_IMAGE_DIM_PREFIX                      = "Dim"
 SPIRV_IMAGE_ARRAY_MODIFIER                  = "Array"
 
@@ -137,19 +137,19 @@ class SpirvImageOpKind:
     querylod            = 4
     read                = 5
     write               = 6
-    atomic_exchange     = 7
-    atomic_compexchange = 8
-    atomic_iincrement   = 9
-    atomic_idecrement   = 10
-    atomic_iadd         = 11
-    atomic_isub         = 12
-    atomic_smin         = 13
-    atomic_umin         = 14
-    atomic_smax         = 15
-    atomic_umax         = 16
-    atomic_and          = 17
-    atomic_or           = 18
-    atomic_xor          = 19
+    atomicexchange      = 7
+    atomiccompexchange  = 8
+    atomiciincrement    = 9
+    atomicidecrement    = 10
+    atomiciadd          = 11
+    atomicisub          = 12
+    atomicsmin          = 13
+    atomicumin          = 14
+    atomicsmax          = 15
+    atomicumax          = 16
+    atomicand           = 17
+    atomicor            = 18
+    atomicxor           = 19
     undef               = 20
 SPIRV_IMAGE_INST_KIND_DICT = setupClassNameToAttrMap(SpirvImageOpKind)
 
@@ -165,24 +165,25 @@ SPIRV_IMAGE_INST_KIND_ATTR_DICT = { \
     SpirvImageOpKind.querylod            : "#0", \
     SpirvImageOpKind.read                : "#0", \
     SpirvImageOpKind.write               : "#1", \
-    SpirvImageOpKind.atomic_exchange     : "#2", \
-    SpirvImageOpKind.atomic_compexchange : "#2", \
-    SpirvImageOpKind.atomic_iincrement   : "#2", \
-    SpirvImageOpKind.atomic_idecrement   : "#2", \
-    SpirvImageOpKind.atomic_iadd         : "#2", \
-    SpirvImageOpKind.atomic_isub         : "#2", \
-    SpirvImageOpKind.atomic_smin         : "#2", \
-    SpirvImageOpKind.atomic_umin         : "#2", \
-    SpirvImageOpKind.atomic_smax         : "#2", \
-    SpirvImageOpKind.atomic_umax         : "#2", \
-    SpirvImageOpKind.atomic_and          : "#2", \
-    SpirvImageOpKind.atomic_or           : "#2", \
-    SpirvImageOpKind.atomic_xor          : "#2"}
+    SpirvImageOpKind.atomicexchange      : "#2", \
+    SpirvImageOpKind.atomiccompexchange  : "#2", \
+    SpirvImageOpKind.atomiciincrement    : "#2", \
+    SpirvImageOpKind.atomicidecrement    : "#2", \
+    SpirvImageOpKind.atomiciadd          : "#2", \
+    SpirvImageOpKind.atomicisub          : "#2", \
+    SpirvImageOpKind.atomicsmin          : "#2", \
+    SpirvImageOpKind.atomicumin          : "#2", \
+    SpirvImageOpKind.atomicsmax          : "#2", \
+    SpirvImageOpKind.atomicumax          : "#2", \
+    SpirvImageOpKind.atomicand           : "#2", \
+    SpirvImageOpKind.atomicor            : "#2", \
+    SpirvImageOpKind.atomicxor           : "#2"}
 
 class SpirvSampledType:
     f32         = 0
     i32         = 1
     u32         = 2
+    f16         = 3
 SPIRV_SAMPLED_TYPE_DICT = setupClassNameToAttrMap(SpirvSampledType)
 
 class VarNames:
@@ -236,13 +237,13 @@ class FuncDef(object):
         self._hasSample         = other._hasSample
         self._hasMinLod         = other._hasMinLod
         self._isFmaskBased      = other._isFmaskBased
-        self._isFmaskOnly       = other._isFmaskOnly
+        self._returnFmaskId     = other._returnFmaskId
         self._attr              = other._attr
         self._localVarCounter   = other._localVarCounter
-        self._coordXYZW[0]         = other._coordXYZW[0]
-        self._coordXYZW[1]         = other._coordXYZW[1]
-        self._coordXYZW[2]         = other._coordXYZW[2]
-        self._coordXYZW[3]         = other._coordXYZW[3]
+        self._coordXYZW[0]      = other._coordXYZW[0]
+        self._coordXYZW[1]      = other._coordXYZW[1]
+        self._coordXYZW[2]      = other._coordXYZW[2]
+        self._coordXYZW[3]      = other._coordXYZW[3]
 
         self._dRef              = other._dRef
         self._invProjDivisor    = other._invProjDivisor
@@ -282,7 +283,7 @@ class FuncDef(object):
         self._hasSample         = False
         self._hasMinLod         = False
         self._isFmaskBased      = False
-        self._isFmaskOnly       = False
+        self._returnFmaskId     = False
         self._attr              = ""
         self._localVarCounter   = 1
         self._coordXYZW         = [FuncDef.INVALID_VAR, FuncDef.INVALID_VAR, \
@@ -359,15 +360,15 @@ class FuncDef(object):
                 self._hasMinLod         = True
             elif t == SPIRV_IMAGE_OPERAND_FMASKBASED_MODIFIER:
                 self._isFmaskBased      = True
-            elif t == SPIRV_IMAGE_OPERAND_FMASKONLY_MODIFIER:
-                self._isFmaskOnly       = True
+            elif t == SPIRV_IMAGE_OPERAND_FMASKID_MODIFIER:
+                self._returnFmaskId     = True
             else:
                 shouldNeverCall(self._mangledName)
         pass
 
     def isAtomicOp(self):
-        return self._opKind >= SpirvImageOpKind.atomic_exchange and \
-            self._opKind <= SpirvImageOpKind.atomic_xor
+        return self._opKind >= SpirvImageOpKind.atomicexchange and \
+            self._opKind <= SpirvImageOpKind.atomicxor
 
     # Returns string representation of this object, used for debug purpose.
     def __repr__(self):
@@ -483,7 +484,7 @@ class CodeGen(FuncDef):
             else:
                 shouldNeverCall()
 
-        if intrinGen._isFmaskOnly:
+        if intrinGen._returnFmaskId:
             # Fetch fmask only
             fmaskVal    = intrinGen.genLoadFmask(irOut)
             retVal      = intrinGen.genReturnFmaskValue(fmaskVal, irOut)
@@ -509,11 +510,17 @@ class CodeGen(FuncDef):
         elif self._opKind == SpirvImageOpKind.querylod:
             ret = "<2 x float>"
         elif self._hasDref and self._opKind != SpirvImageOpKind.gather:
-            assert self._sampledType == SpirvSampledType.f32
-            ret = "float"
+            if self._sampledType == SpirvSampledType.f32:
+                ret = "float"
+            elif self._sampledType == SpirvSampledType.f16:
+                ret = "half"
+            else:
+                assert "Unsupported return type"
         else:
             if self._sampledType == SpirvSampledType.f32:
                 ret = "<4 x float>"
+            elif self._sampledType == SpirvSampledType.f16:
+                ret = "<4 x half>"
             elif self._sampledType == SpirvSampledType.i32:
                 ret = "<4 x i32>"
             elif self._sampledType == SpirvSampledType.u32:
@@ -543,9 +550,7 @@ class CodeGen(FuncDef):
         tokens.insert(3, sampledTypeName)
         funcName = '.'.join(tokens)
 
-        # For atomic operations, atomic.xxx has been changed to atomic_xxx to ease python process,
-        # Now restore all atomic_xxx to atomic.xxx
-        return funcName.replace('atomic_', 'atomic.')
+        return funcName
 
     # Gets image function parameter list.
     def getParamList(self):
@@ -577,6 +582,8 @@ class CodeGen(FuncDef):
         if self._opKind == SpirvImageOpKind.write:
             if self._sampledType == SpirvSampledType.f32:
                 params.append("<4 x float> %s" % (VarNames.texel))
+            elif self._sampledType == SpirvSampledType.f16:
+                params.append("<4 x half> %s" % (VarNames.texel))
             elif self._sampledType == SpirvSampledType.i32:
                 params.append("<4 x i32> %s" % (VarNames.texel))
             elif self._sampledType == SpirvSampledType.u32:
@@ -622,7 +629,7 @@ class CodeGen(FuncDef):
             else:
                 params.append("i32 %s" % (VarNames.atomicData))
 
-        if self._opKind == SpirvImageOpKind.atomic_compexchange:
+        if self._opKind == SpirvImageOpKind.atomiccompexchange:
             params.append("i32 %s" % (VarNames.atomicComparator))
 
         if self.isAtomicOp():
@@ -645,7 +652,7 @@ class CodeGen(FuncDef):
                     VarNames.samplerBinding, VarNames.samplerIndex)
             irOut.write(loadSampler)
 
-        if not self._isFmaskOnly:
+        if not self._returnFmaskId:
             if self._dim == SpirvDim.DimBuffer:
                 loadResource = "    %s = call <4 x i32> @%s(i32 %s, i32 %s, i32 %s)\n" % \
                         (VarNames.resource, LLPC_DESCRIPTOR_LOAD_TEXELBUFFER, VarNames.resourceSet, \
@@ -656,7 +663,7 @@ class CodeGen(FuncDef):
                         VarNames.resourceBinding, VarNames.resourceIndex)
             irOut.write(loadResource)
 
-        if self._isFmaskBased or self._isFmaskOnly:
+        if self._isFmaskBased or self._returnFmaskId:
             loadFMask = "    %s = call <8 x i32> @%s(i32 %s, i32 %s, i32 %s)\n" % \
                     (VarNames.fmask, LLPC_DESCRIPTOR_LOAD_FMASK, VarNames.resourceSet, \
                     VarNames.resourceBinding, VarNames.resourceIndex)
@@ -986,22 +993,22 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
     # Gets coordinate element type.
     def getCoordElemType(self):
         coordElemType = "float"
-        if self._opKind == SpirvImageOpKind.fetch or \
-           self._opKind == SpirvImageOpKind.read or \
-           self._opKind == SpirvImageOpKind.write or \
-           self._opKind == SpirvImageOpKind.atomic_exchange or \
-           self._opKind == SpirvImageOpKind.atomic_compexchange or \
-           self._opKind == SpirvImageOpKind.atomic_iincrement or \
-           self._opKind == SpirvImageOpKind.atomic_idecrement or \
-           self._opKind == SpirvImageOpKind.atomic_iadd or \
-           self._opKind == SpirvImageOpKind.atomic_isub or \
-           self._opKind == SpirvImageOpKind.atomic_smin or \
-           self._opKind == SpirvImageOpKind.atomic_umin or \
-           self._opKind == SpirvImageOpKind.atomic_smax or \
-           self._opKind == SpirvImageOpKind.atomic_umax or \
-           self._opKind == SpirvImageOpKind.atomic_and or \
-           self._opKind == SpirvImageOpKind.atomic_or or \
-           self._opKind == SpirvImageOpKind.atomic_xor:
+        if self._opKind == SpirvImageOpKind.fetch or                \
+           self._opKind == SpirvImageOpKind.read or                 \
+           self._opKind == SpirvImageOpKind.write or                \
+           self._opKind == SpirvImageOpKind.atomicexchange or       \
+           self._opKind == SpirvImageOpKind.atomiccompexchange or   \
+           self._opKind == SpirvImageOpKind.atomiciincrement or     \
+           self._opKind == SpirvImageOpKind.atomicidecrement or     \
+           self._opKind == SpirvImageOpKind.atomiciadd or           \
+           self._opKind == SpirvImageOpKind.atomicisub or           \
+           self._opKind == SpirvImageOpKind.atomicsmin or           \
+           self._opKind == SpirvImageOpKind.atomicumin or           \
+           self._opKind == SpirvImageOpKind.atomicsmax or           \
+           self._opKind == SpirvImageOpKind.atomicumax or           \
+           self._opKind == SpirvImageOpKind.atomicand or            \
+           self._opKind == SpirvImageOpKind.atomicor or             \
+           self._opKind == SpirvImageOpKind.atomicxor:
             coordElemType = "i32"
         return coordElemType
 
@@ -1289,7 +1296,10 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
         elif self.isAtomicOp():
             return "i32"
         else:
-            return "<4 x float>"
+            if self._sampledType == SpirvSampledType.f16:
+                return "<4 x half>"
+            else:
+                return "<4 x float>"
 
     def getDAFlag(self):
         if self._arrayed or \
@@ -1354,7 +1364,7 @@ class BufferAtomicGen(CodeGen):
             irOut.write(irBitcast)
 
         vaddrReg   = self._coordXYZW[0]
-        comp       = self._opKind == SpirvImageOpKind.atomic_compexchange \
+        comp       = self._opKind == SpirvImageOpKind.atomiccompexchange \
                         and "i32 " + VarNames.atomicComparator + "," \
                         or  ""
         # Set slc flag
@@ -1385,25 +1395,25 @@ class BufferAtomicGen(CodeGen):
         funcName = "llvm.amdgcn.buffer.atomic"
 
         intrinsicNames = { \
-            SpirvImageOpKind.atomic_exchange      : ".swap", \
-            SpirvImageOpKind.atomic_compexchange  : ".cmpswap", \
-            SpirvImageOpKind.atomic_iincrement    : ".add", \
-            SpirvImageOpKind.atomic_idecrement    : ".sub", \
-            SpirvImageOpKind.atomic_iadd          : ".add", \
-            SpirvImageOpKind.atomic_isub          : ".sub", \
-            SpirvImageOpKind.atomic_smin          : ".smin", \
-            SpirvImageOpKind.atomic_umin          : ".umin", \
-            SpirvImageOpKind.atomic_smax          : ".smax", \
-            SpirvImageOpKind.atomic_umax          : ".umax", \
-            SpirvImageOpKind.atomic_and           : ".and", \
-            SpirvImageOpKind.atomic_or            : ".or", \
-            SpirvImageOpKind.atomic_xor           : ".xor", \
+            SpirvImageOpKind.atomicexchange      : ".swap",     \
+            SpirvImageOpKind.atomiccompexchange  : ".cmpswap",  \
+            SpirvImageOpKind.atomiciincrement    : ".add",      \
+            SpirvImageOpKind.atomicidecrement    : ".sub",      \
+            SpirvImageOpKind.atomiciadd          : ".add",      \
+            SpirvImageOpKind.atomicisub          : ".sub",      \
+            SpirvImageOpKind.atomicsmin          : ".smin",     \
+            SpirvImageOpKind.atomicumin          : ".umin",     \
+            SpirvImageOpKind.atomicsmax          : ".smax",     \
+            SpirvImageOpKind.atomicumax          : ".umax",     \
+            SpirvImageOpKind.atomicand           : ".and",      \
+            SpirvImageOpKind.atomicor            : ".or",       \
+            SpirvImageOpKind.atomicxor           : ".xor",      \
         }
 
         funcName += intrinsicNames[self._opKind]
 
         compareType = ""
-        if self._opKind == SpirvImageOpKind.atomic_compexchange:
+        if self._opKind == SpirvImageOpKind.atomiccompexchange:
             compareType = "i32,"
 
         if not hasLlvmDecl(funcName):
@@ -1439,7 +1449,7 @@ class ImageAtomicGen(CodeGen):
 
         vaddrRegType = self.getVAddrRegType()
         vaddrReg     = self.genFillVAddrReg(0, False, irOut)
-        comp         = self._opKind == SpirvImageOpKind.atomic_compexchange \
+        comp         = self._opKind == SpirvImageOpKind.atomiccompexchange \
                         and "i32 " + VarNames.atomicComparator + "," \
                         or  ""
         retVal     = self.acquireLocalVar()
@@ -1485,19 +1495,19 @@ class ImageAtomicGen(CodeGen):
         funcName = "llvm.amdgcn.image.atomic"
 
         intrinsicNames = { \
-            SpirvImageOpKind.atomic_exchange      : ".swap", \
-            SpirvImageOpKind.atomic_compexchange  : ".cmpswap", \
-            SpirvImageOpKind.atomic_iincrement    : ".add", \
-            SpirvImageOpKind.atomic_idecrement    : ".sub", \
-            SpirvImageOpKind.atomic_iadd          : ".add", \
-            SpirvImageOpKind.atomic_isub          : ".sub", \
-            SpirvImageOpKind.atomic_smin          : ".smin", \
-            SpirvImageOpKind.atomic_umin          : ".umin", \
-            SpirvImageOpKind.atomic_smax          : ".smax", \
-            SpirvImageOpKind.atomic_umax          : ".umax", \
-            SpirvImageOpKind.atomic_and           : ".and", \
-            SpirvImageOpKind.atomic_or            : ".or", \
-            SpirvImageOpKind.atomic_xor           : ".xor", \
+            SpirvImageOpKind.atomicexchange      : ".swap",     \
+            SpirvImageOpKind.atomiccompexchange  : ".cmpswap",  \
+            SpirvImageOpKind.atomiciincrement    : ".add",      \
+            SpirvImageOpKind.atomicidecrement    : ".sub",      \
+            SpirvImageOpKind.atomiciadd          : ".add",      \
+            SpirvImageOpKind.atomicisub          : ".sub",      \
+            SpirvImageOpKind.atomicsmin          : ".smin",     \
+            SpirvImageOpKind.atomicumin          : ".umin",     \
+            SpirvImageOpKind.atomicsmax          : ".smax",     \
+            SpirvImageOpKind.atomicumax          : ".umax",     \
+            SpirvImageOpKind.atomicand           : ".and",      \
+            SpirvImageOpKind.atomicor            : ".or",       \
+            SpirvImageOpKind.atomicxor           : ".xor",      \
         }
 
         funcName += intrinsicNames[self._opKind]
@@ -1506,7 +1516,7 @@ class ImageAtomicGen(CodeGen):
         funcName += vaddrRegSize == 1 and ".i32" or ".v%di32" % (vaddrRegSize)
 
         compareType = ""
-        if self._opKind == SpirvImageOpKind.atomic_compexchange:
+        if self._opKind == SpirvImageOpKind.atomiccompexchange:
             compareType = "i32,"
 
         if not hasLlvmDecl(funcName):
@@ -1554,7 +1564,12 @@ class BufferLoadGen(CodeGen):
 
     # Gets buffer load intrinsic function name
     def getFuncName(self):
-        funcName = "llvm.amdgcn.buffer.load.format.v4f32"
+        funcName = "llvm.amdgcn.buffer.load.format"
+
+        if self._sampledType == SpirvSampledType.f16:
+            funcName += ".v4f16"
+        else:
+            funcName += ".v4f32"
 
         if not hasLlvmDecl(funcName):
             # Adds LLVM declaration for this function
@@ -1681,7 +1696,10 @@ class ImageLoadGen(CodeGen):
             if self._opKind != SpirvImageOpKind.fetch:
                 funcName += ".o"
 
-        funcName += ".v4f32"
+        if self._sampledType == SpirvSampledType.f16:
+            funcName += ".v4f16"
+        else:
+            funcName += ".v4f32"
 
         vaddrRegSize = self.getVAddrRegSize()
         funcName += vaddrRegSize == 1 and ".i32" or ".v%di32" % (vaddrRegSize)
@@ -1769,6 +1787,7 @@ class ImageSampleGen(CodeGen):
                 self._opKind == SpirvImageOpKind.querylod
 
         retType     = self.getBackendRetType()
+        retElemType = self._sampledType == SpirvSampledType.f16 and "half" or "float"
         funcName    = self.getFuncName()
         resourceName = VarNames.resource
         # Dmask for gather4 instructions
@@ -1860,10 +1879,10 @@ class ImageSampleGen(CodeGen):
             tempRetVal = "undef"
             for i in range(callNum):
                 tempComp   = self.acquireLocalVar()
-                irExtract  = "    %s = extractelement <4 x float> %s, i32 3\n" % (tempComp, retVals[i])
+                irExtract  = "    %s = extractelement %s %s, i32 3\n" % (tempComp, retType, retVals[i])
                 irOut.write(irExtract)
                 retVal = self.acquireLocalVar()
-                irInsert   = "    %s = insertelement <4 x float> %s, float %s, i32 %d\n" % (retVal, tempRetVal, tempComp, i)
+                irInsert   = "    %s = insertelement %s %s, %s %s, i32 %d\n" % (retVal, retType, tempRetVal, retElemType, tempComp, i)
                 tempRetVal = retVal
                 irOut.write(irInsert)
             retVal = self.genCastReturnValToSampledType(retVal, irOut)
@@ -1885,7 +1904,7 @@ class ImageSampleGen(CodeGen):
         if self._hasDref:
             funcName += ".c"
 
-        if self._opKind == SpirvImageOpKind.gather:
+        if self._opKind == SpirvImageOpKind.gather and not self._hasLod and not self._hasBias:
             funcName += ".lz"
 
         if self._hasBias:
@@ -1903,7 +1922,10 @@ class ImageSampleGen(CodeGen):
         if self._hasConstOffset or self._hasOffset or self._hasConstOffsets:
             funcName += ".o"
 
-        funcName += ".v4f32"
+        if self._sampledType == SpirvSampledType.f16:
+            funcName += ".v4f16"
+        else:
+            funcName += ".v4f32"
         vaddrRegSize = self.getVAddrRegSize()
         funcName += vaddrRegSize == 1 and ".f32" or ".v%df32" % (vaddrRegSize)
         funcName += ".v8i32"
@@ -1932,19 +1954,19 @@ def processLine(irOut, funcConfig, gfxLevel):
     #       querylod
     #       read
     #       write
-    #       atomic.exchange
-    #       atomic.compExchange
-    #       atomic.iincrement
-    #       atomic.idecrement
-    #       atomic.iadd
-    #       atomic.isub
-    #       atomic.smin
-    #       atomic.umin
-    #       atomic.smax
-    #       atomic.umax
-    #       atomic.and
-    #       atomic.or
-    #       atomic.xor
+    #       atomicexchange
+    #       atomiccompExchange
+    #       atomiciincrement
+    #       atomicidecrement
+    #       atomiciadd
+    #       atomicisub
+    #       atomicsmin
+    #       atomicumin
+    #       atomicsmax
+    #       atomicumax
+    #       atomicand
+    #       atomicor
+    #       atomicxor
     # 3.  Dimension string                                  (mandatory, see below)
     # 4.  proj                                              (optional)
     # 5.  dref                                              (optional)
@@ -1954,20 +1976,18 @@ def processLine(irOut, funcConfig, gfxLevel):
     #         lodz version will also be generated, which leverages hardware lz instructions.
     # 8.  grad                                              (optional)
     # 9.  constoffset                                       (optional)
-    # 10.  offset                                            (optional)
+    # 10. offset                                            (optional)
     # 11. constoffsets                                      (optional)
     # 12. sample                                            (optional)
     # 13. minlod                                            (optional)
     # 14. fmaskbased                                        (optional)
-    # 15. fmaskonly                                         (optional)
+    # 15. fmaskid                                           (optional)
+    #         returns index of fragment which is encoded in Fmask.
     # Dimension string: All supported dimensions are packed in a dimension string, as a configuration token.
     # Dimension string format:
     # Dim1D|2D|3D|1DArray|2DArray|Cube|CubeArray|Rect|Buffer|SubpassData
 
     print(">>>  %s" % (funcConfig))
-
-    # For atomic operations, replace atomic.xxx to atomic_xxx to ease python process
-    funcConfig = funcConfig.replace('atomic.', 'atomic_')
 
     mangledTokens  = funcConfig.split('.')
     # check token 0
@@ -1989,12 +2009,22 @@ def processLine(irOut, funcConfig, gfxLevel):
         mangledName = '.'.join(mangledTokens)
         if opKind in (SpirvImageOpKind.sample, SpirvImageOpKind.fetch, SpirvImageOpKind.gather, \
                       SpirvImageOpKind.querylod, SpirvImageOpKind.read, SpirvImageOpKind.write, \
-                      SpirvImageOpKind.atomic_exchange):
-            # Support float return type for all non-atomic image operations, plus atomic_exchange
+                      SpirvImageOpKind.atomicexchange):
+            # Support float return type for all non-atomic image operations, plus atomicexchange
             funcDef = FuncDef(mangledName, SpirvSampledType.f32)
             funcDef.parse()
             codeGen = CodeGen(funcDef, gfxLevel)
             codeGen.gen(irOut)
+
+            # Support float16 return type for image sample, gather, read, write operations for GFX9+
+            if gfxLevel >= GFX9 and opKind in (SpirvImageOpKind.sample, \
+                                               SpirvImageOpKind.fetch, \
+                                               SpirvImageOpKind.gather):
+                funcDef = FuncDef(mangledName, SpirvSampledType.f16)
+                funcDef.parse()
+                if not funcDef._returnFmaskId:
+                    codeGen = CodeGen(funcDef, gfxLevel)
+                    codeGen.gen(irOut)
 
         if funcConfig.find('dref') == -1 and opKind != SpirvImageOpKind.querylod:
             # Support integer return type for non-shadowed image operations

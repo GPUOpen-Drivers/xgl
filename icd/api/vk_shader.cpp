@@ -121,10 +121,8 @@ ShaderModule::ShaderModule(
     Util::MetroHash128::Hash(static_cast<const uint8_t*>(pCode), codeSize, codeHash.bytes);
 
     MetroHashTo128Bit(codeHash, &m_codeHash.lower, &m_codeHash.upper);
+    m_pLlpcShaderModule = nullptr;
 
-    m_pLlpcShaderMemory = nullptr;
-
-    memset(&m_llpcConvertOut, 0, sizeof(m_llpcConvertOut));
 }
 
 // =====================================================================================================================
@@ -162,27 +160,11 @@ VkResult ShaderModule::Create(
 // Initialize shader module object, performing SPIR-V to AMD IL shader binary conversion.
 VkResult ShaderModule::Init(const Device* pDevice)
 {
-    const RuntimeSettings* pSettings = &pDevice->VkPhysicalDevice()->GetRuntimeSettings();
-    VkResult result = VK_SUCCESS;
-    {
-        Llpc::ShaderModuleBuildInfo  moduleInfo = {};
-
-        moduleInfo.pInstance = pDevice->VkPhysicalDevice()->VkInstance();
-        moduleInfo.pfnOutputAlloc = AllocateShaderOutput;
-        moduleInfo.pUserData = &m_pLlpcShaderMemory;
-
-        moduleInfo.shaderBin.pCode    = m_pCode;
-        moduleInfo.shaderBin.codeSize = m_codeSize;
-
-        Llpc::Result llpcResult = pDevice->GetCompiler()->GetLlpcCompiler()->BuildShaderModule(&moduleInfo, &m_llpcConvertOut);
-
-        if ((llpcResult != Llpc::Result::Success) && (llpcResult != Llpc::Result::Delayed))
-        {
-            result = VK_ERROR_INITIALIZATION_FAILED;
-        }
-    }
-
-    return result;
+    PipelineCompiler* pCompiler = pDevice->GetCompiler();
+    return pCompiler->BuildShaderModule(m_codeSize,
+                                        m_pCode
+                                        , &m_pLlpcShaderModule
+                                        );
 }
 
 // =====================================================================================================================
@@ -190,11 +172,9 @@ VkResult ShaderModule::Destroy(
     const Device*                   pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+    PipelineCompiler* pCompiler = pDevice->GetCompiler();
 
-    if (m_pLlpcShaderMemory != nullptr)
-    {
-        pDevice->VkInstance()->FreeMem(m_pLlpcShaderMemory);
-    }
+    pCompiler->FreeShaderModule(m_pLlpcShaderModule);
 
     Util::Destructor(this);
 

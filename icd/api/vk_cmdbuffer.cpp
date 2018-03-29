@@ -1035,6 +1035,12 @@ VkResult CmdBuffer::Begin(
 
     palFlags.u32All = 0;
     palFlags.prefetchCommands = 1;
+
+    if (m_pDevice->GetRuntimeSettings().prefetchShaders)
+    {
+        palFlags.prefetchShaders = 1;
+    }
+
     uint32_t currentSubPass = 0;
     for (pInfo = pBeginInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {

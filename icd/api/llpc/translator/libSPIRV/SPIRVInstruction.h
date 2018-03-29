@@ -1518,7 +1518,11 @@ public:
     ExtSetKind = Module->getBuiltinSet(ExtSetId);
     assert((ExtSetKind == SPIRVEIS_OpenCL ||
             ExtSetKind == SPIRVEIS_GLSL ||
-            ExtSetKind == SPIRVEIS_ShaderBallotAMD) && "not supported");
+            ExtSetKind == SPIRVEIS_ShaderBallotAMD ||
+            ExtSetKind == SPIRVEIS_ShaderExplicitVertexParameterAMD ||
+            ExtSetKind == SPIRVEIS_GcnShaderAMD ||
+            ExtSetKind == SPIRVEIS_ShaderTrinaryMinMaxAMD) &&
+           "not supported");
   }
   void encode(spv_ostream &O) const {
     getEncoder(O) << Type << Id << ExtSetId;
@@ -1531,6 +1535,15 @@ public:
       break;
     case SPIRVEIS_ShaderBallotAMD:
       getEncoder(O) << ExtOpShaderBallotAMD;
+      break;
+    case SPIRVEIS_ShaderExplicitVertexParameterAMD:
+      getEncoder(O) << ExtOpShaderExplicitVertexParameterAMD;
+      break;
+    case SPIRVEIS_GcnShaderAMD:
+      getEncoder(O) << ExtOpGcnShaderAMD;
+      break;
+    case SPIRVEIS_ShaderTrinaryMinMaxAMD:
+      getEncoder(O) << ExtOpShaderTrinaryMinMaxAMD;
       break;
     default:
       assert(0 && "not supported");
@@ -1550,6 +1563,15 @@ public:
       break;
     case SPIRVEIS_ShaderBallotAMD:
       getDecoder(I) >> ExtOpShaderBallotAMD;
+      break;
+    case SPIRVEIS_ShaderExplicitVertexParameterAMD:
+      getDecoder(I) >> ExtOpShaderExplicitVertexParameterAMD;
+      break;
+    case SPIRVEIS_GcnShaderAMD:
+      getDecoder(I) >> ExtOpGcnShaderAMD;
+      break;
+    case SPIRVEIS_ShaderTrinaryMinMaxAMD:
+      getDecoder(I) >> ExtOpShaderTrinaryMinMaxAMD;
       break;
     default:
       assert(0 && "not supported");
@@ -1585,6 +1607,10 @@ protected:
     OCLExtOpKind ExtOpOCL;
     GLSLExtOpKind ExtOpGLSL;
     ShaderBallotAMDExtOpKind ExtOpShaderBallotAMD;
+    ShaderExplicitVertexParameterAMDExtOpKind
+      ExtOpShaderExplicitVertexParameterAMD;
+    GcnShaderAMDExtOpKind ExtOpGcnShaderAMD;
+    ShaderTrinaryMinMaxAMDExtOpKind ExtOpShaderTrinaryMinMaxAMD;
   };
   SPIRVExtInstSetKind ExtSetKind;
 };
@@ -2315,7 +2341,7 @@ public:
 // Image instructions
 _SPIRV_OP(SampledImage, true, 5)
 _SPIRV_OP(Image, true, 4)
-_SPIRV_OP(ImageSampleImplicitLod, true, 5, true)
+_SPIRV_OP(ImageSampleImplicitLod, true, 5, true, 2)
 _SPIRV_OP(ImageSampleExplicitLod, true, 7, true, 2)
 _SPIRV_OP(ImageSampleDrefImplicitLod, true, 6, true, 3)
 _SPIRV_OP(ImageSampleDrefExplicitLod, true, 7, true, 3)
@@ -2335,18 +2361,16 @@ _SPIRV_OP(ImageQuerySize, true, 4)
 _SPIRV_OP(ImageQueryLod, true, 5)
 _SPIRV_OP(ImageQueryLevels, true, 4)
 _SPIRV_OP(ImageQuerySamples, true, 4)
-_SPIRV_OP(ImageSparseSampleImplicitLod, true, 5, true)
+_SPIRV_OP(ImageSparseSampleImplicitLod, true, 5, true, 2)
 _SPIRV_OP(ImageSparseSampleExplicitLod, true, 7, true, 2)
 _SPIRV_OP(ImageSparseSampleDrefImplicitLod, true, 6, true, 3)
 _SPIRV_OP(ImageSparseSampleDrefExplicitLod, true, 7, true, 3)
-_SPIRV_OP(ImageSparseSampleProjImplicitLod, true, 5, true, 2)
-_SPIRV_OP(ImageSparseSampleProjExplicitLod, true, 7, true, 2)
-_SPIRV_OP(ImageSparseSampleProjDrefImplicitLod, true, 6, true, 3)
-_SPIRV_OP(ImageSparseSampleProjDrefExplicitLod, true, 7, true, 3)
 _SPIRV_OP(ImageSparseFetch, true, 4, true, 2)
 _SPIRV_OP(ImageSparseGather, true, 6, true, 3)
 _SPIRV_OP(ImageSparseDrefGather, true, 6, true, 3)
 _SPIRV_OP(ImageSparseRead, true, 5, true, 2)
+_SPIRV_OP(FragmentMaskFetchAMD, true, 5)
+_SPIRV_OP(FragmentFetchAMD, true, 6)
 #undef _SPIRV_OP
 
 // SpecConstantOp instruction

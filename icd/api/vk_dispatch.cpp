@@ -309,8 +309,14 @@ const DispatchTableEntry g_StandardDispatchTable[] =
     PRIMARY_DISPATCH_ENTRY( vkDestroySurfaceKHR                             ),
     PRIMARY_DISPATCH_ENTRY( vkCreateXcbSurfaceKHR                           ),
     PRIMARY_DISPATCH_ENTRY( vkCreateXlibSurfaceKHR                          ),
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    PRIMARY_DISPATCH_ENTRY( vkCreateWaylandSurfaceKHR                          ),
+#endif
     PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceXcbPresentationSupportKHR    ),
     PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceXlibPresentationSupportKHR   ),
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceWaylandPresentationSupportKHR   ),
+#endif
     PRIMARY_DISPATCH_ENTRY( vkDestroyBuffer                                 ),
     PRIMARY_DISPATCH_ENTRY( vkDestroyBufferView                             ),
     PRIMARY_DISPATCH_ENTRY( vkFreeCommandBuffers                            ),

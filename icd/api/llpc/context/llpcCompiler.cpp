@@ -642,7 +642,7 @@ Result Compiler::BuildGraphicsPipeline(
                 result = TranslateSpirvToLlvm(&pModuleData->binCode,
                                               static_cast<ShaderStage>(stage),
                                               pShaderInfo->pEntryTarget,
-                                              pShaderInfo->pSpecializatonInfo,
+                                              pShaderInfo->pSpecializationInfo,
                                               pContext,
                                               &pModule);
             }
@@ -1119,7 +1119,7 @@ Result Compiler::BuildComputePipeline(
                 result = TranslateSpirvToLlvm(&pModuleData->binCode,
                                               ShaderStageCompute,
                                               pPipelineInfo->cs.pEntryTarget,
-                                              pPipelineInfo->cs.pSpecializatonInfo,
+                                              pPipelineInfo->cs.pSpecializationInfo,
                                               pContext,
                                               &pModule);
 

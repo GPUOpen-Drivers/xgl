@@ -142,13 +142,18 @@ void PatchImageOp::visitCallInst(
                 // For multi-sampled image, F-mask is only taken into account for texel fetch (not for query)
                 if (imageCallMeta.OpKind != ImageOpQueryNonLod)
                 {
-                    if ((pResourceNode != nullptr) && (pFmaskNode != nullptr))
+                    auto fmaskPatchPos = callName.find(gSPIRVName::ImageCallModPatchFmaskUsage);
+                    if (fmaskPatchPos != std::string::npos)
                     {
-                        callName += gSPIRVName::ImageCallModFmaskBased;
-                    }
-                    else if (pFmaskNode != nullptr)
-                    {
-                        callName += gSPIRVName::ImageCallModFmaskOnly;
+                        callName = callName.substr(0, fmaskPatchPos);
+                        if ((pResourceNode != nullptr) && (pFmaskNode != nullptr))
+                        {
+                            callName += gSPIRVName::ImageCallModFmaskBased;
+                        }
+                        else if (pFmaskNode != nullptr)
+                        {
+                            callName += gSPIRVName::ImageCallModFmaskId;
+                        }
                     }
                 }
             }

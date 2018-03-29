@@ -333,11 +333,83 @@ define i1 @llpc.imagesparse.texel.resident(
     ret i1 %1
 }
 
+define i32 @llpc.image.fetch.u32.2D.fmaskvalue(
+    i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx, <2 x i32> %coord, i32 %imageCallMeta) #0
+{
+    %resource = call <8 x i32> @llpc.descriptor.load.resource(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %fmask = call <8 x i32> @llpc.descriptor.load.fmask(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %1 = extractelement <2 x i32> %coord, i32 0
+    %2 = extractelement <2 x i32> %coord, i32 1
+    %3 = insertelement <4 x i32> undef, i32 %1, i32 0
+    %4 = insertelement <4 x i32> %3, i32 %2, i32 1
+    %5 = insertelement <4 x i32> %4, i32 0, i32 2
+    %6 = call <4 x float> @llvm.amdgcn.image.load.v4f32.v4i32.v8i32(<4 x i32> %5,
+                                                                    <8 x i32> %fmask,
+                                                                    i32 15,
+                                                                    i1 0,
+                                                                    i1 0,
+                                                                    i1 0,
+                                                                    i1 0)
+    %7 = bitcast <4 x float> %6 to <4 x i32>
+    %8 = extractelement <4 x i32> %7, i32 0
+    ret i32 %8
+}
+
+define i32 @llpc.image.fetch.u32.2DArray.fmaskvalue(
+    i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx, <3 x i32> %coord, i32 %imageCallMeta) #0
+{
+    %resource = call <8 x i32> @llpc.descriptor.load.resource(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %fmask = call <8 x i32> @llpc.descriptor.load.fmask(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %1 = extractelement <3 x i32> %coord, i32 0
+    %2 = extractelement <3 x i32> %coord, i32 1
+    %3 = extractelement <3 x i32> %coord, i32 2
+    %4 = insertelement <4 x i32> undef, i32 %1, i32 0
+    %5 = insertelement <4 x i32> %4, i32 %2, i32 1
+    %6 = insertelement <4 x i32> %5, i32 %3, i32 2
+    %7 = insertelement <4 x i32> %6, i32 0, i32 3
+    %8 = call <4 x float> @llvm.amdgcn.image.load.v4f32.v4i32.v8i32(<4 x i32> %7,
+                                                                    <8 x i32> %fmask,
+                                                                    i32 15,
+                                                                    i1 0,
+                                                                    i1 0,
+                                                                    i1 0,
+                                                                    i1 0)
+    %9 = bitcast <4 x float> %8 to <4 x i32>
+    %10 = extractelement <4 x i32> %9, i32 0
+    ret i32 %10
+}
+
+define i32 @llpc.image.fetch.u32.SubpassData.fmaskvalue(
+    i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx, <2 x i32> %coord, i32 %imageCallMeta) #0
+{
+    %resource = call <8 x i32> @llpc.descriptor.load.resource(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %fmask = call <8 x i32> @llpc.descriptor.load.fmask(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %1 = extractelement <2 x i32> %coord, i32 0
+    %2 = extractelement <2 x i32> %coord, i32 1
+    %3 = insertelement <4 x i32> undef, i32 %1, i32 0
+    %4 = insertelement <4 x i32> %3, i32 %2, i32 1
+    %5 = insertelement <4 x i32> %4, i32 0, i32 2
+    %6 = call <4 x float> @llvm.amdgcn.image.load.v4f32.v4i32.v8i32(<4 x i32> %5,
+                                                                    <8 x i32> %fmask,
+                                                                    i32 15,
+                                                                    i1 0,
+                                                                    i1 0,
+                                                                    i1 0,
+                                                                    i1 0)
+    %7 = bitcast <4 x float> %6 to <4 x i32>
+    %8 = extractelement <4 x i32> %7, i32 0
+    ret i32 %8
+}
+
+declare <8 x i32> @llpc.descriptor.load.fmask(i32 , i32 , i32) #0
+
 declare <8 x i32> @llpc.descriptor.load.resource(i32 , i32 , i32) #0
 
 declare <4 x i32> @llpc.descriptor.load.texelbuffer(i32 , i32 , i32) #0
 
 declare <4 x float> @llvm.amdgcn.image.getresinfo.v4f32.i32.v8i32(i32 , <8 x i32> , i32, i1, i1, i1, i1) #0
+
+declare <4 x float> @llvm.amdgcn.image.load.v4f32.v4i32.v8i32(<4 x i32>, <8 x i32>,  i32, i1, i1, i1, i1) #0
 
 declare i32 @llvm.amdgcn.ubfe.i32(i32, i32, i32) #1
 

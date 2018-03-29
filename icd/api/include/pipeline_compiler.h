@@ -43,6 +43,8 @@ namespace Bil
 
 struct BilConvertOptions;
 struct BilShaderPatchOutput;
+struct BilDescriptorMetadata;
+struct BilPatchMetadata;
 enum BilDescriptorType : uint32_t;
 
 }
@@ -53,7 +55,44 @@ namespace vk
 class PhysicalDevice;
 class PipelineLayout;
 class PipelineCache;
+class ShaderModule;
+class PipelineCompiler;
 struct VbBindingInfo;
+
+// Enumerates the cache type in the pipeline cache
+enum PipelineCacheType : uint32_t
+{
+    PipelineCacheTypeLlpc,  // Use shader cache provided by LLPC
+
+};
+
+// Unified shader cache interface
+class ShaderCache
+{
+public:
+    union ShaderCachePtr
+    {
+        Llpc::IShaderCache* pLlpcShaderCache; // Pointer to LLPC shader cache object
+    };
+
+    ShaderCache();
+
+    void Init(PipelineCacheType  cacheType, ShaderCachePtr cachePtr);
+
+    VkResult Serialize(void* pBlob, size_t* pSize);
+
+    VkResult Merge(uint32_t srcCacheCount, const ShaderCachePtr* ppSrcCaches);
+
+    void Destroy(PipelineCompiler* pCompiler);
+
+    PipelineCacheType GetCacheType() const { return m_cacheType; }
+
+    ShaderCachePtr GetCachePtr() { return m_cache; }
+
+private:
+    PipelineCacheType  m_cacheType;
+    ShaderCachePtr     m_cache;
+};
 
 // =====================================================================================================================
 // Represents Vulkan pipeline compiler, it wraps LLPC and SCPC, and hides the differences.
@@ -65,10 +104,10 @@ public:
     struct GraphicsPipelineCreateInfo
     {
         Llpc::GraphicsPipelineBuildInfo        pipelineInfo;
-        const PipelineLayout*                  pLayout;
-        const VkPipelineShaderStageCreateInfo* pStages[ShaderGfxStageCount];
+        ShaderModule*                          pShaderModules[ShaderGfxStageCount];
         VkPipelineCreateFlags                  flags;
         void*                                  pMappingBuffer;
+        size_t                                 tempBufferStageSize;
         VkFormat                               dbFormat;
     };
 
@@ -77,16 +116,36 @@ public:
     struct ComputePipelineCreateInfo
     {
         Llpc::ComputePipelineBuildInfo         pipelineInfo;
-        const PipelineLayout*                  pLayout;
-        const VkPipelineShaderStageCreateInfo* pStage;
+        ShaderModule*                          pShaderModule;
         VkPipelineCreateFlags                  flags;
         void*                                  pMappingBuffer;
+        size_t                                 tempBufferStageSize;
     };
 
     PipelineCompiler(PhysicalDevice* pPhysicalDevice);
+
     ~PipelineCompiler();
+
     VkResult Initialize();
+
     void Destroy();
+
+    VkResult CreateShaderCache(
+        const void*                  pInitialData,
+        size_t                       initialDataSize,
+        void*                        pShaderCacheMem,
+        bool                         isScpcInternalCache,
+        ShaderCache*                 pShaderCache);
+
+    size_t GetShaderCacheSize(PipelineCacheType cacheType);
+
+    PipelineCacheType GetShaderCacheType();
+
+    VkResult BuildShaderModule(
+        size_t          codeSize,
+        const void*     pCode
+        , void**          ppLlpcShaderModule
+        );
 
     VkResult CreateGraphicsPipelineBinary(
         Device*                             pDevice,
@@ -114,6 +173,8 @@ public:
         const VkComputePipelineCreateInfo*  pIn,
         ComputePipelineCreateInfo*          pInfo);
 
+    void FreeShaderModule(void* pShaderModule);
+
     void FreeComputePipelineBinary(
         ComputePipelineCreateInfo* pCreateInfo,
         const void*                pPipelineBinary,
@@ -127,9 +188,6 @@ public:
     void FreeComputePipelineCreateInfo(ComputePipelineCreateInfo* pCreateInfo);
 
     void FreeGraphicsPipelineCreateInfo(GraphicsPipelineCreateInfo* pCreateInfo);
-    // Get LLPC compiler explicitly.
-    // TODO: Should be removed in the future
-    Llpc::ICompiler* GetLlpcCompiler() { return m_pLlpc; }
 
 private:
     VkResult CreateLlpcCompiler();

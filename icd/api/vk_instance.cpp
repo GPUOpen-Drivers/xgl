@@ -603,6 +603,9 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_SURFACE));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_XCB_SURFACE));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_XLIB_SURFACE));
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_WAYLAND_SURFACE));
+#endif
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_PHYSICAL_DEVICE_PROPERTIES2));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_MEMORY_CAPABILITIES));
 

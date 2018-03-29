@@ -54,12 +54,12 @@ namespace vk
 // Enum describing which application is active
 enum class AppProfile : uint32_t
 {
-    Default = 0,        // Default profile
-    Dota2,              // Dota 2 by Valve Software
-    Talos,              // Talos Principle by Croteam
-    MadMax,             // MadMax by Feral3D
-    F1_2017,            // F1 2017 by Feral3D
-    SeriousSamFusion,   // Serious Sam Fusion by Croteam
+    Default = 0,           // Default profile
+    Dota2,                 // Dota 2 by Valve Software
+    Talos,                 // Talos Principle by Croteam
+    MadMax,                // MadMax by Feral3D
+    F1_2017,               // F1 2017 by Feral3D
+    SeriousSamFusion,      // Serious Sam Fusion by Croteam
 };
 
 // Struct describing dynamic CHILL settings

@@ -91,8 +91,6 @@ VkResult PipelineLayout::ConvertCreateInfo(
     pInfo->userDataLayout.pushConstRegBase   = 0;
     pInfo->userDataLayout.pushConstRegCount  = 0;
 
-    pPipelineInfo->numImmutableSamplers      = 0;
-
     // Calculate the number of bytes needed for push constants
     uint32_t pushConstantsSizeInBytes = 0;
 
@@ -122,13 +120,10 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
     for (uint32_t i = 0; i < pInfo->setCount; ++i)
     {
-        // Retain pointer to original descriptor set layout object
-        pInfo->pSetLayouts[i] = DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[i]);
-
         SetUserDataLayout* pSetUserData = &pInfo->setUserData[i];
 
         // Initialize the set layout info
-        const auto& setLayoutInfo = pInfo->pSetLayouts[i]->Info();
+        const auto& setLayoutInfo = DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[i])->Info();
 
         pSetUserData->setPtrRegOffset      = InvalidReg;
         pSetUserData->dynDescDataRegOffset = 0;
@@ -150,7 +145,6 @@ VkResult PipelineLayout::ConvertCreateInfo(
             pPipelineInfo->numUserDataNodes += setLayoutInfo.dyn.numRsrcMapNodes + 1;
 
             // Add space for immutable sampler descriptor storage needed by the set
-            pPipelineInfo->numImmutableSamplers   += setLayoutInfo.imm.numImmutableSamplers;
             pPipelineInfo->numDescRangeValueNodes += setLayoutInfo.imm.numDescriptorValueNodes;
 
             // Reserve user data register space for dynamic descriptor data
@@ -214,6 +208,19 @@ VkResult PipelineLayout::Create(
     Info info = {};
     PipelineInfo pipelineInfo = {};
 
+    size_t setLayoutsOffset[MaxDescriptorSets];
+    size_t setLayoutsArraySize = 0;
+
+    memset(setLayoutsOffset, 0, MaxDescriptorSets * sizeof(size_t));
+
+    for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; ++i)
+    {
+        DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i]);
+
+        setLayoutsOffset[i] = setLayoutsArraySize;
+        setLayoutsArraySize += pLayout->GetObjectSize();
+    }
+
     VkResult result = ConvertCreateInfo(
         pDevice,
         pCreateInfo,
@@ -225,11 +232,9 @@ VkResult PipelineLayout::Create(
         return result;
     }
 
-    // Need to add extra storage for the static sampler descriptors
-    const size_t samplerDescSize = pDevice->GetProperties().descriptorSizes.sampler;
+    // Need to add extra storage for descriptor set layouts
     const size_t apiSize = sizeof(PipelineLayout);
-    const size_t auxSize = pipelineInfo.numImmutableSamplers * samplerDescSize;
-    const size_t objSize = apiSize + auxSize;
+    const size_t objSize = apiSize + setLayoutsArraySize;
 
     void* pSysMem = pDevice->AllocApiObject(objSize, pAllocator);
 
@@ -238,23 +243,17 @@ VkResult PipelineLayout::Create(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    // Prepare the immutable sampler data at the appropriate memory location
-    pipelineInfo.pImmutableSamplerData = reinterpret_cast<uint32_t*>(Util::VoidPtrInc(pSysMem, apiSize));
-
-    void* pDestAddr = pipelineInfo.pImmutableSamplerData;
-
-    for (uint32_t i = 0; i < info.setCount; ++i)
+    for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; ++i)
     {
-        const auto& immSectionInfo = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i])->Info().imm;
+        info.pSetLayouts[i] = reinterpret_cast<DescriptorSetLayout*>(Util::VoidPtrInc(pSysMem, apiSize + setLayoutsOffset[i]));
 
-        size_t dataSize = immSectionInfo.numImmutableSamplers * samplerDescSize;
+        const DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i]);
 
-        memcpy(pDestAddr, immSectionInfo.pImmutableSamplerData, dataSize);
-
-        pDestAddr = Util::VoidPtrInc(pDestAddr, dataSize);
+        // Copy the original descriptor set layout object
+        pLayout->Copy(pDevice, info.pSetLayouts[i]);
     }
 
-    VK_PLACEMENT_NEW (pSysMem) PipelineLayout (pDevice, info, pipelineInfo);
+    VK_PLACEMENT_NEW(pSysMem) PipelineLayout(pDevice, info, pipelineInfo);
 
     *pPipelineLayout = PipelineLayout::HandleFromVoidPointer(pSysMem);
 
@@ -583,6 +582,11 @@ VkResult PipelineLayout::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+    for (uint32_t i = 0; i < m_info.setCount; ++i)
+    {
+        m_info.pSetLayouts[i]->Destroy(pDevice, pAllocator, false);
+    }
+
     this->~PipelineLayout();
 
     pAllocator->pfnFree(pAllocator->pUserData, this);

@@ -226,13 +226,13 @@ Result ShaderCache::Serialize(
                 {
                     LLPC_ASSERT(it.first != nullptr);
 
-                    if (VoidPtrDiff(pDataDst, pBlob) > (*pSize))
+                    const size_t copySize = it.second;
+                    if (VoidPtrDiff(pDataDst, pBlob) + copySize > (*pSize))
                     {
                         result = Result::ErrorUnknown;
                         break;
                     }
 
-                    const size_t copySize = it.second;
                     memcpy(pDataDst, it.first, copySize);
                     pDataDst = VoidPtrInc(pDataDst, copySize);
                 }

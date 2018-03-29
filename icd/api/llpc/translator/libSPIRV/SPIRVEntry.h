@@ -751,6 +751,12 @@ _SPIRV_OP(GroupSMinNonUniformAMD)
 _SPIRV_OP(GroupFMaxNonUniformAMD)
 _SPIRV_OP(GroupUMaxNonUniformAMD)
 _SPIRV_OP(GroupSMaxNonUniformAMD)
+// NOTE: These 4 OpCodes are reserved by SPIR-V spec, they are invalid unless
+// some extensions expose them.
+_SPIRV_OP(ImageSparseSampleProjImplicitLod)
+_SPIRV_OP(ImageSparseSampleProjExplicitLod)
+_SPIRV_OP(ImageSparseSampleProjDrefImplicitLod)
+_SPIRV_OP(ImageSparseSampleProjDrefExplicitLod)
 #undef _SPIRV_OP
 
 }

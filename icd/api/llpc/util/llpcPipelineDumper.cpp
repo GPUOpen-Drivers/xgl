@@ -321,17 +321,17 @@ void PipelineDumper::DumpPipelineShaderInfo(
     }
 
     // Output specialize info
-    if (pShaderInfo->pSpecializatonInfo)
+    if (pShaderInfo->pSpecializationInfo)
     {
-        auto pSpecializatonInfo = pShaderInfo->pSpecializatonInfo;
-        for (uint32_t i = 0; i < pSpecializatonInfo->mapEntryCount; ++i)
+        auto pSpecializationInfo = pShaderInfo->pSpecializationInfo;
+        for (uint32_t i = 0; i < pSpecializationInfo->mapEntryCount; ++i)
         {
-            dumpFile << "specConst.mapEntry[" << i << "].constantID = " << pSpecializatonInfo->pMapEntries[i].constantID << "\n";
-            dumpFile << "specConst.mapEntry[" << i << "].offset = " << pSpecializatonInfo->pMapEntries[i].offset << "\n";
-            dumpFile << "specConst.mapEntry[" << i << "].size = " << pSpecializatonInfo->pMapEntries[i].size << "\n";
+            dumpFile << "specConst.mapEntry[" << i << "].constantID = " << pSpecializationInfo->pMapEntries[i].constantID << "\n";
+            dumpFile << "specConst.mapEntry[" << i << "].offset = " << pSpecializationInfo->pMapEntries[i].offset << "\n";
+            dumpFile << "specConst.mapEntry[" << i << "].size = " << pSpecializationInfo->pMapEntries[i].size << "\n";
         }
-        const uint32_t* pData = reinterpret_cast<const uint32_t*>(pSpecializatonInfo->pData);
-        for (uint32_t i = 0; i < pSpecializatonInfo->dataSize / sizeof(uint32_t); ++i)
+        const uint32_t* pData = reinterpret_cast<const uint32_t*>(pSpecializationInfo->pData);
+        for (uint32_t i = 0; i < pSpecializationInfo->dataSize / sizeof(uint32_t); ++i)
         {
             if ((i % 8) == 0)
             {
@@ -595,8 +595,11 @@ MetroHash::Hash PipelineDumper::GenerateHashForGraphicsPipeline(
         hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexBindingDescriptions),
                       sizeof(VkVertexInputBindingDescription) * pVertexInput->vertexBindingDescriptionCount);
         hasher.Update(pVertexInput->vertexAttributeDescriptionCount);
-        hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexAttributeDescriptions),
+        if (pVertexInput->vertexAttributeDescriptionCount > 0)
+        {
+            hasher.Update(reinterpret_cast<const uint8_t*>(pVertexInput->pVertexAttributeDescriptions),
                       sizeof(VkVertexInputAttributeDescription) * pVertexInput->vertexAttributeDescriptionCount);
+        }
     }
 
     auto pIaState = &pPipeline->iaState;
@@ -682,14 +685,14 @@ void PipelineDumper::UpdateHashForPipelineShaderInfo(
             pHasher->Update(reinterpret_cast<const uint8_t*>(pShaderInfo->pEntryTarget), entryNameLen);
         }
 
-        if ((pShaderInfo->pSpecializatonInfo) && (pShaderInfo->pSpecializatonInfo->mapEntryCount > 0))
+        if ((pShaderInfo->pSpecializationInfo) && (pShaderInfo->pSpecializationInfo->mapEntryCount > 0))
         {
-            auto pSpecializatonInfo = pShaderInfo->pSpecializatonInfo;
-            pHasher->Update(pSpecializatonInfo->mapEntryCount);
-            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pMapEntries),
-                            sizeof(VkSpecializationMapEntry) * pSpecializatonInfo->mapEntryCount);
-            pHasher->Update(pSpecializatonInfo->dataSize);
-            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializatonInfo->pData), pSpecializatonInfo->dataSize);
+            auto pSpecializationInfo = pShaderInfo->pSpecializationInfo;
+            pHasher->Update(pSpecializationInfo->mapEntryCount);
+            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializationInfo->pMapEntries),
+                            sizeof(VkSpecializationMapEntry) * pSpecializationInfo->mapEntryCount);
+            pHasher->Update(pSpecializationInfo->dataSize);
+            pHasher->Update(reinterpret_cast<const uint8_t*>(pSpecializationInfo->pData), pSpecializationInfo->dataSize);
         }
 
         if (pShaderInfo->descriptorRangeValueCount > 0)

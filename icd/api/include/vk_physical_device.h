@@ -630,6 +630,12 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXlibPresentationSupportKHR(
     uint32_t                                    queueFamilyIndex,
     Display*                                    dpy,
     VisualID                                    visualID);
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t                                    queueFamilyIndex,
+    struct wl_display*                                    display);
+#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     VkDevice                                    device,

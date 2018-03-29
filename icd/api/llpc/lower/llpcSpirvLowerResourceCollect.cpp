@@ -1325,6 +1325,27 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                 case BuiltInViewIndex:
                     m_pResUsage->builtInUsage.fs.viewIndex = true;
                     break;
+                case BuiltInBaryCoordNoPerspAMD:
+                    m_pResUsage->builtInUsage.fs.baryCoordNoPersp = true;
+                    break;
+                case BuiltInBaryCoordNoPerspCentroidAMD:
+                    m_pResUsage->builtInUsage.fs.baryCoordNoPerspCentroid = true;
+                    break;
+                case BuiltInBaryCoordNoPerspSampleAMD:
+                    m_pResUsage->builtInUsage.fs.baryCoordNoPerspSample = true;
+                    break;
+                case BuiltInBaryCoordSmoothAMD:
+                    m_pResUsage->builtInUsage.fs.baryCoordSmooth = true;
+                    break;
+                case BuiltInBaryCoordSmoothCentroidAMD:
+                    m_pResUsage->builtInUsage.fs.baryCoordSmoothCentroid = true;
+                    break;
+                case BuiltInBaryCoordSmoothSampleAMD:
+                    m_pResUsage->builtInUsage.fs.baryCoordSmoothSample = true;
+                    break;
+                case BuiltInBaryCoordPullModelAMD:
+                    m_pResUsage->builtInUsage.fs.baryCoordPullModel = true;
+                    break;
                 case BuiltInSubgroupSize:
                     m_pResUsage->builtInUsage.common.subgroupSize = true;
                     break;
@@ -1487,10 +1508,14 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                     {
                         m_pResUsage->builtInUsage.fs.flat = true;
                     }
+                    else if (inOutMeta.InterpMode == InterpModeNoPersp)
+                    {
+                        m_pResUsage->builtInUsage.fs.noperspective = true;
+                    }
                     else
                     {
-                        LLPC_ASSERT(inOutMeta.InterpMode == InterpModeNoPersp);
-                        m_pResUsage->builtInUsage.fs.noperspective = true;
+                        LLPC_ASSERT(inOutMeta.InterpMode == InterpModeCustom);
+                        m_pResUsage->builtInUsage.fs.custom = true;
                     }
 
                     if (inOutMeta.InterpLoc == InterpLocCenter)
@@ -1501,11 +1526,15 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
                     {
                         m_pResUsage->builtInUsage.fs.centroid = true;
                     }
-                    else
+                    else if (inOutMeta.InterpLoc == InterpLocSample)
                     {
-                        LLPC_ASSERT(inOutMeta.InterpLoc == InterpLocSample);
                         m_pResUsage->builtInUsage.fs.sample = true;
                         m_pResUsage->builtInUsage.fs.runAtSampleRate = true;
+                    }
+                    else
+                    {
+                        LLPC_ASSERT(inOutMeta.InterpLoc == InterpLocCustom);
+                        m_pResUsage->builtInUsage.fs.custom = true;
                     }
                 }
                 else

@@ -84,6 +84,7 @@ VkResult Memory::Create(
     Pal::OsExternalHandle handle    = 0;
     bool sharedViaNtHandle          = false;
     bool isExternal                 = false;
+    bool isHostMappedForeign        = false;
     void* pPinnedHostPtr            = nullptr; // If non-null, this memory is allocated as pinned system memory
     const Pal::gpusize palAlignment = Util::Max(palProperties.gpuMemoryProperties.virtualMemAllocGranularity,
                                                 palProperties.gpuMemoryProperties.realMemAllocGranularity);
@@ -206,6 +207,9 @@ VkResult Memory::Create(
                 {
                     VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_EXTERNAL_MEMORY_HOST));
 
+                    VK_ASSERT(pImportMemoryInfo->handleType &
+                        (VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT));
+
                     pPinnedHostPtr = pImportMemoryInfo->pHostPointer;
                 }
                 break;
@@ -256,7 +260,6 @@ VkResult Memory::Create(
                     pinnedInfo.size    = static_cast<size_t>(createInfo.size);
                     pinnedInfo.pSysMem = pPinnedHostPtr;
                     pinnedInfo.vaRange = Pal::VaRange::Default;
-
                     gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetPinnedGpuMemorySize(
                         pinnedInfo, &palResult);
 

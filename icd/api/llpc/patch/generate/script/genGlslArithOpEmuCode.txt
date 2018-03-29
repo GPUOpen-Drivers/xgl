@@ -81,3 +81,14 @@ genType FwidthFine genType p : llpc.fwidthFine.f32 #0
 genType DPdxCoarse genType p : llpc.dpdxCoarse.f32 #0
 genType DPdyCoarse genType p : llpc.dpdyCoarse.f32 #0
 genType FwidthCoarse genType p : llpc.fwidthCoarse.f32 #0
+
+# Functions of extension AMD_shader_trinary_minmax
+genIType SMin3AMD genIType x genIType y genIType z : llpc.smin3.i32 #0
+genIType SMax3AMD genIType x genIType y genIType z : llpc.smax3.i32 #0
+genIType SMid3AMD genIType x genIType y genIType z : llpc.smid3.i32 #0
+genUType UMin3AMD genUType x genUType y genUType z : llpc.umin3.i32 #0
+genUType UMax3AMD genUType x genUType y genUType z : llpc.umax3.i32 #0
+genUType UMid3AMD genUType x genUType y genUType z : llpc.umid3.i32 #0
+genType FMin3AMD genType x genType y genType z : llpc.fmin3.f32 #0
+genType FMax3AMD genType x genType y genType z : llpc.fmax3.f32 #0
+genType FMid3AMD genType x genType y genType z : llpc.fmid3.f32 #0

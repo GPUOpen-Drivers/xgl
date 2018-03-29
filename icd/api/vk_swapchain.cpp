@@ -48,6 +48,7 @@
 
 #include "palQueueSemaphore.h"
 #include "palSwapChain.h"
+#include "palAutoBuffer.h"
 
 #include <stdio.h>
 
@@ -153,6 +154,7 @@ VkResult SwapChain::Create(
                 imageCreateInfo.extent         = VkToPalExtent2d(pVkSwapchainCreateInfoKHR->imageExtent);
                 imageCreateInfo.hDisplay       = properties.displayableInfo.displayHandle;
                 imageCreateInfo.hWindow        = properties.displayableInfo.windowHandle;
+
             }
             break;
 
