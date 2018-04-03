@@ -103,7 +103,7 @@ public:
         bool                             isNtHandle,
         Memory**                         pMemory);
 
-    Pal::OsExternalHandle GetShareHandle(VkExternalMemoryHandleTypeFlagBitsKHR handleType);
+    Pal::OsExternalHandle GetShareHandle(VkExternalMemoryHandleTypeFlagBits handleType);
 
     VkResult Free(
         Device*                         pDevice,
@@ -241,7 +241,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdKHR(
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdPropertiesKHR(
     VkDevice                                device,
-    VkExternalMemoryHandleTypeFlagBitsKHR   handleType,
+    VkExternalMemoryHandleTypeFlagBits      handleType,
     int                                     fd,
     VkMemoryFdPropertiesKHR*                pMemoryFdProperties);
 

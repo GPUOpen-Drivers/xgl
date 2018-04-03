@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -24,30 +24,15 @@
  **********************************************************************************************************************/
 /**
  ***********************************************************************************************************************
- * @file  vk_platform.h
- * @brief Proxy to the real Khronos Vulkan platform header.
+ * @file  vk_layer.h
+ * @brief Proxy to the real Khronos Vulkan layer header.
  ***********************************************************************************************************************
  */
 
-#ifndef __VK_PLATFORM_H_PROXY__
-#define __VK_PLATFORM_H_PROXY__
+#ifndef __VK_LAYER_H_PROXY__
+#define __VK_LAYER_H_PROXY__
 
 // Vulkan SDK 1.1
-#include "sdk-1.1/vk_platform.h"
+#include "sdk-1.1/vk_layer.h"
 
-#ifdef VK_USE_PLATFORM_XLIB_KHR
-#ifdef None
-#undef None
-#endif
-#ifdef Success
-#undef Success
-#endif
-#ifdef Always
-#undef Always
-#endif
-#ifdef setbit
-#undef setbit
-#endif
-#endif
-
-#endif /* __VK_PLATFORM_H_PROXY__ */
+#endif /* __VK_LAYER_H_PROXY__ */

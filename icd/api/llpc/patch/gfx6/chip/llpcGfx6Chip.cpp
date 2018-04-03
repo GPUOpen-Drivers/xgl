@@ -587,8 +587,24 @@ const char* GetRegisterNameString(
 {
     LLPC_ASSERT(gfxIp.major <= 8);
 
+    if (RegNameMap.empty())
+    {
+        InitRegisterNameMap(gfxIp);
+    }
+    const char* pNameString = nullptr;
     auto nameMap = RegNameMap.find(regId);
-    return (nameMap != RegNameMap.end()) ? nameMap->second : "UNKNOWN";
+    if  (nameMap != RegNameMap.end())
+    {
+        pNameString = nameMap->second;
+    }
+    else
+    {
+        static char unknownRegNameBuf[256] = {};
+        int32_t length = snprintf(unknownRegNameBuf, 256, "UNKNOWN(0x%08X)", regId);
+        pNameString = unknownRegNameBuf;
+    }
+
+    return pNameString;
 }
 
 } // Gfx6

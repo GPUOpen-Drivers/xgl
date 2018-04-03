@@ -463,6 +463,7 @@ struct InterfaceData
     static const uint32_t UserDataUnmapped = InvalidValue;
 
     llvm::Value*                descTablePtrs[MaxDescTableCount]; // Descriptor table pointers
+    llvm::Value*                shadowDescTablePtrs[MaxDescTableCount]; // Shadow descriptor table pointers
     llvm::Value*                dynDescs[MaxDynDescCount];        // Dynamic descriptors
     llvm::Value*                pInternalTablePtr;                // Global internal table pointer
     llvm::Value*                pInternalPerShaderTablePtr;       // Internal per shader table pointer
@@ -689,9 +690,6 @@ public:
 
     const GpuProperty* GetGpuProperty() const { return m_pGpuProperty; }
 
-    // Gets the high DWORD of 64-bit VA address for the descriptor table pointer
-    uint32_t GetDescriptorTablePtrHigh() { return m_descTablePtrHigh; }
-
     void AutoLayoutDescriptor(ShaderStage shaderStage);
 
     // Gets pipeline hash code
@@ -731,10 +729,6 @@ private:
 
     ResourceMappingNodeType GetResourceMapNodeType(DescriptorType descType);
     uint32_t GetResourceMapNodeSize(const DescriptorBinding* pBinding);
-
-    // -----------------------------------------------------------------------------------------------------------------
-
-    uint32_t            m_descTablePtrHigh; // High DWORD of 64-bit VA address for the descriptor table pointer
 };
 
 } // Llpc

@@ -73,6 +73,7 @@ public:
         Device*                 pDevice,
         uint32_t                queueFamilyIndex,
         uint32_t                queueIndex,
+        uint32_t                queueFlags,
         Pal::IQueue**           pPalQueues,
         VirtualStackAllocator*  pStackAllocator);
 
@@ -86,14 +87,14 @@ public:
     VkResult WaitIdle(void);
 
     VkResult PalSignalSemaphores(
-        uint32_t                          semaphoreCount,
-        const VkSemaphore*                pSemaphores,
-        const VkDeviceGroupSubmitInfoKHX* pDeviceGroupInfo);
+        uint32_t                       semaphoreCount,
+        const VkSemaphore*             pSemaphores,
+        const VkDeviceGroupSubmitInfo* pDeviceGroupInfo);
 
     VkResult PalWaitSemaphores(
-        uint32_t                          semaphoreCount,
-        const VkSemaphore*                pSemaphores,
-        const VkDeviceGroupSubmitInfoKHX* pDeviceGroupInfo);
+        uint32_t                       semaphoreCount,
+        const VkSemaphore*             pSemaphores,
+        const VkDeviceGroupSubmitInfo* pDeviceGroupInfo);
 
     VkResult Present(
         const VkPresentInfoKHR* pPresentInfo);
@@ -123,6 +124,9 @@ public:
 
     uint32_t GetIndex() const
         { return m_queueIndex; }
+
+    uint32_t GetFlags() const
+        { return m_queueFlags; }
 
    const Pal::PerSourceFrameMetadataControl* GetFrameMetadataControl() const
         { return &m_palFrameMetadataControl; }
@@ -201,6 +205,7 @@ protected:
     Device* const                      m_pDevice;
     uint32_t                           m_queueFamilyIndex;   // This queue's family index
     uint32_t                           m_queueIndex;         // This queue's index within the node group
+    uint32_t                           m_queueFlags;
     DevModeMgr*                        m_pDevModeMgr;
     VirtualStackAllocator*             m_pStackAllocator;
     VidPnSourceFlipStatus              m_flipStatus;

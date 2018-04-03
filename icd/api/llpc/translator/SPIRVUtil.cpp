@@ -1266,7 +1266,6 @@ getSPIRVImageTypePostfixes(StringRef SampledType,
      << Desc.Arrayed << kSPIRVTypeName::PostfixDelim
      << Desc.MS << kSPIRVTypeName::PostfixDelim
      << Desc.Sampled << kSPIRVTypeName::PostfixDelim
-     << Desc.Format << kSPIRVTypeName::PostfixDelim
      << Acc;
   return OS.str();
 }

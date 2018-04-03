@@ -70,7 +70,8 @@ public:
     static size_t GetMaxVertBufTableDwSize(const PhysicalDevice* pPhysDevice);
     static size_t GetSize(const Device* pDevice);
 
-    Pal::Result Initialize(const CmdBuffer* pCmdBuf, void* pVbMem);
+    Pal::Result Initialize(void* pVbMem);
+    void Reset();
 
     void BindVertexBuffers(
         CmdBuffer*          pCmdBuf,

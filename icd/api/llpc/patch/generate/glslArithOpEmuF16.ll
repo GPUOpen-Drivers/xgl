@@ -1551,49 +1551,46 @@ define spir_func <4 x half> @_Z7refractDv4_DhDv4_DhDh(<4 x half> %I, <4 x half> 
     ret <4 x half> %10
 }
 
-; GLSL: float16_t frexp(float16_t, out int)
-define spir_func {half, i32} @_Z11frexpStructDh(
+; GLSL: float16_t frexp(float16_t, out int16_t)
+define spir_func { half, i16 } @_Z11frexpStructDhs(
     half %x) #0
 {
     %1 = call half @llvm.amdgcn.frexp.mant.f16(half %x)
     %2 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x)
-    %3 = sext i16 %2 to i32
 
-    %4 = insertvalue {half, i32} undef, half %1, 0
-    %5 = insertvalue {half, i32} %4, i32 %3, 1
+    %3 = insertvalue { half, i16 } undef, half %1, 0
+    %4 = insertvalue { half, i16 } %3, i16 %2, 1
 
-    ret {half, i32} %5
+    ret { half, i16 } %4
 }
 
-; GLSL: f16vec2 frexp(f16vec2, out ivec2)
-define spir_func {<2 x half>, <2 x i32>} @_Z11frexpStructDv2_Dh(
+; GLSL: f16vec2 frexp(f16vec2, out i16vec2)
+define spir_func { <2 x half>, <2 x i16> } @_Z11frexpStructDv2_DhDv2_s(
     <2 x half> %x) #0
 {
     %x0 = extractelement <2 x half> %x, i32 0
     %x1 = extractelement <2 x half> %x, i32 1
 
     %1 = call half @llvm.amdgcn.frexp.mant.f16(half %x0)
-    %2 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x0)
-    %3 = sext i16 %2 to i32
+    %2 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
 
-    %4 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
-    %5 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x1)
-    %6 = sext i16 %5 to i32
+    %3 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x0)
+    %4 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x1)
 
-    %7 = insertelement <2 x half> undef, half %1, i32 0
-    %8 = insertelement <2 x half> %7, half %4, i32 1
+    %5 = insertelement <2 x half> undef, half %1, i32 0
+    %6 = insertelement <2 x half> %5, half %2, i32 1
 
-    %9 = insertelement <2 x i32> undef, i32 %3, i32 0
-    %10 = insertelement <2 x i32> %9, i32 %6, i32 1
+    %7 = insertelement <2 x i16> undef, i16 %3, i32 0
+    %8 = insertelement <2 x i16> %7, i16 %4, i32 1
 
-    %11 = insertvalue {<2 x half>, <2 x i32>} undef, <2 x half> %8, 0
-    %12 = insertvalue {<2 x half>, <2 x i32>} %11, <2 x i32> %10, 1
+    %9 = insertvalue { <2 x half>, <2 x i16> } undef, <2 x half> %6, 0
+    %10 = insertvalue { <2 x half>, <2 x i16> } %9, <2 x i16> %8, 1
 
-    ret {<2 x half>, <2 x i32>} %12
+    ret { <2 x half>, <2 x i16> } %10
 }
 
-; GLSL: f16vec3 frexp(f16vec3, out ivec3)
-define spir_func {<3 x half>, <3 x i32>} @_Z11frexpStructDv3_Dh(
+; GLSL: f16vec3 frexp(f16vec3, out i16vec3)
+define spir_func { <3 x half>, <3 x i16> } @_Z11frexpStructDv3_DhDv3_s(
     <3 x half> %x) #0
 {
     %x0 = extractelement <3 x half> %x, i32 0
@@ -1601,33 +1598,29 @@ define spir_func {<3 x half>, <3 x i32>} @_Z11frexpStructDv3_Dh(
     %x2 = extractelement <3 x half> %x, i32 2
 
     %1 = call half @llvm.amdgcn.frexp.mant.f16(half %x0)
-    %2 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x0)
-    %3 = sext i16 %2 to i32
+    %2 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
+    %3 = call half @llvm.amdgcn.frexp.mant.f16(half %x2)
 
-    %4 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
+    %4 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x0)
     %5 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x1)
-    %6 = sext i16 %5 to i32
+    %6 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x2)
 
-    %7 = call half @llvm.amdgcn.frexp.mant.f16(half %x2)
-    %8 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x2)
-    %9 = sext i16 %8 to i32
+    %7 = insertelement <3 x half> undef, half %1, i32 0
+    %8 = insertelement <3 x half> %7, half %2, i32 1
+    %9 = insertelement <3 x half> %8, half %3, i32 2
 
-    %10 = insertelement <3 x half> undef, half %1, i32 0
-    %11 = insertelement <3 x half> %10, half %4, i32 1
-    %12 = insertelement <3 x half> %11, half %7, i32 2
+    %10 = insertelement <3 x i16> undef, i16 %4, i32 0
+    %11 = insertelement <3 x i16> %10, i16 %5, i32 1
+    %12 = insertelement <3 x i16> %11, i16 %6, i32 2
 
-    %13 = insertelement <3 x i32> undef, i32 %3, i32 0
-    %14 = insertelement <3 x i32> %13, i32 %6, i32 1
-    %15 = insertelement <3 x i32> %14, i32 %9, i32 2
+    %13 = insertvalue { <3 x half>, <3 x i16> } undef, <3 x half> %9, 0
+    %14 = insertvalue { <3 x half>, <3 x i16> } %13, <3 x i16> %12, 1
 
-    %16 = insertvalue {<3 x half>, <3 x i32>} undef, <3 x half> %12, 0
-    %17 = insertvalue {<3 x half>, <3 x i32>} %16, <3 x i32> %15, 1
-
-    ret {<3 x half>, <3 x i32>} %17
+    ret { <3 x half>, <3 x i16> } %14
 }
 
-; GLSL: f16vec4 frexp(f16vec4, out ivec4)
-define spir_func {<4 x half>, <4 x i32>} @_Z11frexpStructDv4_Dh(
+; GLSL: f16vec4 frexp(f16vec4, out i16vec4)
+define spir_func { <4 x half>, <4 x i16> } @_Z11frexpStructDv4_DhDv4_s(
     <4 x half> %x) #0
 {
     %x0 = extractelement <4 x half> %x, i32 0
@@ -1636,35 +1629,93 @@ define spir_func {<4 x half>, <4 x i32>} @_Z11frexpStructDv4_Dh(
     %x3 = extractelement <4 x half> %x, i32 3
 
     %1 = call half @llvm.amdgcn.frexp.mant.f16(half %x0)
-    %2 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x0)
-    %3 = sext i16 %2 to i32
+    %2 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
+    %3 = call half @llvm.amdgcn.frexp.mant.f16(half %x2)
+    %4 = call half @llvm.amdgcn.frexp.mant.f16(half %x3)
 
-    %4 = call half @llvm.amdgcn.frexp.mant.f16(half %x1)
-    %5 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x1)
-    %6 = sext i16 %5 to i32
+    %5 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x0)
+    %6 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x1)
+    %7 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x2)
+    %8 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x3)
 
-    %7 = call half @llvm.amdgcn.frexp.mant.f16(half %x2)
-    %8 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x2)
-    %9 = sext i16 %8 to i32
+    %9  = insertelement <4 x half> undef, half %1, i32 0
+    %10 = insertelement <4 x half> %9, half %2, i32 1
+    %11 = insertelement <4 x half> %10, half %3, i32 2
+    %12 = insertelement <4 x half> %11, half %4, i32 3
 
-    %10 = call half @llvm.amdgcn.frexp.mant.f16(half %x3)
-    %11 = call i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x3)
-    %12 = sext i16 %11 to i32
+    %13 = insertelement <4 x i16> undef, i16 %5, i32 0
+    %14 = insertelement <4 x i16> %13, i16 %6, i32 1
+    %15 = insertelement <4 x i16> %14, i16 %7, i32 2
+    %16 = insertelement <4 x i16> %15, i16 %8, i32 3
 
-    %13 = insertelement <4 x half> undef, half %1, i32 0
-    %14 = insertelement <4 x half> %13, half %4, i32 1
-    %15 = insertelement <4 x half> %14, half %7, i32 2
-    %16 = insertelement <4 x half> %15, half %10, i32 3
+    %17 = insertvalue { <4 x half>, <4 x i16> } undef, <4 x half> %12, 0
+    %18 = insertvalue { <4 x half>, <4 x i16> } %17, <4 x i16> %16, 1
 
-    %17 = insertelement <4 x i32> undef, i32 %3, i32 0
-    %18 = insertelement <4 x i32> %17, i32 %6, i32 1
-    %19 = insertelement <4 x i32> %18, i32 %9, i32 2
-    %20 = insertelement <4 x i32> %19, i32 %12, i32 3
+    ret { <4 x half>, <4 x i16> } %18
+}
 
-    %21 = insertvalue {<4 x half>, <4 x i32>} undef, <4 x half> %16, 0
-    %22 = insertvalue {<4 x half>, <4 x i32>} %21, <4 x i32> %20, 1
+; GLSL: float16_t frexp(float16_t, out int)
+define spir_func { half, i32 } @_Z11frexpStructDhi(
+    half %x) #0
+{
+    %1 = call { half, i16 } @_Z11frexpStructDhs(half %x)
 
-    ret {<4 x half>, <4 x i32>} %22
+    %2 = extractvalue { half, i16 } %1, 0
+    %3 = extractvalue { half, i16 } %1, 1
+    %4 = sext i16 %3 to i32
+
+    %5 = insertvalue { half, i32 } undef, half %2, 0
+    %6 = insertvalue { half, i32 } %5, i32 %4, 1
+
+    ret { half, i32 } %6
+}
+
+; GLSL: f16vec2 frexp(f16vec2, out ivec2)
+define spir_func { <2 x half>, <2 x i32> } @_Z11frexpStructDv2_DhDv2_i(
+    <2 x half> %x) #0
+{
+    %1 = call { <2 x half>, <2 x i16> } @_Z11frexpStructDv2_DhDv2_s(<2 x half> %x)
+
+    %2 = extractvalue { <2 x half>, <2 x i16> } %1, 0
+    %3 = extractvalue { <2 x half>, <2 x i16> } %1, 1
+    %4 = sext <2 x i16> %3 to <2 x i32>
+
+    %5 = insertvalue { <2 x half>, <2 x i32> } undef, <2 x half> %2, 0
+    %6 = insertvalue { <2 x half>, <2 x i32> } %5, <2 x i32> %4, 1
+
+    ret { <2 x half>, <2 x i32> } %6
+}
+
+; GLSL: f16vec3 frexp(f16vec3, out ivec3)
+define spir_func { <3 x half>, <3 x i32> } @_Z11frexpStructDv3_DhDv3_i(
+    <3 x half> %x) #0
+{
+    %1 = call { <3 x half>, <3 x i16> } @_Z11frexpStructDv3_DhDv3_s(<3 x half> %x)
+
+    %2 = extractvalue { <3 x half>, <3 x i16> } %1, 0
+    %3 = extractvalue { <3 x half>, <3 x i16> } %1, 1
+    %4 = sext <3 x i16> %3 to <3 x i32>
+
+    %5 = insertvalue { <3 x half>, <3 x i32> } undef, <3 x half> %2, 0
+    %6 = insertvalue { <3 x half>, <3 x i32> } %5, <3 x i32> %4, 1
+
+    ret { <3 x half>, <3 x i32> } %6
+}
+
+; GLSL: f16vec4 frexp(f16vec4, out ivec4)
+define spir_func { <4 x half>, <4 x i32> } @_Z11frexpStructDv4_DhDv4_i(
+    <4 x half> %x) #0
+{
+    %1 = call { <4 x half>, <4 x i16> } @_Z11frexpStructDv4_DhDv4_s(<4 x half> %x)
+
+    %2 = extractvalue { <4 x half>, <4 x i16> } %1, 0
+    %3 = extractvalue { <4 x half>, <4 x i16> } %1, 1
+    %4 = sext <4 x i16> %3 to <4 x i32>
+
+    %5 = insertvalue { <4 x half>, <4 x i32> } undef, <4 x half> %2, 0
+    %6 = insertvalue { <4 x half>, <4 x i32> } %5, <4 x i32> %4, 1
+
+    ret { <4 x half>, <4 x i32> } %6
 }
 
 ; =====================================================================================================================

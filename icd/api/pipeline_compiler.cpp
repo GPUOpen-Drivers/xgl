@@ -633,23 +633,23 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         EXTRACT_VK_STRUCTURES_1(
             Tess,
             PipelineTessellationStateCreateInfo,
-            PipelineTessellationDomainOriginStateCreateInfoKHR,
+            PipelineTessellationDomainOriginStateCreateInfo,
             pGraphicsPipelineCreateInfo->pTessellationState,
             PIPELINE_TESSELLATION_STATE_CREATE_INFO,
-            PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO_KHR)
+            PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO)
 
         if (pPipelineTessellationStateCreateInfo != nullptr)
         {
             pCreateInfo->pipelineInfo.iaState.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
         }
 
-        if (pPipelineTessellationDomainOriginStateCreateInfoKHR)
+        if (pPipelineTessellationDomainOriginStateCreateInfo)
         {
             // Vulkan 1.0 incorrectly specified the tessellation u,v coordinate origin as lower left even though
             // framebuffer and image coordinate origins are in the upper left.  This has since been fixed, but
             // an extension exists to use the previous behavior.  Doing so with flat shading would likely appear
             // incorrect, but Vulkan specifies that the provoking vertex is undefined when tessellation is active.
-            if (pPipelineTessellationDomainOriginStateCreateInfoKHR->domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT_KHR)
+            if (pPipelineTessellationDomainOriginStateCreateInfo->domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT)
             {
                 pCreateInfo->pipelineInfo.iaState.switchWinding = true;
             }

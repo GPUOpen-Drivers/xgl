@@ -1653,6 +1653,26 @@ Value* SpirvLowerGlobal::AddCallInstForInOutImport(
                 // external GLSL emulation libarary (.ll files), the import calls could be simplified.
                 args.clear();
                 args.push_back(ConstantInt::get(m_pContext->Int32Ty(), builtInId));
+
+                if ((builtInId == BuiltInSubgroupEqMaskKHR)     ||
+                    (builtInId == BuiltInSubgroupGeMaskKHR)     ||
+                    (builtInId == BuiltInSubgroupGtMaskKHR)     ||
+                    (builtInId == BuiltInSubgroupLeMaskKHR)     ||
+                    (builtInId == BuiltInSubgroupLtMaskKHR))
+                {
+                    // NOTE: Glslang has a bug. For gl_SubGroupXXXMaskARB, they are implemented as "uint64_t" while
+                    // for gl_subgroupXXXMask they are "uvec4". And the SPIR-V enumerants "BuiltInSubgroupXXXMaskKHR"
+                    // and "BuiltInSubgroupXXXMask" share the same numeric values.
+                    if (pInOutTy->isIntegerTy(64) == false)
+                    {
+                        // Not uint64_t, must be uvec4
+                        LLPC_ASSERT(pInOutTy->isVectorTy() &&
+                                    pInOutTy->getVectorElementType()->isIntegerTy(32) &&
+                                    pInOutTy->getVectorNumElements() == 4);
+
+                        instName.replace(instName.find("KHR"), 3, ""); // Get rid of "KHR" suffix
+                    }
+                }
             }
         }
 

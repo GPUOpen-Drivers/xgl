@@ -94,10 +94,8 @@ public:
         uint32_t  reserved                    : 30;
     };
 
-#ifdef ICD_VULKAN_1_1
     static VkResult EnumerateVersion(
         uint32_t*                    pApiVersion);
-#endif
 
     static VkResult Create(
         const VkInstanceCreateInfo*  pCreateInfo,
@@ -348,11 +346,9 @@ void Instance::FreeMem(
 namespace entry
 {
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceVersion(
     uint32_t*                                   pApiVersion);
-#endif
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
@@ -389,13 +385,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHX(
     uint32_t*                                   pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupPropertiesKHX*         pPhysicalDeviceGroupProperties);
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceGroupCount,
-    VkPhysicalDeviceGroupPropertiesKHR*         pPhysicalDeviceGroupProperties);
-#endif
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties);
 
 } // namespace entry
 

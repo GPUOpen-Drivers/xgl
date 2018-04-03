@@ -1083,9 +1083,24 @@ BinaryOperator *SPIRVToLLVM::transShiftLogicalBitwiseInst(SPIRVValue* BV,
   if (isLogicalOpCode(OP))
     OP = IntBoolOpMap::rmap(OP);
   BO = static_cast<Instruction::BinaryOps>(OpCodeMap::rmap(OP));
-  auto Inst = BinaryOperator::Create(BO,
-      transValue(BBN->getOperand(0), F, BB),
-      transValue(BBN->getOperand(1), F, BB), BV->getName(), BB);
+  auto Base = transValue(BBN->getOperand(0), F, BB);
+  auto Shift = transValue(BBN->getOperand(1), F, BB);
+
+  // NOTE: SPIR-V spec allows the operands "base" and "shift" to have different
+  // bit width.
+  auto BaseBitWidth = Base->getType()->getScalarSizeInBits();
+  auto ShiftBitWidth = Shift->getType()->getScalarSizeInBits();
+  if (BaseBitWidth != ShiftBitWidth) {
+    if (BaseBitWidth > ShiftBitWidth)
+      Shift =
+        new ZExtInst(Shift, Base->getType(), "", BB);
+    else
+      Shift =
+        new TruncInst(Shift, Base->getType(), "", BB);
+  }
+
+  auto Inst = BinaryOperator::Create(BO, Base, Shift, BV->getName(), BB);
+
   // For floating-point operations, if "FastMath" is enabled, set the "FastMath"
   // flags on the handled instruction
   if (SPIRVGenFastMath && isa<FPMathOperator>(Inst)) {
@@ -4396,6 +4411,28 @@ SPIRVToLLVM::transGLSLBuiltinFromExtInst(SPIRVExtInst *BC, BasicBlock *BB)
 
   string MangledName;
   MangleGLSLBuiltin(UnmangledName, ArgTys, MangledName);
+  if (static_cast<GLSLExtOpKind>(EntryPoint) == GLSLstd450FrexpStruct) {
+    // NOTE: For frexp(), the input floating-point value is float16, we have
+    // two overloading versions:
+    //     f16vec frexp(f16vec, ivec)
+    //     f16vec frexp(f16vec, i16vec)
+    //
+    // However, glslang translates "frexp" to "FrexpStruct". We have to check
+    // the result type to revise the mangled name to differentiate such two
+    // variants.
+    assert(BC->getType()->isTypeStruct());
+    auto MantTy = BC->getType()->getStructMemberType(0);
+    auto ExpTy = BC->getType()->getStructMemberType(1);
+    if (MantTy->isTypeVectorOrScalarFloat(16)) {
+      if (ExpTy->isTypeVector()) {
+        auto CompCount = ExpTy->getVectorComponentCount();
+        MangledName += "Dv" + std::to_string(CompCount) + "_";
+      }
+
+      MangledName += ExpTy->isTypeVectorOrScalarInt(16) ? "s" : "i";
+    }
+  }
+
   FunctionType *FuncTy = FunctionType::get(transType(BC->getType()),
                                            ArgTys,
                                            false);

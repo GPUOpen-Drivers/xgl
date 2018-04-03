@@ -483,11 +483,9 @@ VkResult SwapChain::AcquireNextImage(
         const VkAcquireNextImageInfoKHX*  pVkAcquireNextImageInfoKHX;
     };
 
-#ifdef ICD_VULKAN_1_1
     // KHX structure has the same definition as KHR or Vulkan 1.1 core structures
     static_assert(VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR == VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHX,
                   "Mismatched KHR and KHX structure defines");
-#endif
 
     uint32_t presentationDeviceIdx = DefaultDeviceIndex;
 
@@ -1101,16 +1099,24 @@ void FullscreenMgr::PostPresent(
 FullscreenMgr::CompatibilityFlags FullscreenMgr::EvaluateExclusiveModeCompat(
     const SwapChain* pSwapChain) const
 {
-    FullscreenMgr::CompatibilityFlags compatFlags = {};
+    CompatibilityFlags compatFlags = {};
 
-    Pal::OsWindowHandle windowHandle = pSwapChain->GetProperties().displayableInfo.windowHandle;
+    if (m_mode == Explicit)
+    {
+        // In explicit mode, we allow the fullscreen manager to acquire fullscreen ownership, regardless of
+        // size changes or lost window focus.
+        return compatFlags;
+    }
+
+    Pal::OsWindowHandle  windowHandle  = pSwapChain->GetProperties().displayableInfo.windowHandle;
+    Pal::OsDisplayHandle displayHandle = pSwapChain->GetProperties().displayableInfo.displayHandle;
 
     VK_ASSERT(m_pScreen != nullptr);
 
     constexpr Pal::OsDisplayHandle unknownHandle = 0;
 
     Pal::IScreen* pScreen = m_pDevice->VkInstance()->FindScreen(
-                m_pDevice->PalDevice(), windowHandle, unknownHandle);
+                m_pDevice->PalDevice(), windowHandle, displayHandle);
 
     if (pScreen != m_pScreen)
     {
@@ -1330,7 +1336,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHX(
     return SwapChain::ObjectFromHandle(pAcquireInfo->swapchain)->AcquireNextImage(pHeader, pImageIndex);
 }
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHR(
     VkDevice                                    device,
@@ -1347,7 +1352,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHR(
 
     return SwapChain::ObjectFromHandle(pAcquireInfo->swapchain)->AcquireNextImage(pHeader, pImageIndex);
 }
-#endif
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkSetHdrMetadataEXT(

@@ -69,3 +69,4 @@ VK_KHR_device_group
 VK_KHR_maintenance3
 VK_KHR_multiview
 VK_AMD_shader_core_properties
+VK_EXT_queue_family_foreign

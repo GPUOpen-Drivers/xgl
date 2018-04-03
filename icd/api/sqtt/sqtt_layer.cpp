@@ -1802,6 +1802,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
 }
 
 #define SQTT_DISPATCH_ENTRY(entry_name) VK_DISPATCH_ENTRY(entry_name, vk::entry::sqtt::entry_name)
+#define SQTT_DISPATCH_ALIAS_FUNCTION(alias_name, entry_name) \
+    VK_DISPATCH_ALIAS(alias_name, entry_name, vk::entry::sqtt::entry_name)
 
 // This is the SQTT layer dispatch table.  It contains an entry for every Vulkan entry point that this layer shadows.
 const DispatchTableEntry g_SqttDispatchTable[] =

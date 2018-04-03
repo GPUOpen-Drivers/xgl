@@ -57,9 +57,9 @@ public:
 
     VkResult ImportSemaphore(
         Device*                                    pDevice,
-        VkExternalSemaphoreHandleTypeFlagsKHR      handleType,
+        VkExternalSemaphoreHandleTypeFlags         handleType,
         const Pal::OsExternalHandle                handle,
-        VkSemaphoreImportFlagsKHR                  importFlags);
+        VkSemaphoreImportFlags                     importFlags);
 
     VK_FORCEINLINE Pal::IQueueSemaphore* PalSemaphore() const
     {
@@ -82,7 +82,7 @@ public:
 
     VkResult GetShareHandle(
         Device*                                     device,
-        VkExternalSemaphoreHandleTypeFlagBitsKHR    handleType,
+        VkExternalSemaphoreHandleTypeFlagBits       handleType,
         Pal::OsExternalHandle*                      pHandle);
 
 private:

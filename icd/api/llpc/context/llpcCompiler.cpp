@@ -135,6 +135,14 @@ static opt<std::string> ShaderReplacePipelineHashes("shader-replace-pipeline-has
 // -enable-spirv-opt: enable optimization for SPIR-V binary
 opt<bool> EnableSpirvOpt("enable-spirv-opt", desc("Enable optimization for SPIR-V binary"), init(false));
 
+// -enable-shadow-desc: enable shadow desriptor table
+opt<bool> EnableShadowDescriptorTable("enable-shadow-desc", desc("Enable shadow descriptor table"), init(false));
+
+// -shadow-desc-table-ptr-high: high part of VA for shadow descriptor table pointer
+opt<uint32_t> ShadowDescTablePtrHigh("shadow-desc-table-ptr-high",
+                                     desc("High part of VA for shadow descriptor table pointer"),
+                                     init(2));
+
 // -auto-layout-desc
 extern opt<bool> AutoLayoutDesc;
 
@@ -265,19 +273,6 @@ Compiler::Compiler(
 
     if (m_instanceCount == 0)
     {
-        // Initialize map table of register names
-        if (EnableOuts() || cl::EnablePipelineDump)
-        {
-            if (gfxIp.major <= 8)
-            {
-                Gfx6::InitRegisterNameMap(gfxIp);
-            }
-            else
-            {
-                Gfx9::InitRegisterNameMap(gfxIp);
-            }
-        }
-
         // Initialize LLVM target: AMDGPU
         LLVMInitializeAMDGPUTargetInfo();
         LLVMInitializeAMDGPUTarget();
@@ -1507,6 +1502,8 @@ MetroHash::Hash Compiler::GenerateHashForCompileOptions(
         cl::EnableErrs.ArgStr,
         cl::LogFileDbgs.ArgStr,
         cl::LogFileOuts.ArgStr,
+        cl::EnableShadowDescriptorTable.ArgStr,
+        cl::ShadowDescTablePtrHigh.ArgStr,
     };
 
     std::set<StringRef> effectingOptions;

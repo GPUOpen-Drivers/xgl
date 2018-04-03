@@ -1,12 +1,10 @@
 ###############################################################################
 # Entry point name                                  type    version/extension
 
-vkGetDeviceProcAddr                                 @none
-vkGetInstanceProcAddr                               @none
-
 vkCreateInstance                                    @none
 vkEnumerateInstanceExtensionProperties              @none
 vkEnumerateInstanceLayerProperties                  @none
+vkGetInstanceProcAddr                               @none
 
 vkCreateDevice                                      @icore 1.0
 vkDestroyInstance                                   @icore 1.0
@@ -117,6 +115,7 @@ vkFreeDescriptorSets                                @dcore 1.0
 vkFreeMemory                                        @dcore 1.0
 vkGetBufferMemoryRequirements                       @dcore 1.0
 vkGetDeviceMemoryCommitment                         @dcore 1.0
+vkGetDeviceProcAddr                                 @dcore 1.0
 vkGetDeviceQueue                                    @dcore 1.0
 vkGetEventStatus                                    @dcore 1.0
 vkGetFenceStatus                                    @dcore 1.0

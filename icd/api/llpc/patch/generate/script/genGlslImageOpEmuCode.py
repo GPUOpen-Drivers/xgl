@@ -1269,6 +1269,14 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
         else:
             return "float"
 
+    # Gets type of vdata register
+    def getVDataRegType(self):
+        return self._sampledType == SpirvSampledType.f16 and "<4 x half>" or "<4 x float>"
+
+    # Gets component type of vdata register
+    def getVDataRegCompType(self):
+        return self._sampledType == SpirvSampledType.f16 and "half" or "float"
+
     # Generates instruction to cast return value to sampled type.
     def genCastReturnValToSampledType(self, retVal, irOut):
         newRetVal = retVal
@@ -1597,8 +1605,9 @@ class BufferStoreGen(CodeGen):
 
         # Process image buffer store
         paramTexel = self.genCastTexelToSampledType(VarNames.texel, irOut)
-        irCall = "    call void @%s(<4 x float> %s, <4 x i32> %s, i32 %s, i32 0, %s)\n" % \
+        irCall = "    call void @%s(%s %s, <4 x i32> %s, i32 %s, i32 0, %s)\n" % \
                  (funcName,
+                  self.getVDataRegType(),
                   paramTexel,
                   VarNames.resource,
                   self._coordXYZW[0],
@@ -1616,7 +1625,10 @@ class BufferStoreGen(CodeGen):
         else:
             shouldNeverCall("")
 
-        funcName += ".v4f32"
+        if self._sampledType == SpirvSampledType.f16:
+            funcName += ".v4f16"
+        else:
+            funcName += ".v4f32"
 
         if not hasLlvmDecl(funcName):
             # Adds LLVM declaration for this function
@@ -1624,8 +1636,8 @@ class BufferStoreGen(CodeGen):
                 funcExternalDecl = "declare %s @%s(<4 x i32>, i32, i32, i1, i1) %s\n" % \
                                    (self.getBackendRetType(), funcName, self._attr)
             elif self._opKind == SpirvImageOpKind.write:
-                funcExternalDecl = "declare %s @%s(<4 x float>, <4 x i32>, i32, i32, i1, i1) %s\n" % \
-                                   (self.getBackendRetType(), funcName, self._attr)
+                funcExternalDecl = "declare %s @%s(%s, <4 x i32>, i32, i32, i1, i1) %s\n" % \
+                                   (self.getBackendRetType(), funcName, self.getVDataRegType(), self._attr)
             else:
                 shouldNeverCall()
             addLlvmDecl(funcName, funcExternalDecl)
@@ -1742,8 +1754,9 @@ class ImageStoreGen(CodeGen):
                    VarNames.resource)
             irOut.write(irPatchCall)
 
-        irCall = "    call void @%s(<4 x float> %s, %s %s, <8 x i32> %s, i32 15, %s)\n" \
+        irCall = "    call void @%s(%s %s, %s %s, <8 x i32> %s, i32 15, %s)\n" \
             % (funcName,
+               self.getVDataRegType(),
                vdataReg,
                self.getVAddrRegType(),
                vaddrReg,
@@ -1760,7 +1773,11 @@ class ImageStoreGen(CodeGen):
         if self._hasLod:
             funcName += ".mip"
 
-        funcName += ".v4f32"
+        if self._sampledType == SpirvSampledType.f16:
+            funcName += ".v4f16"
+        else:
+            funcName += ".v4f32"
+
         vaddrRegSize = self.getVAddrRegSize()
         funcName += vaddrRegSize == 1 and ".i32" or ".v%di32" % (vaddrRegSize)
 
@@ -1768,8 +1785,8 @@ class ImageStoreGen(CodeGen):
 
         if not hasLlvmDecl(funcName):
             # Adds LLVM declaration for this function
-            funcExternalDecl = "declare %s @%s(<4 x float>, %s, <8 x i32>,  i32, i1, i1, i1, i1) %s\n" % \
-                               (self.getBackendRetType(), funcName, self.getVAddrRegType(), \
+            funcExternalDecl = "declare %s @%s(%s, %s, <8 x i32>,  i32, i1, i1, i1, i1) %s\n" % \
+                               (self.getBackendRetType(), funcName, self.getVDataRegType(), self.getVAddrRegType(), \
                                 self._attr)
             addLlvmDecl(funcName, funcExternalDecl)
         return funcName
@@ -1787,7 +1804,7 @@ class ImageSampleGen(CodeGen):
                 self._opKind == SpirvImageOpKind.querylod
 
         retType     = self.getBackendRetType()
-        retElemType = self._sampledType == SpirvSampledType.f16 and "half" or "float"
+        retElemType = self.getVDataRegCompType()
         funcName    = self.getFuncName()
         resourceName = VarNames.resource
         # Dmask for gather4 instructions
@@ -2018,8 +2035,10 @@ def processLine(irOut, funcConfig, gfxLevel):
 
             # Support float16 return type for image sample, gather, read, write operations for GFX9+
             if gfxLevel >= GFX9 and opKind in (SpirvImageOpKind.sample, \
-                                               SpirvImageOpKind.fetch, \
-                                               SpirvImageOpKind.gather):
+                                               SpirvImageOpKind.fetch,  \
+                                               SpirvImageOpKind.gather, \
+                                               SpirvImageOpKind.read,   \
+                                               SpirvImageOpKind.write):
                 funcDef = FuncDef(mangledName, SpirvSampledType.f16)
                 funcDef.parse()
                 if not funcDef._returnFmaskId:

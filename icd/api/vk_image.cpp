@@ -288,12 +288,12 @@ static VkResult ConvertImageCreateInfo(
     VkImageUsageFlags      imageUsage = pCreateInfo->usage;
     const RuntimeSettings& settings   = pDevice->GetRuntimeSettings();
 
-    // VK_IMAGE_CREATE_EXTENDED_USAGE_BIT_KHR indicates that the image can be created with usage flags that are not
+    // VK_IMAGE_CREATE_EXTENDED_USAGE_BIT indicates that the image can be created with usage flags that are not
     // supported for the format the image is created with but are supported for at least one format a VkImageView
     // created from the image can have.  For PAL, restrict the usage to only those supported for this format and set
     // formatChangeSrd and formatChangeTgt flags to handle the other usages.  This image will still contain the superset
     // of the usages to makes sure barriers properly handle each.
-    if ((pCreateInfo->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT_KHR) != 0)
+    if ((pCreateInfo->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT) != 0)
     {
         VkFormatProperties formatProperties;
 
@@ -571,9 +571,9 @@ VkResult Image::Create(
     union
     {
         const VkStructHeader*                       pHeader;
+        const VkExternalMemoryImageCreateInfo*      pExternalMemoryImageCreateInfo;
         const VkImageCreateInfo*                    pVkImageCreateInfo;
-        const VkImageSwapchainCreateInfoKHX*        pVkImageSwapchainCreateInfoKHX;
-        const VkExternalMemoryImageCreateInfoKHR*   pExternalMemoryImageCreateInfoKHR;
+        const VkImageSwapchainCreateInfoKHR*        pVkImageSwapchainCreateInfoKHR;
         const VkImageFormatListCreateInfoKHR*       pVkImageFormatListCreateInfoKHR;
     };
 
@@ -593,37 +593,37 @@ VkResult Image::Create(
 
             break;
         }
-        case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO_KHR:
+        case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
         {
             palCreateInfo.flags.invariant = 1;
 
-            VkExternalMemoryPropertiesKHR externalMemoryProperties = {};
+            VkExternalMemoryProperties externalMemoryProperties = {};
 
             pDevice->VkPhysicalDevice()->GetExternalMemoryProperties(
                 isSparse,
-                static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExternalMemoryImageCreateInfoKHR->handleTypes),
+                static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExternalMemoryImageCreateInfo->handleTypes),
                 &externalMemoryProperties);
 
-            if (externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR)
+            if (externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT)
             {
                 imageFlags.dedicatedRequired = true;
             }
 
-            if (externalMemoryProperties.externalMemoryFeatures & (VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR |
-                                                                   VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR))
+            if (externalMemoryProperties.externalMemoryFeatures & (VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
+                                                                   VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT))
             {
                 imageFlags.externallyShareable = true;
 
-                if ((pExternalMemoryImageCreateInfoKHR->handleTypes &
-                    (VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT_KHR |
-                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT_KHR |
-                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_HEAP_BIT_KHR |
-                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT_KHR)) != 0)
+                if ((pExternalMemoryImageCreateInfo->handleTypes &
+                    (VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT     |
+                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT |
+                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_HEAP_BIT        |
+                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_RESOURCE_BIT)) != 0)
                 {
                     imageFlags.externalD3DHandle = true;
                 }
 
-                if ((pExternalMemoryImageCreateInfoKHR->handleTypes &
+                if ((pExternalMemoryImageCreateInfo->handleTypes &
                      VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT) != 0)
                 {
                     imageFlags.externalPinnedHost = true;
@@ -632,7 +632,7 @@ VkResult Image::Create(
 
             break;
         }
-        case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHX:
+        case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR:
         {
             // TODO: SWDEV-120361 - peer memory swapchain binding not implemented yet.
             VK_NOT_IMPLEMENTED;
@@ -673,8 +673,8 @@ VkResult Image::Create(
         }
     }
 
-    // If flags contains VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT_KHR, imageType must be VK_IMAGE_TYPE_3D
-    VK_ASSERT(((pImageCreateInfo->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT_KHR) == 0) ||
+    // If flags contains VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT, imageType must be VK_IMAGE_TYPE_3D
+    VK_ASSERT(((pImageCreateInfo->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) == 0) ||
                (pImageCreateInfo->imageType == VK_IMAGE_TYPE_3D));
 
     if (imageFlags.androidPresentable)
@@ -1645,9 +1645,10 @@ VK_INLINE uint32_t Image::GetLayoutEngines(
     ) const
 {
     uint32_t engines;
-    // For now, we only want to full decompress the image if queueFamilyIndex is VK_QUEUE_FAMILY_EXTERNAL_KHR, and it's
-    // equal to set engines to Pal::LayoutAllEngines.
-    if (queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL_KHR)
+    // For now, we only want to full decompress the image if queueFamilyIndex is VK_QUEUE_FAMILY_EXTERNAL_KHR
+    // or VK_QUEUE_FAMILY_FOREIGN_EXT, and it's equal to set engines to Pal::LayoutAllEngines.
+    if (queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL_KHR ||
+        queueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
     {
         engines = Pal::LayoutAllEngines;
     }
@@ -1739,10 +1740,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2(
     VkDevice                                    device,
-    const VkImageMemoryRequirementsInfo2KHR*    pInfo,
-    VkMemoryRequirements2KHR*                   pMemoryRequirements)
+    const VkImageMemoryRequirementsInfo2*       pInfo,
+    VkMemoryRequirements2*                      pMemoryRequirements)
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
     VK_ASSERT((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
@@ -1750,12 +1751,12 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2KHR(
 
     union
     {
-        const VkStructHeader*                    pHeader;
-        const VkImageMemoryRequirementsInfo2KHR* pRequirementsInfo2;
+        const VkStructHeader*                 pHeader;
+        const VkImageMemoryRequirementsInfo2* pRequirementsInfo2;
     };
 
     pRequirementsInfo2 = pInfo;
-    pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2_KHR);
+    pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_IMAGE_MEMORY_REQUIREMENTS_INFO_2);
 
     if (pHeader != nullptr)
     {
@@ -1763,13 +1764,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2KHR(
         Image* pImage = Image::ObjectFromHandle(pRequirementsInfo2->image);
         pImage->GetMemoryRequirements(pMemReq);
 
-        if (pMemoryRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR)
+        if (pMemoryRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2)
         {
-            VkMemoryDedicatedRequirementsKHR* pMemDedicatedRequirements =
-                static_cast<VkMemoryDedicatedRequirementsKHR*>(pMemoryRequirements->pNext);
+            VkMemoryDedicatedRequirements* pMemDedicatedRequirements =
+                static_cast<VkMemoryDedicatedRequirements*>(pMemoryRequirements->pNext);
 
             if ((pMemDedicatedRequirements != nullptr) &&
-                (pMemDedicatedRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS_KHR))
+                (pMemDedicatedRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS))
             {
                 pMemDedicatedRequirements->prefersDedicatedAllocation  = pImage->DedicatedMemoryRequired();
                 pMemDedicatedRequirements->requiresDedicatedAllocation = pImage->DedicatedMemoryRequired();
@@ -1779,11 +1780,11 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2(
     VkDevice                                        device,
-    const VkImageSparseMemoryRequirementsInfo2KHR*  pInfo,
+    const VkImageSparseMemoryRequirementsInfo2*     pInfo,
     uint32_t*                                       pSparseMemoryRequirementCount,
-    VkSparseImageMemoryRequirements2KHR*            pSparseMemoryRequirements)
+    VkSparseImageMemoryRequirements2*               pSparseMemoryRequirements)
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
     VK_ASSERT((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
@@ -1791,12 +1792,12 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2KHR(
 
     union
     {
-        const VkStructHeader*                          pHeader;
-        const VkImageSparseMemoryRequirementsInfo2KHR* pRequirementsInfo2;
+        const VkStructHeader*                       pHeader;
+        const VkImageSparseMemoryRequirementsInfo2* pRequirementsInfo2;
     };
 
     pRequirementsInfo2 = pInfo;
-    pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2_KHR);
+    pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2);
 
     if (pHeader != nullptr)
     {

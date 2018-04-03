@@ -69,6 +69,10 @@ opt<bool> InRegEsGsLdsSize("inreg-esgs-lds-size",
                           desc("For GS on-chip, add esGsLdsSize in user data"),
                           init(true));
 
+extern opt<bool> EnableShadowDescriptorTable;
+
+extern opt<uint32_t> ShadowDescTablePtrHigh;
+
 } // cl
 
 } // llvm
@@ -204,20 +208,17 @@ bool PatchEntryPointMutate::runOnModule(
                                             "",
                                             &*pInsertPos);
     auto pInternalTablePtrLow = GetFunctionArgument(pEntryPoint, 0);
-    Value* pDescTablePtrHigh = ConstantInt::get(m_pContext->Int32Ty(), m_pContext->GetDescriptorTablePtrHigh());
+
     auto pDescTablePtrTy = PointerType::get(ArrayType::get(m_pContext->Int8Ty(), UINT32_MAX), ADDR_SPACE_CONST);
 
     // Use s_getpc if descriptor table ptr high isn't available
-    if (m_pContext->GetDescriptorTablePtrHigh() == InvalidValue)
-    {
-        std::vector<Value*> args; // Empty arguments
-        Value* pPc = EmitCall(m_pModule, "llvm.amdgcn.s.getpc", m_pContext->Int64Ty(), args, NoAttrib, &*pInsertPos);
-        pPc = new BitCastInst(pPc, m_pContext->Int32x2Ty(), "", &*pInsertPos);
-        pDescTablePtrHigh = ExtractElementInst::Create(pPc,
-                                                       ConstantInt::get(m_pContext->Int32Ty(), 1),
-                                                       "",
-                                                       &*pInsertPos);
-    }
+    std::vector<Value*> args; // Empty arguments
+    Value* pPc = EmitCall(m_pModule, "llvm.amdgcn.s.getpc", m_pContext->Int64Ty(), args, NoAttrib, &*pInsertPos);
+    pPc = new BitCastInst(pPc, m_pContext->Int32x2Ty(), "", &*pInsertPos);
+    Value* pDescTablePtrHigh = ExtractElementInst::Create(pPc,
+                                                          ConstantInt::get(m_pContext->Int32Ty(), 1),
+                                                          "",
+                                                          &*pInsertPos);
 
     pIntfData->pInternalTablePtr = InitPointerWithValue(pInternalTablePtr,
                                                         pInternalTablePtrLow,
@@ -359,6 +360,22 @@ bool PatchEntryPointMutate::runOnModule(
                                                                          pDescTablePtrHigh,
                                                                          pDescTablePtrTy,
                                                                          &*pInsertPos);
+                if (cl::EnableShadowDescriptorTable)
+                {
+                    Value* pShadowDescTablePtrHigh =
+                        ConstantInt::get(m_pContext->Int32Ty(), cl::ShadowDescTablePtrHigh);
+                    auto pShadowDescTablePtr = new AllocaInst(m_pContext->Int32x2Ty(),
+                                                              dataLayout.getAllocaAddrSpace(),
+                                                              "",
+                                                              &*pInsertPos);
+
+                    auto descSet = pNode->tablePtr.pNext->srdRange.set;
+                    pIntfData->shadowDescTablePtrs[descSet] = InitPointerWithValue(pShadowDescTablePtr,
+                                                                                   pDescTablePtrLow,
+                                                                                   pShadowDescTablePtrHigh,
+                                                                                   pDescTablePtrTy,
+                                                                                   &*pInsertPos);
+                }
                 break;
             }
         case ResourceMappingNodeType::IndirectUserDataVaPtr:
@@ -699,14 +716,6 @@ bool PatchEntryPointMutate::runOnModule(
     const char* pEntryName = Util::Abi::PipelineAbiSymbolNameStrings[static_cast<uint32_t>(entryStage)];
     pEntryPoint->setName(pEntryName);
     pEntryPoint->setDLLStorageClass(GlobalValue::DLLExportStorageClass);
-
-    // NOTE: Set function attribute for hard-coded high part of the GIT address. Use 0xFFFFFFFF (-1)
-    // as don't-care value to mean not set (use s_getpc instead). Current hardware only allows 16
-    // bits for this value.
-    if (m_pContext->GetDescriptorTablePtrHigh() != InvalidValue)
-    {
-        pEntryPoint->addFnAttr("amdgpu-git-ptr-high", Twine(m_pContext->GetDescriptorTablePtrHigh()).str());
-    }
 
     LLPC_VERIFY_MODULE_FOR_PASS(module);
 

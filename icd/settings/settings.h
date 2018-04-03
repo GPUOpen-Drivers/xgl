@@ -52,6 +52,14 @@ extern void ProcessSettings(
     AppProfile*      pAppProfile,
 #endif
     RuntimeSettings* pSettings);
+
+extern void ValidateSettings(
+    Pal::IDevice*    pPalDevice,
+    RuntimeSettings* pSettings);
+
+extern void UpdatePalSettings(
+    Pal::IDevice*          pPalDevice,
+    const RuntimeSettings* pSettings);
 };
 
 #endif // __SETTINGS_SETTINGS_H__

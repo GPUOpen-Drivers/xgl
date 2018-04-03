@@ -416,36 +416,62 @@ static char* GetExecutableName(
 // Parse profile data to uint32_t
 static uint32_t ParseProfileDataToUint32(
     const wchar_t* wcharData,
-    bool           isUser3DAreaFormat)
+    bool           isUser3DAreaFormat,
+    const uint32_t targetAppGpuID = 0u)
 {
     uint32_t dataValue;
-    bool haveGoodData = false;
+    bool     haveGoodData = false;
+
     if (isUser3DAreaFormat == true)
     {
         // The data in user 3D area is in format: "0x0200::2;;".
         // On MGPU systems, the data can look like this: "0x0300::2;;0x0400::2;;"
-        // We need to skip the first part which is GPU ID and take the first number between :: and ;;
-        const wchar_t* pStart = wcschr(wcharData, L':'); // search pattern "::" forward
-        const wchar_t* pEnd   = wcschr(wcharData, L';'); // search pattern ";;" forward
-        if ((pStart != nullptr) &&
-            (pEnd   != nullptr) &&
-            (*(pStart + 1) == L':') &&
-            ((pStart + 2) < pEnd))
+        const wchar_t* pStart      = wcharData;
+        const wchar_t* pMiddle     = wcschr(wcharData, L':'); // search pattern "::" forward
+        const wchar_t* pEnd        = wcschr(wcharData, L';'); // search pattern ";;" forward
+        bool           ignoreGpuID = false;
+
+        do
         {
-            constexpr uint32_t stringLen = 50;
-            wchar_t pParsedVal[stringLen];
-            pStart += 2;  // Move past the first 2 ':' characters
-            VK_ASSERT(pStart < pEnd); //This should never happen due to above checks.
-            uint32_t size = static_cast<uint32_t>(pEnd - pStart);
-            VK_ASSERT(size <= stringLen); // If this happens we will truncate data but not crash.
-            size = Util::Min(size, stringLen);
+            uint32_t appGpuID = 0u;
 
-            wcsncpy(pParsedVal, pStart, size);
-            pParsedVal[size] = '\0';
+            if ((pStart != nullptr) &&
+                (pMiddle != nullptr) &&
+                (pStart < pMiddle))
+            {
+                appGpuID = wcstoul(pStart, NULL, 0);;
+            }
 
-            dataValue = wcstoul(pParsedVal, NULL, 0);
-            haveGoodData = true;
-        }
+            if (((appGpuID == targetAppGpuID) || ignoreGpuID) &&
+                (pMiddle != nullptr) &&
+                (pEnd != nullptr) &&
+                (*(pMiddle + 1) == L':') &&
+                ((pMiddle + 2) < pEnd))
+            {
+                pMiddle += 2;  // Move past the first 2 ':' characters
+                dataValue = wcstoul(pMiddle, NULL, 0);
+
+                haveGoodData = true;
+            }
+
+            pStart  = pEnd + 2;
+            pEnd    = wcschr(pStart, L';'); // search pattern ";;" forward
+            pMiddle = wcschr(pStart, L':'); // search pattern "::" forward
+
+            if ((pEnd == nullptr) &&
+                (!haveGoodData) &&
+                (!ignoreGpuID))
+            {
+                // We could not find our target GPU ID, so we will use the data for
+                // the GPU that was listed first
+                pStart      = wcharData; // point to beginning
+                pMiddle     = wcschr(wcharData, L':'); // search pattern "::" forward from beginning
+                pEnd        = wcschr(wcharData, L';'); // search pattern ";;" forward from beginning
+                ignoreGpuID = true;
+            }
+
+         } while ((pEnd != nullptr) &&
+                  (!haveGoodData));
     }
 
     if (haveGoodData == false)
@@ -469,20 +495,32 @@ void ProcessProfileEntry(
     // Skip if the data is empty
     if (dataSize != 0)
     {
-        const wchar_t* wcharData = reinterpret_cast<const wchar_t *>(data);
-        bool*     pBoolSetting   = nullptr;
-        uint32_t* pUint32Setting = nullptr;
-        bool assertOnZero   = false;
-        bool doNotSetOnZero = false;
+        const wchar_t* wcharData      = reinterpret_cast<const wchar_t *>(data);
+        bool*          pBoolSetting   = nullptr;
+        uint32_t*      pUint32Setting = nullptr;
+        bool           assertOnZero   = false;
+        bool           doNotSetOnZero = false;
+        uint32_t       appGpuID       = 0u;
+
+        if (pRuntimeSettings != nullptr)
+        {
+            appGpuID = pRuntimeSettings->appGpuID;
+
+            if (strcmp(entryName, "TFQ") == 0 && (pRuntimeSettings != nullptr))
+            {
+                pUint32Setting = reinterpret_cast<uint32_t*>(&(pRuntimeSettings->vulkanTexFilterQuality));
+            }
+
+        }
 
         if (pBoolSetting != nullptr)
         {
-            uint32_t dataValue = ParseProfileDataToUint32(wcharData, isUser3DAreaFormat);
+            uint32_t dataValue = ParseProfileDataToUint32(wcharData, isUser3DAreaFormat, appGpuID);
             *pBoolSetting = dataValue ? true : false;
         }
         else if (pUint32Setting != nullptr)
         {
-            uint32_t dataValue = ParseProfileDataToUint32(wcharData, isUser3DAreaFormat);
+            uint32_t dataValue = ParseProfileDataToUint32(wcharData, isUser3DAreaFormat, appGpuID);
 #if DEBUG
             if (assertOnZero)
             {

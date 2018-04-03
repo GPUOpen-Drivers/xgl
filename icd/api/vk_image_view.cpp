@@ -84,6 +84,7 @@ void ImageView::BuildImageSrds(
     info.viewType         = VkToPalImageViewType(pCreateInfo->viewType);
     info.swizzledFormat   = RemapFormatComponents(viewFormat, pCreateInfo->components);
     info.samplePatternIdx = Device::GetDefaultSamplePatternIndex(pImage->GetImageSamples());
+    info.texOptLevel      = VkToPalTexFilterQuality(pDevice->GetRuntimeSettings().vulkanTexFilterQuality);
 
     // NOTE: Unlike for color views, we don't have to mess with the subresource range for 3D views.
     // When zRangeValid is 0, PAL still enables all depth slices on that subresource visible to the view
@@ -262,7 +263,7 @@ VkResult ImageView::Create(
     union
     {
         const VkStructHeader*                pHeader;
-        const VkImageViewUsageCreateInfoKHR* pUsageInfo;
+        const VkImageViewUsageCreateInfo*    pUsageInfo;
     };
 
     VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
@@ -271,7 +272,7 @@ VkResult ImageView::Create(
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO_KHR:
+        case VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO:
             // The image view usage must be a subset of the usage of the image it is created from.  For uncompressed
             // views of compressed images or format compatible image views, VK_IMAGE_CREATE_EXTENDED_USAGE_BIT_KHR
             // allows the image to be created with usage flags that are not supported for the format the image is created
@@ -352,7 +353,7 @@ VkResult ImageView::Create(
     // When the image type is a 3D texture, a single level-layer 3D texture subresource describes all depth slices of
     // that texture.  This is implied by Table 8 of the spec, where the description for shader reads from a 3D texture
     // of arbitrary depth through VK_IMAGE_VIEW_TYPE_3D requires that the PAL subresource range be set to
-    // arraySlice = 0, numSlices = 1.  However, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT_KHR permits rendering to 3D
+    // arraySlice = 0, numSlices = 1.  However, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT permits rendering to 3D
     // slices as 2D by specifying a baseArrayLayer >= 0 and layerCount >= 1 in VkImageSubresourceRange, which doesn't
     // directly map to the PAL subresource range anymore.  Separate this information from the subresource range and
     // have the view keep track of a 3D texture zRange for attachment operations like clears.

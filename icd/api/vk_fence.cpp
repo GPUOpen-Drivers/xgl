@@ -55,7 +55,7 @@ VkResult Fence::Create(
     {
         const VkStructHeader*                  pHeader;
         const VkFenceCreateInfo*               pVkFenceCreateInfo;
-        const VkExportFenceCreateInfoKHR*      pVkExportCreateInfoKHR;
+        const VkExportFenceCreateInfo*         pVkExportCreateInfo;
     };
 
     Pal::FenceCreateInfo palFenceCreateInfo = {};
@@ -68,7 +68,7 @@ VkResult Fence::Create(
             palFenceCreateInfo.flags.signaled = (pVkFenceCreateInfo->flags & VK_FENCE_CREATE_SIGNALED_BIT) != 0;
             break;
         }
-        case VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO_KHR:
+        case VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO:
         {
             // We don't need to check the handleTypes here.
             break;

@@ -126,7 +126,7 @@ VkResult Memory::Create(
                 if (pDevice->NumPalDevices() > 1)
                 {
                     multiInstanceHeap = (memoryProperties.memoryHeaps[pInfo->memoryTypeIndex].flags &
-                        VK_MEMORY_HEAP_MULTI_INSTANCE_BIT_KHX) != 0;
+                                         VK_MEMORY_HEAP_MULTI_INSTANCE_BIT) != 0;
 
                     if (multiInstanceHeap)
                     {
@@ -156,28 +156,28 @@ VkResult Memory::Create(
                 {
                     const VkImportMemoryFdInfoKHR* pImportMemoryFdInfo =
                         reinterpret_cast<const VkImportMemoryFdInfoKHR *>(pHeader);
-                    VK_ASSERT(pImportMemoryFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
+                    VK_ASSERT(pImportMemoryFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
                     handle = pImportMemoryFdInfo->fd;
                     isExternal = true;
                 }
                 break;
-            case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO_KHR:
+            case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO:
             {
-                const VkExportMemoryAllocateInfoKHR* pExportMemory =
-                    reinterpret_cast<const VkExportMemoryAllocateInfoKHR *>(pHeader);
-                    VK_ASSERT(pExportMemory->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
+                const VkExportMemoryAllocateInfo* pExportMemory =
+                    reinterpret_cast<const VkExportMemoryAllocateInfo *>(pHeader);
+                    VK_ASSERT(pExportMemory->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
                     createInfo.flags.interprocess = 1;
                     // Todo: we'd better to pass in the handleTypes to the Pal as well.
                     // The supported handleType should also be provided by Pal as Device Capabilities.
             }
             break;
 
-            case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO_KHX:
+            case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO:
             {
-                const VkMemoryAllocateFlagsInfoKHX * pMemoryAllocateFlags =
-                    reinterpret_cast<const VkMemoryAllocateFlagsInfoKHX *>(pHeader);
+                const VkMemoryAllocateFlagsInfo * pMemoryAllocateFlags =
+                    reinterpret_cast<const VkMemoryAllocateFlagsInfo *>(pHeader);
 
-                if ((pMemoryAllocateFlags->flags & VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT_KHX) != 0)
+                if ((pMemoryAllocateFlags->flags & VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT) != 0)
                 {
                     VK_ASSERT(pMemoryAllocateFlags->deviceMask != 0);
                     VK_ASSERT((pDevice->GetPalDeviceMask() & pMemoryAllocateFlags->deviceMask) ==
@@ -188,10 +188,10 @@ VkResult Memory::Create(
             }
             break;
 
-            case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO_KHR:
+            case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO:
             {
-                const VkMemoryDedicatedAllocateInfoKHR* pDedicatedInfo =
-                    reinterpret_cast<const VkMemoryDedicatedAllocateInfoKHR *>(pHeader);
+                const VkMemoryDedicatedAllocateInfo* pDedicatedInfo =
+                    reinterpret_cast<const VkMemoryDedicatedAllocateInfo *>(pHeader);
                 if (pDedicatedInfo->image != VK_NULL_HANDLE)
                 {
                     pBoundImage       = Image::ObjectFromHandle(pDedicatedInfo->image);
@@ -265,7 +265,7 @@ VkResult Memory::Create(
 
                     if (palResult != Pal::Result::Success)
                     {
-                        vkResult = VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
+                        vkResult = VK_ERROR_INVALID_EXTERNAL_HANDLE;
                     }
                 }
 
@@ -346,7 +346,7 @@ VkResult Memory::Create(
                     }
                     else if (pinned)
                     {
-                        vkResult = VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
+                        vkResult = VK_ERROR_INVALID_EXTERNAL_HANDLE;
                     }
                     else if (palResult == Pal::Result::ErrorOutOfGpuMemory)
                     {
@@ -720,7 +720,8 @@ VkResult Memory::OpenExternalMemory(
 
 // =====================================================================================================================
 // Returns the external shared handle of the memory object.
-Pal::OsExternalHandle Memory::GetShareHandle(VkExternalMemoryHandleTypeFlagBitsKHR handleType)
+Pal::OsExternalHandle Memory::GetShareHandle(
+    VkExternalMemoryHandleTypeFlagBits handleType)
 {
     VK_ASSERT((m_pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
               m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_EXTERNAL_MEMORY_FD)             ||
@@ -921,7 +922,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdKHR(
     const VkMemoryGetFdInfoKHR*             pGetFdInfo,
     int*                                    pFd)
 {
-    VK_ASSERT(pGetFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
+    VK_ASSERT(pGetFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
 
     *pFd = Memory::ObjectFromHandle(pGetFdInfo->memory)->GetShareHandle(pGetFdInfo->handleType);
 
@@ -930,7 +931,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdKHR(
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdPropertiesKHR(
     VkDevice                                device,
-    VkExternalMemoryHandleTypeFlagBitsKHR   handleType,
+    VkExternalMemoryHandleTypeFlagBits      handleType,
     int                                     fd,
     VkMemoryFdPropertiesKHR*                pMemoryFdProperties)
 {

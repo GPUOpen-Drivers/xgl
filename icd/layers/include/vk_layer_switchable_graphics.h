@@ -35,7 +35,7 @@
 #pragma once
 
 #include "include/khronos/vulkan.h"
-#include "include/khronos/sdk-1.0/vk_layer.h"
+#include "include/khronos/vk_layer.h"
 
 namespace vk
 {

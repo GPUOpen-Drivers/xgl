@@ -103,11 +103,11 @@ public:
   bool isTypeScalar() const;
   bool isTypeVector() const;
   bool isTypeMatrix() const;
-  bool isTypeVectorInt() const;
-  bool isTypeVectorFloat() const;
+  bool isTypeVectorInt(unsigned Bits = 0) const;
+  bool isTypeVectorFloat(unsigned Bits = 0) const;
   bool isTypeVectorBool() const;
-  bool isTypeVectorOrScalarInt() const;
-  bool isTypeVectorOrScalarFloat() const;
+  bool isTypeVectorOrScalarInt(unsigned Bits = 0) const;
+  bool isTypeVectorOrScalarFloat(unsigned Bits = 0) const;
   bool isTypeVectorOrScalarBool() const;
 };
 

@@ -305,12 +305,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHX(
     const VkAcquireNextImageInfoKHX*            pAcquireInfo,
     uint32_t*                                   pImageIndex);
 
-#ifdef ICD_VULKAN_1_1
 VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHR(
     VkDevice                                    device,
     const VkAcquireNextImageInfoKHR*            pAcquireInfo,
     uint32_t*                                   pImageIndex);
-#endif
 
 VKAPI_ATTR void VKAPI_CALL vkSetHdrMetadataEXT(
     VkDevice                                    device,

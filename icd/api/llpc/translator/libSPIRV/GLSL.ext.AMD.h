@@ -28,7 +28,7 @@
 #define GLSLextAMD_H
 
 static const int GLSLextAMDVersion = 100;
-static const int GLSLextAMDRevision = 6;
+static const int GLSLextAMDRevision = 7;
 
 // SPV_AMD_shader_ballot
 static const char* const E_SPV_AMD_shader_ballot = "SPV_AMD_shader_ballot";
@@ -101,5 +101,13 @@ static const char* const E_SPV_AMD_shader_image_load_store_lod = "SPV_AMD_shader
 
 // SPV_AMD_shader_fragment_mask
 static const char* const E_SPV_AMD_shader_fragment_mask = "SPV_AMD_shader_fragment_mask";
+
+// SPV_AMD_gpu_shader_half_float_fetch
+static const char* const E_SPV_AMD_gpu_shader_half_float_fetch = "SPV_AMD_gpu_shader_half_float_fetch";
+
+// SPV_AMD_property_id_attachment
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+static const char* const E_SPV_AMD_property_id_attachment = "SPV_AMD_property_id_attachment";
+#endif
 
 #endif  // #ifndef GLSLextAMD_H

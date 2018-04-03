@@ -40,9 +40,9 @@ namespace vk
 // =====================================================================================================================
 VkResult DescriptorUpdateTemplate::Create(
     const Device*                                   pDevice,
-    const VkDescriptorUpdateTemplateCreateInfoKHR*  pCreateInfo,
+    const VkDescriptorUpdateTemplateCreateInfo*     pCreateInfo,
     const VkAllocationCallbacks*                    pAllocator,
-    VkDescriptorUpdateTemplateKHR*                  pDescriptorUpdateTemplate)
+    VkDescriptorUpdateTemplate*                     pDescriptorUpdateTemplate)
 {
     VkResult                    result      = VK_SUCCESS;
     const uint32_t              numEntries  = pCreateInfo->descriptorUpdateEntryCount;
@@ -65,14 +65,14 @@ VkResult DescriptorUpdateTemplate::Create(
     {
         // It's safe to ignore pCreateInfo.pipelineBindPoint, pCreateInfo.pipelineLayout, and pCreateInfo.set because
         // we don't support VK_KHR_push_descriptors.
-        VK_ASSERT(pCreateInfo->templateType == VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET_KHR);
+        VK_ASSERT(pCreateInfo->templateType == VK_DESCRIPTOR_UPDATE_TEMPLATE_TYPE_DESCRIPTOR_SET);
 
         TemplateUpdateInfo* pEntries = static_cast<TemplateUpdateInfo*>(Util::VoidPtrInc(pSysMem, apiSize));
 
         for (uint32_t ii = 0; ii < numEntries; ii++)
         {
-            const VkDescriptorUpdateTemplateEntryKHR&   srcEntry    = pCreateInfo->pDescriptorUpdateEntries[ii];
-            const DescriptorSetLayout::BindingInfo&     dstBinding  = pLayout->Binding(srcEntry.dstBinding);
+            const VkDescriptorUpdateTemplateEntry&  srcEntry   = pCreateInfo->pDescriptorUpdateEntries[ii];
+            const DescriptorSetLayout::BindingInfo& dstBinding = pLayout->Binding(srcEntry.dstBinding);
 
             pEntries[ii].descriptorCount                = srcEntry.descriptorCount;
             pEntries[ii].srcOffset                      = srcEntry.offset;
@@ -424,9 +424,9 @@ namespace entry
 {
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorUpdateTemplateKHR(
+VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorUpdateTemplate(
     VkDevice                                        device,
-    VkDescriptorUpdateTemplateKHR                   descriptorUpdateTemplate,
+    VkDescriptorUpdateTemplate                      descriptorUpdateTemplate,
     const VkAllocationCallbacks*                    pAllocator)
 {
     if (descriptorUpdateTemplate != VK_NULL_HANDLE)
@@ -439,10 +439,10 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorUpdateTemplateKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSetWithTemplateKHR(
+VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSetWithTemplate(
     VkDevice                                        device,
     VkDescriptorSet                                 descriptorSet,
-    VkDescriptorUpdateTemplateKHR                   descriptorUpdateTemplate,
+    VkDescriptorUpdateTemplate                      descriptorUpdateTemplate,
     const void*                                     pData)
 {
     Device*                   pDevice   = ApiDevice::ObjectFromHandle(device);

@@ -52,16 +52,16 @@ VkResult Semaphore::Create(
 
     if (pCreateInfo->pNext)
     {
-        const VkExportSemaphoreCreateInfoKHR* pExportCreateInfo =
-                        static_cast<const VkExportSemaphoreCreateInfoKHR*>(pCreateInfo->pNext);
+        const VkExportSemaphoreCreateInfo* pExportCreateInfo =
+                        static_cast<const VkExportSemaphoreCreateInfo*>(pCreateInfo->pNext);
 
-        VK_ASSERT(pExportCreateInfo->sType == VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO_KHR);
+        VK_ASSERT(pExportCreateInfo->sType == VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO);
 
         // mark this semaphore as shareable.
         palCreateInfo.flags.shareable         = 1;
         palCreateInfo.flags.externalOpened    = 1;
         palCreateInfo.flags.sharedViaNtHandle = (pExportCreateInfo->handleTypes  ==
-                                                 VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR);
+                                                 VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT);
     }
 
     void* pMemory = pAllocator->pfnAllocation(
@@ -108,7 +108,7 @@ VkResult Semaphore::Create(
 // Get external handle from the semaphore object.
 VkResult Semaphore::GetShareHandle(
     Device*                                     device,
-    VkExternalSemaphoreHandleTypeFlagBitsKHR    handleType,
+    VkExternalSemaphoreHandleTypeFlagBits       handleType,
     Pal::OsExternalHandle*                      pHandle)
 {
     *pHandle = m_pPalSemaphore->ExportExternalHandle();
@@ -119,17 +119,17 @@ VkResult Semaphore::GetShareHandle(
 // Import semaphore
 VkResult Semaphore::ImportSemaphore(
     Device*                                     pDevice,
-    VkExternalSemaphoreHandleTypeFlagsKHR       handleType,
+    VkExternalSemaphoreHandleTypeFlags          handleType,
     const Pal::OsExternalHandle                 handle,
-    VkSemaphoreImportFlagsKHR                   importFlags)
+    VkSemaphoreImportFlags                      importFlags)
 {
     VkResult result = VK_SUCCESS;
     Pal::ExternalQueueSemaphoreOpenInfo palOpenInfo = {};
-    PAL_ASSERT(handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
+    PAL_ASSERT(handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
     palOpenInfo.externalSemaphore  = handle;
     palOpenInfo.flags.crossProcess = true;
 
-    palOpenInfo.flags.sharedViaNtHandle = handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT_KHR;
+    palOpenInfo.flags.sharedViaNtHandle = handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
 
     //Todo: Check whether pDevice is the same as the one created the semaphore.
 
@@ -157,7 +157,7 @@ VkResult Semaphore::ImportSemaphore(
 
             if (palResult == Pal::Result::Success)
             {
-                if ((importFlags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT_KHR))
+                if ((importFlags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT))
                 {
                     SetPalTemporarySemaphore(pPalSemaphore);
                 }

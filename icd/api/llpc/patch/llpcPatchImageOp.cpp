@@ -41,6 +41,18 @@
 using namespace llvm;
 using namespace Llpc;
 
+namespace llvm
+{
+
+namespace cl
+{
+
+extern opt<bool> EnableShadowDescriptorTable;
+
+} // cl
+
+} // llvm
+
 namespace Llpc
 {
 
@@ -129,6 +141,12 @@ void PatchImageOp::visitCallInst(
                                     (pNode->type == ResourceMappingNodeType::DescriptorCombinedTexture))
                                 {
                                     pResourceNode = pNode;
+                                    // NOTE: When shadow descriptor table is enable, we need get F-mask descriptor
+                                    // node from associated multi-sampled texture resource node.
+                                    if (cl::EnableShadowDescriptorTable)
+                                    {
+                                        pFmaskNode = pNode;
+                                    }
                                 }
                                 else if (pNode->type == ResourceMappingNodeType::DescriptorFmask)
                                 {
@@ -264,7 +282,23 @@ void PatchImageOp::visitCallInst(
                 m_imageCalls.insert(&callInst);
             }
         }
-        else if ((imageCallMeta.OpKind == ImageOpFetch) && (imageCallMeta.Dim == DimBuffer))
+        else if ((imageCallMeta.Dim == DimBuffer) &&
+                 ((imageCallMeta.OpKind == ImageOpFetch) ||
+                  (imageCallMeta.OpKind == ImageOpRead) ||
+                  (imageCallMeta.OpKind == ImageOpWrite) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicExchange) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicCompareExchange) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicIIncrement) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicIDecrement) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicIAdd) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicISub) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicSMin) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicUMin) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicSMax) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicUMax) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicAnd) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicOr) ||
+                  (imageCallMeta.OpKind == ImageOpAtomicXor)))
         {
             // TODO: This is a workaround and should be removed after backend compiler fixes it. The issue is: for
             // GFX9, when texel offset is constant zero, backend will unset "idxen" flag and provide no VGPR as

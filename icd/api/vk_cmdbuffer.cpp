@@ -537,7 +537,7 @@ VkResult CmdBuffer::Initialize(
 
     if (result == Pal::Result::Success)
     {
-        result = m_vbMgr.Initialize(this, pVbMem);
+        result = m_vbMgr.Initialize(pVbMem);
     }
 
     if (result == Pal::Result::Success)
@@ -1023,9 +1023,9 @@ VkResult CmdBuffer::Begin(
 
     union
     {
-        const VkStructHeader*                         pHeader;
-        const VkCommandBufferBeginInfo*               pInfo;
-        const VkDeviceGroupCommandBufferBeginInfoKHX* pDeviceGroupInfo;
+        const VkStructHeader*                      pHeader;
+        const VkCommandBufferBeginInfo*            pInfo;
+        const VkDeviceGroupCommandBufferBeginInfo* pDeviceGroupInfo;
     };
 
     RenderPass*  pRenderPass = nullptr;
@@ -1075,7 +1075,7 @@ VkResult CmdBuffer::Begin(
             }
             break;
 
-        case VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO_KHX:
+        case VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO:
         {
             // Check that the application did not set any bits outside of our device group mask.
             VK_ASSERT((m_palDeviceUsedMask & pDeviceGroupInfo->deviceMask) == pDeviceGroupInfo->deviceMask);
@@ -1246,6 +1246,7 @@ VkResult CmdBuffer::End(void)
 void CmdBuffer::ResetState()
 {
     m_stencilCombiner.Reset();
+    m_vbMgr.Reset();
 
     // Memset the first section of m_state.allGpuState.  The second section begins with pipelineState.
     const size_t memsetBytes = offsetof(AllGpuRenderState, pipelineState);
@@ -4212,31 +4213,31 @@ void CmdBuffer::BeginRenderPass(
     EXTRACT_VK_STRUCTURES_2(
         RP,
         RenderPassBeginInfo,
-        DeviceGroupRenderPassBeginInfoKHX,
+        DeviceGroupRenderPassBeginInfo,
         RenderPassSampleLocationsBeginInfoEXT,
         pRenderPassBegin,
         RENDER_PASS_BEGIN_INFO,
-        DEVICE_GROUP_RENDER_PASS_BEGIN_INFO_KHX,
+        DEVICE_GROUP_RENDER_PASS_BEGIN_INFO,
         RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT)
 
     // Copy render areas (these may be per-device in a group)
     bool replicateRenderArea = true;
 
-    if (pDeviceGroupRenderPassBeginInfoKHX != nullptr)
+    if (pDeviceGroupRenderPassBeginInfo != nullptr)
     {
-        replicateRenderArea = (pDeviceGroupRenderPassBeginInfoKHX->deviceRenderAreaCount == 0);
+        replicateRenderArea = (pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount == 0);
 
-        SetDeviceMask(pDeviceGroupRenderPassBeginInfoKHX->deviceMask);
+        SetDeviceMask(pDeviceGroupRenderPassBeginInfo->deviceMask);
 
-        m_renderPassInstance.renderAreaCount = pDeviceGroupRenderPassBeginInfoKHX->deviceRenderAreaCount;
+        m_renderPassInstance.renderAreaCount = pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount;
 
         VK_ASSERT(m_renderPassInstance.renderAreaCount <= MaxPalDevices);
 
-        utils::IterateMask deviceGroup(pDeviceGroupRenderPassBeginInfoKHX->deviceMask);
+        utils::IterateMask deviceGroup(pDeviceGroupRenderPassBeginInfo->deviceMask);
 
-        for (uint32_t areaIdx = 0; areaIdx < pDeviceGroupRenderPassBeginInfoKHX->deviceRenderAreaCount; areaIdx++)
+        for (uint32_t areaIdx = 0; areaIdx < pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount; areaIdx++)
         {
-            const VkRect2D& srcRect = pDeviceGroupRenderPassBeginInfoKHX->pDeviceRenderAreas[areaIdx];
+            const VkRect2D& srcRect = pDeviceGroupRenderPassBeginInfo->pDeviceRenderAreas[areaIdx];
 
             deviceGroup.Iterate();
 
@@ -4250,7 +4251,7 @@ void CmdBuffer::BeginRenderPass(
             pDstRect->extent.height = srcRect.extent.height;
         }
 
-        VK_ASSERT(deviceGroup.Count() == pDeviceGroupRenderPassBeginInfoKHX->deviceRenderAreaCount);
+        VK_ASSERT(deviceGroup.Count() == pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount);
     }
 
     if (replicateRenderArea)
@@ -6236,9 +6237,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHX(
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDeviceMask(deviceMask);
 }
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBase(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    baseGroupX,
     uint32_t                                    baseGroupY,
@@ -6252,13 +6252,12 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHR(
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMask(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    deviceMask)
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDeviceMask(deviceMask);
 }
-#endif
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdSetViewport(

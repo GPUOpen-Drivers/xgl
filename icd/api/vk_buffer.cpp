@@ -231,25 +231,25 @@ VkResult Buffer::Create(
 
     if (palResult == Pal::Result::Success)
     {
-        const VkExternalMemoryBufferCreateInfoKHR* pExternalInfo =
-            static_cast<const VkExternalMemoryBufferCreateInfoKHR*>(pCreateInfo->pNext);
+        const VkExternalMemoryBufferCreateInfo* pExternalInfo =
+            static_cast<const VkExternalMemoryBufferCreateInfo*>(pCreateInfo->pNext);
         if ((pExternalInfo != nullptr) &&
-            (pExternalInfo->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO_KHR))
+            (pExternalInfo->sType == VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_BUFFER_CREATE_INFO))
         {
-            VkExternalMemoryPropertiesKHR externalMemoryProperties = {};
+            VkExternalMemoryProperties externalMemoryProperties = {};
 
             pDevice->VkPhysicalDevice()->GetExternalMemoryProperties(
                 isSparse,
-                static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExternalInfo->handleTypes),
+                static_cast<VkExternalMemoryHandleTypeFlagBits>(pExternalInfo->handleTypes),
                 &externalMemoryProperties);
 
-            if (externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR)
+            if (externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT)
             {
                 bufferFlags.dedicatedRequired = true;
             }
 
-            if (externalMemoryProperties.externalMemoryFeatures & (VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR |
-                                                                   VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR))
+            if (externalMemoryProperties.externalMemoryFeatures & (VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT |
+                                                                   VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT))
             {
                 bufferFlags.externallyShareable = true;
 
@@ -463,10 +463,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
     VkDevice                                    device,
-    const VkBufferMemoryRequirementsInfo2KHR*   pInfo,
-    VkMemoryRequirements2KHR*                   pMemoryRequirements)
+    const VkBufferMemoryRequirementsInfo2*      pInfo,
+    VkMemoryRequirements2*                      pMemoryRequirements)
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
     VK_ASSERT((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
@@ -474,25 +474,25 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2KHR(
 
     union
     {
-        const VkStructHeader*                     pHeader;
-        const VkBufferMemoryRequirementsInfo2KHR* pRequirementsInfo2;
+        const VkStructHeader*                  pHeader;
+        const VkBufferMemoryRequirementsInfo2* pRequirementsInfo2;
     };
 
     pRequirementsInfo2 = pInfo;
-    pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2_KHR);
+    pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2);
     if (pHeader != nullptr)
     {
         Buffer* pBuffer = Buffer::ObjectFromHandle(pRequirementsInfo2->buffer);
         VkMemoryRequirements* pRequirements = &pMemoryRequirements->memoryRequirements;
         pBuffer->GetMemoryRequirements(pRequirements);
 
-        if (pMemoryRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2_KHR)
+        if (pMemoryRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2)
         {
-            VkMemoryDedicatedRequirementsKHR* pMemDedicatedRequirements =
-                static_cast<VkMemoryDedicatedRequirementsKHR*>(pMemoryRequirements->pNext);
+            VkMemoryDedicatedRequirements* pMemDedicatedRequirements =
+                static_cast<VkMemoryDedicatedRequirements*>(pMemoryRequirements->pNext);
 
             if ((pMemDedicatedRequirements != nullptr) &&
-                (pMemDedicatedRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS_KHR))
+                (pMemDedicatedRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_DEDICATED_REQUIREMENTS))
             {
                 pMemDedicatedRequirements->prefersDedicatedAllocation  = pBuffer->DedicatedMemoryRequired();
                 pMemDedicatedRequirements->requiresDedicatedAllocation = pBuffer->DedicatedMemoryRequired();

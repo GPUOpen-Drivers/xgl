@@ -1,4 +1,4 @@
-// Copyright (c) 2014-2017 The Khronos Group Inc.
+// Copyright (c) 2014-2018 The Khronos Group Inc.
 // 
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and/or associated documentation files (the "Materials"),
@@ -394,6 +394,8 @@ enum Decoration {
     DecorationPassthroughNV = 5250,
     DecorationViewportRelativeNV = 5252,
     DecorationSecondaryViewportRelativeNV = 5256,
+    DecorationHlslCounterBufferGOOGLE = 5634,
+    DecorationHlslSemanticGOOGLE = 5635,
     DecorationMax = 0x7fffffff,
 };
 
@@ -439,25 +441,15 @@ enum BuiltIn {
     BuiltInSubgroupLocalInvocationId = 41,
     BuiltInVertexIndex = 42,
     BuiltInInstanceIndex = 43,
-#ifdef ICD_VULKAN_1_1
     BuiltInSubgroupEqMask = 4416,
-#endif
     BuiltInSubgroupEqMaskKHR = 4416,
-#ifdef ICD_VULKAN_1_1
     BuiltInSubgroupGeMask = 4417,
-#endif
     BuiltInSubgroupGeMaskKHR = 4417,
-#ifdef ICD_VULKAN_1_1
     BuiltInSubgroupGtMask = 4418,
-#endif
     BuiltInSubgroupGtMaskKHR = 4418,
-#ifdef ICD_VULKAN_1_1
     BuiltInSubgroupLeMask = 4419,
-#endif
     BuiltInSubgroupLeMaskKHR = 4419,
-#ifdef ICD_VULKAN_1_1
     BuiltInSubgroupLtMask = 4420,
-#endif
     BuiltInSubgroupLtMaskKHR = 4420,
     BuiltInBaseVertex = 4424,
     BuiltInBaseInstance = 4425,
@@ -472,14 +464,15 @@ enum BuiltIn {
     BuiltInBaryCoordSmoothSampleAMD = 4997,
     BuiltInBaryCoordPullModelAMD = 4998,
     BuiltInFragStencilRefEXT = 5014,
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+    BuiltInPropertyIdAMD = 5023,
+#endif
     BuiltInViewportMaskNV = 5253,
     BuiltInSecondaryPositionNV = 5257,
     BuiltInSecondaryViewportMaskNV = 5258,
     BuiltInPositionPerViewNV = 5261,
     BuiltInViewportMaskPerViewNV = 5262,
-#ifdef ICD_VULKAN_1_1
     BuiltInFullyCoveredEXT = 5264,
-#endif
     BuiltInPerVertex = 1024, /* internal use only */
     BuiltInMax = 0x7fffffff,
 };
@@ -583,9 +576,7 @@ enum GroupOperation {
     GroupOperationReduce = 0,
     GroupOperationInclusiveScan = 1,
     GroupOperationExclusiveScan = 2,
-#ifdef ICD_VULKAN_1_1
     GroupOperationClusteredReduce = 3,
-#endif
     GroupOperationMax = 0x7fffffff,
 };
 
@@ -666,7 +657,6 @@ enum Capability {
     CapabilitySubgroupDispatch = 58,
     CapabilityNamedBarrier = 59,
     CapabilityPipeStorage = 60,
-#ifdef ICD_VULKAN_1_1
     CapabilityGroupNonUniform = 61,
     CapabilityGroupNonUniformVote = 62,
     CapabilityGroupNonUniformArithmetic = 63,
@@ -675,7 +665,6 @@ enum Capability {
     CapabilityGroupNonUniformShuffleRelative = 66,
     CapabilityGroupNonUniformClustered = 67,
     CapabilityGroupNonUniformQuad = 68,
-#endif
     CapabilitySubgroupBallotKHR = 4423,
     CapabilityDrawParameters = 4427,
     CapabilitySubgroupVoteKHR = 4431,
@@ -691,10 +680,14 @@ enum Capability {
     CapabilityVariablePointers = 4442,
     CapabilityAtomicStorageOps = 4445,
     CapabilitySampleMaskPostDepthCoverage = 4447,
+    CapabilityFloat16ImageAMD = 5008,
     CapabilityImageGatherBiasLodAMD = 5009,
     CapabilityFragmentMaskAMD = 5010,
     CapabilityStencilExportEXT = 5013,
     CapabilityImageReadWriteLodAMD = 5015,
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+    CapabilityPropertyIdAttachmentAMD = 5022,
+#endif
     CapabilitySampleMaskOverrideCoverageNV = 5249,
     CapabilityGeometryShaderPassthroughNV = 5251,
     CapabilityShaderViewportIndexLayerEXT = 5254,
@@ -702,9 +695,7 @@ enum Capability {
     CapabilityShaderViewportMaskNV = 5255,
     CapabilityShaderStereoViewNV = 5259,
     CapabilityPerViewAttributesNV = 5260,
-#ifdef ICD_VULKAN_1_1
     CapabilityFragmentFullyCoveredEXT = 5265,
-#endif
     CapabilitySubgroupShuffleINTEL = 5568,
     CapabilitySubgroupBufferBlockIOINTEL = 5569,
     CapabilitySubgroupImageBlockIOINTEL = 5570,
@@ -1018,7 +1009,6 @@ enum Op {
     OpModuleProcessed = 330,
     OpExecutionModeId = 331,
     OpDecorateId = 332,
-#ifdef ICD_VULKAN_1_1
     OpGroupNonUniformElect = 333,
     OpGroupNonUniformAll = 334,
     OpGroupNonUniformAny = 335,
@@ -1053,7 +1043,6 @@ enum Op {
     OpGroupNonUniformLogicalXor = 364,
     OpGroupNonUniformQuadBroadcast = 365,
     OpGroupNonUniformQuadSwap = 366,
-#endif
     OpSubgroupBallotKHR = 4421,
     OpSubgroupFirstInvocationKHR = 4422,
     OpSubgroupAllKHR = 4428,
@@ -1078,6 +1067,8 @@ enum Op {
     OpSubgroupBlockWriteINTEL = 5576,
     OpSubgroupImageBlockReadINTEL = 5577,
     OpSubgroupImageBlockWriteINTEL = 5578,
+    OpDecorateStringGOOGLE = 5632,
+    OpMemberDecorateStringGOOGLE = 5633,
     OpForward = 1024, /* internal use only */
     OpMax = 0x7fffffff,
 };

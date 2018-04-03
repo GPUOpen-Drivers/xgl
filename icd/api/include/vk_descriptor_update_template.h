@@ -46,14 +46,14 @@ class Device;
 // =====================================================================================================================
 // A Vulkan descriptor update template provides a way to update a descriptor set using with a pointer to user defined
 // data, which describes the descriptor writes.
-class DescriptorUpdateTemplate : public NonDispatchable<VkDescriptorUpdateTemplateKHR, DescriptorUpdateTemplate>
+class DescriptorUpdateTemplate : public NonDispatchable<VkDescriptorUpdateTemplate, DescriptorUpdateTemplate>
 {
 public:
     static VkResult Create(
         const Device*                                   pDevice,
-        const VkDescriptorUpdateTemplateCreateInfoKHR*  pCreateInfo,
+        const VkDescriptorUpdateTemplateCreateInfo*     pCreateInfo,
         const VkAllocationCallbacks*                    pAllocator,
-        VkDescriptorUpdateTemplateKHR*                  pDescriptorUpdateTemplate);
+        VkDescriptorUpdateTemplate*                     pDescriptorUpdateTemplate);
 
     VkResult Destroy(
         const Device*                pDevice,
@@ -157,15 +157,15 @@ private:
 namespace entry
 {
 
-VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorUpdateTemplateKHR(
+VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorUpdateTemplate(
     VkDevice                                        device,
-    VkDescriptorUpdateTemplateKHR                   descriptorUpdateTemplate,
+    VkDescriptorUpdateTemplate                      descriptorUpdateTemplate,
     const VkAllocationCallbacks*                    pAllocator);
 
-VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSetWithTemplateKHR(
+VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSetWithTemplate(
     VkDevice                                        device,
     VkDescriptorSet                                 descriptorSet,
-    VkDescriptorUpdateTemplateKHR                   descriptorUpdateTemplate,
+    VkDescriptorUpdateTemplate                      descriptorUpdateTemplate,
     const void*                                     pData);
 
 } // namespace entry

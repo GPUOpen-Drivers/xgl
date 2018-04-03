@@ -123,10 +123,10 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyFence(
     VkFence                                     fence,
     const VkAllocationCallbacks*                pAllocator);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFencePropertiesKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFenceProperties(
     VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo,
-    VkExternalFencePropertiesKHR*               pExternalFenceProperties);
+    const VkPhysicalDeviceExternalFenceInfo*    pExternalFenceInfo,
+    VkExternalFenceProperties*                  pExternalFenceProperties);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkImportFenceFdKHR(
     VkDevice                                    device,

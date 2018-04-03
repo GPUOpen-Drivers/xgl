@@ -174,9 +174,9 @@ public:
         VkDescriptorSetLayout*                      pSetLayout);
 
     VkResult CreateDescriptorUpdateTemplate(
-        const VkDescriptorUpdateTemplateCreateInfoKHR*  pCreateInfo,
-        const VkAllocationCallbacks*                    pAllocator,
-        VkDescriptorUpdateTemplateKHR*                  pDescriptorUpdateTemplate);
+        const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator,
+        VkDescriptorUpdateTemplate*                 pDescriptorUpdateTemplate);
 
     VkResult CreatePipelineLayout(
         const VkPipelineLayoutCreateInfo*           pCreateInfo,
@@ -274,10 +274,10 @@ public:
         VkSwapchainKHR*                             pSwapChain);
 
     VkResult ImportSemaphore(
-        VkExternalSemaphoreHandleTypeFlagsKHR       handleType,
+        VkExternalSemaphoreHandleTypeFlags          handleType,
         const Pal::OsExternalHandle                 handle,
         VkSemaphore                                 semaphore,
-        VkSemaphoreImportFlagsKHR                   importFlags);
+        VkSemaphoreImportFlags                      importFlags);
 
     VkResult Initialize(DispatchableQueue** pQueues,
                         uint8_t*            pPalQueueMemory);
@@ -375,12 +375,12 @@ public:
         T*              pModes) const;
 
     VkResult BindBufferMemory(
-        uint32_t                          bindInfoCount,
-        const VkBindBufferMemoryInfoKHR*  pBindInfos) const;
+        uint32_t                      bindInfoCount,
+        const VkBindBufferMemoryInfo* pBindInfos) const;
 
     VkResult BindImageMemory(
-        uint32_t                        bindInfoCount,
-        const VkBindImageMemoryInfoKHR* pBindInfos) const;
+        uint32_t                     bindInfoCount,
+        const VkBindImageMemoryInfo* pBindInfos) const;
 
     VK_FORCEINLINE uint32_t GetSupportedBarrierQueues() const
         { return m_supportedBarrierQueues; }
@@ -480,8 +480,8 @@ public:
     uint32_t GetPinnedSystemMemoryTypes() const;
 
     uint32_t GetExternalHostMemoryTypes(
-        VkExternalMemoryHandleTypeFlagBitsKHR handleType,
-        const void*                           pExternalPtr) const;
+        VkExternalMemoryHandleTypeFlagBits handleType,
+        const void*                        pExternalPtr) const;
 
     PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc() const
         { return m_pfnUpdateDescriptorSets; }
@@ -597,12 +597,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue(
     uint32_t                                    queueIndex,
     VkQueue*                                    pQueue);
 
-#ifdef ICD_VULKAN_1_1
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue2(
     VkDevice                                    device,
     const VkDeviceQueueInfo2*                   pQueueInfo,
     VkQueue*                                    pQueue);
-#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSemaphore(
     VkDevice                                    device,
@@ -734,7 +732,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(
     const VkAllocationCallbacks*                pAllocator,
     VkSampler*                                  pSampler);
 
-#ifdef ICD_VULKAN_1_1
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSamplerYcbcrConversion(
     VkDevice                                    device,
     const VkSamplerYcbcrConversionCreateInfo*   pCreateInfo,
@@ -745,7 +742,6 @@ VKAPI_ATTR void VKAPI_CALL vkDestroySamplerYcbcrConversion(
     VkDevice                                    device,
     VkSamplerYcbcrConversion                    ycbcrConversion,
     const VkAllocationCallbacks*                pAllocator);
-#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSwapchainKHR(
     VkDevice                                    device,
@@ -758,29 +754,28 @@ VKAPI_ATTR void VKAPI_CALL vkGetRenderAreaGranularity(
     VkRenderPass                                renderPass,
     VkExtent2D*                                 pGranularity);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory2(
     VkDevice                                    device,
     uint32_t                                    bindInfoCount,
-    const VkBindBufferMemoryInfoKHR*            pBindInfos);
+    const VkBindBufferMemoryInfo*               pBindInfos);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory2(
     VkDevice                                    device,
     uint32_t                                    bindInfoCount,
-    const VkBindImageMemoryInfoKHR*             pBindInfos);
+    const VkBindImageMemoryInfo*                pBindInfos);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorUpdateTemplateKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorUpdateTemplate(
     VkDevice                                        device,
-    const VkDescriptorUpdateTemplateCreateInfoKHR*  pCreateInfo,
+    const VkDescriptorUpdateTemplateCreateInfo*     pCreateInfo,
     const VkAllocationCallbacks*                    pAllocator,
-    VkDescriptorUpdateTemplateKHR*                  pDescriptorUpdateTemplate);
+    VkDescriptorUpdateTemplate*                     pDescriptorUpdateTemplate);
 
-#ifdef ICD_VULKAN_1_1
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeatures(
     VkDevice                                    device,
     uint32_t                                    heapIndex,
     uint32_t                                    localDeviceIndex,
     uint32_t                                    remoteDeviceIndex,
-    VkPeerMemoryFeatureFlagsKHR*                pPeerMemoryFeatures);
+    VkPeerMemoryFeatureFlags*                   pPeerMemoryFeatures);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupPresentCapabilitiesKHR(
     VkDevice                                    device,
@@ -790,7 +785,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupSurfacePresentModesKHR(
     VkDevice                                    device,
     VkSurfaceKHR                                surface,
     VkDeviceGroupPresentModeFlagsKHR*           pModes);
-#endif
 
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHX(
     VkDevice                                    device,
@@ -824,16 +818,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
     VkDevice                                    device,
     VkGpaDeviceClockModeInfoAMD*                pInfo);
 
-#ifdef ICD_VULKAN_1_1
-VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupportKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
     VkDevice                                    device,
     const VkDescriptorSetLayoutCreateInfo*      pCreateInfo,
-    VkDescriptorSetLayoutSupportKHR*            pSupport);
-#endif
+    VkDescriptorSetLayoutSupport*               pSupport);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     VkDevice                                    device,
-    VkExternalMemoryHandleTypeFlagBitsKHR       handleType,
+    VkExternalMemoryHandleTypeFlagBits          handleType,
     const void*                                 pHostPointer,
     VkMemoryHostPointerPropertiesEXT*           pMemoryHostPointerProperties);
 

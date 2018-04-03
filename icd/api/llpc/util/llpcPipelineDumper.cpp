@@ -940,7 +940,10 @@ OStream& operator<<(
                     }
                 default:
                     {
-                        out << "    unknown note type " << (uint32_t)pNode->type << "\n";
+                        out << "    Unknown(" << (uint32_t)pNode->type << ")                (name = "
+                            << pNode->name << "  size = " << pNode->descSize << ")\n";
+                        auto pDesc = pSection->pData + offset + noteHeaderSize;
+                        OutputBinary(pDesc, 0, pNode->descSize, out);
                         break;
                     }
                 }

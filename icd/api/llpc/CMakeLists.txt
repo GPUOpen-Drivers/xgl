@@ -53,7 +53,6 @@ if(UNIX)
             -Wno-unused
             -Wno-ignored-qualifiers
             -Wno-missing-field-initializers
-            -Wno-invalid-offsetof           # offsetof within non-standard-layout type 'x' is undefined
         >)
 
         target_compile_options(llpc PRIVATE -fno-strict-aliasing)

@@ -37,7 +37,6 @@
 #include "include/vk_shader_code.h"
 
 #include "llpc.h"
-
 namespace Bil
 {
 

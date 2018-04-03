@@ -32,12 +32,7 @@
 #ifndef __VK_ICD_H_PROXY__
 #define __VK_ICD_H_PROXY__
 
-#ifdef ICD_VULKAN_1_1
 // Vulkan SDK 1.1
 #include "sdk-1.1/vk_icd.h"
-#else
-// Vulkan SDK 1.0
-#include "sdk-1.0/vk_icd.h"
-#endif
 
 #endif /* __VK_ICD_H_PROXY__ */

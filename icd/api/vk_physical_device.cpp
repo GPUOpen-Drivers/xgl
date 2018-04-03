@@ -75,8 +75,8 @@ namespace vk
 
 // Vulkan Spec Table 30.11: All features in optimalTilingFeatures
 constexpr VkFormatFeatureFlags AllImgFeatures =
-    VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
-    VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR |
+    VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
+    VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
     VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
     VK_FORMAT_FEATURE_BLIT_SRC_BIT |
     VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT |
@@ -134,9 +134,9 @@ static bool VerifyFormatSupport(
             supported &= (props.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0;
 
             // Formats that are required to support VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT must also support
-            // VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR and VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR.
-            supported &= (props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR) != 0;
-            supported &= (props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR) != 0;
+            // VK_FORMAT_FEATURE_TRANSFER_SRC_BIT and VK_FORMAT_FEATURE_TRANSFER_DST_BIT.
+            supported &= (props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) != 0;
+            supported &= (props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) != 0;
         }
 
         if (blitSrcBit)
@@ -439,6 +439,8 @@ VkResult PhysicalDevice::Initialize()
             finalizeInfo.supportedFullScreenFrameMetadata.postFrameTimerSubmission  = true;
         }
 
+        finalizeInfo.internalTexOptLevel = VkToPalTexFilterQuality(m_settings.vulkanTexFilterQuality);
+
             // Finalize the PAL device
             result = m_pPalDevice->Finalize(finalizeInfo);
     }
@@ -660,8 +662,8 @@ void PhysicalDevice::PopulateFormatProperties()
          if (numFmt == Pal::Formats::NumericSupportFlags::Uscaled ||
              numFmt == Pal::Formats::NumericSupportFlags::Sscaled)
          {
-             const auto disabledScaledFeatures = VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR |
-                                                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR |
+             const auto disabledScaledFeatures = VK_FORMAT_FEATURE_TRANSFER_DST_BIT |
+                                                 VK_FORMAT_FEATURE_TRANSFER_SRC_BIT |
                                                  VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT;
 
              linearFlags  &= ~disabledScaledFeatures;
@@ -769,7 +771,7 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 // Retrieve queue family properties. Called in response to vkGetPhysicalDeviceQueueFamilyProperties2KHR
 VkResult PhysicalDevice::GetQueueFamilyProperties(
     uint32_t*                        pCount,
-    VkQueueFamilyProperties2KHR*     pQueueProperties
+    VkQueueFamilyProperties2*       pQueueProperties
     ) const
 {
     if (pQueueProperties == nullptr)
@@ -784,15 +786,15 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
     {
         union
         {
-            const VkStructHeader*        pHeader;
-            VkQueueFamilyProperties2KHR* pQueueProps;
+            const VkStructHeader*     pHeader;
+            VkQueueFamilyProperties2* pQueueProps;
         };
 
         for (pQueueProps = &pQueueProperties[i]; pHeader != nullptr; pHeader = pHeader->pNext)
         {
             switch (pHeader->sType)
             {
-            case VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2_KHR:
+            case VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2:
             {
                 pQueueProps->queueFamilyProperties = m_queueFamilies[i].properties;
             }
@@ -860,8 +862,15 @@ VkResult PhysicalDevice::GetFeatures(
     pFeatures->shaderClipDistance                       = VK_TRUE;
     pFeatures->shaderCullDistance                       = VK_TRUE;
     pFeatures->shaderFloat64                            = VK_TRUE;
-    pFeatures->shaderInt64                              = VK_FALSE;
+    pFeatures->shaderInt64                              = VK_TRUE;
 
+    if ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
+        ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false)      ||
+         (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)))
+    {
+        pFeatures->shaderInt16 = VK_TRUE;
+    }
+    else
     {
         pFeatures->shaderInt16 = VK_FALSE;
     }
@@ -910,7 +919,7 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     }
 
     // not implemented due to issue binding single images to multiple peer memory allocations (page table support)
-    if ((flags & VK_IMAGE_CREATE_BIND_SFR_BIT_KHX) != 0)
+    if ((flags & VK_IMAGE_CREATE_SPLIT_INSTANCE_BIND_REGIONS_BIT) != 0)
     {
         return VK_ERROR_FORMAT_NOT_SUPPORTED;
     }
@@ -955,9 +964,9 @@ VkResult PhysicalDevice::GetImageFormatProperties(
 
     if ((supportedFeatures == 0)                                                        ||
         (((usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0)                               &&
-          (supportedFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR) == 0)            ||
+          (supportedFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT) == 0)                ||
         (((usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) != 0)                               &&
-          (supportedFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR) == 0)            ||
+          (supportedFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT) == 0)                ||
         (((usage & VK_IMAGE_USAGE_SAMPLED_BIT) != 0)                                    &&
          ((supportedFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) == 0))              ||
         (((usage & VK_IMAGE_USAGE_STORAGE_BIT) != 0)                                    &&
@@ -1274,7 +1283,6 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     // flags - Need to take care of handling per-layer miptail and aligned miptail
 }
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
 // Returns the API version supported by this device.
 uint32_t PhysicalDevice::GetSupportedAPIVersion() const
@@ -1313,7 +1321,6 @@ uint32_t PhysicalDevice::GetSupportedAPIVersion() const
 
     return apiVersion;
 }
-#endif
 
 // =====================================================================================================================
 // Retrieve device properties. Called in response to vkGetPhysicalDeviceProperties.
@@ -1327,7 +1334,7 @@ VkResult PhysicalDevice::GetDeviceProperties(
     // Get properties from PAL
     const Pal::DeviceProperties& palProps = PalProperties();
 
-#ifdef ICD_VULKAN_1_1
+#if VKI_SDK_1_0 == 0
     pProperties->apiVersion    = GetSupportedAPIVersion();
 #else
     pProperties->apiVersion    = (VK_API_VERSION_1_0 | VK_HEADER_VERSION);
@@ -2123,15 +2130,18 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
 
         if (result == VK_SUCCESS)
         {
-            pSurfaceCapabilities->minImageCount         = swapChainProperties.minImageCount;
-            pSurfaceCapabilities->maxImageCount         = swapChainProperties.maxImageCount;
-            pSurfaceCapabilities->currentExtent.width   = swapChainProperties.currentExtent.width;
-            pSurfaceCapabilities->currentExtent.height  = swapChainProperties.currentExtent.height;
-            pSurfaceCapabilities->minImageExtent.width  = swapChainProperties.minImageExtent.width;
-            pSurfaceCapabilities->minImageExtent.height = swapChainProperties.minImageExtent.height;
-            pSurfaceCapabilities->maxImageExtent.width  = swapChainProperties.maxImageExtent.width;
-            pSurfaceCapabilities->maxImageExtent.height = swapChainProperties.maxImageExtent.height;
-            pSurfaceCapabilities->maxImageArrayLayers   = swapChainProperties.maxImageArraySize;
+            {
+                pSurfaceCapabilities->currentExtent.width   = swapChainProperties.currentExtent.width;
+                pSurfaceCapabilities->currentExtent.height  = swapChainProperties.currentExtent.height;
+                pSurfaceCapabilities->minImageExtent.width  = swapChainProperties.minImageExtent.width;
+                pSurfaceCapabilities->minImageExtent.height = swapChainProperties.minImageExtent.height;
+                pSurfaceCapabilities->maxImageExtent.width  = swapChainProperties.maxImageExtent.width;
+                pSurfaceCapabilities->maxImageExtent.height = swapChainProperties.maxImageExtent.height;
+                pSurfaceCapabilities->maxImageArrayLayers   = swapChainProperties.maxImageArraySize;
+            }
+
+            pSurfaceCapabilities->minImageCount = swapChainProperties.minImageCount;
+            pSurfaceCapabilities->maxImageCount = swapChainProperties.maxImageCount;
 
             pSurfaceCapabilities->supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
 
@@ -2455,6 +2465,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_DRAW_PARAMETERS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SWAPCHAIN));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_RASTERIZATION_ORDER));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_TRINARY_MINMAX));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_EXPLICIT_VERTEX_PARAMETER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DRAW_INDIRECT_COUNT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_BALLOT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_VOTE));
@@ -2472,12 +2484,10 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHX_DEVICE_GROUP));
     }
 
-#ifdef ICD_VULKAN_1_1
     if (pInstance->IsExtensionSupported(InstanceExtensions::KHR_DEVICE_GROUP_CREATION))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEVICE_GROUP));
     }
-#endif
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_BIND_MEMORY2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEDICATED_ALLOCATION));
@@ -2499,9 +2509,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SAMPLER_FILTER_MINMAX));
 
-#ifdef ICD_VULKAN_1_1
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE3));
-#endif
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
@@ -2513,7 +2521,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
          ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
           (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
     {
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_HALF_FLOAT));
     }
 
     if ((pPhysicalDevice == nullptr) ||
@@ -2528,7 +2535,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_INT16));
     }
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_FRAGMENT_MASK));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_TEXTURE_GATHER_BIAS_LOD));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MIXED_ATTACHMENT_SAMPLES));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SAMPLE_LOCATIONS));
 
     // If RGP tracing is enabled, report support for VK_EXT_debug_marker extension since RGP traces can trap
@@ -2552,14 +2561,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     // TODO: Add this extension if the related implementation of Linux is done.
     // availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE_FD));
 
-#ifdef ICD_VULKAN_1_1
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MULTIVIEW));
-#endif
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTERNAL_MEMORY_HOST));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_RANGE_UNRESTRICTED));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_QUEUE_FAMILY_FOREIGN));
 
     return availableExtensions;
 }
@@ -2786,7 +2794,7 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
     uint32_t* pPalMajor         = reinterpret_cast<uint32_t *>(pDriverUUID);
     uint32_t* pPalMinor         = reinterpret_cast<uint32_t *>(pDriverUUID+4);
 
-    memset(pDeviceLUID, 0, VK_LUID_SIZE_KHR);
+    memset(pDeviceLUID, 0, VK_LUID_SIZE);
     memset(pDeviceUUID, 0, VK_UUID_SIZE);
     memset(pDriverUUID, 0, VK_UUID_SIZE);
 
@@ -2816,8 +2824,8 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
 // =====================================================================================================================
 VkResult PhysicalDevice::GetExternalMemoryProperties(
     bool                                    isSparse,
-    VkExternalMemoryHandleTypeFlagBitsKHR   handleType,
-    VkExternalMemoryPropertiesKHR*          pExternalMemoryProperties
+    VkExternalMemoryHandleTypeFlagBits      handleType,
+    VkExternalMemoryProperties*             pExternalMemoryProperties
 ) const
 {
     VkResult result = VK_SUCCESS;
@@ -2830,21 +2838,21 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
     if (isSparse == false)
     {
         const Pal::DeviceProperties& props = PalProperties();
-        if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT_KHR))
+        if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT))
         {
-            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT_KHR |
-                                                                VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT_KHR     |
-                                                                VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR;
+            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT |
+                                                                VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT     |
+                                                                VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
         }
         else if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
         {
-            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR;
+            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
         }
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 393
         else if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT) &&
                  props.gpuMemoryProperties.flags.supportHostMappedForeignMemory)
         {
-            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT_KHR;
+            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
         }
 #endif
 
@@ -2864,7 +2872,7 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
 
 // =====================================================================================================================
 void PhysicalDevice::GetFeatures2(
-    VkPhysicalDeviceFeatures2KHR*               pFeatures)
+    VkPhysicalDeviceFeatures2*                  pFeatures)
 {
     VkStructHeaderNonConst* pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pFeatures);
 
@@ -2872,17 +2880,17 @@ void PhysicalDevice::GetFeatures2(
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2_KHR:
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
             {
                 VK_ASSERT(static_cast<void*>(pHeader) == static_cast<void*>(pFeatures) );
 
                 GetFeatures(&pFeatures->features);
                 break;
             }
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES_KHR:
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
             {
-                VkPhysicalDevice16BitStorageFeaturesKHR* pStorageFeatures =
-                    reinterpret_cast<VkPhysicalDevice16BitStorageFeaturesKHR*>(pHeader);
+                VkPhysicalDevice16BitStorageFeatures* pStorageFeatures =
+                    reinterpret_cast<VkPhysicalDevice16BitStorageFeatures*>(pHeader);
 
                 // We support 16-bit buffer load/store on all ASICs
                 pStorageFeatures->storageBuffer16BitAccess           = VK_TRUE;
@@ -2919,7 +2927,6 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
-#ifdef ICD_VULKAN_1_1
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
             {
                 VkPhysicalDeviceSamplerYcbcrConversionFeatures* pSamplerYcbcrConversionFeatures =
@@ -2962,7 +2969,6 @@ void PhysicalDevice::GetFeatures2(
 
                 break;
             }
-#endif
 
             default:
             {
@@ -2977,11 +2983,11 @@ void PhysicalDevice::GetFeatures2(
 
 // =====================================================================================================================
 VkResult PhysicalDevice::GetImageFormatProperties2(
-    const VkPhysicalDeviceImageFormatInfo2KHR*  pImageFormatInfo,
-    VkImageFormatProperties2KHR*                pImageFormatProperties)
+    const VkPhysicalDeviceImageFormatInfo2*     pImageFormatInfo,
+    VkImageFormatProperties2*                   pImageFormatProperties)
 {
     VkResult result = VK_SUCCESS;
-    VK_ASSERT(pImageFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR);
+    VK_ASSERT(pImageFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2);
 
     result = GetImageFormatProperties(
                  pImageFormatInfo->format,
@@ -2996,21 +3002,21 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
         union
         {
             const VkStructHeader*                                   pHeader;
-            const VkPhysicalDeviceImageFormatInfo2KHR*              pFormatInfo;
-            const VkPhysicalDeviceExternalImageFormatInfoKHR*       pExternalImageFormatInfo;
+            const VkPhysicalDeviceImageFormatInfo2*                 pFormatInfo;
+            const VkPhysicalDeviceExternalImageFormatInfo*          pExternalImageFormatInfo;
         };
 
         union
         {
             const VkStructHeader*                                   pHeader2;
-            VkImageFormatProperties2KHR*                            pImageFormatProps;
-            VkExternalImageFormatPropertiesKHR*                     pExternalImageProperties;
+            VkImageFormatProperties2*                               pImageFormatProps;
+            VkExternalImageFormatProperties*                        pExternalImageProperties;
             VkTextureLODGatherFormatPropertiesAMD*                  pTextureLODGatherFormatProperties;
         };
 
         pFormatInfo = pImageFormatInfo;
         pHeader = utils::GetExtensionStructure(pHeader,
-                                               VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO_KHR);
+                                               VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO);
 
         if (pHeader)
         {
@@ -3019,7 +3025,7 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
             pImageFormatProps = pImageFormatProperties;
             pHeader2 = utils::GetExtensionStructure(
                                   pHeader2,
-                                  VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES_KHR);
+                                  VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES);
 
             if (pExternalImageProperties)
             {
@@ -3032,7 +3038,7 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
 
         // handle VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD
         pFormatInfo = pImageFormatInfo;
-        pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2_KHR);
+        pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2);
 
         if (pHeader)
         {
@@ -3066,42 +3072,41 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
 
 // =====================================================================================================================
 void PhysicalDevice::GetDeviceProperties2(
-    VkPhysicalDeviceProperties2KHR* pProperties)
+    VkPhysicalDeviceProperties2* pProperties)
 {
-    VK_ASSERT(pProperties->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2_KHR);
+    VK_ASSERT(pProperties->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2);
 
     GetDeviceProperties(&pProperties->properties);
 
     union
     {
         const VkStructHeader*                                    pHeader;
-        VkPhysicalDeviceProperties2KHR*                          pProp;
-        VkPhysicalDevicePointClippingPropertiesKHR*              pPointClippingProperties;
-        VkPhysicalDeviceIDPropertiesKHR*                         pIDProperties;
+        VkPhysicalDeviceProperties2*                             pProp;
+        VkPhysicalDevicePointClippingProperties*                 pPointClippingProperties;
+        VkPhysicalDeviceIDProperties*                            pIDProperties;
         VkPhysicalDeviceSampleLocationsPropertiesEXT*            pSampleLocationsPropertiesEXT;
         VkPhysicalDeviceGpaPropertiesAMD*                        pGpaProperties;
-#ifdef ICD_VULKAN_1_1
         VkPhysicalDeviceMaintenance3Properties*                  pMaintenance3Properties;
         VkPhysicalDeviceMultiviewProperties*                     pMultiviewProperties;
         VkPhysicalDeviceProtectedMemoryProperties*               pProtectedMemoryProperties;
         VkPhysicalDeviceSubgroupProperties*                      pSubgroupProperties;
-#endif
         VkPhysicalDeviceExternalMemoryHostPropertiesEXT*         pExternalMemoryHostProperties;
         VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*        pMinMaxProperties;
         VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
+
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES:
         {
             // Points are clipped when their centers fall outside the clip volume, i.e. the desktop GL behavior.
-            pPointClippingProperties->pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES_KHR;
+            pPointClippingProperties->pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
             break;
         }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES:
         {
             GetPhysicalDeviceIDProperties(
                 &pIDProperties->deviceUUID[0],
@@ -3128,8 +3133,7 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
-#ifdef ICD_VULKAN_1_1
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES:
         {
             // We don't have limits on number of desc sets
             pMaintenance3Properties->maxPerSetDescriptors    = UINT32_MAX;
@@ -3153,9 +3157,6 @@ void PhysicalDevice::GetDeviceProperties2(
 
             break;
         }
-#endif
-
-#ifdef ICD_VULKAN_1_1
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES:
         {
@@ -3177,7 +3178,6 @@ void PhysicalDevice::GetDeviceProperties2(
 
             break;
         }
-#endif
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT:
         {
@@ -3231,27 +3231,27 @@ void PhysicalDevice::GetDeviceProperties2(
 // =====================================================================================================================
 void PhysicalDevice::GetFormatProperties2(
     VkFormat                                    format,
-    VkFormatProperties2KHR*                     pFormatProperties)
+    VkFormatProperties2*                        pFormatProperties)
 {
-    VK_ASSERT(pFormatProperties->sType == VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2_KHR);
+    VK_ASSERT(pFormatProperties->sType == VK_STRUCTURE_TYPE_FORMAT_PROPERTIES_2);
     GetFormatProperties(format, &pFormatProperties->formatProperties);
 }
 
 // =====================================================================================================================
 void PhysicalDevice::GetMemoryProperties2(
-    VkPhysicalDeviceMemoryProperties2KHR*       pMemoryProperties)
+    VkPhysicalDeviceMemoryProperties2*          pMemoryProperties)
 {
-    VK_ASSERT(pMemoryProperties->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2_KHR);
+    VK_ASSERT(pMemoryProperties->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2);
     pMemoryProperties->memoryProperties = GetMemoryProperties();
 }
 
 // =====================================================================================================================
 void PhysicalDevice::GetSparseImageFormatProperties2(
-    const VkPhysicalDeviceSparseImageFormatInfo2KHR*    pFormatInfo,
+    const VkPhysicalDeviceSparseImageFormatInfo2*       pFormatInfo,
     uint32_t*                                           pPropertyCount,
-    VkSparseImageFormatProperties2KHR*                  pProperties)
+    VkSparseImageFormatProperties2*                     pProperties)
 {
-    VK_ASSERT(pFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2_KHR);
+    VK_ASSERT(pFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2);
     GetSparseImageFormatProperties(
         pFormatInfo->format,
         pFormatInfo->type,
@@ -3281,10 +3281,10 @@ void PhysicalDevice::GetDeviceMultisampleProperties(
 
 // =====================================================================================================================
 void PhysicalDevice::GetExternalBufferProperties(
-    const VkPhysicalDeviceExternalBufferInfoKHR*    pExternalBufferInfo,
-    VkExternalBufferPropertiesKHR*                  pExternalBufferProperties)
+    const VkPhysicalDeviceExternalBufferInfo*       pExternalBufferInfo,
+    VkExternalBufferProperties*                     pExternalBufferProperties)
 {
-    VK_ASSERT(pExternalBufferInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO_KHR);
+    VK_ASSERT(pExternalBufferInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO);
 
     GetExternalMemoryProperties(((pExternalBufferInfo->flags & Buffer::SparseEnablingFlags) != 0),
                                 pExternalBufferInfo->handleType,
@@ -3293,10 +3293,10 @@ void PhysicalDevice::GetExternalBufferProperties(
 
 // =====================================================================================================================
 void PhysicalDevice::GetExternalSemaphoreProperties(
-    const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo,
-    VkExternalSemaphorePropertiesKHR*               pExternalSemaphoreProperties)
+    const VkPhysicalDeviceExternalSemaphoreInfo*    pExternalSemaphoreInfo,
+    VkExternalSemaphoreProperties*                  pExternalSemaphoreProperties)
 {
-    VK_ASSERT(pExternalSemaphoreInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO_KHR);
+    VK_ASSERT(pExternalSemaphoreInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_SEMAPHORE_INFO);
 
     // For windows, kmt and NT are mutually exclusive. You can only enable one type at creation time.
     pExternalSemaphoreProperties->compatibleHandleTypes         = pExternalSemaphoreInfo->handleType;
@@ -3305,10 +3305,10 @@ void PhysicalDevice::GetExternalSemaphoreProperties(
 
     if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_SEMAPHORE_FD))
     {
-        if (pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR)
+        if (pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT)
         {
-            pExternalSemaphoreProperties->externalSemaphoreFeatures = VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT_KHR |
-                                                                      VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT_KHR;
+            pExternalSemaphoreProperties->externalSemaphoreFeatures = VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
+                                                                      VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
         }
     }
 
@@ -3322,10 +3322,10 @@ void PhysicalDevice::GetExternalSemaphoreProperties(
 
 // =====================================================================================================================
 void PhysicalDevice::GetExternalFenceProperties(
-    const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo,
-    VkExternalFencePropertiesKHR*               pExternalFenceProperties)
+    const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo,
+    VkExternalFenceProperties*               pExternalFenceProperties)
 {
-    VK_ASSERT(pExternalFenceInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FENCE_INFO_KHR);
+    VK_ASSERT(pExternalFenceInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_FENCE_INFO);
 
     // For windows, kmt and NT are mutually exclusive. You can only enable one type at creation time.
     pExternalFenceProperties->compatibleHandleTypes         = pExternalFenceInfo->handleType;
@@ -3334,10 +3334,10 @@ void PhysicalDevice::GetExternalFenceProperties(
 
     if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_FENCE_FD))
     {
-        if (pExternalFenceInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR)
+        if (pExternalFenceInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT)
         {
-            pExternalFenceProperties->externalFenceFeatures = VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT_KHR |
-                                                              VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT_KHR;
+            pExternalFenceProperties->externalFenceFeatures = VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT |
+                                                              VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT;
         }
     }
 
@@ -4076,26 +4076,26 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHX(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2(
     VkPhysicalDevice                            physicalDevice,
-    VkPhysicalDeviceFeatures2KHR*               pFeatures)
+    VkPhysicalDeviceFeatures2*                  pFeatures)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetFeatures2(pFeatures);
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2(
     VkPhysicalDevice                            physicalDevice,
-    VkPhysicalDeviceProperties2KHR*             pProperties)
+    VkPhysicalDeviceProperties2*                pProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDeviceProperties2(pProperties);
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFormatProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFormatProperties2(
     VkPhysicalDevice                            physicalDevice,
     VkFormat                                    format,
-    VkFormatProperties2KHR*                     pFormatProperties)
+    VkFormatProperties2*                        pFormatProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetFormatProperties2(
                 format,
@@ -4103,10 +4103,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFormatProperties2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2(
     VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceImageFormatInfo2KHR*  pImageFormatInfo,
-    VkImageFormatProperties2KHR*                pImageFormatProperties)
+    const VkPhysicalDeviceImageFormatInfo2*     pImageFormatInfo,
+    VkImageFormatProperties2*                   pImageFormatProperties)
 {
     return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetImageFormatProperties2(
                         pImageFormatInfo,
@@ -4125,10 +4125,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMultisamplePropertiesEXT(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties2(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pQueueFamilyPropertyCount,
-    VkQueueFamilyProperties2KHR*                pQueueFamilyProperties)
+    VkQueueFamilyProperties2*                   pQueueFamilyProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetQueueFamilyProperties(
             pQueueFamilyPropertyCount,
@@ -4136,19 +4136,19 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties2(
     VkPhysicalDevice                            physicalDevice,
-    VkPhysicalDeviceMemoryProperties2KHR*       pMemoryProperties)
+    VkPhysicalDeviceMemoryProperties2*          pMemoryProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetMemoryProperties2(pMemoryProperties);
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties2(
     VkPhysicalDevice                                    physicalDevice,
-    const VkPhysicalDeviceSparseImageFormatInfo2KHR*    pFormatInfo,
+    const VkPhysicalDeviceSparseImageFormatInfo2*       pFormatInfo,
     uint32_t*                                           pPropertyCount,
-    VkSparseImageFormatProperties2KHR*                  pProperties)
+    VkSparseImageFormatProperties2*                     pProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSparseImageFormatProperties2(
             pFormatInfo,
@@ -4157,10 +4157,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties2KHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalBufferPropertiesKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalBufferProperties(
     VkPhysicalDevice                                physicalDevice,
-    const VkPhysicalDeviceExternalBufferInfoKHR*    pExternalBufferInfo,
-    VkExternalBufferPropertiesKHR*                  pExternalBufferProperties)
+    const VkPhysicalDeviceExternalBufferInfo*       pExternalBufferInfo,
+    VkExternalBufferProperties*                     pExternalBufferProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetExternalBufferProperties(
             pExternalBufferInfo,
@@ -4168,10 +4168,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalBufferPropertiesKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalSemaphoreProperties(
     VkPhysicalDevice                                physicalDevice,
-    const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo,
-    VkExternalSemaphorePropertiesKHR*               pExternalSemaphoreProperties)
+    const VkPhysicalDeviceExternalSemaphoreInfo*    pExternalSemaphoreInfo,
+    VkExternalSemaphoreProperties*                  pExternalSemaphoreProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetExternalSemaphoreProperties(
             pExternalSemaphoreInfo,
@@ -4179,10 +4179,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFencePropertiesKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFenceProperties(
     VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo,
-    VkExternalFencePropertiesKHR*               pExternalFenceProperties)
+    const VkPhysicalDeviceExternalFenceInfo*    pExternalFenceInfo,
+    VkExternalFenceProperties*                  pExternalFenceProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetExternalFenceProperties(
         pExternalFenceInfo,
@@ -4190,10 +4190,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFencePropertiesKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkTrimCommandPoolKHR(
+VKAPI_ATTR void VKAPI_CALL vkTrimCommandPool(
     VkDevice                                    device,
     VkCommandPool                               commandPool,
-    VkCommandPoolTrimFlagsKHR                   flags)
+    VkCommandPoolTrimFlags                      flags)
 {
 }
 

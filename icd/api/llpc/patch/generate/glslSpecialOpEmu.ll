@@ -998,15 +998,15 @@ define spir_func i32 @_Z29GroupNonUniformBallotBitCountiiDv4_i(i32 %scope, i32 %
     %4 = extractelement <2 x i32> %1, i32 1
 
     switch i32 %operation, label %.default [ i32 0, label %.reduce
-                                             i32 1, label %.inclusive
-                                             i32 2, label %.exclusive ]
+                                             i32 1, label %.inclusiveScan
+                                             i32 2, label %.exclusiveScan ]
 
 .reduce:
     %5 = call i64 @llvm.ctpop.i64(i64 %2)
     %6 = trunc i64 %5 to i32
     ret i32 %6
 
-.inclusive:
+.inclusiveScan:
     %7 = call i32 @llvm.amdgcn.mbcnt.lo(i32 %3, i32 0)
     %8 = call i32 @llvm.amdgcn.mbcnt.hi(i32 %4, i32 %7)
     %9 = add i32 %8, 1
@@ -1022,7 +1022,7 @@ define spir_func i32 @_Z29GroupNonUniformBallotBitCountiiDv4_i(i32 %scope, i32 %
 
     ret i32 %16
 
-.exclusive:
+.exclusiveScan:
     %17 = call i32 @llvm.amdgcn.mbcnt.lo(i32 %3, i32 0)
     %18 = call i32 @llvm.amdgcn.mbcnt.hi(i32 %4, i32 %17)
 
@@ -1845,11 +1845,589 @@ define spir_func <4 x i1> @_Z26GroupNonUniformShuffleDowniDv4_bi(i32 %scope, <4 
     ret <4 x i1> %3
 }
 
-; GLSL: ivec/uvec subgroupAdd(ivec/uvec)
-;       ivec/uvec subgroupInclusiveAdd(ivec/uvec)
-;       ivec/uvec subgroupExclusiveAdd(ivec/uvec)
+; GLSL: x [binary] y (32-bit)
+define spir_func i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %x, i32 %y)
+{
+.entry:
+    switch i32 %binaryOp, label %.end [i32 0,  label %.iadd
+                                       i32 1,  label %.imul
+                                       i32 2,  label %.smin
+                                       i32 3,  label %.smax
+                                       i32 4,  label %.umin
+                                       i32 5,  label %.umax
+                                       i32 6,  label %.and
+                                       i32 7,  label %.or
+                                       i32 8,  label %.xor
+                                       i32 9,  label %.fmul
+                                       i32 10, label %.fmin
+                                       i32 11, label %.fmax
+                                       i32 12, label %.fadd ]
+.iadd:
+    %0 = add i32 %x, %y
+    br label %.end
+.imul:
+    %1 = mul i32 %x, %y
+    br label %.end
+.smin:
+    %2 = call i32 @llpc.sminnum.i32(i32 %x, i32 %y)
+    br label %.end
+.smax:
+    %3 = call i32 @llpc.smaxnum.i32(i32 %x, i32 %y)
+    br label %.end
+.umin:
+    %4 = call i32 @llpc.uminnum.i32(i32 %x, i32 %y)
+    br label %.end
+.umax:
+    %5 = call i32 @llpc.umaxnum.i32(i32 %x, i32 %y)
+    br label %.end
+.and:
+    %6 = and i32 %x, %y
+    br label %.end
+.or:
+    %7 = or i32 %x, %y
+    br label %.end
+.xor:
+    %8 = xor i32 %x, %y
+    br label %.end
+.fmul:
+    %x.fmul.f32 = bitcast i32 %x to float
+    %y.fmul.f32 = bitcast i32 %y to float
+    %fmul.f32 = fmul float %x.fmul.f32, %y.fmul.f32
+    %9 = bitcast float %fmul.f32 to i32
+    br label %.end
+.fmin:
+    %x.fmin.f32 = bitcast i32 %x to float
+    %y.fmin.f32 = bitcast i32 %y to float
+    %fmin.f32 = call float @llvm.minnum.f32(float %x.fmin.f32, float %y.fmin.f32)
+    %10 = bitcast float %fmin.f32 to i32
+    br label %.end
+.fmax:
+    %x.fmax.f32 = bitcast i32 %x to float
+    %y.fmax.f32 = bitcast i32 %y to float
+    %fmax.f32 = call float @llvm.maxnum.f32(float %x.fmax.f32, float %y.fmax.f32)
+    %11 = bitcast float %fmax.f32 to i32
+    br label %.end
+.fadd:
+    %x.fadd.f32 = bitcast i32 %x to float
+    %y.fadd.f32 = bitcast i32 %y to float
+    %fadd.f32 = fadd float %x.fadd.f32, %y.fadd.f32
+    %12 = bitcast float %fadd.f32 to i32
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.iadd], [%1, %.imul], [%2, %.smin],
+              [%3, %.smax], [%4, %.umin], [%5, %.umax], [%6, %.and], [%7, %.or],
+              [%8, %.xor], [%9, %.fmul], [%10, %.fmin], [%11, %.fmax], [%12, %.fadd]
+    ret i32 %result
+}
 
-; GLSL: vec subgroupAdd(vec)
+; GLSL: identity (32-bit)
+define spir_func i32 @llpc.subgroup.identity.i32(i32 %binaryOp)
+{
+.entry:
+    switch i32 %binaryOp, label %.end [i32 0,  label %.iadd
+                                       i32 1,  label %.imul
+                                       i32 2,  label %.smin
+                                       i32 3,  label %.smax
+                                       i32 4,  label %.umin
+                                       i32 5,  label %.umax
+                                       i32 6,  label %.and
+                                       i32 7,  label %.or
+                                       i32 8,  label %.xor
+                                       i32 9,  label %.fmul
+                                       i32 10, label %.fmin
+                                       i32 11, label %.fmax
+                                       i32 12, label %.fadd ]
+.iadd:
+    ret i32 0
+.imul:
+    ret i32 1
+.smin:
+    ; 0x7FFF FFFF
+    ret i32 2147483647
+.smax:
+    ; 0x80000000
+    ret i32 2147483648
+.umin:
+    ; 0xFFFF FFFF
+    ret i32 4294967295
+.umax:
+    ret i32 0
+.and:
+    ; 0xFFFF FFFF
+    ret i32 4294967295
+.or:
+    ret i32 0
+.xor:
+    ret i32 0
+.fmul:
+    ; 0x3F800000, 1.0
+    ret i32 1065353216
+.fmin:
+    ; 0x7F800000, +1.#INF00E+000
+    ret i32 2139095040
+.fmax:
+    ; 0xFF800000  -1.#INF00E+000
+    ret i32 4286578688
+.fadd:
+    ret i32 0
+.end:
+    ret i32 undef
+}
+
+; GLSL: int/uint/float subgroupXXX(int/uint/float)
+define spir_func i32 @llpc.subgroup.reduce.i32(i32 %binaryOp, i32 %value)
+{
+    ; Get identity value of binary ops value
+    %identity = call i32 @llpc.subgroup.identity.i32(i32 %binaryOp)
+    ; Set identity value for the inactive threads
+    %inactiveValue = call i32 @llvm.amdgcn.set.inactive.i32(i32 %value, i32 %identity)
+
+    ; ds_swizzle work in 32 consecutive lanes/threads BIT mode
+    ; log2(64) = 6 , so there are 6 iteration of binary ops needed
+
+    ; 1055 ,bit mode, xor mask = 1 ->(SWAP, 1)
+    %i1.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %inactiveValue, i32 1055)
+    %i1.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i1.1)
+    %i1.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %inactiveValue, i32 %i1.2)
+
+    ; 2079 ,bit mode, xor mask = 2 ->(SWAP, 2)
+    %i2.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i1.3, i32 2079)
+    %i2.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i2.1)
+    %i2.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i1.3, i32 %i2.2)
+
+    ; 4127 ,bit mode, xor mask = 4 ->(SWAP, 4)
+    %i3.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i2.3, i32 4127)
+    %i3.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i3.1)
+    %i3.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i2.3, i32 %i3.2)
+
+    ; 8223 ,bit mode, xor mask = 8 ->(SWAP, 8)
+    %i4.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i3.3, i32 8223)
+    %i4.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i4.1)
+    %i4.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i3.3, i32 %i4.2)
+
+    ; 16415 ,bit mode, xor mask = 16 >(SWAP, 16)
+    %i5.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i4.3, i32 16415)
+    %i5.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i5.1)
+    %i5.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i4.3, i32 %i5.2)
+    %i5.4 = call i32 @llvm.amdgcn.wwm.i32(i32 %i5.3)
+
+    %i6.1 = call i32 @llvm.amdgcn.readlane(i32 %i5.4, i32 31)
+    %i6.2 = call i32 @llvm.amdgcn.readlane(i32 %i5.4, i32 63)
+    %i6.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i6.1, i32 %i6.2)
+    ret i32 %i6.3
+}
+
+; GLSL: int/uint/float subgroupInclusiveXXX(int/uint/float)
+define spir_func i32 @llpc.subgroup.inclusiveScan.i32(i32 %arithOp, i32 %value)
+{
+    ret i32 undef
+}
+
+; GLSL: int/uint/float subgroupExclusiveXXX(int/uint/float)
+define spir_func i32 @llpc.subgroup.exclusiveScan.i32(i32 %arithOp, i32 %value)
+{
+    ret i32 undef
+}
+
+; GLSL: int/uint subgroupAdd(int/uint)
+;       int/uint subgroupInclusiveAdd(int/uint)
+;       int/uint subgroupExclusiveAdd(int/uint)
+define spir_func i32 @_Z19GroupNonUniformIAddiii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    ; 0 = arithmetic iadd
+.entry:
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 0, i32 %value)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0, i32 %value)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0, i32 %value)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    ret i32 %result
+}
+
+; GLSL: int/uint subgroupMul(int/uint)
+;       int/uint subgroupInclusiveMul(int/uint)
+;       int/uint subgroupExclusiveMul(int/uint)
+define spir_func i32 @_Z19GroupNonUniformIMuliii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    ; 1 = arithmetic imul
+.entry:
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 1, i32 %value)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1, i32 %value)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1, i32 %value)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    ret i32 %result
+}
+
+; GLSL: float subgroupMul(float)
+;       float subgroupInclusiveMul(float)
+;       float subgroupExclusiveMul(float)
+define spir_func float @_Z19GroupNonUniformFMuliif(i32 %scope, i32 %groupOp, float %value)
+{
+    ; 9 = arithmetic fmul
+.entry:
+    %value.i32 = bitcast float %value to i32
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 9, i32 %value.i32)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9, i32 %value.i32)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9, i32 %value.i32)
+    br label %.end
+.end:
+    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    %result = bitcast i32 %result.i32 to float
+    ret float %result
+}
+
+; GLSL: int subgroupMin(int)
+;       int subgroupInclusiveMin(int)
+;       int subgroupExclusiveMin(int)
+define spir_func i32 @_Z19GroupNonUniformSMiniii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    ; 2 = arithmetic smin
+.entry:
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 2, i32 %value)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2, i32 %value)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2, i32 %value)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    ret i32 %result
+}
+
+; GLSL: int subgroupMax(int)
+;       int subgroupInclusiveMax(int)
+;       int subgroupExclusiveMax(int)
+define spir_func i32 @_Z19GroupNonUniformSMaxiii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    ; 3 = arithmetic smax
+.entry:
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 3, i32 %value)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3, i32 %value)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3, i32 %value)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    ret i32 %result
+}
+
+; GLSL: uint subgroupMin(uint)
+;       uint subgroupInclusiveMin(uint)
+;       uint subgroupExclusiveMin(uint)
+define spir_func i32 @_Z19GroupNonUniformUMiniii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    ; 4 = arithmetic umin
+.entry:
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 4, i32 %value)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4, i32 %value)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4, i32 %value)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    ret i32 %result
+}
+
+; GLSL: uint subgroupMax(uint)
+;       uint subgroupInclusiveMax(uint)
+;       uint subgroupExclusiveMax(uint)
+define spir_func i32 @_Z19GroupNonUniformUMaxiii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    ; 5 = arithmetic umax
+.entry:
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 5, i32 %value)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5, i32 %value)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5, i32 %value)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    ret i32 %result
+}
+
+; GLSL: float subgroupMin(float)
+;       float subgroupInclusiveMin(float)
+;       float subgroupExclusiveMin(float)
+define spir_func float @_Z19GroupNonUniformFMiniif(i32 %scope, i32 %groupOp, float %value)
+{
+    ; 10 = arithmetic fmin
+.entry:
+    %value.i32 = bitcast float %value to i32
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 10, i32 %value.i32)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10, i32 %value.i32)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10, i32 %value.i32)
+    br label %.end
+.end:
+    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    %result = bitcast i32 %result.i32 to float
+    ret float %result
+}
+
+; GLSL: float subgroupMax(float)
+;       float subgroupInclusiveMax(float)
+;       float subgroupExclusiveMax(float)
+define spir_func float @_Z19GroupNonUniformFMaxiif(i32 %scope, i32 %groupOp, float %value)
+{
+    ; 11 = arithmetic fmax
+.entry:
+    %value.i32 = bitcast float %value to i32
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 11, i32 %value.i32)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11, i32 %value.i32)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11, i32 %value.i32)
+    br label %.end
+.end:
+    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    %result = bitcast i32 %result.i32 to float
+    ret float %result
+}
+
+; GLSL: float subgroupAdd(float)
+;       float subgroupInclusiveAdd(float)
+;       float subgroupExclusiveAdd(float)
+define spir_func float @_Z19GroupNonUniformFAddiif(i32 %scope, i32 %groupOp, float %value)
+{
+    ; 12 = arithmetic fadd
+.entry:
+    %value.i32 = bitcast float %value to i32
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 12, i32 %value.i32)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12, i32 %value.i32)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12, i32 %value.i32)
+    br label %.end
+.end:
+    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    %result = bitcast i32 %result.i32 to float
+    ret float %result
+}
+
+; GLSL: int/uint subgroupAnd(int/uint)
+;       int/uint subgroupInclusiveAnd(int/uint)
+;       int/uint subgroupExclusiveAnd(int/uint)
+define spir_func i32 @_Z25GroupNonUniformBitwiseAndiii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    ; 6 = arithmetic and
+.entry:
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 6, i32 %value)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6, i32 %value)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6, i32 %value)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    ret i32 %result
+}
+
+; GLSL: int/uint subgroupOr(int/uint)
+;       int/uint subgroupInclusiveOr(int/uint)
+;       int/uint subgroupExclusiveOr(int/uint)
+define spir_func i32 @_Z24GroupNonUniformBitwiseOriii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    ; 7 = arithmetic or
+.entry:
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 7, i32 %value)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7, i32 %value)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7, i32 %value)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    ret i32 %result
+}
+
+; GLSL: int/uint subgroupXor(int/uint)
+;       int/uint subgroupInclusiveXor(int/uint)
+;       int/uint subgroupExclusiveXor(int/uint)
+define spir_func i32 @_Z25GroupNonUniformBitwiseXoriii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    ; 8 = arithmetic xor
+.entry:
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 8, i32 %value)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8, i32 %value)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8, i32 %value)
+    br label %.end
+.end:
+    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    ret i32 %result
+}
+
+; GLSL: bool subgroupAnd(bool)
+;       bool subgroupInclusiveAnd(bool)
+;       bool subgroupExclusiveAnd(bool)
+define spir_func i1 @_Z25GroupNonUniformLogicalAndiib(i32 %scope, i32 %groupOp, i1 %value)
+{
+    ; 6 = arithmetic and
+.entry:
+    %value.i32 = zext i1 %value to i32
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 6, i32 %value.i32)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6, i32 %value.i32)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6, i32 %value.i32)
+    br label %.end
+.end:
+    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    %result = trunc i32 %result.i32 to i1
+
+    ret i1 %result
+}
+
+; GLSL: bool subgroupOr(bool)
+;       bool subgroupInclusiveOr(bool)
+;       bool subgroupExclusiveOr(bool)
+define spir_func i1 @_Z24GroupNonUniformLogicalOriib(i32 %scope, i32 %groupOp, i1 %value)
+{
+    ; 7 = arithmetic or
+.entry:
+    %value.i32 = zext i1 %value to i32
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 7, i32 %value.i32)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7, i32 %value.i32)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7, i32 %value.i32)
+    br label %.end
+.end:
+    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    %result = trunc i32 %result.i32 to i1
+    ret i1 %result
+}
+
+; GLSL: bool subgroupXor(bool)
+;       bool subgroupInclusiveXor(bool)
+;       bool subgroupExclusiveXor(bool)
+define spir_func i1 @_Z25GroupNonUniformLogicalXoriib(i32 %scope, i32 %groupOp, i1 %value)
+{
+    ; 8 = arithmetic xor
+.entry:
+    %value.i32 = zext i1 %value to i32
+    switch i32 %groupOp, label %.end [i32 0, label %.reduce
+                                      i32 1, label %.inclusiveScan
+                                      i32 2, label %.exclusiveScan ]
+.reduce:
+    %0 = call i32 @llpc.subgroup.reduce.i32(i32 8, i32 %value.i32)
+    br label %.end
+.inclusiveScan:
+    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8, i32 %value.i32)
+    br label %.end
+.exclusiveScan:
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8, i32 %value.i32)
+    br label %.end
+.end:
+    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
+    %result = trunc i32 %result.i32 to i1
+    ret i1 %result
+}
+
 ;       vec subgroupInclusiveAdd(vec)
 ;       vec subgroupExclusiveAdd(vec)
 
@@ -1857,11 +2435,9 @@ define spir_func <4 x i1> @_Z26GroupNonUniformShuffleDowniDv4_bi(i32 %scope, <4 
 ;       dvec subgroupInclusiveAdd(dvec)
 ;       dvec subgroupExclusiveAdd(dvec)
 
-; GLSL: ivec/uvec subgroupMul(ivec/uvec)
 ;       ivec/uvec subgroupInclusiveMul(ivec/uvec)
 ;       ivec/uvec subgroupExclusiveMul(ivec/uvec)
 
-; GLSL: vec subgroupMul(vec)
 ;       vec subgroupInclusiveMul(vec)
 ;       vec subgroupExclusiveMul(vec)
 
@@ -1869,15 +2445,12 @@ define spir_func <4 x i1> @_Z26GroupNonUniformShuffleDowniDv4_bi(i32 %scope, <4 
 ;       dvec subgroupInclusiveMul(dvec)
 ;       dvec subgroupExclusiveMul(dvec)
 
-; GLSL: ivec subgroupMin(ivec)
 ;       ivec subgroupInclusiveMin(ivec)
 ;       ivec subgroupExclusiveMin(ivec)
 
-; GLSL: uvec subgroupMin(uvec)
 ;       uvec subgroupInclusiveMin(uvec)
 ;       uvec subgroupExclusiveMin(uvec)
 
-; GLSL: vec subgroupMin(vec)
 ;       vec subgroupInclusiveMin(vec)
 ;       vec subgroupExclusiveMin(vec)
 
@@ -1885,15 +2458,11 @@ define spir_func <4 x i1> @_Z26GroupNonUniformShuffleDowniDv4_bi(i32 %scope, <4 
 ;       dvec subgroupInclusiveMin(dvec)
 ;       dvec subgroupExclusiveMin(dvec)
 
-; GLSL: ivec subgroupMax(ivec)
 ;       ivec subgroupInclusiveMax(ivec)
 ;       ivec subgroupExclusiveMax(ivec)
-
-; GLSL: uvec subgroupMax(uvec)
 ;       uvec subgroupInclusiveMax(uvec)
 ;       uvec subgroupExclusiveMax(uvec)
 
-; GLSL: vec subgroupMax(vec)
 ;       vec subgroupInclusiveMax(vec)
 ;       vec subgroupExclusiveMax(vec)
 
@@ -1901,27 +2470,21 @@ define spir_func <4 x i1> @_Z26GroupNonUniformShuffleDowniDv4_bi(i32 %scope, <4 
 ;       dvec subgroupInclusiveMax(dvec)
 ;       dvec subgroupExclusiveMax(dvec)
 
-; GLSL: ivec/uvec subgroupAnd(ivec/uvec)
 ;       ivec/uvec subgroupInclusiveAnd(ivec/uvec)
 ;       ivec/uvec subgroupExclusiveAnd(ivec/uvec)
 
-; GLSL: ivec/uvec subgroupOr(ivec/uvec)
 ;       ivec/uvec subgroupInclusiveOr(ivec/uvec)
 ;       ivec/uvec subgroupExclusiveOr(ivec/uvec)
 
-; GLSL: ivec/uvec subgroupXor(ivec/uvec)
 ;       ivec/uvec subgroupInclusiveXor(ivec/uvec)
 ;       ivec/uvec subgroupExclusiveXor(ivec/uvec)
 
-; GLSL: bvec subgroupAnd(bvec)
 ;       bvec subgroupInclusiveAnd(bvec)
 ;       bvec subgroupExclusiveAnd(bvec)
 
-; GLSL: bvec subgroupOr(bvec)
 ;       bvec subgroupInclusiveOr(bvec)
 ;       bvec subgroupExclusiveOr(bvec)
 
-; GLSL: bvec subgroupXor(bvec)
 ;       bvec subgroupInclusiveXor(bvec)
 ;       bvec subgroupExclusiveXor(bvec)
 
@@ -2385,6 +2948,510 @@ define spir_func <4 x i1> @_Z23GroupNonUniformQuadSwapiDv4_bi(i32 %scope, <4 x i
     %2 = call <4 x i32> @_Z23GroupNonUniformQuadSwapiDv4_ii(i32 %scope, <4 x i32> %1, i32 %direction)
     %3 = trunc <4 x i32> %2 to <4 x i1>
     ret <4 x i1> %3
+}
+
+; GLSL: int/uint addInvocations(int/uint)
+define spir_func i32 @_Z20sub_group_reduce_addi(i32 %value)
+{
+    ; 3 = subgroup (scope), 0 = reduce (group operation)
+    %1 = call spir_func i32 @_Z19GroupNonUniformIAddiii(i32 3, i32 0, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float addInvocations(float)
+define spir_func float @_Z20sub_group_reduce_addf(float %value)
+{
+    ; 3 = subgroup (scope), 0 = reduce (group operation)
+    %1 = call spir_func float @_Z19GroupNonUniformFAddiif(i32 3, i32 0, float %value)
+    ret float %1
+}
+
+; GLSL: double addInvocations(double)
+define spir_func double @_Z20sub_group_reduce_addd(double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t/uint64_t addInvocations(int64_t/uint64_t)
+define spir_func i64 @_Z20sub_group_reduce_addl(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int minInvocations(int)
+define spir_func i32 @_Z20sub_group_reduce_mini(i32 %value)
+{
+    ; 3 = subgroup (scope), 0 = reduce (group operation)
+    %1 = call spir_func i32 @_Z19GroupNonUniformSMiniii(i32 3, i32 0, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: uint minInvocations(uint)
+define spir_func i32 @_Z20sub_group_reduce_minj(i32 %value)
+{
+    ; 3 = subgroup (scope), 0 = reduce (group operation)
+    %1 = call spir_func i32 @_Z19GroupNonUniformUMiniii(i32 3, i32 0, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float minInvocations(float)
+define spir_func float @_Z20sub_group_reduce_minf(float %value)
+{
+    ; 3 = subgroup (scope), 0 = reduce (group operation)
+    %1 = call spir_func float @_Z19GroupNonUniformFMiniif(i32 3, i32 0, float %value)
+    ret float %1
+}
+
+; GLSL: double minInvocations(double)
+define spir_func double @_Z20sub_group_reduce_mind(double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t minInvocations(int64_t)
+define spir_func i64 @_Z20sub_group_reduce_minl(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: uint64_t minInvocations(uint64_t)
+define spir_func i64 @_Z20sub_group_reduce_minm(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int maxInvocations(int)
+define spir_func i32 @_Z20sub_group_reduce_maxi(i32 %value)
+{
+    ; 3 = subgroup (scope), 0 = reduce (group operation)
+    %1 = call spir_func i32 @_Z19GroupNonUniformSMaxiii(i32 3, i32 0, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: uint maxInvocations(uint)
+define spir_func i32 @_Z20sub_group_reduce_maxj(i32 %value)
+{
+    ; 3 = subgroup (scope), 0 = reduce (group operation)
+    %1 = call spir_func i32 @_Z19GroupNonUniformUMaxiii(i32 3, i32 0, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float maxInvocations(float)
+define spir_func float @_Z20sub_group_reduce_maxf(float %value)
+{
+    ; 3 = subgroup (scope), 0 = reduce (group operation)
+    %1 = call spir_func float @_Z19GroupNonUniformFMaxiif(i32 3, i32 0, float %value)
+    ret float %1
+}
+
+; GLSL: double maxInvocations(double)
+define spir_func double @_Z20sub_group_reduce_maxd(double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t maxInvocations(int64_t)
+define spir_func i64 @_Z20sub_group_reduce_maxl(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: uint64_t maxInvocations(uint64_t)
+define spir_func i64 @_Z20sub_group_reduce_maxm(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int/uint addInvocationsInclusiveScan(int/uint)
+define spir_func i32 @_Z28sub_group_scan_inclusive_addi(i32 %value)
+{
+    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformIAddiii(i32 3, i32 1, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float addInvocationsInclusiveScan(float)
+define spir_func float @_Z28sub_group_scan_inclusive_addf(float %value)
+{
+    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
+    %1 = call float @_Z19GroupNonUniformFAddiif(i32 3, i32 1, float %value)
+    ret float %1
+}
+
+; GLSL: double addInvocationsInclusiveScan(double)
+define spir_func double @_Z28sub_group_scan_inclusive_addd(double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t/uint64_t addInvocationsInclusiveScan(int64_t/uint64_t)
+define spir_func i64 @_Z28sub_group_scan_inclusive_addl(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int minInvocationsInclusiveScan(int)
+define spir_func i32 @_Z28sub_group_scan_inclusive_mini(i32 %value)
+{
+    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformSMiniii(i32 3, i32 1, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: uint minInvocationsInclusiveScan(uint)
+define spir_func i32 @_Z28sub_group_scan_inclusive_minj(i32 %value)
+{
+    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformUMiniii(i32 3, i32 1, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float minInvocationsInclusiveScan(float)
+define spir_func float @_Z28sub_group_scan_inclusive_minf(float %value)
+{
+    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
+    %1 = call float @_Z19GroupNonUniformFMiniif(i32 3, i32 1, float %value)
+    ret float %1
+}
+
+; GLSL: double minInvocationsInclusiveScan(double)
+define spir_func double @_Z28sub_group_scan_inclusive_mind(double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t minInvocationsInclusiveScan(int64_t)
+define spir_func i64 @_Z28sub_group_scan_inclusive_minl(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: uint64_t minInvocationsInclusiveScan(uint64_t)
+define spir_func i64 @_Z28sub_group_scan_inclusive_minm(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int maxInvocationsInclusiveScan(int)
+define spir_func i32 @_Z28sub_group_scan_inclusive_maxi(i32 %value)
+{
+    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformSMaxiii(i32 3, i32 1, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: uint maxInvocationsInclusiveScan(uint)
+define spir_func i32 @_Z28sub_group_scan_inclusive_maxj(i32 %value)
+{
+    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformUMaxiii(i32 3, i32 1, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float maxInvocationsInclusiveScan(float)
+define spir_func float @_Z28sub_group_scan_inclusive_maxf(float %value)
+{
+    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
+    %1 = call float @_Z19GroupNonUniformFMaxiif(i32 3, i32 1, float %value)
+    ret float %1
+}
+
+; GLSL: double maxInvocationsInclusiveScan(double)
+define spir_func double @_Z28sub_group_scan_inclusive_maxd(double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t maxInvocationsInclusiveScan(int64_t)
+define spir_func i64 @_Z28sub_group_scan_inclusive_maxl(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: uint64_t maxInvocationsInclusiveScan(uint64_t)
+define spir_func i64 @_Z28sub_group_scan_inclusive_maxm(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int/uint addInvocationsExclusiveScan(int/uint)
+define spir_func i32 @_Z28sub_group_scan_exclusive_addi(i32 %value)
+{
+    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformIAddiii(i32 3, i32 2, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float addInvocationsExclusiveScan(float)
+define spir_func float @_Z28sub_group_scan_exclusive_addf(float %value)
+{
+    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
+    %1 = call float @_Z19GroupNonUniformFAddiif(i32 3, i32 2, float %value)
+    ret float %1
+}
+
+; GLSL: double addInvocationsExclusiveScan(double)
+define spir_func double @_Z28sub_group_scan_exclusive_addd(double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t/uint64_t addInvocationsExclusiveScan(int64_t/uint64_t)
+define spir_func i64 @_Z28sub_group_scan_exclusive_addl(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int minInvocationsExclusiveScan(int)
+define spir_func i32 @_Z28sub_group_scan_exclusive_mini(i32 %value)
+{
+    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformSMiniii(i32 3, i32 2, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: uint minInvocationsExclusiveScan(uint)
+define spir_func i32 @_Z28sub_group_scan_exclusive_minj(i32 %value)
+{
+    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformUMiniii(i32 3, i32 2, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float minInvocationsExclusiveScan(float)
+define spir_func float @_Z28sub_group_scan_exclusive_minf(float %value)
+{
+    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
+    %1 = call float @_Z19GroupNonUniformFMiniif(i32 3, i32 2, float %value)
+    ret float %1
+}
+
+; GLSL: double minInvocationsExclusiveScan(double)
+define spir_func double @_Z28sub_group_scan_exclusive_mind(double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t minInvocationsExclusiveScan(int64_t)
+define spir_func i64 @_Z28sub_group_scan_exclusive_minl(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: uint64_t minInvocationsExclusiveScan(uint64_t)
+define spir_func i64 @_Z28sub_group_scan_exclusive_minm(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int maxInvocationsExclusiveScan(int)
+define spir_func i32 @_Z28sub_group_scan_exclusive_maxi(i32 %value)
+{
+    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformSMaxiii(i32 3, i32 2, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: uint maxInvocationsExclusiveScan(uint)
+define spir_func i32 @_Z28sub_group_scan_exclusive_maxj(i32 %value)
+{
+    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
+    %1 = call i32 @_Z19GroupNonUniformUMaxiii(i32 3, i32 2, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float maxInvocationsExclusiveScan(float)
+define spir_func float @_Z28sub_group_scan_exclusive_maxf(float %value)
+{
+    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
+    %1 = call float @_Z19GroupNonUniformFMaxiif(i32 3, i32 2, float %value)
+    ret float %1
+}
+
+; GLSL: double maxInvocationsExclusiveScan(double)
+define spir_func double @_Z28sub_group_scan_exclusive_maxd(double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t maxInvocationsExclusiveScan(int64_t)
+define spir_func i64 @_Z28sub_group_scan_exclusive_maxl(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: uint64_t maxInvocationsExclusiveScan(uint64_t)
+define spir_func i64 @_Z28sub_group_scan_exclusive_maxm(i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int/uint addInvocationsNonUniform(int/uint)
+;       int/uint addInvocationsInclusiveScanNonUniform(int/uint)
+;       int/uint addInvocationsExclusiveScanNonUniform(int/uint)
+define spir_func i32 @_Z22GroupIAddNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    %1 = call i32 @_Z19GroupNonUniformIAddiii(i32 %scope, i32 %groupOp, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float addInvocationsNonUniform(float)
+;       float addInvocationsInclusiveScanNonUniform(float)
+;       float addInvocationsExclusiveScanNonUniform(float)
+define spir_func float @_Z22GroupFAddNonUniformAMDiif(i32 %scope, i32 %groupOp, float %value)
+{
+    %1 = call float @_Z19GroupNonUniformFAddiif(i32 %scope, i32 %groupOp, float %value)
+    ret float %1
+}
+
+; GLSL: double addInvocationsNonUniform(double)
+;       double addInvocationsInclusiveScanNonUniform(double)
+;       double addInvocationsExclusiveScanNonUniform(double)
+define spir_func double @_Z22GroupFAddNonUniformAMDiid(i32 %scope, i32 %groupOp, double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t/uint64_t addInvocationsNonUniform(int64_t/uint64_t)
+;       int64_t/uint64_t addInvocationsInclusiveScanNonUniform(int64_t/uint64_t)
+;       int64_t/uint64_t addInvocationsExclusiveScanNonUniform(int64_t/uint64_t)
+define spir_func i64 @_Z22GroupIAddNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int minInvocationsNonUniform(int)
+;       int minInvocationsInclusiveScanNonUniform(int)
+;       int minInvocationsExclusiveScanNonUniform(int)
+define spir_func i32 @_Z22GroupSMinNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    %1 = call i32 @_Z19GroupNonUniformSMiniii(i32 %scope, i32 %groupOp, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: uint minInvocationsNonUniform(uint)
+;       uint minInvocationsInclusiveScanNonUniform(uint)
+;       uint minInvocationsExclusiveScanNonUniform(uint)
+define spir_func i32 @_Z22GroupUMinNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    %1 = call i32 @_Z19GroupNonUniformUMiniii(i32 %scope, i32 %groupOp, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float minInvocationsNonUniform(float)
+;       float minInvocationsInclusiveScanNonUniform(float)
+;       float minInvocationsExclusiveScanNonUniform(float)
+define spir_func float @_Z22GroupFMinNonUniformAMDiif(i32 %scope, i32 %groupOp, float %value)
+{
+    %1 = call float @_Z19GroupNonUniformFMiniif(i32 %scope, i32 %groupOp, float %value)
+    ret float %1
+}
+
+; GLSL: double minInvocationsNonUniform(double)
+;       double minInvocationsInclusiveScanNonUniform(double)
+;       double minInvocationsExclusiveScanNonUniform(double)
+define spir_func double @_Z22GroupFMinNonUniformAMDiid(i32 %scope, i32 %groupOp, double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t minInvocationsNonUniform(int64_t)
+;       int64_t minInvocationsInclusiveScanNonUniform(int64_t)
+;       int64_t minInvocationsExclusiveScanNonUniform(int64_t)
+define spir_func i64 @_Z22GroupSMinNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: uint64_t minInvocationsNonUniform(uint64_t)
+;       uint64_t minInvocationsInclusiveScanNonUniform(uint64_t)
+;       uint64_t minInvocationsExclusiveScanNonUniform(uint64_t)
+define spir_func i64 @_Z22GroupUMinNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: int maxInvocationsNonUniform(int)
+;       int maxInvocationsInclusiveScanNonUniform(int)
+;       int maxInvocationsExclusiveScanNonUniform(int)
+define spir_func i32 @_Z22GroupSMaxNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    %1 = call i32 @_Z19GroupNonUniformSMaxiii(i32 %scope, i32 %groupOp, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: uint maxInvocationsNonUniform(uint)
+;       uint maxInvocationsInclusiveScanNonUniform(uint)
+;       uint maxInvocationsExclusiveScanNonUniform(uint)
+define spir_func i32 @_Z22GroupUMaxNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
+{
+    %1 = call i32 @_Z19GroupNonUniformUMaxiii(i32 %scope, i32 %groupOp, i32 %value)
+    ret i32 %1
+}
+
+; GLSL: float maxInvocationsNonUniform(float)
+;       float maxInvocationsInclusiveScanNonUniform(float)
+;       float maxInvocationsExclusiveScanNonUniform(float)
+define spir_func float @_Z22GroupFMaxNonUniformAMDiif(i32 %scope, i32 %groupOp, float %value)
+{
+    %1 = call float @_Z19GroupNonUniformFMaxiif(i32 %scope, i32 %groupOp, float %value)
+    ret float %1
+}
+
+; GLSL: double maxInvocationsNonUniform(double)
+;       double maxInvocationsInclusiveScanNonUniform(double)
+;       double maxInvocationsExclusiveScanNonUniform(double)
+define spir_func double @_Z22GroupFMaxNonUniformAMDiid(i32 %scope, i32 %groupOp, double %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret double undef
+}
+
+; GLSL: int64_t minInvocationsNonUniform(int64_t)
+;       int64_t minInvocationsInclusiveScanNonUniform(int64_t)
+;       int64_t minInvocationsExclusiveScanNonUniform(int64_t)
+define spir_func i64 @_Z22GroupSMaxNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
+}
+
+; GLSL: uint64_t minInvocationsNonUniform(uint64_t)
+;       uint64_t minInvocationsInclusiveScanNonUniform(uint64_t)
+;       uint64_t minInvocationsExclusiveScanNonUniform(uint64_t)
+define spir_func i64 @_Z22GroupUMaxNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
+{
+    ; TODO: Support 64-bit subgroup arithmetic operations.
+    ret i64 undef
 }
 
 ; GLSL: int/uint swizzleInvocations(int/uint, uvec4)
@@ -2898,8 +3965,10 @@ define spir_func <2 x float> @_Z16CubeFaceCoordAMDDv3_f(<3 x float> %coord)
 ; GLSL: uint64_t time()
 define spir_func i64 @_Z7TimeAMDv()
 {
-    %1 = call i64 @llvm.amdgcn.s.memtime()
-    ret i64 %1
+    %1 = call i64 @llvm.amdgcn.s.memtime() #0
+    ; Prevent optimization of backend compiler on the control flow
+    %2 = call i64 asm sideeffect "; %1", "=v,0"(i64 %1)
+    ret i64 %2
 }
 
 declare void @llvm.AMDGPU.kilp() #0
@@ -2925,11 +3994,19 @@ declare float @llvm.amdgcn.cubeid(float, float, float) #1
 declare float @llvm.amdgcn.cubesc(float, float, float) #1
 declare float @llvm.amdgcn.cubema(float, float, float) #1
 declare float @llvm.amdgcn.cubetc(float, float, float) #1
-declare i64 @llvm.amdgcn.s.memtime() #4
+declare i64 @llvm.amdgcn.s.memtime() #0
+declare i32 @llvm.amdgcn.wwm.i32(i32) #1
+declare i32 @llvm.amdgcn.set.inactive.i32(i32, i32) #2
+
+declare i32 @llpc.sminnum.i32(i32, i32) #0
+declare i32 @llpc.smaxnum.i32(i32, i32) #0
+declare i32 @llpc.uminnum.i32(i32, i32) #0
+declare i32 @llpc.umaxnum.i32(i32, i32) #0
+declare float @llvm.minnum.f32(float, float) #0
+declare float @llvm.maxnum.f32(float, float) #0
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readnone }
 attributes #2 = { nounwind readnone convergent }
 attributes #3 = { convergent nounwind }
 attributes #4 = { nounwind readonly }
-

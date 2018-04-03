@@ -167,10 +167,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements(
     VkBuffer                                    buffer,
     VkMemoryRequirements*                       pMemoryRequirements);
 
-VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
     VkDevice                                    device,
-    const VkBufferMemoryRequirementsInfo2KHR*   pInfo,
-    VkMemoryRequirements2KHR*                   pMemoryRequirements);
+    const VkBufferMemoryRequirementsInfo2*      pInfo,
+    VkMemoryRequirements2*                      pMemoryRequirements);
 
 } // namespace entry
 

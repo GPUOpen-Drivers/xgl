@@ -31,6 +31,7 @@
 #include "include/vk_utils.h"
 #include "include/vk_formats.h"
 #include "include/khronos/vk_icd.h"
+#include "settings/g_settings.h"
 
 #include "pal.h"
 #include "palColorBlendState.h"
@@ -575,6 +576,25 @@ VK_INLINE Pal::TexFilter VkToPalTexFilter(
     }
 
     return palTexFilter;
+}
+
+// =====================================================================================================================
+// Converts a Vulkan texture filter quality parameter to the pal equivalent
+VK_INLINE Pal::ImageTexOptLevel VkToPalTexFilterQuality(TextureFilterOptimizationSettings texFilterQuality)
+{
+    switch (texFilterQuality)
+    {
+    case TextureFilterOptimizationSettings::TextureFilterOptimizationsDisabled:
+        return Pal::ImageTexOptLevel::Disabled;
+    case TextureFilterOptimizationSettings::TextureFilterOptimizationsEnabled:
+        return Pal::ImageTexOptLevel::Enabled;
+    case TextureFilterOptimizationSettings::TextureFilterOptimizationsAggressive:
+        return Pal::ImageTexOptLevel::Maximum;
+    default:
+        return Pal::ImageTexOptLevel::Default;
+    }
+
+    return Pal::ImageTexOptLevel::Default;
 }
 
 // =====================================================================================================================
@@ -1887,7 +1907,7 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags)
 
     palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)  ? 1 : 0;
     palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
-    palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT_KHR)        ? 1 : 0;
+    palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)            ? 1 : 0;
 
     // We must not use any metadata if sparse aliasing is enabled
     palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)   ? 1 : 0;
@@ -2102,7 +2122,7 @@ VK_INLINE VkMemoryHeapFlags PalGpuHeapToVkMemoryHeapFlags(Pal::GpuHeap heap)
     {
     case Pal::GpuHeapLocal:
     case Pal::GpuHeapInvisible:
-        return (VK_MEMORY_HEAP_DEVICE_LOCAL_BIT | VK_MEMORY_HEAP_MULTI_INSTANCE_BIT_KHX);
+        return (VK_MEMORY_HEAP_DEVICE_LOCAL_BIT | VK_MEMORY_HEAP_MULTI_INSTANCE_BIT);
     case Pal::GpuHeapGartUswc:
     case Pal::GpuHeapGartCacheable:
         return 0;
@@ -2200,12 +2220,12 @@ VK_INLINE void VkToPalImageLayoutUsages(
             layoutUsages[0] = Pal::LayoutPresentFullscreen | Pal::LayoutPresentWindowed;
             layoutUsages[1] = 0;
             break;
-        case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL_KHR:
+        case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
             VK_ASSERT(Formats::HasStencil(imgFormat) && Formats::HasDepth(imgFormat));
             layoutUsages[0] = Usages[VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL];
             layoutUsages[1] = Usages[VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL];
             break;
-        case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL_KHR:
+        case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
             VK_ASSERT(Formats::HasStencil(imgFormat) && Formats::HasDepth(imgFormat));
             layoutUsages[0] = Usages[VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL];
             layoutUsages[1] = Usages[VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL];
@@ -2242,7 +2262,7 @@ VK_INLINE VkFormatFeatureFlags PalToVkFormatFeatureFlags(Pal::FormatFeatureFlags
 
     if (flags & Pal::FormatFeatureCopy)
     {
-        retFlags |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR | VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR;
+        retFlags |= VK_FORMAT_FEATURE_TRANSFER_SRC_BIT | VK_FORMAT_FEATURE_TRANSFER_DST_BIT;
     }
 
     if (flags & Pal::FormatFeatureImageShaderRead)
@@ -2544,12 +2564,12 @@ VK_INLINE VkImageUsageFlags VkFormatFeatureFlagsToImageUsageFlags(
 {
     VkImageUsageFlags imageUsage = 0;
 
-    if (formatFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT_KHR)
+    if (formatFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT)
     {
         imageUsage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
     }
 
-    if (formatFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT_KHR)
+    if (formatFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT)
     {
         imageUsage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     }

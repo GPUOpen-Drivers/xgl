@@ -760,7 +760,7 @@ VkResult GraphicsPipeline::Create(
 
     const bool viewIndexFromDeviceIndex = Util::TestAnyFlagSet(
         pCreateInfo->flags,
-        VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT_KHX);
+        VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT);
 
     // On success, wrap it up in a Vulkan object.
     if (result == VK_SUCCESS)

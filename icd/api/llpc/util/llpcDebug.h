@@ -30,6 +30,9 @@
  */
 #pragma once
 
+// Solve warning of "offset of on non-standard-layout type" for Linux GCC. Use private OFFSETOF instead.
+#define OFFSETOF(TYPE,MEMBER) ((size_t)(&reinterpret_cast<const volatile char&>(((TYPE *)0)->MEMBER)))
+
 #if PAL_ENABLE_PRINTS_ASSERTS
 #include <cassert>
 

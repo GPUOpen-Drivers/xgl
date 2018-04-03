@@ -2258,7 +2258,6 @@ _SPIRV_OP(GroupReserveReadPipePackets, true, 8)
 _SPIRV_OP(GroupReserveWritePipePackets, true, 8)
 _SPIRV_OP(GroupCommitReadPipe, false, 6)
 _SPIRV_OP(GroupCommitWritePipe, false, 6)
-#ifdef ICD_VULKAN_1_1
 _SPIRV_OP(GroupNonUniformElect, true, 4)
 _SPIRV_OP(GroupNonUniformAll, true, 5)
 _SPIRV_OP(GroupNonUniformAny, true, 5)
@@ -2293,7 +2292,14 @@ _SPIRV_OP(GroupNonUniformLogicalOr, true, 6, true, 1)
 _SPIRV_OP(GroupNonUniformLogicalXor, true, 6, true, 1)
 _SPIRV_OP(GroupNonUniformQuadBroadcast, true, 6)
 _SPIRV_OP(GroupNonUniformQuadSwap, true, 6)
-#endif
+_SPIRV_OP(GroupIAddNonUniformAMD, true, 6, true, 1)
+_SPIRV_OP(GroupFAddNonUniformAMD, true, 6, true, 1)
+_SPIRV_OP(GroupFMinNonUniformAMD, true, 6, true, 1)
+_SPIRV_OP(GroupUMinNonUniformAMD, true, 6, true, 1)
+_SPIRV_OP(GroupSMinNonUniformAMD, true, 6, true, 1)
+_SPIRV_OP(GroupFMaxNonUniformAMD, true, 6, true, 1)
+_SPIRV_OP(GroupUMaxNonUniformAMD, true, 6, true, 1)
+_SPIRV_OP(GroupSMaxNonUniformAMD, true, 6, true, 1)
 #undef _SPIRV_OP
 
 class SPIRVAtomicInstBase:public SPIRVInstTemplateBase {

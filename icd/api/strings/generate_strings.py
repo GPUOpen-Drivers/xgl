@@ -205,9 +205,6 @@ def generate_func_table(entry_file_prefix, header_file, impl_file):
             ext_tokens = tokens[1].split(' ', 2)
             if ext_tokens[0] == 'iext' or ext_tokens[0] == 'dext':
                 cur_ext = 'VK_' + ext_tokens[1]
-            # Guard Vulkan 1.1 with a preprocessor define until public
-            elif len(ext_tokens) == 2 and ext_tokens[1] =='1.1':
-                cur_ext = 'ICD_VULKAN_1_1'
 
         if '$win32_only' in original:
             cur_ext = '_WIN32'

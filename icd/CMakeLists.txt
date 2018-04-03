@@ -108,10 +108,10 @@ endif()
 # Configure Vulkan SDK version definitions
 if(USE_NEXT_SDK)
     set(VULKAN_SDK_VERSION sdk-1.1)
-    target_compile_definitions(xgl PRIVATE ICD_VULKAN_1_1)
-    target_compile_definitions(llpc PRIVATE ICD_VULKAN_1_1)
+    target_compile_definitions(xgl PRIVATE VKI_SDK_1_1=1)
 else()
     set(VULKAN_SDK_VERSION sdk-1.0)
+    target_compile_definitions(xgl PRIVATE VKI_SDK_1_0=1)
 endif()
 
 # Enable relevant GPUOpen preprocessor definitions
@@ -121,11 +121,6 @@ endif()
 
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION_SUPPORTS_SHADER_CACHE_EXPECTED_ENTRIES=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
-
-if (BUILD_WAYLAND_SUPPORT)
-    target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
-    target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
-endif()
 
 if(UNIX)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XCB_KHR)

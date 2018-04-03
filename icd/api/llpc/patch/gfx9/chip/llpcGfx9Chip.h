@@ -276,7 +276,7 @@ struct PipelineVsFsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  offsetof(PipelineVsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  OFFSETOF(PipelineVsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };
@@ -313,7 +313,7 @@ struct PipelineVsTsFsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  offsetof(PipelineVsTsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  OFFSETOF(PipelineVsTsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };
@@ -349,7 +349,7 @@ struct PipelineVsGsFsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  offsetof(PipelineVsGsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  OFFSETOF(PipelineVsGsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };
@@ -391,7 +391,7 @@ struct PipelineVsTsGsFsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  offsetof(PipelineVsTsGsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  OFFSETOF(PipelineVsTsGsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };
@@ -430,7 +430,7 @@ struct PipelineCsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  offsetof(PipelineCsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  OFFSETOF(PipelineCsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };

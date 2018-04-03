@@ -592,7 +592,12 @@ const char* GetRegisterNameString(
 {
     LLPC_ASSERT((gfxIp.major == 9) || (gfxIp.major == 10));
 
-    const char* pNameString = "UNKNOWN";
+    const char* pNameString = nullptr;
+
+    if (RegNameMap.empty())
+    {
+        InitRegisterNameMap(gfxIp);
+    }
 
     if (RegNameMap.find(regId) == RegNameMap.end())
     {
@@ -612,6 +617,13 @@ const char* GetRegisterNameString(
     else
     {
         pNameString = RegNameMap[regId];
+    }
+
+    if (pNameString == nullptr)
+    {
+        static char unknownRegNameBuf[256] = {};
+        int32_t length = snprintf(unknownRegNameBuf, 256, "UNKNOWN(0x%08X)", regId);
+        pNameString = unknownRegNameBuf;
     }
 
     return pNameString;

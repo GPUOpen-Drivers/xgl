@@ -215,6 +215,7 @@ static Result Init(
             "-simplifycfg-sink-common",  "-simplifycfg-sink-common=false",
             "-amdgpu-vgpr-index-mode",   "-amdgpu-vgpr-index-mode",         // force VGPR indexing on GFX8
             "-filetype",                 "-filetype=obj",   // target = obj, ELF binary; target = asm, ISA assembly text
+            "-enable-cache-emu-lib-context", "-enable-cache-emu-lib-context",
         };
 
         // Build new arguments, starting with those supplied in command line

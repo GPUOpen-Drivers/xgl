@@ -410,6 +410,9 @@ SPIRVMap<BuiltIn, std::string>::init() {
   add(BuiltInBaryCoordSmoothCentroidAMD, "BuiltInBaryCoordSmoothCentroidAMD");
   add(BuiltInBaryCoordSmoothSampleAMD, "BuiltInBaryCoordSmoothSampleAMD");
   add(BuiltInBaryCoordPullModelAMD, "BuiltInBaryCoordPullModelAMD");
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+  add(BuiltInPropertyIdAMD, "BuiltInPropertyIdAMD");
+#endif
 }
 SPIRV_DEF_NAMEMAP(BuiltIn, SPIRVBuiltInNameMap)
 
@@ -428,9 +431,7 @@ SPIRVMap<GroupOperation, std::string>::init() {
   add(GroupOperationReduce, "Reduce");
   add(GroupOperationInclusiveScan, "InclusiveScan");
   add(GroupOperationExclusiveScan, "ExclusiveScan");
-#ifdef ICD_VULKAN_1_1
   add(GroupOperationClusteredReduce, "ClusteredReduce");
-#endif
 }
 SPIRV_DEF_NAMEMAP(GroupOperation, SPIRVGroupOperationNameMap)
 
@@ -511,7 +512,6 @@ SPIRVMap<Capability, std::string>::init() {
   add(CapabilityUniformAndStorageBuffer16BitAccess, "UniformAndStorageBuffer16BitAccess");
   add(CapabilityStoragePushConstant16, "StoragePushConstant16");
   add(CapabilityStorageInputOutput16, "StorageInputOutput16");
-#ifdef ICD_VULKAN_1_1
   add(CapabilityGroupNonUniform, "GroupNonUniform");
   add(CapabilityGroupNonUniformVote, "GroupNonUniformVote");
   add(CapabilityGroupNonUniformArithmetic, "GroupNonUniformArithmetic");
@@ -520,9 +520,12 @@ SPIRVMap<Capability, std::string>::init() {
   add(CapabilityGroupNonUniformShuffleRelative, "GroupNonUniformShuffleRelative");
   add(CapabilityGroupNonUniformClustered, "GroupNonUniformClustered");
   add(CapabilityGroupNonUniformQuad, "GroupNonUniformQuad");
-#endif
   add(CapabilityImageGatherBiasLodAMD, "ImageGatherBiasLodAMD");
   add(CapabilityFragmentMaskAMD, "FragmentMaskAMD");
+  add(CapabilityFloat16ImageAMD, "Float16ImageAMD");
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+  add(CapabilityPropertyIdAttachmentAMD, "PropertyIdAttachmentAMD");
+#endif
 }
 SPIRV_DEF_NAMEMAP(Capability, SPIRVCapabilityNameMap)
 

@@ -133,6 +133,56 @@ define i64 @llpc.input.import.builtin.SubgroupLtMaskKHR(i32 %builtInId) #0
     ret i64 %5
 }
 
+; GLSL: in uvec4 gl_SubgroupEqMask
+define <4 x i32> @llpc.input.import.builtin.SubgroupEqMask(i32 %builtInId) #0
+{
+    %1 = call i64 @llpc.input.import.builtin.SubgroupEqMaskKHR(i32 %builtInId)
+    %2 = bitcast i64 %1 to <2 x i32>
+    %3 = shufflevector <2 x i32> %2, <2 x i32> <i32 0, i32 0>, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+
+    ret <4 x i32> %3
+}
+
+; GLSL: in uvec4 gl_SubgroupGeMask
+define <4 x i32> @llpc.input.import.builtin.SubgroupGeMask(i32 %builtInId) #0
+{
+    %1 = call i64 @llpc.input.import.builtin.SubgroupGeMaskKHR(i32 %builtInId)
+    %2 = bitcast i64 %1 to <2 x i32>
+    %3 = shufflevector <2 x i32> %2, <2 x i32> <i32 0, i32 0>, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+
+    ret <4 x i32> %3
+}
+
+; GLSL: in uvec4 gl_SubgroupGtMask
+define <4 x i32> @llpc.input.import.builtin.SubgroupGtMask(i32 %builtInId) #0
+{
+    %1 = call i64 @llpc.input.import.builtin.SubgroupGtMaskKHR(i32 %builtInId)
+    %2 = bitcast i64 %1 to <2 x i32>
+    %3 = shufflevector <2 x i32> %2, <2 x i32> <i32 0, i32 0>, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+
+    ret <4 x i32> %3
+}
+
+; GLSL: in uvec4 gl_SubgroupLeMask
+define <4 x i32> @llpc.input.import.builtin.SubgroupLeMask(i32 %builtInId) #0
+{
+    %1 = call i64 @llpc.input.import.builtin.SubgroupLeMaskKHR(i32 %builtInId)
+    %2 = bitcast i64 %1 to <2 x i32>
+    %3 = shufflevector <2 x i32> %2, <2 x i32> <i32 0, i32 0>, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+
+    ret <4 x i32> %3
+}
+
+; GLSL: in uvec4 gl_SubgroupLtMask
+define <4 x i32> @llpc.input.import.builtin.SubgroupLtMask(i32 %builtInId) #0
+{
+    %1 = call i64 @llpc.input.import.builtin.SubgroupLtMaskKHR(i32 %builtInId)
+    %2 = bitcast i64 %1 to <2 x i32>
+    %3 = shufflevector <2 x i32> %2, <2 x i32> <i32 0, i32 0>, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
+
+    ret <4 x i32> %3
+}
+
 ; =====================================================================================================================
 ; >>>  Compute Shader Built-in Variables
 ; =====================================================================================================================

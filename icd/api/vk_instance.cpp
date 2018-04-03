@@ -97,7 +97,6 @@ Instance::Instance(
     memset(m_pScreens, 0, sizeof(m_pScreens));
 }
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
 // Returns supported instance API version.
 VkResult Instance::EnumerateVersion(
@@ -108,7 +107,6 @@ VkResult Instance::EnumerateVersion(
 
     return VK_SUCCESS;
 }
-#endif
 
 // =====================================================================================================================
 // Creates a new instance of Vulkan.
@@ -154,7 +152,7 @@ VkResult Instance::Create(
         }
     }
 
-#ifdef ICD_VULKAN_1_1
+#if VKI_SDK_1_0 == 0
     // According to the Vulkan 1.1 spec, if pApplicationInfo is not provided or if the apiVersion requested is 0
     // it is equivalent of providing an apiVersion of 1.0.0
     uint32_t apiVersion = VK_MAKE_VERSION(1,0,0);
@@ -165,7 +163,7 @@ VkResult Instance::Create(
 
     if ((pAppInfo != nullptr) && (pAppInfo->apiVersion != 0))
     {
-#ifndef ICD_VULKAN_1_1
+#if VKI_SDK_1_0
         // Check if the requested API version is valid. Zero indicates we should ignore the field, non-zero values
         // must be validated.
         if (!(VK_VERSION_MAJOR(pAppInfo->apiVersion) == 1 &&
@@ -497,9 +495,15 @@ VkResult Instance::LoadAndCommitSettings(
                         &pSettings[deviceIdx]);
 
 #ifdef ICD_BUILD_APPPROFILE
-        // Query the application profile from Radeon Settings
+        // Overlay the application profile from Radeon Settings
         QueryApplicationProfile(&pSettings[deviceIdx]);
 #endif
+
+        // Make sure the final settings have legal values and update dependant parameters
+        ValidateSettings(ppDevices[deviceIdx], &pSettings[deviceIdx]);
+
+        // Update PAL settings based on runtime settings and desired driver defaults if needed
+        UpdatePalSettings(ppDevices[deviceIdx], &pSettings[deviceIdx]);
     }
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -612,9 +616,7 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHX_DEVICE_GROUP_CREATION));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_SURFACE_CAPABILITIES2));
 
-#ifdef ICD_VULKAN_1_1
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_DEVICE_GROUP_CREATION));
-#endif
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_SEMAPHORE_CAPABILITIES));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_FENCE_CAPABILITIES));
@@ -1060,13 +1062,11 @@ void Instance::CallExternalCallbacks(
 namespace entry
 {
 
-#ifdef ICD_VULKAN_1_1
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceVersion(
     uint32_t*                                   pApiVersion)
 {
     return Instance::EnumerateVersion(pApiVersion);
 }
-#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
     const VkInstanceCreateInfo*                 pCreateInfo,
@@ -1106,16 +1106,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHX(
         pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
 }
 
-#ifdef ICD_VULKAN_1_1
-VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceGroupCount,
-    VkPhysicalDeviceGroupPropertiesKHR*         pPhysicalDeviceGroupProperties)
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties)
 {
     return Instance::ObjectFromHandle(instance)->EnumeratePhysicalDeviceGroups(
         pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
 }
-#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(
     const char*                                 pLayerName,
@@ -1152,13 +1150,11 @@ extern "C"
 {
 // =====================================================================================================================
 
-#ifdef ICD_VULKAN_1_1
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceVersion(
     uint32_t*                                   pApiVersion)
 {
     return vk::entry::vkEnumerateInstanceVersion(pApiVersion);
 }
-#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance(
     const VkInstanceCreateInfo*                 pCreateInfo,

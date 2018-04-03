@@ -57,12 +57,14 @@ Queue::Queue(
     Device*                 pDevice,
     uint32_t                queueFamilyIndex,
     uint32_t                queueIndex,
+    uint32_t                queueFlags,
     Pal::IQueue**           pPalQueues,
     VirtualStackAllocator*  pStackAllocator)
     :
     m_pDevice(pDevice),
     m_queueFamilyIndex(queueFamilyIndex),
     m_queueIndex(queueIndex),
+    m_queueFlags(queueFlags),
     m_pDevModeMgr(pDevice->VkInstance()->GetDevModeMgr()),
     m_pStackAllocator(pStackAllocator),
     m_pDummyCmdBuffer(nullptr)
@@ -250,21 +252,21 @@ VkResult Queue::Submit(
         for (uint32_t submitIdx = 0; (submitIdx < submitCount) && (result == VK_SUCCESS); ++submitIdx)
         {
             const VkSubmitInfo& submitInfo = pSubmits[submitIdx];
-            const VkDeviceGroupSubmitInfoKHX* pDeviceGroupInfo = nullptr;
+            const VkDeviceGroupSubmitInfo* pDeviceGroupInfo = nullptr;
             {
                 union
                 {
                     const VkStructHeader*                          pHeader;
                     const VkSubmitInfo*                            pVkSubmitInfo;
-                    const VkDeviceGroupSubmitInfoKHX*              pVkDeviceGroupSubmitInfoKHX;
+                    const VkDeviceGroupSubmitInfo*                 pVkDeviceGroupSubmitInfo;
                 };
 
                 for (pVkSubmitInfo = &submitInfo; pHeader != nullptr; pHeader = pHeader->pNext)
                 {
                     switch (static_cast<int32_t>(pHeader->sType))
                     {
-                    case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO_KHX:
-                        pDeviceGroupInfo = pVkDeviceGroupSubmitInfoKHX;
+                    case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO:
+                        pDeviceGroupInfo = pVkDeviceGroupSubmitInfo;
                         break;
                     default:
                         // Skip any unknown extension structures
@@ -405,9 +407,9 @@ VkResult Queue::WaitIdle(void)
 // =====================================================================================================================
 // Signal a queue semaphore
 VkResult Queue::PalSignalSemaphores(
-    uint32_t                          semaphoreCount,
-    const VkSemaphore*                pSemaphores,
-    const VkDeviceGroupSubmitInfoKHX* pDeviceGroupInfo)
+    uint32_t                       semaphoreCount,
+    const VkSemaphore*             pSemaphores,
+    const VkDeviceGroupSubmitInfo* pDeviceGroupInfo)
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
     DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
@@ -456,9 +458,9 @@ VkResult Queue::PalSignalSemaphores(
 // =====================================================================================================================
 // Wait for a queue semaphore to become signaled
 VkResult Queue::PalWaitSemaphores(
-    uint32_t                          semaphoreCount,
-    const VkSemaphore*                pSemaphores,
-    const VkDeviceGroupSubmitInfoKHX* pDeviceGroupInfo)
+    uint32_t                       semaphoreCount,
+    const VkSemaphore*             pSemaphores,
+    const VkDeviceGroupSubmitInfo* pDeviceGroupInfo)
 {
     Pal::Result palResult = Pal::Result::Success;
 
@@ -1037,10 +1039,6 @@ VkResult Queue::BindSparse(
             // Signal any semaphores depending on the preceding remap operations
             if (result == VK_SUCCESS)
             {
-#ifdef ICD_VULKAN_1_1
-                // TODO - implement device group support for sparse resources
-                // SWDEV - 120869 [Vulkan1.1] - VK_KHX_device group - spare resource support
-#endif
 
                 result = PalSignalSemaphores(
                     bindInfo.signalSemaphoreCount,

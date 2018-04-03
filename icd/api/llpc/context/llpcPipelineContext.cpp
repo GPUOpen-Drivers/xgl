@@ -39,20 +39,6 @@
 
 using namespace llvm;
 
-namespace llvm
-{
-
-namespace cl
-{
-
-opt<uint32_t> DescTablePtrHigh("desc-table-ptr-high",
-                               desc("High part of VA for descriptor table pointer"),
-                               init(Llpc::InvalidValue));
-
-} // cl
-
-} // llvm
-
 namespace Llpc
 {
 
@@ -64,8 +50,7 @@ PipelineContext::PipelineContext(
     :
     m_gfxIp(gfxIp),
     m_hash(*pHash),
-    m_pGpuProperty(pGpuProp),
-    m_descTablePtrHigh(cl::DescTablePtrHigh)
+    m_pGpuProperty(pGpuProp)
 {
 
 }
@@ -596,6 +581,7 @@ void PipelineContext::InitShaderInterfaceData(
     auto pIntfData = GetShaderInterfaceData(shaderStage);
 
     memset(pIntfData->descTablePtrs, 0, sizeof(pIntfData->descTablePtrs));
+    memset(pIntfData->shadowDescTablePtrs, 0, sizeof(pIntfData->shadowDescTablePtrs));
     memset(pIntfData->userDataMap, InterfaceData::UserDataUnmapped, sizeof(pIntfData->userDataMap));
     memset(pIntfData->dynDescs, 0, sizeof(pIntfData->dynDescs));
 

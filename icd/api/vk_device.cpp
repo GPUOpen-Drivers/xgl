@@ -253,6 +253,7 @@ VkResult Device::Create(
 {
     Pal::Result palResult = Pal::Result::Success;
     uint32_t queueCounts[Queue::MaxQueueFamilies] = {};
+    uint32_t queueFlags[Queue::MaxQueueFamilies] = {};
 
     // VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT is the default value.
     VkQueueGlobalPriorityEXT queuePriority[Queue::MaxQueueFamilies] = { VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT };
@@ -309,10 +310,10 @@ VkResult Device::Create(
     {
         switch (static_cast<int>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO_KHX:
+        case VK_STRUCTURE_TYPE_DEVICE_GROUP_DEVICE_CREATE_INFO:
         {
-            const VkDeviceGroupDeviceCreateInfoKHX* pDeviceGroupCreateInfo =
-                        reinterpret_cast<const VkDeviceGroupDeviceCreateInfoKHX*>(pHeader);
+            const VkDeviceGroupDeviceCreateInfo* pDeviceGroupCreateInfo =
+                        reinterpret_cast<const VkDeviceGroupDeviceCreateInfo*>(pHeader);
 
             numDevices = pDeviceGroupCreateInfo->physicalDeviceCount;
 
@@ -357,6 +358,8 @@ VkResult Device::Create(
                     queueCounts[pQueueInfo->queueFamilyIndex] = pQueueInfo->queueCount;
                     totalQueues += pQueueInfo->queueCount;
 
+                    queueFlags[pQueueInfo->queueFamilyIndex] = pQueueInfo->flags;
+
                     // handle global priority
                     union
                     {
@@ -380,7 +383,6 @@ VkResult Device::Create(
                 }
                 break;
 
-#ifdef ICD_VULKAN_1_1
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
             {
                 const VkPhysicalDeviceMultiviewFeatures* pMultiviewFeatures =
@@ -394,7 +396,6 @@ VkResult Device::Create(
 
                 break;
             }
-#endif
 
             default:
                 // Skip any unknown extension structures
@@ -541,6 +542,7 @@ VkResult Device::Create(
                                                 (pDeviceAndQueues->device,
                                                 queueFamilyIndex,
                                                 queueIndex,
+                                                queueFlags[queueFamilyIndex],
                                                 pPalQueues,
                                                 pQueueStackAllocator));
 
@@ -1363,9 +1365,9 @@ VkResult Device::CreateDescriptorSetLayout(
 
 // =====================================================================================================================
 VkResult Device::CreateDescriptorUpdateTemplate(
-    const VkDescriptorUpdateTemplateCreateInfoKHR*  pCreateInfo,
-    const VkAllocationCallbacks*                    pAllocator,
-    VkDescriptorUpdateTemplateKHR*                  pDescriptorUpdateTemplate)
+    const VkDescriptorUpdateTemplateCreateInfo* pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDescriptorUpdateTemplate*                 pDescriptorUpdateTemplate)
 {
     return DescriptorUpdateTemplate::Create(this, pCreateInfo, pAllocator, pDescriptorUpdateTemplate);
 }
@@ -1560,13 +1562,13 @@ void Device::GetDeviceGroupPeerMemoryFeatures(
     {
         const Pal::GpuHeap palHeap = GetPalHeapFromVkTypeIndex(heapIndex);
 
-        enabledFeatures |= VK_PEER_MEMORY_FEATURE_COPY_DST_BIT_KHX;
+        enabledFeatures |= VK_PEER_MEMORY_FEATURE_COPY_DST_BIT;
 
         switch(palHeap)
         {
             case Pal::GpuHeapLocal:
 #if ENABLE_P2P_GENERIC_ACCESS
-                enabledFeatures |= VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT_KHX;
+                enabledFeatures |= VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT;
 #endif
                 break;
             case Pal::GpuHeapInvisible:
@@ -1591,22 +1593,20 @@ VkResult Device::GetDeviceGroupPresentCapabilities(
     {
         const VkStructHeader*                pHeader;
         T*                                   pTemplatedCaps;
-        VkDeviceGroupPresentCapabilitiesKHX* pVkDeviceGroupPresentCapabilitiesKHX;
+        VkDeviceGroupPresentCapabilitiesKHR* pVkDeviceGroupPresentCapabilitiesKHR;
     };
 
-#ifdef ICD_VULKAN_1_1
     // KHX structure has the same definition as KHR or Vulkan 1.1 core structures
     static_assert(VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHR == VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHX,
                   "Mismatched KHR and KHX structure defines");
-#endif
 
     for (pTemplatedCaps = pDeviceGroupPresentCapabilities; pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHX:
+        case VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHR:
         {
-            auto pCurrentType = pVkDeviceGroupPresentCapabilitiesKHX;
+            auto pCurrentType = pVkDeviceGroupPresentCapabilitiesKHR;
 
             GetDeviceGroupSurfacePresentModes(VK_NULL_HANDLE, &pCurrentType->modes);
 
@@ -1632,8 +1632,8 @@ VkResult Device::GetDeviceGroupSurfacePresentModes(
     VkSurfaceKHR          surface,
     T*                    pModes) const
 {
-    *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHX  |
-              VK_DEVICE_GROUP_PRESENT_MODE_REMOTE_BIT_KHX;
+    *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR |
+              VK_DEVICE_GROUP_PRESENT_MODE_REMOTE_BIT_KHR;
 
         //TODO: SWDEV-120359 - Implement summed Presents
         //      VK_DEVICE_GROUP_PRESENT_MODE_SUM_BIT_KHX;
@@ -1643,37 +1643,41 @@ VkResult Device::GetDeviceGroupSurfacePresentModes(
 
 // =====================================================================================================================
 VkResult Device::BindBufferMemory(
-    uint32_t                           bindInfoCount,
-    const VkBindBufferMemoryInfoKHR*   pBindInfos) const
+    uint32_t                        bindInfoCount,
+    const VkBindBufferMemoryInfo*   pBindInfos) const
 {
+    // KHX structure has the same definition as KHR or Vulkan 1.1 core structures
+    static_assert(VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO == VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO_KHX,
+                  "Mismatched 1.1 and KHX structure defines");
+
     union
     {
-        const VkStructHeader*                       pHeader;
-        const VkBindBufferMemoryInfoKHR*            pVkBindBufferMemoryInfoKHR;
-        const VkBindBufferMemoryDeviceGroupInfoKHX* pVkBindBufferMemoryDeviceGroupInfoKHX;
+        const VkStructHeader*                    pHeader;
+        const VkBindBufferMemoryInfo*            pVkBindBufferMemoryInfo;
+        const VkBindBufferMemoryDeviceGroupInfo* pVkBindBufferMemoryDeviceGroupInfo;
     };
 
     for (uint32_t bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
-        const VkBindBufferMemoryInfoKHR& info = pBindInfos[bindIdx];
+        const VkBindBufferMemoryInfo& info = pBindInfos[bindIdx];
 
         uint32_t        deviceIndexCount = 0;
         const uint32_t* pDeviceIndices   = nullptr;
 
-        for (pVkBindBufferMemoryInfoKHR = &info; pHeader != nullptr; pHeader = pHeader->pNext)
+        for (pVkBindBufferMemoryInfo = &info; pHeader != nullptr; pHeader = pHeader->pNext)
         {
             switch (static_cast<uint32_t>(pHeader->sType))
             {
-            case VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO_KHR:
+            case VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO:
             {
-                VK_ASSERT(pVkBindBufferMemoryInfoKHR == &info);
+                VK_ASSERT(pVkBindBufferMemoryInfo == &info);
                 break;
             }
 
-            case VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO_KHX:
+            case VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO:
             {
-                deviceIndexCount = pVkBindBufferMemoryDeviceGroupInfoKHX->deviceIndexCount;
-                pDeviceIndices   = pVkBindBufferMemoryDeviceGroupInfoKHX->pDeviceIndices;
+                deviceIndexCount = pVkBindBufferMemoryDeviceGroupInfo->deviceIndexCount;
+                pDeviceIndices   = pVkBindBufferMemoryDeviceGroupInfo->pDeviceIndices;
                 break;
             }
 
@@ -1694,23 +1698,21 @@ VkResult Device::BindBufferMemory(
 // =====================================================================================================================
 VkResult Device::BindImageMemory(
     uint32_t                          bindInfoCount,
-    const VkBindImageMemoryInfoKHR*   pBindInfos) const
+    const VkBindImageMemoryInfo*      pBindInfos) const
 {
     union
     {
         const VkStructHeader*                        pHeader;
-        const VkBindImageMemoryInfoKHR*              pVkBindImageMemoryInfoKHR;
-        const VkBindImageMemorySwapchainInfoKHX*     pVkBindImageMemorySwapchainInfoKHX;
-        const VkBindImageMemoryDeviceGroupInfoKHX*   pVkBindImageMemoryDeviceGroupInfoKHX;
+        const VkBindImageMemoryInfo*                 pVkBindImageMemoryInfo;
+        const VkBindImageMemorySwapchainInfoKHR*     pVkBindImageMemorySwapchainInfo;
+        const VkBindImageMemoryDeviceGroupInfo*      pVkBindImageMemoryDeviceGroupInfo;
     };
 
-#ifdef ICD_VULKAN_1_1
     // KHX structures have the same definition as KHR or Vulkan 1.1 core structures
-    static_assert(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO_KHR == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO_KHX,
-                  "Mismatched KHR and KHX structure defines");
+    static_assert(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO_KHX,
+                  "Mismatched 1.1 and KHX structure defines");
     static_assert(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHX,
                   "Mismatched KHR and KHX structure defines");
-#endif
 
     for (uint32_t bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
@@ -1723,31 +1725,31 @@ VkResult Device::BindImageMemory(
         uint32_t        swapChainImageIndex = 0;
         SwapChain*      pSwapchain          = nullptr;
 
-        const VkBindImageMemoryInfoKHR& info = pBindInfos[bindIdx];
+        const VkBindImageMemoryInfo& info = pBindInfos[bindIdx];
 
-        for (pVkBindImageMemoryInfoKHR = &info; pHeader != nullptr; pHeader = pHeader->pNext)
+        for (pVkBindImageMemoryInfo = &info; pHeader != nullptr; pHeader = pHeader->pNext)
         {
             switch (static_cast<uint32_t>(pHeader->sType))
             {
-            case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO_KHR:
+            case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO:
             {
-                VK_ASSERT(pVkBindImageMemoryInfoKHR == &info);
+                VK_ASSERT(pVkBindImageMemoryInfo == &info);
                 break;
             }
 
-            case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO_KHX:
+            case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO:
             {
-                deviceIndexCount = pVkBindImageMemoryDeviceGroupInfoKHX->deviceIndexCount;
-                pDeviceIndices = pVkBindImageMemoryDeviceGroupInfoKHX->pDeviceIndices;
-                SFRRectCount = pVkBindImageMemoryDeviceGroupInfoKHX->SFRRectCount;
-                pSFRRects = pVkBindImageMemoryDeviceGroupInfoKHX->pSFRRects;
+                deviceIndexCount = pVkBindImageMemoryDeviceGroupInfo->deviceIndexCount;
+                pDeviceIndices = pVkBindImageMemoryDeviceGroupInfo->pDeviceIndices;
+                SFRRectCount = pVkBindImageMemoryDeviceGroupInfo->splitInstanceBindRegionCount;
+                pSFRRects = pVkBindImageMemoryDeviceGroupInfo->pSplitInstanceBindRegions;
                 break;
             }
 
-            case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHX:
+            case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR:
             {
-                pSwapchain = SwapChain::ObjectFromHandle(pVkBindImageMemorySwapchainInfoKHX->swapchain);
-                swapChainImageIndex = pVkBindImageMemorySwapchainInfoKHX->imageIndex;
+                pSwapchain = SwapChain::ObjectFromHandle(pVkBindImageMemorySwapchainInfo->swapchain);
+                swapChainImageIndex = pVkBindImageMemorySwapchainInfo->imageIndex;
                 break;
             }
 
@@ -1814,10 +1816,10 @@ VkResult Device::CreateQueryPool(
 }
 
 VkResult Device::ImportSemaphore(
-    VkExternalSemaphoreHandleTypeFlagsKHR       handleType,
+    VkExternalSemaphoreHandleTypeFlags          handleType,
     const Pal::OsExternalHandle                 handle,
     VkSemaphore                                 semaphore,
-    VkSemaphoreImportFlagsKHR                   importFlags)
+    VkSemaphoreImportFlags                      importFlags)
 {
     return Semaphore::ObjectFromHandle(semaphore)->ImportSemaphore(this, handleType, handle, importFlags);
 }
@@ -1926,8 +1928,8 @@ uint32_t Device::GetPinnedSystemMemoryTypes() const
 // Returns the memory type bit-mask that is compatible to be used as pinned memory types for the given external
 // host pointer
 uint32_t Device::GetExternalHostMemoryTypes(
-    VkExternalMemoryHandleTypeFlagBitsKHR handleType,
-    const void*                           pExternalPtr
+    VkExternalMemoryHandleTypeFlagBits handleType,
+    const void*                        pExternalPtr
     ) const
 {
     uint32_t memoryTypes = 0;
@@ -1993,7 +1995,6 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue(
     ApiDevice::ObjectFromHandle(device)->GetQueue(queueFamilyIndex, queueIndex, pQueue);
 }
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue2(
     VkDevice                                    device,
@@ -2008,8 +2009,14 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue2(
     VK_ASSERT(pQueueInfo->flags == 0);
 
     ApiDevice::ObjectFromHandle(device)->GetQueue(pQueueInfo->queueFamilyIndex, pQueueInfo->queueIndex, pQueue);
+
+    const Queue* queue = DispatchableQueue::ObjectFromHandle(*pQueue);
+
+    if(queue->GetFlags() != pQueueInfo->flags)
+    {
+        *pQueue = VK_NULL_HANDLE;
+    }
 }
-#endif
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSemaphore(
@@ -2271,7 +2278,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSampler(
     return pDevice->CreateSampler(pCreateInfo, pAllocCB, pSampler);
 }
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSamplerYcbcrConversion(
     VkDevice                                    device,
@@ -2292,7 +2298,6 @@ VKAPI_ATTR void VKAPI_CALL vkDestroySamplerYcbcrConversion(
 {
     VK_NOT_IMPLEMENTED;
 }
-#endif
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSwapchainKHR(
@@ -2364,29 +2369,29 @@ VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory2(
     VkDevice                                    device,
     uint32_t                                    bindInfoCount,
-    const VkBindBufferMemoryInfoKHR*            pBindInfos)
+    const VkBindBufferMemoryInfo*               pBindInfos)
 {
     return ApiDevice::ObjectFromHandle(device)->BindBufferMemory(bindInfoCount, pBindInfos);
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkBindImageMemory2(
     VkDevice                                    device,
     uint32_t                                    bindInfoCount,
-    const VkBindImageMemoryInfoKHR*             pBindInfos)
+    const VkBindImageMemoryInfo*                pBindInfos)
 {
     return ApiDevice::ObjectFromHandle(device)->BindImageMemory(bindInfoCount, pBindInfos);
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorUpdateTemplateKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorUpdateTemplate(
     VkDevice                                        device,
-    const VkDescriptorUpdateTemplateCreateInfoKHR*  pCreateInfo,
+    const VkDescriptorUpdateTemplateCreateInfo*     pCreateInfo,
     const VkAllocationCallbacks*                    pAllocator,
-    VkDescriptorUpdateTemplateKHR*                  pDescriptorUpdateTemplate)
+    VkDescriptorUpdateTemplate*                     pDescriptorUpdateTemplate)
 {
     Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
     const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
@@ -2394,9 +2399,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorUpdateTemplateKHR(
     return pDevice->CreateDescriptorUpdateTemplate(pCreateInfo, pAllocCB, pDescriptorUpdateTemplate);
 }
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeatures(
     VkDevice                                    device,
     uint32_t                                    heapIndex,
     uint32_t                                    localDeviceIndex,
@@ -2422,11 +2426,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupPresentCapabilitiesKHR(
 VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupSurfacePresentModesKHR(
     VkDevice                                    device,
     VkSurfaceKHR                                surface,
-    VkDeviceGroupPresentModeFlagsKHX*           pModes)
+    VkDeviceGroupPresentModeFlagsKHR*           pModes)
 {
     return ApiDevice::ObjectFromHandle(device)->GetDeviceGroupSurfacePresentModes(surface, pModes);
 }
-#endif
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHX(
@@ -2524,31 +2527,45 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
     return PalToVkResult(palResult);
 }
 
-#ifdef ICD_VULKAN_1_1
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupportKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
     VkDevice                                    device,
     const VkDescriptorSetLayoutCreateInfo*      pCreateInfo,
-    VkDescriptorSetLayoutSupportKHR*            pSupport)
+    VkDescriptorSetLayoutSupport*               pSupport)
 {
+    VkStructHeaderNonConst* pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pSupport);
+
     // No descriptor set layout validation is required beyond what is expressed with existing limits.
     VK_ASSERT(pSupport->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT);
-    VK_ASSERT(pSupport->pNext == nullptr);
 
-    pSupport->supported = VK_TRUE;
+    while (pHeader)
+    {
+        switch (static_cast<uint32_t>(pHeader->sType))
+        {
+            case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT:
+            {
+                pSupport->supported = VK_TRUE;
+                break;
+            }
+
+            default:
+                break;
+        }
+
+        pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pHeader->pNext);
+    }
 }
-#endif
 
 // =====================================================================================================================
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     VkDevice                                    device,
-    VkExternalMemoryHandleTypeFlagBitsKHR       handleType,
+    VkExternalMemoryHandleTypeFlagBits          handleType,
     const void*                                 pHostPointer,
     VkMemoryHostPointerPropertiesEXT*           pMemoryHostPointerProperties)
 {
-    VkResult result         = VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR;
+    VkResult result         = VK_ERROR_INVALID_EXTERNAL_HANDLE;
     const Device* pDevice   = ApiDevice::ObjectFromHandle(device);
     const uint32_t memTypes = pDevice->GetExternalHostMemoryTypes(handleType, pHostPointer);
 

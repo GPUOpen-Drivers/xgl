@@ -81,12 +81,19 @@ size_t VertBufBindingMgr::GetSize(
 // =====================================================================================================================
 // Initializes VB binding manager state.  Should be called when the command buffer is being initialized.
 Pal::Result VertBufBindingMgr::Initialize(
-    const CmdBuffer* pCmdBuf,
-    void*            pVbMem)
+    void* pVbMem)
 {
-    Pal::Result result = Pal::Result::Success;
-
     m_pVbTblSysMem = reinterpret_cast<uint32_t*>(pVbMem);
+    Reset();
+
+    return Pal::Result::Success;
+}
+
+// =====================================================================================================================
+// Called to reset the state of the VB manager because the parent command buffer is being reset.
+void VertBufBindingMgr::Reset()
+{
+    m_bindingTableSize = 0;
 
     for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
     {
@@ -106,9 +113,7 @@ Pal::Result VertBufBindingMgr::Initialize(
 
     memset(m_pVbTblSysMem,
            0,
-           m_vbSrdDwSize * MaxVertexBuffers * sizeof(uint32_t) * pCmdBuf->VkDevice()->NumPalDevices());
-
-    return result;
+           m_vbSrdDwSize * MaxVertexBuffers * sizeof(uint32_t) * m_pDevice->NumPalDevices());
 }
 
 // =====================================================================================================================

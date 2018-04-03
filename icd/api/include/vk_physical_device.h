@@ -118,12 +118,12 @@ public:
         VkPhysicalDeviceGpaPropertiesAMD* pGpaProperties) const;
 
     void GetExternalSemaphoreProperties(
-        const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo,
-        VkExternalSemaphorePropertiesKHR*               pExternalSemaphoreProperties);
+        const VkPhysicalDeviceExternalSemaphoreInfo* pExternalSemaphoreInfo,
+        VkExternalSemaphoreProperties*               pExternalSemaphoreProperties);
 
     void GetExternalFenceProperties(
-        const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo,
-        VkExternalFencePropertiesKHR*               pExternalFenceProperties);
+        const VkPhysicalDeviceExternalFenceInfo* pExternalFenceInfo,
+        VkExternalFenceProperties*               pExternalFenceProperties);
 
     void PopulateQueueFamilies();
     void PopulateFormatProperties();
@@ -188,8 +188,8 @@ public:
         VkQueueFamilyProperties* pQueueProperties) const;
 
     VkResult GetQueueFamilyProperties(
-        uint32_t*                    pCount,
-        VkQueueFamilyProperties2KHR* pQueueProperties) const;
+        uint32_t*                 pCount,
+        VkQueueFamilyProperties2* pQueueProperties) const;
 
     VkResult GetFeatures(VkPhysicalDeviceFeatures* pFeatures) const;
 
@@ -219,9 +219,9 @@ public:
         VkBool32*           pDeviceLUIDValid) const;
 
     VkResult GetExternalMemoryProperties(
-        bool                                    isSparse,
-        VkExternalMemoryHandleTypeFlagBitsKHR   handleType,
-        VkExternalMemoryPropertiesKHR*          pExternalMemoryProperties) const;
+        bool                               isSparse,
+        VkExternalMemoryHandleTypeFlagBits handleType,
+        VkExternalMemoryProperties*        pExternalMemoryProperties) const;
 
     VkResult GetImageFormatProperties(
         VkFormat                 format,
@@ -241,33 +241,33 @@ public:
         VkSparseImageFormatProperties*  pProperties) const;
 
     void GetExternalBufferProperties(
-        const VkPhysicalDeviceExternalBufferInfoKHR*    pExternalBufferInfo,
-        VkExternalBufferPropertiesKHR*                  pExternalBufferProperties);
+        const VkPhysicalDeviceExternalBufferInfo*   pExternalBufferInfo,
+        VkExternalBufferProperties*                 pExternalBufferProperties);
 
     void GetSparseImageFormatProperties2(
-        const VkPhysicalDeviceSparseImageFormatInfo2KHR*    pFormatInfo,
-        uint32_t*                                           pPropertyCount,
-        VkSparseImageFormatProperties2KHR*                  pProperties);
+        const VkPhysicalDeviceSparseImageFormatInfo2*   pFormatInfo,
+        uint32_t*                                       pPropertyCount,
+        VkSparseImageFormatProperties2*                 pProperties);
 
     void GetFeatures2(
-        VkPhysicalDeviceFeatures2KHR*               pFeatures);
+        VkPhysicalDeviceFeatures2*                  pFeatures);
 
     void GetMemoryProperties2(
-        VkPhysicalDeviceMemoryProperties2KHR*  pMemoryProperties);
+        VkPhysicalDeviceMemoryProperties2*          pMemoryProperties);
 
     void GetFormatProperties2(
         VkFormat                                    format,
-        VkFormatProperties2KHR*                     pFormatProperties);
+        VkFormatProperties2*                        pFormatProperties);
 
     void GetDeviceProperties2(
-        VkPhysicalDeviceProperties2KHR*             pProperties);
+        VkPhysicalDeviceProperties2*                pProperties);
 
     void GetPhysicalDeviceFeatures2(
-        VkPhysicalDeviceFeatures2KHR*               pFeatures);
+        VkPhysicalDeviceFeatures2*                  pFeatures);
 
     VkResult GetImageFormatProperties2(
-        const VkPhysicalDeviceImageFormatInfo2KHR*  pImageFormatInfo,
-        VkImageFormatProperties2KHR*                pImageFormatProperties);
+        const VkPhysicalDeviceImageFormatInfo2*     pImageFormatInfo,
+        VkImageFormatProperties2*                   pImageFormatProperties);
 
     void GetDeviceMultisampleProperties(
         VkSampleCountFlagBits                       samples,
@@ -378,13 +378,11 @@ public:
     VK_INLINE bool IsExtensionSupported(InstanceExtensions::ExtensionId id) const
         { return VkInstance()->IsExtensionSupported(id); }
 
-#ifdef ICD_VULKAN_1_1
     uint32_t GetSupportedAPIVersion() const;
-#endif
 
     VK_INLINE uint32_t GetEnabledAPIVersion() const
     {
-#ifdef ICD_VULKAN_1_1
+#if VKI_SDK_1_0 == 0
         return Util::Min(GetSupportedAPIVersion(), VkInstance()->GetAPIVersion());
 #else
         return VkInstance()->GetAPIVersion();
@@ -527,53 +525,53 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties(
     uint32_t*                                   pPropertyCount,
     VkSparseImageFormatProperties*              pProperties);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2(
     VkPhysicalDevice                            physicalDevice,
-    VkPhysicalDeviceFeatures2KHR*               pFeatures);
+    VkPhysicalDeviceFeatures2*                  pFeatures);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceProperties2(
     VkPhysicalDevice                            physicalDevice,
-    VkPhysicalDeviceProperties2KHR*             pProperties);
+    VkPhysicalDeviceProperties2*                pProperties);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFormatProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFormatProperties2(
     VkPhysicalDevice                            physicalDevice,
     VkFormat                                    format,
-    VkFormatProperties2KHR*                     pFormatProperties);
+    VkFormatProperties2*                        pFormatProperties);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceImageFormatProperties2(
     VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceImageFormatInfo2KHR*  pImageFormatInfo,
-    VkImageFormatProperties2KHR*                pImageFormatProperties);
+    const VkPhysicalDeviceImageFormatInfo2*     pImageFormatInfo,
+    VkImageFormatProperties2*                   pImageFormatProperties);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceQueueFamilyProperties2(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pQueueFamilyPropertyCount,
-    VkQueueFamilyProperties2KHR*                pQueueFamilyProperties);
+    VkQueueFamilyProperties2*                   pQueueFamilyProperties);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMemoryProperties2(
     VkPhysicalDevice                            physicalDevice,
-    VkPhysicalDeviceMemoryProperties2KHR*       pMemoryProperties);
+    VkPhysicalDeviceMemoryProperties2*          pMemoryProperties);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties2(
     VkPhysicalDevice                                    physicalDevice,
-    const VkPhysicalDeviceSparseImageFormatInfo2KHR*    pFormatInfo,
+    const VkPhysicalDeviceSparseImageFormatInfo2*       pFormatInfo,
     uint32_t*                                           pPropertyCount,
-    VkSparseImageFormatProperties2KHR*                  pProperties);
+    VkSparseImageFormatProperties2*                     pProperties);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalBufferPropertiesKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalBufferProperties(
     VkPhysicalDevice                                physicalDevice,
-    const VkPhysicalDeviceExternalBufferInfoKHR*    pExternalBufferInfo,
-    VkExternalBufferPropertiesKHR*                  pExternalBufferProperties);
+    const VkPhysicalDeviceExternalBufferInfo*       pExternalBufferInfo,
+    VkExternalBufferProperties*                     pExternalBufferProperties);
 
 VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceMultisamplePropertiesEXT(
     VkPhysicalDevice                            physicalDevice,
     VkSampleCountFlagBits                       samples,
     VkMultisamplePropertiesEXT*                 pMultisampleProperties);
 
-VKAPI_ATTR void VKAPI_CALL vkTrimCommandPoolKHR(
+VKAPI_ATTR void VKAPI_CALL vkTrimCommandPool(
     VkDevice                                    device,
     VkCommandPool                               commandPool,
-    VkCommandPoolTrimFlagsKHR                   flags);
+    VkCommandPoolTrimFlags                      flags);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkPhysicalDevice                            physicalDevice,
@@ -609,15 +607,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHX(
     uint32_t*                                   pRectCount,
     VkRect2D*                                   pRects);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalSemaphorePropertiesKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalSemaphoreProperties(
     VkPhysicalDevice physicalDevice,
-    const VkPhysicalDeviceExternalSemaphoreInfoKHR* pExternalSemaphoreInfo,
-    VkExternalSemaphorePropertiesKHR*               pExternalSemaphoreProperties);
+    const VkPhysicalDeviceExternalSemaphoreInfo*    pExternalSemaphoreInfo,
+    VkExternalSemaphoreProperties*                  pExternalSemaphoreProperties);
 
-VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFencePropertiesKHR(
+VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFenceProperties(
     VkPhysicalDevice                            physicalDevice,
-    const VkPhysicalDeviceExternalFenceInfoKHR* pExternalFenceInfo,
-    VkExternalFencePropertiesKHR*               pExternalFenceProperties);
+    const VkPhysicalDeviceExternalFenceInfo*    pExternalFenceInfo,
+    VkExternalFenceProperties*                  pExternalFenceProperties);
 
 VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXcbPresentationSupportKHR(
     VkPhysicalDevice                            physicalDevice,
@@ -634,12 +632,12 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXlibPresentationSupportKHR(
 VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t                                    queueFamilyIndex,
-    struct wl_display*                                    display);
+    struct wl_display*                          display);
 #endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     VkDevice                                    device,
-    VkExternalMemoryHandleTypeFlagBitsKHR       handleType,
+    VkExternalMemoryHandleTypeFlagBits          handleType,
     const void*                                 pHostPointer,
     VkMemoryHostPointerPropertiesEXT*           pMemoryHostPointerProperties);
 

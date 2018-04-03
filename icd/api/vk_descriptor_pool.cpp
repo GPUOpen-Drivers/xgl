@@ -234,14 +234,14 @@ VkResult DescriptorPool::AllocDescriptorSets(
             {
                 // State set will be released in error case handling below, since non-null handle is present
 
-                result = VK_ERROR_OUT_OF_POOL_MEMORY_KHR;
+                result = VK_ERROR_OUT_OF_POOL_MEMORY;
             }
 
             allocCount++;
         }
         else
         {
-            result = VK_ERROR_OUT_OF_POOL_MEMORY_KHR;
+            result = VK_ERROR_OUT_OF_POOL_MEMORY;
         }
     }
 

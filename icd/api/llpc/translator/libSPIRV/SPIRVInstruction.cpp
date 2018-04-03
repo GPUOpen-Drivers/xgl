@@ -350,10 +350,13 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
 
   union ConstValue {
     bool      BoolVal;
+    int16_t   Int16Val;
+    uint16_t  Uint16Val;
     int32_t   IntVal;
     uint32_t  UintVal;
     int64_t   Int64Val;
     uint64_t  Uint64Val;
+    uint16_t  Float16Val;
     float     FloatVal;
     double    DoubleVal;
   };
@@ -444,23 +447,37 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         auto BV = BM->getValue(Ops[J]);
         if (CompCount == 1)
           SrcVal[J].Uint64Val = getConstantValue(BV);
-        else {
+        else
           SrcVal[J].Uint64Val = getConstantValue(BV, I);
-        }
       }
 
       // Do computation (constant folding)
       switch (OC) {
       case OpUConvert: {
-        if (DestCompTy->isTypeInt(32)) {
-          if (SrcCompTy->isTypeInt(64))
+        if (DestCompTy->isTypeInt(16)) {
+          if (SrcCompTy->isTypeInt(32))
+            // Uint16 <- uint32
+            DestVal.Uint16Val = static_cast<uint16_t>(SrcVal[0].UintVal);
+          else if (SrcCompTy->isTypeInt(64))
+            // Uint16 <- uint64
+            DestVal.Uint16Val = static_cast<uint16_t>(SrcVal[0].Uint64Val);
+          else
+            llvm_unreachable("Invalid type");
+        } else if (DestCompTy->isTypeInt(32)) {
+          if (SrcCompTy->isTypeInt(16))
+            // Uint <- uint16
+            DestVal.UintVal = static_cast<uint32_t>(SrcVal[0].Uint16Val);
+          else if (SrcCompTy->isTypeInt(64))
             // Uint <- uint64
             DestVal.UintVal = static_cast<uint32_t>(SrcVal[0].Uint64Val);
           else
             llvm_unreachable("Invalid type");
         } else {
           assert(DestCompTy->isTypeInt(64));
-          if (SrcCompTy->isTypeInt(32))
+          if (SrcCompTy->isTypeInt(16))
+            // Uint64 <- uint16
+            DestVal.Uint64Val = static_cast<uint64_t>(SrcVal[0].Uint16Val);
+          else if (SrcCompTy->isTypeInt(32))
             // Uint64 <- uint
             DestVal.Uint64Val = static_cast<uint64_t>(SrcVal[0].UintVal);
           else
@@ -469,15 +486,30 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpSConvert: {
-        if (DestCompTy->isTypeInt(32)) {
-          if (SrcCompTy->isTypeInt(64))
+        if (DestCompTy->isTypeInt(16)) {
+          if (SrcCompTy->isTypeInt(32))
+            // Int16 <- int32
+            DestVal.Int16Val = static_cast<int16_t>(SrcVal[0].IntVal);
+          else if (SrcCompTy->isTypeInt(64))
+            // Int16 <- int64
+            DestVal.Int16Val = static_cast<int16_t>(SrcVal[0].Int64Val);
+          else
+            llvm_unreachable("Invalid type");
+        } else if (DestCompTy->isTypeInt(32)) {
+          if (SrcCompTy->isTypeInt(16))
+            // Int <- int16
+            DestVal.IntVal = static_cast<int32_t>(SrcVal[0].Int16Val);
+          else if (SrcCompTy->isTypeInt(64))
             // Int <- int64
             DestVal.IntVal = static_cast<int32_t>(SrcVal[0].Int64Val);
           else
             llvm_unreachable("Invalid type");
         } else {
           assert(DestCompTy->isTypeInt(64));
-          if (SrcCompTy->isTypeInt(32))
+          if (SrcCompTy->isTypeInt(16))
+            // Int64 <- int16
+            DestVal.Int64Val = static_cast<int64_t>(SrcVal[0].Int16Val);
+          else if (SrcCompTy->isTypeInt(32))
             // Int64 <- int
             DestVal.Int64Val = static_cast<int64_t>(SrcVal[0].IntVal);
           else
@@ -486,15 +518,46 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpFConvert: {
-        if (DestCompTy->isTypeFloat(32)) {
-          if (SrcCompTy->isTypeFloat(64))
+        if (DestCompTy->isTypeFloat(16)) {
+          if (SrcCompTy->isTypeFloat(32)) {
+            // Float16 <- Float
+            spvutils::HexFloat<spvutils::FloatProxy<float>> FVal(SrcVal[0].FloatVal);
+            spvutils::HexFloat<spvutils::FloatProxy<spvutils::Float16>> F16Val(0);
+
+            FVal.castTo(F16Val, spvutils::kRoundToZero);
+            DestVal.Float16Val = F16Val.getBits();
+          } else if (SrcCompTy->isTypeFloat(64)) {
+            // Float16 <- Double
+            spvutils::HexFloat<spvutils::FloatProxy<double>> F64Val(SrcVal[0].DoubleVal);
+            spvutils::HexFloat<spvutils::FloatProxy<spvutils::Float16>> F16Val(0);
+
+            F64Val.castTo(F16Val, spvutils::kRoundToZero);
+            DestVal.Float16Val = F16Val.getBits();
+          } else
+            llvm_unreachable("Invalid type");
+        } else if (DestCompTy->isTypeFloat(32)) {
+          if (SrcCompTy->isTypeFloat(16)) {
+            // Float <- Float16
+            spvutils::HexFloat<spvutils::FloatProxy<spvutils::Float16>> F16Val(SrcVal[0].Uint16Val);
+            spvutils::HexFloat<spvutils::FloatProxy<float>> FVal(0.0f);
+
+            F16Val.castTo(FVal, spvutils::kRoundToZero);
+            DestVal.FloatVal = FVal.value().getAsFloat();
+          } else if (SrcCompTy->isTypeFloat(64))
             // Float <- double
             DestVal.FloatVal = static_cast<float>(SrcVal[0].DoubleVal);
           else
             llvm_unreachable("Invalid type");
         } else {
           assert(DestCompTy->isTypeFloat(64));
-          if (SrcCompTy->isTypeFloat(32))
+          if (SrcCompTy->isTypeFloat(16)) {
+            // Double <- Float16
+            spvutils::HexFloat<spvutils::FloatProxy<spvutils::Float16>> F16Val(SrcVal[0].Uint16Val);
+            spvutils::HexFloat<spvutils::FloatProxy<double>> F64Val(0.0);
+
+            F16Val.castTo(F64Val, spvutils::kRoundToZero);
+            DestVal.DoubleVal = F64Val.value().getAsFloat();
+          } else if (SrcCompTy->isTypeFloat(32))
             // Double <- Float
             DestVal.DoubleVal = static_cast<double>(SrcVal[0].FloatVal);
           else
@@ -516,7 +579,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpSNegate: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // -Int16
+          DestVal.Int16Val = (0 - SrcVal[0].Int16Val);
+        else if (DestCompTy->isTypeInt(32))
           // -Int
           DestVal.IntVal = (0 - SrcVal[0].IntVal);
         else {
@@ -527,7 +593,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpNot: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // ~Uint
+          DestVal.Uint16Val = ~SrcVal[0].Uint16Val;
+        else if (DestCompTy->isTypeInt(32))
           // ~Uint
           DestVal.UintVal = ~SrcVal[0].UintVal;
         else {
@@ -538,7 +607,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpIAdd: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Int16 + int16
+          DestVal.Int16Val = SrcVal[0].Int16Val + SrcVal[1].Int16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Int + int
           DestVal.IntVal = SrcVal[0].IntVal + SrcVal[1].IntVal;
         else {
@@ -549,7 +621,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpISub: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Int16 - int16
+          DestVal.Int16Val = SrcVal[0].Int16Val - SrcVal[1].Int16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Int - int
           DestVal.IntVal = SrcVal[0].IntVal - SrcVal[1].IntVal;
         else {
@@ -560,7 +635,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpIMul: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Int16 * int16
+          DestVal.Int16Val = SrcVal[0].Int16Val * SrcVal[1].Int16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Int * int
           DestVal.IntVal = SrcVal[0].IntVal * SrcVal[1].IntVal;
         else {
@@ -571,7 +649,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpUDiv: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Uint16 / uint16
+          DestVal.Uint16Val = SrcVal[0].Uint16Val / SrcVal[1].Uint16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Uint / uint
           DestVal.UintVal = SrcVal[0].UintVal / SrcVal[1].UintVal;
         else {
@@ -582,7 +663,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpSDiv: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Int16 / int16
+          DestVal.Int16Val = SrcVal[0].Int16Val / SrcVal[1].Int16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Int / int
           DestVal.IntVal = SrcVal[0].IntVal / SrcVal[1].IntVal;
         else {
@@ -593,7 +677,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpUMod: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Uint16 % uint16
+          DestVal.Uint16Val = SrcVal[0].Uint16Val % SrcVal[1].Uint16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Uint % uint
           DestVal.UintVal = SrcVal[0].UintVal % SrcVal[1].UintVal;
         else {
@@ -604,7 +691,13 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpSMod: {
-        if (DestCompTy->isTypeInt(32)) {
+        if (DestCompTy->isTypeInt(16)) {
+          // Mod(int16, int16)
+          float Quo =
+            static_cast<float>(SrcVal[0].Int16Val) / SrcVal[1].Int16Val;
+          DestVal.Int16Val = SrcVal[0].Int16Val -
+            SrcVal[1].Int16Val * static_cast<int16_t>(std::floor(Quo));
+        } else if (DestCompTy->isTypeInt(32)) {
           // Mod(int, int)
           float Quo =
             static_cast<float>(SrcVal[0].IntVal) / SrcVal[1].IntVal;
@@ -621,7 +714,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpSRem: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Int16 % int16
+          DestVal.Int16Val = SrcVal[0].Int16Val % SrcVal[1].Int16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Int % int
           DestVal.IntVal = SrcVal[0].IntVal % SrcVal[1].IntVal;
         else {
@@ -634,7 +730,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
       case OpShiftRightLogical: {
         // NOTE: "Shift number" is consumed as an 32-bit unsigned integer
         // regardless of its actual type.
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Uint16 >> uint
+          DestVal.Uint16Val = SrcVal[0].Uint16Val >> SrcVal[1].UintVal;
+        else if (DestCompTy->isTypeInt(32))
           // Uint >> uint
           DestVal.UintVal = SrcVal[0].UintVal >> SrcVal[1].UintVal;
         else {
@@ -647,7 +746,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
       case OpShiftRightArithmetic: {
         // NOTE: "Shift number" is consumed as an 32-bit unsigned integer
         // regardless of its actual type.
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Int16 >> uint
+          DestVal.Int16Val = SrcVal[0].Int16Val >> SrcVal[1].UintVal;
+        else if (DestCompTy->isTypeInt(32))
           // Int >> uint
           DestVal.IntVal = SrcVal[0].IntVal >> SrcVal[1].UintVal;
         else {
@@ -660,7 +762,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
       case OpShiftLeftLogical: {
         // NOTE: "Shift number" is consumed as an 32-bit unsigned integer
         // regardless of its actual type.
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Uint16 << uint
+          DestVal.Uint16Val = SrcVal[0].Uint16Val << SrcVal[1].UintVal;
+        else if (DestCompTy->isTypeInt(32))
           // Uint << uint
           DestVal.UintVal = SrcVal[0].UintVal << SrcVal[1].UintVal;
         else {
@@ -671,7 +776,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpBitwiseOr: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Uint16 | uint16
+          DestVal.Uint16Val = SrcVal[0].Uint16Val | SrcVal[1].Uint16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Uint | uint
           DestVal.UintVal = SrcVal[0].UintVal | SrcVal[1].UintVal;
         else {
@@ -682,7 +790,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpBitwiseXor: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Uint16 ^ uint16
+          DestVal.Uint16Val = SrcVal[0].Uint16Val ^ SrcVal[1].Uint16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Uint ^ uint
           DestVal.UintVal = SrcVal[0].UintVal ^ SrcVal[1].UintVal;
         else {
@@ -693,7 +804,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpBitwiseAnd: {
-        if (DestCompTy->isTypeInt(32))
+        if (DestCompTy->isTypeInt(16))
+          // Uint16 & uint16
+          DestVal.Uint16Val = SrcVal[0].Uint16Val & SrcVal[1].Uint16Val;
+        else if (DestCompTy->isTypeInt(32))
           // Uint & uint
           DestVal.UintVal = SrcVal[0].UintVal & SrcVal[1].UintVal;
         else {
@@ -728,7 +842,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         DestVal = SrcVal[0].BoolVal ? SrcVal[1] : SrcVal[2];
         break;
       case OpIEqual: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Uint16 == uint16
+          DestVal.BoolVal = (SrcVal[0].Uint16Val == SrcVal[1].Uint16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Uint == uint
           DestVal.BoolVal = (SrcVal[0].UintVal == SrcVal[1].UintVal);
         else {
@@ -739,7 +856,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpINotEqual: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Uint16 != uint16
+          DestVal.BoolVal = (SrcVal[0].Uint16Val != SrcVal[1].Uint16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Uint != uint
           DestVal.BoolVal = (SrcVal[0].UintVal != SrcVal[1].UintVal);
         else {
@@ -750,7 +870,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpULessThan: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Uint16 < uint16
+          DestVal.BoolVal = (SrcVal[0].Uint16Val < SrcVal[1].Uint16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Uint < uint
           DestVal.BoolVal = (SrcVal[0].UintVal < SrcVal[1].UintVal);
         else {
@@ -761,7 +884,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpSLessThan: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Int16 < int16
+          DestVal.BoolVal = (SrcVal[0].Int16Val < SrcVal[1].Int16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Int < int
           DestVal.BoolVal = (SrcVal[0].IntVal < SrcVal[1].IntVal);
         else {
@@ -772,7 +898,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpUGreaterThan: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Uint16 > uint16
+          DestVal.BoolVal = (SrcVal[0].Uint16Val > SrcVal[1].Uint16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Uint > uint
           DestVal.BoolVal = (SrcVal[0].UintVal > SrcVal[1].UintVal);
         else {
@@ -783,7 +912,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpSGreaterThan: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Int16 > int16
+          DestVal.BoolVal = (SrcVal[0].Int16Val > SrcVal[1].Int16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Int > int
           DestVal.BoolVal = (SrcVal[0].IntVal > SrcVal[1].IntVal);
         else {
@@ -794,7 +926,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpULessThanEqual: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Uint16 <= uint16
+          DestVal.BoolVal = (SrcVal[0].Uint16Val <= SrcVal[1].Uint16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Uint <= uint
           DestVal.BoolVal = (SrcVal[0].UintVal <= SrcVal[1].UintVal);
         else {
@@ -805,7 +940,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpSLessThanEqual: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Int16 <= int16
+          DestVal.BoolVal = (SrcVal[0].Int16Val <= SrcVal[1].Int16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Int <= int
           DestVal.BoolVal = (SrcVal[0].IntVal <= SrcVal[1].IntVal);
         else {
@@ -816,7 +954,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpUGreaterThanEqual: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Uint16 >= uint16
+          DestVal.BoolVal = (SrcVal[0].Uint16Val >= SrcVal[1].Uint16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Uint >= uint
           DestVal.BoolVal = (SrcVal[0].UintVal >= SrcVal[1].UintVal);
         else {
@@ -827,7 +968,10 @@ createValueFromSpecConstantOp(SPIRVSpecConstantOp *Inst) {
         break;
       }
       case OpSGreaterThanEqual: {
-        if (SrcCompTy->isTypeInt(32))
+        if (SrcCompTy->isTypeInt(16))
+          // Int16 >= int16
+          DestVal.BoolVal = (SrcVal[0].Int16Val >= SrcVal[1].Int16Val);
+        else if (SrcCompTy->isTypeInt(32))
           // Int >= int
           DestVal.BoolVal = (SrcVal[0].IntVal >= SrcVal[1].IntVal);
         else {

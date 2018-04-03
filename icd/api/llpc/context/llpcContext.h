@@ -193,11 +193,6 @@ public:
         return m_pEmptyMetaNode;
     }
 
-    uint32_t GetDescriptorTablePtrHigh()
-    {
-        return m_pPipelineContext->GetDescriptorTablePtrHigh();
-    }
-
     void AutoLayoutDescriptor(ShaderStage shaderStage)
     {
         return m_pPipelineContext->AutoLayoutDescriptor(shaderStage);

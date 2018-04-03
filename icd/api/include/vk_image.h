@@ -197,7 +197,7 @@ public:
         { return (m_flags & SparseEnablingFlags) != 0; }
 
     bool Is2dArrayCompatible() const
-        { return (m_flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT_KHR) != 0; }
+        { return (m_flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) != 0; }
 
     bool IsSampleLocationsCompatibleDepth() const
     {
@@ -414,16 +414,16 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(
     const VkImageSubresource*                   pSubresource,
     VkSubresourceLayout*                        pLayout);
 
-VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetImageMemoryRequirements2(
     VkDevice                                    device,
-    const VkImageMemoryRequirementsInfo2KHR*    pInfo,
-    VkMemoryRequirements2KHR*                   pMemoryRequirements);
+    const VkImageMemoryRequirementsInfo2*       pInfo,
+    VkMemoryRequirements2*                      pMemoryRequirements);
 
-VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2KHR(
+VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2(
     VkDevice                                    device,
-    const VkImageSparseMemoryRequirementsInfo2KHR* pInfo,
+    const VkImageSparseMemoryRequirementsInfo2* pInfo,
     uint32_t*                                   pSparseMemoryRequirementCount,
-    VkSparseImageMemoryRequirements2KHR*        pSparseMemoryRequirements);
+    VkSparseImageMemoryRequirements2*           pSparseMemoryRequirements);
 
 } // namespace entry
 

@@ -770,8 +770,8 @@ define spir_func {float, i32} @_Z11frexpStructf(
     %1 = call float @llvm.amdgcn.frexp.mant.f32(float %x)
     %2 = call i32 @llvm.amdgcn.frexp.exp.i32.f32(float %x)
 
-    %3 = insertvalue {float, i32} undef, float %1, 0
-    %4 = insertvalue {float, i32} %3, i32 %2, 1
+    %3 = insertvalue { float, i32 } undef, float %1, 0
+    %4 = insertvalue { float, i32 } %3, i32 %2, 1
 
     ret {float, i32} %4
 }
@@ -795,8 +795,8 @@ define spir_func {<2 x float>, <2 x i32>} @_Z11frexpStructDv2_f(
     %7 = insertelement <2 x i32> undef, i32 %2, i32 0
     %8 = insertelement <2 x i32> %7, i32 %4, i32 1
 
-    %9 = insertvalue {<2 x float>, <2 x i32>} undef, <2 x float> %6, 0
-    %10 = insertvalue {<2 x float>, <2 x i32>} %9, <2 x i32> %8, 1
+    %9  = insertvalue { <2 x float>, <2 x i32> } undef, <2 x float> %6, 0
+    %10 = insertvalue { <2 x float>, <2 x i32> } %9, <2 x i32> %8, 1
 
     ret {<2 x float>, <2 x i32>} %10
 }
@@ -826,8 +826,8 @@ define spir_func {<3 x float>, <3 x i32>} @_Z11frexpStructDv3_f(
     %11 = insertelement <3 x i32> %10, i32 %4, i32 1
     %12 = insertelement <3 x i32> %11, i32 %6, i32 2
 
-    %13 = insertvalue {<3 x float>, <3 x i32>} undef, <3 x float> %9, 0
-    %14 = insertvalue {<3 x float>, <3 x i32>} %13, <3 x i32> %12, 1
+    %13 = insertvalue { <3 x float>, <3 x i32> } undef, <3 x float> %9, 0
+    %14 = insertvalue { <3 x float>, <3 x i32> } %13, <3 x i32> %12, 1
 
     ret {<3 x float>, <3 x i32>} %14
 }
@@ -863,8 +863,8 @@ define spir_func {<4 x float>, <4 x i32>} @_Z11frexpStructDv4_f(
     %15 = insertelement <4 x i32> %14, i32 %6, i32 2
     %16 = insertelement <4 x i32> %15, i32 %8, i32 3
 
-    %17 = insertvalue {<4 x float>, <4 x i32>} undef, <4 x float> %12, 0
-    %18 = insertvalue {<4 x float>, <4 x i32>} %17, <4 x i32> %16, 1
+    %17 = insertvalue { <4 x float>, <4 x i32> } undef, <4 x float> %12, 0
+    %18 = insertvalue { <4 x float>, <4 x i32> } %17, <4 x i32> %16, 1
 
     ret {<4 x float>, <4 x i32>} %18
 }
@@ -1946,8 +1946,8 @@ define spir_func {i32, i32} @_Z9IAddCarryii(
     %3 = extractvalue { i32, i1 } %1, 1
     %4 = zext i1 %3 to i32
 
-    %5 = insertvalue {i32, i32} undef, i32 %2, 0
-    %6 = insertvalue {i32, i32} %5, i32 %4, 1
+    %5 = insertvalue { i32, i32 } undef, i32 %2, 0
+    %6 = insertvalue { i32, i32 } %5, i32 %4, 1
 
     ret {i32, i32} %6
 }
@@ -1978,8 +1978,8 @@ define spir_func {<2 x i32>, <2 x i32>} @_Z9IAddCarryDv2_iDv2_i(
     %11 = insertelement <2 x i32> undef, i32 %4, i32 0
     %12 = insertelement <2 x i32> %11, i32 %8, i32 1
 
-    %13 = insertvalue {<2 x i32>, <2 x i32>} undef, <2 x i32> %10, 0
-    %14 = insertvalue {<2 x i32>, <2 x i32>} %13, <2 x i32> %12, 1
+    %13 = insertvalue { <2 x i32>, <2 x i32> } undef, <2 x i32> %10, 0
+    %14 = insertvalue { <2 x i32>, <2 x i32> } %13, <2 x i32> %12, 1
 
     ret {<2 x i32>, <2 x i32>} %14
 }
@@ -2019,8 +2019,8 @@ define spir_func {<3 x i32>, <3 x i32>} @_Z9IAddCarryDv3_iDv3_i(
     %17 = insertelement <3 x i32> %16, i32 %8, i32 1
     %18 = insertelement <3 x i32> %17, i32 %12, i32 2
 
-    %19 = insertvalue {<3 x i32>, <3 x i32>} undef, <3 x i32> %15, 0
-    %20 = insertvalue {<3 x i32>, <3 x i32>} %19, <3 x i32> %18, 1
+    %19 = insertvalue { <3 x i32>, <3 x i32> } undef, <3 x i32> %15, 0
+    %20 = insertvalue { <3 x i32>, <3 x i32> } %19, <3 x i32> %18, 1
 
     ret {<3 x i32>, <3 x i32>} %20
 }
@@ -2069,8 +2069,8 @@ define spir_func {<4 x i32>, <4 x i32>} @_Z9IAddCarryDv4_iDv4_i(
     %23 = insertelement <4 x i32> %22, i32 %12, i32 2
     %24 = insertelement <4 x i32> %23, i32 %16, i32 3
 
-    %25 = insertvalue {<4 x i32>, <4 x i32>} undef, <4 x i32> %20, 0
-    %26 = insertvalue {<4 x i32>, <4 x i32>} %25, <4 x i32> %24, 1
+    %25 = insertvalue { <4 x i32>, <4 x i32> } undef, <4 x i32> %20, 0
+    %26 = insertvalue { <4 x i32>, <4 x i32> } %25, <4 x i32> %24, 1
 
     ret {<4 x i32>, <4 x i32>} %26
 }
@@ -2084,8 +2084,8 @@ define spir_func {i32, i32} @_Z10ISubBorrowii(
     %3 = extractvalue { i32, i1 } %1, 1
     %4 = zext i1 %3 to i32
 
-    %5 = insertvalue {i32, i32} undef, i32 %2, 0
-    %6 = insertvalue {i32, i32} %5, i32 %4, 1
+    %5 = insertvalue { i32, i32 } undef, i32 %2, 0
+    %6 = insertvalue { i32, i32 } %5, i32 %4, 1
 
     ret {i32, i32} %6
 }
@@ -2116,8 +2116,8 @@ define spir_func {<2 x i32>, <2 x i32>} @_Z10ISubBorrowDv2_iDv2_i(
     %11 = insertelement <2 x i32> undef, i32 %4, i32 0
     %12 = insertelement <2 x i32> %11, i32 %8, i32 1
 
-    %13 = insertvalue {<2 x i32>, <2 x i32>} undef, <2 x i32> %10, 0
-    %14 = insertvalue {<2 x i32>, <2 x i32>} %13, <2 x i32> %12, 1
+    %13 = insertvalue { <2 x i32>, <2 x i32> } undef, <2 x i32> %10, 0
+    %14 = insertvalue { <2 x i32>, <2 x i32> } %13, <2 x i32> %12, 1
 
     ret {<2 x i32>, <2 x i32>} %14
 }
@@ -2157,8 +2157,8 @@ define spir_func {<3 x i32>, <3 x i32>} @_Z10ISubBorrowDv3_iDv3_i(
     %17 = insertelement <3 x i32> %16, i32 %8, i32 1
     %18 = insertelement <3 x i32> %17, i32 %12, i32 2
 
-    %19 = insertvalue {<3 x i32>, <3 x i32>} undef, <3 x i32> %15, 0
-    %20 = insertvalue {<3 x i32>, <3 x i32>} %19, <3 x i32> %18, 1
+    %19 = insertvalue { <3 x i32>, <3 x i32> } undef, <3 x i32> %15, 0
+    %20 = insertvalue { <3 x i32>, <3 x i32> } %19, <3 x i32> %18, 1
 
     ret {<3 x i32>, <3 x i32>} %20
 }
@@ -2207,8 +2207,8 @@ define spir_func {<4 x i32>, <4 x i32>} @_Z10ISubBorrowDv4_iDv4_i(
     %23 = insertelement <4 x i32> %22, i32 %12, i32 2
     %24 = insertelement <4 x i32> %23, i32 %16, i32 3
 
-    %25 = insertvalue {<4 x i32>, <4 x i32>} undef, <4 x i32> %20, 0
-    %26 = insertvalue {<4 x i32>, <4 x i32>} %25, <4 x i32> %24, 1
+    %25 = insertvalue { <4 x i32>, <4 x i32> } undef, <4 x i32> %20, 0
+    %26 = insertvalue { <4 x i32>, <4 x i32> } %25, <4 x i32> %24, 1
 
     ret {<4 x i32>, <4 x i32>} %26
 }
@@ -2224,8 +2224,8 @@ define spir_func {i32, i32} @_Z12UMulExtendedii(
     %5 = lshr i64 %3, 32
     %6 = trunc i64 %5 to i32
 
-    %7 = insertvalue {i32, i32} undef, i32 %4, 0
-    %8 = insertvalue {i32, i32} %7, i32 %6, 1
+    %7 = insertvalue { i32, i32 } undef, i32 %4, 0
+    %8 = insertvalue { i32, i32 } %7, i32 %6, 1
 
     ret {i32, i32} %8
 }
@@ -2260,8 +2260,8 @@ define spir_func {<2 x i32>, <2 x i32>} @_Z12UMulExtendedDv2_iDv2_i(
     %15 = insertelement <2 x i32> undef, i32 %6, i32 0
     %16 = insertelement <2 x i32> %15, i32 %12, i32 1
 
-    %17 = insertvalue {<2 x i32>, <2 x i32>} undef, <2 x i32> %14, 0
-    %18 = insertvalue {<2 x i32>, <2 x i32>} %17, <2 x i32> %16, 1
+    %17 = insertvalue { <2 x i32>, <2 x i32> } undef, <2 x i32> %14, 0
+    %18 = insertvalue { <2 x i32>, <2 x i32> } %17, <2 x i32> %16, 1
 
     ret {<2 x i32>, <2 x i32>} %18
 }
@@ -2307,8 +2307,8 @@ define spir_func {<3 x i32>, <3 x i32>} @_Z12UMulExtendedDv3_iDv3_i(
     %23 = insertelement <3 x i32> %22, i32 %12, i32 1
     %24 = insertelement <3 x i32> %23, i32 %18, i32 2
 
-    %25 = insertvalue {<3 x i32>, <3 x i32>} undef, <3 x i32> %21, 0
-    %26 = insertvalue {<3 x i32>, <3 x i32>} %25, <3 x i32> %24, 1
+    %25 = insertvalue { <3 x i32>, <3 x i32> } undef, <3 x i32> %21, 0
+    %26 = insertvalue { <3 x i32>, <3 x i32> } %25, <3 x i32> %24, 1
 
     ret {<3 x i32>, <3 x i32>} %26
 }
@@ -2365,8 +2365,8 @@ define spir_func {<4 x i32>, <4 x i32>} @_Z12UMulExtendedDv4_iDv4_i(
     %31 = insertelement <4 x i32> %30, i32 %18, i32 2
     %32 = insertelement <4 x i32> %31, i32 %24, i32 3
 
-    %33 = insertvalue {<4 x i32>, <4 x i32>} undef, <4 x i32> %28, 0
-    %34 = insertvalue {<4 x i32>, <4 x i32>} %33, <4 x i32> %32, 1
+    %33 = insertvalue { <4 x i32>, <4 x i32> } undef, <4 x i32> %28, 0
+    %34 = insertvalue { <4 x i32>, <4 x i32> } %33, <4 x i32> %32, 1
 
     ret {<4 x i32>, <4 x i32>} %34
 }
@@ -2382,8 +2382,8 @@ define spir_func {i32, i32} @_Z12SMulExtendedii(
     %5 = lshr i64 %3, 32
     %6 = trunc i64 %5 to i32
 
-    %7 = insertvalue {i32, i32} undef, i32 %4, 0
-    %8 = insertvalue {i32, i32} %7, i32 %6, 1
+    %7 = insertvalue { i32, i32 } undef, i32 %4, 0
+    %8 = insertvalue { i32, i32 } %7, i32 %6, 1
 
     ret {i32, i32} %8
 }
@@ -2418,8 +2418,8 @@ define spir_func {<2 x i32>, <2 x i32>} @_Z12SMulExtendedDv2_iDv2_i(
     %15 = insertelement <2 x i32> undef, i32 %6, i32 0
     %16 = insertelement <2 x i32> %15, i32 %12, i32 1
 
-    %17 = insertvalue {<2 x i32>, <2 x i32>} undef, <2 x i32> %14, 0
-    %18 = insertvalue {<2 x i32>, <2 x i32>} %17, <2 x i32> %16, 1
+    %17 = insertvalue { <2 x i32>, <2 x i32> } undef, <2 x i32> %14, 0
+    %18 = insertvalue { <2 x i32>, <2 x i32> } %17, <2 x i32> %16, 1
 
     ret {<2 x i32>, <2 x i32>} %18
 }
@@ -2465,8 +2465,8 @@ define spir_func {<3 x i32>, <3 x i32>} @_Z12SMulExtendedDv3_iDv3_i(
     %23 = insertelement <3 x i32> %22, i32 %12, i32 1
     %24 = insertelement <3 x i32> %23, i32 %18, i32 2
 
-    %25 = insertvalue {<3 x i32>, <3 x i32>} undef, <3 x i32> %21, 0
-    %26 = insertvalue {<3 x i32>, <3 x i32>} %25, <3 x i32> %24, 1
+    %25 = insertvalue { <3 x i32>, <3 x i32> } undef, <3 x i32> %21, 0
+    %26 = insertvalue { <3 x i32>, <3 x i32> } %25, <3 x i32> %24, 1
 
     ret {<3 x i32>, <3 x i32>} %26
 }
@@ -2523,8 +2523,8 @@ define spir_func {<4 x i32>, <4 x i32>} @_Z12SMulExtendedDv4_iDv4_i(
     %31 = insertelement <4 x i32> %30, i32 %18, i32 2
     %32 = insertelement <4 x i32> %31, i32 %24, i32 3
 
-    %33 = insertvalue {<4 x i32>, <4 x i32>} undef, <4 x i32> %28, 0
-    %34 = insertvalue {<4 x i32>, <4 x i32>} %33, <4 x i32> %32, 1
+    %33 = insertvalue { <4 x i32>, <4 x i32> } undef, <4 x i32> %28, 0
+    %34 = insertvalue { <4 x i32>, <4 x i32> } %33, <4 x i32> %32, 1
 
     ret {<4 x i32>, <4 x i32>} %34
 }

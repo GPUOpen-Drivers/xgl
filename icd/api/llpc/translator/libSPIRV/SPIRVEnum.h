@@ -198,7 +198,6 @@ SPIRVMap<SPIRVCapabilityKind, SPIRVCapVec>::init() {
   ADD_VEC_INIT(CapabilityStencilExportEXT, { CapabilityShader });
   ADD_VEC_INIT(CapabilityShaderViewportIndexLayerEXT, { CapabilityMultiViewport });
   ADD_VEC_INIT(CapabilityUniformAndStorageBuffer16BitAccess, { CapabilityStorageBuffer16BitAccess });
-#ifdef ICD_VULKAN_1_1
   ADD_VEC_INIT(CapabilityGroupNonUniformVote, { CapabilityGroupNonUniform });
   ADD_VEC_INIT(CapabilityGroupNonUniformArithmetic, { CapabilityGroupNonUniform });
   ADD_VEC_INIT(CapabilityGroupNonUniformBallot, { CapabilityGroupNonUniform });
@@ -206,9 +205,12 @@ SPIRVMap<SPIRVCapabilityKind, SPIRVCapVec>::init() {
   ADD_VEC_INIT(CapabilityGroupNonUniformShuffleRelative, { CapabilityGroupNonUniform });
   ADD_VEC_INIT(CapabilityGroupNonUniformClustered, { CapabilityGroupNonUniform });
   ADD_VEC_INIT(CapabilityGroupNonUniformQuad, { CapabilityGroupNonUniform });
-#endif
   ADD_VEC_INIT(CapabilityImageGatherBiasLodAMD, { CapabilityShader });
   ADD_VEC_INIT(CapabilityFragmentMaskAMD, { CapabilityShader });
+  ADD_VEC_INIT(CapabilityFloat16ImageAMD, { CapabilityShader });
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+  ADD_VEC_INIT(CapabilityPropertyIdAttachmentAMD, { CapabilityShader });
+#endif
 }
 
 template<> inline void
@@ -421,6 +423,9 @@ SPIRVMap<BuiltIn, SPIRVCapVec>::init() {
   ADD_VEC_INIT(BuiltInSubgroupLtMaskKHR, { CapabilitySubgroupBallotKHR });
   ADD_VEC_INIT(BuiltInDeviceIndex, { CapabilityDeviceGroup });
   ADD_VEC_INIT(BuiltInViewIndex, { CapabilityMultiView });
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+  ADD_VEC_INIT(BuiltInPropertyIdAMD, { CapabilityPropertyIdAttachmentAMD });
+#endif
 }
 
 template<> inline void

@@ -222,8 +222,6 @@ void CopyShader::ExportOutput()
         ExportGenericOutput(pOutputValue, loc, pInsertPos);
     }
 
-    const auto& builtInOutLocs = pResUsage->inOutUsage.gs.builtInOutLocs;
-
     if (builtInUsage.position)
     {
         LLPC_ASSERT(pResUsage->inOutUsage.builtInOutputLocMap.find(BuiltInPosition) !=

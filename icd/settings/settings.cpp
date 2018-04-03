@@ -42,8 +42,6 @@ extern void SetupDefaults(RuntimeSettings* pSettings);
 extern void ReadSettings(const Pal::IDevice* pPalDevice, RuntimeSettings* pSettings);
 
 static void ReadPublicSettings(Pal::IDevice* pPalDevice, RuntimeSettings* pSettings);
-static void ValidateSettings(Pal::IDevice* pPalDevice, RuntimeSettings* pSettings);
-static void UpdatePalSettings(Pal::IDevice* pPalDevice, const RuntimeSettings* pSettings);
 
 #ifdef ICD_BUILD_APPPROFILE
 // =====================================================================================================================
@@ -68,6 +66,8 @@ static void OverrideProfiledSettings(
         pSettings->disableDeviceOnlyMemoryTypeWithoutHeap = true;
 
         pSettings->prefetchShaders = true;
+
+        pSettings->enableFmaskBasedMsaaRead = false;
     }
 
     if (appProfile == AppProfile::Talos)
@@ -92,6 +92,11 @@ static void OverrideProfiledSettings(
         pSettings->anisoThreshold    = 1.0f;
     }
 
+    if (appProfile == AppProfile::F1_2017)
+    {
+        pSettings->prefetchShaders = true;
+    }
+
 }
 #endif
 
@@ -107,11 +112,8 @@ void ProcessSettings(
     RuntimeSettings*   pSettings)
 {
 
-    // setup default values for the settings.
+    // Setup default values for the settings.
     SetupDefaults(pSettings);
-
-    // Update PAL settings based on runtime settings and desired driver defaults if needed
-    UpdatePalSettings(pPalDevice, pSettings);
 
 #ifdef ICD_BUILD_APPPROFILE
     const AppProfile origProfile = *pAppProfile;
@@ -133,9 +135,6 @@ void ProcessSettings(
     }
 #endif
 
-    // Make sure the final settings have legal values
-    ValidateSettings(pPalDevice, pSettings);
-
 #ifdef ICD_BUILD_APPPROFILE
     // If we are changing profile via panel setting (i.e. forcing a specific profile), then
     // reload all settings.  This is because certain app profiles may override the default
@@ -154,6 +153,17 @@ void ReadPublicSettings(
     Pal::IDevice*      pPalDevice,
     RuntimeSettings*   pSettings)
 {
+    // Read GPU ID (composed of PCI bus properties)
+    uint32_t appGpuID = 0;
+    if (pPalDevice->ReadSetting("AppGpuId",
+        Pal::SettingScope::Global,
+        Util::ValueType::Uint,
+        &appGpuID,
+        sizeof(appGpuID)))
+    {
+        pSettings->appGpuID = appGpuID;
+    }
+
     // Read TurboSync global key
     bool turboSyncGlobal = false;
     if (pPalDevice->ReadSetting("TurboSync",
@@ -189,8 +199,6 @@ void ValidateSettings(
 {
     // Override the default preciseAnisoMode value based on the public CCC vulkanTexFilterQuality (TFQ) setting.
     // Note: This will override any Vulkan app specific profile.
-    // TODO: Add code to read the Radeon Settings' per-app profile blob's TFQ setting and use that to override
-    //       the global registry TFQ settings.
     switch (pSettings->vulkanTexFilterQuality)
     {
     case TextureFilterOptimizationsDisabled:
@@ -220,7 +228,7 @@ void UpdatePalSettings(
 {
     Pal::PalPublicSettings* pPalSettings = pPalDevice->GetPublicSettings();
 
-    /* Nothing to do here at the moment */
+    pPalSettings->textureOptLevel = pSettings->vulkanTexFilterQuality;
 }
 
 };

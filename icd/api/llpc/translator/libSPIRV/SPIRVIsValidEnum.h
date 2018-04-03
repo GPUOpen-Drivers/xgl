@@ -484,6 +484,9 @@ isValid(spv::BuiltIn V) {
     case BuiltInBaryCoordSmoothCentroidAMD:
     case BuiltInBaryCoordSmoothSampleAMD:
     case BuiltInBaryCoordPullModelAMD:
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+    case BuiltInPropertyIdAMD:
+#endif
       return true;
     default:
       return false;
@@ -510,9 +513,7 @@ isValid(spv::GroupOperation V) {
     case GroupOperationReduce:
     case GroupOperationInclusiveScan:
     case GroupOperationExclusiveScan:
-#ifdef ICD_VULKAN_1_1
     case GroupOperationClusteredReduce:
-#endif
       return true;
     default:
       return false;
@@ -593,7 +594,6 @@ isValid(spv::Capability V) {
     case CapabilitySubgroupDispatch:
     case CapabilityNamedBarrier:
     case CapabilityPipeStorage:
-#ifdef ICD_VULKAN_1_1
     case CapabilityGroupNonUniform:
     case CapabilityGroupNonUniformVote:
     case CapabilityGroupNonUniformArithmetic:
@@ -602,7 +602,6 @@ isValid(spv::Capability V) {
     case CapabilityGroupNonUniformShuffleRelative:
     case CapabilityGroupNonUniformClustered:
     case CapabilityGroupNonUniformQuad:
-#endif
     case CapabilityStencilExportEXT:
     case CapabilityShaderViewportIndexLayerEXT:
     case CapabilitySubgroupBallotKHR:
@@ -615,6 +614,10 @@ isValid(spv::Capability V) {
     case CapabilityMultiView:
     case CapabilityImageGatherBiasLodAMD:
     case CapabilityFragmentMaskAMD:
+    case CapabilityFloat16ImageAMD:
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+    case CapabilityPropertyIdAttachmentAMD:
+#endif
       return true;
     default:
       return false;
@@ -930,7 +933,6 @@ isValid(spv::Op V) {
     case OpModuleProcessed:
     case OpExecutionModeId:
     case OpDecorateId:
-#ifdef ICD_VULKAN_1_1
     case OpGroupNonUniformElect:
     case OpGroupNonUniformAll:
     case OpGroupNonUniformAny:
@@ -965,7 +967,6 @@ isValid(spv::Op V) {
     case OpGroupNonUniformLogicalXor:
     case OpGroupNonUniformQuadBroadcast:
     case OpGroupNonUniformQuadSwap:
-#endif
     case OpForward:
     case OpSubgroupBallotKHR:
     case OpSubgroupFirstInvocationKHR:
@@ -975,6 +976,14 @@ isValid(spv::Op V) {
     case OpSubgroupAllEqualKHR:
     case OpFragmentMaskFetchAMD:
     case OpFragmentFetchAMD:
+    case OpGroupIAddNonUniformAMD:
+    case OpGroupFAddNonUniformAMD:
+    case OpGroupFMinNonUniformAMD:
+    case OpGroupUMinNonUniformAMD:
+    case OpGroupSMinNonUniformAMD:
+    case OpGroupFMaxNonUniformAMD:
+    case OpGroupUMaxNonUniformAMD:
+    case OpGroupSMaxNonUniformAMD:
       return true;
     default:
       return false;
