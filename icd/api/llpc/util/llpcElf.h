@@ -51,26 +51,6 @@ static const char   AmdGpuDisasmName[] = ".AMDGPU.disasm"; // Name of ".AMDGPU.d
 static const char   AmdGpuCsdataName[] = ".AMDGPU.csdata"; // Name of ".AMDGPU.csdata" section
 static const char   AmdGpuConfigName[] = ".AMDGPU.config"; // Name of ".AMDGPU.config" section
 
-// Pal pipeline ABI debug symbol names
-namespace DebugSymNames
-{
-    static const char LsDisasm[] = "_amdgpu_ls_disasm";
-    static const char HsDisasm[] = "_amdgpu_hs_disasm";
-    static const char EsDisasm[] = "_amdgpu_es_disasm";
-    static const char GsDisasm[] = "_amdgpu_gs_disasm";
-    static const char VsDisasm[] = "_amdgpu_vs_disasm";
-    static const char PsDisasm[] = "_amdgpu_ps_disasm";
-    static const char CsDisasm[] = "_amdgpu_cs_disasm";
-
-    static const char LsCsdata[] = "_amdgpu_ls_csdata";
-    static const char HsCsdata[] = "_amdgpu_hs_csdata";
-    static const char EsCsdata[] = "_amdgpu_es_csdata";
-    static const char GsCsdata[] = "_amdgpu_gs_csdata";
-    static const char VsCsdata[] = "_amdgpu_vs_csdata";
-    static const char PsCsdata[] = "_amdgpu_ps_csdata";
-    static const char CsCsdata[] = "_amdgpu_cs_csdata";
-};
-
 // e_ident size and indices
 enum
 {

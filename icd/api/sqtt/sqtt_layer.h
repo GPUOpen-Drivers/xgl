@@ -90,7 +90,7 @@ public:
     void BeginRenderPassResolve();
     void EndRenderPassResolve();
 
-    VK_INLINE const EntryPointTable* GetNextLayer() const
+    VK_INLINE const DispatchTable* GetNextLayer() const
         { return m_pNextLayer; }
 
     VK_INLINE CmdBuffer* GetParent() const
@@ -140,7 +140,7 @@ private:
     SqttMgr*                    m_pSqttMgr;          // Per-device SQTT state
     DevModeMgr*                 m_pDevModeMgr;
     const RuntimeSettings&      m_settings;
-    const EntryPointTable*      m_pNextLayer;        // Pointer to next layer's functions
+    const DispatchTable*        m_pNextLayer;        // Pointer to next layer's dispatch table
     RgpSqttMarkerCbID           m_cbId;              // Command buffer ID associated with this command buffer
     uint64_t                    m_deviceId;          // API-specific device ID (we use VkDevice handle)
     uint32_t                    m_queueFamilyIndex;
@@ -164,16 +164,7 @@ private:
     Util::List<uint64_t, PalAllocator> m_debugTags;
 };
 
-namespace entry
-{
-
-namespace sqtt
-{
-// Dispatch table of entry points that need to be shadowed to support SQTT annotations
-extern const DispatchTableEntry g_SqttDispatchTable[];
-}
-
-}; // namespace entry
+void SqttOverrideDispatchTable(DispatchTable* pDispatchTable, SqttMgr* pMgr);
 
 }; // namespace vk
 

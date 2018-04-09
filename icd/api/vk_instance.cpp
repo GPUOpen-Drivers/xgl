@@ -81,6 +81,7 @@ Instance::Instance(
     m_pPhysicalDeviceManager(nullptr),
     m_apiVersion(apiVersion),
     m_enabledExtensions(enabledExtensions),
+    m_dispatchTable(DispatchTable::Type::INSTANCE, this),
 #ifdef ICD_BUILD_APPPROFILE
     m_preInitAppProfile(preInitProfile),
 #endif
@@ -88,9 +89,6 @@ Instance::Instance(
     m_pScreenStorage(nullptr),
     m_pDevModeMgr(nullptr),
     m_debugReportCallbacks(&m_palAllocator)
-#if PAL_ENABLE_PRINTS_ASSERTS
-    , m_dispatchTableQueryCount(0)
-#endif
 {
     m_flags.u32All = 0;
 
@@ -463,7 +461,37 @@ VkResult Instance::Init(
         }
     }
 
+    if (status == VK_SUCCESS)
+    {
+        InitDispatchTable();
+    }
+
     return status;
+}
+
+// =====================================================================================================================
+// This function initializes the instance dispatch table and allows the chance to override entries in it if necessary.
+// NOTE: Any entry points overridden in the instance dispatch table may need to be also overriden in the device dispatch
+// table as the overrides are not inherited.
+void Instance::InitDispatchTable()
+{
+    // =================================================================================================================
+    // Initialize dispatch table.
+    m_dispatchTable.Init();
+
+    // =================================================================================================================
+    // Override dispatch table entries.
+    EntryPoints* ep = m_dispatchTable.OverrideEntryPoints();
+    // There are no entry point overrides currently.
+
+    // =================================================================================================================
+    // After generic overrides, apply any internal layer specific dispatch table override.
+
+    // Install SQTT marker annotation layer if needed
+    if (IsTracingSupportEnabled())
+    {
+        SqttOverrideDispatchTable(&m_dispatchTable, nullptr);
+    }
 }
 
 // =====================================================================================================================
@@ -741,40 +769,7 @@ void Instance::EnableTracingSupport()
 {
     // This function should not be called after the loader/application has queried this ICD's per-instance dispatch
     // table.
-    VK_DEBUG_BUILD_ONLY_ASSERT(m_dispatchTableQueryCount == 0);
-
     m_flags.sqttSupport = 1;
-}
-
-// =====================================================================================================================
-// Returns this instance's dispatch table stack.  This stack describes the function pointer implementations of all
-// Vulkan entry points, both device and instance, that utilize either this instance, its physical devices, and devices
-// created from them.
-//
-// The function returns a list of entry-arrays and the length of the list.  Not all entry points may appear in every
-// array.  For a given entry point name, the caller should use the entry in the first array that contains a matching
-// name.
-uint32_t Instance::GetDispatchTables(
-    const DispatchTableEntry* pTables[Instance::MaxDispatchTables]
-    ) const
-{
-#if PAL_ENABLE_PRINTS_ASSERTS
-    m_dispatchTableQueryCount++;
-#endif
-
-    uint32_t count = 0;
-
-    // Install SQTT marker annotation layer if needed
-    if (IsTracingSupportEnabled())
-    {
-        pTables[count++] = vk::entry::sqtt::g_SqttDispatchTable;
-    }
-
-    pTables[count++] = vk::entry::g_StandardDispatchTable;
-
-    VK_ASSERT(count <= MaxDispatchTables);
-
-    return count;
 }
 
 // =====================================================================================================================

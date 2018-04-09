@@ -1318,24 +1318,6 @@ Value* VertexFetch::Run(
         }
     }
 
-    // TODO: Support 16-bit vertex fetch.
-    if (is16bitFetch)
-    {
-        // NOTE: Since tbuffer_load_d16 is not supported, we have to convert the resulting float fetch values to
-        // float16 values manually. The fetch values are represented by <n x i32>, so we will bitcast the float16
-        // values to int32 eventually.
-        if (pBasicTy->isFloatingPointTy())
-        {
-            for (uint32_t i = 0; i < fetchCompCount; ++i)
-            {
-                fetchValues[i] = new BitCastInst(fetchValues[i], m_pContext->FloatTy(), "", pInsertPos);
-                fetchValues[i] = new FPTruncInst(fetchValues[i], m_pContext->Float16Ty(), "", pInsertPos);
-                fetchValues[i] = new BitCastInst(fetchValues[i], m_pContext->Int16Ty(), "", pInsertPos);
-                fetchValues[i] = new ZExtInst(fetchValues[i], m_pContext->Int32Ty(), "", pInsertPos);
-            }
-        }
-    }
-
     // Construct vertex fetch results
     const uint32_t inputCompCount = pInputTy->isVectorTy() ? pInputTy->getVectorNumElements() : 1;
     const uint32_t vertexCompCount = inputCompCount * ((bitWidth == 64) ? 2 : 1);
@@ -1525,33 +1507,77 @@ void VertexFetch::AddVertexFetchInst(
 
         StringRef suffix = "";
         Type* pFetchTy = nullptr;
-        switch (numChannels)
+
+        if (is16bitFetch)
         {
-        case 1:
-            suffix = ".i32";
-            pFetchTy = m_pContext->Int32Ty();
-            break;
-        case 2:
-            suffix = ".v2i32";
-            pFetchTy = m_pContext->Int32x2Ty();
-            break;
-        case 3:
-        case 4:
-            suffix = ".v4i32";
-            pFetchTy = m_pContext->Int32x4Ty();
-            break;
-        default:
-            LLPC_NEVER_CALLED();
-            break;
+            switch (numChannels)
+            {
+            case 1:
+                suffix = ".f16";
+                pFetchTy = m_pContext->Float16Ty();
+                break;
+            case 2:
+                suffix = ".v2f16";
+                pFetchTy = m_pContext->Float16x2Ty();
+                break;
+            case 3:
+            case 4:
+                suffix = ".v4f16";
+                pFetchTy = m_pContext->Float16x4Ty();
+                break;
+            default:
+                LLPC_NEVER_CALLED();
+                break;
+            }
+        }
+        else
+        {
+            switch (numChannels)
+            {
+            case 1:
+                suffix = ".i32";
+                pFetchTy = m_pContext->Int32Ty();
+                break;
+            case 2:
+                suffix = ".v2i32";
+                pFetchTy = m_pContext->Int32x2Ty();
+                break;
+            case 3:
+            case 4:
+                suffix = ".v4i32";
+                pFetchTy = m_pContext->Int32x4Ty();
+                break;
+            default:
+                LLPC_NEVER_CALLED();
+                break;
+            }
         }
 
-        // TODO: Support 16-bit vertex fetch.
         auto pFetch = EmitCall(m_pModule,
                                ("llvm.amdgcn.tbuffer.load" + suffix).str(),
                                pFetchTy,
                                args,
                                NoAttrib,
                                pInsertPos);
+
+        if (is16bitFetch)
+        {
+            // NOTE: The fetch values are represented by <n x i32>, so we will bitcast the float16 values to
+            // int32 eventually.
+            pFetch = new BitCastInst(pFetch,
+                                     (numChannels == 1) ?
+                                         m_pContext->Int16Ty() :
+                                         VectorType::get(m_pContext->Int16Ty(), numChannels),
+                                     "",
+                                     pInsertPos);
+
+            pFetch = new ZExtInst(pFetch,
+                                  (numChannels == 1) ?
+                                      m_pContext->Int32Ty() :
+                                      VectorType::get(m_pContext->Int32Ty(), numChannels),
+                                  "",
+                                  pInsertPos);
+        }
 
         if (numChannels == 3)
         {
@@ -1617,13 +1643,28 @@ void VertexFetch::AddVertexFetchInst(
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));                  // glc
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));                  // slc
 
-            // TODO: Support 16-bit vertex fetch.
-            auto pCompFetch = EmitCall(m_pModule,
-                                       "llvm.amdgcn.tbuffer.load.i32",
-                                       m_pContext->Int32Ty(),
-                                       args,
-                                       NoAttrib,
-                                       pInsertPos);
+            Value* pCompFetch = nullptr;
+            if (is16bitFetch)
+            {
+                pCompFetch = EmitCall(m_pModule,
+                                      "llvm.amdgcn.tbuffer.load.f16",
+                                      m_pContext->Float16Ty(),
+                                      args,
+                                      NoAttrib,
+                                      pInsertPos);
+
+                pCompFetch = new BitCastInst(pCompFetch, m_pContext->Int16Ty(), "", pInsertPos);
+                pCompFetch = new ZExtInst(pCompFetch, m_pContext->Int32Ty(), "", pInsertPos);
+            }
+            else
+            {
+                pCompFetch = EmitCall(m_pModule,
+                                      "llvm.amdgcn.tbuffer.load.i32",
+                                      m_pContext->Int32Ty(),
+                                      args,
+                                      NoAttrib,
+                                      pInsertPos);
+            }
 
             pFetch = InsertElementInst::Create(pFetch,
                                                pCompFetch,

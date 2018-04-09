@@ -190,6 +190,93 @@ VkResult Fence::GetStatus(void)
 }
 
 // =====================================================================================================================
+VkResult Fence::ImportFenceFd(
+    Device*                         pDevice,
+    const VkImportFenceFdInfoKHR*   pImportFenceFdInfo)
+{
+    VkResult result = VkResult::VK_SUCCESS;
+    Pal::FenceOpenInfo openInfo = {};
+
+    openInfo.externalFence = pImportFenceFdInfo->fd;
+    // VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR: Reference
+    // VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR: Copy
+    openInfo.flags.isReference = (pImportFenceFdInfo->handleType & VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
+
+    bool isPermanence = (pImportFenceFdInfo->flags & VK_FENCE_IMPORT_TEMPORARY_BIT_KHR) == 0;
+
+    m_flags.isOpened       = 1;
+    m_flags.isPermanence   = isPermanence;
+    m_flags.isReference    = openInfo.flags.isReference;
+    Pal::IFence* pPalFence = PalFence(DefaultDeviceIndex);
+
+    if (isPermanence)
+    {
+        pPalFence->Destroy();
+        result = PalToVkResult(pDevice->PalDevice(DefaultDeviceIndex)->OpenFence(openInfo, pPalFence, &pPalFence));
+    }
+    else
+    {
+        const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->GetFenceSize(nullptr);
+        VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
+
+        // Allocate system memory
+        void* pMemory = pAllocator->pfnAllocation(
+                pAllocator->pUserData,
+                palSize,
+                VK_DEFAULT_MEM_ALIGN,
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        if (pMemory != nullptr)
+        {
+            result = PalToVkResult(pDevice->PalDevice(DefaultDeviceIndex)->OpenFence(
+                openInfo,
+                pMemory,
+                &m_pPalTemporaryFences));
+        }
+        else
+        {
+            result = VkResult::VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Export the payload of a fence as fd. Currently only support OPAQUE_FD, will implement SYNC_FD export later.
+VkResult Fence::GetFenceFd(
+    Device*                         pDevice,
+    const VkFenceGetFdInfoKHR*      pGetFdInfo,
+    int*                            pFd)
+{
+    VK_ASSERT(pGetFdInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
+
+    *pFd  = PalFence(DefaultDeviceIndex)->GetHandle();
+
+    return VkResult::VK_SUCCESS;
+}
+
+// =====================================================================================================================
+
+// =====================================================================================================================
+VkResult Fence::RestoreFence(
+    const Device* pDevice)
+{
+    VkResult ret = VK_SUCCESS;
+
+    if ((m_flags.isPermanence == 0) && m_flags.isOpened)
+    {
+        m_pPalTemporaryFences->Destroy();
+        m_pPalTemporaryFences = nullptr;
+        m_flags.isPermanence  = 1;
+        m_flags.isOpened      = 0;
+
+        VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
+        pAllocator->pfnFree(pAllocator->pUserData, m_pPalTemporaryFences);
+    }
+
+    return ret;
+}
 
 namespace entry
 {
@@ -219,7 +306,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkImportFenceFdKHR(
     VkDevice                                    device,
     const VkImportFenceFdInfoKHR*               pImportFenceFdInfo)
 {
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
+    Device*    pDevice  = ApiDevice::ObjectFromHandle(device);
+
+    return Fence::ObjectFromHandle(pImportFenceFdInfo->fence)->ImportFenceFd(pDevice, pImportFenceFdInfo);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetFenceFdKHR(
@@ -227,7 +316,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetFenceFdKHR(
     const VkFenceGetFdInfoKHR*                  pGetFdInfo,
     int*                                        pFd)
 {
-    return VK_ERROR_EXTENSION_NOT_PRESENT;
+    Device*    pDevice  = ApiDevice::ObjectFromHandle(device);
+
+    return Fence::ObjectFromHandle(pGetFdInfo->fence)->GetFenceFd(pDevice, pGetFdInfo, pFd);
 }
 
 } // namespace entry

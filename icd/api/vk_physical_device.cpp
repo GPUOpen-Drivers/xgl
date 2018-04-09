@@ -4240,7 +4240,6 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
     uint32_t                                    queueFamilyIndex,
     struct wl_display*                          display)
 {
-
     Pal::OsDisplayHandle displayHandle = display;
     VkIcdWsiPlatform     platform      = VK_ICD_WSI_PLATFORM_WAYLAND;
 
@@ -4250,6 +4249,18 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
                                                                                                queueFamilyIndex);
 }
 #endif
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkSurfaceKHR                                surface,
+    uint32_t*                                   pRectCount,
+    VkRect2D*                                   pRects)
+{
+    // TODO: Currently we just return zero rectangles, as we don't support
+    // VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_MULTI_DEVICE_BIT_KHR.
+    *pRectCount = 0;
+    return VK_SUCCESS;
+}
 
 }
 

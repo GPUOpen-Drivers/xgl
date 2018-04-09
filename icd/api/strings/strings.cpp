@@ -33,7 +33,7 @@
 namespace vk
 {
 
-namespace secure
+namespace strings
 {
 namespace entry
 {

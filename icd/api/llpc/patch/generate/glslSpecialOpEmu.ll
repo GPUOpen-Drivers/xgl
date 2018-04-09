@@ -264,7 +264,7 @@ define spir_func void @_Z9mem_fencej(i32 %semantics) #0
 ; =====================================================================================================================
 
 ; GLSL: uint64_t ballot(bool)
-define i64 @llpc.ballot(i1 %value) #0
+define i64 @llpc.subgroup.ballot(i1 %value) #0
 {
     %1 = select i1 %value, i32 1, i32 0
     ; Prevent optimization of backend compiler on the control flow
@@ -278,7 +278,7 @@ define i64 @llpc.ballot(i1 %value) #0
 ; GLSL: uvec4 ballot(bool)
 define spir_func <4 x i32> @_Z17SubgroupBallotKHRb(i1 %value) #0
 {
-    %1 = call i64 @llpc.ballot(i1 %value)
+    %1 = call i64 @llpc.subgroup.ballot(i1 %value)
     %2 = bitcast i64 %1 to <2 x i32>
     %3 = shufflevector <2 x i32> %2, <2 x i32> <i32 0, i32 0>, <4 x i32> <i32 0, i32 1, i32 2, i32 3>
 
@@ -322,7 +322,7 @@ define spir_func float @_Z26SubgroupFirstInvocationKHRf(float %value)
 ; GLSL: bool anyInvocation(bool)
 define spir_func i1 @_Z14SubgroupAnyKHRb(i1 %value)
 {
-    %1 = call i64 @llpc.ballot(i1 %value)
+    %1 = call i64 @llpc.subgroup.ballot(i1 %value)
     %2 = icmp ne i64 %1, 0
 
     ret i1 %2
@@ -331,8 +331,8 @@ define spir_func i1 @_Z14SubgroupAnyKHRb(i1 %value)
 ; GLSL: bool allInvocations(bool)
 define spir_func i1 @_Z14SubgroupAllKHRb(i1 %value)
 {
-    %1 = call i64 @llpc.ballot(i1 %value)
-    %2 = call i64 @llpc.ballot(i1 true)
+    %1 = call i64 @llpc.subgroup.ballot(i1 %value)
+    %2 = call i64 @llpc.subgroup.ballot(i1 true)
     %3 = icmp eq i64 %1, %2
 
     ret i1 %3
@@ -341,8 +341,8 @@ define spir_func i1 @_Z14SubgroupAllKHRb(i1 %value)
 ; GLSL: bool allInvocationsEqual(bool)
 define spir_func i1 @_Z19SubgroupAllEqualKHRb(i1 %value)
 {
-    %1 = call i64 @llpc.ballot(i1 %value)
-    %2 = call i64 @llpc.ballot(i1 true)
+    %1 = call i64 @llpc.subgroup.ballot(i1 %value)
+    %2 = call i64 @llpc.subgroup.ballot(i1 true)
     %3 = icmp eq i64 %1, %2
     %4 = icmp eq i64 %1, 0
     %5 = or i1 %3, %4
@@ -353,7 +353,7 @@ define spir_func i1 @_Z19SubgroupAllEqualKHRb(i1 %value)
 ; GLSL: bool subgroupElect()
 define spir_func i1 @_Z20GroupNonUniformElecti(i32 %scope)
 {
-    %1 = call i64 @llpc.ballot(i1 true)
+    %1 = call i64 @llpc.subgroup.ballot(i1 true)
     %2 = call i64 @llvm.cttz.i64(i64 %1, i1 true)
     %3 = trunc i64 %2 to i32
 

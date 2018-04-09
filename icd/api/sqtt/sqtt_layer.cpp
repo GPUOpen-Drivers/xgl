@@ -689,7 +689,7 @@ namespace sqtt
 
 // Helper function to call the next layer's function by name
 #define SQTT_CALL_NEXT_LAYER(entry_name) \
-    pSqtt->GetNextLayer()->entry_name
+    pSqtt->GetNextLayer()->GetEntryPoints().entry_name
 
 // =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(
@@ -1801,74 +1801,81 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
     return result;
 }
 
-#define SQTT_DISPATCH_ENTRY(entry_name) VK_DISPATCH_ENTRY(entry_name, vk::entry::sqtt::entry_name)
-#define SQTT_DISPATCH_ALIAS_FUNCTION(alias_name, entry_name) \
-    VK_DISPATCH_ALIAS(alias_name, entry_name, vk::entry::sqtt::entry_name)
-
-// This is the SQTT layer dispatch table.  It contains an entry for every Vulkan entry point that this layer shadows.
-const DispatchTableEntry g_SqttDispatchTable[] =
-{
-    // Command buffer functions
-    SQTT_DISPATCH_ENTRY(vkCmdBindPipeline),
-    SQTT_DISPATCH_ENTRY(vkCmdBindDescriptorSets),
-    SQTT_DISPATCH_ENTRY(vkCmdBindIndexBuffer),
-    SQTT_DISPATCH_ENTRY(vkCmdBindVertexBuffers),
-    SQTT_DISPATCH_ENTRY(vkCmdDraw),
-    SQTT_DISPATCH_ENTRY(vkCmdDrawIndexed),
-    SQTT_DISPATCH_ENTRY(vkCmdDrawIndirect),
-    SQTT_DISPATCH_ENTRY(vkCmdDrawIndexedIndirect),
-    SQTT_DISPATCH_ENTRY(vkCmdDrawIndirectCountAMD),
-    SQTT_DISPATCH_ENTRY(vkCmdDrawIndexedIndirectCountAMD),
-    SQTT_DISPATCH_ENTRY(vkCmdDispatch),
-    SQTT_DISPATCH_ENTRY(vkCmdDispatchIndirect),
-    SQTT_DISPATCH_ENTRY(vkCmdCopyBuffer),
-    SQTT_DISPATCH_ENTRY(vkCmdCopyImage),
-    SQTT_DISPATCH_ENTRY(vkCmdBlitImage),
-    SQTT_DISPATCH_ENTRY(vkCmdCopyBufferToImage),
-    SQTT_DISPATCH_ENTRY(vkCmdCopyImageToBuffer),
-    SQTT_DISPATCH_ENTRY(vkCmdUpdateBuffer),
-    SQTT_DISPATCH_ENTRY(vkCmdFillBuffer),
-    SQTT_DISPATCH_ENTRY(vkCmdClearColorImage),
-    SQTT_DISPATCH_ENTRY(vkCmdClearDepthStencilImage),
-    SQTT_DISPATCH_ENTRY(vkCmdClearAttachments),
-    SQTT_DISPATCH_ENTRY(vkCmdResolveImage),
-    SQTT_DISPATCH_ENTRY(vkCmdWaitEvents),
-    SQTT_DISPATCH_ENTRY(vkCmdPipelineBarrier),
-    SQTT_DISPATCH_ENTRY(vkCmdBeginQuery),
-    SQTT_DISPATCH_ENTRY(vkCmdEndQuery),
-    SQTT_DISPATCH_ENTRY(vkCmdResetQueryPool),
-    SQTT_DISPATCH_ENTRY(vkCmdWriteTimestamp),
-    SQTT_DISPATCH_ENTRY(vkCmdCopyQueryPoolResults),
-    SQTT_DISPATCH_ENTRY(vkCmdPushConstants),
-    SQTT_DISPATCH_ENTRY(vkCmdBeginRenderPass),
-    SQTT_DISPATCH_ENTRY(vkCmdNextSubpass),
-    SQTT_DISPATCH_ENTRY(vkCmdEndRenderPass),
-    SQTT_DISPATCH_ENTRY(vkCmdExecuteCommands),
-    SQTT_DISPATCH_ENTRY(vkCmdSetViewport),
-    SQTT_DISPATCH_ENTRY(vkCmdSetScissor),
-    SQTT_DISPATCH_ENTRY(vkCmdSetLineWidth),
-    SQTT_DISPATCH_ENTRY(vkCmdSetDepthBias),
-    SQTT_DISPATCH_ENTRY(vkCmdSetBlendConstants),
-    SQTT_DISPATCH_ENTRY(vkCmdSetDepthBounds),
-    SQTT_DISPATCH_ENTRY(vkCmdSetStencilCompareMask),
-    SQTT_DISPATCH_ENTRY(vkCmdSetStencilWriteMask),
-    SQTT_DISPATCH_ENTRY(vkCmdSetStencilReference),
-    SQTT_DISPATCH_ENTRY(vkCmdDebugMarkerBeginEXT),
-    SQTT_DISPATCH_ENTRY(vkCmdDebugMarkerEndEXT),
-    SQTT_DISPATCH_ENTRY(vkCmdDebugMarkerInsertEXT),
-
-    // Device functions
-    SQTT_DISPATCH_ENTRY(vkCreateGraphicsPipelines),
-    SQTT_DISPATCH_ENTRY(vkCreateComputePipelines),
-    SQTT_DISPATCH_ENTRY(vkDebugMarkerSetObjectNameEXT),
-    SQTT_DISPATCH_ENTRY(vkDebugMarkerSetObjectTagEXT),
-    SQTT_DISPATCH_ENTRY(vkQueueSubmit),
-
-    VK_DISPATCH_TABLE_END()
-};
-
 } // namespace sqtt
 
 } // namespace entry
+
+#define SQTT_OVERRIDE_ALIAS(entry_name, func_name) \
+    pDispatchTable->OverrideEntryPoints()->entry_name = vk::entry::sqtt::func_name
+
+#define SQTT_OVERRIDE_ENTRY(entry_name) SQTT_OVERRIDE_ALIAS(entry_name, entry_name)
+
+// =====================================================================================================================
+void SqttOverrideDispatchTable(
+    DispatchTable*  pDispatchTable,
+    SqttMgr*        pMgr)
+{
+    if (pMgr != nullptr)
+    {
+        // If a manager already exists (created together with the device) then we have to take a snapshot of the
+        // device dispatch table that we'll use as the next level layer.
+        pMgr->SaveNextLayer();
+    }
+
+    // Always override the necessary entry points, no matter if we're patching the device or the instance dispatch
+    // table.
+    SQTT_OVERRIDE_ENTRY(vkCmdBindPipeline);
+    SQTT_OVERRIDE_ENTRY(vkCmdBindDescriptorSets);
+    SQTT_OVERRIDE_ENTRY(vkCmdBindIndexBuffer);
+    SQTT_OVERRIDE_ENTRY(vkCmdBindVertexBuffers);
+    SQTT_OVERRIDE_ENTRY(vkCmdDraw);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexed);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawIndirect);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirect);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawIndirectCountAMD);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirectCountAMD);
+    SQTT_OVERRIDE_ENTRY(vkCmdDispatch);
+    SQTT_OVERRIDE_ENTRY(vkCmdDispatchIndirect);
+    SQTT_OVERRIDE_ENTRY(vkCmdCopyBuffer);
+    SQTT_OVERRIDE_ENTRY(vkCmdCopyImage);
+    SQTT_OVERRIDE_ENTRY(vkCmdBlitImage);
+    SQTT_OVERRIDE_ENTRY(vkCmdCopyBufferToImage);
+    SQTT_OVERRIDE_ENTRY(vkCmdCopyImageToBuffer);
+    SQTT_OVERRIDE_ENTRY(vkCmdUpdateBuffer);
+    SQTT_OVERRIDE_ENTRY(vkCmdFillBuffer);
+    SQTT_OVERRIDE_ENTRY(vkCmdClearColorImage);
+    SQTT_OVERRIDE_ENTRY(vkCmdClearDepthStencilImage);
+    SQTT_OVERRIDE_ENTRY(vkCmdClearAttachments);
+    SQTT_OVERRIDE_ENTRY(vkCmdResolveImage);
+    SQTT_OVERRIDE_ENTRY(vkCmdWaitEvents);
+    SQTT_OVERRIDE_ENTRY(vkCmdPipelineBarrier);
+    SQTT_OVERRIDE_ENTRY(vkCmdBeginQuery);
+    SQTT_OVERRIDE_ENTRY(vkCmdEndQuery);
+    SQTT_OVERRIDE_ENTRY(vkCmdResetQueryPool);
+    SQTT_OVERRIDE_ENTRY(vkCmdWriteTimestamp);
+    SQTT_OVERRIDE_ENTRY(vkCmdCopyQueryPoolResults);
+    SQTT_OVERRIDE_ENTRY(vkCmdPushConstants);
+    SQTT_OVERRIDE_ENTRY(vkCmdBeginRenderPass);
+    SQTT_OVERRIDE_ENTRY(vkCmdNextSubpass);
+    SQTT_OVERRIDE_ENTRY(vkCmdEndRenderPass);
+    SQTT_OVERRIDE_ENTRY(vkCmdExecuteCommands);
+    SQTT_OVERRIDE_ENTRY(vkCmdSetViewport);
+    SQTT_OVERRIDE_ENTRY(vkCmdSetScissor);
+    SQTT_OVERRIDE_ENTRY(vkCmdSetLineWidth);
+    SQTT_OVERRIDE_ENTRY(vkCmdSetDepthBias);
+    SQTT_OVERRIDE_ENTRY(vkCmdSetBlendConstants);
+    SQTT_OVERRIDE_ENTRY(vkCmdSetDepthBounds);
+    SQTT_OVERRIDE_ENTRY(vkCmdSetStencilCompareMask);
+    SQTT_OVERRIDE_ENTRY(vkCmdSetStencilWriteMask);
+    SQTT_OVERRIDE_ENTRY(vkCmdSetStencilReference);
+    SQTT_OVERRIDE_ENTRY(vkCmdDebugMarkerBeginEXT);
+    SQTT_OVERRIDE_ENTRY(vkCmdDebugMarkerEndEXT);
+    SQTT_OVERRIDE_ENTRY(vkCmdDebugMarkerInsertEXT);
+    SQTT_OVERRIDE_ENTRY(vkCreateGraphicsPipelines);
+    SQTT_OVERRIDE_ENTRY(vkCreateComputePipelines);
+    SQTT_OVERRIDE_ENTRY(vkDebugMarkerSetObjectNameEXT);
+    SQTT_OVERRIDE_ENTRY(vkDebugMarkerSetObjectTagEXT);
+    SQTT_OVERRIDE_ENTRY(vkQueueSubmit);
+}
 
 } // namespace vk

@@ -34,6 +34,7 @@
 
 #include "vk_internal_ext_helper.h"
 
+#define VK_AMD_shader_core_properties                             1
 #define VK_AMD_SHADER_CORE_PROPERTIES_SPEC_VERSION                1
 #define VK_AMD_SHADER_CORE_PROPERTIES_EXTENSION_NAME              "VK_AMD_shader_core_properties"
 

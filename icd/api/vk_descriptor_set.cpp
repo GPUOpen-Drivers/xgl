@@ -753,9 +753,8 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSets(
 {
     const Device*             pDevice          = ApiDevice::ObjectFromHandle(device);
 
-    PFN_vkUpdateDescriptorSets pFunc = pDevice->GetUpdateDescriptorSetsFunc();
-
-    (*pFunc)(device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies);
+    pDevice->GetEntryPoints().vkUpdateDescriptorSets(
+        device, descriptorWriteCount, pDescriptorWrites, descriptorCopyCount, pDescriptorCopies);
 }
 
 } // namespace entry

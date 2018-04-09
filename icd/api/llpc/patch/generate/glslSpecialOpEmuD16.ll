@@ -159,6 +159,302 @@ define half @llpc.fwidthCoarse.f16(half %p) #0
 }
 
 ; =====================================================================================================================
+; >>>  Shader Invocation Group Functions
+; =====================================================================================================================
+
+; GLSL: i16vec/u16vec subgroupAdd(i16vec/u16vec)
+;       i16vec/u16vec subgroupInclusiveAdd(i16vec/u16vec)
+;       i16vec/u16vec subgroupExclusiveAdd(i16vec/u16vec)
+
+; GLSL: f16vec subgroupAdd(f16vec)
+;       f16vec subgroupInclusiveAdd(f16vec)
+;       f16vec subgroupExclusiveAdd(f16vec)
+
+; GLSL: i16vec/u16vec subgroupMul(i16vec/u16vec)
+;       i16vec/u16vec subgroupInclusiveMul(i16vec/u16vec)
+;       i16vec/u16vec subgroupExclusiveMul(i16vec/u16vec)
+
+; GLSL: f16vec subgroupMul(f16vec)
+;       f16vec subgroupInclusiveMul(f16vec)
+;       f16vec subgroupExclusiveMul(f16vec)
+
+; GLSL: i16vec subgroupMin(i16vec)
+;       i16vec subgroupInclusiveMin(i16vec)
+;       i16vec subgroupExclusiveMin(i16vec)
+
+; GLSL: u16vec subgroupMin(u16vec)
+;       u16vec subgroupInclusiveMin(u16vec)
+;       u16vec subgroupExclusiveMin(u16vec)
+
+; GLSL: f16vec subgroupMin(f16vec)
+;       f16vec subgroupInclusiveMin(f16vec)
+;       f16vec subgroupExclusiveMin(f16vec)
+
+; GLSL: i16vec subgroupMax(i16vec)
+;       i16vec subgroupInclusiveMax(i16vec)
+;       i16vec subgroupExclusiveMax(i16vec)
+
+; GLSL: u16vec subgroupMax(u16vec)
+;       u16vec subgroupInclusiveMax(u16vec)
+;       u16vec subgroupExclusiveMax(u16vec)
+
+; GLSL: f16vec subgroupMax(f16vec)
+;       f16vec subgroupInclusiveMax(f16vec)
+;       f16vec subgroupExclusiveMax(f16vec)
+
+; GLSL: i16vec/u16vec subgroupAnd(i16vec/u16vec)
+;       i16vec/u16vec subgroupInclusiveAnd(i16vec/u16vec)
+;       i16vec/u16vec subgroupExclusiveAnd(i16vec/u16vec)
+
+; GLSL: i16vec/u16vec subgroupOr(i16vec/u16vec)
+;       i16vec/u16vec subgroupInclusiveOr(i16vec/u16vec)
+;       i16vec/u16vec subgroupExclusiveOr(i16vec/u16vec)
+
+; GLSL: i16vec/u16vec subgroupXor(i16vec/u16vec)
+;       i16vec/u16vec subgroupInclusiveXor(i16vec/u16vec)
+;       i16vec/u16vec subgroupExclusiveXor(i16vec/u16vec)
+
+; GLSL: int16_t/uint16_t addInvocations(int16_t/uint16_t)
+define spir_func i16 @_Z20sub_group_reduce_adds(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t addInvocations(float16_t)
+define spir_func half @_Z20sub_group_reduce_addDh(half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t minInvocations(int16_t)
+define spir_func i16 @_Z20sub_group_reduce_mins(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: uint16_t minInvocations(uint16_t)
+define spir_func i16 @_Z20sub_group_reduce_mint(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t minInvocations(float16_t)
+define spir_func half @_Z20sub_group_reduce_minDh(half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t maxInvocations(int16_t)
+define spir_func i16 @_Z20sub_group_reduce_maxs(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: uint16_t maxInvocations(uint16_t)
+define spir_func i16 @_Z20sub_group_reduce_maxt(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t maxInvocations(float16_t)
+define spir_func half @_Z20sub_group_reduce_maxDh(half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t/uint16_t addInvocationsInclusiveScan(int16_t/uint16_t)
+define spir_func i16 @_Z28sub_group_scan_inclusive_adds(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t addInvocationsInclusiveScan(float16_t)
+define spir_func half @_Z28sub_group_scan_inclusive_addDh(half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t minInvocationsInclusive(int16_t)
+define spir_func i16 @_Z28sub_group_scan_inclusive_mins(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: uint16_t minInvocationsInclusive(uint16_t)
+define spir_func i16 @_Z28sub_group_scan_inclusive_mint(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t minInvocationsInclusive(float16_t)
+define spir_func half @_Z28sub_group_scan_inclusive_minDh(half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t maxInvocationsInclusive(int16_t)
+define spir_func i16 @_Z28sub_group_scan_inclusive_maxs(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: uint16_t maxInvocationsInclusive(uint16_t)
+define spir_func i16 @_Z28sub_group_scan_inclusive_maxt(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t maxInvocationsInclusive(float16_t)
+define spir_func half @_Z28sub_group_scan_inclusive_maxDh(half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t/uint16_t addInvocationsExclusiveScan(int16_t/uint16_t)
+define spir_func i16 @_Z28sub_group_scan_exclusive_adds(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t addInvocationsExclusiveScan(float16_t)
+define spir_func half @_Z28sub_group_scan_exclusive_addDh(half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t minInvocationsExclusive(int16_t)
+define spir_func i16 @_Z28sub_group_scan_exclusive_mins(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: uint16_t minInvocationsExclusive(uint16_t)
+define spir_func i16 @_Z28sub_group_scan_exclusive_mint(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t minInvocationsExclusive(float16_t)
+define spir_func half @_Z28sub_group_scan_exclusive_minDh(half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t maxInvocationsExclusive(int16_t)
+define spir_func i16 @_Z28sub_group_scan_exclusive_maxs(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: uint16_t maxInvocationsExclusive(uint16_t)
+define spir_func i16 @_Z28sub_group_scan_exclusive_maxt(i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t maxInvocationsExclusive(float16_t)
+define spir_func half @_Z28sub_group_scan_exclusive_maxDh(half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t/uint16_t addInvocationsNonUniform(int16_t/uint16_t)
+;       int16_t/uint16_t addInvocationsInclusiveScanNonUniform(int16_t/uint16_t)
+;       int16_t/uint16_t addInvocationsExclusiveScanNonUniform(int16_t/uint16_t)
+define spir_func i16 @_Z22GroupIAddNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t addInvocationsNonUniform(float16_t)
+;       float16_t addInvocationsInclusiveScanNonUniform(float16_t)
+;       float16_t addInvocationsExclusiveScanNonUniform(float16_t)
+define spir_func half @_Z22GroupFAddNonUniformAMDiiDh(i32 %scope, i32 %groupOp, half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t minInvocationsNonUniform(int16_t)
+;       int16_t minInvocationsInclusiveScanNonUniform(int16_t)
+;       int16_t minInvocationsExclusiveScanNonUniform(int16_t)
+define spir_func i16 @_Z22GroupSMinNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: uint16_t minInvocationsNonUniform(uint16_t)
+;       uint16_t minInvocationsInclusiveScanNonUniform(uint16_t)
+;       uint16_t minInvocationsExclusiveScanNonUniform(uint16_t)
+define spir_func i16 @_Z22GroupUMinNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t minInvocationsNonUniform(float16_t)
+;       float16_t minInvocationsInclusiveScanNonUniform(float16_t)
+;       float16_t minInvocationsExclusiveScanNonUniform(float16_t)
+define spir_func half @_Z22GroupFMinNonUniformAMDiiDh(i32 %scope, i32 %groupOp, half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; GLSL: int16_t maxInvocationsNonUniform(int16_t)
+;       int16_t maxInvocationsInclusiveScanNonUniform(int16_t)
+;       int16_t maxInvocationsExclusiveScanNonUniform(int16_t)
+define spir_func i16 @_Z22GroupSMaxNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: uint16_t maxInvocationsNonUniform(uint16_t)
+;       uint16_t maxInvocationsInclusiveScanNonUniform(uint16_t)
+;       uint16_t maxInvocationsExclusiveScanNonUniform(uint16_t)
+define spir_func i16 @_Z22GroupUMaxNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret i16 undef
+}
+
+; GLSL: float16_t maxInvocationsNonUniform(float16_t)
+;       float16_t maxInvocationsInclusiveScanNonUniform(float16_t)
+;       float16_t maxInvocationsExclusiveScanNonUniform(float16_t)
+define spir_func half @_Z22GroupFMaxNonUniformAMDiiDh(i32 %scope, i32 %groupOp, half %value)
+{
+    ; TODO: Support 16-bit subgroup arithmetic operations.
+    ret half undef
+}
+
+; =====================================================================================================================
 ; >>>  Interpolation Functions
 ; =====================================================================================================================
 

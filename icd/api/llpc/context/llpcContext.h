@@ -111,6 +111,7 @@ public:
     llvm::Type* Int32x6Ty() const { return m_tys.pInt32x6Ty; }
     llvm::Type* Int32x8Ty() const { return m_tys.pInt32x8Ty; }
     llvm::Type* Float16x2Ty() const { return m_tys.pFloat16x2Ty; }
+    llvm::Type* Float16x4Ty() const { return m_tys.pFloat16x4Ty; }
     llvm::Type* Floatx2Ty() const { return m_tys.pFloatx2Ty; }
     llvm::Type* Floatx3Ty() const { return m_tys.pFloatx3Ty; }
     llvm::Type* Floatx4Ty() const { return m_tys.pFloatx4Ty; }
@@ -271,6 +272,7 @@ private:
         llvm::Type* pInt32x6Ty;   // Int32 x 6
         llvm::Type* pInt32x8Ty;   // Int32 x 8
         llvm::Type* pFloat16x2Ty; // Float16 x 2
+        llvm::Type* pFloat16x4Ty; // Float16 x 4
         llvm::Type* pFloatx2Ty;   // Float x 2
         llvm::Type* pFloatx3Ty;   // Float x 3
         llvm::Type* pFloatx4Ty;   // Float x 4

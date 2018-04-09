@@ -4,3 +4,11 @@ genI16Type smod genI16Type x genI16Type y : llpc.mod.i16 #0
 # Common Functions
 genI16Type sabs genI16Type x : llpc.sabs.i16 #0
 genI16Type ssign genI16Type x : llpc.ssign.i16 #0
+
+# Functions of extension AMD_shader_trinary_minmax
+genI16Type SMin3AMD genI16Type x genI16Type y genI16Type z : llpc.smin3.i16 #0
+genI16Type SMax3AMD genI16Type x genI16Type y genI16Type z : llpc.smax3.i16 #0
+genI16Type SMid3AMD genI16Type x genI16Type y genI16Type z : llpc.smid3.i16 #0
+genU16Type UMin3AMD genU16Type x genU16Type y genU16Type z : llpc.umin3.i16 #0
+genU16Type UMax3AMD genU16Type x genU16Type y genU16Type z : llpc.umax3.i16 #0
+genU16Type UMid3AMD genU16Type x genU16Type y genU16Type z : llpc.umid3.i16 #0

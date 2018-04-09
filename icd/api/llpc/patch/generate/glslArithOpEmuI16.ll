@@ -413,6 +413,110 @@ define spir_func <4 x half> @_Z5ldexpDv4_DhDv4_s(
     ret <4 x half> %10
 }
 
+; =====================================================================================================================
+; >>>  Functions of Extension AMD_shader_trinary_minmax
+; =====================================================================================================================
+
+; GLSL: int16_t min3(int16_t, int16_t, int16_t)
+define i16 @llpc.smin3.i16(i16 %x, i16 %y, i16 %z)
+{
+    ; min(x, y)
+    %1 = icmp slt i16 %x, %y
+    %2 = select i1 %1, i16 %x, i16 %y
+
+    ; min(min(x, y), z)
+    %3 = icmp slt i16 %2, %z
+    %4 = select i1 %3, i16 %2, i16 %z
+
+    ret i16 %4
+}
+
+; GLSL: int16_t max3(int16_t, int16_t, int16_t)
+define i16 @llpc.smax3.i16(i16 %x, i16 %y, i16 %z)
+{
+    ; max(x, y)
+    %1 = icmp sgt i16 %x, %y
+    %2 = select i1 %1, i16 %x, i16 %y
+
+    ; max(max(x, y), z)
+    %3 = icmp sgt i16 %2, %z
+    %4 = select i1 %3, i16 %2, i16 %z
+
+    ret i16 %4
+}
+
+; GLSL: int16_t mid3(int16_t, int16_t, int16_t)
+define i16 @llpc.smid3.i16(i16 %x, i16 %y, i16 %z)
+{
+    ; min(x, y)
+    %1 = icmp slt i16 %x, %y
+    %2 = select i1 %1, i16 %x, i16 %y
+
+    ; max(x, y)
+    %3 = icmp sgt i16 %x, %y
+    %4 = select i1 %3, i16 %x, i16 %y
+
+    ; min(max(x, y), z)
+    %5 = icmp slt i16 %4, %z
+    %6 = select i1 %5, i16 %4, i16 %z
+
+    ; max(min(x, y), min(max(x, y), z))
+    %7 = icmp sgt i16 %2, %6
+    %8 = select i1 %7, i16 %2, i16 %6
+
+    ret i16 %8
+}
+
+; GLSL: uint16_t min3(uint16_t, uint16_t, uint16_t)
+define i16 @llpc.umin3.i16(i16 %x, i16 %y, i16 %z)
+{
+    ; min(x, y)
+    %1 = icmp ult i16 %x, %y
+    %2 = select i1 %1, i16 %x, i16 %y
+
+    ; min(min(x, y), z)
+    %3 = icmp ult i16 %2, %z
+    %4 = select i1 %3, i16 %2, i16 %z
+
+    ret i16 %4
+}
+
+; GLSL: uint16_t max3(uint16_t, uint16_t, uint16_t)
+define i16 @llpc.umax3.i16(i16 %x, i16 %y, i16 %z)
+{
+    ; max(x, y)
+    %1 = icmp ugt i16 %x, %y
+    %2 = select i1 %1, i16 %x, i16 %y
+
+    ; max(max(x, y), z)
+    %3 = icmp ugt i16 %2, %z
+    %4 = select i1 %3, i16 %2, i16 %z
+
+    ret i16 %4
+}
+
+; GLSL: uint16_t mid3(uint16_t, uint16_t, uint16_t)
+define i16 @llpc.umid3.i16(i16 %x, i16 %y, i16 %z)
+{
+    ; min(x, y)
+    %1 = icmp ult i16 %x, %y
+    %2 = select i1 %1, i16 %x, i16 %y
+
+    ; max(x, y)
+    %3 = icmp ugt i16 %x, %y
+    %4 = select i1 %3, i16 %x, i16 %y
+
+    ; min(max(x, y), z)
+    %5 = icmp ult i16 %4, %z
+    %6 = select i1 %5, i16 %4, i16 %z
+
+    ; max(min(x, y), min(max(x, y), z))
+    %7 = icmp ugt i16 %2, %6
+    %8 = select i1 %7, i16 %2, i16 %6
+
+    ret i16 %8
+}
+
 declare half @llvm.amdgcn.ldexp.f16(half, i32) #1
 declare i16 @llvm.amdgcn.frexp.exp.i16.f16(half %x) #1
 declare half @llvm.amdgcn.frexp.mant.f16(half) #1

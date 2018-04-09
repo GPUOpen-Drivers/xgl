@@ -31,6 +31,7 @@
 #ifndef VK_KHX_DEVICE_GROUP_H_
 #define VK_KHX_DEVICE_GROUP_H_
 
+#define VK_KHX_device_group                     1
 #define VK_KHX_DEVICE_GROUP_SPEC_VERSION        2
 #define VK_KHX_DEVICE_GROUP_EXTENSION_NAME      "VK_KHX_device_group"
 #define VK_KHX_DEVICE_GROUP_EXTENSION_NUMBER    61

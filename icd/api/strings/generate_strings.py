@@ -25,6 +25,7 @@
 
 import os
 import sys
+import re
 from optparse import OptionParser
 
 open_copyright = '''/*
@@ -100,9 +101,42 @@ def generate_string(f, name, suffix, value, gentype):
         if name != name.upper():
             f.write("static const char* %s%s = %s%s;\n" % (name.upper(), suffix, name, suffix))
 
-def generate_entry_point_condition(f, name, type, value):
-    f.write("#define %s_condition_type vk::secure::entry::ENTRY_POINT_%s\n" % (name, type))
-    f.write("#define %s_condition_value %s\n" % (name, value))
+def generate_entry_point_index(f, name, epidx):
+    f.write("#define %s_index %d\n" % (name, epidx))
+
+def generate_entry_point_type(f, name, eptype):
+    f.write("#define %s_type vk::EntryPoint::Type::%s\n" % (name, eptype))
+
+def generate_entry_point_condition(f, name, cond):
+    cond = cond.upper()
+    cond = cond.replace('@NONE', 'true')
+    cond = cond.replace('@WIN32', 'true')
+
+    core = re.compile('@CORE\( ( [^\.]* ) \. ( [^\)]* ) \)', re.VERBOSE)
+    cond = core.sub(r'CheckAPIVersion(VK_MAKE_VERSION(\1,\2,0))', cond)
+
+    iext = re.compile('@IEXT\( ( [^\)]* ) \)', re.VERBOSE)
+    cond = iext.sub(r'CheckInstanceExtension(InstanceExtensions::ExtensionId::\1)', cond)
+
+    dext = re.compile('@DEXT\( ( [^\)]* ) \)', re.VERBOSE)
+    cond = dext.sub(r'CheckDeviceExtension(DeviceExtensions::ExtensionId::\1)', cond)
+
+    f.write("#define %s_condition %s\n" % (name, cond))
+
+def get_compile_condition(cond):
+    cond = cond.replace('@none', '')
+    cond = cond.replace('@win32', '_WIN32')
+
+    core = re.compile('@core\( ( [^\.]* ) \. ( [^\)]* ) \)', re.VERBOSE)
+    cond = core.sub(r'VK_VERSION_\1_\2', cond)
+
+    iext = re.compile('@iext\( ( [^\)]* ) \)', re.VERBOSE)
+    cond = iext.sub(r'VK_\1', cond)
+
+    dext = re.compile('@dext\( ( [^\)]* ) \)', re.VERBOSE)
+    cond = dext.sub(r'VK_\1', cond)
+
+    return cond
 
 def make_version(version):
     tokens = version.split(".", 1)
@@ -121,6 +155,8 @@ def generate_string_file_pass(string_file_prefix, header_file_prefix, gentype):
     lines = f.readlines()
     f.close()
 
+    epidx = 0
+
     f = open(header_file, 'w')
 
     f.write("// do not edit by hand; generated from source file \"%s.txt\"\n" % string_file_prefix)
@@ -137,28 +173,22 @@ def generate_string_file_pass(string_file_prefix, header_file_prefix, gentype):
             generate_string(f, name, "", value, gentype)
         elif '@' in original:
             # Generate extension conditioned string (e.g. for entry points having conditions)
-            tokens = original.split('@', 1)
+            tokens = original.split('@', 2)
             name   = tokens[0].rstrip()
-            cond   = tokens[1].lstrip()
-            tokens = cond.split(' ', 1)
-            type   = tokens[0].rstrip()
-            if type != 'none':
-                value = tokens[1].lstrip()
+            eptype = tokens[1].rstrip()
+            cond   = '@' + tokens[2].rstrip()
             generate_string(f, name, "_name", name, gentype)
             if gentype == 'decl':
-                if type == 'none':
-                    generate_entry_point_condition(f, name, "NONE", 0)
-                elif type == 'icore':
-                    generate_entry_point_condition(f, name, "CORE_INSTANCE", make_version(value))
-                elif type == 'dcore':
-                    generate_entry_point_condition(f, name, "CORE_DEVICE", make_version(value))
-                elif type == 'iext':
-                    generate_entry_point_condition(f, name, "INSTANCE_EXTENSION", "vk::InstanceExtensions::%s" % value.upper())
-                elif type == 'dext':
-                    generate_entry_point_condition(f, name, "DEVICE_EXTENSION", "vk::DeviceExtensions::%s" % value.upper())
+                generate_entry_point_index(f, name, epidx)
+                epidx += 1
+                generate_entry_point_type(f, name, eptype.upper())
+                generate_entry_point_condition(f, name, cond)
         else:
             # Generate regular string (e.g. for extension strings)
             generate_string(f, original, "_name", original, gentype)
+
+    if epidx > 0:
+        f.write("#define VKI_ENTRY_POINT_COUNT %d\n" % epidx)
 
     f.close()
 
@@ -166,17 +196,15 @@ def generate_string_file(string_file_prefix):
     generate_string_file_pass(string_file_prefix, string_file_prefix, 'decl');
     generate_string_file_pass(string_file_prefix, string_file_prefix, 'impl');
 
-def generate_func_table(entry_file_prefix, header_file, impl_file):
+def generate_func_table(entry_file_prefix, header_file):
     from func_table_template import header_template
-    from func_table_template import impl_template
-    from func_table_template import gnl_entry
-    from func_table_template import entry_table_member
+    from func_table_template import entry_point_member
 
     global open_copyright
     global openSource;
     global PREFIX
 
-    print("Generating %s and %s from %s ..." % (header_file, impl_file, entry_file_prefix))
+    print("Generating %s from %s ..." % (header_file, entry_file_prefix))
 
     entry_file = ".%s" % (entry_file_prefix);
     f = open(entry_file)
@@ -184,11 +212,11 @@ def generate_func_table(entry_file_prefix, header_file, impl_file):
     f.close()
 
     header = open(PREFIX + header_file, 'w')
-    impl = open(PREFIX + impl_file, 'w')
 
-    entry_table_members = ''
-    gnl_code = ''
+    entry_point_members = ''
     prev_ext = ''
+    prev_ext_ep_count = 0
+    reserved_ep_count = 0
 
     for line in lines:
         original = line.rstrip().lstrip()
@@ -201,50 +229,44 @@ def generate_func_table(entry_file_prefix, header_file, impl_file):
         cur_ext = ''
 
         if '@' in original:
-            tokens = original.split('@', 1)
-            ext_tokens = tokens[1].split(' ', 2)
-            if ext_tokens[0] == 'iext' or ext_tokens[0] == 'dext':
-                cur_ext = 'VK_' + ext_tokens[1]
-
-        if '$win32_only' in original:
-            cur_ext = '_WIN32'
+            tokens = original.split('@', 2)
+            cur_ext = get_compile_condition('@' + tokens[2])
 
         if cur_ext != prev_ext:
             preprocessor = ''
             if len(prev_ext) > 0:
+                preprocessor += '#else\n'
+                for num in range(0, prev_ext_ep_count):
+                    preprocessor += '    PFN_vkVoidFunction reserved' + str(reserved_ep_count) + ';\n'
+                    reserved_ep_count += 1
                 preprocessor += '#endif\n'
+
             if len(cur_ext) > 0:
                 preprocessor += ('#if %s\n' % cur_ext)
 
             prev_ext = cur_ext
-            gnl_code = gnl_code + preprocessor
-            entry_table_members = entry_table_members + preprocessor
+            prev_ext_ep_count = 0
+            entry_point_members = entry_point_members + preprocessor
 
         func_name = line.split(' ')[0]
 
-        entry_table_members = entry_table_members + entry_table_member.replace('$func_name$', func_name) + '\n'
-        gnl_code = gnl_code + gnl_entry.replace('$func_name$', func_name) + '\n'
+        prev_ext_ep_count += 1
+        entry_point_members = entry_point_members + entry_point_member.replace('$func_name$', func_name) + '\n'
 
     if len(prev_ext) > 0:
-        preprocessor = '#endif\n'
-        entry_table_members = entry_table_members + preprocessor
-        gnl_code = gnl_code + preprocessor
+        preprocessor = '#else\n'
+        for num in range(0, prev_ext_ep_count):
+            preprocessor += '    PFN_vkVoidFunction reserved' + str(reserved_ep_count) + ';\n'
+        preprocessor += '#endif\n'
+        entry_point_members = entry_point_members + preprocessor
 
     if openSource:
         header_template = header_template.replace('$copyright_string$', open_copyright)
-        impl_template = impl_template.replace('$copyright_string$', open_copyright)
-        impl_template = impl_template.replace('$header_file$', 'strings/strings.h')
     header_template = header_template.replace('$entry_file$', entry_file_prefix)
-    header_template = header_template.replace('$entry_table_members$', entry_table_members)
-
-    impl_template = impl_template.replace('$entry_file$', entry_file_prefix)
-    impl_template = impl_template.replace('$gnl_code$', gnl_code)
+    header_template = header_template.replace('$entry_point_members$', entry_point_members)
 
     header.write(header_template)
     header.close()
-
-    impl.write(impl_template)
-    impl.close()
 
 def generate_temp_file(string_file):
     global PREFIX
@@ -281,6 +303,6 @@ generate_temp_file("extensions")
 generate_temp_file("entry_points")
 generate_string_file("extensions")
 generate_string_file("entry_points")
-generate_func_table("entry_points.txt", "g_func_table.h", "g_func_table.cpp")
+generate_func_table("entry_points.txt", "g_func_table.h")
 delete_temp_file("extensions")
 delete_temp_file("entry_points")

@@ -65,6 +65,17 @@ public:
         const Device*                   pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
+    VkResult ImportFenceFd(
+        Device*                         pDevice,
+        const VkImportFenceFdInfoKHR*   pImportFenceFdInfo);
+
+    VkResult GetFenceFd(
+        Device*                         pDevice,
+        const VkFenceGetFdInfoKHR*      pGetFdInfo,
+        int*                            pFd);
+
+    VkResult RestoreFence(const Device* pDevice);
+
     VK_INLINE uint32_t GetActiveDeviceMask() const
         { return m_activeDeviceMask; }
 

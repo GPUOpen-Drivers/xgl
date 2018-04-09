@@ -38,7 +38,7 @@
 #include "strings/strings.h"
 
 // Helper macros to specify extension parameters
-#define VK_XX_EXTENSION(type, id)       type##Extensions::id, vk::secure::ext::VK_##id##_name, VK_##id##_SPEC_VERSION
+#define VK_XX_EXTENSION(type, id)       type##Extensions::id, vk::strings::ext::VK_##id##_name, VK_##id##_SPEC_VERSION
 #define VK_INSTANCE_EXTENSION(id)       VK_XX_EXTENSION(Instance, id)
 #define VK_DEVICE_EXTENSION(id)         VK_XX_EXTENSION(Device, id)
 

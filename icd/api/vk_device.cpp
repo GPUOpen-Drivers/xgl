@@ -63,6 +63,7 @@
 #include "include/vk_utils.h"
 #include "include/vk_conv.h"
 
+#include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -178,8 +179,8 @@ Device::Device(
     m_internalMemMgr(this, pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_renderStateCache(this),
     m_enabledExtensions(enabledExtensions),
-    m_pSqttMgr(nullptr),
-    m_pfnUpdateDescriptorSets(nullptr)
+    m_dispatchTable(DispatchTable::Type::DEVICE, m_pInstance, this),
+    m_pSqttMgr(nullptr)
 {
     memcpy(m_pPhysicalDevices, pPhysicalDevices, sizeof(pPhysicalDevices[DefaultDeviceIndex]) * palDeviceCount);
     memcpy(m_pPalDevices, pPalDevices, sizeof(pPalDevices[0]) * palDeviceCount);
@@ -764,17 +765,36 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        InitEntryPointFuncs();
+        InitDispatchTable();
     }
 
     return result;
 }
 
 // =====================================================================================================================
-// Initialize the entry point functions for paths known at device init time
-void Device::InitEntryPointFuncs()
+// This function initializes the device dispatch table and allows the chance to override entries in it if necessary.
+// NOTE: Any entry points overridden in the instance dispatch table may need to be also overriden in the device dispatch
+// table as the overrides are not inherited.
+void Device::InitDispatchTable()
 {
-    m_pfnUpdateDescriptorSets = DescriptorSet::GetUpdateDescriptorSetsFunc(this);
+    // =================================================================================================================
+    // Initialize dispatch table.
+    m_dispatchTable.Init();
+
+    // =================================================================================================================
+    // Override dispatch table entries.
+    EntryPoints* ep = m_dispatchTable.OverrideEntryPoints();
+
+    ep->vkUpdateDescriptorSets = DescriptorSet::GetUpdateDescriptorSetsFunc(this);
+
+    // =================================================================================================================
+    // After generic overrides, apply any internal layer specific dispatch table override.
+
+    // Install SQTT marker annotation layer if needed
+    if (m_pSqttMgr != nullptr)
+    {
+        SqttOverrideDispatchTable(&m_dispatchTable, m_pSqttMgr);
+    }
 }
 
 // =====================================================================================================================
@@ -1336,6 +1356,7 @@ VkResult Device::ResetFences(
     for (uint32_t i = 0; i < fenceCount; ++i)
     {
         Fence::ObjectFromHandle(pFences[i])->ClearActiveDeviceMask();
+        Fence::ObjectFromHandle(pFences[i])->RestoreFence(this);
     }
 
     for (uint32_t deviceIdx = 0;

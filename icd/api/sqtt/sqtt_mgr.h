@@ -64,7 +64,7 @@ public:
         uint32_t                        queueFamilyIndex,
         const VkCommandBufferBeginInfo* pBeginInfo);
 
-    VK_INLINE const EntryPointTable* GetNextLayer() const
+    VK_INLINE const DispatchTable* GetNextLayer() const
         { return &m_nextLayer; }
 
     static void PalDeveloperCallback(
@@ -75,6 +75,8 @@ public:
 
     SqttObjectMgr* GetObjectMgr()
         { return &m_objectMgr; }
+
+    void SaveNextLayer();
 
 private:
     void InitLayer();
@@ -90,8 +92,8 @@ private:
     // Global ID counters per queue family.
     volatile uint32_t m_globalIDsPerQueue[Queue::MaxQueueFamilies];
 
-    // Jump table to the next layer's functions
-    EntryPointTable   m_nextLayer;
+    // Dispatch table to the next layer's functions
+    DispatchTable     m_nextLayer;
 
     // Metadata tracking for Vulkan objects
     SqttObjectMgr     m_objectMgr;

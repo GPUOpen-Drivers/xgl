@@ -367,7 +367,7 @@ VkResult PipelineCompiler::CreateShaderCache(
     ShaderCache*  pShaderCache)
 {
     VkResult                     result         = VK_SUCCESS;
-    const RuntimeSettings        settings       = m_pPhysicalDevice->GetRuntimeSettings();
+    const RuntimeSettings&       settings       = m_pPhysicalDevice->GetRuntimeSettings();
     PipelineCacheType            cacheType      = GetShaderCacheType();
     ShaderCache::ShaderCachePtr  shaderCachePtr = {};
 

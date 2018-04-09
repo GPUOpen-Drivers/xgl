@@ -36,17 +36,102 @@
 
 #include "include/vk_utils.h"
 #include "include/khronos/vk_icd.h"
+#include "include/vk_extensions.h"
 #include "strings/g_func_table.h"
+
 namespace vk
 {
+
 class Device;
 class Instance;
 
-namespace secure { namespace entry { enum EntryPointCondition : uint32_t; } }
+namespace EntryPoint
+{
+
+// Entry point type
+enum class Type : uint32_t
+{
+    GLOBAL,                 // Global entry point
+    INSTANCE,               // Instance-level entry point
+    DEVICE,                 // Device-level entry point
 };
 
-namespace vk
+// Entry point metadata
+struct Metadata
 {
+    const char*             pName;
+    Type                    type;
+};
+
+}
+
+// Dispatch table class
+class DispatchTable
+{
+public:
+    // Dispatch table type
+    enum class Type : uint32_t
+    {
+        GLOBAL,             // Global dispatch table
+        INSTANCE,           // Instance dispatch table
+        DEVICE,             // Device dispatch table
+    };
+
+    DispatchTable(
+        Type                type        = Type::INSTANCE,
+        const Instance*     pInstance   = nullptr,
+        const Device*       pDevice     = nullptr);
+
+    void Init();
+
+    VK_FORCEINLINE Type GetType() const
+    {
+        return m_type;
+    }
+
+    VK_FORCEINLINE const EntryPoints& GetEntryPoints() const
+    {
+        return m_func;
+    }
+
+    VK_FORCEINLINE PFN_vkVoidFunction GetEntryPoint(uint32_t index) const
+    {
+        VK_ASSERT(index < VKI_ENTRY_POINT_COUNT);
+        return m_table[index];
+    }
+
+    PFN_vkVoidFunction GetEntryPoint(const char* pName) const;
+
+    VK_FORCEINLINE EntryPoints* OverrideEntryPoints()
+    {
+        return &m_func;
+    }
+
+    VK_FORCEINLINE void OverrideEntryPoint(uint32_t index, PFN_vkVoidFunction func)
+    {
+        m_table[index] = func;
+    }
+
+protected:
+    bool CheckAPIVersion(uint32_t apiVersion);
+    bool CheckInstanceExtension(InstanceExtensions::ExtensionId id);
+    bool CheckDeviceExtension(DeviceExtensions::ExtensionId id);
+
+    union
+    {
+        EntryPoints             m_func;
+        PFN_vkVoidFunction      m_table[VKI_ENTRY_POINT_COUNT];
+    };
+
+    Type                        m_type;
+
+    const Instance*             m_pInstance;
+    const Device*               m_pDevice;
+};
+
+static_assert(sizeof(EntryPoints) == sizeof(PFN_vkVoidFunction) * VKI_ENTRY_POINT_COUNT, "Entry point count mismatch");
+
+extern const DispatchTable          g_GlobalDispatchTable;
 
 // =====================================================================================================================
 // The Dispatchable<> template class is a wrapper around "dispatchable" Vulkan objects, (e.g. VkInstance, VkDevice,
@@ -194,60 +279,8 @@ private:
     }
 };
 
-// Entry in a dispatch table of Vulkan entry points that maps a name (a secure string) to a function pointer
-// implementation.  An array of these makes up a dispatch table.  A list of arrays makes up a set of dispatch tables
-// that represents one or more driver-internal layers.  The Instance class owns the official dispatch table stack,
-// and implementations can use GetIcdProcAddr() to resolve a name to a function pointer.
-struct DispatchTableEntry
-{
-    const char*                             pName;
-    void*                                   pFunc;
-    vk::secure::entry::EntryPointCondition  conditionType;
-    uint32_t                                conditionValue;
-};
-
-// Helper macro for referencing the secure string for a particular Vulkan entry point
-#define VK_SECURE_ENTRY(entry_name) vk::secure::entry::entry_name##_name
-
-// Helper macro used to build entries of DispatchTableEntry arrays.
-#define VK_DISPATCH_ENTRY(entry_name, entry_func) \
-    { \
-        VK_SECURE_ENTRY(entry_name), \
-        reinterpret_cast<void *>(static_cast<PFN_##entry_name>(entry_func)), \
-        entry_name##_condition_type, \
-        entry_name##_condition_value, \
-    }
-
-// Helper macro used to build alias entries of DispatchTableEntry arrays.
-#define VK_DISPATCH_ALIAS(alias_name, entry_name, entry_func) \
-    { \
-        VK_SECURE_ENTRY(alias_name), \
-        reinterpret_cast<void *>(static_cast<PFN_##entry_name>(entry_func)), \
-        alias_name##_condition_type, \
-        alias_name##_condition_value, \
-    }
-
-// Helper macro to identify the end of a Vulkan dispatch table
-#define VK_DISPATCH_TABLE_END() { 0, 0 }
-
-extern void* GetIcdProcAddr(
-    const Instance*            pInstance,
-    const Device*              pDevice,
-    uint32_t                   tableCount,
-    const DispatchTableEntry** pTables,
-    const char*                pSecureEntryName);
-
-extern void GetNextDeviceLayerTable(
-    const Instance*            pInstance,
-    const Device*              pDevice,
-    const DispatchTableEntry*  pCurLayerTable,
-    EntryPointTable*           pNextLayerFuncs);
-
 namespace entry
 {
-
-extern const DispatchTableEntry g_GlobalDispatchTable[];
-extern const DispatchTableEntry g_StandardDispatchTable[];
 
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
     VkInstance                                  instance,

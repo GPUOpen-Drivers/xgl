@@ -34,6 +34,7 @@
 
 #include "vk_internal_ext_helper.h"
 
+#define VK_AMD_gpa_interface                             1
 #define VK_AMD_GPA_INTERFACE_SPEC_VERSION                1
 #define VK_AMD_GPA_INTERFACE_EXTENSION_NAME              "VK_AMD_gpa_interface"
 

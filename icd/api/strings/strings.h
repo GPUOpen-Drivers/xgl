@@ -40,19 +40,10 @@
 namespace vk
 {
 
-namespace secure
+namespace strings
 {
     namespace entry
     {
-        enum EntryPointCondition : uint32_t
-        {
-            ENTRY_POINT_NONE,               // First-class entry point without any condition
-            ENTRY_POINT_CORE_INSTANCE,      // Core instance entry point specific to a core Vulkan version
-            ENTRY_POINT_CORE_DEVICE,        // Core device entry point specific to a core Vulkan version
-            ENTRY_POINT_INSTANCE_EXTENSION, // Instance extension specific entry point
-            ENTRY_POINT_DEVICE_EXTENSION,   // Device extension specific entry point
-        };
-
         #include "strings/g_entry_points_decl.h"
     }
 

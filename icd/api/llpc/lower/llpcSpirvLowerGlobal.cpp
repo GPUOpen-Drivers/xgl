@@ -973,6 +973,7 @@ void SpirvLowerGlobal::LowerOutput()
     if (m_shaderStage == ShaderStageGeometry)
     {
         m_instVisitFlags.checkEmitCall = true;
+        m_instVisitFlags.checkReturn = true;
     }
     else
     {

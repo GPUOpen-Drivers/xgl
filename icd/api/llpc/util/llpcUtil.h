@@ -51,15 +51,6 @@ const char* GetShaderStageAbbreviation(ShaderStage shaderStage, bool upper = fal
 // Translates shader stage to corresponding stage mask.
 uint32_t ShaderStageToMask(ShaderStage stage);
 
-// Gets the symbol name for .text section.
-const char* GetSymbolNameForTextSection(ShaderStage stage, uint32_t stageMask);
-
-// Gets the symbol name for .AMDGPU.disasm section.
-const char* GetSymbolNameForDisasmSection(ShaderStage stage, uint32_t stageMask);
-
-// Gets the symbol name for .AMDGPU.csdata section.
-const char* GetSymbolNameForCsdataSection(ShaderStage stage, uint32_t stageMask);
-
 // =====================================================================================================================
 // Increments a pointer by nBytes by first casting it to a uint8_t*.
 //

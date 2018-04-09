@@ -74,11 +74,6 @@ class Instance
 public:
     typedef VkInstance ApiType;
 
-    // Maximum number of DispatchTableEntry arrays that an instance can report.  Generally there is only 1, but
-    // sometimes it may be necessary to shadow subsets of Vulkan entry points to customize behavior.  See
-    // vk::entry::GetProcAddr() and Instance::GetDispatchTables() for where this is used.
-    static constexpr uint32_t MaxDispatchTables = 2;
-
     // Instances are a special type of objects, they are dispatchable but don't have the loader header as other
     // dispatchable object types.
     static Instance* ObjectFromHandle(VkInstance instance)
@@ -104,6 +99,8 @@ public:
 
     VkResult Init(
         const VkApplicationInfo* pAppInfo);
+
+    void InitDispatchTable();
 
     VkResult Destroy(void);
 
@@ -164,7 +161,7 @@ public:
 
     bool IsDeviceExtensionAvailable(DeviceExtensions::ExtensionId id) const;
 
-    VK_INLINE bool IsExtensionSupported(InstanceExtensions::ExtensionId id) const
+    static VK_INLINE bool IsExtensionSupported(InstanceExtensions::ExtensionId id)
         { return GetSupportedExtensions().IsExtensionSupported(id); }
 
     VK_INLINE bool IsExtensionEnabled(InstanceExtensions::ExtensionId id) const
@@ -180,7 +177,8 @@ public:
         Pal::OsWindowHandle     windowHandle,
         Pal::OsDisplayHandle    monitorHandle) const;
 
-    uint32_t GetDispatchTables(const DispatchTableEntry* pTables[MaxDispatchTables]) const;
+    VK_INLINE const DispatchTable& GetDispatchTable() const
+        { return m_dispatchTable; }
 
     void EnableTracingSupport();
 
@@ -265,6 +263,7 @@ private:
     PhysicalDeviceManager*              m_pPhysicalDeviceManager;   // Physical device manager
     const uint32_t                      m_apiVersion;               // Requested Vulkan API version
     const InstanceExtensions::Enabled   m_enabledExtensions;        // Enabled instance extensions
+    DispatchTable                       m_dispatchTable;            // Instance dispatch table
 
     union
     {
@@ -302,10 +301,6 @@ private:
     Util::Mutex                                     m_logCallbackInternalExternalMutex; // Serialize all calls to
                                                                                         // external callbacks from
                                                                                         // internal and external sources
-
-#ifdef PAL_ENABLE_PRINTS_ASSERTS
-    mutable uint32_t m_dispatchTableQueryCount;
-#endif
 };
 
 // =====================================================================================================================

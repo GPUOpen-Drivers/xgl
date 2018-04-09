@@ -282,6 +282,8 @@ public:
     VkResult Initialize(DispatchableQueue** pQueues,
                         uint8_t*            pPalQueueMemory);
 
+    void InitDispatchTable();
+
     VK_FORCEINLINE Instance* VkInstance() const
         { return m_pInstance; }
 
@@ -483,8 +485,11 @@ public:
         VkExternalMemoryHandleTypeFlagBits handleType,
         const void*                        pExternalPtr) const;
 
-    PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc() const
-        { return m_pfnUpdateDescriptorSets; }
+    VK_INLINE const DispatchTable& GetDispatchTable() const
+        { return m_dispatchTable; }
+
+    VK_INLINE const EntryPoints& GetEntryPoints() const
+        { return m_dispatchTable.GetEntryPoints(); }
 
 protected:
     Device(
@@ -507,8 +512,6 @@ protected:
     void DestroyInternalPipelines();
 
     void InitSamplePatternPalette(Pal::SamplePatternPalette* pPalette) const;
-
-    void InitEntryPointFuncs();
 
     Instance* const                     m_pInstance;
     const RuntimeSettings&              m_settings;
@@ -535,6 +538,7 @@ protected:
     Pal::IMsaaState*                    m_pBltMsaaState[BltMsaaStateCount][MaxPalDevices];
 
     const DeviceExtensions::Enabled     m_enabledExtensions;    // Enabled device extensions
+    DispatchTable                       m_dispatchTable;        // Device dispatch table
     SqttMgr*                            m_pSqttMgr;             // Manager for developer mode SQ thread tracing
     Util::Mutex                         m_memoryMutex;          // Shared mutex used occasionally by memory objects
     Util::Mutex                         m_timerQueueMutex;      // Shared mutex used occasionally by timer queue objects
@@ -548,7 +552,6 @@ protected:
     // The maximum allocations that can be created from the logical device
     uint32_t                             m_maxAllocations;
 
-    PFN_vkUpdateDescriptorSets          m_pfnUpdateDescriptorSets;
 };
 
 // =====================================================================================================================

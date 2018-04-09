@@ -33,6 +33,7 @@
 
 #include "vk_internal_ext_helper.h"
 
+#define VK_KHX_device_group_creation                    1
 #define VK_KHX_DEVICE_GROUP_CREATION_SPEC_VERSION       1
 #define VK_KHX_DEVICE_GROUP_CREATION_EXTENSION_NAME     "VK_KHX_device_group_creation"
 

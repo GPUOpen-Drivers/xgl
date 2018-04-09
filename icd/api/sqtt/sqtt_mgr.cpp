@@ -88,8 +88,13 @@ void SqttMgr::InitLayer()
     {
         m_globalIDsPerQueue[i] = 0;
     }
+}
 
-    GetNextDeviceLayerTable(m_pDevice->VkInstance(), m_pDevice, vk::entry::sqtt::g_SqttDispatchTable, &m_nextLayer);
+// =====================================================================================================================
+void SqttMgr::SaveNextLayer()
+{
+    // Save current device dispatch table to use as the next layer.
+    m_nextLayer = m_pDevice->GetDispatchTable();
 }
 
 // =====================================================================================================================

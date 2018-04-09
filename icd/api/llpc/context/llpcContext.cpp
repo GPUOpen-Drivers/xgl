@@ -115,6 +115,7 @@ Context::Context(
     m_tys.pInt32x6Ty    = VectorType::get(m_tys.pInt32Ty, 6);
     m_tys.pInt32x8Ty    = VectorType::get(m_tys.pInt32Ty, 8);
     m_tys.pFloat16x2Ty  = VectorType::get(m_tys.pFloat16Ty, 2);
+    m_tys.pFloat16x4Ty  = VectorType::get(m_tys.pFloat16Ty, 4);
     m_tys.pFloatx2Ty    = VectorType::get(m_tys.pFloatTy, 2);
     m_tys.pFloatx3Ty    = VectorType::get(m_tys.pFloatTy, 3);
     m_tys.pFloatx4Ty    = VectorType::get(m_tys.pFloatTy, 4);

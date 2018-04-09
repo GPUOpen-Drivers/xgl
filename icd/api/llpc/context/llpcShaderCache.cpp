@@ -33,11 +33,8 @@
 #include <string.h>
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/FileSystem.h"
-
 #include "llpcShaderCache.h"
-#if XGL_LLVM_UPSTREAM==1
 #include "llvm/Support/DJB.h"
-#endif
 
 using namespace llvm;
 
@@ -389,11 +386,8 @@ Result ShaderCache::BuildFileName(
              gfxIp.major,
              gfxIp.minor,
              gfxIp.stepping);
-#if XGL_LLVM_UPSTREAM == 1
+
     const uint32_t nameHash = djbHash(hashedFileName, 0);
-#else
-    const uint32_t nameHash = HashString(hashedFileName, 0);
-#endif
     length = snprintf(hashedFileName, MaxFilePathLen, "%08x.bin", nameHash);
 
     // Combine the base path, the sub-path and the file name to get the fully qualified path to the cache file

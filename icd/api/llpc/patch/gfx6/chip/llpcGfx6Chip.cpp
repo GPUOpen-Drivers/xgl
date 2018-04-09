@@ -62,7 +62,7 @@ void VsRegConfig::Init()
     INIT_REG(VGT_STRMOUT_VTX_STRIDE_3);
     INIT_REG(VGT_REUSE_OFF);
     INIT_REG(VGT_VERTEX_REUSE_BLOCK_CNTL);
-    INIT_REG(VS_SCRATCH_SIZE);
+    INIT_REG(VS_SCRATCH_BYTE_SIZE);
     INIT_REG(VS_NUM_USED_VGPRS);
     INIT_REG(VS_NUM_USED_SGPRS);
     INIT_REG(USES_VIEWPORT_ARRAY_INDEX);
@@ -74,7 +74,7 @@ void HsRegConfig::Init()
 {
     INIT_REG(SPI_SHADER_PGM_RSRC1_HS);
     INIT_REG(SPI_SHADER_PGM_RSRC2_HS);
-    INIT_REG(HS_SCRATCH_SIZE);
+    INIT_REG(HS_SCRATCH_BYTE_SIZE);
     INIT_REG(HS_NUM_USED_VGPRS);
     INIT_REG(HS_NUM_USED_SGPRS);
     INIT_REG(VGT_LS_HS_CONFIG);
@@ -88,7 +88,7 @@ void EsRegConfig::Init()
 {
     INIT_REG(SPI_SHADER_PGM_RSRC1_ES);
     INIT_REG(SPI_SHADER_PGM_RSRC2_ES);
-    INIT_REG(ES_SCRATCH_SIZE);
+    INIT_REG(ES_SCRATCH_BYTE_SIZE);
     INIT_REG(ES_NUM_USED_VGPRS);
     INIT_REG(ES_NUM_USED_SGPRS);
     INIT_REG(VGT_ESGS_RING_ITEMSIZE);
@@ -100,7 +100,7 @@ void LsRegConfig::Init()
 {
     INIT_REG(SPI_SHADER_PGM_RSRC1_LS);
     INIT_REG(SPI_SHADER_PGM_RSRC2_LS);
-    INIT_REG(LS_SCRATCH_SIZE);
+    INIT_REG(LS_SCRATCH_BYTE_SIZE);
     INIT_REG(LS_NUM_USED_VGPRS);
     INIT_REG(LS_NUM_USED_SGPRS);
 }
@@ -111,7 +111,7 @@ void GsRegConfig::Init()
 {
     INIT_REG(SPI_SHADER_PGM_RSRC1_GS);
     INIT_REG(SPI_SHADER_PGM_RSRC2_GS);
-    INIT_REG(GS_SCRATCH_SIZE);
+    INIT_REG(GS_SCRATCH_BYTE_SIZE);
     INIT_REG(GS_NUM_USED_VGPRS);
     INIT_REG(GS_NUM_USED_SGPRS);
     INIT_REG(VGT_GS_MAX_VERT_OUT);
@@ -149,7 +149,7 @@ void PsRegConfig::Init()
     INIT_REG(DB_SHADER_CONTROL);
     INIT_REG(CB_SHADER_MASK);
     INIT_REG(PS_USES_UAVS);
-    INIT_REG(PS_SCRATCH_SIZE);
+    INIT_REG(PS_SCRATCH_BYTE_SIZE);
     INIT_REG(PS_NUM_USED_VGPRS);
     INIT_REG(PS_NUM_USED_SGPRS);
 }
@@ -176,10 +176,10 @@ void PipelineVsFsRegConfig::Init()
     PipelineRegConfig::Init();
 
     INIT_REG(VGT_SHADER_STAGES_EN);
-    INIT_REG(API_VS_HASH_LO);
-    INIT_REG(API_VS_HASH_HI);
-    INIT_REG(API_PS_HASH_LO);
-    INIT_REG(API_PS_HASH_HI);
+    INIT_REG(API_VS_HASH_DWORD0);
+    INIT_REG(API_VS_HASH_DWORD1);
+    INIT_REG(API_PS_HASH_DWORD0);
+    INIT_REG(API_PS_HASH_DWORD1);
     INIT_REG(INDIRECT_TABLE_ENTRY);
     INIT_REG(IA_MULTI_VGT_PARAM);
 
@@ -197,14 +197,14 @@ void PipelineVsTsFsRegConfig::Init()
     PipelineRegConfig::Init();
 
     INIT_REG(VGT_SHADER_STAGES_EN);
-    INIT_REG(API_VS_HASH_LO);
-    INIT_REG(API_VS_HASH_HI);
-    INIT_REG(API_HS_HASH_LO);
-    INIT_REG(API_HS_HASH_HI);
-    INIT_REG(API_DS_HASH_LO);
-    INIT_REG(API_DS_HASH_HI);
-    INIT_REG(API_PS_HASH_LO);
-    INIT_REG(API_PS_HASH_HI);
+    INIT_REG(API_VS_HASH_DWORD0);
+    INIT_REG(API_VS_HASH_DWORD1);
+    INIT_REG(API_HS_HASH_DWORD0);
+    INIT_REG(API_HS_HASH_DWORD1);
+    INIT_REG(API_DS_HASH_DWORD0);
+    INIT_REG(API_DS_HASH_DWORD1);
+    INIT_REG(API_PS_HASH_DWORD0);
+    INIT_REG(API_PS_HASH_DWORD1);
     INIT_REG(INDIRECT_TABLE_ENTRY);
     INIT_REG(IA_MULTI_VGT_PARAM);
     INIT_REG(VGT_TF_PARAM);
@@ -223,12 +223,12 @@ void PipelineVsGsFsRegConfig::Init()
     PipelineRegConfig::Init();
 
     INIT_REG(VGT_SHADER_STAGES_EN);
-    INIT_REG(API_VS_HASH_LO);
-    INIT_REG(API_VS_HASH_HI);
-    INIT_REG(API_GS_HASH_LO);
-    INIT_REG(API_GS_HASH_HI);
-    INIT_REG(API_PS_HASH_LO);
-    INIT_REG(API_PS_HASH_HI);
+    INIT_REG(API_VS_HASH_DWORD0);
+    INIT_REG(API_VS_HASH_DWORD1);
+    INIT_REG(API_GS_HASH_DWORD0);
+    INIT_REG(API_GS_HASH_DWORD1);
+    INIT_REG(API_PS_HASH_DWORD0);
+    INIT_REG(API_PS_HASH_DWORD1);
     INIT_REG(INDIRECT_TABLE_ENTRY);
     INIT_REG(IA_MULTI_VGT_PARAM);
 
@@ -248,16 +248,16 @@ void PipelineVsTsGsFsRegConfig::Init()
     PipelineRegConfig::Init();
 
     INIT_REG(VGT_SHADER_STAGES_EN);
-    INIT_REG(API_VS_HASH_LO);
-    INIT_REG(API_VS_HASH_HI);
-    INIT_REG(API_HS_HASH_LO);
-    INIT_REG(API_HS_HASH_HI);
-    INIT_REG(API_DS_HASH_LO);
-    INIT_REG(API_DS_HASH_HI);
-    INIT_REG(API_GS_HASH_LO);
-    INIT_REG(API_GS_HASH_HI);
-    INIT_REG(API_PS_HASH_LO);
-    INIT_REG(API_PS_HASH_HI);
+    INIT_REG(API_VS_HASH_DWORD0);
+    INIT_REG(API_VS_HASH_DWORD1);
+    INIT_REG(API_HS_HASH_DWORD0);
+    INIT_REG(API_HS_HASH_DWORD1);
+    INIT_REG(API_DS_HASH_DWORD0);
+    INIT_REG(API_DS_HASH_DWORD1);
+    INIT_REG(API_GS_HASH_DWORD0);
+    INIT_REG(API_GS_HASH_DWORD1);
+    INIT_REG(API_PS_HASH_DWORD0);
+    INIT_REG(API_PS_HASH_DWORD1);
     INIT_REG(INDIRECT_TABLE_ENTRY);
     INIT_REG(IA_MULTI_VGT_PARAM);
     INIT_REG(VGT_TF_PARAM);
@@ -274,7 +274,7 @@ void CsRegConfig::Init()
     INIT_REG(COMPUTE_NUM_THREAD_X);
     INIT_REG(COMPUTE_NUM_THREAD_Y);
     INIT_REG(COMPUTE_NUM_THREAD_Z);
-    INIT_REG(CS_SCRATCH_SIZE);
+    INIT_REG(CS_SCRATCH_BYTE_SIZE);
     INIT_REG(CS_NUM_USED_VGPRS);
     INIT_REG(CS_NUM_USED_SGPRS);
 }
@@ -286,8 +286,8 @@ void PipelineCsRegConfig::Init()
     m_csRegs.Init();
     PipelineRegConfig::Init();
 
-    INIT_REG(API_CS_HASH_LO);
-    INIT_REG(API_CS_HASH_HI);
+    INIT_REG(API_CS_HASH_DWORD0);
+    INIT_REG(API_CS_HASH_DWORD1);
 
     m_dynRegCount = 0;
 }
@@ -396,24 +396,6 @@ void InitRegisterNameMap(
     ADD_REG_MAP(VGT_STRMOUT_VTX_STRIDE_3);
     ADD_REG_MAP(VGT_REUSE_OFF);
 
-    ADD_REG_MAP(PS_USES_UAVS);
-    ADD_REG_MAP(HS_MAX_TESS_FACTOR);
-    ADD_REG_MAP(USER_DATA_LIMIT);
-    ADD_REG_MAP(SPILL_THRESHOLD);
-    ADD_REG_MAP(API_VS_HASH_LO);
-    ADD_REG_MAP(API_VS_HASH_HI);
-    ADD_REG_MAP(API_HS_HASH_LO);
-    ADD_REG_MAP(API_HS_HASH_HI);
-    ADD_REG_MAP(API_DS_HASH_LO);
-    ADD_REG_MAP(API_DS_HASH_HI);
-    ADD_REG_MAP(API_GS_HASH_LO);
-    ADD_REG_MAP(API_GS_HASH_HI);
-    ADD_REG_MAP(API_PS_HASH_LO);
-    ADD_REG_MAP(API_PS_HASH_HI);
-    ADD_REG_MAP(API_CS_HASH_LO);
-    ADD_REG_MAP(API_CS_HASH_HI);
-    ADD_REG_MAP(PIPELINE_HASH_LO);
-    ADD_REG_MAP(PIPELINE_HASH_HI);
     ADD_REG_MAP(SPI_BARYC_CNTL);
 
     ADD_REG_MAP(SPI_SHADER_USER_DATA_VS_0);
@@ -539,44 +521,11 @@ void InitRegisterNameMap(
     ADD_REG_MAP(COMPUTE_NUM_THREAD_Y);
     ADD_REG_MAP(COMPUTE_NUM_THREAD_Z);
 
-    ADD_REG_MAP(VS_SCRATCH_SIZE);
-    ADD_REG_MAP(VS_NUM_USED_VGPRS);
-    ADD_REG_MAP(VS_NUM_USED_SGPRS);
-    ADD_REG_MAP(INDIRECT_TABLE_ENTRY);
-
-    ADD_REG_MAP(LS_NUM_USED_VGPRS);
-    ADD_REG_MAP(LS_NUM_USED_SGPRS);
-    ADD_REG_MAP(LS_SCRATCH_SIZE);
-
-    ADD_REG_MAP(HS_NUM_USED_VGPRS);
-    ADD_REG_MAP(HS_NUM_USED_SGPRS);
-    ADD_REG_MAP(HS_SCRATCH_SIZE);
-
-    ADD_REG_MAP(PS_SCRATCH_SIZE);
-    ADD_REG_MAP(PS_NUM_USED_VGPRS);
-    ADD_REG_MAP(PS_NUM_USED_SGPRS);
-
-    ADD_REG_MAP(CS_SCRATCH_SIZE);
-    ADD_REG_MAP(CS_NUM_USED_VGPRS);
-    ADD_REG_MAP(CS_NUM_USED_SGPRS);
-
-    ADD_REG_MAP(ES_SCRATCH_SIZE);
-    ADD_REG_MAP(ES_NUM_USED_VGPRS);
-    ADD_REG_MAP(ES_NUM_USED_SGPRS);
-
-    ADD_REG_MAP(GS_SCRATCH_SIZE);
-    ADD_REG_MAP(GS_NUM_USED_VGPRS);
-    ADD_REG_MAP(GS_NUM_USED_SGPRS);
-
     ADD_REG_MAP(VGT_TF_PARAM);
     ADD_REG_MAP(VGT_LS_HS_CONFIG);
     ADD_REG_MAP(VGT_HOS_MIN_TESS_LEVEL);
     ADD_REG_MAP(VGT_HOS_MAX_TESS_LEVEL);
     ADD_REG_MAP(IA_MULTI_VGT_PARAM);
-
-    ADD_REG_MAP(USES_VIEWPORT_ARRAY_INDEX);
-    ADD_REG_MAP(API_HW_SHADER_MAPPING_LO);
-    ADD_REG_MAP(API_HW_SHADER_MAPPING_HI);
 }
 
 // =====================================================================================================================
@@ -591,17 +540,26 @@ const char* GetRegisterNameString(
     {
         InitRegisterNameMap(gfxIp);
     }
+
     const char* pNameString = nullptr;
-    auto nameMap = RegNameMap.find(regId);
-    if  (nameMap != RegNameMap.end())
+    if ((regId / 4 >= Util::Abi::PipelineMetadataBase) &&
+        (regId / 4 <= Util::Abi::PipelineMetadataBase + static_cast<uint32_t>(Util::Abi::PipelineMetadataType::Count)))
     {
-        pNameString = nameMap->second;
+        pNameString = Util::Abi::PipelineMetadataNameStrings[regId / 4 - Util::Abi::PipelineMetadataBase];
     }
     else
     {
-        static char unknownRegNameBuf[256] = {};
-        int32_t length = snprintf(unknownRegNameBuf, 256, "UNKNOWN(0x%08X)", regId);
-        pNameString = unknownRegNameBuf;
+        auto nameMap = RegNameMap.find(regId);
+        if  (nameMap != RegNameMap.end())
+        {
+            pNameString = nameMap->second;
+        }
+        else
+        {
+            static char unknownRegNameBuf[256] = {};
+            int32_t length = snprintf(unknownRegNameBuf, 256, "UNKNOWN(0x%08X)", regId);
+            pNameString = unknownRegNameBuf;
+        }
     }
 
     return pNameString;

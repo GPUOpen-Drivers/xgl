@@ -68,103 +68,493 @@
 namespace vk
 {
 
+static EntryPoint::Metadata     g_EntryPointMetadataTable[VKI_ENTRY_POINT_COUNT];
+
+const DispatchTable             g_GlobalDispatchTable(DispatchTable::Type::GLOBAL);
+
+// Helper macro used to index the entry point metadata table
+#define METADATA_TABLE(entry_name) g_EntryPointMetadataTable[entry_name##_index]
+
+// Helper macro used to initialize the global dispatch table entries
+#define INIT_DISPATCH_ALIAS(entry_name, func_name) \
+    if (GetType() == Type::GLOBAL) \
+    { \
+        METADATA_TABLE(entry_name).pName            = vk::strings::entry::entry_name##_name; \
+        METADATA_TABLE(entry_name).type             = entry_name##_type; \
+    } \
+    if (entry_name##_condition) \
+    { \
+        m_func.entry_name = vk::entry::func_name; \
+    }
+
+// Helper macro used to initialize non-aliased global dispatch table entries
+#define INIT_DISPATCH_ENTRY(entry_name) INIT_DISPATCH_ALIAS(entry_name, entry_name)
+
 // =====================================================================================================================
-// Given one or more dispatch tables (ppTables), go through each one and look for the first dispatch table that
-// matches the name and current entry point conditions.
-//
-// This implementation supports both secure and insecure strings.  If 'nameSecure' is true, then 'pName' is expected
-// to be one of the vk::entry::secure string pointers (comparison happens by address).  If 'nameSecure' is false,
-// 'pName' is expected to be a normal string.
-void* GetIcdProcAddr(
-    const Instance*            pInstance,
-    const Device*              pDevice,
-    uint32_t                   tableCount,
-    const DispatchTableEntry** ppTables,
-    const char*                pName)
+// Checks whether API version requirement is fulfilled.
+bool DispatchTable::CheckAPIVersion(uint32_t apiVersion)
 {
-    void* pFunc = nullptr;
+    switch (GetType())
+    {
+    case Type::GLOBAL:
+        // The global dispatch table should not contain any entry points that depend on the API version.
+        return false;
+
+    case Type::INSTANCE:
+        VK_ASSERT(m_pInstance != nullptr);
+        return m_pInstance->GetAPIVersion() >= apiVersion;
+
+    case Type::DEVICE:
+        VK_ASSERT(m_pDevice != nullptr);
+        return m_pDevice->VkInstance()->GetAPIVersion() >= apiVersion;
+
+    default:
+        VK_ASSERT("Unexpected dispatch table type");
+        return false;
+    }
+}
+
+// =====================================================================================================================
+// Checks whether instance extension requirement is fulfilled.
+bool DispatchTable::CheckInstanceExtension(InstanceExtensions::ExtensionId id)
+{
+    switch (GetType())
+    {
+    case Type::GLOBAL:
+        // The global dispatch table should not contain any entry points that depend on instance extensions.
+        return false;
+
+    case Type::INSTANCE:
+        VK_ASSERT(m_pInstance != nullptr);
+        return m_pInstance->IsExtensionEnabled(id);
+
+    case Type::DEVICE:
+        VK_ASSERT(m_pDevice != nullptr);
+        return m_pDevice->VkInstance()->IsExtensionEnabled(id);
+
+    default:
+        VK_ASSERT("Unexpected dispatch table type");
+        return false;
+    }
+}
+
+// =====================================================================================================================
+// Checks whether device extension requirement is fulfilled.
+bool DispatchTable::CheckDeviceExtension(DeviceExtensions::ExtensionId id)
+{
+    switch (GetType())
+    {
+    case Type::GLOBAL:
+        // The global dispatch table should not contain any entry points that depend on device extensions.
+        return false;
+
+    case Type::INSTANCE:
+        VK_ASSERT(m_pInstance != nullptr);
+        return m_pInstance->IsDeviceExtensionAvailable(id);
+
+    case Type::DEVICE:
+        VK_ASSERT(m_pDevice != nullptr);
+        return m_pDevice->IsExtensionEnabled(id);
+
+    default:
+        VK_ASSERT("Unexpected dispatch table type");
+        return false;
+    }
+}
+
+// =====================================================================================================================
+// This constructor initializes the dispatch table based on its type.
+// For the global dispatch table this constructor also initializes the entry point metadata table, thus this is expected
+// to be only called once, implicitly, as part of constructing g_GlobalDispatchTable.
+DispatchTable::DispatchTable(
+    Type                type,
+    const Instance*     pInstance,
+    const Device*       pDevice)
+  : m_type(type),
+    m_pInstance(pInstance),
+    m_pDevice(pDevice)
+{
+    // Clear dispatch table.
+    memset(&m_func, 0, sizeof(m_func));
+
+    // If this is the global dispatch table then clear the entry point metadata table.
+    // The INIT_DISPATCH_ENTRY will also initialize the individual entry point metadata entries as well.
+    if (GetType() == Type::GLOBAL)
+    {
+        VK_ASSERT(this == &g_GlobalDispatchTable);
+        memset(&g_EntryPointMetadataTable[0], 0, sizeof(g_EntryPointMetadataTable));
+
+        // The global dispatch table doesn't need a separate Init() call, it's automatically initialized.
+        Init();
+    }
+}
+
+// =====================================================================================================================
+// This constructor initializes the dispatch table based on its type.
+// For the global dispatch table this constructor also initializes the entry point metadata table, thus this is expected
+// to be only called once, implicitly, as part of constructing g_GlobalDispatchTable.
+void DispatchTable::Init()
+{
+    INIT_DISPATCH_ENTRY(vkGetInstanceProcAddr                           );
+
+    INIT_DISPATCH_ENTRY(vkCreateInstance                                );
+    INIT_DISPATCH_ENTRY(vkEnumerateInstanceExtensionProperties          );
+    INIT_DISPATCH_ENTRY(vkEnumerateInstanceLayerProperties              );
+#if VKI_SDK_1_0 == 0
+    INIT_DISPATCH_ENTRY(vkEnumerateInstanceVersion                      );
+#endif
+
+    INIT_DISPATCH_ENTRY(vkGetDeviceProcAddr                             );
+    INIT_DISPATCH_ENTRY(vkAcquireNextImageKHR                           );
+    INIT_DISPATCH_ENTRY(vkAllocateDescriptorSets                        );
+    INIT_DISPATCH_ENTRY(vkAllocateMemory                                );
+    INIT_DISPATCH_ENTRY(vkBeginCommandBuffer                            );
+    INIT_DISPATCH_ENTRY(vkBindBufferMemory                              );
+    INIT_DISPATCH_ENTRY(vkBindImageMemory                               );
+    INIT_DISPATCH_ENTRY(vkCmdBeginRenderPass                            );
+    INIT_DISPATCH_ENTRY(vkCmdBeginQuery                                 );
+    INIT_DISPATCH_ENTRY(vkCmdBindDescriptorSets                         );
+    INIT_DISPATCH_ENTRY(vkCmdBindIndexBuffer                            );
+    INIT_DISPATCH_ENTRY(vkCmdBindPipeline                               );
+    INIT_DISPATCH_ENTRY(vkCmdBindVertexBuffers                          );
+    INIT_DISPATCH_ENTRY(vkCmdBlitImage                                  );
+    INIT_DISPATCH_ENTRY(vkCmdClearAttachments                           );
+    INIT_DISPATCH_ENTRY(vkCmdClearColorImage                            );
+    INIT_DISPATCH_ENTRY(vkCmdClearDepthStencilImage                     );
+    INIT_DISPATCH_ENTRY(vkCmdCopyBuffer                                 );
+    INIT_DISPATCH_ENTRY(vkCmdCopyBufferToImage                          );
+    INIT_DISPATCH_ENTRY(vkCmdCopyImage                                  );
+    INIT_DISPATCH_ENTRY(vkCmdCopyImageToBuffer                          );
+    INIT_DISPATCH_ENTRY(vkCmdCopyQueryPoolResults                       );
+    INIT_DISPATCH_ENTRY(vkCmdDraw                                       );
+    INIT_DISPATCH_ENTRY(vkCmdDrawIndexed                                );
+    INIT_DISPATCH_ENTRY(vkCmdDrawIndexedIndirect                        );
+    INIT_DISPATCH_ENTRY(vkCmdDrawIndirect                               );
+    INIT_DISPATCH_ENTRY(vkCmdDrawIndexedIndirectCountAMD                );
+    INIT_DISPATCH_ENTRY(vkCmdDrawIndirectCountAMD                       );
+    INIT_DISPATCH_ENTRY(vkCmdDispatch                                   );
+    INIT_DISPATCH_ENTRY(vkCmdDispatchIndirect                           );
+    INIT_DISPATCH_ENTRY(vkCmdEndRenderPass                              );
+    INIT_DISPATCH_ENTRY(vkCmdEndQuery                                   );
+    INIT_DISPATCH_ENTRY(vkCmdExecuteCommands                            );
+    INIT_DISPATCH_ENTRY(vkCmdFillBuffer                                 );
+    INIT_DISPATCH_ENTRY(vkCmdNextSubpass                                );
+    INIT_DISPATCH_ENTRY(vkCmdPipelineBarrier                            );
+    INIT_DISPATCH_ENTRY(vkCmdPushConstants                              );
+    INIT_DISPATCH_ENTRY(vkCmdResetEvent                                 );
+    INIT_DISPATCH_ENTRY(vkCmdResetQueryPool                             );
+    INIT_DISPATCH_ENTRY(vkCmdResolveImage                               );
+
+    INIT_DISPATCH_ENTRY(vkCmdSetBlendConstants                          );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthBias                               );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthBounds                             );
+
+    INIT_DISPATCH_ENTRY(vkCmdSetEvent                                   );
+
+    INIT_DISPATCH_ENTRY(vkCmdSetLineWidth                               );
+    INIT_DISPATCH_ENTRY(vkCmdSetScissor                                 );
+    INIT_DISPATCH_ENTRY(vkCmdSetStencilCompareMask                      );
+    INIT_DISPATCH_ENTRY(vkCmdSetStencilReference                        );
+    INIT_DISPATCH_ENTRY(vkCmdSetStencilWriteMask                        );
+    INIT_DISPATCH_ENTRY(vkCmdSetViewport                                );
+
+    INIT_DISPATCH_ENTRY(vkCmdUpdateBuffer                               );
+    INIT_DISPATCH_ENTRY(vkCmdWaitEvents                                 );
+    INIT_DISPATCH_ENTRY(vkCmdWriteTimestamp                             );
+
+    INIT_DISPATCH_ENTRY(vkCreateBuffer                                  );
+    INIT_DISPATCH_ENTRY(vkCreateBufferView                              );
+    INIT_DISPATCH_ENTRY(vkAllocateCommandBuffers                        );
+    INIT_DISPATCH_ENTRY(vkCreateCommandPool                             );
+    INIT_DISPATCH_ENTRY(vkCreateComputePipelines                        );
+    INIT_DISPATCH_ENTRY(vkCreateDescriptorPool                          );
+    INIT_DISPATCH_ENTRY(vkCreateDescriptorSetLayout                     );
+    INIT_DISPATCH_ENTRY(vkCreateDevice                                  );
+
+    INIT_DISPATCH_ENTRY(vkCreateEvent                                   );
+    INIT_DISPATCH_ENTRY(vkCreateFence                                   );
+    INIT_DISPATCH_ENTRY(vkCreateFramebuffer                             );
+    INIT_DISPATCH_ENTRY(vkCreateGraphicsPipelines                       );
+    INIT_DISPATCH_ENTRY(vkCreateImage                                   );
+    INIT_DISPATCH_ENTRY(vkCreateImageView                               );
+    INIT_DISPATCH_ENTRY(vkCreatePipelineLayout                          );
+    INIT_DISPATCH_ENTRY(vkCreatePipelineCache                           );
+    INIT_DISPATCH_ENTRY(vkCreateQueryPool                               );
+    INIT_DISPATCH_ENTRY(vkCreateRenderPass                              );
+    INIT_DISPATCH_ENTRY(vkCreateSampler                                 );
+    INIT_DISPATCH_ENTRY(vkCreateSemaphore                               );
+    INIT_DISPATCH_ENTRY(vkCreateShaderModule                            );
+    INIT_DISPATCH_ENTRY(vkCreateSwapchainKHR                            );
+    INIT_DISPATCH_ENTRY(vkDestroySurfaceKHR                             );
+    INIT_DISPATCH_ENTRY(vkCreateXcbSurfaceKHR                           );
+    INIT_DISPATCH_ENTRY(vkCreateXlibSurfaceKHR                          );
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    INIT_DISPATCH_ENTRY(vkCreateWaylandSurfaceKHR                       );
+#endif
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceXcbPresentationSupportKHR    );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceXlibPresentationSupportKHR   );
+#ifdef VK_USE_PLATFORM_WAYLAND_KHR
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceWaylandPresentationSupportKHR);
+#endif
+    INIT_DISPATCH_ENTRY(vkDestroyBuffer                                 );
+    INIT_DISPATCH_ENTRY(vkDestroyBufferView                             );
+    INIT_DISPATCH_ENTRY(vkFreeCommandBuffers                            );
+    INIT_DISPATCH_ENTRY(vkDestroyCommandPool                            );
+    INIT_DISPATCH_ENTRY(vkDestroyDescriptorPool                         );
+    INIT_DISPATCH_ENTRY(vkDestroyDescriptorSetLayout                    );
+    INIT_DISPATCH_ENTRY(vkDestroyDevice                                 );
+    INIT_DISPATCH_ENTRY(vkDestroyEvent                                  );
+    INIT_DISPATCH_ENTRY(vkDestroyFence                                  );
+    INIT_DISPATCH_ENTRY(vkDestroyFramebuffer                            );
+    INIT_DISPATCH_ENTRY(vkDestroyImage                                  );
+    INIT_DISPATCH_ENTRY(vkDestroyImageView                              );
+    INIT_DISPATCH_ENTRY(vkDestroyInstance                               );
+    INIT_DISPATCH_ENTRY(vkDestroyPipeline                               );
+    INIT_DISPATCH_ENTRY(vkDestroyPipelineCache                          );
+    INIT_DISPATCH_ENTRY(vkDestroyPipelineLayout                         );
+    INIT_DISPATCH_ENTRY(vkDestroyQueryPool                              );
+    INIT_DISPATCH_ENTRY(vkDestroyRenderPass                             );
+    INIT_DISPATCH_ENTRY(vkDestroySampler                                );
+    INIT_DISPATCH_ENTRY(vkDestroySemaphore                              );
+    INIT_DISPATCH_ENTRY(vkDestroyShaderModule                           );
+    INIT_DISPATCH_ENTRY(vkDestroySwapchainKHR                           );
+
+    INIT_DISPATCH_ENTRY(vkDeviceWaitIdle                                );
+    INIT_DISPATCH_ENTRY(vkEndCommandBuffer                              );
+    INIT_DISPATCH_ENTRY(vkEnumeratePhysicalDevices                      );
+    INIT_DISPATCH_ENTRY(vkFlushMappedMemoryRanges                       );
+    INIT_DISPATCH_ENTRY(vkFreeDescriptorSets                            );
+    INIT_DISPATCH_ENTRY(vkFreeMemory                                    );
+    INIT_DISPATCH_ENTRY(vkGetBufferMemoryRequirements                   );
+    INIT_DISPATCH_ENTRY(vkGetDeviceMemoryCommitment                     );
+    INIT_DISPATCH_ENTRY(vkGetDeviceQueue                                );
+    INIT_DISPATCH_ENTRY(vkGetEventStatus                                );
+    INIT_DISPATCH_ENTRY(vkGetFenceStatus                                );
+
+    INIT_DISPATCH_ENTRY(vkEnumerateDeviceExtensionProperties            );
+    INIT_DISPATCH_ENTRY(vkEnumerateDeviceLayerProperties                );
+
+    INIT_DISPATCH_ENTRY(vkGetImageMemoryRequirements                    );
+    INIT_DISPATCH_ENTRY(vkGetImageSparseMemoryRequirements              );
+    INIT_DISPATCH_ENTRY(vkGetImageSubresourceLayout                     );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceFeatures                     );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceFormatProperties             );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceImageFormatProperties        );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceMemoryProperties             );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceProperties                   );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceQueueFamilyProperties        );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSparseImageFormatProperties  );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceSupportKHR            );
+    INIT_DISPATCH_ENTRY(vkGetPipelineCacheData                          );
+    INIT_DISPATCH_ENTRY(vkGetQueryPoolResults                           );
+    INIT_DISPATCH_ENTRY(vkGetRenderAreaGranularity                      );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilitiesKHR       );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilities2KHR      );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceFormatsKHR            );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceFormats2KHR           );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfacePresentModesKHR       );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDevicePresentRectanglesKHX         );
+
+    INIT_DISPATCH_ENTRY(vkGetSwapchainImagesKHR                         );
+
+    INIT_DISPATCH_ENTRY(vkInvalidateMappedMemoryRanges                  );
+    INIT_DISPATCH_ENTRY(vkMapMemory                                     );
+    INIT_DISPATCH_ENTRY(vkMergePipelineCaches                           );
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceFeatures2KHR                 ,
+                        vkGetPhysicalDeviceFeatures2                    );
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceProperties2KHR               ,
+                        vkGetPhysicalDeviceProperties2                  );
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceFormatProperties2KHR         ,
+                        vkGetPhysicalDeviceFormatProperties2            );
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceImageFormatProperties2KHR    ,
+                        vkGetPhysicalDeviceImageFormatProperties2       );
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceQueueFamilyProperties2KHR    ,
+                        vkGetPhysicalDeviceQueueFamilyProperties2       );
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceMemoryProperties2KHR         ,
+                        vkGetPhysicalDeviceMemoryProperties2            );
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceSparseImageFormatProperties2KHR,
+                        vkGetPhysicalDeviceSparseImageFormatProperties2 );
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceExternalBufferPropertiesKHR  ,
+                        vkGetPhysicalDeviceExternalBufferProperties     );
+
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceExternalSemaphorePropertiesKHR,
+                        vkGetPhysicalDeviceExternalSemaphoreProperties  );
+    INIT_DISPATCH_ENTRY(vkGetMemoryFdPropertiesKHR                      );
+    INIT_DISPATCH_ENTRY(vkGetMemoryFdKHR                                );
+    INIT_DISPATCH_ENTRY(vkImportSemaphoreFdKHR                          );
+    INIT_DISPATCH_ENTRY(vkGetSemaphoreFdKHR                             );
+    INIT_DISPATCH_ENTRY(vkGetFenceFdKHR                                 );
+    INIT_DISPATCH_ENTRY(vkImportFenceFdKHR                              );
+
+    INIT_DISPATCH_ALIAS(vkBindBufferMemory2KHR                          ,
+                        vkBindBufferMemory2                             );
+    INIT_DISPATCH_ALIAS(vkBindImageMemory2KHR                           ,
+                        vkBindImageMemory2                              );
+
+    INIT_DISPATCH_ALIAS(vkCreateDescriptorUpdateTemplateKHR             ,
+                        vkCreateDescriptorUpdateTemplate                );
+    INIT_DISPATCH_ALIAS(vkDestroyDescriptorUpdateTemplateKHR            ,
+                        vkDestroyDescriptorUpdateTemplate               );
+    INIT_DISPATCH_ALIAS(vkUpdateDescriptorSetWithTemplateKHR            ,
+                        vkUpdateDescriptorSetWithTemplate               );
+
+    INIT_DISPATCH_ENTRY(vkAcquireNextImage2KHX                          );
+    INIT_DISPATCH_ENTRY(vkCmdDispatchBaseKHX                            );
+    INIT_DISPATCH_ENTRY(vkCmdSetDeviceMaskKHX                           );
+    INIT_DISPATCH_ENTRY(vkEnumeratePhysicalDeviceGroupsKHX              );
+    INIT_DISPATCH_ENTRY(vkGetDeviceGroupPeerMemoryFeaturesKHX           );
+    INIT_DISPATCH_ENTRY(vkGetDeviceGroupPresentCapabilitiesKHX          );
+    INIT_DISPATCH_ENTRY(vkGetDeviceGroupSurfacePresentModesKHX          );
+
+    INIT_DISPATCH_ENTRY(vkAcquireNextImage2KHR                          );
+    INIT_DISPATCH_ALIAS(vkCmdDispatchBaseKHR                            ,
+                        vkCmdDispatchBase                               );
+    INIT_DISPATCH_ALIAS(vkCmdSetDeviceMaskKHR                           ,
+                        vkCmdSetDeviceMask                              );
+    INIT_DISPATCH_ALIAS(vkEnumeratePhysicalDeviceGroupsKHR              ,
+                        vkEnumeratePhysicalDeviceGroups                 );
+    INIT_DISPATCH_ALIAS(vkGetDeviceGroupPeerMemoryFeaturesKHR           ,
+                        vkGetDeviceGroupPeerMemoryFeatures              );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDevicePresentRectanglesKHR         );
+    INIT_DISPATCH_ENTRY(vkGetDeviceGroupPresentCapabilitiesKHR          );
+    INIT_DISPATCH_ENTRY(vkGetDeviceGroupSurfacePresentModesKHR          );
+
+    INIT_DISPATCH_ENTRY(vkQueueBindSparse                               );
+    INIT_DISPATCH_ENTRY(vkQueuePresentKHR                               );
+    INIT_DISPATCH_ENTRY(vkQueueSubmit                                   );
+    INIT_DISPATCH_ENTRY(vkQueueWaitIdle                                 );
+    INIT_DISPATCH_ENTRY(vkResetCommandBuffer                            );
+    INIT_DISPATCH_ENTRY(vkResetCommandPool                              );
+    INIT_DISPATCH_ENTRY(vkResetDescriptorPool                           );
+    INIT_DISPATCH_ENTRY(vkResetEvent                                    );
+    INIT_DISPATCH_ENTRY(vkResetFences                                   );
+    INIT_DISPATCH_ENTRY(vkSetEvent                                      );
+    INIT_DISPATCH_ALIAS(vkTrimCommandPoolKHR                            ,
+                        vkTrimCommandPool                               );
+    INIT_DISPATCH_ENTRY(vkUnmapMemory                                   );
+    INIT_DISPATCH_ENTRY(vkUpdateDescriptorSets                          );
+    INIT_DISPATCH_ENTRY(vkWaitForFences                                 );
+    INIT_DISPATCH_ENTRY(vkGetShaderInfoAMD                              );
+
+    INIT_DISPATCH_ENTRY(vkCmdDebugMarkerBeginEXT                        );
+    INIT_DISPATCH_ENTRY(vkCmdDebugMarkerEndEXT                          );
+    INIT_DISPATCH_ENTRY(vkCmdDebugMarkerInsertEXT                       );
+    INIT_DISPATCH_ENTRY(vkDebugMarkerSetObjectTagEXT                    );
+    INIT_DISPATCH_ENTRY(vkDebugMarkerSetObjectNameEXT                   );
+
+    INIT_DISPATCH_ENTRY(vkCreateGpaSessionAMD                           );
+    INIT_DISPATCH_ENTRY(vkDestroyGpaSessionAMD                          );
+    INIT_DISPATCH_ENTRY(vkSetGpaDeviceClockModeAMD                      );
+    INIT_DISPATCH_ENTRY(vkCmdBeginGpaSessionAMD                         );
+    INIT_DISPATCH_ENTRY(vkCmdEndGpaSessionAMD                           );
+    INIT_DISPATCH_ENTRY(vkCmdBeginGpaSampleAMD                          );
+    INIT_DISPATCH_ENTRY(vkCmdEndGpaSampleAMD                            );
+    INIT_DISPATCH_ENTRY(vkGetGpaSessionStatusAMD                        );
+    INIT_DISPATCH_ENTRY(vkGetGpaSessionResultsAMD                       );
+    INIT_DISPATCH_ENTRY(vkResetGpaSessionAMD                            );
+    INIT_DISPATCH_ENTRY(vkCmdCopyGpaSessionResultsAMD                   );
+    INIT_DISPATCH_ALIAS(vkGetImageMemoryRequirements2KHR                ,
+                        vkGetImageMemoryRequirements2                   );
+    INIT_DISPATCH_ALIAS(vkGetBufferMemoryRequirements2KHR               ,
+                        vkGetBufferMemoryRequirements2                  );
+    INIT_DISPATCH_ALIAS(vkGetImageSparseMemoryRequirements2KHR          ,
+                        vkGetImageSparseMemoryRequirements2             );
+
+    INIT_DISPATCH_ENTRY(vkCmdSetSampleLocationsEXT                      );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceMultisamplePropertiesEXT     );
+
+    INIT_DISPATCH_ALIAS(vkGetDescriptorSetLayoutSupportKHR              ,
+                        vkGetDescriptorSetLayoutSupport                 );
+
+    INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceExternalFencePropertiesKHR   ,
+                        vkGetPhysicalDeviceExternalFenceProperties      );
+#if VKI_SDK_1_0 == 0
+    INIT_DISPATCH_ENTRY(vkBindBufferMemory2                             );
+    INIT_DISPATCH_ENTRY(vkBindImageMemory2                              );
+    INIT_DISPATCH_ENTRY(vkCmdSetDeviceMask                              );
+    INIT_DISPATCH_ENTRY(vkCmdDispatchBase                               );
+    INIT_DISPATCH_ENTRY(vkCreateDescriptorUpdateTemplate                );
+    INIT_DISPATCH_ENTRY(vkCreateSamplerYcbcrConversion                  );
+    INIT_DISPATCH_ENTRY(vkDestroyDescriptorUpdateTemplate               );
+    INIT_DISPATCH_ENTRY(vkDestroySamplerYcbcrConversion                 );
+    INIT_DISPATCH_ENTRY(vkEnumeratePhysicalDeviceGroups                 );
+    INIT_DISPATCH_ENTRY(vkGetBufferMemoryRequirements2                  );
+    INIT_DISPATCH_ENTRY(vkGetDescriptorSetLayoutSupport                 );
+    INIT_DISPATCH_ENTRY(vkGetDeviceGroupPeerMemoryFeatures              );
+    INIT_DISPATCH_ENTRY(vkGetDeviceQueue2                               );
+    INIT_DISPATCH_ENTRY(vkGetImageMemoryRequirements2                   );
+    INIT_DISPATCH_ENTRY(vkGetImageSparseMemoryRequirements2             );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceExternalBufferProperties     );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceExternalFenceProperties      );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceExternalSemaphoreProperties  );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceFeatures2                    );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceFormatProperties2            );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceImageFormatProperties2       );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceMemoryProperties2            );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceProperties2                  );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceQueueFamilyProperties2       );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSparseImageFormatProperties2 );
+    INIT_DISPATCH_ENTRY(vkTrimCommandPool                               );
+    INIT_DISPATCH_ENTRY(vkUpdateDescriptorSetWithTemplate               );
+#endif
+    INIT_DISPATCH_ENTRY(vkCreateDebugReportCallbackEXT                  );
+    INIT_DISPATCH_ENTRY(vkDestroyDebugReportCallbackEXT                 );
+    INIT_DISPATCH_ENTRY(vkDebugReportMessageEXT                         );
+    INIT_DISPATCH_ENTRY(vkCmdWriteBufferMarkerAMD                       );
+    INIT_DISPATCH_ENTRY(vkGetMemoryHostPointerPropertiesEXT             );
+}
+
+// =====================================================================================================================
+// Call this function to get the entry point corresponding to an entry point name from the dispatch table.
+// Depending on the dispatch table type the following behavior is expected:
+// * GLOBAL - Only entry points queriable using vkGetInstanceProcAddr with an instance parameter of VK_NULL_HANDLE
+//   are returned. This means only global entry points can be queried this way.
+// * INSTANCE - Only entry points queriable using vkGetInstanceProcAddr with an instance parameter different than
+//   VK_NULL_HANDLE are returned. This means instance- and device-level entry points can be queried this way and
+//   for device entry points an appropriate trampoline is returned if applicable. Core API version, instance
+//   extension enablement, and device extension availability are a prerequisite.
+// * DEVICE - Only entry points queriable using vkGetDeviceProcAddr are returned. This means only device-level
+//   entry points can be queried this way. Core API version and device extension enablement are a prerequisite.
+PFN_vkVoidFunction DispatchTable::GetEntryPoint(const char* pName) const
+{
+    PFN_vkVoidFunction pFunc = nullptr;
     bool found = false;
 
-    for (uint32_t tableIdx = 0; (found == false) && (tableIdx < tableCount); tableIdx++)
+    for (uint32_t epIdx = 0; (found == false) && (epIdx < VKI_ENTRY_POINT_COUNT); epIdx++)
     {
-        const DispatchTableEntry* pTable = ppTables[tableIdx];
+        const EntryPoint::Metadata& metadata = g_EntryPointMetadataTable[epIdx];
 
-        for (const DispatchTableEntry* pEntry = pTable; (found == false) && (pEntry->pName != nullptr); pEntry++)
+        if ((metadata.pName != nullptr) &&
+            (strcmp(pName, metadata.pName) == 0))
         {
-            if ((pName == pEntry->pName) || (strcmp(pName, pEntry->pName) == 0))
+            found = true;
+
+            switch (metadata.type)
             {
-                found = true;
+            case EntryPoint::Type::GLOBAL:
+                // Only return global entry points if this is the global dispatch table or an instance
+                // dispatch table.
+                if ((GetType() == Type::GLOBAL) || (GetType() == Type::INSTANCE))
+                {
+                    pFunc = m_table[epIdx];
+                }
+                break;
 
-                if (pEntry->conditionType == vk::secure::entry::ENTRY_POINT_NONE)
+            case EntryPoint::Type::INSTANCE:
+                // Only return instance-level entry points if this is an instance dispatch table.
+                if (GetType() == Type::INSTANCE)
                 {
-                    // No further conditions, return the entry point.
-                    pFunc = pEntry->pFunc;
+                    pFunc = m_table[epIdx];
                 }
-                else if (pEntry->conditionType == vk::secure::entry::ENTRY_POINT_CORE_INSTANCE)
-                {
-                    // Check the minimum required version and nullptr requirements.
-                    if ((pDevice == nullptr) &&
-                        (pInstance != nullptr) && (pInstance->GetAPIVersion() >= pEntry->conditionValue))
-                    {
-                        pFunc = pEntry->pFunc;
-                    }
-                }
-                else if (pEntry->conditionType == vk::secure::entry::ENTRY_POINT_CORE_DEVICE)
-                {
-                    // Check if the entry point is available in the requested API version.
-                    if ((pInstance != nullptr) && (pInstance->GetAPIVersion() >= pEntry->conditionValue))
-                    {
-                        pFunc = pEntry->pFunc;
-                    }
-                }
-                else if (pEntry->conditionType == vk::secure::entry::ENTRY_POINT_INSTANCE_EXTENSION)
-                {
-                    // Check instance extension support.
-                    auto extension = static_cast<InstanceExtensions::ExtensionId>(pEntry->conditionValue);
+                break;
 
-                    if ((pInstance != nullptr) && pInstance->IsExtensionEnabled(extension))
-                    {
-                        pFunc = pEntry->pFunc;
-                    }
-                }
-                else if (pEntry->conditionType == vk::secure::entry::ENTRY_POINT_DEVICE_EXTENSION)
+            case EntryPoint::Type::DEVICE:
+                // Only return device-level entry points if this is an instance or device dispatch table.
+                if ((GetType() == Type::INSTANCE) || (GetType() == Type::DEVICE))
                 {
-                    // Check device extension support.
-                    auto extension = static_cast<DeviceExtensions::ExtensionId>(pEntry->conditionValue);
-
-                    if (pDevice != nullptr)
-                    {
-                        // A few device group entrypoints are special because they rely on VK_KHR_swapchain as well.
-                        if ((pEntry->pName == VK_SECURE_ENTRY(vkAcquireNextImage2KHR))                 ||
-                            (pEntry->pName == VK_SECURE_ENTRY(vkGetDeviceGroupPresentCapabilitiesKHR)) ||
-                            (pEntry->pName == VK_SECURE_ENTRY(vkGetDeviceGroupSurfacePresentModesKHR)) ||
-                            (pEntry->pName == VK_SECURE_ENTRY(vkGetPhysicalDevicePresentRectanglesKHR)))
-                        {
-                            const auto deviceGroupEnabled =
-                                ((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
-                                 pDevice->IsExtensionEnabled(DeviceExtensions::KHR_DEVICE_GROUP));
-
-                            if (deviceGroupEnabled && pDevice->IsExtensionEnabled(DeviceExtensions::KHR_SWAPCHAIN))
-                            {
-                                pFunc = pEntry->pFunc;
-                            }
-                        }
-                        else if (pDevice->IsExtensionEnabled(extension))
-                        {
-                            pFunc = pEntry->pFunc;
-                        }
-                    }
-                    else if (pInstance != nullptr)
-                    {
-                        // The loader-ICD interface allows querying "available" device extension commands using
-                        // vk_icdGetInstanceProcAddr and vk_icdGetPhysicalDeviceProcAddr thus here we have to
-                        // check whether any of the devices support the extension.
-                        if (pInstance->IsDeviceExtensionAvailable(extension))
-                        {
-                            pFunc = pEntry->pFunc;
-                        }
-                    }
+                    pFunc = m_table[epIdx];
                 }
+                break;
             }
         }
     }
@@ -172,391 +562,29 @@ void* GetIcdProcAddr(
     return pFunc;
 }
 
-// =====================================================================================================================
-// This is a catch-all implementation of all the public ways of resolving entry point names to function pointers e.g.
-// vkGetInstanceProcAddr, vkGetDeviceProcAddr, vk_icdGetProcAddr, and so on.
-static PFN_vkVoidFunction GetIcdProcAddr(
-    VkInstance  instance,
-    VkDevice    device,
-    const char* pName)
-{
-    Instance* pInstance = nullptr;
-    Device*   pDevice   = nullptr;
-
-    if (instance != VK_NULL_HANDLE)
-    {
-        pInstance = Instance::ObjectFromHandle(instance);
-    }
-    else if (device != VK_NULL_HANDLE)
-    {
-        pDevice   = ApiDevice::ObjectFromHandle(device);
-        pInstance = pDevice->VkInstance();
-    }
-
-    // Get the instance's dispatch tables if we have a valid instance handle.
-    uint32_t tableCount = 0;
-    const DispatchTableEntry* dispatchTables[Instance::MaxDispatchTables];
-
-    if (pInstance != nullptr)
-    {
-        tableCount = pInstance->GetDispatchTables(dispatchTables);
-    }
-    else
-    {
-        // If this function is being called without a valid instance handle (which happens by the loader when it first
-        // loads the ICD), use the global dispatch table which has the bare minimal plain entry points required by the
-        // spec to create an instance and enumerate its properties.
-        tableCount        = 1;
-        dispatchTables[0] = vk::entry::g_GlobalDispatchTable;
-    }
-
-    return reinterpret_cast<PFN_vkVoidFunction>(GetIcdProcAddr(pInstance, pDevice, tableCount, dispatchTables, pName));
-}
-
 namespace entry
 {
-
-// Helper macro used to create an entry for the "primary" entry point implementation (i.e. the one that goes straight
-// to the driver, unmodified.
-#define PRIMARY_DISPATCH_ENTRY(entry_name) VK_DISPATCH_ENTRY(entry_name, vk::entry::entry_name)
-#define PRIMARY_DISPATCH_ALIAS(alias_name, entry_name) VK_DISPATCH_ALIAS(alias_name, entry_name, vk::entry::entry_name)
-
-// These are the entry points that are legal to query from the driver with a NULL instance handle (See Table 3.1 of the
-// Vulkan specification).  They are queried by the loader before creating any instances, and therefore we can not or
-// should not specialize their function pointer based on any panel setting, etc..
-const DispatchTableEntry g_GlobalDispatchTable[] =
-{
-    PRIMARY_DISPATCH_ENTRY(vkCreateInstance),
-    PRIMARY_DISPATCH_ENTRY(vkEnumerateInstanceExtensionProperties),
-    PRIMARY_DISPATCH_ENTRY(vkEnumerateInstanceLayerProperties),
-#if VKI_SDK_1_0 == 0
-    PRIMARY_DISPATCH_ENTRY(vkEnumerateInstanceVersion),
-#endif
-    VK_DISPATCH_TABLE_END()
-};
-
-// These are the entries of the "standard" dispatch table.  They are the ones containing the real driver
-// implementations running under "normal" driver behavior.  The GetProcAddr() function accesses the given VkInstance's
-// dispatch table, and most VkInstances will return a dispatch table with just these entries.  When under specific
-// panel or registry settings though, such as developer mode driver enabled, we may shadow some of these entry points
-// with different implementations.
-const DispatchTableEntry g_StandardDispatchTable[] =
-{
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceProcAddr                             ),
-    PRIMARY_DISPATCH_ENTRY( vkAcquireNextImageKHR                           ),
-    PRIMARY_DISPATCH_ENTRY( vkAllocateDescriptorSets                        ),
-    PRIMARY_DISPATCH_ENTRY( vkAllocateMemory                                ),
-    PRIMARY_DISPATCH_ENTRY( vkBeginCommandBuffer                            ),
-    PRIMARY_DISPATCH_ENTRY( vkBindBufferMemory                              ),
-    PRIMARY_DISPATCH_ENTRY( vkBindImageMemory                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdBeginRenderPass                            ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdBeginQuery                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdBindDescriptorSets                         ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdBindIndexBuffer                            ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdBindPipeline                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdBindVertexBuffers                          ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdBlitImage                                  ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdClearAttachments                           ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdClearColorImage                            ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdClearDepthStencilImage                     ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdCopyBuffer                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdCopyBufferToImage                          ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdCopyImage                                  ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdCopyImageToBuffer                          ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdCopyQueryPoolResults                       ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDraw                                       ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDrawIndexed                                ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDrawIndexedIndirect                        ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDrawIndirect                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDrawIndexedIndirectCountAMD                ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDrawIndirectCountAMD                       ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDispatch                                   ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDispatchIndirect                           ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdEndRenderPass                              ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdEndQuery                                   ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdExecuteCommands                            ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdFillBuffer                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdNextSubpass                                ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdPipelineBarrier                            ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdPushConstants                              ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdResetEvent                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdResetQueryPool                             ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdResolveImage                               ),
-
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetBlendConstants                          ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetDepthBias                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetDepthBounds                             ),
-
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetEvent                                   ),
-
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetLineWidth                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetScissor                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetStencilCompareMask                      ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetStencilReference                        ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetStencilWriteMask                        ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetViewport                                ),
-
-    PRIMARY_DISPATCH_ENTRY( vkCmdUpdateBuffer                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdWaitEvents                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdWriteTimestamp                             ),
-
-    PRIMARY_DISPATCH_ENTRY( vkCreateBuffer                                  ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateBufferView                              ),
-    PRIMARY_DISPATCH_ENTRY( vkAllocateCommandBuffers                        ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateCommandPool                             ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateComputePipelines                        ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateDescriptorPool                          ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateDescriptorSetLayout                     ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateDevice                                  ),
-
-    PRIMARY_DISPATCH_ENTRY( vkCreateEvent                                   ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateFence                                   ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateFramebuffer                             ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateGraphicsPipelines                       ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateImage                                   ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateImageView                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateInstance                                ),
-    PRIMARY_DISPATCH_ENTRY( vkCreatePipelineLayout                          ),
-    PRIMARY_DISPATCH_ENTRY( vkCreatePipelineCache                           ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateQueryPool                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateRenderPass                              ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateSampler                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateSemaphore                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateShaderModule                            ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateSwapchainKHR                            ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroySurfaceKHR                             ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateXcbSurfaceKHR                           ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateXlibSurfaceKHR                          ),
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    PRIMARY_DISPATCH_ENTRY( vkCreateWaylandSurfaceKHR                          ),
-#endif
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceXcbPresentationSupportKHR    ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceXlibPresentationSupportKHR   ),
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceWaylandPresentationSupportKHR   ),
-#endif
-    PRIMARY_DISPATCH_ENTRY( vkDestroyBuffer                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyBufferView                             ),
-    PRIMARY_DISPATCH_ENTRY( vkFreeCommandBuffers                            ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyCommandPool                            ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyDescriptorPool                         ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyDescriptorSetLayout                    ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyDevice                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyEvent                                  ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyFence                                  ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyFramebuffer                            ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyImage                                  ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyImageView                              ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyInstance                               ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyPipeline                               ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyPipelineCache                          ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyPipelineLayout                         ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyQueryPool                              ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyRenderPass                             ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroySampler                                ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroySemaphore                              ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyShaderModule                           ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroySwapchainKHR                           ),
-
-    PRIMARY_DISPATCH_ENTRY( vkDeviceWaitIdle                                ),
-    PRIMARY_DISPATCH_ENTRY( vkEndCommandBuffer                              ),
-    PRIMARY_DISPATCH_ENTRY( vkEnumeratePhysicalDevices                      ),
-    PRIMARY_DISPATCH_ENTRY( vkFlushMappedMemoryRanges                       ),
-    PRIMARY_DISPATCH_ENTRY( vkFreeDescriptorSets                            ),
-    PRIMARY_DISPATCH_ENTRY( vkFreeMemory                                    ),
-    PRIMARY_DISPATCH_ENTRY( vkGetBufferMemoryRequirements                   ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceMemoryCommitment                     ),
-    PRIMARY_DISPATCH_ENTRY( vkGetInstanceProcAddr                           ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceProcAddr                             ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceQueue                                ),
-    PRIMARY_DISPATCH_ENTRY( vkGetEventStatus                                ),
-    PRIMARY_DISPATCH_ENTRY( vkGetFenceStatus                                ),
-
-    PRIMARY_DISPATCH_ENTRY( vkEnumerateInstanceExtensionProperties          ),
-    PRIMARY_DISPATCH_ENTRY( vkEnumerateInstanceLayerProperties              ),
-    PRIMARY_DISPATCH_ENTRY( vkEnumerateDeviceExtensionProperties            ),
-    PRIMARY_DISPATCH_ENTRY( vkEnumerateDeviceLayerProperties                ),
-
-    PRIMARY_DISPATCH_ENTRY( vkGetImageMemoryRequirements                    ),
-    PRIMARY_DISPATCH_ENTRY( vkGetImageSparseMemoryRequirements              ),
-    PRIMARY_DISPATCH_ENTRY( vkGetImageSubresourceLayout                     ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceFeatures                     ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceFormatProperties             ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceImageFormatProperties        ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceMemoryProperties             ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceProperties                   ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceQueueFamilyProperties        ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceSparseImageFormatProperties  ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceSurfaceSupportKHR            ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPipelineCacheData                          ),
-    PRIMARY_DISPATCH_ENTRY( vkGetQueryPoolResults                           ),
-    PRIMARY_DISPATCH_ENTRY( vkGetRenderAreaGranularity                      ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceSurfaceCapabilitiesKHR       ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceSurfaceCapabilities2KHR      ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceSurfaceFormatsKHR            ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceSurfaceFormats2KHR           ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceSurfacePresentModesKHR       ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDevicePresentRectanglesKHX         ),
-
-    PRIMARY_DISPATCH_ENTRY( vkGetSwapchainImagesKHR                         ),
-
-    PRIMARY_DISPATCH_ENTRY( vkInvalidateMappedMemoryRanges                  ),
-    PRIMARY_DISPATCH_ENTRY( vkMapMemory                                     ),
-    PRIMARY_DISPATCH_ENTRY( vkMergePipelineCaches                           ),
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceFeatures2KHR,
-                            vkGetPhysicalDeviceFeatures2                    ),
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceProperties2KHR,
-                            vkGetPhysicalDeviceProperties2                  ),
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceFormatProperties2KHR,
-                            vkGetPhysicalDeviceFormatProperties2            ),
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceImageFormatProperties2KHR,
-                            vkGetPhysicalDeviceImageFormatProperties2       ),
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceQueueFamilyProperties2KHR,
-                            vkGetPhysicalDeviceQueueFamilyProperties2       ),
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceMemoryProperties2KHR,
-                            vkGetPhysicalDeviceMemoryProperties2            ),
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceSparseImageFormatProperties2KHR,
-                            vkGetPhysicalDeviceSparseImageFormatProperties2 ),
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceExternalBufferPropertiesKHR,
-                            vkGetPhysicalDeviceExternalBufferProperties     ),
-
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceExternalSemaphorePropertiesKHR,
-                            vkGetPhysicalDeviceExternalSemaphoreProperties  ),
-    PRIMARY_DISPATCH_ENTRY( vkGetMemoryFdPropertiesKHR                      ),
-    PRIMARY_DISPATCH_ENTRY( vkGetMemoryFdKHR                                ),
-    PRIMARY_DISPATCH_ENTRY( vkImportSemaphoreFdKHR                          ),
-    PRIMARY_DISPATCH_ENTRY( vkGetSemaphoreFdKHR                             ),
-    PRIMARY_DISPATCH_ENTRY( vkGetFenceFdKHR                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkImportFenceFdKHR                              ),
-
-    PRIMARY_DISPATCH_ALIAS( vkBindBufferMemory2KHR,
-                            vkBindBufferMemory2                             ),
-    PRIMARY_DISPATCH_ALIAS( vkBindImageMemory2KHR,
-                            vkBindImageMemory2                              ),
-
-    PRIMARY_DISPATCH_ALIAS( vkCreateDescriptorUpdateTemplateKHR,
-                            vkCreateDescriptorUpdateTemplate                ),
-    PRIMARY_DISPATCH_ALIAS( vkDestroyDescriptorUpdateTemplateKHR,
-                            vkDestroyDescriptorUpdateTemplate               ),
-    PRIMARY_DISPATCH_ALIAS( vkUpdateDescriptorSetWithTemplateKHR,
-                            vkUpdateDescriptorSetWithTemplate               ),
-
-    PRIMARY_DISPATCH_ENTRY( vkAcquireNextImage2KHX                          ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDispatchBaseKHX                            ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetDeviceMaskKHX                           ),
-    PRIMARY_DISPATCH_ENTRY( vkEnumeratePhysicalDeviceGroupsKHX              ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupPeerMemoryFeaturesKHX           ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupPresentCapabilitiesKHX          ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupSurfacePresentModesKHX          ),
-
-    PRIMARY_DISPATCH_ENTRY( vkAcquireNextImage2KHR                          ),
-    PRIMARY_DISPATCH_ALIAS( vkCmdDispatchBaseKHR,
-                            vkCmdDispatchBase                               ),
-    PRIMARY_DISPATCH_ALIAS( vkCmdSetDeviceMaskKHR,
-                            vkCmdSetDeviceMask                              ),
-    PRIMARY_DISPATCH_ALIAS( vkEnumeratePhysicalDeviceGroupsKHR,
-                            vkEnumeratePhysicalDeviceGroups                 ),
-    PRIMARY_DISPATCH_ALIAS( vkGetDeviceGroupPeerMemoryFeaturesKHR,
-                            vkGetDeviceGroupPeerMemoryFeatures              ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupPresentCapabilitiesKHR          ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupSurfacePresentModesKHR          ),
-
-    PRIMARY_DISPATCH_ENTRY( vkQueueBindSparse                               ),
-    PRIMARY_DISPATCH_ENTRY( vkQueuePresentKHR                               ),
-    PRIMARY_DISPATCH_ENTRY( vkQueueSubmit                                   ),
-    PRIMARY_DISPATCH_ENTRY( vkQueueWaitIdle                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkResetCommandBuffer                            ),
-    PRIMARY_DISPATCH_ENTRY( vkResetCommandPool                              ),
-    PRIMARY_DISPATCH_ENTRY( vkResetDescriptorPool                           ),
-    PRIMARY_DISPATCH_ENTRY( vkResetEvent                                    ),
-    PRIMARY_DISPATCH_ENTRY( vkResetFences                                   ),
-    PRIMARY_DISPATCH_ENTRY( vkSetEvent                                      ),
-    PRIMARY_DISPATCH_ALIAS( vkTrimCommandPoolKHR,
-                            vkTrimCommandPool                               ),
-    PRIMARY_DISPATCH_ENTRY( vkUnmapMemory                                   ),
-    PRIMARY_DISPATCH_ENTRY( vkUpdateDescriptorSets                          ),
-    PRIMARY_DISPATCH_ENTRY( vkWaitForFences                                 ),
-    PRIMARY_DISPATCH_ENTRY( vkGetShaderInfoAMD                              ),
-
-    PRIMARY_DISPATCH_ENTRY( vkCmdDebugMarkerBeginEXT                        ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDebugMarkerEndEXT                          ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDebugMarkerInsertEXT                       ),
-    PRIMARY_DISPATCH_ENTRY( vkDebugMarkerSetObjectTagEXT                    ),
-    PRIMARY_DISPATCH_ENTRY( vkDebugMarkerSetObjectNameEXT                   ),
-
-    PRIMARY_DISPATCH_ENTRY( vkCreateGpaSessionAMD                           ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyGpaSessionAMD                          ),
-    PRIMARY_DISPATCH_ENTRY( vkSetGpaDeviceClockModeAMD                      ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdBeginGpaSessionAMD                         ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdEndGpaSessionAMD                           ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdBeginGpaSampleAMD                          ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdEndGpaSampleAMD                            ),
-    PRIMARY_DISPATCH_ENTRY( vkGetGpaSessionStatusAMD                        ),
-    PRIMARY_DISPATCH_ENTRY( vkGetGpaSessionResultsAMD                       ),
-    PRIMARY_DISPATCH_ENTRY( vkResetGpaSessionAMD                            ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdCopyGpaSessionResultsAMD                   ),
-    PRIMARY_DISPATCH_ALIAS( vkGetImageMemoryRequirements2KHR,
-                            vkGetImageMemoryRequirements2                   ),
-    PRIMARY_DISPATCH_ALIAS( vkGetBufferMemoryRequirements2KHR,
-                            vkGetBufferMemoryRequirements2                  ),
-    PRIMARY_DISPATCH_ALIAS( vkGetImageSparseMemoryRequirements2KHR,
-                            vkGetImageSparseMemoryRequirements2             ),
-
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetSampleLocationsEXT                      ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceMultisamplePropertiesEXT     ),
-
-    PRIMARY_DISPATCH_ALIAS( vkGetDescriptorSetLayoutSupportKHR,
-                            vkGetDescriptorSetLayoutSupport                 ),
-
-    PRIMARY_DISPATCH_ALIAS( vkGetPhysicalDeviceExternalFencePropertiesKHR,
-                            vkGetPhysicalDeviceExternalFenceProperties      ),
-
-#if VKI_SDK_1_0 == 0
-    PRIMARY_DISPATCH_ENTRY( vkEnumerateInstanceVersion                      ),
-
-    PRIMARY_DISPATCH_ENTRY( vkBindBufferMemory2                             ),
-    PRIMARY_DISPATCH_ENTRY( vkBindImageMemory2                              ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdSetDeviceMask                              ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdDispatchBase                               ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateDescriptorUpdateTemplate                ),
-    PRIMARY_DISPATCH_ENTRY( vkCreateSamplerYcbcrConversion                  ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyDescriptorUpdateTemplate               ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroySamplerYcbcrConversion                 ),
-    PRIMARY_DISPATCH_ENTRY( vkEnumeratePhysicalDeviceGroups                 ),
-    PRIMARY_DISPATCH_ENTRY( vkGetBufferMemoryRequirements2                  ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDescriptorSetLayoutSupport                 ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceGroupPeerMemoryFeatures              ),
-    PRIMARY_DISPATCH_ENTRY( vkGetDeviceQueue2                               ),
-    PRIMARY_DISPATCH_ENTRY( vkGetImageMemoryRequirements2                   ),
-    PRIMARY_DISPATCH_ENTRY( vkGetImageSparseMemoryRequirements2             ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceExternalBufferProperties     ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceExternalFenceProperties      ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceExternalSemaphoreProperties  ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceFeatures2                    ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceFormatProperties2            ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceImageFormatProperties2       ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceMemoryProperties2            ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceProperties2                  ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceQueueFamilyProperties2       ),
-    PRIMARY_DISPATCH_ENTRY( vkGetPhysicalDeviceSparseImageFormatProperties2 ),
-    PRIMARY_DISPATCH_ENTRY( vkTrimCommandPool                               ),
-    PRIMARY_DISPATCH_ENTRY( vkUpdateDescriptorSetWithTemplate               ),
-#endif
-    PRIMARY_DISPATCH_ENTRY( vkCreateDebugReportCallbackEXT                  ),
-    PRIMARY_DISPATCH_ENTRY( vkDestroyDebugReportCallbackEXT                 ),
-    PRIMARY_DISPATCH_ENTRY( vkDebugReportMessageEXT                         ),
-    PRIMARY_DISPATCH_ENTRY( vkCmdWriteBufferMarkerAMD                       ),
-    PRIMARY_DISPATCH_ENTRY( vkGetMemoryHostPointerPropertiesEXT             ),
-
-    VK_DISPATCH_TABLE_END()
-};
 
 // =====================================================================================================================
 VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
     VkInstance                                  instance,
     const char*                                 pName)
 {
-    return vk::GetIcdProcAddr(instance, VK_NULL_HANDLE, pName);
+    if (instance == VK_NULL_HANDLE)
+    {
+        return g_GlobalDispatchTable.GetEntryPoint(pName);
+    }
+    else
+    {
+        PFN_vkVoidFunction pFunc = g_GlobalDispatchTable.GetEntryPoint(pName);
+
+        if (pFunc == nullptr)
+        {
+            pFunc = Instance::ObjectFromHandle(instance)->GetDispatchTable().GetEntryPoint(pName);
+        }
+
+        return pFunc;
+    }
 }
 
 // =====================================================================================================================
@@ -564,7 +592,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetPhysicalDeviceProcAddr(
     VkInstance                                  instance,
     const char*                                 pName)
 {
-    return vk::GetIcdProcAddr(instance, VK_NULL_HANDLE, pName);
+    return Instance::ObjectFromHandle(instance)->GetDispatchTable().GetEntryPoint(pName);
 }
 
 // =====================================================================================================================
@@ -572,7 +600,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetDeviceProcAddr(
     VkDevice                                    device,
     const char*                                 pName)
 {
-    return vk::GetIcdProcAddr(VK_NULL_HANDLE, device, pName);
+    return ApiDevice::ObjectFromHandle(device)->GetDispatchTable().GetEntryPoint(pName);
 }
 
 } // namespace entry
@@ -650,4 +678,3 @@ extern "C" const VK_LAYER_DISPATCH_TABLE dispatch_table =
     vk::entry::vkGetInstanceProcAddr,
     vk::entry::vkGetDeviceProcAddr,
 };
-#include "strings/g_func_table.cpp"

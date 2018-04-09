@@ -47,6 +47,8 @@ VK_AMD_gpu_shader_half_float
 VK_AMD_shader_info
 VK_AMD_texture_gather_bias_lod
 VK_AMD_mixed_attachment_samples
+VK_AMD_gpu_shader_half_float_fetch
+VK_AMD_shader_image_load_store_lod
 VK_EXT_debug_marker
 VK_AMD_gpu_shader_int16
 VK_EXT_shader_subgroup_ballot
