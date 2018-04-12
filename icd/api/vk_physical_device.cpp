@@ -2370,9 +2370,14 @@ VkResult PhysicalDevice::GetSurfaceFormats(
         // Windowed Presents
 
         // The w/a here will be removed once more presentable format is supported on base driver side.
+
+        //These are the formats currently working with KHR_wayland_surface
+        // NB THEY ARE NOT FULLY TESTED ON X11 AND SOME MIGHT NEED TO BE DISABLED FOR NOW
         const VkSurfaceFormatKHR formatList[] = {
-            { VK_FORMAT_B8G8R8A8_UNORM, VK_COLORSPACE_SRGB_NONLINEAR_KHR },
-            { VK_FORMAT_B8G8R8A8_SRGB,  VK_COLORSPACE_SRGB_NONLINEAR_KHR } };
+            { VK_FORMAT_B8G8R8A8_UNORM,           VK_COLORSPACE_SRGB_NONLINEAR_KHR },
+            { VK_FORMAT_B8G8R8A8_SRGB,            VK_COLORSPACE_SRGB_NONLINEAR_KHR },
+            { VK_FORMAT_A2R10G10B10_UNORM_PACK32, VK_COLORSPACE_SRGB_NONLINEAR_KHR },
+            { VK_FORMAT_R5G6B5_UNORM_PACK16,      VK_COLORSPACE_SRGB_NONLINEAR_KHR }, };
         const uint32_t formatCount = sizeof(formatList) / sizeof(formatList[0]);
 
         if (pSurfaceFormats == nullptr)
