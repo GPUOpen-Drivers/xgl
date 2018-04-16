@@ -576,14 +576,7 @@ VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL vkGetInstanceProcAddr(
     }
     else
     {
-        PFN_vkVoidFunction pFunc = g_GlobalDispatchTable.GetEntryPoint(pName);
-
-        if (pFunc == nullptr)
-        {
-            pFunc = Instance::ObjectFromHandle(instance)->GetDispatchTable().GetEntryPoint(pName);
-        }
-
-        return pFunc;
+        return Instance::ObjectFromHandle(instance)->GetDispatchTable().GetEntryPoint(pName);
     }
 }
 

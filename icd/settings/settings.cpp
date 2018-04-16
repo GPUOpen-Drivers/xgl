@@ -218,6 +218,15 @@ void ValidateSettings(
         // This is the default.  Do nothing and maintain default settings.
         break;
     }
+
+    // Disable FMASK MSAA reads if shadow desc VA range is not supported
+    Pal::DeviceProperties deviceProps;
+    pPalDevice->GetProperties(&deviceProps);
+
+    if (deviceProps.gpuMemoryProperties.flags.shadowDescVaSupport == 0)
+    {
+        pSettings->enableFmaskBasedMsaaRead = false;
+    }
 }
 
 // =====================================================================================================================

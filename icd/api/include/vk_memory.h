@@ -105,7 +105,7 @@ public:
 
     Pal::OsExternalHandle GetShareHandle(VkExternalMemoryHandleTypeFlagBits handleType);
 
-    VkResult Free(
+    void Free(
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
@@ -117,7 +117,7 @@ public:
 
     VkResult Unmap(void);
 
-    Pal::Result Init();
+    VkResult Init();
 
     VK_INLINE bool IsMultiInstance() const
     {
@@ -186,6 +186,24 @@ private:
            Pal::IGpuMemory** pPalMemory,
            PeerMemory*       pPeerMemory,
            uint32_t          allocationMask);
+
+    static VkResult CreateGpuMemory(
+        Device*                         pDevice,
+        const VkAllocationCallbacks*    pAllocator,
+        const Pal::GpuMemoryCreateInfo& createInfo,
+        uint32_t                        allocationMask,
+        bool                            multiInstanceHeap,
+        Memory**                        ppMemory);
+
+    static VkResult CreateGpuPinnedMemory(
+        Device*                         pDevice,
+        const VkAllocationCallbacks*    pAllocator,
+        const Pal::GpuMemoryCreateInfo& createInfo,
+        uint32_t                        allocationMask,
+        bool                            multiInstanceHeap,
+        bool                            isHostMappedForeign,
+        void*                           pPinnedHostPtr,
+        Memory**                        ppMemory);
 
     static VkResult OpenExternalSharedImage(
         Device*                      pDevice,

@@ -67,6 +67,7 @@ public:
 
     bool AllocSetGpuMem(
         const DescriptorSetLayout*  pLayout,
+        uint32_t                    variableDescriptorCounts,
         Pal::gpusize*               pSetGpuMemOffset,
         void**                      pSetAllocHandle);
 
@@ -194,9 +195,8 @@ public:
     VkResult Reset();
 
     VkResult AllocDescriptorSets(
-        uint32_t                        count,
-        const VkDescriptorSetLayout*    pSetLayouts,
-        VkDescriptorSet*                pDescriptorSets);
+        const VkDescriptorSetAllocateInfo* pAllocateInfo,
+        VkDescriptorSet*                   pDescriptorSets);
 
     VkResult FreeDescriptorSets(
         uint32_t                         count,
@@ -218,12 +218,14 @@ private:
 
     DescriptorPool(Device* pDevice);
 
-    Device*              m_pDevice;         // Device pointer
-    DescriptorSetHeap    m_setHeap;         // Allocates driver state instances of descriptor sets
-    DescriptorGpuMemHeap m_gpuMemHeap;      // Allocates GPU memory for descriptor sets
-    InternalMemory       m_internalMem;     // Internal GPU memory allocation for the descriptor pool
-    Pal::gpusize         m_gpuAddressCached[MaxPalDevices];
-    uint32_t*            m_pCpuAddressCached[MaxPalDevices];
+    Device*              m_pDevice;           // Device pointer
+    DescriptorSetHeap    m_setHeap;           // Allocates driver state instances of descriptor sets
+    DescriptorGpuMemHeap m_gpuMemHeap;        // Allocates GPU memory for descriptor sets
+
+    InternalMemory       m_staticInternalMem; // Static Internal GPU memory
+    InternalMemory       m_fmaskInternalMem;  // Fmask Internal GPU memory
+
+    DescriptorAddr       m_addresses[MaxPalDevices];
 };
 
 namespace entry

@@ -114,6 +114,13 @@ VkResult CmdPool::Create(
         createInfo.allocInfo[Pal::EmbeddedDataAlloc].allocSize    = pSettings->cmdAllocatorEmbeddedAllocSize;
         createInfo.allocInfo[Pal::EmbeddedDataAlloc].suballocSize = pSettings->cmdAllocatorEmbeddedSubAllocSize;
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 395
+        // Initialize GPU scratch memory chunk allocation size
+        createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocHeap    = pSettings->cmdAllocatorScratchHeap;
+        createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocSize    = pSettings->cmdAllocatorScratchAllocSize;
+        createInfo.allocInfo[Pal::GpuScratchMemAlloc].suballocSize = pSettings->cmdAllocatorScratchSubAllocSize;
+#endif
+
         Pal::Result  palResult     = Pal::Result::Success;
         const size_t allocatorSize = pDevice->PalDevice()->GetCmdAllocatorSize(createInfo, &palResult);
 

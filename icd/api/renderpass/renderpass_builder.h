@@ -102,6 +102,7 @@ public:
         size_t GetExtraSize() const;
         void* Finalize(void* pStorage, RPSyncPointInfo* pResult) const;
 
+        RPSyncPointFlags                                  flags;
         RPBarrierInfo                                     barrier;
         Util::List<RPTransitionInfo, utils::TempMemArena> transitions;
     };
@@ -118,7 +119,6 @@ public:
         const VkSubpassDescription*                 pDesc;
 
         // Build-time state for RPExecuteBeginSubpassInfo:
-        RPExecuteBeginSubpassInfo::Flags                   beginFlags;
         SyncPointState                                     syncTop;
         Util::List<RPLoadOpClearInfo, utils::TempMemArena> colorClears;
         Util::List<RPLoadOpClearInfo, utils::TempMemArena> dsClears;
@@ -127,7 +127,6 @@ public:
         Util::List<RPResolveInfo, utils::TempMemArena>     resolves;
 
         // Build-time state for RPExecuteEndSubpassInfo:
-        RPExecuteEndSubpassInfo::Flags              endFlags;
         SyncPointState                              syncBottom;
 
         bool                                        hasFirstUseAttachments; // True if this subpass has first-use
@@ -147,8 +146,7 @@ public:
         size_t GetExtraSize() const;
         void* Finalize(void* pStorage, RPExecuteEndRenderPassInfo* pResult) const;
 
-        RPExecuteEndRenderPassInfo::Flags flags;
-        SyncPointState                    syncEnd;
+        SyncPointState syncEnd;
     };
 
     RenderPassBuilder(Device* pDevice, utils::TempMemArena* pArena, RenderPassLogger* pLogger);
@@ -200,7 +198,7 @@ private:
     uint32_t GetSubpassReferenceMask(uint32_t subpass, uint32_t attachment) const;
     static bool ReadsFromAttachment(uint32_t refMask);
     static bool WritesToAttachment(uint32_t refMask);
-    bool IsSyncPointActive(const SyncPointState& syncPoint) const;
+    void PostProcessSyncPoint(SyncPointState* pSyncPoint);
     size_t GetTotalExtraSize() const;
 
     const VkRenderPassCreateInfo*            m_pApiInfo;            // API create info

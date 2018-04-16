@@ -78,14 +78,14 @@ VkResult DescriptorUpdateTemplate::Create(
             pEntries[ii].srcOffset                      = srcEntry.offset;
             pEntries[ii].srcStride                      = srcEntry.stride;
             pEntries[ii].dstBindStaDwArrayStride        = dstBinding.sta.dwArrayStride;
-            pEntries[ii].dstBindFmaskDwArrayStride      = dstBinding.fmask.dwArrayStride;
             pEntries[ii].dstBindDynDataDwArrayStride    = dstBinding.dyn.dwArrayStride;
+
             pEntries[ii].dstStaOffset                   =
                 pLayout->GetDstStaOffset(dstBinding, srcEntry.dstArrayElement);
-            pEntries[ii].dstFmaskOffset                 =
-                pLayout->GetDstFmaskOffset(dstBinding, srcEntry.dstArrayElement);
+
             pEntries[ii].dstDynOffset                   =
                 pLayout->GetDstDynOffset(dstBinding, srcEntry.dstArrayElement);
+
             pEntries[ii].pFunc                          =
                 GetUpdateEntryFunc(pDevice, srcEntry.descriptorType, dstBinding);
         }
@@ -113,7 +113,7 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
         pFunc = &UpdateEntrySampler<samplerDescSize>;
         break;
     case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (dstBinding.fmask.dwSize > 0))
+        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (dstBinding.sta.dwSize > 0))
         {
             if (dstBinding.imm.dwSize != 0)
             {
@@ -139,7 +139,7 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
     case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (dstBinding.fmask.dwSize > 0))
+        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (dstBinding.sta.dwSize > 0))
         {
             pFunc = &UpdateEntrySampledImage<imageDescSize, true>;
         }
@@ -256,7 +256,7 @@ void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
 
     const VkDescriptorImageInfo* pImageInfo = static_cast<const VkDescriptorImageInfo*>(pDescriptorInfo);
 
-    uint32_t* pDestAddr = pDstSet->CpuAddress(deviceIdx) + entry.dstStaOffset;
+    uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
 
     if (immutable)
     {
@@ -283,14 +283,14 @@ void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
 
     if (updateFmask)
     {
-        uint32_t* pDestFmaskAddr = pDstSet->CpuAddress(deviceIdx) + entry.dstFmaskOffset;
+        uint32_t* pDestFmaskAddr = pDstSet->FmaskCpuAddress(deviceIdx) + entry.dstStaOffset;
 
         DescriptorSet::WriteFmaskDescriptors<imageDescSize>(
             pImageInfo,
             deviceIdx,
             pDestFmaskAddr,
             entry.descriptorCount,
-            entry.dstBindFmaskDwArrayStride,
+            entry.dstBindStaDwArrayStride,
             entry.srcStride);
     }
 }
@@ -308,7 +308,7 @@ void DescriptorUpdateTemplate::UpdateEntryTexelBuffer(
 
     const VkBufferView* pTexelBufferView = static_cast<const VkBufferView*>(pDescriptorInfo);
 
-    uint32_t* pDestAddr = pDstSet->CpuAddress(deviceIdx) + entry.dstStaOffset;
+    uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
 
     DescriptorSet::WriteBufferDescriptors<bufferDescSize, descriptorType>(
             pTexelBufferView,
@@ -346,7 +346,7 @@ void DescriptorUpdateTemplate::UpdateEntryBuffer(
     }
     else
     {
-        pDestAddr   = pDstSet->CpuAddress(deviceIdx) + entry.dstStaOffset;
+        pDestAddr   = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
         stride      = entry.dstBindStaDwArrayStride;
     }
 
@@ -373,7 +373,7 @@ void DescriptorUpdateTemplate::UpdateEntrySampler(
 
     const VkDescriptorImageInfo* pImageInfo = static_cast<const VkDescriptorImageInfo*>(pDescriptorInfo);
 
-    uint32_t* pDestAddr = pDstSet->CpuAddress(deviceIdx) + entry.dstStaOffset;
+    uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
 
     DescriptorSet::WriteSamplerDescriptors<samplerDescSize>(
         pImageInfo,
@@ -396,7 +396,7 @@ void DescriptorUpdateTemplate::UpdateEntrySampledImage(
 
     const VkDescriptorImageInfo* pImageInfo = static_cast<const VkDescriptorImageInfo*>(pDescriptorInfo);
 
-    uint32_t* pDestAddr = pDstSet->CpuAddress(deviceIdx) + entry.dstStaOffset;
+    uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
 
     DescriptorSet::WriteImageDescriptors<imageDescSize>(
             pImageInfo,
@@ -406,18 +406,18 @@ void DescriptorUpdateTemplate::UpdateEntrySampledImage(
             entry.dstBindStaDwArrayStride,
             entry.srcStride);
 
-    if (updateFmask)
-    {
-        uint32_t* pDestFmaskAddr = pDstSet->CpuAddress(deviceIdx) + entry.dstFmaskOffset;
+     if (updateFmask)
+     {
+         uint32_t* pDestFmaskAddr = pDstSet->FmaskCpuAddress(deviceIdx) + entry.dstStaOffset;
 
-        DescriptorSet::WriteFmaskDescriptors<imageDescSize>(
-            pImageInfo,
-            deviceIdx,
-            pDestFmaskAddr,
-            entry.descriptorCount,
-            entry.dstBindFmaskDwArrayStride,
-            entry.srcStride);
-    }
+         DescriptorSet::WriteFmaskDescriptors<imageDescSize>(
+             pImageInfo,
+             deviceIdx,
+             pDestFmaskAddr,
+             entry.descriptorCount,
+             entry.dstBindStaDwArrayStride,
+             entry.srcStride);
+     }
 }
 
 namespace entry

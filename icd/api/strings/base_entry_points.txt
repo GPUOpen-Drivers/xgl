@@ -2,7 +2,7 @@
 # Entry point name                                  type        version/extension
 
 vkGetInstanceProcAddr                               @global     @none
-vkGetDeviceProcAddr                                 @global     @none
+vkGetDeviceProcAddr                                 @device     @none
 
 vkCreateInstance                                    @global     @none
 vkEnumerateInstanceExtensionProperties              @global     @none
@@ -255,10 +255,10 @@ vkQueuePresentKHR                                   @device     @dext(KHR_swapch
 vkCmdDrawIndexedIndirectCountAMD                    @device     @dext(AMD_draw_indirect_count)
 vkCmdDrawIndirectCountAMD                           @device     @dext(AMD_draw_indirect_count)
 
-vkGetMultiDevicePropertiesAMDInternal               @global     @win32
-vkOpenWin32BufferAMDInternal                        @global     @win32
-vkOpenWin32ImageAMDInternal                         @global     @win32
-vkOpenWin32SemaphoreAMDInternal                     @global     @win32
+vkGetMultiDevicePropertiesAMDInternal               @device     @win32
+vkOpenWin32BufferAMDInternal                        @device     @win32
+vkOpenWin32ImageAMDInternal                         @device     @win32
+vkOpenWin32SemaphoreAMDInternal                     @device     @win32
 
 vkGetShaderInfoAMD                                  @device     @dext(AMD_shader_info)
 

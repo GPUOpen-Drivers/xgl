@@ -62,11 +62,9 @@ public:
     struct BindingInfo
     {
         VkDescriptorSetLayoutBinding info;  // Vulkan binding information
-
         BindingSectionInfo  sta;            // Information specific to the static section of the descriptor binding
         BindingSectionInfo  dyn;            // Information specific to the dynamic section of the descriptor binding
         BindingSectionInfo  imm;            // Information specific to the immutable section of the descriptor binding
-        BindingSectionInfo  fmask;          // Information sepcific to the fmask section of the descriptor binding
     };
 
     // Information about a specific section of a descriptor set layout
@@ -96,7 +94,8 @@ public:
         SectionInfo     dyn;                // Information specific to the dynamic section of the descriptor set layout
         ImmSectionInfo  imm;                // Information specific to the immutable section of the descriptor set
                                             // layout
-        SectionInfo     fmask;              // Information specific to the fmask section of the descriptor set layout
+        uint32_t        varDescDwStride;    // DWord Size of a descriptor of the type specified for
+                                            // the VARIABLE_DESCRIPTOR_COUNT_BIT binding
     };
 
     static VkResult Create(
@@ -140,7 +139,6 @@ public:
     const Device* VkDevice() const { return m_pDevice; }
 
     static uint32_t GetDescStaticSectionDwSize(const Device* pDevice, VkDescriptorType type);
-    static uint32_t GetDescFmaskSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDescDynamicSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDescImmutableSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDynamicBufferDescDwSize(const Device* pDevice);
@@ -148,15 +146,6 @@ public:
     size_t GetDstStaOffset(const BindingInfo& dstBinding, uint32_t dstArrayElement) const
     {
         size_t offset = dstBinding.sta.dwOffset + (dstArrayElement * dstBinding.sta.dwArrayStride);
-
-        return offset;
-    }
-
-    size_t GetDstFmaskOffset(const BindingInfo& dstBinding, uint32_t dstArrayElement) const
-    {
-        size_t offset = Info().sta.dwSize +
-                        dstBinding.fmask.dwOffset +
-                        (dstArrayElement * dstBinding.fmask.dwArrayStride);
 
         return offset;
     }
@@ -187,8 +176,15 @@ protected:
         uint32_t                            descSizeInDw,
         uint32_t                            descAlignmentInDw,
         SectionInfo*                        pSectionInfo,
-        BindingSectionInfo*                 pBindingSectionInfo,
-        bool                                isFmaskSection);
+        BindingSectionInfo*                 pBindingSectionInfo);
+
+    static void ConvertVariableInfo(
+        const VkDescriptorSetLayoutBinding* pBindingInfo,
+        uint32_t                            descStaAlignmentInDw,
+        uint32_t                            descAlignmentInDw,
+        uint32_t&                           varDescDwStride,
+        SectionInfo*                        pSectionInfo,
+        BindingSectionInfo*                 pBindingSectionInfoVar);
 
     static void ConvertImmutableInfo(
         const VkDescriptorSetLayoutBinding* pBindingInfo,

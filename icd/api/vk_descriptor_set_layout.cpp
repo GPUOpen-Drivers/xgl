@@ -95,31 +95,6 @@ uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(const Device* pDevice, 
 }
 
 // =====================================================================================================================
-// Returns the dword size required in the fmask section for a particular type of descriptor.
-uint32_t  DescriptorSetLayout::GetDescFmaskSectionDwSize(const Device* pDevice, VkDescriptorType type)
-{
-    const Device::Properties& props = pDevice->GetProperties();
-
-    uint32_t size;
-
-    switch (type)
-    {
-    case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-    case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-        size = props.descriptorSizes.fmaskView;
-        break;
-    default:
-        size = 0;
-        break;
-    }
-
-    VK_ASSERT(Util::IsPow2Aligned(size, sizeof(uint32_t)));
-
-    return size / sizeof(uint32_t);
-}
-
-// =====================================================================================================================
 // Returns the dword size of the dynamic descriptor
 uint32_t DescriptorSetLayout::GetDynamicBufferDescDwSize(const Device* pDevice)
 {
@@ -196,8 +171,7 @@ void DescriptorSetLayout::ConvertBindingInfo(
     uint32_t                            descSizeInDw,
     uint32_t                            descAlignmentInDw,
     SectionInfo*                        pSectionInfo,
-    BindingSectionInfo*                 pBindingSectionInfo,
-    bool                                isFmaskSection)
+    BindingSectionInfo*                 pBindingSectionInfo)
 {
     uint32_t descCount = pBindingInfo->descriptorCount;
 
@@ -220,12 +194,51 @@ void DescriptorSetLayout::ConvertBindingInfo(
         pSectionInfo->numRsrcMapNodes++;
 
         // Combined image sampler descriptors in static section need an additional ResourceMappingNode.
-        if (!isFmaskSection && (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER))
+        if (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
         {
             pSectionInfo->numRsrcMapNodes++;
         }
     }
 }
+
+// =====================================================================================================================
+// Converts information about a binding for the specified section.
+ void DescriptorSetLayout::ConvertVariableInfo(
+     const VkDescriptorSetLayoutBinding* pBindingInfo,
+     uint32_t                            descStaAlignmentInDw,
+     uint32_t                            descAlignmentInDw,
+     uint32_t&                           varDescDwStride,
+     SectionInfo*                        pSectionInfo,
+     BindingSectionInfo*                 pBindingSectionInfoVar)
+ {
+     // Array stride in dwords.
+     varDescDwStride = descStaAlignmentInDw;
+
+     // Dword offset to this binding
+     pBindingSectionInfoVar->dwOffset = Util::Pow2Align(pSectionInfo->dwSize, descAlignmentInDw);
+
+     // Array stride in dwords.
+     pBindingSectionInfoVar->dwArrayStride = descStaAlignmentInDw;
+
+     // Size of the whole array in dwords.
+     pBindingSectionInfoVar->dwSize = pBindingSectionInfoVar->dwArrayStride;
+
+     // If this descriptor actually requires storage in the section then also update the global section information.
+     if (pBindingSectionInfoVar->dwSize > 0)
+     {
+         // Update total section size by how much space this binding takes.
+         pSectionInfo->dwSize += pBindingSectionInfoVar->dwSize;
+
+         // Update total number of ResourceMappingNodes required by this binding.
+         pSectionInfo->numRsrcMapNodes++;
+
+         // Combined image sampler descriptors in static section need an additional ResourceMappingNode.
+         if (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+         {
+             pSectionInfo->numRsrcMapNodes++;
+         }
+     }
+ }
 
 // =====================================================================================================================
 void DescriptorSetLayout::ConvertImmutableInfo(
@@ -292,13 +305,15 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
     union
     {
-        const VkStructHeader*                   pHeader;
-        const VkDescriptorSetLayoutCreateInfo*  pInfo;
+        const VkStructHeader*                                 pHeader;
+        const VkDescriptorSetLayoutCreateInfo*                pInfo;
     };
 
     pOut->activeStageMask = VK_SHADER_STAGE_ALL; // TODO set this up properly enumerating the active stages.
                                                  // currently this flag is only tested for non zero, so
                                                  // setting all flags active makes no difference...
+
+    pOut->varDescDwStride           = 0;
 
     pOut->sta.dwSize                = 0;
     pOut->sta.numRsrcMapNodes       = 0;
@@ -308,18 +323,19 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
     pOut->imm.numImmutableSamplers  = 0;
 
-    pOut->fmask.dwSize              = 0;
-    pOut->fmask.numRsrcMapNodes     = 0;
-
     for (pInfo = pIn; pHeader != nullptr; pHeader = pHeader->pNext)
     {
-        switch (pHeader->sType)
+        switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO:
             {
+
                 // Bindings numbers are allowed to come in out-of-order, as well as with gaps.
                 // We compute offsets using the size we've seen so far as we iterate, so we need to handle
                 // the bindings in binding-number order, rather than array order.
+
+                VK_IGNORE(pInfo->flags & VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT);
+                VK_IGNORE(pInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT);
 
                 // First, copy the binding info into our output array in order.
                 for (uint32_t inIndex = 0; inIndex < pInfo->bindingCount; ++inIndex)
@@ -338,47 +354,35 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                     // Determine the alignment requirement of descriptors in dwords.
                     uint32_t descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32_t);
 
-                    // Construct the information specific to the static section of the descriptor set layout.
-                    ConvertBindingInfo(
-                        &pBinding->info,
-                        GetDescStaticSectionDwSize(pDevice, pBinding->info.descriptorType),
-                        descAlignmentInDw,
-                        &pOut->sta,
-                        &pBinding->sta,
-                        false);
-
-                    // Construct the information specific to the dynamic section of the descriptor set layout.
-                    ConvertBindingInfo(
-                        &pBinding->info,
-                        GetDescDynamicSectionDwSize(pDevice, pBinding->info.descriptorType),
-                        descAlignmentInDw,
-                        &pOut->dyn,
-                        &pBinding->dyn,
-                        false);
-
-                    // Construct the information specific to the immutable section of the descriptor set layout.
-                    ConvertImmutableInfo(
-                        &pBinding->info,
-                        GetDescImmutableSectionDwSize(pDevice, pBinding->info.descriptorType),
-                        &pOut->imm,
-                        &pBinding->imm);
-
-                    if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
                     {
-                        // Construct the information specific to the fmask section of the descriptor set layout.
+                        // Construct the information specific to the static section of the descriptor set layout.
                         ConvertBindingInfo(
                             &pBinding->info,
-                            GetDescFmaskSectionDwSize(pDevice, pBinding->info.descriptorType),
+                            GetDescStaticSectionDwSize(pDevice, pBinding->info.descriptorType),
                             descAlignmentInDw,
-                            &pOut->fmask,
-                            &pBinding->fmask,
-                            true);
-                    }
+                            &pOut->sta,
+                            &pBinding->sta);
 
-                    if ((pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
-                        (pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
-                    {
-                        pOut->numDynamicDescriptors += pBinding->info.descriptorCount;
+                        // Construct the information specific to the dynamic section of the descriptor set layout.
+                        ConvertBindingInfo(
+                            &pBinding->info,
+                            GetDescDynamicSectionDwSize(pDevice, pBinding->info.descriptorType),
+                            descAlignmentInDw,
+                            &pOut->dyn,
+                            &pBinding->dyn);
+
+                        // Construct the information specific to the immutable section of the descriptor set layout.
+                        ConvertImmutableInfo(
+                            &pBinding->info,
+                            GetDescImmutableSectionDwSize(pDevice, pBinding->info.descriptorType),
+                            &pOut->imm,
+                            &pBinding->imm);
+
+                        if ((pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
+                            (pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
+                        {
+                            pOut->numDynamicDescriptors += pBinding->info.descriptorCount;
+                        }
                     }
                 }
             }

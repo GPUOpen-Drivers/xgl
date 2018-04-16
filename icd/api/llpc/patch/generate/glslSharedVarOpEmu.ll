@@ -40,11 +40,11 @@ define spir_func i32 @_Z10AtomicIAddPU3AS3iiii(
 define spir_func i32 @_Z10AtomicISubPU3AS3iiii(
     i32 addrspace(3)* %mem, i32 %scope, i32 %semantics, i32 %data)
 {
-    %1 = atomicrmw volatile add i32 addrspace(3)* %mem, i32 %data seq_cst
+    %1 = atomicrmw volatile sub i32 addrspace(3)* %mem, i32 %data seq_cst
     ret i32 %1
 }
 
-; GLSL: int atomicMin (inout int mem, int data)
+; GLSL: int atomicMin(inout int, int)
 define spir_func i32 @_Z10AtomicSMinPU3AS3iiii(
     i32 addrspace(3)* %mem, i32 %scope, i32 %semantics, i32 %data)
 {
@@ -52,7 +52,7 @@ define spir_func i32 @_Z10AtomicSMinPU3AS3iiii(
     ret i32 %1
 }
 
-; GLSL: uint atomicMin (inout uint mem, uint data)
+; GLSL: uint atomicMin(inout uint, uint)
 define spir_func i32 @_Z10AtomicUMinPU3AS3iiii(
     i32 addrspace(3)* %mem, i32 %scope, i32 %semantics, i32 %data)
 {
@@ -60,7 +60,7 @@ define spir_func i32 @_Z10AtomicUMinPU3AS3iiii(
     ret i32 %1
 }
 
-; GLSL: int atomicMax (inout int mem, int data)
+; GLSL: int atomicMax(inout int, int)
 define spir_func i32 @_Z10AtomicSMaxPU3AS3iiii(
     i32 addrspace(3)* %mem, i32 %scope, i32 %semantics, i32 %data)
 {
@@ -68,7 +68,7 @@ define spir_func i32 @_Z10AtomicSMaxPU3AS3iiii(
     ret i32 %1
 }
 
-; GLSL: uint atomicMax (inout uint mem, uint data)
+; GLSL: uint atomicMax(inout uint, uint)
 define spir_func i32 @_Z10AtomicUMaxPU3AS3iiii(
     i32 addrspace(3)* %mem, i32 %scope, i32 %semantics, i32 %data)
 {
@@ -121,4 +121,101 @@ define spir_func i32 @_Z21AtomicCompareExchangePU3AS3iiiiii(
     %1 = cmpxchg i32 addrspace(3)* %mem, i32 %compare, i32 %data seq_cst monotonic
     %2 = extractvalue { i32, i1 } %1, 0
     ret i32 %2
+}
+
+; GLSL: uint64_t atomicAdd(inout uint64_t, uint64_t)
+;       int64_t  atomicAdd(inout int64_t, int64_t)
+define spir_func i64 @_Z10AtomicIAddPU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile add i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicSub(inout uint64_t, uint64_t)
+;       int64_t  atomicSub(inout int64_t, int64_t)
+define spir_func i64 @_Z10AtomicISubPU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile sub i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: int64_t atomicMin(inout int64_t, int64_t)
+define spir_func i64 @_Z10AtomicSMinPU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile min i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicMin(inout uint64_t, uint64_t)
+define spir_func i64 @_Z10AtomicUMinPU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile umin i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: int64_t atomicMax(inout int64_t, int64_t)
+define spir_func i64 @_Z10AtomicSMaxPU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile max i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicMax(inout uint64_t, uint64_t)
+define spir_func i64 @_Z10AtomicUMaxPU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile umax i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicAnd(inout uint64_t, uint64_t)
+;       int64_t  atomicAnd(inout int64_t, int64_t)
+define spir_func i64 @_Z9AtomicAndPU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile and i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicOr(inout uint64_t, uint64_t)
+;       int64_t  atomicOr(inout int64_t, int64_t)
+define spir_func i64 @_Z8AtomicOrPU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile or i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicXor(inout uint64_t, uint64_t)
+;       int64_t  atomicXor(inout int64_t, int64_t)
+define spir_func i64 @_Z9AtomicXorPU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile xor i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicExchange(inout uint64_t, uint64_t)
+;       int64_t  atomicExchange(inout int64_t, int64_t)
+define spir_func i64 @_Z14AtomicExchangePU3AS3liil(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics, i64 %data)
+{
+    %1 = atomicrmw volatile xchg i64 addrspace(3)* %mem, i64 %data seq_cst
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicCompSwap(inout uint64_t, uint64_t, uint64_t)
+;       int64_t  atomicCompSwap(inout int64_t, int64_t, int64_t)
+define spir_func i64 @_Z21AtomicCompareExchangePU3AS3liiill(
+    i64 addrspace(3)* %mem, i32 %scope, i32 %semantics_equ,
+    i32 %semantics_unequ, i64 %data, i64 %compare)
+{
+    %1 = cmpxchg i64 addrspace(3)* %mem, i64 %compare, i64 %data seq_cst monotonic
+    %2 = extractvalue { i64, i1 } %1, 0
+    ret i64 %2
 }

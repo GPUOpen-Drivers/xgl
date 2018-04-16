@@ -311,6 +311,9 @@ VkResult Instance::Init(
 
     createInfo.pSettingsPath = "/etc/amd";
 
+    // We use shadow descriptors to support FMASK based MSAA reads so we need to request support from PAL.
+    createInfo.flags.requestShadowDescriptorVaRange = 1;
+
     // Switch to "null" GPU mode if requested
     if (DetermineNullGpuSupport(&createInfo.nullGpuId))
     {

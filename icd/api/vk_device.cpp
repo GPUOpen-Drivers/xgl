@@ -637,6 +637,13 @@ VkResult Device::Initialize(
             createInfo.allocInfo[Pal::EmbeddedDataAlloc].allocSize = m_settings.cmdAllocatorEmbeddedAllocSize;
             createInfo.allocInfo[Pal::EmbeddedDataAlloc].suballocSize = m_settings.cmdAllocatorEmbeddedSubAllocSize;
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 395
+            // Initialize GPU scratch memory chunk allocation size
+            createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocHeap = m_settings.cmdAllocatorScratchHeap;
+            createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocSize = m_settings.cmdAllocatorScratchAllocSize;
+            createInfo.allocInfo[Pal::GpuScratchMemAlloc].suballocSize = m_settings.cmdAllocatorScratchSubAllocSize;
+#endif
+
             Pal::Result  palResult = Pal::Result::Success;
             const size_t allocatorSize = PalDevice(DefaultDeviceIndex)->GetCmdAllocatorSize(createInfo, &palResult);
 
@@ -1856,7 +1863,7 @@ VkResult Device::CreateSwapchain(
 
 // =====================================================================================================================
 // Adds an item to the residency list.
-void Device::AddMemReference(
+Pal::Result Device::AddMemReference(
     Pal::IDevice*    pPalDevice,
     Pal::IGpuMemory* pPalMemory,
     bool             readOnly)
@@ -1868,7 +1875,7 @@ void Device::AddMemReference(
 
     const Pal::GpuMemoryRefFlags memoryReferenceFlags = static_cast<Pal::GpuMemoryRefFlags>(0);
 
-    pPalDevice->AddGpuMemoryReferences(1, &memRef, nullptr, memoryReferenceFlags);
+    return pPalDevice->AddGpuMemoryReferences(1, &memRef, nullptr, memoryReferenceFlags);
 }
 
 // =====================================================================================================================

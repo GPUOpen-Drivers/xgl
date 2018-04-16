@@ -215,26 +215,26 @@ void SpirvLowerAggregateLoadStore::ExpandStoreInst(
 
         if (pElemPtr->getType()->getPointerElementType() != pElemValue->getType())
         {
-            // Type mismatch (only occurs for the store of uint32 <-> bool)
+            // Type mismatch (only occurs for the store of uint32 <-> uint8)
             auto pElemValueTy = pElemValue->getType();
             auto pElemPointeeTy = pElemPtr->getType()->getPointerElementType();
-            LLPC_ASSERT((pElemValueTy->getScalarType() == m_pContext->BoolTy() &&
+            LLPC_ASSERT((pElemValueTy->getScalarType() == m_pContext->Int8Ty() &&
                          pElemPointeeTy->getScalarType() == m_pContext->Int32Ty())||
-                        (pElemPointeeTy->getScalarType() == m_pContext->BoolTy() &&
+                        (pElemPointeeTy->getScalarType() == m_pContext->Int8Ty() &&
                          pElemValueTy->getScalarType() == m_pContext->Int32Ty()));
 
-            if (pElemValueTy->getScalarType() == m_pContext->BoolTy())
+            if (pElemValueTy->getScalarType() == m_pContext->Int8Ty())
             {
-                // bool -> uint32
+                // uint8 -> uint32
                 pElemValue = BitCastInst::Create(Instruction::ZExt, pElemValue, pElemPointeeTy, "", pInsertPos);
                 new StoreInst(pElemValue, pElemPtr, pInsertPos);
             }
             else
             {
-                // uint32 -> bool
+                // uint32 -> uint8
                 auto pZero = pElemPointeeTy->isVectorTy() ? ConstantAggregateZero::get(pElemPointeeTy) :
                                                      ConstantInt::get(m_pContext->Int32Ty(), 0);
-                pElemValue = new ICmpInst(pInsertPos, CmpInst::ICMP_NE, pElemValue, pZero, "");
+                pElemValue = BitCastInst::Create(Instruction::Trunc, pElemValue, pElemPointeeTy,"", pInsertPos);
                 new StoreInst(pElemValue, pElemPtr, pInsertPos);
             }
         }

@@ -89,8 +89,6 @@ private:
         size_t          dstStaOffset;
         uint32_t        descriptorCount;
         uint32_t        dstBindStaDwArrayStride;
-        size_t          dstFmaskOffset;
-        uint32_t        dstBindFmaskDwArrayStride;
         uint32_t        dstBindDynDataDwArrayStride;
         size_t          dstDynOffset;
     };

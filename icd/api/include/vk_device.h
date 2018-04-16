@@ -406,7 +406,7 @@ public:
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
     }
 
-    void AddMemReference(
+    Pal::Result AddMemReference(
         Pal::IDevice*       pPalDevice,
         Pal::IGpuMemory*    pPalMemory,
         bool                readOnly = false);

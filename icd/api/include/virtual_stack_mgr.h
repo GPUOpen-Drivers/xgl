@@ -38,7 +38,7 @@
 
 #include "pal.h"
 #include "palLinearAllocator.h"
-#include "palList.h"
+#include "palIntrusiveList.h"
 #include "palMutex.h"
 
 namespace vk
@@ -48,7 +48,7 @@ namespace vk
 class Instance;
 
 // Virtual stack allocator base type
-typedef Util::VirtualLinearAllocator VirtualStackAllocator;
+typedef Util::VirtualLinearAllocatorWithNode VirtualStackAllocator;
 
 // =====================================================================================================================
 // Virtual stack frame helper class
@@ -92,7 +92,7 @@ public:
 private:
     VirtualStackMgr(Instance* pInstance);
 
-    typedef Util::List<VirtualStackAllocator*, PalAllocator> VirtualStackList;
+    typedef Util::IntrusiveList<VirtualStackAllocator> VirtualStackList;
 
     Instance* const         m_pInstance;        // Vulkan instance the virtual stack manager belongs to
 

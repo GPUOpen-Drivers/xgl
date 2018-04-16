@@ -62,6 +62,14 @@ union DescriptorSetFlags
     uint32_t u32All;
 };
 
+struct DescriptorAddr
+{
+    Pal::gpusize  staticGpuAddr;
+    Pal::gpusize  fmaskGpuAddr;
+    uint32_t*     staticCpuAddr;
+    uint32_t*     fmaskCpuAddr;
+};
+
 // =====================================================================================================================
 // A descriptor set is a chunk of GPU memory containing one or more descriptors organized in a manner described by a
 // DescriptorSetLayout associated with it.  They are allocated and freed by DescriptorPools.
@@ -132,16 +140,26 @@ public:
         { return m_pLayout; }
 
     size_t Size() const
-        { return (m_pLayout->Info().sta.dwSize + m_pLayout->Info().fmask.dwSize) * sizeof(uint32_t); }
+        { return (m_pLayout->Info().sta.dwSize * sizeof(uint32_t)); }
 
-    Pal::gpusize GpuAddress(int32_t idx) const
+    Pal::gpusize StaticGpuAddress(int32_t idx) const
     {
-        return m_gpuAddress[idx];
+        return m_addresses[idx].staticGpuAddr;
     }
 
-    uint32_t* CpuAddress(int32_t idx) const
+    uint32_t* StaticCpuAddress(int32_t idx) const
     {
-        return m_pCpuAddress[idx];
+        return m_addresses[idx].staticCpuAddr;
+    }
+
+    Pal::gpusize FmaskGpuAddress(int32_t idx) const
+    {
+        return m_addresses[idx].fmaskGpuAddr;
+    }
+
+    uint32_t* FmaskCpuAddress(int32_t idx) const
+    {
+        return m_addresses[idx].fmaskCpuAddr;
     }
 
     uint32_t* DynamicDescriptorData()
@@ -199,16 +217,11 @@ protected:
     void Reassign(
         const DescriptorSetLayout*  pLayout,
         Pal::gpusize                gpuMemOffset,
-        Pal::gpusize*               gpuBaseAddress,
-        uint32_t**                  cpuBaseAddress,
+        DescriptorAddr*             pBaseAddrs,
         uint32_t                    numPalDevices,
         void*                       pAllocHandle);
 
     void Reset();
-
-    void InitImmutableDescriptors(
-        const DescriptorSetLayout*  pLayout,
-        uint32_t                    numPalDevices);
 
     void* AllocHandle() const
         { return m_pAllocHandle; }
@@ -218,8 +231,7 @@ protected:
 
     const DescriptorSetLayout*  m_pLayout;
     void*                       m_pAllocHandle;
-    Pal::gpusize                m_gpuAddress[MaxPalDevices];
-    uint32_t*                   m_pCpuAddress[MaxPalDevices];
+    DescriptorAddr              m_addresses[MaxPalDevices];
 
     DescriptorPool* const       m_pPool;
     uint32_t                    m_heapIndex;
@@ -249,7 +261,7 @@ Pal::gpusize DescriptorSet::GpuAddressFromHandle(
     uint32_t        deviceIdx,
     VkDescriptorSet set)
 {
-    return StateFromHandle(set)->GpuAddress(deviceIdx);
+    return StateFromHandle(set)->StaticGpuAddress(deviceIdx);
 }
 
 // =====================================================================================================================

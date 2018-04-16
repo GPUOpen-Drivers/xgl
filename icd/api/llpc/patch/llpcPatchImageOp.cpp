@@ -145,10 +145,17 @@ void PatchImageOp::visitCallInst(
                                     // node from associated multi-sampled texture resource node.
                                     if (cl::EnableShadowDescriptorTable)
                                     {
-                                        pFmaskNode = pNode;
+                                        // Fmask based fetch only can work for texel fetch or load subpass data
+                                        if((imageCallMeta.OpKind == ImageOpFetch) ||
+                                           ((imageCallMeta.OpKind == ImageOpRead) &&
+                                            (imageCallMeta.Dim == DimSubpassData)))
+                                        {
+                                            pFmaskNode = pNode;
+                                        }
                                     }
                                 }
-                                else if (pNode->type == ResourceMappingNodeType::DescriptorFmask)
+                                else if ((pNode->type == ResourceMappingNodeType::DescriptorFmask) &&
+                                         (pFmaskNode == nullptr))
                                 {
                                     pFmaskNode = pNode;
                                 }
@@ -166,7 +173,13 @@ void PatchImageOp::visitCallInst(
                         callName = callName.substr(0, fmaskPatchPos);
                         if ((pResourceNode != nullptr) && (pFmaskNode != nullptr))
                         {
-                            callName += gSPIRVName::ImageCallModFmaskBased;
+                            // Fmask based fetch only can work for texel fetch or load subpass data
+                            if((imageCallMeta.OpKind == ImageOpFetch) ||
+                                ((imageCallMeta.OpKind == ImageOpRead) &&
+                                (imageCallMeta.Dim == DimSubpassData)))
+                            {
+                                callName += gSPIRVName::ImageCallModFmaskBased;
+                            }
                         }
                         else if (pFmaskNode != nullptr)
                         {

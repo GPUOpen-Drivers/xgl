@@ -134,28 +134,52 @@ VkResult DescriptorPool::Init(
 
             pDevice->MemMgr()->GetCommonPool(InternalPoolDescriptorTable, &allocInfo);
 
-            result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &m_internalMem, pDevice->GetPalDeviceMask());
+            result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &m_staticInternalMem, pDevice->GetPalDeviceMask());
 
             if (result != VK_SUCCESS)
             {
                 return result;
             }
 
-            m_gpuMemHeap.BindMemory(&m_internalMem);
+            m_gpuMemHeap.BindMemory(&m_staticInternalMem);
 
             for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
             {
-                m_gpuAddressCached[deviceIdx] = m_internalMem.GpuVirtAddr(deviceIdx);
-                m_pCpuAddressCached[deviceIdx] = static_cast<uint32_t*>(m_gpuMemHeap.CpuAddr(deviceIdx));
+                m_addresses[deviceIdx].staticGpuAddr = m_staticInternalMem.GpuVirtAddr(deviceIdx);
+                m_addresses[deviceIdx].staticCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuAddr(deviceIdx));
             }
 
+            if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+            {
+                // Allocate memory for shadow descriptor table for MSAA image Fmask SRDs
+                allocInfo.pal.descrVirtAddr = m_staticInternalMem.GpuVirtAddr(0);
+                pDevice->MemMgr()->GetCommonPool(InternalPoolShadowDescriptorTable, &allocInfo);
+
+                result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &m_fmaskInternalMem, pDevice->GetPalDeviceMask());
+
+                if (result != VK_SUCCESS)
+                {
+                    return result;
+                }
+
+                m_gpuMemHeap.BindMemory(&m_fmaskInternalMem);
+
+                for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
+                {
+                    m_addresses[deviceIdx].fmaskGpuAddr = m_fmaskInternalMem.GpuVirtAddr(deviceIdx);
+                    m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuAddr(deviceIdx));
+                }
+            }
         }
         else
         {
             for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
             {
-                m_gpuAddressCached[deviceIdx] = 0;
-                m_pCpuAddressCached[deviceIdx] = nullptr;
+                m_addresses[deviceIdx].staticGpuAddr = 0;
+                m_addresses[deviceIdx].staticCpuAddr = nullptr;
+
+                m_addresses[deviceIdx].fmaskGpuAddr = 0;
+                m_addresses[deviceIdx].fmaskCpuAddr = nullptr;
             }
         }
     }
@@ -185,9 +209,14 @@ VkResult DescriptorPool::Destroy(
     m_gpuMemHeap.Destroy(pDevice);
 
     // Free internal GPU memory allocation used by the object
-    if (m_internalMem.PalMemory(DefaultDeviceIndex) != nullptr)
+    if (m_staticInternalMem.PalMemory(DefaultDeviceIndex) != nullptr)
     {
-        pDevice->MemMgr()->FreeGpuMem(&m_internalMem);
+        pDevice->MemMgr()->FreeGpuMem(&m_staticInternalMem);
+    }
+
+    if (m_fmaskInternalMem.PalMemory(DefaultDeviceIndex) != nullptr)
+    {
+        pDevice->MemMgr()->FreeGpuMem(&m_fmaskInternalMem);
     }
 
     // Call destructor
@@ -203,37 +232,41 @@ VkResult DescriptorPool::Destroy(
 // =====================================================================================================================
 // Allocate descriptor sets from a descriptor set region.
 VkResult DescriptorPool::AllocDescriptorSets(
-    uint32_t                        count,
-    const VkDescriptorSetLayout*    pSetLayouts,
-    VkDescriptorSet*                pDescriptorSets)
+    const VkDescriptorSetAllocateInfo* pAllocateInfo,
+    VkDescriptorSet*                   pDescriptorSets)
 {
-    VkResult result = VK_SUCCESS;
-
-    uint32_t allocCount = 0;
+    VkResult                     result                          = VK_SUCCESS;
+    uint32_t                     allocCount                      = 0;
+    uint32_t                     count                           = pAllocateInfo->descriptorSetCount;
+    const VkDescriptorSetLayout* pSetLayouts                     = pAllocateInfo->pSetLayouts;
 
     while ((result == VK_SUCCESS) && (allocCount < count))
     {
         if (m_setHeap.AllocSetState(&pDescriptorSets[allocCount]))
         {
             // Try to allocate GPU memory for the descriptor set
-            const DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pSetLayouts[allocCount]);
+            DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pSetLayouts[allocCount]);
+
+            uint32_t variableDescriptorCounts = 0;
 
             Pal::gpusize setGpuMemOffset;
             void* pSetAllocHandle;
 
-            if (m_gpuMemHeap.AllocSetGpuMem(pLayout, &setGpuMemOffset, &pSetAllocHandle))
+            if (m_gpuMemHeap.AllocSetGpuMem(pLayout, variableDescriptorCounts, &setGpuMemOffset, &pSetAllocHandle))
             {
                 // Allocation succeeded: Mark this
                 // Reallocate this descriptor set to use the allocated GPU range and layout
                 DescriptorSet* pSet = DescriptorSet::StateFromHandle(pDescriptorSets[allocCount]);
 
-                pSet->Reassign(pLayout, setGpuMemOffset, m_gpuAddressCached, m_pCpuAddressCached, m_pDevice->NumPalDevices(),
-                    pSetAllocHandle);
+                pSet->Reassign(pLayout,
+                               setGpuMemOffset,
+                               m_addresses,
+                               m_pDevice->NumPalDevices(),
+                               pSetAllocHandle);
             }
             else
             {
                 // State set will be released in error case handling below, since non-null handle is present
-
                 result = VK_ERROR_OUT_OF_POOL_MEMORY;
             }
 
@@ -337,13 +370,6 @@ VkResult DescriptorGpuMemHeap::Init(
     {
         m_gpuMemSize += DescriptorSetLayout::GetDescStaticSectionDwSize(pDevice, pTypeCount[i].type) *
             pTypeCount[i].descriptorCount;
-
-        // Add Fmask descriptors size to gpu memory size.
-        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
-        {
-            m_gpuMemSize += DescriptorSetLayout::GetDescFmaskSectionDwSize(pDevice, pTypeCount[i].type) *
-                pTypeCount[i].descriptorCount;
-        }
     }
 
     m_gpuMemSize *= sizeof(uint32_t);
@@ -498,11 +524,15 @@ void DescriptorGpuMemHeap::SanityCheckDynamicAllocBlockList()
 // handle that can be used to free that memory for non-one-shot allocations.
 bool DescriptorGpuMemHeap::AllocSetGpuMem(
     const DescriptorSetLayout*  pLayout,
+    uint32_t                    variableDescriptorCounts,
     Pal::gpusize*               pSetGpuMemOffset,
     void**                      pSetAllocHandle)
 {
     // Figure out the byte size and alignment
-    const uint32_t byteSize  = (pLayout->Info().sta.dwSize + pLayout->Info().fmask.dwSize) * sizeof(uint32_t);
+    const uint32_t byteSize  = (pLayout->Info().sta.dwSize +
+                               (pLayout->Info().varDescDwStride * variableDescriptorCounts)) *
+                               sizeof(uint32_t);
+
     const uint32_t alignment = m_gpuMemAddrAlignment;
 
     if (byteSize == 0)
@@ -1036,8 +1066,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(
     VkDescriptorSet*                            pDescriptorSets)
 {
     return DescriptorPool::ObjectFromHandle(pAllocateInfo->descriptorPool)->AllocDescriptorSets(
-        pAllocateInfo->descriptorSetCount,
-        pAllocateInfo->pSetLayouts,
+        pAllocateInfo,
         pDescriptorSets);
 }
 

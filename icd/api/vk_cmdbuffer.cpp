@@ -1041,6 +1041,15 @@ VkResult CmdBuffer::Begin(
         palFlags.prefetchShaders = 1;
     }
 
+    if (m_pDevice->GetRuntimeSettings().useRingBufferForCeRamDumps == false)
+    {
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 395
+        palFlags.useLinearBufferForCeRamDumps = 1;
+#else
+        palFlags.useEmbeddedDataForCeRamDumps = 1;
+#endif
+    }
+
     uint32_t currentSubPass = 0;
     for (pInfo = pBeginInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
@@ -1202,22 +1211,6 @@ VkResult CmdBuffer::End(void)
     VK_ASSERT(m_isRecording);
 
     DbgBarrierPreCmd(DbgBarrierCmdBufEnd);
-
-    if (m_renderPassInstance.pAttachments != nullptr)
-    {
-        m_pDevice->VkInstance()->FreeMem(m_renderPassInstance.pAttachments);
-
-        m_renderPassInstance.pAttachments       = nullptr;
-        m_renderPassInstance.maxAttachmentCount = 0;
-    }
-
-    if (m_renderPassInstance.pSamplePatterns != nullptr)
-    {
-        m_pDevice->VkInstance()->FreeMem(m_renderPassInstance.pSamplePatterns);
-
-        m_renderPassInstance.pSamplePatterns = nullptr;
-        m_renderPassInstance.maxSubpassCount = 0;
-    }
 
     if (m_pSqttState != nullptr)
     {
@@ -1548,6 +1541,12 @@ VkResult CmdBuffer::Destroy(void)
     if (m_renderPassInstance.pAttachments != nullptr)
     {
         m_pDevice->VkInstance()->FreeMem(m_renderPassInstance.pAttachments);
+    }
+
+    // Free per-subpass instance memory
+    if (m_renderPassInstance.pSamplePatterns != nullptr)
+    {
+        m_pDevice->VkInstance()->FreeMem(m_renderPassInstance.pSamplePatterns);
     }
 
     // Unregister this command buffer from the pool
@@ -4504,7 +4503,7 @@ void CmdBuffer::RPEndSubpass()
     VirtualStackFrame virtStack(m_pStackAllocator);
 
     // Synchronize preceding work before resolving if needed
-    if (subpass.end.flags.hasPreResolveSyncPoint)
+    if (subpass.end.syncPreResolve.flags.active)
     {
         RPSyncPoint(subpass.end.syncPreResolve, &virtStack);
     }
@@ -4516,10 +4515,42 @@ void CmdBuffer::RPEndSubpass()
     }
 
     // Synchronize preceding work at the end of the subpass
-    if (subpass.end.flags.hasBottomSyncPoint)
+    if (subpass.end.syncBottom.flags.active)
     {
         RPSyncPoint(subpass.end.syncBottom, &virtStack);
     }
+}
+
+// =====================================================================================================================
+// Handles post-clear synchronization for load-op color clears when not auto-syncing.
+void CmdBuffer::RPSyncPostLoadOpColorClear()
+{
+    static const Pal::BarrierTransition transition =
+    {
+        Pal::CoherClear,
+        Pal::CoherColorTarget,
+        {}
+    };
+
+    constexpr Pal::BarrierFlags NullFlags   = {};
+    static const Pal::HwPipePoint PipePoint = Pal::HwPipePostBlt;
+    static const Pal::BarrierInfo Barrier   =
+    {
+        NullFlags,                          // flags
+        Pal::HwPipePreRasterization,        // waitPoint
+        1,                                  // pipePointWaitCount
+        &PipePoint,                         // pPipePoints
+        0,                                  // gpuEventWaitCount
+        nullptr,                            // ppGpuEvents
+        0,                                  // rangeCheckedTargetWaitCount
+        nullptr,                            // ppTargets
+        1,                                  // transitionCount
+        &transition,                        // pTransitions
+        0,                                  // pSplitBarrierGpuEvent
+        RgpBarrierExternalRenderPassSync    // reason
+    };
+
+    PalCmdBarrier(Barrier);
 }
 
 // =====================================================================================================================
@@ -4535,7 +4566,7 @@ void CmdBuffer::RPBeginSubpass()
 
     // Synchronize prior work (defined by subpass dependencies) prior to the top of this subpass, and handle any
     // layout transitions for this subpass's references.
-    if (subpass.begin.flags.hasTopSyncPoint)
+    if (subpass.begin.syncTop.flags.active)
     {
         RPSyncPoint(subpass.begin.syncTop, &virtStack);
     }
@@ -4544,6 +4575,12 @@ void CmdBuffer::RPBeginSubpass()
     if (subpass.begin.loadOps.colorClearCount > 0)
     {
         RPLoadOpClearColor(subpass.begin.loadOps.colorClearCount, subpass.begin.loadOps.pColorClears);
+    }
+
+    // If we are manually pre-syncing color clears, we must post-sync also
+    if (subpass.begin.syncTop.barrier.flags.preColorClearSync)
+    {
+        RPSyncPostLoadOpColorClear();
     }
 
     // Execute any depth-stencil clear load operations
@@ -4568,53 +4605,14 @@ void CmdBuffer::RPSyncPoint(
     VirtualStackFrame*     pVirtStack)
 {
     const uint32_t barrierOptions = m_pDevice->GetRuntimeSettings().resourceBarrierOptions;
+    const auto&    rpBarrier      = syncPoint.barrier;
 
     Pal::BarrierInfo barrier = {};
 
-    barrier.reason    = RgpBarrierExternalRenderPassSync;
-    barrier.waitPoint = Pal::HwPipeBottom;
-
-    // Get the PAL wait point for the barrier based on the subpass dependency
-    if (syncPoint.barrier.dstStageMask != 0)
-    {
-        barrier.waitPoint = VkToPalWaitPipePoint(syncPoint.barrier.dstStageMask);
-    }
-
-    // Get the PAL signal pipe points based on the subpass dependency
-    Pal::HwPipePoint pipePoints[MaxHwPipePoints + 2]; // Two extra for pre-resolve and post-resolve signals
-
-    barrier.pipePointWaitCount = VkToPalSrcPipePoints(syncPoint.barrier.srcStageMask, pipePoints);
-    barrier.pPipePoints        = pipePoints;
-
-    // Augment the active source pipeline stages for resolves if we need to wait for prior resolves to complete
-    if (syncPoint.barrier.flags.postResolveSync)
-    {
-        VK_ASSERT(barrier.pipePointWaitCount < VK_ARRAY_SIZE(pipePoints));
-
-        pipePoints[barrier.pipePointWaitCount++] = Pal::HwPipePostBlt;
-
-        // If there is no actual explicit waiting done for other reasons (e.g. dependency) we need to wait at the
-        // top of the pipe here.
-        if (barrier.waitPoint == Pal::HwPipeBottom)
-        {
-            barrier.waitPoint = Pal::HwPipeTop;
-        }
-    }
-
-    // Similarly augment the waiting if we need to wait for prior color rendering to finish
-    if (syncPoint.barrier.flags.preColorResolveSync ||
-        syncPoint.barrier.flags.preDsResolveSync)
-    {
-        VK_ASSERT(barrier.pipePointWaitCount < VK_ARRAY_SIZE(pipePoints));
-
-        pipePoints[barrier.pipePointWaitCount++] = Pal::HwPipeBottom;
-
-        // If we're waiting prior a resolve, make sure the wait point waits early enough.
-        if (barrier.waitPoint > Pal::HwPipePreBlt)
-        {
-            barrier.waitPoint = Pal::HwPipePreBlt;
-        }
-    }
+    barrier.reason             = RgpBarrierExternalRenderPassSync;
+    barrier.waitPoint          = rpBarrier.waitPoint;
+    barrier.pipePointWaitCount = rpBarrier.pipePointCount;
+    barrier.pPipePoints        = rpBarrier.pipePoints;
 
     const uint32_t maxTransitionCount = 1 + // For global memory dependency
                                         MaxRangePerAttachment * syncPoint.transitionCount;
@@ -4624,12 +4622,8 @@ void CmdBuffer::RPSyncPoint(
 
     if ((pPalTransitions != nullptr) && (ppImages != nullptr))
     {
-        // Construct global memory dependency to synchronize caches
-        if (syncPoint.barrier.srcAccessMask != 0        ||
-            syncPoint.barrier.dstAccessMask != 0        ||
-            syncPoint.barrier.flags.preColorResolveSync ||
-            syncPoint.barrier.flags.preDsResolveSync    ||
-            syncPoint.barrier.flags.postResolveSync)
+        // Construct global memory dependency to synchronize caches (subpass dependencies + implicit synchronization)
+        if (rpBarrier.flags.needsGlobalTransition)
         {
             VK_ASSERT(barrier.transitionCount < maxTransitionCount);
 
@@ -4639,29 +4633,15 @@ void CmdBuffer::RPSyncPoint(
 
             ConvertBarrierCacheFlags(
                 m_pDevice,
-                syncPoint.barrier.srcAccessMask,
-                syncPoint.barrier.dstAccessMask,
+                rpBarrier.srcAccessMask,
+                rpBarrier.dstAccessMask,
                 0xffffffff,
                 0xffffffff,
                 barrierOptions,
                 pGlobalTransition);
 
-            if (syncPoint.barrier.flags.preColorResolveSync)
-            {
-                pGlobalTransition->srcCacheMask |= Pal::CoherColorTarget;
-                pGlobalTransition->dstCacheMask |= Pal::CoherResolve;
-            }
-
-            if (syncPoint.barrier.flags.preDsResolveSync)
-            {
-                pGlobalTransition->srcCacheMask |= Pal::CoherDepthStencilTarget;
-                pGlobalTransition->dstCacheMask |= Pal::CoherResolve;
-            }
-
-            if (syncPoint.barrier.flags.postResolveSync)
-            {
-                pGlobalTransition->srcCacheMask |= Pal::CoherResolve;
-            }
+            pGlobalTransition->srcCacheMask |= rpBarrier.implicitSrcCacheMask;
+            pGlobalTransition->dstCacheMask |= rpBarrier.implicitDstCacheMask;
         }
 
         // Construct attachment-specific layout transitions
@@ -4689,17 +4669,17 @@ void CmdBuffer::RPSyncPoint(
                 {
                     VK_ASSERT(barrier.transitionCount < maxTransitionCount);
 
-                    ppImages[barrier.transitionCount]         = attachment.pImage;
+                    ppImages[barrier.transitionCount] = attachment.pImage;
 
                     Pal::BarrierTransition* pLayoutTransition = &pPalTransitions[barrier.transitionCount++];
 
-                    pLayoutTransition->srcCacheMask                         = 0;
-                    pLayoutTransition->dstCacheMask                         = 0;
-                    pLayoutTransition->imageInfo.pImage                     = attachment.pImage->PalImage();
-                    pLayoutTransition->imageInfo.oldLayout                  = oldLayout;
-                    pLayoutTransition->imageInfo.newLayout                  = newLayout;
-                    pLayoutTransition->imageInfo.subresRange                = attachment.subresRange[sr];
-                    pLayoutTransition->imageInfo.pQuadSamplePattern         = 0;
+                    pLayoutTransition->srcCacheMask                 = 0;
+                    pLayoutTransition->dstCacheMask                 = 0;
+                    pLayoutTransition->imageInfo.pImage             = attachment.pImage->PalImage();
+                    pLayoutTransition->imageInfo.oldLayout          = oldLayout;
+                    pLayoutTransition->imageInfo.newLayout          = newLayout;
+                    pLayoutTransition->imageInfo.subresRange        = attachment.subresRange[sr];
+                    pLayoutTransition->imageInfo.pQuadSamplePattern = 0;
 
                     const uint32_t sampleCount = attachment.pImage->GetImageSamples();
 
@@ -4802,8 +4782,9 @@ void CmdBuffer::RPLoadOpClearColor(
                 clearColor,
                 clearSubresRanges.NumElements(),
                 clearSubresRanges.Data(),
-                1, &clearBox,
-                Pal::ColorClearAutoSync);
+                1,
+                &clearBox,
+                count == 1 ? Pal::ColorClearAutoSync : 0); // Multi-RT clears are synchronized later in RPBeginSubpass()
         }
     }
 
@@ -4862,7 +4843,8 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
                 clearStencil,
                 clearSubresRanges.NumElements(),
                 clearSubresRanges.Data(),
-                1, &clearRect,
+                1,
+                &clearRect,
                 Pal::DsClearAutoSync);
         }
     }
@@ -5099,7 +5081,7 @@ void CmdBuffer::EndRenderPass()
 
         // Synchronize any prior work before leaving the instance (external dependencies) and also handle final layout
         // transitions.
-        if (end.flags.hasEndSyncPoint)
+        if (end.syncEnd.flags.active)
         {
             VirtualStackFrame virtStack(m_pStackAllocator);
 

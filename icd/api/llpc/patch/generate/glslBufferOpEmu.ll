@@ -562,6 +562,170 @@ define void @llpc.buffer.atomic.store.f32(
     ret void
 }
 
+; GLSL: uint64_t atomicAdd(inout uint64_t, uint64_t)
+;       int64_t  atomicAdd(inout int64_t, int64_t)
+define i64 @llpc.buffer.atomic.iadd.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: uint64_t atomicSub(inout uint64_t, uint64_t)
+;       int64_t  atomicSub(inout int64_t, int64_t)
+define i64 @llpc.buffer.atomic.isub.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: uint64_t atomicMin(inout uint64_t, uint64_t)
+define i64 @llpc.buffer.atomic.umin.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: int64_t atomicMin(inout int64_t, int64_t)
+define i64 @llpc.buffer.atomic.smin.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: uint64_t atomicMax(inout uint64_t, uint64_t)
+define i64 @llpc.buffer.atomic.umax.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: int64_t atomicMax(inout int64_t, int64_t)
+define i64 @llpc.buffer.atomic.smax.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: uint64_t atomicAnd(inout uint64_t, uint64_t)
+;       int64_t  atomicAnd(inout int64_t, int64_t)
+define i64 @llpc.buffer.atomic.and.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: uint64_t atomicOr(inout uint64_t, uint64_t)
+;       int64_t  atomicOr(inout int64_t, int64_t)
+define i64 @llpc.buffer.atomic.or.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: uint64_t atomicXor(inout uint64_t, uint64_t)
+;       int64_t  atomicXor(inout int64_t, int64_t)
+define i64 @llpc.buffer.atomic.xor.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: uint64_t atomicExchange(inout uint64_t, uint64_t)
+;       int64_t  atomicExchange(inout int64_t, int64_t)
+define i64 @llpc.buffer.atomic.exchange.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: uint64_t atomicCompSwap(inout uint64_t, uint64_t, uint64_t)
+;       int64_t  atomicCompSwap(inout int64_t, int64_t, int64_t)
+define i64 @llpc.buffer.atomic.compareexchange.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i64 %compare, i1 %slc) #0
+{
+    %desc = call <4 x i32> @llpc.descriptor.load.buffer(i32 %descSet, i32 %binding, i32 %blockOffset)
+    ; Support 64-bit buffer atomic operations.
+    ret i64 0
+}
+
+; GLSL: uint64_t atomicIncrement(inout uint64_t)
+;       int64_t  atomicIncrement(inout int64_t)
+define i64 @llpc.buffer.atomic.iincrement.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i1 %slc) #0
+{
+    %1 = call i64 @llpc.buffer.atomic.iadd.i64(i32 %descSet,
+                                               i32 %binding,
+                                               i32 %blockOffset,
+                                               i32 %memberOffset,
+                                               i64 1,
+                                               i1  %slc)
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicDecrement(inout uint64_t)
+;       int64_t  atomicDecrement(inout int64_t)
+define i64 @llpc.buffer.atomic.idecrement.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i1 %slc) #0
+{
+    %1 = call i64 @llpc.buffer.atomic.isub.i64(i32 %descSet,
+                                               i32 %binding,
+                                               i32 %blockOffset,
+                                               i32 %memberOffset,
+                                               i64 1,
+                                               i1  %slc)
+    ret i64 %1
+}
+
+; GLSL: uint64_t atomicLoad(inout uint64_t)
+;       int64_t  atomicLoad(inout int64_t)
+define i64 @llpc.buffer.atomic.load.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i1 %slc) #0
+{
+    %1 = call i64 @llpc.buffer.atomic.iadd.i64(i32 %descSet,
+                                               i32 %binding,
+                                               i32 %blockOffset,
+                                               i32 %memberOffset,
+                                               i64 0,
+                                               i1  %slc)
+    ret i64 %1
+}
+
+; GLSL: void atomicStore(inout uint64_t, uint64_t)
+;       void atomicStore(inout int64_t, int64_t)
+define void @llpc.buffer.atomic.store.i64(
+    i32 %descSet, i32 %binding, i32 %blockOffset, i32 %memberOffset, i64 %data, i1 %slc) #0
+{
+    %1 = call i64 @llpc.buffer.atomic.exchange.i64(i32 %descSet,
+                                                   i32 %binding,
+                                                   i32 %blockOffset,
+                                                   i32 %memberOffset,
+                                                   i64 %data,
+                                                   i1  %slc)
+    ; We do not care about the result returned by "exchange" operation. We just want to store the specified
+    ; data to the targeted buffer.
+    ret void
+}
+
 ; GLSL: int array.length()
 define i32 @llpc.buffer.arraylength(
     i32 %descSet, i32 %binding, i32 %blockOffset, i32 %arrayOffset, i32 %arrayStride) #0

@@ -172,7 +172,9 @@ VkResult InternalMemMgr::Init()
         // For shadow descriptor tables use a GPU-read-only CPU-visible pool with a corresponding VA range.
         // This ensures that the top 32 bits of shadow descriptor table addresses will be a known value to SC thus
         // it's enough to provide a 32-bit descriptor set address with the lower 32 bits through user data.
-        m_commonPoolProps[InternalPoolShadowDescriptorTable] = m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible];
+        m_commonPoolProps[InternalPoolShadowDescriptorTable].heapCount = 1;
+        m_commonPoolProps[InternalPoolShadowDescriptorTable].heaps[0]  = Pal::GpuHeapGartCacheable;
+
         m_commonPoolProps[InternalPoolShadowDescriptorTable].vaRange = Pal::VaRange::ShadowDescriptorTable;
 
         result = CalcSubAllocationPool(
@@ -798,11 +800,11 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                     {
                         palMemOffset += m_pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(localCreateInfo, &palResult);
                         VK_ASSERT(palResult == Pal::Result::Success);
-                    }
 
-                    // Add the newly created memory object to the residency list
-                    m_pDevice->AddMemReference(
-                        m_pDevice->PalDevice(deviceIdx), pGpuMemory->groupMemory.m_pPalMemory[deviceIdx], readOnly);
+                        // Add the newly created memory object to the residency list
+                        palResult = m_pDevice->AddMemReference(
+                            m_pDevice->PalDevice(deviceIdx), pGpuMemory->groupMemory.m_pPalMemory[deviceIdx], readOnly);
+                    }
                 }
             }
         }

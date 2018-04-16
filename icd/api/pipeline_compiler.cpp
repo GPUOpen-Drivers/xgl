@@ -212,6 +212,21 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     // Identify for Icd and stanalone compiler
     llpcOptions[numOptions++] = Llpc::VkIcdName;
 
+    // Enable shadow descriptor table
+    Pal::DeviceProperties info;
+    m_pPhysicalDevice->PalDevice()->GetProperties(&info);
+
+    llpcOptions[numOptions++] = "-enable-shadow-desc";
+    optionLength = Util::Snprintf(pOptionBuffer,
+                                  bufSize,
+                                  "-shadow-desc-table-ptr-high=%u",
+                                  static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32));
+
+    ++optionLength;
+    llpcOptions[numOptions++] = pOptionBuffer;
+    pOptionBuffer += optionLength;
+    bufSize       -= optionLength;
+
     // LLPC log options
     llpcOptions[numOptions++] = (settings.enableLog & 1) ? "-enable-errs=1" : "-enable-errs=0";
     llpcOptions[numOptions++] = (settings.enableLog & 2) ? "-enable-outs=1" : "-enable-outs=0";

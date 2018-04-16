@@ -693,7 +693,7 @@ void RenderPassLogger::LogExecuteInfo(
 
     Log("==== Execute End State:\n\n");
 
-    if (end.flags.hasEndSyncPoint)
+    if (end.syncEnd.flags.active)
     {
         LogExecuteRPSyncPoint(end.syncEnd, "syncEnd");
     }
@@ -707,9 +707,7 @@ void RenderPassLogger::LogExecuteRPBeginSubpass(
 
     const RPExecuteBeginSubpassInfo& begin = m_pExecute->pSubpasses[subpass].begin;
 
-    Log("Flags = 0x%x\n\n", begin.flags.u32All);
-
-    if (begin.flags.hasTopSyncPoint)
+    if (begin.syncTop.flags.active)
     {
         LogExecuteRPSyncPoint(begin.syncTop, "syncTop");
     }
@@ -789,9 +787,7 @@ void RenderPassLogger::LogExecuteRPEndSubpass(
 
     const RPExecuteEndSubpassInfo& end = m_pExecute->pSubpasses[subpass].end;
 
-    Log("Flags = 0x%x\n\n", end.flags.u32All);
-
-    if (end.flags.hasPreResolveSyncPoint)
+    if (end.syncPreResolve.flags.active)
     {
         LogExecuteRPSyncPoint(end.syncPreResolve, "syncPreResolve");
     }
@@ -801,7 +797,7 @@ void RenderPassLogger::LogExecuteRPEndSubpass(
         LogExecuteRPResolveAttachments(end.resolveCount, end.pResolves);
     }
 
-    if (end.flags.hasBottomSyncPoint)
+    if (end.syncBottom.flags.active)
     {
         LogExecuteRPSyncPoint(end.syncBottom, "syncBottom");
     }
@@ -839,11 +835,13 @@ void RenderPassLogger::LogExecuteRPSyncPoint(
     Log(    "    .dstStageMask  = "); LogPipelineStageMask(syncPoint.barrier.dstStageMask, false); Log("\n");
     Log(    "    .srcAccessMask = "); LogAccessMask(syncPoint.barrier.srcAccessMask, false); Log("\n");
     Log(    "    .dstAccessMask = "); LogAccessMask(syncPoint.barrier.dstAccessMask, false); Log("\n");
+    LogFlag("    .flags.needsGlobalTransition    = 1\n", syncPoint.barrier.flags.needsGlobalTransition);
     LogFlag("    .flags.implicitExternalIncoming = 1\n", syncPoint.barrier.flags.implicitExternalIncoming);
     LogFlag("    .flags.implicitExternalOutgoing = 1\n", syncPoint.barrier.flags.implicitExternalOutgoing);
     LogFlag("    .flags.preColorResolveSync      = 1\n", syncPoint.barrier.flags.preColorResolveSync);
     LogFlag("    .flags.preDsResolveSync         = 1\n", syncPoint.barrier.flags.preDsResolveSync);
     LogFlag("    .flags.postResolveSync          = 1\n", syncPoint.barrier.flags.postResolveSync);
+    LogFlag("    .flags.preColorClearSync        = 1\n", syncPoint.barrier.flags.preColorClearSync);
 
     for (uint32_t i = 0; i < syncPoint.transitionCount; ++i)
     {

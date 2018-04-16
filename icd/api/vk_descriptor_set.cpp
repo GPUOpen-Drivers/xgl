@@ -54,8 +54,7 @@ DescriptorSet::DescriptorSet(
     m_heapIndex(heapIndex),
     m_flags(flags)
 {
-    memset(m_gpuAddress, 0, sizeof(m_gpuAddress));
-    memset(m_pCpuAddress, 0, sizeof(m_pCpuAddress));
+    memset(m_addresses, 0, sizeof(m_addresses));
 }
 
 // =====================================================================================================================
@@ -74,8 +73,7 @@ VkResult DescriptorSet::Destroy(Device* pDevice)
 void DescriptorSet::Reassign(
     const DescriptorSetLayout*  pLayout,
     Pal::gpusize                gpuMemOffset,
-    Pal::gpusize*               gpuBaseAddress,
-    uint32_t**                  cpuBaseAddress,
+    DescriptorAddr*             pBaseAddrs,
     uint32_t                    numPalDevices,
     void*                       pAllocHandle)
 {
@@ -84,18 +82,21 @@ void DescriptorSet::Reassign(
 
     for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
     {
-        m_gpuAddress[deviceIdx] = gpuBaseAddress[deviceIdx] + gpuMemOffset;
-
         // When memory is assigned to this descriptor set let's cache its mapped CPU address as we anyways use
         // persistent mapped memory for descriptor pools.
-        m_pCpuAddress[deviceIdx] =
-            static_cast<uint32_t*>(Util::VoidPtrInc(cpuBaseAddress[deviceIdx], static_cast<intptr_t>(gpuMemOffset)));
-        VK_ASSERT(Util::IsPow2Aligned(reinterpret_cast<uint64_t>(m_pCpuAddress[deviceIdx]), sizeof(uint32_t)));
-    }
+        m_addresses[deviceIdx].staticCpuAddr = static_cast<uint32_t*>(Util::VoidPtrInc(pBaseAddrs[deviceIdx].staticCpuAddr, static_cast<intptr_t>(gpuMemOffset)));
+        VK_ASSERT(Util::IsPow2Aligned(reinterpret_cast<uint64_t>(m_addresses[deviceIdx].staticCpuAddr), sizeof(uint32_t)));
 
-    // In this case we also have to copy the immutable sampler data from the descriptor set layout to the
-    // descriptor set's appropriate memory locations.
-    InitImmutableDescriptors(pLayout, numPalDevices);
+        m_addresses[deviceIdx].staticGpuAddr = pBaseAddrs[deviceIdx].staticGpuAddr + gpuMemOffset;
+
+        if (pBaseAddrs[deviceIdx].fmaskCpuAddr != nullptr)
+        {
+            m_addresses[deviceIdx].fmaskGpuAddr = pBaseAddrs[deviceIdx].fmaskGpuAddr + gpuMemOffset;
+
+            m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(Util::VoidPtrInc(pBaseAddrs[deviceIdx].fmaskCpuAddr, static_cast<intptr_t>(gpuMemOffset)));
+            VK_ASSERT(Util::IsPow2Aligned(reinterpret_cast<uint64_t>(m_addresses[deviceIdx].fmaskCpuAddr), sizeof(uint32_t)));
+        }
+    }
 
 }
 
@@ -106,67 +107,7 @@ void DescriptorSet::Reset()
     m_pLayout = nullptr;
     m_pAllocHandle = nullptr;
 
-    memset(m_pCpuAddress, 0, sizeof(m_pCpuAddress));
-}
-
-// =====================================================================================================================
-// Initialize immutable descriptor data in the descriptor set.
-void DescriptorSet::InitImmutableDescriptors(
-    const DescriptorSetLayout*  pLayout,
-    uint32_t                    numPalDevices)
-{
-    VK_ASSERT(m_pLayout == pLayout);
-
-    uint32_t immutableSamplersLeft = pLayout->Info().imm.numImmutableSamplers;
-
-    if (immutableSamplersLeft > 0)
-    {
-        const size_t imageDescDwSize = pLayout->VkDevice()->GetProperties().descriptorSizes.imageView / sizeof(uint32_t);
-        const size_t samplerDescSize = pLayout->VkDevice()->GetProperties().descriptorSizes.sampler;
-
-        uint32_t binding = 0;
-
-        uint32_t* pSrcData  = pLayout->Info().imm.pImmutableSamplerData;
-
-        do
-        {
-            const DescriptorSetLayout::BindingInfo& bindingInfo = pLayout->Binding(binding);
-            uint32_t desCount = bindingInfo.info.descriptorCount;
-
-            if (bindingInfo.imm.dwSize > 0)
-            {
-                for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
-                {
-                    if (bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER)
-                    {
-                        // If it's a pure immutable sampler descriptor binding then we can copy all descriptors in one shot.
-                        memcpy(m_pCpuAddress[deviceIdx] + bindingInfo.sta.dwOffset,
-                                pSrcData  + bindingInfo.imm.dwOffset,
-                                bindingInfo.imm.dwSize * sizeof(uint32_t));
-                    }
-                    else
-                    {
-                        // Otherwise, if it's a combined image sampler descriptor with immutable sampler then we have to
-                        // copy each element individually because the source and destination strides don't match.
-                        VK_ASSERT(bindingInfo.info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-
-                        for (uint32_t i = 0; i < desCount; ++i)
-                        {
-                            memcpy(m_pCpuAddress[deviceIdx] + bindingInfo.sta.dwOffset +
-                                                                    (i * bindingInfo.sta.dwArrayStride) + imageDescDwSize,
-                                    pSrcData + bindingInfo.imm.dwOffset + (i * bindingInfo.imm.dwArrayStride),
-                                    samplerDescSize);
-                        }
-                    }
-                }
-                // Update the remaining number of immutable samplers to copy.
-                immutableSamplersLeft -= desCount;
-            }
-
-            binding++;
-        }
-        while (immutableSamplersLeft > 0);
-    }
+    memset(m_addresses, 0, sizeof(m_addresses));
 }
 
 // =====================================================================================================================
@@ -391,11 +332,11 @@ void DescriptorSet::WriteDescriptorSets(
 
         DescriptorSet* pDestSet  = DescriptorSet::ObjectFromHandle(params.dstSet);
         const DescriptorSetLayout::BindingInfo& destBinding = pDestSet->Layout()->Binding(params.dstBinding);
-        uint32_t* pDestAddr = pDestSet->CpuAddress(deviceIdx) +
+        uint32_t* pDestAddr = pDestSet->StaticCpuAddress(deviceIdx) +
                               pDestSet->Layout()->GetDstStaOffset(destBinding, params.dstArrayElement);
 
-        uint32_t* pDestFmaskAddr = pDestSet->CpuAddress(deviceIdx) +
-                                   pDestSet->Layout()->GetDstFmaskOffset(destBinding, params.dstArrayElement);
+        uint32_t* pDestFmaskAddr = pDestSet->FmaskCpuAddress(deviceIdx) +
+                                   pDestSet->Layout()->GetDstStaOffset(destBinding, params.dstArrayElement);
 
         // Determine whether the binding has immutable sampler descriptors.
         bool hasImmutableSampler = (destBinding.imm.dwSize != 0);
@@ -442,21 +383,30 @@ void DescriptorSet::WriteDescriptorSets(
                     descriptorStrideInBytes);
             }
 
-            if (pDestSet->FmaskBasedMsaaReadEnabled() && (destBinding.fmask.dwSize > 0))
+            if (pDestSet->FmaskBasedMsaaReadEnabled() && (destBinding.sta.dwSize > 0))
             {
-                WriteFmaskDescriptors<imageDescSize>(
-                    params.pImageInfo,
-                    deviceIdx,
-                    pDestFmaskAddr,
-                    params.descriptorCount,
-                    destBinding.fmask.dwArrayStride,
-                    descriptorStrideInBytes);
+                 WriteFmaskDescriptors<imageDescSize>(
+                     params.pImageInfo,
+                     deviceIdx,
+                     pDestFmaskAddr,
+                     params.descriptorCount,
+                     destBinding.sta.dwArrayStride,
+                     descriptorStrideInBytes);
             }
 
             break;
 
-        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
         case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            WriteImageDescriptors<imageDescSize>(
+                params.pImageInfo,
+                deviceIdx,
+                pDestAddr,
+                params.descriptorCount,
+                destBinding.sta.dwArrayStride,
+                descriptorStrideInBytes);
+            break;
+
+        case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
         case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
             WriteImageDescriptors<imageDescSize>(
                 params.pImageInfo,
@@ -466,14 +416,14 @@ void DescriptorSet::WriteDescriptorSets(
                 destBinding.sta.dwArrayStride,
                 descriptorStrideInBytes);
 
-            if (pDestSet->FmaskBasedMsaaReadEnabled() && (destBinding.fmask.dwSize > 0))
+            if (pDestSet->FmaskBasedMsaaReadEnabled() && (destBinding.sta.dwSize > 0))
             {
                 pDestSet->WriteFmaskDescriptors<imageDescSize>(
                     params.pImageInfo,
                     deviceIdx,
                     pDestFmaskAddr,
                     params.descriptorCount,
-                    destBinding.fmask.dwArrayStride,
+                    destBinding.sta.dwArrayStride,
                     descriptorStrideInBytes);
             }
             break;
@@ -615,10 +565,10 @@ void DescriptorSet::CopyDescriptorSets(
         }
         else
         {
-            uint32_t* pSrcAddr  = pSrcSet->CpuAddress(deviceIdx) + srcBinding.sta.dwOffset
+            uint32_t* pSrcAddr  = pSrcSet->StaticCpuAddress(deviceIdx) + srcBinding.sta.dwOffset
                                 + params.srcArrayElement * srcBinding.sta.dwArrayStride;
 
-            uint32_t* pDestAddr = pDestSet->CpuAddress(deviceIdx) + destBinding.sta.dwOffset
+            uint32_t* pDestAddr = pDestSet->StaticCpuAddress(deviceIdx) + destBinding.sta.dwOffset
                                 + params.dstArrayElement * destBinding.sta.dwArrayStride;
 
             // Source and destination strides are expected to match as only copies between the same type of descriptors
@@ -644,18 +594,20 @@ void DescriptorSet::CopyDescriptorSets(
                 memcpy(pDestAddr, pSrcAddr, srcBinding.sta.dwArrayStride * sizeof(uint32_t) * count);
             }
 
-            if (pSrcSet->FmaskBasedMsaaReadEnabled() && srcBinding.fmask.dwSize > 0)
+            if (pSrcSet->FmaskBasedMsaaReadEnabled() && srcBinding.sta.dwSize > 0)
             {
-                uint32_t* pSrcFmaskAddr  = pSrcSet->CpuAddress(deviceIdx) + pSrcSet->Layout()->Info().sta.dwSize
-                                         + srcBinding.fmask.dwOffset + params.srcArrayElement * srcBinding.fmask.dwArrayStride;
+                uint32_t* pSrcFmaskAddr = pSrcSet->FmaskCpuAddress(deviceIdx)
+                                        + srcBinding.sta.dwOffset
+                                        + (params.srcArrayElement * srcBinding.sta.dwArrayStride);
 
-                uint32_t* pDestFmaskAddr = pDestSet->CpuAddress(deviceIdx) + pDestSet->Layout()->Info().sta.dwSize
-                                         + destBinding.fmask.dwOffset + params.dstArrayElement * destBinding.fmask.dwArrayStride;
+                uint32_t* pDestFmaskAddr = pDestSet->FmaskCpuAddress(deviceIdx)
+                                         + destBinding.sta.dwOffset
+                                         + (params.dstArrayElement * destBinding.sta.dwArrayStride);
 
-                VK_ASSERT(srcBinding.fmask.dwArrayStride == destBinding.fmask.dwArrayStride);
+                VK_ASSERT(srcBinding.sta.dwArrayStride == destBinding.sta.dwArrayStride);
 
                 // Copy fmask descriptors covering the entire range
-                memcpy(pDestFmaskAddr, pSrcFmaskAddr, srcBinding.fmask.dwArrayStride * sizeof(uint32_t) * count);
+                memcpy(pDestFmaskAddr, pSrcFmaskAddr, srcBinding.sta.dwArrayStride * sizeof(uint32_t) * count);
             }
         }
     }

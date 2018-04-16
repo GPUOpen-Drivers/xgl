@@ -266,11 +266,18 @@ void SpirvLowerBufferOp::visitCallInst(
             }
         }
     }
-    else if ((mangledName.find("Atomic") != std::string::npos) && (mangledName.find("Pi") != std::string::npos))
+    else if ((mangledName.find("Atomic") != std::string::npos) &&
+             ((mangledName.find("Pi") != std::string::npos) ||
+              (mangledName.find("Pl") != std::string::npos)))
     {
         // Atomic call
         auto startPos = mangledName.find("Atomic");
         auto endPos = mangledName.find("Pi");
+        if (endPos == std::string::npos)
+        {
+            endPos = mangledName.find("Pl");
+            LLPC_ASSERT(endPos != std::string::npos);
+        }
 
         startPos += strlen("Atomic");
         std::string atomicOpName = mangledName.substr(startPos, endPos - startPos);
@@ -1216,7 +1223,7 @@ Value* SpirvLowerBufferOp::AddBufferAtomicInst(
 {
     LLPC_ASSERT(pDataTy->isIntegerTy() || pDataTy->isFloatingPointTy());
     const uint32_t bitWidth = pDataTy->getScalarSizeInBits();
-    LLPC_ASSERT(bitWidth == 32);
+    LLPC_ASSERT((bitWidth == 32) || (bitWidth == 64));
 
     Value* pAtomicValue = nullptr;
 

@@ -218,168 +218,168 @@ define half @llpc.fwidthCoarse.f16(half %p) #0
 define spir_func i16 @_Z20sub_group_reduce_adds(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t addInvocations(float16_t)
 define spir_func half @_Z20sub_group_reduce_addDh(half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t minInvocations(int16_t)
 define spir_func i16 @_Z20sub_group_reduce_mins(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: uint16_t minInvocations(uint16_t)
 define spir_func i16 @_Z20sub_group_reduce_mint(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t minInvocations(float16_t)
 define spir_func half @_Z20sub_group_reduce_minDh(half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t maxInvocations(int16_t)
 define spir_func i16 @_Z20sub_group_reduce_maxs(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: uint16_t maxInvocations(uint16_t)
 define spir_func i16 @_Z20sub_group_reduce_maxt(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t maxInvocations(float16_t)
 define spir_func half @_Z20sub_group_reduce_maxDh(half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t/uint16_t addInvocationsInclusiveScan(int16_t/uint16_t)
 define spir_func i16 @_Z28sub_group_scan_inclusive_adds(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t addInvocationsInclusiveScan(float16_t)
 define spir_func half @_Z28sub_group_scan_inclusive_addDh(half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t minInvocationsInclusive(int16_t)
 define spir_func i16 @_Z28sub_group_scan_inclusive_mins(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: uint16_t minInvocationsInclusive(uint16_t)
 define spir_func i16 @_Z28sub_group_scan_inclusive_mint(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t minInvocationsInclusive(float16_t)
 define spir_func half @_Z28sub_group_scan_inclusive_minDh(half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t maxInvocationsInclusive(int16_t)
 define spir_func i16 @_Z28sub_group_scan_inclusive_maxs(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: uint16_t maxInvocationsInclusive(uint16_t)
 define spir_func i16 @_Z28sub_group_scan_inclusive_maxt(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t maxInvocationsInclusive(float16_t)
 define spir_func half @_Z28sub_group_scan_inclusive_maxDh(half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t/uint16_t addInvocationsExclusiveScan(int16_t/uint16_t)
 define spir_func i16 @_Z28sub_group_scan_exclusive_adds(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t addInvocationsExclusiveScan(float16_t)
 define spir_func half @_Z28sub_group_scan_exclusive_addDh(half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t minInvocationsExclusive(int16_t)
 define spir_func i16 @_Z28sub_group_scan_exclusive_mins(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: uint16_t minInvocationsExclusive(uint16_t)
 define spir_func i16 @_Z28sub_group_scan_exclusive_mint(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t minInvocationsExclusive(float16_t)
 define spir_func half @_Z28sub_group_scan_exclusive_minDh(half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t maxInvocationsExclusive(int16_t)
 define spir_func i16 @_Z28sub_group_scan_exclusive_maxs(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: uint16_t maxInvocationsExclusive(uint16_t)
 define spir_func i16 @_Z28sub_group_scan_exclusive_maxt(i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t maxInvocationsExclusive(float16_t)
 define spir_func half @_Z28sub_group_scan_exclusive_maxDh(half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t/uint16_t addInvocationsNonUniform(int16_t/uint16_t)
@@ -388,7 +388,7 @@ define spir_func half @_Z28sub_group_scan_exclusive_maxDh(half %value)
 define spir_func i16 @_Z22GroupIAddNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t addInvocationsNonUniform(float16_t)
@@ -397,7 +397,7 @@ define spir_func i16 @_Z22GroupIAddNonUniformAMDiis(i32 %scope, i32 %groupOp, i1
 define spir_func half @_Z22GroupFAddNonUniformAMDiiDh(i32 %scope, i32 %groupOp, half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t minInvocationsNonUniform(int16_t)
@@ -406,7 +406,7 @@ define spir_func half @_Z22GroupFAddNonUniformAMDiiDh(i32 %scope, i32 %groupOp, 
 define spir_func i16 @_Z22GroupSMinNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: uint16_t minInvocationsNonUniform(uint16_t)
@@ -415,7 +415,7 @@ define spir_func i16 @_Z22GroupSMinNonUniformAMDiis(i32 %scope, i32 %groupOp, i1
 define spir_func i16 @_Z22GroupUMinNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t minInvocationsNonUniform(float16_t)
@@ -424,7 +424,7 @@ define spir_func i16 @_Z22GroupUMinNonUniformAMDiis(i32 %scope, i32 %groupOp, i1
 define spir_func half @_Z22GroupFMinNonUniformAMDiiDh(i32 %scope, i32 %groupOp, half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; GLSL: int16_t maxInvocationsNonUniform(int16_t)
@@ -433,7 +433,7 @@ define spir_func half @_Z22GroupFMinNonUniformAMDiiDh(i32 %scope, i32 %groupOp, 
 define spir_func i16 @_Z22GroupSMaxNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: uint16_t maxInvocationsNonUniform(uint16_t)
@@ -442,7 +442,7 @@ define spir_func i16 @_Z22GroupSMaxNonUniformAMDiis(i32 %scope, i32 %groupOp, i1
 define spir_func i16 @_Z22GroupUMaxNonUniformAMDiis(i32 %scope, i32 %groupOp, i16 %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret i16 undef
+    ret i16 0
 }
 
 ; GLSL: float16_t maxInvocationsNonUniform(float16_t)
@@ -451,7 +451,7 @@ define spir_func i16 @_Z22GroupUMaxNonUniformAMDiis(i32 %scope, i32 %groupOp, i1
 define spir_func half @_Z22GroupFMaxNonUniformAMDiiDh(i32 %scope, i32 %groupOp, half %value)
 {
     ; TODO: Support 16-bit subgroup arithmetic operations.
-    ret half undef
+    ret half 0.0
 }
 
 ; =====================================================================================================================

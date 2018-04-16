@@ -359,10 +359,17 @@ Pal::Result RenderPassBuilder::BuildSubpass(
         result = BuildResolveAttachmentReferences(subpass);
     }
 
+    // If we are clearing more than one color target, then we won't auto-sync (it ends up being slower and causing
+    // back-to-back syncs under the current implementation).  This means we need to manually pre-sync also.
+    if (pSubpass->colorClears.NumElements() > 1)
+    {
+        pSubpass->syncTop.barrier.flags.preColorClearSync = 1;
+    }
+
     // Pre-calculate a master flag for whether this subpass's sync points are active based on what was added to them.
-    pSubpass->beginFlags.hasTopSyncPoint      = IsSyncPointActive(pSubpass->syncTop);
-    pSubpass->endFlags.hasPreResolveSyncPoint = IsSyncPointActive(pSubpass->syncPreResolve);
-    pSubpass->endFlags.hasBottomSyncPoint     = IsSyncPointActive(pSubpass->syncBottom);
+    PostProcessSyncPoint(&pSubpass->syncTop);
+    PostProcessSyncPoint(&pSubpass->syncPreResolve);
+    PostProcessSyncPoint(&pSubpass->syncBottom);
 
     return result;
 }
@@ -643,32 +650,126 @@ Pal::Result RenderPassBuilder::BuildEndState()
             &m_endState.syncEnd);
     }
 
-    // Figure out if we need to care about the end-instance state.
-    m_endState.flags.hasEndSyncPoint = IsSyncPointActive(m_endState.syncEnd);
+    PostProcessSyncPoint(&m_endState.syncEnd);
 
     return result;
 }
 
 // =====================================================================================================================
-// This function decides whether a sync point needs to actually execute any commands or if it's an empty sync point
-// that can be skipped.
-bool RenderPassBuilder::IsSyncPointActive(
-    const SyncPointState& syncPoint
-    ) const
+static void IncludePipePoint(
+    RPBarrierInfo*   pBarrier,
+    Pal::HwPipePoint point)
 {
-    bool active = false;
-
-    if (syncPoint.barrier.srcAccessMask != 0 ||
-        syncPoint.barrier.dstAccessMask != 0 ||
-        syncPoint.barrier.srcStageMask != 0 ||
-        syncPoint.barrier.dstStageMask != 0 ||
-        syncPoint.transitions.NumElements() > 0 ||
-        syncPoint.barrier.flags.u32All != 0)
+    if (point == Pal::HwPipeBottom)
     {
-        active = true;
+        pBarrier->pipePointCount = 1;
+        memset(pBarrier->pipePoints, 0, sizeof(pBarrier->pipePoints));
+        pBarrier->pipePoints[0]  = Pal::HwPipeBottom;
+    }
+    else if ((pBarrier->pipePointCount == 0) ||
+             (pBarrier->pipePoints[0] != Pal::HwPipeBottom))
+    {
+        bool seen = false;
+
+        for (uint32_t i = 0; (i < pBarrier->pipePointCount) && (seen == false); ++i)
+        {
+            if (pBarrier->pipePoints[i] == point)
+            {
+                seen = true;
+            }
+        }
+
+        if (seen == false)
+        {
+            VK_ASSERT(pBarrier->pipePointCount < VK_ARRAY_SIZE(pBarrier->pipePoints));
+
+            pBarrier->pipePoints[pBarrier->pipePointCount++] = point;
+        }
+    }
+}
+
+// =====================================================================================================================
+static void IncludeWaitPoint(
+    RPBarrierInfo*   pBarrier,
+    Pal::HwPipePoint point)
+{
+    if (point < pBarrier->waitPoint)
+    {
+        pBarrier->waitPoint = point;
+    }
+}
+
+// =====================================================================================================================
+static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
+{
+    pBarrier->implicitSrcCacheMask = 0;
+    pBarrier->implicitDstCacheMask = 0;
+
+    // Similarly augment the waiting if we need to wait for prior color rendering to finish
+    if (pBarrier->flags.preColorResolveSync ||
+        pBarrier->flags.preDsResolveSync)
+    {
+        // If we're waiting prior a resolve, make sure the wait point waits early enough.
+        IncludePipePoint(pBarrier, Pal::HwPipeBottom);
+        IncludeWaitPoint(pBarrier, Pal::HwPipePreBlt);
+
+        pBarrier->implicitSrcCacheMask |= pBarrier->flags.preColorResolveSync ?
+                                          Pal::CoherColorTarget :
+                                          Pal::CoherDepthStencilTarget;
+        pBarrier->implicitDstCacheMask |= Pal::CoherResolve;
     }
 
-    return active;
+    // Wait for (non-auto-synced) pre-clear if necessary.  No need to augment the pipe point because the prior work falls
+    // under subpass dependency, but we may need to move the wait point forward to cover blts.
+    if (pBarrier->flags.preColorClearSync)
+    {
+        IncludeWaitPoint(pBarrier, Pal::HwPipePreBlt);
+
+        pBarrier->implicitDstCacheMask |= Pal::CoherClear;
+    }
+
+    // Augment the active source pipeline stages for resolves if we need to wait for prior resolves to complete
+    if (pBarrier->flags.postResolveSync)
+    {
+        IncludePipePoint(pBarrier, Pal::HwPipePostBlt);
+        IncludeWaitPoint(pBarrier, Pal::HwPipeTop);
+
+        pBarrier->implicitSrcCacheMask |= Pal::CoherResolve;
+    }
+}
+
+// =====================================================================================================================
+// This function decides whether a sync point needs to actually execute any commands or if it's an empty sync point
+// that can be skipped.
+void RenderPassBuilder::PostProcessSyncPoint(
+    SyncPointState* pSyncPoint)
+{
+    // Convert subpass dependency execution scope to PAL pipe/wait point
+    pSyncPoint->barrier.waitPoint = VkToPalWaitPipePoint(pSyncPoint->barrier.dstStageMask);
+
+    pSyncPoint->barrier.pipePointCount = VkToPalSrcPipePoints(pSyncPoint->barrier.srcStageMask,
+                                                              pSyncPoint->barrier.pipePoints);
+
+    // Include implicit waiting and cache access
+    ConvertImplicitSyncs(&pSyncPoint->barrier);
+
+    // Need a global cache transition if any of the sync flags are set or if there's an app
+    // subpass dependency that requires cache synchronization.
+    if (pSyncPoint->barrier.srcAccessMask != 0 ||
+        pSyncPoint->barrier.dstAccessMask != 0 ||
+        pSyncPoint->barrier.implicitSrcCacheMask != 0 ||
+        pSyncPoint->barrier.implicitDstCacheMask != 0)
+    {
+        pSyncPoint->barrier.flags.needsGlobalTransition = 1;
+    }
+
+    // The barrier is active if it does any waiting or global cache synchronization or attachment transitions
+    if (pSyncPoint->barrier.pipePointCount > 0 ||
+        pSyncPoint->barrier.flags.needsGlobalTransition ||
+        pSyncPoint->transitions.NumElements() > 0)
+    {
+        pSyncPoint->flags.active = 1;
+    }
 }
 
 // =====================================================================================================================
@@ -974,9 +1075,6 @@ RenderPassBuilder::SubpassState::SubpassState(
     hasExternalIncoming(false),
     hasExternalOutgoing(false)
 {
-    beginFlags.u32All = 0;
-    endFlags.u32All   = 0;
-
     memset(&bindTargets, 0, sizeof(bindTargets));
 }
 
@@ -1050,8 +1148,6 @@ void* RenderPassBuilder::SubpassState::Finalize(
 
     auto* pBegin = &pSubpass->begin;
 
-    pBegin->flags = beginFlags;
-
     pStorage = syncTop.Finalize(pStorage, &pBegin->syncTop);
 
     pStorage = AssignArray(colorClears.NumElements(), pStorage,
@@ -1077,8 +1173,6 @@ void* RenderPassBuilder::SubpassState::Finalize(
     pBegin->bindTargets = bindTargets;
 
     auto* pEnd = &pSubpass->end;
-
-    pEnd->flags = endFlags;
 
     pStorage = syncPreResolve.Finalize(pStorage, &pEnd->syncPreResolve);
 
@@ -1112,6 +1206,8 @@ RenderPassBuilder::SyncPointState::SyncPointState(
     :
     transitions(pArena)
 {
+    flags.u32All = 0;
+
     memset(&barrier, 0, sizeof(barrier));
 }
 
@@ -1132,6 +1228,7 @@ void* RenderPassBuilder::SyncPointState::Finalize(
     RPSyncPointInfo* pSyncPoint
     ) const
 {
+    pSyncPoint->flags   = flags;
     pSyncPoint->barrier = barrier;
 
     pStorage = AssignArray(transitions.NumElements(), pStorage, &pSyncPoint->transitionCount,
@@ -1153,7 +1250,7 @@ RenderPassBuilder::EndState::EndState(
     :
     syncEnd(pArena)
 {
-    flags.u32All = 0;
+
 }
 
 // =====================================================================================================================
@@ -1172,8 +1269,6 @@ void* RenderPassBuilder::EndState::Finalize(
     RPExecuteEndRenderPassInfo* pEndState
     ) const
 {
-    pEndState->flags = flags;
-
     pStorage = syncEnd.Finalize(pStorage, &pEndState->syncEnd);
 
     return pStorage;

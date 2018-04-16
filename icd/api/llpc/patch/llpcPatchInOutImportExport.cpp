@@ -1485,7 +1485,7 @@ void PatchInOutImportExport::visitReturnInst(
 
             args.clear();
             args.push_back(ConstantInt::get(m_pContext->Int32Ty(), EXP_TARGET_Z));  // tgt
-            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), channelMask));           // en
+            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), channelMask));   // en
 
             // src0 ~ src3
             args.push_back(pFragDepth);
@@ -1494,7 +1494,7 @@ void PatchInOutImportExport::visitReturnInst(
             args.push_back(pUndef);
 
             args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // done
-            args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // vm
+            args.push_back(ConstantInt::get(m_pContext->BoolTy(), true));   // vm
 
             m_pLastExport = cast<CallInst>(
                 EmitCall(m_pModule, "llvm.amdgcn.exp.f32", m_pContext->VoidTy(), args, NoAttrib, pInsertPos));
@@ -4001,7 +4001,7 @@ void PatchInOutImportExport::PatchFsBuiltInOutputExport(
                 args.push_back(pUndef);
 
                 args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // done
-                args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // vm
+                args.push_back(ConstantInt::get(m_pContext->BoolTy(), true));   // vm
 
                 // "Done" flag is valid for exporting MRT
                 m_pLastExport = cast<CallInst>(
@@ -4036,7 +4036,7 @@ void PatchInOutImportExport::PatchFsBuiltInOutputExport(
                 args.push_back(pUndef);
 
                 args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // done
-                args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // vm
+                args.push_back(ConstantInt::get(m_pContext->BoolTy(), true));   // vm
 
                 // "Done" flag is valid for exporting MRT
                 m_pLastExport = cast<CallInst>(
@@ -4064,7 +4064,7 @@ void PatchInOutImportExport::PatchFsBuiltInOutputExport(
                 args.push_back(pUndef);
 
                 args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // done
-                args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // vm
+                args.push_back(ConstantInt::get(m_pContext->BoolTy(), true));   // vm
 
                 // "Done" flag is valid for exporting MRT
                 m_pLastExport = cast<CallInst>(

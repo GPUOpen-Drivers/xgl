@@ -2970,14 +2970,14 @@ define spir_func float @_Z20sub_group_reduce_addf(float %value)
 define spir_func double @_Z20sub_group_reduce_addd(double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t/uint64_t addInvocations(int64_t/uint64_t)
 define spir_func i64 @_Z20sub_group_reduce_addl(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int minInvocations(int)
@@ -3008,21 +3008,21 @@ define spir_func float @_Z20sub_group_reduce_minf(float %value)
 define spir_func double @_Z20sub_group_reduce_mind(double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t minInvocations(int64_t)
 define spir_func i64 @_Z20sub_group_reduce_minl(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: uint64_t minInvocations(uint64_t)
 define spir_func i64 @_Z20sub_group_reduce_minm(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int maxInvocations(int)
@@ -3053,21 +3053,21 @@ define spir_func float @_Z20sub_group_reduce_maxf(float %value)
 define spir_func double @_Z20sub_group_reduce_maxd(double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t maxInvocations(int64_t)
 define spir_func i64 @_Z20sub_group_reduce_maxl(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: uint64_t maxInvocations(uint64_t)
 define spir_func i64 @_Z20sub_group_reduce_maxm(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int/uint addInvocationsInclusiveScan(int/uint)
@@ -3090,14 +3090,14 @@ define spir_func float @_Z28sub_group_scan_inclusive_addf(float %value)
 define spir_func double @_Z28sub_group_scan_inclusive_addd(double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t/uint64_t addInvocationsInclusiveScan(int64_t/uint64_t)
 define spir_func i64 @_Z28sub_group_scan_inclusive_addl(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int minInvocationsInclusiveScan(int)
@@ -3128,21 +3128,21 @@ define spir_func float @_Z28sub_group_scan_inclusive_minf(float %value)
 define spir_func double @_Z28sub_group_scan_inclusive_mind(double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t minInvocationsInclusiveScan(int64_t)
 define spir_func i64 @_Z28sub_group_scan_inclusive_minl(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: uint64_t minInvocationsInclusiveScan(uint64_t)
 define spir_func i64 @_Z28sub_group_scan_inclusive_minm(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int maxInvocationsInclusiveScan(int)
@@ -3173,21 +3173,21 @@ define spir_func float @_Z28sub_group_scan_inclusive_maxf(float %value)
 define spir_func double @_Z28sub_group_scan_inclusive_maxd(double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t maxInvocationsInclusiveScan(int64_t)
 define spir_func i64 @_Z28sub_group_scan_inclusive_maxl(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: uint64_t maxInvocationsInclusiveScan(uint64_t)
 define spir_func i64 @_Z28sub_group_scan_inclusive_maxm(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int/uint addInvocationsExclusiveScan(int/uint)
@@ -3210,14 +3210,14 @@ define spir_func float @_Z28sub_group_scan_exclusive_addf(float %value)
 define spir_func double @_Z28sub_group_scan_exclusive_addd(double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t/uint64_t addInvocationsExclusiveScan(int64_t/uint64_t)
 define spir_func i64 @_Z28sub_group_scan_exclusive_addl(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int minInvocationsExclusiveScan(int)
@@ -3248,21 +3248,21 @@ define spir_func float @_Z28sub_group_scan_exclusive_minf(float %value)
 define spir_func double @_Z28sub_group_scan_exclusive_mind(double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t minInvocationsExclusiveScan(int64_t)
 define spir_func i64 @_Z28sub_group_scan_exclusive_minl(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: uint64_t minInvocationsExclusiveScan(uint64_t)
 define spir_func i64 @_Z28sub_group_scan_exclusive_minm(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int maxInvocationsExclusiveScan(int)
@@ -3293,21 +3293,21 @@ define spir_func float @_Z28sub_group_scan_exclusive_maxf(float %value)
 define spir_func double @_Z28sub_group_scan_exclusive_maxd(double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t maxInvocationsExclusiveScan(int64_t)
 define spir_func i64 @_Z28sub_group_scan_exclusive_maxl(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: uint64_t maxInvocationsExclusiveScan(uint64_t)
 define spir_func i64 @_Z28sub_group_scan_exclusive_maxm(i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int/uint addInvocationsNonUniform(int/uint)
@@ -3334,7 +3334,7 @@ define spir_func float @_Z22GroupFAddNonUniformAMDiif(i32 %scope, i32 %groupOp, 
 define spir_func double @_Z22GroupFAddNonUniformAMDiid(i32 %scope, i32 %groupOp, double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t/uint64_t addInvocationsNonUniform(int64_t/uint64_t)
@@ -3343,7 +3343,7 @@ define spir_func double @_Z22GroupFAddNonUniformAMDiid(i32 %scope, i32 %groupOp,
 define spir_func i64 @_Z22GroupIAddNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int minInvocationsNonUniform(int)
@@ -3379,7 +3379,7 @@ define spir_func float @_Z22GroupFMinNonUniformAMDiif(i32 %scope, i32 %groupOp, 
 define spir_func double @_Z22GroupFMinNonUniformAMDiid(i32 %scope, i32 %groupOp, double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t minInvocationsNonUniform(int64_t)
@@ -3388,7 +3388,7 @@ define spir_func double @_Z22GroupFMinNonUniformAMDiid(i32 %scope, i32 %groupOp,
 define spir_func i64 @_Z22GroupSMinNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: uint64_t minInvocationsNonUniform(uint64_t)
@@ -3397,7 +3397,7 @@ define spir_func i64 @_Z22GroupSMinNonUniformAMDiil(i32 %scope, i32 %groupOp, i6
 define spir_func i64 @_Z22GroupUMinNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int maxInvocationsNonUniform(int)
@@ -3433,7 +3433,7 @@ define spir_func float @_Z22GroupFMaxNonUniformAMDiif(i32 %scope, i32 %groupOp, 
 define spir_func double @_Z22GroupFMaxNonUniformAMDiid(i32 %scope, i32 %groupOp, double %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double undef
+    ret double 0.0
 }
 
 ; GLSL: int64_t minInvocationsNonUniform(int64_t)
@@ -3442,7 +3442,7 @@ define spir_func double @_Z22GroupFMaxNonUniformAMDiid(i32 %scope, i32 %groupOp,
 define spir_func i64 @_Z22GroupSMaxNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: uint64_t minInvocationsNonUniform(uint64_t)
@@ -3451,7 +3451,7 @@ define spir_func i64 @_Z22GroupSMaxNonUniformAMDiil(i32 %scope, i32 %groupOp, i6
 define spir_func i64 @_Z22GroupUMaxNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
 {
     ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 undef
+    ret i64 0
 }
 
 ; GLSL: int/uint swizzleInvocations(int/uint, uvec4)

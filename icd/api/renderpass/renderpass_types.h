@@ -110,26 +110,48 @@ struct RPBarrierInfo
     VkPipelineStageFlags dstStageMask;
     VkAccessFlags        srcAccessMask;
     VkAccessFlags        dstAccessMask;
+    Pal::HwPipePoint     waitPoint;
+    uint32_t             pipePointCount;
+    Pal::HwPipePoint     pipePoints[MaxHwPipePoints];
+    uint32_t             implicitSrcCacheMask;
+    uint32_t             implicitDstCacheMask;
 
     union
     {
         struct
         {
+            uint32_t needsGlobalTransition    : 1; // True if the barrier needs a global (non-attachment) barrier
+                                                   // transition during execution.  This is a master bit that is
+                                                   // calculated from the more precise sync needs of this barrier.
             uint32_t implicitExternalIncoming : 1; // Hint that this barrier includes an implicit incoming subpass
                                                    // dependency because no explicit external subpass dependency was
                                                    // provided, per spec-rules.
             uint32_t implicitExternalOutgoing : 1; // Hint that this barrier includes an implicit incoming subpass
                                                    // dependency because no explicit external subpass dependency was
                                                    // provided, per spec-rules.
+
             uint32_t preColorResolveSync      : 1; // Barrier needs to synchronize prior color writes against an
                                                    // impending color resolve.
             uint32_t preDsResolveSync         : 1; // Barrier needs to synchronize against prior depth-stencil writes
                                                    // against an impending depth-stencil resolve.
             uint32_t postResolveSync          : 1; // Barrier needs to synchronize against a prior resolve operation.
-            uint32_t reserved                 : 27;
+            uint32_t preColorClearSync        : 1; // Barrier needs to synchronize before an impending load-op color
+                                                   // clear.
+
+            uint32_t reserved                 : 25;
         };
         uint32_t u32All;
     } flags;
+};
+
+union RPSyncPointFlags
+{
+    struct
+    {
+        uint32_t active   : 1;  // True if this sync point needs to be handled
+        uint32_t reserved : 31;
+    };
+    uint32_t u32All;
 };
 
 // This is a render pass "synchronization point" that mainly translates to a barrier.  Any synchronization across
@@ -137,9 +159,10 @@ struct RPBarrierInfo
 // point.  Also any layout transitions are executed within a synchronization point.
 struct RPSyncPointInfo
 {
-    RPBarrierInfo     barrier;
-    uint32_t          transitionCount;
-    RPTransitionInfo* pTransitions;
+    RPBarrierInfo      barrier;
+    RPSyncPointFlags   flags;
+    uint32_t           transitionCount;
+    RPTransitionInfo*  pTransitions;
 };
 
 // Describes steps that need to be done during the "beginning" of a subpass i.e. during RPBeginSubpass().
@@ -147,18 +170,6 @@ struct RPSyncPointInfo
 // The operations are executed more or less in the order they appear in this structure.
 struct RPExecuteBeginSubpassInfo
 {
-    union Flags
-    {
-        struct
-        {
-            uint32_t hasTopSyncPoint : 1;  // True of syncTop needs to be handled.
-            uint32_t reserved        : 31;
-        };
-        uint32_t u32All;
-    };
-
-    Flags                  flags;
-
     // Synchronization happening at the top of a subpass (before any clears)
     RPSyncPointInfo        syncTop;
 
@@ -183,19 +194,6 @@ struct RPExecuteBeginSubpassInfo
 // The operations are executed more or less in the order they appear in this structure.
 struct RPExecuteEndSubpassInfo
 {
-    union Flags
-    {
-        struct
-        {
-            uint32_t hasPreResolveSyncPoint : 1; // If true, syncPreResolve needs to be executed.
-            uint32_t hasBottomSyncPoint     : 1; // If true, syncBottom needs to be executed.
-            uint32_t reserved               : 30;
-        };
-        uint32_t u32All;
-    };
-
-    Flags              flags;
-
     // Synchronization happening after subpass rendering, but prior to any resolves
     RPSyncPointInfo    syncPreResolve;
 
@@ -221,17 +219,6 @@ struct RPExecuteSubpassInfo
 // Executed during vkCmdEndRenderPass().
 struct RPExecuteEndRenderPassInfo
 {
-    union Flags
-    {
-        struct
-        {
-            uint32_t hasEndSyncPoint : 1;  // If true, syncEnd is valid.
-            uint32_t reserved        : 31;
-        };
-        uint32_t u32All;
-    };
-
-    Flags                flags;
     RPSyncPointInfo      syncEnd; // Synchronization that needs to be done during the end of a render pass instance.
 };
 

@@ -842,6 +842,8 @@ private:
     void RPLoadOpClearColor(uint32_t count, const RPLoadOpClearInfo* pClears);
     void RPLoadOpClearDepthStencil(uint32_t count, const RPLoadOpClearInfo* pClears);
     void RPBindTargets(const RPBindTargetsInfo& targets);
+    void RPSyncPostLoadOpColorClear();
+
     void RPInitSamplePattern();
 
     VK_INLINE Pal::ImageLayout RPGetAttachmentLayout(uint32_t attachment, Pal::ImageAspect aspect);

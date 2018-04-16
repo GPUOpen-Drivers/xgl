@@ -138,8 +138,11 @@ VkResult PipelineLayout::ConvertCreateInfo(
             // Accumulate the space needed by all resource nodes for this set
             pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
 
-            // Accumulate the space needed by all fmask resource nodes for this set
-            pPipelineInfo->numRsrcMapNodes += setLayoutInfo.fmask.numRsrcMapNodes;
+            // Add count for FMASK nodes
+            if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+            {
+                pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
+            }
 
             // Add space for the user data node entries needed for dynamic descriptors
             pPipelineInfo->numUserDataNodes += setLayoutInfo.dyn.numRsrcMapNodes + 1;
@@ -333,13 +336,15 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
             pNode->srdRange.set        = setIndex;
             (*pStaNodeCount)++;
 
-            if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (binding.fmask.dwSize > 0))
+            if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (binding.sta.dwSize > 0))
             {
-                // If the binding has a fmask section then add a fmask static section node for it.
+                // If the binding has a sta section then add a shadow fmask static section node for it.
                 pNode++;
                 pNode->type             = Llpc::ResourceMappingNodeType::DescriptorFmask;
-                pNode->offsetInDwords   = pLayout->Info().sta.dwSize + binding.fmask.dwOffset;
-                pNode->sizeInDwords     = binding.fmask.dwSize;
+                pNode->offsetInDwords   = binding.sta.dwOffset;
+                pNode->sizeInDwords     = binding.info.descriptorCount *
+                                          (m_pDevice->GetProperties().descriptorSizes.fmaskView / sizeof(uint32_t));
+
                 pNode->srdRange.binding = binding.info.binding;
                 pNode->srdRange.set     = setIndex;
                 (*pStaNodeCount)++;

@@ -34,7 +34,7 @@
 #include "include/vk_conv.h"
 #include "include/vk_utils.h"
 
-#include "palListImpl.h"
+#include "palIntrusiveListImpl.h"
 
 namespace vk
 {
@@ -44,8 +44,7 @@ constexpr size_t MaxVirtualStackSize = 256 * 1024;  // 256 kilobytes
 // =====================================================================================================================
 VirtualStackMgr::VirtualStackMgr(
     Instance* pInstance)
-  : m_pInstance(pInstance),
-    m_stackList(pInstance->Allocator())
+  : m_pInstance(pInstance)
 {
 }
 
@@ -101,15 +100,15 @@ Pal::Result VirtualStackMgr::Init()
 void VirtualStackMgr::Destroy()
 {
     // Release all virtual stack allocators
-    while (m_stackList.NumElements() > 0)
+    while (m_stackList.IsEmpty() == false)
     {
         auto iter = m_stackList.Begin();
 
-        VirtualStackAllocator* pAllocator = *iter.Get();
-
-        PAL_DELETE(pAllocator, m_pInstance->Allocator());
+        VirtualStackAllocator* pAllocator = iter.Get();
 
         m_stackList.Erase(&iter);
+
+        PAL_DELETE(pAllocator, m_pInstance->Allocator());
     }
 
     // Free the memory used by the object
@@ -127,12 +126,12 @@ Pal::Result VirtualStackMgr::AcquireAllocator(
     Pal::Result palResult = Pal::Result::Success;
 
     // Reuse an existing allocator if possible; otherwise create a new one
-    if (m_stackList.NumElements() > 0)
+    if (m_stackList.IsEmpty() == false)
     {
         auto iter = m_stackList.Begin();
 
         // Just return the first available stack allocator
-        *ppAllocator = *iter.Get();
+        *ppAllocator = iter.Get();
 
         // Remove the selected stack allocator from the list of the available ones
         m_stackList.Erase(&iter);
@@ -179,10 +178,7 @@ void VirtualStackMgr::ReleaseAllocator(
     VK_ASSERT(pAllocator != nullptr);
 
     // Simply put the allocator to the front of the list of available stack allocators
-    if (m_stackList.PushFront(pAllocator) != Pal::Result::Success)
-    {
-        PAL_DELETE(pAllocator, m_pInstance->Allocator());
-    }
+    m_stackList.PushFront(pAllocator->GetNode());
 }
 
 } // namespace vk

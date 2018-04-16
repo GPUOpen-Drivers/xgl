@@ -326,6 +326,24 @@ VkResult SwapChain::Create(
                 &properties.imageMemory[properties.imageCount]);
         }
 
+        if (result == VK_SUCCESS)
+        {
+            palResult = Pal::Result::Success;
+
+            // Add memory references to presentable image memory
+            for (uint32_t deviceIdx = 0;
+                (deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
+                 deviceIdx++)
+            {
+                palResult = pDevice->AddMemReference(
+                    pDevice->PalDevice(deviceIdx),
+                    Memory::ObjectFromHandle(properties.imageMemory[properties.imageCount])->PalMemory(deviceIdx),
+                    false);
+            }
+
+            result = PalToVkResult(palResult);
+        }
+
         if (result != VK_SUCCESS)
         {
             break;
@@ -352,20 +370,9 @@ VkResult SwapChain::Create(
 
         for (uint32_t i = 0; i < properties.imageCount; ++i)
         {
-            // Add memory references to presentable image memory
-            for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-            {
-                pDevice->AddMemReference(
-                    pDevice->PalDevice(deviceIdx),
-                    Memory::ObjectFromHandle(properties.imageMemory[i])->PalMemory(deviceIdx),
-                    false);
-            }
-
             // Register presentable images with the swap chain
             Image::ObjectFromHandle(properties.images[i])->RegisterPresentableImageWithSwapChain(pObject);
         }
-
-        result = VK_SUCCESS;
     }
     else
     {
