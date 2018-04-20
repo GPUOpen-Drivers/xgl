@@ -114,7 +114,7 @@ VkResult ComputePipeline::Create(
     const void* pPipelineBinaries[MaxPalDevices]   = {};
     PipelineCompiler*   pDefaultCompiler = pDevice->GetCompiler();
     PipelineCompiler::ComputePipelineCreateInfo binaryCreateInfo = {};
-    VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(pCreateInfo, &binaryCreateInfo);
+    VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo);
 
     for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < pDevice->NumPalDevices()); deviceIdx++)
     {

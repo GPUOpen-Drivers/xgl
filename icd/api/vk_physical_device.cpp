@@ -2467,6 +2467,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_RASTERIZATION_ORDER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_TRINARY_MINMAX));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_EXPLICIT_VERTEX_PARAMETER));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GCN_SHADER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DRAW_INDIRECT_COUNT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_BALLOT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_VOTE));
@@ -2478,6 +2479,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_NEGATIVE_VIEWPORT_HEIGHT));
     }
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_IMAGE_LOAD_STORE_LOD));
 
     if (pInstance->IsExtensionSupported(InstanceExtensions::KHX_DEVICE_GROUP_CREATION))
     {
@@ -2558,8 +2561,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE));
-    // TODO: Add this extension if the related implementation of Linux is done.
-    // availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE_FD));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE_FD));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MULTIVIEW));
 
@@ -2848,14 +2850,11 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
         {
             pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
         }
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 393
         else if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT) &&
                  props.gpuMemoryProperties.flags.supportHostMappedForeignMemory)
         {
             pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
         }
-#endif
-
     }
 
     if (pExternalMemoryProperties->externalMemoryFeatures == 0)
@@ -3302,10 +3301,17 @@ void PhysicalDevice::GetExternalSemaphoreProperties(
     pExternalSemaphoreProperties->compatibleHandleTypes         = pExternalSemaphoreInfo->handleType;
     pExternalSemaphoreProperties->exportFromImportedHandleTypes = pExternalSemaphoreInfo->handleType;
     pExternalSemaphoreProperties->externalSemaphoreFeatures     = 0;
+    const Pal::DeviceProperties& props                          = PalProperties();
 
     if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_SEMAPHORE_FD))
     {
         if (pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT)
+        {
+            pExternalSemaphoreProperties->externalSemaphoreFeatures = VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
+                                                                      VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
+        }
+        else if ((pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT) &&
+                 (props.osProperties.supportSyncFileSemaphore))
         {
             pExternalSemaphoreProperties->externalSemaphoreFeatures = VK_EXTERNAL_SEMAPHORE_FEATURE_EXPORTABLE_BIT |
                                                                       VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
@@ -3331,14 +3337,21 @@ void PhysicalDevice::GetExternalFenceProperties(
     pExternalFenceProperties->compatibleHandleTypes         = pExternalFenceInfo->handleType;
     pExternalFenceProperties->exportFromImportedHandleTypes = pExternalFenceInfo->handleType;
     pExternalFenceProperties->externalFenceFeatures         = 0;
+    const Pal::DeviceProperties& props                      = PalProperties();
 
     if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_FENCE_FD))
     {
-        if (pExternalFenceInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT)
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 398
+        if ((pExternalFenceInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
+            (pExternalFenceInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT))
         {
-            pExternalFenceProperties->externalFenceFeatures = VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT |
-                                                              VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT;
+            if (props.osProperties.supportSyncFileFence)
+            {
+                pExternalFenceProperties->externalFenceFeatures = VK_EXTERNAL_FENCE_FEATURE_EXPORTABLE_BIT |
+                                                                  VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT;
+            }
         }
+#endif
     }
 
     if (pExternalFenceProperties->externalFenceFeatures == 0)

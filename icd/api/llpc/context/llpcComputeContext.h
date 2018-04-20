@@ -78,6 +78,9 @@ public:
     // Does user data node merge for merged shader
     virtual void DoUserDataNodeMerge() { LLPC_NEVER_CALLED(); }
 
+    // Gets per pipeline options
+    virtual const PipelineOptions* GetPipelineOptions() const { return &m_pPipelineInfo->options; }
+
 protected:
     virtual std::vector<ResourceMappingNode>* GetDummyResourceMapNodes(ShaderStage shaderStage);
 

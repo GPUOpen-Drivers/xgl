@@ -109,7 +109,7 @@ bool DispatchTable::CheckAPIVersion(uint32_t apiVersion)
         return m_pDevice->VkInstance()->GetAPIVersion() >= apiVersion;
 
     default:
-        VK_ASSERT("Unexpected dispatch table type");
+        VK_NEVER_CALLED();
         return false;
     }
 }
@@ -133,7 +133,7 @@ bool DispatchTable::CheckInstanceExtension(InstanceExtensions::ExtensionId id)
         return m_pDevice->VkInstance()->IsExtensionEnabled(id);
 
     default:
-        VK_ASSERT("Unexpected dispatch table type");
+        VK_NEVER_CALLED();
         return false;
     }
 }
@@ -157,7 +157,7 @@ bool DispatchTable::CheckDeviceExtension(DeviceExtensions::ExtensionId id)
         return m_pDevice->IsExtensionEnabled(id);
 
     default:
-        VK_ASSERT("Unexpected dispatch table type");
+        VK_NEVER_CALLED();
         return false;
     }
 }

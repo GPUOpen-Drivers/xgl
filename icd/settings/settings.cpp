@@ -66,8 +66,6 @@ static void OverrideProfiledSettings(
         pSettings->disableDeviceOnlyMemoryTypeWithoutHeap = true;
 
         pSettings->prefetchShaders = true;
-
-        pSettings->enableFmaskBasedMsaaRead = false;
     }
 
     if (appProfile == AppProfile::Talos)

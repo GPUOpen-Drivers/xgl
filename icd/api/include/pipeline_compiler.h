@@ -169,6 +169,7 @@ public:
         VbBindingInfo*                      pVbInfo);
 
     VkResult ConvertComputePipelineInfo(
+        Device*                             pDevice,
         const VkComputePipelineCreateInfo*  pIn,
         ComputePipelineCreateInfo*          pInfo);
 

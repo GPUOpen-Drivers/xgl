@@ -298,8 +298,6 @@ static const char* PipelineStageFlagString(
         return compact ? "ALL_GFX" : "ALL_GRAPHICS_BIT";
     case VK_PIPELINE_STAGE_ALL_COMMANDS_BIT:
         return compact ? "ALL" : "ALL_COMMANDS_BIT";
-    case VK_PIPELINE_STAGE_COMMAND_PROCESS_BIT_NVX:
-        return compact ? "CMD_PROC" : "COMMAND_PROCESS_BIT_NVX";
     default:
         VK_NEVER_CALLED();
         return "<unknown pipeline stage flag>";
@@ -349,7 +347,6 @@ void RenderPassLogger::LogPipelineStageMask(
     LogFlag(VK_PIPELINE_STAGE_TRANSFER_BIT);
     LogFlag(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     LogFlag(VK_PIPELINE_STAGE_HOST_BIT);
-    LogFlag(VK_PIPELINE_STAGE_COMMAND_PROCESS_BIT_NVX);
 
     if (flags != 0)
     {
@@ -405,10 +402,6 @@ static const char* AccessFlagString(VkAccessFlagBits flag, bool compact)
         return compact ? "MEM_RD" : "MEMORY_READ_BIT";
     case VK_ACCESS_MEMORY_WRITE_BIT:
         return compact ? "MEM_WR" : "MEMORY_WRITE_BIT";
-    case VK_ACCESS_COMMAND_PROCESS_READ_BIT_NVX:
-        return compact ? "CMD_PROC_RD" : "COMMAND_PROCESS_READ_BIT_NVX";
-    case VK_ACCESS_COMMAND_PROCESS_WRITE_BIT_NVX:
-        return compact ? "CMD_PROC_WR" : "COMMAND_PROCESS_WRITE_BIT_NVX";
     default:
         VK_NEVER_CALLED();
         return "<unknown access flag>";
@@ -456,8 +449,6 @@ void RenderPassLogger::LogAccessMask(VkAccessFlags flags, bool compact)
     LogFlag(VK_ACCESS_HOST_WRITE_BIT);
     LogFlag(VK_ACCESS_MEMORY_READ_BIT);
     LogFlag(VK_ACCESS_MEMORY_WRITE_BIT);
-    LogFlag(VK_ACCESS_COMMAND_PROCESS_READ_BIT_NVX);
-    LogFlag(VK_ACCESS_COMMAND_PROCESS_WRITE_BIT_NVX);
 
     if (flags != 0)
     {

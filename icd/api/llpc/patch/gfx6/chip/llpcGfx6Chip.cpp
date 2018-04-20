@@ -65,6 +65,8 @@ void VsRegConfig::Init()
     INIT_REG(VS_SCRATCH_BYTE_SIZE);
     INIT_REG(VS_NUM_USED_VGPRS);
     INIT_REG(VS_NUM_USED_SGPRS);
+    INIT_REG(VS_NUM_AVAIL_VGPRS);
+    INIT_REG(VS_NUM_AVAIL_SGPRS);
     INIT_REG(USES_VIEWPORT_ARRAY_INDEX);
 }
 
@@ -77,6 +79,8 @@ void HsRegConfig::Init()
     INIT_REG(HS_SCRATCH_BYTE_SIZE);
     INIT_REG(HS_NUM_USED_VGPRS);
     INIT_REG(HS_NUM_USED_SGPRS);
+    INIT_REG(HS_NUM_AVAIL_VGPRS);
+    INIT_REG(HS_NUM_AVAIL_SGPRS);
     INIT_REG(VGT_LS_HS_CONFIG);
     INIT_REG(VGT_HOS_MIN_TESS_LEVEL);
     INIT_REG(VGT_HOS_MAX_TESS_LEVEL);
@@ -91,6 +95,8 @@ void EsRegConfig::Init()
     INIT_REG(ES_SCRATCH_BYTE_SIZE);
     INIT_REG(ES_NUM_USED_VGPRS);
     INIT_REG(ES_NUM_USED_SGPRS);
+    INIT_REG(ES_NUM_AVAIL_VGPRS);
+    INIT_REG(ES_NUM_AVAIL_SGPRS);
     INIT_REG(VGT_ESGS_RING_ITEMSIZE);
 }
 
@@ -103,6 +109,8 @@ void LsRegConfig::Init()
     INIT_REG(LS_SCRATCH_BYTE_SIZE);
     INIT_REG(LS_NUM_USED_VGPRS);
     INIT_REG(LS_NUM_USED_SGPRS);
+    INIT_REG(LS_NUM_AVAIL_VGPRS);
+    INIT_REG(LS_NUM_AVAIL_SGPRS);
 }
 
 // =====================================================================================================================
@@ -114,6 +122,8 @@ void GsRegConfig::Init()
     INIT_REG(GS_SCRATCH_BYTE_SIZE);
     INIT_REG(GS_NUM_USED_VGPRS);
     INIT_REG(GS_NUM_USED_SGPRS);
+    INIT_REG(GS_NUM_AVAIL_VGPRS);
+    INIT_REG(GS_NUM_AVAIL_SGPRS);
     INIT_REG(VGT_GS_MAX_VERT_OUT);
     INIT_REG(VGT_GS_ONCHIP_CNTL__CI__VI);
     INIT_REG(VGT_ES_PER_GS);
@@ -152,6 +162,8 @@ void PsRegConfig::Init()
     INIT_REG(PS_SCRATCH_BYTE_SIZE);
     INIT_REG(PS_NUM_USED_VGPRS);
     INIT_REG(PS_NUM_USED_SGPRS);
+    INIT_REG(PS_NUM_AVAIL_VGPRS);
+    INIT_REG(PS_NUM_AVAIL_SGPRS);
 }
 
 // =====================================================================================================================
@@ -277,6 +289,8 @@ void CsRegConfig::Init()
     INIT_REG(CS_SCRATCH_BYTE_SIZE);
     INIT_REG(CS_NUM_USED_VGPRS);
     INIT_REG(CS_NUM_USED_SGPRS);
+    INIT_REG(CS_NUM_AVAIL_VGPRS);
+    INIT_REG(CS_NUM_AVAIL_SGPRS);
 }
 
 // =====================================================================================================================

@@ -337,7 +337,7 @@ public:
   Instruction *transOCLBuiltinFromInst(SPIRVInstruction *BI, BasicBlock *BB);
   Instruction *transSPIRVBuiltinFromInst(SPIRVInstruction *BI, BasicBlock *BB);
   Instruction *transOCLBarrierFence(SPIRVInstruction* BI, BasicBlock *BB);
-  Instruction *transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB);
+  Value       *transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB);
   Instruction *transSPIRVFragmentMaskOpFromInst(SPIRVInstruction *BI, BasicBlock*BB);
   void transOCLVectorLoadStore(std::string& UnmangledName,
       std::vector<SPIRVWord> &BArgs);
@@ -1601,26 +1601,31 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
     Constant *Initializer = nullptr;
     SPIRVValue *Init = BVar->getInitializer();
     if (Init)
-        Initializer = dyn_cast<Constant>(transValue(Init, F, BB, false));
+      Initializer = dyn_cast<Constant>(transValue(Init, F, BB, false));
     else if (LinkageTy == GlobalValue::CommonLinkage)
-        // In LLVM variables with common linkage type must be initilized by 0
-        Initializer = Constant::getNullValue(Ty);
-    else if (BVar->getStorageClass() == SPIRVStorageClassKind::StorageClassWorkgroup)
-        Initializer = dyn_cast<Constant>(UndefValue::get(Ty));
+      // In LLVM variables with common linkage type must be initilized by 0
+      Initializer = Constant::getNullValue(Ty);
+    else if (BVar->getStorageClass() == SPIRVStorageClassKind::StorageClassWorkgroup ||
+             LinkageTy == GlobalValue::InternalLinkage ||
+             LinkageTy == GlobalValue::PrivateLinkage)
+      Initializer = dyn_cast<Constant>(UndefValue::get(Ty));
 
     SPIRVStorageClassKind BS = BVar->getStorageClass();
-    if (BS == StorageClassFunction && !Init) {
-        assert (BB && "Invalid BB");
-        return mapValue(BV, new AllocaInst(
-            Ty, M->getDataLayout().getAllocaAddrSpace(),
-            BV->getName(), BB));
+    if (BS == StorageClassFunction) {
+      assert (BB && "Invalid BB");
+      auto LVar = mapValue(BV, new AllocaInst(
+        Ty, M->getDataLayout().getAllocaAddrSpace(),
+        BV->getName(), BB));
+      if (Init)
+        new StoreInst(Initializer, LVar, BB);
+      return LVar;
     }
     auto AddrSpace = SPIRSPIRVAddrSpaceMap::rmap(BS);
     auto LVar = new GlobalVariable(*M, Ty, IsConst, LinkageTy, Initializer,
-        BV->getName(), 0, GlobalVariable::NotThreadLocal, AddrSpace);
+      BV->getName(), 0, GlobalVariable::NotThreadLocal, AddrSpace);
     LVar->setUnnamedAddr(IsConst && Ty->isArrayTy() &&
-        Ty->getArrayElementType()->isIntegerTy(8) ? GlobalValue::UnnamedAddr::Global :
-                                                    GlobalValue::UnnamedAddr::None);
+      Ty->getArrayElementType()->isIntegerTy(8) ? GlobalValue::UnnamedAddr::Global :
+                                                  GlobalValue::UnnamedAddr::None);
     SPIRVBuiltinVariableKind BVKind;
     if (BVar->isBuiltin(&BVKind))
       BuiltinGVMap[LVar] = BVKind;
@@ -2411,7 +2416,8 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
     } else if (OCLSPIRVBuiltinMap::rfind(OC, nullptr) &&
                !isAtomicOpCode(OC) &&
                !isGroupOpCode(OC) &&
-               !isPipeOpCode(OC)) {
+               !isPipeOpCode(OC) &&
+               !isGroupNonUniformOpCode(OC )) {
       return mapValue(BV, transOCLBuiltinFromInst(
           static_cast<SPIRVInstruction *>(BV), BB));
     } else if (isBinaryShiftLogicalBitwiseOpCode(OC) ||
@@ -2832,7 +2838,7 @@ SPIRVToLLVM::transSPIRVFragmentMaskOpFromInst(SPIRVInstruction *BI, BasicBlock*B
 }
 
 // Translates SPIR-V image operations to LLVM function calls
-Instruction *
+Value *
 SPIRVToLLVM::transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB)
 {
   Op OC = BI->getOpCode();
@@ -3107,6 +3113,60 @@ SPIRVToLLVM::transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB)
     assert(BI->hasType());
     RetTy = transType(BI->getType());
   }
+
+  // For image read and image write, handle such case in which data argument
+  // is not vec4.
+  // NOTE: Such case is valid and can come from hand written or HLSL generated
+  // SPIR-V shader
+  uint32_t  DataCompCnt   = 4;
+  if (BI->getOpCode() == OpImageRead) {
+    DataCompCnt = (RetTy->isVectorTy() == false) ?
+                    1 : RetTy->getVectorNumElements();
+    assert(DataCompCnt <= 4);
+
+    // For image read, need to change return type to vec4, and after
+    // generating call to library function, need to change return
+    // value from vec4 to the original type specified in SPIR-V.
+    if (DataCompCnt != 4)
+      RetTy = VectorType::get(RetTy->getScalarType(), 4);
+
+  } else if (BI->getOpCode() == OpImageWrite) {
+    Type  *DataTy = ArgTys[2];
+    Value *Data   = Args[2];
+
+    DataCompCnt = (DataTy->isVectorTy() == false) ?
+                    1 : DataTy->getVectorNumElements();
+    assert(DataCompCnt <= 4);
+
+    if (DataCompCnt != 4) {
+      // For image write, need to change data type to vec4, and zero-fill
+      // the extra components.
+      Type  *DataVec4Ty = VectorType::get(DataTy->getScalarType(), 4);
+      Value *DataVec4 = nullptr;
+
+      if (DataCompCnt == 1) {
+        Value *DataZeroVec4 = ConstantAggregateZero::get(DataVec4Ty);
+        DataVec4 = InsertElementInst::Create(DataZeroVec4,
+                                             Data,
+                                             ConstantInt::get(Type::getInt32Ty(*Context), 0),
+                                             "",
+                                             BB);
+      } else {
+        Value *DataZero = ConstantAggregateZero::get(DataTy);
+
+        SmallVector<Constant*, 4> Idxs;
+        for (uint32_t i = 0; i < 4; ++i)
+          Idxs.push_back(ConstantInt::get(Type::getInt32Ty(*Context), i));
+
+        Value *ShuffleMask = ConstantVector::get(Idxs);
+        DataVec4 = new ShuffleVectorInst(Data, DataZero, ShuffleMask, "", BB);
+      }
+
+      ArgTys[2] = DataVec4Ty;
+      Args[2] = DataVec4;
+    }
+  }
+
   FunctionType *FT = FunctionType::get(RetTy, ArgTys, false);
 
   if (!F) {
@@ -3120,11 +3180,36 @@ SPIRVToLLVM::transSPIRVImageOpFromInst(SPIRVInstruction *BI, BasicBlock*BB)
     assert(F->getFunctionType() == FT);
   }
 
-  auto Call = CallInst::Create(F, Args, "", BB);
+  CallInst *Call = CallInst::Create(F, Args, "", BB);
   setName(Call, BI);
   setAttrByCalledFunc(Call);
 
-  return Call;
+  // For image read, handle such case in which return value is not vec4
+  // NOTE: Such case is valid and can come from hand written or HLSL generated
+  // SPIR-V shader
+  Value *RetVal = Call;
+  if ((BI->getOpCode() == OpImageRead) && (DataCompCnt != 4)) {
+    // Need to change return value of library function call from vec4 to the
+    // original type specified in SPIR-V.
+    assert(DataCompCnt < 4);
+
+    if (DataCompCnt == 1)
+      RetVal = ExtractElementInst::Create(Call,
+                                          ConstantInt::get(
+                                            Type::getInt32Ty(*Context), 0),
+                                          "",
+                                          BB);
+    else {
+      SmallVector<Constant*, 4> Idxs;
+      for (uint32_t i = 0; i < DataCompCnt; ++i)
+        Idxs.push_back(ConstantInt::get(Type::getInt32Ty(*Context), i));
+
+      Value *ShuffleMask = ConstantVector::get(Idxs);
+      RetVal = new ShuffleVectorInst(Call, Call, ShuffleMask, "", BB);
+    }
+  }
+
+  return RetVal;
 }
 
 std::string
@@ -3188,7 +3273,6 @@ SPIRVToLLVM::translate(ExecutionModel EntryExecModel, const char *EntryName) {
   EnableLoopUnroll = (EntryExecModel == ExecutionModelVertex ||
                       EntryExecModel == ExecutionModelFragment ||
                       EntryExecModel == ExecutionModelGLCompute);
-
   DbgTran.createCompileUnit();
   DbgTran.addDbgInfoVersion();
 
@@ -4703,11 +4787,11 @@ SPIRVToLLVM::transLinkageType(const SPIRVValue* V) {
           StorageClass == StorageClassInput ||
           StorageClass == StorageClassUniform ||
           StorageClass == StorageClassPushConstant ||
-          StorageClass == StorageClassOutput ||
           StorageClass == StorageClassStorageBuffer)
         return GlobalValue::ExternalLinkage;
-      else if (StorageClass == StorageClassPrivate)
-        return GlobalValue::CommonLinkage;
+      else if (StorageClass == StorageClassPrivate ||
+               StorageClass == StorageClassOutput)
+        return GlobalValue::PrivateLinkage;
     }
     return GlobalValue::InternalLinkage;
   }

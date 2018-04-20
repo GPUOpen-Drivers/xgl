@@ -1041,13 +1041,11 @@ VkResult CmdBuffer::Begin(
         palFlags.prefetchShaders = 1;
     }
 
-    if (m_pDevice->GetRuntimeSettings().useRingBufferForCeRamDumps == false)
+    // Pal would still use ring buffer for CE RAM dumps if command buffer is nested.
+    // Disable linear buffer for this case as a workaround until PAL has a solution.
+    if ((m_pDevice->GetRuntimeSettings().useRingBufferForCeRamDumps == false) && (m_is2ndLvl == false))
     {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 395
         palFlags.useLinearBufferForCeRamDumps = 1;
-#else
-        palFlags.useEmbeddedDataForCeRamDumps = 1;
-#endif
     }
 
     uint32_t currentSubPass = 0;
@@ -1133,9 +1131,10 @@ VkResult CmdBuffer::Begin(
 
     if (result == Pal::Result::Success)
     {
-        VK_ASSERT(m_pStackAllocator == nullptr);
-
-        result = m_pDevice->VkInstance()->StackMgr()->AcquireAllocator(&m_pStackAllocator);
+        if (m_pStackAllocator == nullptr)
+        {
+            result = m_pDevice->VkInstance()->StackMgr()->AcquireAllocator(&m_pStackAllocator);
+        }
     }
 
     if (result == Pal::Result::Success)
@@ -1220,13 +1219,6 @@ VkResult CmdBuffer::End(void)
     DbgBarrierPostCmd(DbgBarrierCmdBufEnd);
 
     result = PalCmdBufferEnd();
-
-    if (m_pStackAllocator != nullptr)
-    {
-        m_pDevice->VkInstance()->StackMgr()->ReleaseAllocator(m_pStackAllocator);
-
-        m_pStackAllocator = nullptr;
-    }
 
     m_isRecording = false;
 
@@ -1321,30 +1313,7 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
 
     if (releaseResources)
     {
-        // Release per-attachment render pass instance memory
-        if (m_renderPassInstance.pAttachments != nullptr)
-        {
-            m_pDevice->VkInstance()->FreeMem(m_renderPassInstance.pAttachments);
-
-            m_renderPassInstance.pAttachments       = nullptr;
-            m_renderPassInstance.maxAttachmentCount = 0;
-        }
-
-        // Release per-subpass instance memory
-        if (m_renderPassInstance.pSamplePatterns != nullptr)
-        {
-            m_pDevice->VkInstance()->FreeMem(m_renderPassInstance.pSamplePatterns);
-
-            m_renderPassInstance.pSamplePatterns = nullptr;
-            m_renderPassInstance.maxSubpassCount = 0;
-        }
-
-        // Release the GPU event manager back to the command pool
-        if (m_pGpuEventMgr != nullptr)
-        {
-            m_pCmdPool->ReleaseGpuEventMgr(m_pGpuEventMgr);
-            m_pGpuEventMgr = nullptr;
-        }
+        ReleaseResources();
     }
 
     result = PalToVkResult(PalCmdBufferReset(nullptr, releaseResources));
@@ -1537,22 +1506,42 @@ VkResult CmdBuffer::Destroy(void)
         pInstance->FreeMem(m_pSqttState);
     }
 
-    // Free per-attachment render pass instance memory
-    if (m_renderPassInstance.pAttachments != nullptr)
-    {
-        m_pDevice->VkInstance()->FreeMem(m_renderPassInstance.pAttachments);
-    }
-
-    // Free per-subpass instance memory
-    if (m_renderPassInstance.pSamplePatterns != nullptr)
-    {
-        m_pDevice->VkInstance()->FreeMem(m_renderPassInstance.pSamplePatterns);
-    }
-
     // Unregister this command buffer from the pool
     m_pCmdPool->UnregisterCmdBuffer(this);
 
     PalCmdBufferDestroy();
+
+    ReleaseResources();
+
+    Util::Destructor(this);
+
+    pInstance->FreeMem(ApiCmdBuffer::FromObject(this));
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+void CmdBuffer::ReleaseResources()
+{
+    auto pInstance = m_pDevice->VkInstance();
+
+    // Release per-attachment render pass instance memory
+    if (m_renderPassInstance.pAttachments != nullptr)
+    {
+        pInstance->FreeMem(m_renderPassInstance.pAttachments);
+
+        m_renderPassInstance.pAttachments       = nullptr;
+        m_renderPassInstance.maxAttachmentCount = 0;
+    }
+
+    // Release per-subpass instance memory
+    if (m_renderPassInstance.pSamplePatterns != nullptr)
+    {
+        pInstance->FreeMem(m_renderPassInstance.pSamplePatterns);
+
+        m_renderPassInstance.pSamplePatterns = nullptr;
+        m_renderPassInstance.maxSubpassCount = 0;
+    }
 
     // Release the GPU event manager back to the command pool
     if (m_pGpuEventMgr != nullptr)
@@ -1566,12 +1555,6 @@ VkResult CmdBuffer::Destroy(void)
         pInstance->StackMgr()->ReleaseAllocator(m_pStackAllocator);
         m_pStackAllocator = nullptr;
     }
-
-    Util::Destructor(this);
-
-    pInstance->FreeMem(ApiCmdBuffer::FromObject(this));
-
-    return VK_SUCCESS;
 }
 
 // =====================================================================================================================
@@ -2030,37 +2013,6 @@ void CmdBuffer::BlitImage(
     DbgBarrierPostCmd(DbgBarrierCopyImage);
 }
 
-// PAL version 391.1 adds support for mis-aligned buffer-image/image-buffer copies
-#if (PAL_CLIENT_INTERFACE_MAJOR_VERSION < 391) || \
-    ((PAL_CLIENT_INTERFACE_MAJOR_VERSION == 391) && (PAL_CLIENT_INTERFACE_MINOR_VERSION < 1))
-// =====================================================================================================================
-// Align memory to image copy region
-void CmdBuffer::AlignMemoryImageCopyRegion(
-    const Pal::IImage*          pImage,
-    Pal::MemoryImageCopyRegion* pRegion) const
-{
-    VK_ASSERT(m_palQueueType == Pal::QueueTypeDma);
-
-    // Copying from a buffer to image on the DMA Queue requires the width/height to be byte aligned.
-    // According to the OSS spec X and Rect X should be aligned to DW (multiple of four for 8bpp,
-    // multiple of 2 for 16bpp)
-
-    auto bytesPerPixel = Pal::Formats::BytesPerPixel(pImage->GetImageCreateInfo().swizzledFormat.format);
-
-    const uint32_t copySizeDwordsWidth =
-        Util::NumBytesToNumDwords(pRegion->imageExtent.width * bytesPerPixel);
-    const uint32_t copySizeBytesWidth  = copySizeDwordsWidth * sizeof(uint32_t);
-    const uint32_t copySizePixelsWidth = copySizeBytesWidth  / bytesPerPixel;
-    pRegion->imageExtent.width = copySizePixelsWidth;
-
-    const uint32_t copySizeDwordsHeight =
-        Util::NumBytesToNumDwords(pRegion->imageExtent.height * bytesPerPixel);
-    const uint32_t copySizeBytesHeight  = copySizeDwordsHeight * sizeof(uint32_t);
-    const uint32_t copySizePixelsHeight = copySizeBytesHeight  / bytesPerPixel;
-    pRegion->imageExtent.height = copySizePixelsHeight;
-}
-#endif
-
 // =====================================================================================================================
 // Copies from a buffer of linear data to a region of an image (vkCopyBufferToImage)
 void CmdBuffer::CopyBufferToImage(
@@ -2099,20 +2051,6 @@ void CmdBuffer::CopyBufferToImage(
                     pDstImage->GetFormat(), pRegions[regionIdx + i].imageSubresource.aspectMask));
 
                 pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, srcMemOffset);
-
-                // PAL version 391.1 adds support for mis-aligned buffer-image/image-buffer copies
-#if (PAL_CLIENT_INTERFACE_MAJOR_VERSION < 391) || \
-    ((PAL_CLIENT_INTERFACE_MAJOR_VERSION == 391) && (PAL_CLIENT_INTERFACE_MINOR_VERSION < 1))
-                if (!GpuUtil::ValidateMemoryImageRegion(
-                    m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(),
-                    m_palEngineType,
-                    *pDstImage->PalImage(),
-                    *pSrcBuffer->PalMemory(),
-                    pPalRegions[i]))
-                {
-                     AlignMemoryImageCopyRegion(pDstImage->PalImage(), &pPalRegions[i]);
-                }
-#endif
             }
 
             PalCmdCopyMemoryToImage(pSrcBuffer, pDstImage, layout, regionBatch, pPalRegions);
@@ -3071,11 +3009,6 @@ Pal::uint32 CmdBuffer::ConvertBarrierDstAccessFlags(
             coher |= Pal::CoherIndirectArgs;
         }
 
-        if (accessMask & VK_ACCESS_COMMAND_PROCESS_READ_BIT_NVX)
-        {
-            coher |= Pal::CoherMemory;
-        }
-
         return coher;
     }
     else
@@ -3211,14 +3144,6 @@ void CmdBuffer::ExecuteBarriers(
     const Image** pTransitionImages = (m_pDevice->NumPalDevices() > 1) && (imageMemoryBarrierCount > 0) ?
         virtStackFrame.AllocArray<const Image*>(MaxTransitionCount) : nullptr;
 
-    // True if this barrier needs to wait on prior GPU work
-    const bool needExecutionControl =
-        (pBarrier->pipePointWaitCount > 1) ||
-        (pBarrier->pipePointWaitCount == 1 && pBarrier->pPipePoints[0] != Pal::HwPipeTop) ||
-        (pBarrier->gpuEventWaitCount > 0);
-
-    // True if any global cache flushes are being requested
-    bool needGlobalCacheFlush = false;
     uint32_t barrierOptions = m_pDevice->GetRuntimeSettings().resourceBarrierOptions;
 
     for (uint32_t i = 0; i < memBarrierCount; ++i)
@@ -3234,7 +3159,6 @@ void CmdBuffer::ExecuteBarriers(
         pNextMain->imageInfo.pImage = nullptr;
         VK_ASSERT(pMemoryBarriers[i].pNext == nullptr);
 
-        needGlobalCacheFlush |= (pNextMain->srcCacheMask != 0);
         ++pNextMain;
 
         const uint32_t mainTransitionCount = static_cast<uint32_t>(pNextMain - pTransitions);
@@ -3245,18 +3169,6 @@ void CmdBuffer::ExecuteBarriers(
             pNextMain = pTransitions;
         }
     }
-
-    // If transitioning images out of "srcLayout = UNDEFINED", and the barrier also is required prior to that
-    // happening wait for any execution to complete, or sync any caches, then that layout transition must be
-    // moved to a separate "post-barrier" that executes after the main barrier.
-    //
-    // The post barrier is just a barrier executing immediately after the main barrier containing no waits/cache syncs,
-    // but just these layout transitions.
-    //
-    // The reason for this is that PAL always executes all image layout transitions from the Uninitialized
-    // (UNDEFINED) layout in the early phase, which executes before any GPU waits or cache syncs.  This could
-    // be fixed in PAL, but I think currently this is considered a part of the design.
-    bool needPostBarrier = needExecutionControl || needGlobalCacheFlush;
 
     for (uint32_t i = 0; i < bufferMemoryBarrierCount; ++i)
     {
@@ -3303,7 +3215,6 @@ void CmdBuffer::ExecuteBarriers(
 
         const Image*           pImage                 = Image::ObjectFromHandle(pImageMemoryBarriers[i].image);
         VkFormat               format                 = pImage->GetFormat();
-        bool                   hasDepthAndStencil     = ((Formats::HasDepth(format)) && (Formats::HasStencil(format)));
         uint32_t               supportInputCoherMask  = pImage->GetSupportedInputCoherMask();
         uint32_t               supportOutputCoherMask = pImage->GetSupportedOutputCoherMask();
         Pal::BarrierTransition barrierTransition      = { 0 };
@@ -3371,6 +3282,13 @@ void CmdBuffer::ExecuteBarriers(
             pImage->GetArraySize(),
             palRanges,
             palRangeCount);
+
+        bool hasDepthAndStencil = ((pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+                                   (pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT));
+
+        // If image has a depth/stencil format with both depth and stencil components, then aspectMask member of
+        // subresourceRange must include both VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT
+        VK_ASSERT(hasDepthAndStencil == (Formats::HasDepth(format) && Formats::HasStencil(format)));
 
         if (hasDepthAndStencil)
         {

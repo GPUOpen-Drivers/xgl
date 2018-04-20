@@ -39,8 +39,20 @@ namespace Llpc
 struct ComputePipelineBuildInfo;
 struct GraphicsPipelineBuildInfo;
 struct BinaryData;
+struct PipelineDumpFile;
 namespace MetroHash { struct Hash; };
 class MetroHash64;
+
+// Enumerates which types of pipeline dump are disable
+enum PipelineDumpFilters : uint32_t
+{
+    PipelineDumpFilterNone = 0x00, // Do not disable any pipeline type
+    PipelineDumpFilterCs   = 0x01, // Disable pipeline dump for Cs
+    PipelineDumpFilterNgg  = 0x02, // Disable pipeline dump for NGG
+    PipelineDumpFilterGs   = 0x04, // Disable pipeline dump for Gs
+    PipelineDumpFilterTess = 0x08, // Disable pipeline dump for Tess
+    PipelineDumpFilterVsPs = 0x10, // Disable pipeline dump for VsPs
+};
 
 class PipelineDumper
 {
@@ -49,22 +61,19 @@ public:
                                 const BinaryData*               pSpirvBin,
                                 MetroHash::Hash*                pHash);
 
-    static std::ofstream* BeginPipelineDump(const char*                      pDumpDir,
-                                            const ComputePipelineBuildInfo*  pComputePipelineInfo,
-                                            const GraphicsPipelineBuildInfo* pGraphicsPipelineInfo,
-                                            const MetroHash::Hash*           pHash);
+    static PipelineDumpFile* BeginPipelineDump(const PipelineDumpOptions*       pDumpOptions,
+                                               const ComputePipelineBuildInfo*  pComputePipelineInfo,
+                                               const GraphicsPipelineBuildInfo* pGraphicsPipelineInfo,
+                                               const MetroHash::Hash*           pHash);
 
-    static void EndPipelineDump(std::ofstream* pDumpFile);
+    static void EndPipelineDump(PipelineDumpFile* pDumpFile);
 
-    static void DumpPipelineBinary(std::ostream*                    pDumpFile,
+    static void DumpPipelineBinary(PipelineDumpFile*                pBinaryFile,
                                    GfxIpVersion                     gfxIp,
                                    const BinaryData*                pPipelineBin);
 
-    static uint64_t GetGraphicsPipelineHash(const GraphicsPipelineBuildInfo* pPipelineInfo);
-    static uint64_t GetComputePipelineHash(const ComputePipelineBuildInfo* pPipelineInfo);
-
-    static MetroHash::Hash GenerateHashForGraphicsPipeline(const GraphicsPipelineBuildInfo* pPipeline);
-    static MetroHash::Hash GenerateHashForComputePipeline(const ComputePipelineBuildInfo* pPipeline);
+    static MetroHash::Hash GenerateHashForGraphicsPipeline(const GraphicsPipelineBuildInfo* pPipeline, bool isCacheHash);
+    static MetroHash::Hash GenerateHashForComputePipeline(const ComputePipelineBuildInfo* pPipeline, bool isCacheHash);
 
 private:
     static std::string GetSpirvBinaryFileName(const MetroHash::Hash* pHash);
@@ -91,6 +100,7 @@ private:
 
     static void UpdateHashForPipelineShaderInfo(ShaderStage               stage,
                                                 const PipelineShaderInfo* pShaderInfo,
+                                                bool                      isCacheHash,
                                                 MetroHash64*              pHasher);
 
     static void UpdateHashForResourceMappingNode(const ResourceMappingNode* pUserDataNode,

@@ -31,7 +31,11 @@
 #define DEBUG_TYPE "llpc-code-gen-manager"
 
 #include "llvm/Bitcode/BitcodeWriter.h"
+#if XGL_LLVM_UPSTREAM == 1
+#include "llvm/CodeGen/CommandFlags.inc"
+#else
 #include "llvm/CodeGen/CommandFlags.def"
+#endif
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"
@@ -120,7 +124,9 @@ class LlpcDiagnosticHandler: public llvm::DiagnosticHandler
 Result CodeGenManager::CreateTargetMachine(
     Context*           pContext)  // [in/out] Pipeline context
 {
-    if (pContext->GetTargetMachine() != nullptr)
+    auto pPipelineOptions = pContext->GetPipelineContext()->GetPipelineOptions();
+    if ((pContext->GetTargetMachine() != nullptr) &&
+        (pPipelineOptions->includeDisassembly == pContext->GetTargetMachinePipelineOptions()->includeDisassembly))
     {
         return Result::Success;
     }
@@ -137,7 +143,9 @@ Result CodeGenManager::CreateTargetMachine(
         auto relocModel = Optional<Reloc::Model>();
         std::string features = "+vgpr-spilling";
 
-        if (cl::EnablePipelineDump || EnableOuts())
+        if (cl::EnablePipelineDump ||
+            EnableOuts() ||
+            pPipelineOptions->includeDisassembly)
         {
             features += ",+DumpCode";
         }
@@ -162,7 +170,7 @@ Result CodeGenManager::CreateTargetMachine(
                                                            relocModel);
         if (pTargetMachine != nullptr)
         {
-            pContext->SetTargetMachine(pTargetMachine);
+            pContext->SetTargetMachine(pTargetMachine, pPipelineOptions);
             result = Result::Success;
         }
     }

@@ -529,9 +529,22 @@ bool DescriptorGpuMemHeap::AllocSetGpuMem(
     void**                      pSetAllocHandle)
 {
     // Figure out the byte size and alignment
-    const uint32_t byteSize  = (pLayout->Info().sta.dwSize +
-                               (pLayout->Info().varDescDwStride * variableDescriptorCounts)) *
-                               sizeof(uint32_t);
+    uint32_t byteSize = 0;
+    if (variableDescriptorCounts > 0)
+    {
+        uint32_t lastBindingIdx      = pLayout->Info().count - 1;
+        uint32_t varBindingStaDWSize = pLayout->Binding(lastBindingIdx).sta.dwSize;
+
+        // Total size = STA section size - last binding STA size + last binding variable descriptor count size
+        byteSize = (pLayout->Info().sta.dwSize -
+                    varBindingStaDWSize +
+                    (pLayout->Info().varDescDwStride * variableDescriptorCounts)) *
+                    sizeof(uint32_t);
+    }
+    else
+    {
+        byteSize = pLayout->Info().sta.dwSize * sizeof(uint32_t);
+    }
 
     const uint32_t alignment = m_gpuMemAddrAlignment;
 

@@ -120,7 +120,7 @@ VkResult Sampler::Create(
     // object around it.
     void* pMemory = pAllocator->pfnAllocation(
         pAllocator->pUserData,
-        apiSize + (palSize * pDevice->NumPalDevices()),
+        apiSize + palSize,
         VK_DEFAULT_MEM_ALIGN,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -129,20 +129,13 @@ VkResult Sampler::Create(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    uint32_t palOffset = apiSize;
-
-    // Construct the PAL samplers for each device - just an SRD.
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-    {
-        pDevice->PalDevice(deviceIdx)->CreateSamplerSrds(
+    // Create one sampler srd which can be used by any device in the group
+    pDevice->PalDevice()->CreateSamplerSrds(
             1,
             &samplerInfo,
-            Util::VoidPtrInc(pMemory, palOffset));
+            Util::VoidPtrInc(pMemory, apiSize));
 
-        palOffset += palSize;
-    }
-
-    VK_PLACEMENT_NEW (pMemory) Sampler (pDevice, palSize);
+    VK_PLACEMENT_NEW (pMemory) Sampler(pDevice);
 
     *pSampler = Sampler::HandleFromVoidPointer(pMemory);
 

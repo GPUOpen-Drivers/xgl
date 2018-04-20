@@ -178,14 +178,6 @@ protected:
         SectionInfo*                        pSectionInfo,
         BindingSectionInfo*                 pBindingSectionInfo);
 
-    static void ConvertVariableInfo(
-        const VkDescriptorSetLayoutBinding* pBindingInfo,
-        uint32_t                            descStaAlignmentInDw,
-        uint32_t                            descAlignmentInDw,
-        uint32_t&                           varDescDwStride,
-        SectionInfo*                        pSectionInfo,
-        BindingSectionInfo*                 pBindingSectionInfoVar);
-
     static void ConvertImmutableInfo(
         const VkDescriptorSetLayoutBinding* pBindingInfo,
         uint32_t                            descSizeInDw,

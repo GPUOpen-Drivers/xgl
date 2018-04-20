@@ -83,6 +83,9 @@ public:
 
     virtual void DoUserDataNodeMerge();
 
+    // Gets per pipeline options
+    virtual const PipelineOptions* GetPipelineOptions() const { return &m_pPipelineInfo->options; }
+
     void InitShaderInfoForNullFs();
 
 protected:

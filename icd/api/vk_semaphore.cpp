@@ -111,7 +111,17 @@ VkResult Semaphore::GetShareHandle(
     VkExternalSemaphoreHandleTypeFlagBits       handleType,
     Pal::OsExternalHandle*                      pHandle)
 {
+    PAL_ASSERT((handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
+               (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT));
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 398
+    Pal::QueueSemaphoreExportInfo palExportInfo = {};
+    palExportInfo.flags.isReference = (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
+    *pHandle = m_pPalSemaphore->ExportExternalHandle(palExportInfo);
+#else
     *pHandle = m_pPalSemaphore->ExportExternalHandle();
+#endif
+
     return VK_SUCCESS;
 }
 
@@ -125,11 +135,14 @@ VkResult Semaphore::ImportSemaphore(
 {
     VkResult result = VK_SUCCESS;
     Pal::ExternalQueueSemaphoreOpenInfo palOpenInfo = {};
-    PAL_ASSERT(handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
+
     palOpenInfo.externalSemaphore  = handle;
     palOpenInfo.flags.crossProcess = true;
-
-    palOpenInfo.flags.sharedViaNtHandle = handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT;
+    PAL_ASSERT((handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
+               (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT));
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 398
+    palOpenInfo.flags.isReference  = (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
+#endif
 
     //Todo: Check whether pDevice is the same as the one created the semaphore.
 

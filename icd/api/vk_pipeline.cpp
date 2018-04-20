@@ -256,6 +256,72 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
                 result = VK_SUCCESS;
             }
         }
+        else if (infoType == VK_SHADER_INFO_TYPE_DISASSEMBLY_AMD)
+        {
+            // To extract the shader code, we can re-parse the saved ELF binary and lookup the shader's program
+            // instructions by examining the symbol table entry for that shader's entrypoint.
+            Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pDevice->VkInstance()->Allocator());
+
+            const PipelineBinaryInfo* pPipelineBinary = pPipeline->GetBinary();
+
+            Pal::Result palResult = abiProcessor.LoadFromBuffer(pPipelineBinary->pBinary, pPipelineBinary->binaryByteSize);
+
+            if (palResult == Pal::Result::Success)
+            {
+                bool symbolValid  = false;
+                Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
+
+                static_assert(((static_cast<uint32_t>(Util::Abi::ApiShaderType::Cs)    == static_cast<uint32_t>(Pal::ShaderType::Compute))  &&
+                               (static_cast<uint32_t>(Util::Abi::ApiShaderType::Vs)    == static_cast<uint32_t>(Pal::ShaderType::Vertex))   &&
+                               (static_cast<uint32_t>(Util::Abi::ApiShaderType::Hs)    == static_cast<uint32_t>(Pal::ShaderType::Hull))     &&
+                               (static_cast<uint32_t>(Util::Abi::ApiShaderType::Ds)    == static_cast<uint32_t>(Pal::ShaderType::Domain))   &&
+                               (static_cast<uint32_t>(Util::Abi::ApiShaderType::Gs)    == static_cast<uint32_t>(Pal::ShaderType::Geometry)) &&
+                               (static_cast<uint32_t>(Util::Abi::ApiShaderType::Ps)    == static_cast<uint32_t>(Pal::ShaderType::Pixel))    &&
+                               (static_cast<uint32_t>(Util::Abi::ApiShaderType::Count) == Pal::NumShaderTypes)),
+                               "Util::Abi::ApiShaderType to Pal::ShaderType mapping does not match!");
+
+                uint32_t hwStage = 0;
+                if (Util::BitMaskScanForward(&hwStage, apiToHwShader.apiShaders[static_cast<uint32_t>(shaderType)]))
+                {
+                    Util::Abi::PipelineSymbolEntry symbol = {};
+                    symbolValid = abiProcessor.HasPipelineSymbolEntry(
+                        Util::Abi::GetSymbolForStage(
+                            Util::Abi::PipelineSymbolType::ShaderDisassembly,
+                            static_cast<Util::Abi::HardwareStage>(hwStage)),
+                        &symbol);
+
+                    if (symbolValid)
+                    {
+                        if (pBufferSize != nullptr)
+                        {
+                            *pBufferSize = static_cast<size_t>(symbol.size);
+                        }
+
+                        if (pBuffer != nullptr)
+                        {
+                            const void* pDisassemblySection   = nullptr;
+                            size_t      disassemblySectionLen = 0;
+
+                            abiProcessor.GetDisassembly(&pDisassemblySection, &disassemblySectionLen);
+                            VK_ASSERT((symbol.size + symbol.value) <= disassemblySectionLen);
+
+                            // Copy disassemble code
+                            memcpy(pBuffer,
+                                   Util::VoidPtrInc(pDisassemblySection, static_cast<size_t>(symbol.value)),
+                                   static_cast<size_t>(symbol.size));
+                        }
+                    }
+                }
+
+                result = symbolValid ? VK_SUCCESS : VK_INCOMPLETE;
+            }
+            else
+            {
+                VK_ASSERT(palResult == Pal::Result::ErrorInvalidMemorySize);
+
+                result = VK_INCOMPLETE;
+            }
+        }
         else if (infoType == VK_SHADER_INFO_TYPE_BINARY_AMD)
         {
             const PipelineBinaryInfo* pBinary = pPipeline->GetBinary();

@@ -161,19 +161,58 @@ bool PatchEntryPointMutate::runOnModule(
         builder.addAttribute("InitialPSInputAddr", std::to_string(spiPsInputAddr.u32All));
     }
 
-    if (cl::VgprLimit != 0)
+    // Set vgpr,sgpr and wave limits
+    uint32_t vgprLimit = 0;
+    uint32_t sgprLimit = 0;
+    std::string wavesPerEu;
+    auto pShaderOptions = &(m_pContext->GetPipelineShaderInfo(m_shaderStage)->options);
+    auto pResourceUsage = m_pContext->GetShaderResourceUsage(m_shaderStage);
+
+    pResourceUsage->numSgprsAvailable = m_pContext->GetGpuProperty()->maxSgprsAvailable;
+    pResourceUsage->numVgprsAvailable = m_pContext->GetGpuProperty()->maxVgprsAvailable;
+
+    if ((pShaderOptions->vgprLimit != 0) && (pShaderOptions->vgprLimit != UINT32_MAX))
     {
-        builder.addAttribute("amdgpu-num-vgpr", std::to_string(cl::VgprLimit));
+        vgprLimit = pShaderOptions->vgprLimit;
+    }
+    else if (cl::VgprLimit != 0)
+    {
+        vgprLimit = cl::VgprLimit;
     }
 
-    if (cl::SgprLimit != 0)
+    if (vgprLimit != 0)
     {
-        builder.addAttribute("amdgpu-num-sgpr", std::to_string(cl::SgprLimit));
+        builder.addAttribute("amdgpu-num-vgpr", std::to_string(vgprLimit));
+        pResourceUsage->numVgprsAvailable = std::min(vgprLimit, pResourceUsage->numVgprsAvailable);
     }
 
-    if (cl::WavesPerEu.empty() == false)
+    if ((pShaderOptions->sgprLimit != 0) && (pShaderOptions->sgprLimit != UINT32_MAX))
     {
-        builder.addAttribute("amdgpu-waves-per-eu", cl::WavesPerEu);
+        sgprLimit = pShaderOptions->sgprLimit;
+    }
+    else if (cl::SgprLimit != 0)
+    {
+        sgprLimit = cl::SgprLimit;
+    }
+
+    if (sgprLimit != 0)
+    {
+        builder.addAttribute("amdgpu-num-sgpr", std::to_string(sgprLimit));
+        pResourceUsage->numSgprsAvailable = std::min(sgprLimit, pResourceUsage->numSgprsAvailable);
+    }
+
+    if (pShaderOptions->maxThreadGroupsPerComputeUnit != 0)
+    {
+        wavesPerEu = std::string("0,") + std::to_string(pShaderOptions->maxThreadGroupsPerComputeUnit);
+    }
+    else if (cl::WavesPerEu.empty() == false)
+    {
+        wavesPerEu = cl::WavesPerEu;
+    }
+
+    if (wavesPerEu.empty() == false)
+    {
+        builder.addAttribute("amdgpu-waves-per-eu", wavesPerEu);
     }
 
     AttributeList::AttrIndex attribIdx = AttributeList::AttrIndex(AttributeList::FunctionIndex);

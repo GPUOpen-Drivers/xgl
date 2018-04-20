@@ -541,10 +541,19 @@ Result ConfigBuilder::BuildVsRegConfig(
         {
             // NOTE: For copy shader, we use fixed number of user data registers.
             SET_REG_FIELD_GFX9(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, USER_SGPR, Llpc::CopyShaderUserSgprCount);
+            SET_REG(&pConfig->m_vsRegs, VS_NUM_AVAIL_SGPRS, pContext->GetGpuProperty()->maxSgprsAvailable);
+            SET_REG(&pConfig->m_vsRegs, VS_NUM_AVAIL_VGPRS, pContext->GetGpuProperty()->maxVgprsAvailable);
         }
         else
         {
+            const auto pShaderInfo = pContext->GetPipelineShaderInfo(shaderStage);
+            SET_REG_FIELD(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC1_VS, DEBUG_MODE, pShaderInfo->options.debugMode);
+
+            SET_REG_FIELD_GFX9(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, TRAP_PRESENT, pShaderInfo->options.trapPresent);
             SET_REG_FIELD_GFX9(&pConfig->m_vsRegs, SPI_SHADER_PGM_RSRC2_VS, USER_SGPR, pIntfData->userDataCount);
+
+            SET_REG(&pConfig->m_vsRegs, VS_NUM_AVAIL_SGPRS, pResUsage->numSgprsAvailable);
+            SET_REG(&pConfig->m_vsRegs, VS_NUM_AVAIL_VGPRS, pResUsage->numVgprsAvailable);
         }
     }
     else
@@ -789,8 +798,9 @@ Result ConfigBuilder::BuildLsHsRegConfig(
 
     GfxIpVersion gfxIp = pContext->GetGfxIpVersion();
 
+    const auto pTcsResUsage = pContext->GetShaderResourceUsage(ShaderStageTessControl);
     const auto& vsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageVertex)->builtInUsage.vs;
-    const auto& tcsBuiltInUsage = pContext->GetShaderResourceUsage(ShaderStageTessControl)->builtInUsage.tcs;
+    const auto& tcsBuiltInUsage = pTcsResUsage->builtInUsage.tcs;
 
     SET_REG_FIELD(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC1_HS, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC1_HS, DX10_CLAMP, true); // Follow PAL setting
@@ -806,8 +816,15 @@ Result ConfigBuilder::BuildLsHsRegConfig(
     const auto& pTcsIntfData = pContext->GetShaderInterfaceData(ShaderStageTessControl);
     uint32_t userDataCount = std::max(pVsIntfData->userDataCount, pTcsIntfData->userDataCount);
 
+    const auto pTcsShaderInfo = pContext->GetPipelineShaderInfo(ShaderStageTessControl);
+    SET_REG_FIELD(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC1_HS, DEBUG_MODE, pTcsShaderInfo->options.debugMode);
     if (gfxIp.major == 9)
     {
+
+        SET_REG_FIELD_GFX9(&pConfig->m_lsHsRegs,
+                           SPI_SHADER_PGM_RSRC2_HS,
+                           TRAP_PRESENT,
+                           pTcsShaderInfo->options.trapPresent);
         SET_REG_FIELD_GFX9(&pConfig->m_lsHsRegs, SPI_SHADER_PGM_RSRC2_HS, USER_SGPR, userDataCount);
     }
     else
@@ -817,7 +834,7 @@ Result ConfigBuilder::BuildLsHsRegConfig(
 
     // NOTE: On GFX7+, granularity for the LDS_SIZE field is 128. The range is 0~128 which allocates 0 to 16K
     // DWORDs.
-    const auto& calcFactor = pContext->GetShaderResourceUsage(ShaderStageTessControl)->inOutUsage.tcs.calcFactor;
+    const auto& calcFactor = pTcsResUsage->inOutUsage.tcs.calcFactor;
     uint32_t ldsSizeInDwords = calcFactor.onChip.patchConstStart +
                                calcFactor.patchConstSize * calcFactor.patchCountPerThreadGroup;
     if (pContext->IsTessOffChip())
@@ -851,6 +868,9 @@ Result ConfigBuilder::BuildLsHsRegConfig(
 
     auto hsNumOutputCp = tcsBuiltInUsage.outputVertices;
     SET_REG_FIELD(&pConfig->m_lsHsRegs, VGT_LS_HS_CONFIG, HS_NUM_OUTPUT_CP, hsNumOutputCp);
+
+    SET_REG(&pConfig->m_lsHsRegs, HS_NUM_AVAIL_SGPRS, pTcsResUsage->numSgprsAvailable);
+    SET_REG(&pConfig->m_lsHsRegs, HS_NUM_AVAIL_VGPRS, pTcsResUsage->numVgprsAvailable);
 
     // Set up VGT_TF_PARAM
     SetupVgtTfParam(pContext, &pConfig->m_lsHsRegs);
@@ -931,8 +951,15 @@ Result ConfigBuilder::BuildEsGsRegConfig(
     uint32_t userDataCount = std::max(hasTs ? pTesIntfData->userDataCount : pVsIntfData->userDataCount,
                                       pGsIntfData->userDataCount);
 
+    const auto pGsShaderInfo = pContext->GetPipelineShaderInfo(ShaderStageGeometry);
+    SET_REG_FIELD(&pConfig->m_esGsRegs, SPI_SHADER_PGM_RSRC1_GS, DEBUG_MODE, pGsShaderInfo->options.debugMode);
     if (gfxIp.major == 9)
     {
+
+        SET_REG_FIELD_GFX9(&pConfig->m_esGsRegs,
+                           SPI_SHADER_PGM_RSRC2_GS,
+                           TRAP_PRESENT,
+                           pGsShaderInfo->options.trapPresent);
         SET_REG_FIELD_GFX9(&pConfig->m_esGsRegs, SPI_SHADER_PGM_RSRC2_GS, USER_SGPR, userDataCount);
     }
     else
@@ -1059,6 +1086,9 @@ Result ConfigBuilder::BuildEsGsRegConfig(
 
     SET_REG_FIELD(&pConfig->m_esGsRegs, VGT_ESGS_RING_ITEMSIZE, ITEMSIZE, calcFactor.esGsRingItemSize);
 
+    SET_REG(&pConfig->m_esGsRegs, GS_NUM_AVAIL_SGPRS, pGsResUsage->numSgprsAvailable);
+    SET_REG(&pConfig->m_esGsRegs, GS_NUM_AVAIL_VGPRS, pGsResUsage->numVgprsAvailable);
+
     result = ConfigBuilder::BuildUserDataConfig<T>(
                  pContext,
                  (shaderStage1 != ShaderStageInvalid) ? shaderStage1 : shaderStage2,
@@ -1087,14 +1117,17 @@ Result ConfigBuilder::BuildPsRegConfig(
         static_cast<const GraphicsPipelineBuildInfo*>(pContext->GetPipelineBuildInfo());
 
     const auto pIntfData = pContext->GetShaderInterfaceData(shaderStage);
-
+    const auto pShaderInfo = pContext->GetPipelineShaderInfo(shaderStage);
     const auto pResUsage = pContext->GetShaderResourceUsage(shaderStage);
     const auto& builtInUsage = pResUsage->builtInUsage.fs;
 
     SET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, DX10_CLAMP, true);  // Follow PAL setting
+    SET_REG_FIELD(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC1_PS, DEBUG_MODE, pShaderInfo->options.debugMode);
+
     if (gfxIp.major == 9)
     {
+        SET_REG_FIELD_GFX9(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC2_PS, TRAP_PRESENT, pShaderInfo->options.trapPresent);
         SET_REG_FIELD_GFX9(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC2_PS, USER_SGPR, pIntfData->userDataCount);
     }
     else
@@ -1246,9 +1279,18 @@ Result ConfigBuilder::BuildPsRegConfig(
 
     SET_REG(&pConfig->m_psRegs, PS_USES_UAVS, static_cast<uint32_t>(pResUsage->imageWrite));
 
-    SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_AA_CONFIG, COVERAGE_TO_SHADER_SELECT, INPUT_COVERAGE);
-    SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_CONSERVATIVE_RASTERIZATION_CNTL, COVERAGE_AA_MASK_ENABLE, true);
-    SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_CONSERVATIVE_RASTERIZATION_CNTL, UNDER_RAST_ENABLE, false);
+    if (pPipelineInfo->rsState.innerCoverage)
+    {
+        SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_AA_CONFIG, COVERAGE_TO_SHADER_SELECT, INPUT_INNER_COVERAGE);
+        SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_CONSERVATIVE_RASTERIZATION_CNTL, COVERAGE_AA_MASK_ENABLE, false);
+        SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_CONSERVATIVE_RASTERIZATION_CNTL, UNDER_RAST_ENABLE, true);
+    }
+    else
+    {
+        SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_AA_CONFIG, COVERAGE_TO_SHADER_SELECT, INPUT_COVERAGE);
+        SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_CONSERVATIVE_RASTERIZATION_CNTL, COVERAGE_AA_MASK_ENABLE, true);
+        SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_CONSERVATIVE_RASTERIZATION_CNTL, UNDER_RAST_ENABLE, false);
+    }
 
     const uint32_t spiShaderPgmRsrc2Ps = GET_REG(&pConfig->m_psRegs, SPI_SHADER_PGM_RSRC2_PS);
     const uint32_t loadCollisionWaveId =
@@ -1260,6 +1302,9 @@ Result ConfigBuilder::BuildPsRegConfig(
 
     SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_SHADER_CONTROL, LOAD_COLLISION_WAVEID, loadCollisionWaveId);
     SET_REG_FIELD(&pConfig->m_psRegs, PA_SC_SHADER_CONTROL, LOAD_INTRAWAVE_COLLISION, loadIntrawaveCollision);
+
+    SET_REG(&pConfig->m_psRegs, PS_NUM_AVAIL_SGPRS, pResUsage->numSgprsAvailable);
+    SET_REG(&pConfig->m_psRegs, PS_NUM_AVAIL_VGPRS, pResUsage->numVgprsAvailable);
 
     // Set shader user data mapping
     if (result == Result::Success)
@@ -1286,14 +1331,16 @@ Result ConfigBuilder::BuildCsRegConfig(
     LLPC_ASSERT(shaderStage == ShaderStageCompute);
 
     const auto pIntfData = pContext->GetShaderInterfaceData(shaderStage);
-
+    const auto pShaderInfo = pContext->GetPipelineShaderInfo(shaderStage);
     const auto pResUsage = pContext->GetShaderResourceUsage(shaderStage);
     const auto& builtInUsage = pResUsage->builtInUsage.cs;
 
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC1, FLOAT_MODE, 0xC0); // 0xC0: Disable denorm
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC1, DX10_CLAMP, true);  // Follow PAL setting
+    SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC1, DEBUG_MODE, pShaderInfo->options.debugMode);
 
     // Set registers based on shader interface data
+    SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC2, TRAP_PRESENT, pShaderInfo->options.trapPresent);
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC2, USER_SGPR, pIntfData->userDataCount);
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC2, TGID_X_EN, true);
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_PGM_RSRC2, TGID_Y_EN, true);
@@ -1304,6 +1351,9 @@ Result ConfigBuilder::BuildCsRegConfig(
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_NUM_THREAD_X, NUM_THREAD_FULL, builtInUsage.workgroupSizeX);
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_NUM_THREAD_Y, NUM_THREAD_FULL, builtInUsage.workgroupSizeY);
     SET_REG_FIELD(&pConfig->m_csRegs, COMPUTE_NUM_THREAD_Z, NUM_THREAD_FULL, builtInUsage.workgroupSizeZ);
+
+    SET_REG(&pConfig->m_csRegs, CS_NUM_AVAIL_SGPRS, pResUsage->numSgprsAvailable);
+    SET_REG(&pConfig->m_csRegs, CS_NUM_AVAIL_VGPRS, pResUsage->numVgprsAvailable);
 
     // Set shader user data mapping
     if (result == Result::Success)
@@ -1523,7 +1573,7 @@ void ConfigBuilder::SetupVgtTfParam(
 
     const auto& builtInUsage = pContext->GetShaderResourceUsage(ShaderStageTessEval)->builtInUsage.tes;
 
-    LLPC_ASSERT(builtInUsage.primitiveMode != Unknown);
+    LLPC_ASSERT(builtInUsage.primitiveMode != SPIRVPrimitiveModeKind::Unknown);
     if (builtInUsage.primitiveMode == Isolines)
     {
         primType = TESS_ISOLINE;

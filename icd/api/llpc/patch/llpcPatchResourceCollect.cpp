@@ -2219,12 +2219,12 @@ void PatchResourceCollect::ReviseTessExecutionMode()
         }
     }
 
-    if (tesBuiltInUsage.primitiveMode == Unknown)
+    if (tesBuiltInUsage.primitiveMode == SPIRVPrimitiveModeKind::Unknown)
     {
-        if (tcsBuiltInUsage.primitiveMode != Unknown)
+        if (tcsBuiltInUsage.primitiveMode != SPIRVPrimitiveModeKind::Unknown)
         {
             tesBuiltInUsage.primitiveMode = tcsBuiltInUsage.primitiveMode;
-            tcsBuiltInUsage.primitiveMode = Unknown;
+            tcsBuiltInUsage.primitiveMode = SPIRVPrimitiveModeKind::Unknown;
         }
         else
         {

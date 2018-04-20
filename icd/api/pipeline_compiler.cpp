@@ -36,6 +36,8 @@
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
 
+#include <inttypes.h>
+
 namespace vk
 {
 
@@ -252,41 +254,38 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
         llpcOptions[numOptions++] = "-debug";
     }
 
-    if (settings.llpcOptions[0] != '\0')
-    {
-        const char* pOptions = &settings.llpcOptions[0];
-        VK_ASSERT(pOptions[0] == '-');
-
-        // Split options
-        while (pOptions)
-        {
-            const char* pNext = strchr(pOptions, ' ');
-            if (pNext)
-            {
-                // Copy options to option buffer
-                optionLength = static_cast<int32_t>(pNext - pOptions);
-                memcpy(pOptionBuffer, pOptions, optionLength);
-                pOptionBuffer[optionLength] = 0;
-
-                llpcOptions[numOptions++] = pOptionBuffer;
-                pOptionBuffer += (optionLength + 1);
-
-                bufSize -= (optionLength + 1);
-                pOptions = strchr(pOptions + optionLength, '-');
-            }
-            else
-            {
-                // Use pOptions directly for last option
-                llpcOptions[numOptions++] = pOptions;
-                pOptions = nullptr;
-            }
-        }
-    }
-
     // LLPC pipeline dump options
     if (settings.enablePipelineDump)
     {
         llpcOptions[numOptions++] = "-enable-pipeline-dump";
+        if (settings.filterPipelineDumpByType)
+        {
+            optionLength = Util::Snprintf(pOptionBuffer,
+                                          bufSize,
+                                          "-filter-pipeline-dump-by-type=%u",
+                                          settings.filterPipelineDumpByType);
+            ++optionLength;
+            llpcOptions[numOptions++] = pOptionBuffer;
+            pOptionBuffer += optionLength;
+            bufSize -= optionLength;
+        }
+
+        if (settings.dumpDuplicatePipelines)
+        {
+            llpcOptions[numOptions++] = "-dump-duplicate-pipelines";
+        }
+
+        if (settings.filterPipelineDumpByHash != 0)
+        {
+            optionLength = Util::Snprintf(pOptionBuffer,
+                                          bufSize,
+                                          "-filter-pipeline-dump-by-hash=0x%016" PRIX64,
+                                          settings.filterPipelineDumpByHash);
+            ++optionLength;
+            llpcOptions[numOptions++] = pOptionBuffer;
+            pOptionBuffer += optionLength;
+            bufSize -= optionLength;
+        }
     }
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-pipeline-dump-dir=%s", settings.pipelineDumpDir);
@@ -359,6 +358,56 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
         llpcOptions[numOptions++] = pOptionBuffer;
         pOptionBuffer += optionLength;
         bufSize -= optionLength;
+    }
+
+    if (settings.llpcOptions[0] != '\0')
+    {
+        const char* pOptions = &settings.llpcOptions[0];
+        VK_ASSERT(pOptions[0] == '-');
+
+        // Split options
+        while (pOptions)
+        {
+            const char* pNext = strchr(pOptions, ' ');
+            const char* pOption = nullptr;
+            if (pNext)
+            {
+                // Copy options to option buffer
+                optionLength = static_cast<int32_t>(pNext - pOptions);
+                memcpy(pOptionBuffer, pOptions, optionLength);
+                pOptionBuffer[optionLength] = 0;
+                pOption = pOptionBuffer;
+                pOptionBuffer += (optionLength + 1);
+                bufSize -= (optionLength + 1);
+                pOptions = strchr(pOptions + optionLength, '-');
+            }
+            else
+            {
+                pOption = pOptions;
+                pOptions = nullptr;
+            }
+
+            const char* pNameEnd = strchr(pOption, '=');
+            size_t nameLength = (pNameEnd != nullptr) ? (pNameEnd - pOption) : strlen(pOption);
+            uint32_t optionIndex = UINT32_MAX;
+            for (uint32_t i = 0; i < numOptions; ++i)
+            {
+                if (strncmp(llpcOptions[i], pOption, nameLength) == 0)
+                {
+                    optionIndex = i;
+                    break;
+                }
+            }
+
+            if (optionIndex != UINT32_MAX)
+            {
+                llpcOptions[optionIndex] = pOption;
+            }
+            else
+            {
+                llpcOptions[numOptions++] = pOption;
+            }
+        }
     }
 
     VK_ASSERT(numOptions <= MaxLlpcOptions);
@@ -550,18 +599,18 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
-    // Build the LLPC pipeline
-    Llpc::ComputePipelineBuildOut  pipelineOut         = {};
-    void*                          pLlpcPipelineBuffer = nullptr;
+    Llpc::ComputePipelineBuildInfo* pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
+    pPipelineBuildInfo->deviceIndex    = deviceIdx;
 
     {
-        // Fill pipeline create info for LLPC
-        Llpc::ComputePipelineBuildInfo* pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
+        // Build the LLPC pipeline
+       Llpc::ComputePipelineBuildOut  pipelineOut         = {};
+       void*                          pLlpcPipelineBuffer = nullptr;
 
+        // Fill pipeline create info for LLPC
         pPipelineBuildInfo->pInstance      = pInstance;
         pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
         pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
-        pPipelineBuildInfo->deviceIndex    = deviceIdx;
 
         if (pPipelineCache != nullptr)
         {
@@ -591,7 +640,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         VK_ASSERT(*ppPipelineBinary == pLlpcPipelineBuffer);
     }
 
-    return VK_SUCCESS;
+    return result;
 }
 
 // =====================================================================================================================
@@ -766,6 +815,11 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         }
     }
 
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
+    {
+        pCreateInfo->pipelineInfo.options.includeDisassembly = true;
+    }
+
     // Allocate space to create the LLPC/SCPC pipeline resource mappings
     if (pLayout != nullptr)
     {
@@ -864,6 +918,7 @@ bool PipelineCompiler::IsDualSourceBlend(
 // =====================================================================================================================
 // Converts Vulkan compute pipeline parameters to an internal structure
 VkResult PipelineCompiler::ConvertComputePipelineInfo(
+    Device*                             pDevice,
     const VkComputePipelineCreateInfo*  pIn,
     ComputePipelineCreateInfo*          pCreateInfo)
 {
@@ -877,6 +932,11 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
         pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
     pCreateInfo->flags  = pIn->flags;
+
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
+    {
+        pCreateInfo->pipelineInfo.options.includeDisassembly = true;
+    }
 
     // Allocate space to create the LLPC/SCPC pipeline resource mappings
     if (pLayout != nullptr)

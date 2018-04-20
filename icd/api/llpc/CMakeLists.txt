@@ -259,21 +259,18 @@ set(GEN_GLSL_EMU_LIB_DEPS
     ${OP_EMU_LIB_GEN_DIR}/script/genGlslOpEmuCodeUtil.py
 )
 
-add_custom_command(
-    OUTPUT ${OP_EMU_LIB_GEN_DIR}/g_llpcGlslOpEmuLib.h
-    COMMAND ${PYTHON_CMD} ${GEN_GLSL_OP_EMU_LIB_SCRIPT} ${XGL_LLVM_BUILD_PATH} ${BUILD_OS}
-    DEPENDS ${GEN_OP_EMU_LIB_FILES}
-    COMMENT "Generating g_llpcGlslOpEmuLib.h from glslOpEmu.lib"
-)
+if(UNIX)
+    set(LLVM_BIN_DIR ${XGL_LLVM_BUILD_PATH}/bin/)
+endif()
 
 add_custom_target(
     RunHeapGlslOpEmuLibGenerator
-    COMMAND ${PYTHON_CMD} ${GEN_GLSL_OP_EMU_LIB_SCRIPT} ${XGL_LLVM_BUILD_PATH}/bin/  ${XGL_LLVM_BUILD_PATH}/bin/  ${BUILD_OS}
+    COMMAND ${PYTHON_CMD} ${GEN_GLSL_OP_EMU_LIB_SCRIPT} ${LLVM_BIN_DIR}  ${LLVM_BIN_DIR}  ${BUILD_OS}
     DEPENDS ${GEN_OP_EMU_LIB_FILES}
     COMMENT "Checking if re-generation is required for g_llpcGlslOpEmuLib.h"
 )
 
-add_dependencies(RunHeapGlslOpEmuLibGenerator llvm-ar llvm-link)
+add_dependencies(RunHeapGlslOpEmuLibGenerator llvm-ar llvm-link llvm-as)
 add_dependencies(llpc RunHeapGlslOpEmuLibGenerator)
 
 ### Link Libraries #####################################################################################################
@@ -333,6 +330,8 @@ if(UNIX)
     endif()
 endif()
 
-target_link_libraries(amdllpc PRIVATE llpc dl stdc++)
+if(UNIX)
+    target_link_libraries(amdllpc PRIVATE llpc dl stdc++)
+endif()
     llvm_map_components_to_libnames(llvm_libs amdgpucodegen amdgpuinfo amdgpuasmparser amdgpudisassembler LTO ipo analysis bitreader bitwriter codegen irreader linker mc passes support target transformutils coroutines aggressiveinstcombine)
 target_link_libraries(amdllpc PRIVATE ${llvm_libs})

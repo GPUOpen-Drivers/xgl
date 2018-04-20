@@ -81,6 +81,24 @@ static opt<std::string> PipelineDumpDir("pipeline-dump-dir",
                                         value_desc("directory"),
                                         init("."));
 
+static opt<uint32_t> FilterPipelineDumpByType("filter-pipeline-dump-by-type",
+                                              desc("Filter which types of pipeline dump are disabled\n"
+                                                   "0x00 - Do not disable logging based on pipeline type\n"
+                                                   "0x01 - Disable logging for CS pipelines\n"
+                                                   "0x02 - Disable logging for NGG pipelines\n"
+                                                   "0x04 - Disable logging for GS pipelines\n"
+                                                   "0x08 - Disable logging for TS pipelines\n"
+                                                   "0x10 - Disable logging for VS-PS pipelines"),
+                                              init(0));
+
+static opt<uint64_t> FilterPipelineDumpByHash("filter-pipeline-dump-by-hash",
+                                              desc("Only dump the pipeline with this compiler hash if non-zero"),
+                                              init(0));
+
+static opt<bool> DumpDuplicatePipelines("dump-duplicate-pipelines",
+    desc("If TRUE, duplicate pipelines will be dumped to a file with a numeric suffix attached"),
+    init(false));
+
 // -enable-pipeline-dump: enable pipeline info dump
 opt<bool> EnablePipelineDump("enable-pipeline-dump", desc("Enable pipeline info dump"), init(false));
 
@@ -471,27 +489,29 @@ Result Compiler::BuildGraphicsPipeline(
         result = ValidatePipelineShaderInfo(static_cast<ShaderStage>(i), shaderInfo[i]);
     }
 
-    MetroHash::Hash hash = {};
-    hash = PipelineDumper::GenerateHashForGraphicsPipeline(pPipelineInfo);
+    MetroHash::Hash cacheHash = {};
+    MetroHash::Hash pipelineHash = {};
+    cacheHash = PipelineDumper::GenerateHashForGraphicsPipeline(pPipelineInfo, true);
+    pipelineHash = PipelineDumper::GenerateHashForGraphicsPipeline(pPipelineInfo, false);
 
     // Do shader replacement if it's enabled
     bool ShaderReplaced = false;
     const ShaderModuleData* restoreModuleData[ShaderStageGfxCount] = {};
     if (cl::ShaderReplaceMode != ShaderReplaceDisable)
     {
-        char pipelineHash[64];
-        int32_t length = snprintf(pipelineHash, 64, "0x%016" PRIX64, MetroHash::Compact64(&hash));
+        char pipelineHashString[64];
+        int32_t length = snprintf(pipelineHashString, 64, "0x%016" PRIX64, MetroHash::Compact64(&pipelineHash));
         LLPC_ASSERT(length >= 0);
 
         bool hashMatch = true;
         if (cl::ShaderReplaceMode == ShaderReplaceShaderPipelineHash)
         {
             std::string pipelineReplacementHashes = cl::ShaderReplacePipelineHashes;
-            hashMatch = (pipelineReplacementHashes.find(pipelineHash) != std::string::npos);
+            hashMatch = (pipelineReplacementHashes.find(pipelineHashString) != std::string::npos);
 
             if (hashMatch)
             {
-                LLPC_OUTS("// Shader replacement for graphics pipeline: " << pipelineHash << "\n");
+                LLPC_OUTS("// Shader replacement for graphics pipeline: " << pipelineHashString << "\n");
             }
         }
 
@@ -519,7 +539,7 @@ Result Compiler::BuildGraphicsPipeline(
                                                   MetroHash::Compact64(pHash));
                         LLPC_ASSERT(length >= 0);
                         LLPC_OUTS("// Shader replacement for shader: " << shaderHash
-                                  << ", in pipeline: " << pipelineHash << "\n");
+                                  << ", in pipeline: " << pipelineHashString << "\n");
                     }
                 }
             }
@@ -527,18 +547,18 @@ Result Compiler::BuildGraphicsPipeline(
             if (ShaderReplaced)
             {
                 // Update pipeline hash after shader replacement
-                hash = PipelineDumper::GenerateHashForGraphicsPipeline(pPipelineInfo);
+                cacheHash = PipelineDumper::GenerateHashForGraphicsPipeline(pPipelineInfo, true);
             }
         }
     }
 
-    GraphicsContext graphicsContext(m_gfxIp, &m_gpuProperty, pPipelineInfo, &hash);
+    GraphicsContext graphicsContext(m_gfxIp, &m_gpuProperty, pPipelineInfo, &pipelineHash);
 
     if ((result == Result::Success) && EnableOuts())
     {
         LLPC_OUTS("===============================================================================\n");
         LLPC_OUTS("// LLPC calculated hash results (graphics pipline)\n");
-        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, MetroHash::Compact64(&hash)) << "\n");
+        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, MetroHash::Compact64(&pipelineHash)) << "\n");
         for (uint32_t stage = 0; stage < ShaderStageGfxCount; ++stage)
         {
             const ShaderModuleData* pModuleData =
@@ -553,11 +573,16 @@ Result Compiler::BuildGraphicsPipeline(
         LLPC_OUTS("\n");
     }
 
-    std::ofstream* pPipelineDumperFile = nullptr;
+    PipelineDumpFile* pPipelineDumperFile = nullptr;
 
     if ((result == Result::Success) && cl::EnablePipelineDump)
     {
-        pPipelineDumperFile = PipelineDumper::BeginPipelineDump(cl::PipelineDumpDir.c_str(), nullptr, pPipelineInfo, &hash);
+        PipelineDumpOptions dumpOptions = {};
+        dumpOptions.pDumpDir                 = cl::PipelineDumpDir.c_str();
+        dumpOptions.filterPipelineDumpByType = cl::FilterPipelineDumpByType;
+        dumpOptions.filterPipelineDumpByHash = cl::FilterPipelineDumpByHash;
+        dumpOptions.dumpDuplicatePipelines   = cl::DumpDuplicatePipelines;
+        pPipelineDumperFile = PipelineDumper::BeginPipelineDump(&dumpOptions, nullptr, pPipelineInfo, &pipelineHash);
     }
 
     ShaderEntryState cacheEntryState = ShaderEntryState::New;
@@ -577,7 +602,7 @@ Result Compiler::BuildGraphicsPipeline(
         }
         else
         {
-            cacheEntryState = pShaderCache->FindShader(hash, true, &hEntry);
+            cacheEntryState = pShaderCache->FindShader(cacheHash, true, &hEntry);
             if (cacheEntryState == ShaderEntryState::Ready)
             {
                 result = pShaderCache->RetrieveShader(hEntry, &pElf, &elfSize);
@@ -944,8 +969,8 @@ Result Compiler::BuildGraphicsPipeline(
         if (result == Result::Success)
         {
             PipelineDumper::DumpPipelineBinary(pPipelineDumperFile,
-                                             m_gfxIp,
-                                             &pPipelineOut->pipelineBin);
+                                               m_gfxIp,
+                                               &pPipelineOut->pipelineBin);
         }
 
         PipelineDumper::EndPipelineDump(pPipelineDumperFile);
@@ -966,7 +991,7 @@ Result Compiler::BuildGraphicsPipeline(
 
     if (cl::EnableTimeProfiler)
     {
-        DumpTimeProfilingResult(&hash);
+        DumpTimeProfilingResult(&pipelineHash);
     }
 
     return result;
@@ -985,27 +1010,29 @@ Result Compiler::BuildComputePipeline(
 
     Result result = ValidatePipelineShaderInfo(ShaderStageCompute, &pPipelineInfo->cs);
 
-    MetroHash::Hash hash = {};
-    hash = PipelineDumper::GenerateHashForComputePipeline(pPipelineInfo);
+    MetroHash::Hash cacheHash = {};
+    MetroHash::Hash pipelineHash = {};
+    cacheHash = PipelineDumper::GenerateHashForComputePipeline(pPipelineInfo, true);
+    pipelineHash = PipelineDumper::GenerateHashForComputePipeline(pPipelineInfo, false);
 
     // Do shader replacement if it's enabled
     bool ShaderReplaced = false;
     const ShaderModuleData* pRestoreModuleData = nullptr;
     if (cl::ShaderReplaceMode != ShaderReplaceDisable)
     {
-        char pipelineHash[64];
-        int32_t length = snprintf(pipelineHash, 64, "0x%016" PRIX64, MetroHash::Compact64(&hash));
+        char pipelineHashString[64];
+        int32_t length = snprintf(pipelineHashString, 64, "0x%016" PRIX64, MetroHash::Compact64(&pipelineHash));
         LLPC_ASSERT(length >= 0);
 
         bool hashMatch = true;
         if (cl::ShaderReplaceMode == ShaderReplaceShaderPipelineHash)
         {
             std::string pipelineReplacementHashes = cl::ShaderReplacePipelineHashes;
-            hashMatch = (pipelineReplacementHashes.find(pipelineHash) != std::string::npos);
+            hashMatch = (pipelineReplacementHashes.find(pipelineHashString) != std::string::npos);
 
             if (hashMatch)
             {
-                LLPC_OUTS("// Shader replacement for compute pipeline: " << pipelineHash << "\n");
+                LLPC_OUTS("// Shader replacement for compute pipeline: " << pipelineHashString << "\n");
             }
         }
 
@@ -1027,19 +1054,19 @@ Result Compiler::BuildComputePipeline(
                     int32_t length = snprintf(shaderHash, 64, "0x%016" PRIX64, MetroHash::Compact64(pHash));
                     LLPC_ASSERT(length >= 0);
                     LLPC_OUTS("// Shader replacement for shader: " << shaderHash
-                               << ", in pipeline: " << pipelineHash << "\n");
+                               << ", in pipeline: " << pipelineHashString << "\n");
                 }
             }
 
             if (ShaderReplaced)
             {
                 // Update pipeline hash after shader replacement
-                hash = PipelineDumper::GenerateHashForComputePipeline(pPipelineInfo);
+                cacheHash = PipelineDumper::GenerateHashForComputePipeline(pPipelineInfo, true);
             }
         }
     }
 
-    ComputeContext computeContext(m_gfxIp, &m_gpuProperty, pPipelineInfo, &hash);
+    ComputeContext computeContext(m_gfxIp, &m_gpuProperty, pPipelineInfo, &pipelineHash);
 
     if ((result == Result::Success) && EnableOuts())
     {
@@ -1047,16 +1074,21 @@ Result Compiler::BuildComputePipeline(
         auto pModuleHash = reinterpret_cast<const MetroHash::Hash*>(&pModuleData->hash[0]);
         LLPC_OUTS("===============================================================================\n");
         LLPC_OUTS("// LLPC calculated hash results (compute pipline)\n");
-        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, MetroHash::Compact64(&hash)) << "\n");
+        LLPC_OUTS("PIPE : " << format("0x%016" PRIX64, MetroHash::Compact64(&pipelineHash)) << "\n");
         LLPC_OUTS(format("%-4s : ", GetShaderStageAbbreviation(ShaderStageCompute, true)) <<
                   format("0x%016" PRIX64, MetroHash::Compact64(pModuleHash)) << "\n");
         LLPC_OUTS("\n");
     }
 
-    std::ofstream* pPipelineDumperFile = nullptr;
+    PipelineDumpFile* pPipelineDumperFile = nullptr;
     if ((result == Result::Success) && cl::EnablePipelineDump)
     {
-        pPipelineDumperFile = PipelineDumper::BeginPipelineDump(cl::PipelineDumpDir.c_str(), pPipelineInfo, nullptr, &hash);
+        PipelineDumpOptions dumpOptions = {};
+        dumpOptions.pDumpDir                 = cl::PipelineDumpDir.c_str();
+        dumpOptions.filterPipelineDumpByType = cl::FilterPipelineDumpByType;
+        dumpOptions.filterPipelineDumpByHash = cl::FilterPipelineDumpByHash;
+        dumpOptions.dumpDuplicatePipelines   = cl::DumpDuplicatePipelines;
+        pPipelineDumperFile = PipelineDumper::BeginPipelineDump(&dumpOptions, pPipelineInfo, nullptr, &pipelineHash);
     }
 
     ShaderEntryState cacheEntryState = ShaderEntryState::New;
@@ -1076,7 +1108,7 @@ Result Compiler::BuildComputePipeline(
         }
         else
         {
-            cacheEntryState = pShaderCache->FindShader(hash, true, &hEntry);
+            cacheEntryState = pShaderCache->FindShader(cacheHash, true, &hEntry);
             if (cacheEntryState == ShaderEntryState::Ready)
             {
                 result = pShaderCache->RetrieveShader(hEntry, &pElf, &elfSize);
@@ -1292,8 +1324,8 @@ Result Compiler::BuildComputePipeline(
         if (result == Result::Success)
         {
             PipelineDumper::DumpPipelineBinary(pPipelineDumperFile,
-                                             m_gfxIp,
-                                             &pPipelineOut->pipelineBin);
+                                               m_gfxIp,
+                                               &pPipelineOut->pipelineBin);
         }
 
         PipelineDumper::EndPipelineDump(pPipelineDumperFile);
@@ -1311,7 +1343,7 @@ Result Compiler::BuildComputePipeline(
 
     if (cl::EnableTimeProfiler)
     {
-        DumpTimeProfilingResult(&hash);
+        DumpTimeProfilingResult(&pipelineHash);
     }
 
     return result;
@@ -1690,6 +1722,8 @@ void Compiler::InitGpuProperty()
     m_gpuProperty.ldsSizePerCu = (m_gfxIp.major > 6) ? 65536 : 32768;
     m_gpuProperty.ldsSizePerThreadGroup = 32 * 1024;
     m_gpuProperty.numShaderEngines = 4;
+    m_gpuProperty.maxSgprsAvailable = 104;
+    m_gpuProperty.maxVgprsAvailable = 256;
 
     //TODO: Setup gsPrimBufferDepth from hardware config option, will be done in another change.
     m_gpuProperty.gsPrimBufferDepth = 0x100;

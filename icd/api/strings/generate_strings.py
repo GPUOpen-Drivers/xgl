@@ -257,6 +257,7 @@ def generate_func_table(entry_file_prefix, header_file):
         preprocessor = '#else\n'
         for num in range(0, prev_ext_ep_count):
             preprocessor += '    PFN_vkVoidFunction reserved' + str(reserved_ep_count) + ';\n'
+            reserved_ep_count += 1
         preprocessor += '#endif\n'
         entry_point_members = entry_point_members + preprocessor
 

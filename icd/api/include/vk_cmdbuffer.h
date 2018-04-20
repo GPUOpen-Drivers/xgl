@@ -828,10 +828,6 @@ private:
         VkPipelineBindPoint     pipelineBindPoint,
         VkPipeline              pipeline);
 
-    void AlignMemoryImageCopyRegion(
-        const Pal::IImage*          pImage,
-        Pal::MemoryImageCopyRegion* pRegion) const;
-
     template< typename Type_T >
     bool DetectCopyOverwrite(const Type_T* pDst) const;
 
@@ -856,6 +852,8 @@ private:
         const uint32_t            timestampChunk);
 
     VK_INLINE uint32_t EstimateMaxObjectsOnVirtualStack(size_t objectSize) const;
+
+    void ReleaseResources();
 
 #if VK_ENABLE_DEBUG_BARRIERS
     void DbgCmdBarrier(bool preCmd);

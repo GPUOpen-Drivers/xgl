@@ -116,7 +116,16 @@ bool SpirvLowerResourceCollect::runOnModule(
     {
         if (pGlobal->user_empty())
         {
-            removedGlobals.insert(&*pGlobal);
+            Value* pInitializer = nullptr;
+            if (pGlobal->hasInitializer())
+            {
+                pInitializer = pGlobal->getInitializer();
+            }
+
+            if ((pInitializer == nullptr) || isa<UndefValue>(pInitializer))
+            {
+                removedGlobals.insert(&*pGlobal);
+            }
         }
     }
 
@@ -409,7 +418,7 @@ void SpirvLowerResourceCollect::CollectExecutionModeUsage()
                         m_pResUsage->builtInUsage.tcs.vertexOrder = VertexOrderCcw;
                     }
 
-                    m_pResUsage->builtInUsage.tcs.primitiveMode = Unknown;
+                    m_pResUsage->builtInUsage.tcs.primitiveMode = SPIRVPrimitiveModeKind::Unknown;
                     if (execModeMeta.ts.Triangles)
                     {
                         m_pResUsage->builtInUsage.tcs.primitiveMode = Triangles;
@@ -455,7 +464,7 @@ void SpirvLowerResourceCollect::CollectExecutionModeUsage()
                         m_pResUsage->builtInUsage.tes.vertexOrder = VertexOrderCcw;
                     }
 
-                    m_pResUsage->builtInUsage.tes.primitiveMode = Unknown;
+                    m_pResUsage->builtInUsage.tes.primitiveMode = SPIRVPrimitiveModeKind::Unknown;
                     if (execModeMeta.ts.Triangles)
                     {
                         m_pResUsage->builtInUsage.tes.primitiveMode = Triangles;

@@ -115,6 +115,8 @@ struct ResourceUsage
     uint32_t                   pushConstSizeInBytes;  // Push constant size (in bytes)
     bool                       imageWrite;            // Whether shader does image-write operations
     bool                       perShaderTable;        // Whether per shader stage table is used
+    uint32_t                   numSgprsAvailable;     // Number of available SGPRs
+    uint32_t                   numVgprsAvailable;     // Number of available VGPRs
 
     // Usage of built-ins
     struct
@@ -695,6 +697,9 @@ public:
     // Gets pipeline hash code
     uint64_t GetPiplineHashCode() const { return MetroHash::Compact64(&m_hash); }
     virtual uint64_t GetShaderHashCode(ShaderStage stage) const = 0;
+
+    // Gets per pipeline options
+    virtual const PipelineOptions* GetPipelineOptions() const = 0;
 
 protected:
     // Gets dummy resource mapping nodes of the specified shader stage

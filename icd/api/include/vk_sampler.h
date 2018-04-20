@@ -50,13 +50,9 @@ public:
         const VkAllocationCallbacks*    pAllocator,
         VkSampler*                      pSampler);
 
-    VK_FORCEINLINE const void* Descriptor(int32_t idx = DefaultDeviceIndex) const
+    VK_FORCEINLINE const void* Descriptor() const
     {
-        VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-
-        const void* pSrd = static_cast<const void*>(this + 1);
-
-        return Util::VoidPtrInc(pSrd, m_SrdSize * idx);
+        return static_cast<const void*>(this + 1);
     }
 
     VkResult Destroy(
@@ -64,13 +60,9 @@ public:
         const VkAllocationCallbacks*    pAllocator);
 
 protected:
-    Sampler(Device* pDevice, uint32_t srdSize)
-    :
-    m_SrdSize(srdSize)
+    Sampler(Device* pDevice)
     {
     }
-
-    uint32_t m_SrdSize;
 };
 
 namespace entry

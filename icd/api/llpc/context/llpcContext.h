@@ -83,15 +83,22 @@ public:
     }
 
     // Sets the target machine.
-    void SetTargetMachine(llvm::TargetMachine* pTargetMachine)
+    void SetTargetMachine(llvm::TargetMachine* pTargetMachine, const PipelineOptions* pPipelineOptions)
     {
         m_pTargetMachine.reset(pTargetMachine);
+        m_TargetMachineOptions = *pPipelineOptions;
     }
 
     // Gets the target machine.
     llvm::TargetMachine* GetTargetMachine()
     {
         return m_pTargetMachine.get();
+    }
+
+    // Gets pipeline debuging/tunning options
+    const PipelineOptions* GetTargetMachinePipelineOptions() const
+    {
+        return &m_TargetMachineOptions;
     }
 
     // Gets pre-constructed LLVM types
@@ -243,13 +250,14 @@ private:
 
     // -----------------------------------------------------------------------------------------------------------------
 
-     GfxIpVersion                  m_gfxIp;             // Graphics IP version info
-     PipelineContext*              m_pPipelineContext;  // Pipeline-specific context
-     std::unique_ptr<llvm::Module> m_pGlslEmuLib;       // LLVM library for GLSL emulation
-     std::unique_ptr<llvm::Module> m_pNativeGlslEmuLib; // Native LLVM library for GLSL emulation
-     volatile  bool                m_isInUse;           // Whether this context is in use
+    GfxIpVersion                  m_gfxIp;             // Graphics IP version info
+    PipelineContext*              m_pPipelineContext;  // Pipeline-specific context
+    std::unique_ptr<llvm::Module> m_pGlslEmuLib;       // LLVM library for GLSL emulation
+    std::unique_ptr<llvm::Module> m_pNativeGlslEmuLib; // Native LLVM library for GLSL emulation
+    volatile  bool                m_isInUse;           // Whether this context is in use
 
-     std::unique_ptr<llvm::TargetMachine> m_pTargetMachine; // Target machine
+    std::unique_ptr<llvm::TargetMachine> m_pTargetMachine; // Target machine
+    PipelineOptions               m_TargetMachineOptions;  // Pipeline options when create target machine
 
     llvm::MDNode*       m_pEmptyMetaNode;   // Empty metadata node
 

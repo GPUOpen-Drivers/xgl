@@ -40,7 +40,7 @@
 namespace Llpc
 {
 
-static const uint32_t  Version = 5;
+static const uint32_t  Version = 6;
 static const uint32_t  MaxColorTargets = 8;
 static const char      VkIcdName[]     = "amdvlk";
 
@@ -148,6 +148,49 @@ struct ShaderModuleBuildOut
     void*                pModuleData;       ///< Output shader module data (opaque)
 };
 
+/// Represents the options for pipeline dump.
+struct PipelineDumpOptions
+{
+    const char* pDumpDir;                  ///< Pipeline dump directory
+    uint32_t    filterPipelineDumpByType;  ///< Filter which types of pipeline dump are enabled
+    uint64_t    filterPipelineDumpByHash;  ///< Only dump the pipeline with this compiler hash if non-zero
+    bool        dumpDuplicatePipelines;    ///< If TRUE, duplicate pipelines will be dumped to a file with a
+                                           ///  numeric suffix attached
+};
+
+/// Represents per shader stage options.
+struct PipelineShaderOptions
+{
+    bool   trapPresent;  ///< Indicates a trap handler will be present when this pipeline is executed,
+                         ///  and any trap conditions encountered in this shader should call the trap
+                         ///  handler. This could include an arithmetic exception, an explicit trap
+                         ///  request from the host, or a trap after every instruction when in debug
+                         ///  mode.
+    bool   debugMode;    ///< When set, this shader should cause the trap handler to be executed after
+                         ///  every instruction.  Only valid if trapPresent is set.
+    bool   enablePerformanceData; ///< Enables the compiler to generate extra instructions to gather
+                                  ///  various performance-related data.
+    /// Maximum VGPR limit for this shader. The actual limit used by back-end for shader compilation is the smaller
+    /// of this value and whatever the target GPU supports. To effectively disable this limit, set this to UINT_MAX.
+    uint32_t  vgprLimit;
+
+    /// Maximum SGPR limit for this shader. The actual limit used by back-end for shader compilation is the smaller
+    /// of this value and whatever the target GPU supports. To effectively disable this limit, set this to UINT_MAX.
+    uint32_t  sgprLimit;
+
+    /// Overrides the number of CS thread-groups which the GPU will launch per compute-unit. This throttles the
+    /// shader, which can sometimes enable more graphics shader work to complete in parallel. A value of zero
+    /// disables limiting the number of thread-groups to launch. This field is ignored for graphics shaders.
+    uint32_t  maxThreadGroupsPerComputeUnit;
+};
+
+/// Represents per pipeline options.
+struct PipelineOptions
+{
+    bool includeDisassembly;  ///< If set, the disassembly for all compiled shaders will be included in
+                              ///  the pipeline ELF.
+};
+
 /// Represents one node in a graph defining how the user data bound in a command buffer at draw/dispatch time maps to
 /// resources referenced by a shader (t#, u#, etc.).
 struct ResourceMappingNode
@@ -208,6 +251,7 @@ struct PipelineShaderInfo
     /// NOTE: Normally, this user data will correspond to the GPU's user data registers. However, Compiler needs some
     /// user data registers for internal use, so some user data may spill to internal GPU memory managed by Compiler.
     const ResourceMappingNode*      pUserDataNodes;
+    PipelineShaderOptions           options;               ///< Per shader stage tuning/debugging options
 };
 
 /// Represents output of building a graphics pipeline.
@@ -252,6 +296,8 @@ struct GraphicsPipelineBuildInfo
     {
         bool    rasterizerDiscardEnable;    ///< Kill all rasterized pixels. This is implicitly true if stream out
                                             ///  is enabled and no streams are rasterized
+        bool    innerCoverage;              ///< Related to conservative rasterization.  Must be false if conservative
+                                            ///  rasterization is disabled.
         bool    perSampleShading;           ///< Enable per sample shading
         uint32_t  numSamples;               ///< Number of coverage samples used when rendering with this pipeline.
         uint32_t  samplePatternIdx;         ///< Index into the currently bound MSAA sample pattern table that
@@ -269,10 +315,11 @@ struct GraphicsPipelineBuildInfo
             bool          blendEnable;          ///< Blend will be enabled for this target at draw time
             bool          blendSrcAlphaToColor; ///< Whether source alpha is blended to color channels for this target
                                                 ///  at draw time
-           uint8_t channelWriteMask;            ///< Write mask to specify destination channels
+           uint8_t        channelWriteMask;     ///< Write mask to specify destination channels
            VkFormat       format;               ///< Color attachment format
         } target[MaxColorTargets];              ///< Per-MRT color target info
     } cbState;                                  ///< Color target state
+    PipelineOptions     options;                ///< Per pipeline tuning/debugging options
 };
 
 /// Represents info to build a compute pipeline.
@@ -284,6 +331,7 @@ struct ComputePipelineBuildInfo
     IShaderCache*       pShaderCache;       ///< Shader cache, used to search for the compiled shader data
     uint32_t            deviceIndex;        ///< Device index for device group
     PipelineShaderInfo  cs;                 ///< Compute shader
+    PipelineOptions     options;            ///< Per pipeline tuning options
 };
 
 /// Represents output of building a compute pipeline.
@@ -380,7 +428,7 @@ public:
     /// @param [in]  pGraphicsPipelineInfo  Info of the graphics pipeline to be built
     ///
     /// @returns The handle of pipeline dump file
-    static void* VKAPI_CALL BeginPipelineDump(const char*                      pDumpDir,
+    static void* VKAPI_CALL BeginPipelineDump(const PipelineDumpOptions*       pDumpOptions,
                                               const ComputePipelineBuildInfo*  pComputePipelineInfo,
                                               const GraphicsPipelineBuildInfo* pGraphicsPipelineInfo);
 

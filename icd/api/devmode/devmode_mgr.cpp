@@ -1602,12 +1602,10 @@ Pal::Result DevModeMgr::InitRGPTracing(
         createInfo.allocInfo[Pal::EmbeddedDataAlloc].allocSize    = settings.cmdAllocatorEmbeddedAllocSize;
         createInfo.allocInfo[Pal::EmbeddedDataAlloc].suballocSize = settings.cmdAllocatorEmbeddedSubAllocSize;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 395
         // Initialize GPU scratch memory chunk allocation size
         createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocHeap    = settings.cmdAllocatorScratchHeap;
         createInfo.allocInfo[Pal::GpuScratchMemAlloc].allocSize    = settings.cmdAllocatorScratchAllocSize;
         createInfo.allocInfo[Pal::GpuScratchMemAlloc].suballocSize = settings.cmdAllocatorScratchSubAllocSize;
-#endif
 
         const size_t allocatorSize = pPalDevice->GetCmdAllocatorSize(createInfo, nullptr);
 

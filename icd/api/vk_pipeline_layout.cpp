@@ -139,6 +139,8 @@ VkResult PipelineLayout::ConvertCreateInfo(
             pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
 
             // Add count for FMASK nodes
+            // In SCPC path,  subpass are translated to UAV, but related load_ptr need a node with type Resource,
+            // so we need declare two nodes in this case.
             if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
             {
                 pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
@@ -335,20 +337,6 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
             pNode->srdRange.binding    = binding.info.binding;
             pNode->srdRange.set        = setIndex;
             (*pStaNodeCount)++;
-
-            if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (binding.sta.dwSize > 0))
-            {
-                // If the binding has a sta section then add a shadow fmask static section node for it.
-                pNode++;
-                pNode->type             = Llpc::ResourceMappingNodeType::DescriptorFmask;
-                pNode->offsetInDwords   = binding.sta.dwOffset;
-                pNode->sizeInDwords     = binding.info.descriptorCount *
-                                          (m_pDevice->GetProperties().descriptorSizes.fmaskView / sizeof(uint32_t));
-
-                pNode->srdRange.binding = binding.info.binding;
-                pNode->srdRange.set     = setIndex;
-                (*pStaNodeCount)++;
-            }
 
             if (binding.imm.dwSize > 0)
             {

@@ -187,7 +187,7 @@ SPIRVToOCL20::visitCallInst(CallInst& CI) {
       visitCallSPIRVAtomicBuiltin(&CI, OC);
     return;
   }
-  if (isGroupOpCode(OC)) {
+  if (isGroupOpCode(OC) || isGroupNonUniformOpCode(OC)) {
     visitCallSPIRVGroupBuiltin(&CI, OC);
     return;
   }
@@ -414,8 +414,7 @@ void SPIRVToOCL20::visitCallSPIRVGroupBuiltin(CallInst* CI, Op OC) {
   assert(DemangledName.find(kSPIRVName::GroupPrefix) == 0);
 
   std::string Prefix = getGroupBuiltinPrefix(CI);
-
-  bool HasGroupOperation = hasGroupOperation(OC);
+  bool HasGroupOperation = hasGroupOperation(OC) || isGroupNonUniformOpCode(OC);
   if (!HasGroupOperation) {
     DemangledName = Prefix + DemangledName;
   } else {
