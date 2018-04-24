@@ -59,6 +59,7 @@ enum class AppProfile : uint32_t
     Talos,                 // Talos Principle by Croteam
     MadMax,                // MadMax by Feral3D
     F1_2017,               // F1 2017 by Feral3D
+    RiseOfTheTombra,       // RiseOfTheTombRaider by Feral3D
     SeriousSamFusion,      // Serious Sam Fusion by Croteam
 };
 

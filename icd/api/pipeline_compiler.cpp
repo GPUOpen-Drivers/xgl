@@ -325,6 +325,11 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
         // Force to use internal disk cache.
         shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
     }
+
+    if(appProfile == AppProfile::RiseOfTheTombra)
+    {
+        llpcOptions[numOptions++] = "-disable-gs-onchip=0";
+    }
 #endif
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);

@@ -146,6 +146,18 @@ constexpr AppProfilePatternEntry AppNameF1_2017 =
     }
 };
 
+constexpr AppProfilePatternEntry AppNameRiseOfTheTombra =
+{
+    //# AppName = "RiseOfTheTombra"
+    PatternAppNameLower,
+    {
+        0xc9910bfa,
+        0xea917b62,
+        0x68e46986,
+        0x46238b8b
+    }
+};
+
 constexpr AppProfilePatternEntry AppNameSeriousSamFusion =
 {
     PatternAppNameLower,
@@ -204,6 +216,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::F1_2017,
         {
             AppNameF1_2017,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::RiseOfTheTombra,
+        {
+            AppNameRiseOfTheTombra,
             AppEngineFeral3D,
             PatternEnd
         }
