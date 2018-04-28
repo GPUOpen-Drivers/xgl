@@ -34,8 +34,17 @@
 #define SPVGEN_REVISION 4
 
 #ifndef SH_IMPORT_EXPORT
+    #ifdef _WIN32
+        #define SPVAPI __cdecl
+        #ifdef SH_EXPORTING
+            #define SH_IMPORT_EXPORT __declspec(dllexport)
+        #else
+            #define SH_IMPORT_EXPORT __declspec(dllimport)
+        #endif
+    #else
         #define SH_IMPORT_EXPORT
         #define SPVAPI
+    #endif
 #endif
 
 enum SpvGenVersion
@@ -282,6 +291,27 @@ DEFI_EXPORT_FUNC(vfxGetPipelineDoc);
 DEFI_EXPORT_FUNC(vfxPrintDoc);
 
 // SPIR-V generator Windows implementation
+#ifdef _WIN32
+
+#include <windows.h>
+// SPIR-V generator Windows DLL name
+#ifdef UNICODE
+static const wchar_t* SpvGeneratorName = L"spvgen.dll";
+#else
+static const char* SpvGeneratorName = "spvgen.dll";
+#endif
+
+#define INITFUNC(func) \
+  g_pfn##func = reinterpret_cast<PFN_##func>(GetProcAddress(hModule, #func));\
+  if (g_pfn##func == NULL)\
+  {\
+      success = false;\
+  }
+
+#define INIT_OPT_FUNC(func) \
+  g_pfn##func = reinterpret_cast<PFN_##func>(GetProcAddress(hModule, #func));
+
+#else
 
 #include <dlfcn.h>
 #include <stdio.h>
@@ -297,12 +327,18 @@ static const char* SpvGeneratorName = "spvgen.so";
 #define INIT_OPT_FUNC(func) \
   g_pfn##func = reinterpret_cast<PFN_##func>(dlsym(hModule, #func));
 
+#endif // _WIN32
+
 // =====================================================================================================================
 // Initialize SPIR-V generator entry-points
 bool InitSpvGen()
 {
     bool success = true;
+#ifdef _WIN32
+    HMODULE hModule = LoadLibrary(SpvGeneratorName);
+#else
     void* hModule = dlopen(SpvGeneratorName, RTLD_GLOBAL | RTLD_NOW);
+#endif
 
     if (hModule != NULL)
     {
@@ -324,7 +360,9 @@ bool InitSpvGen()
     }
     else
     {
+#ifndef _WIN32
         fprintf(stderr, "Failed: %s\n", dlerror());
+#endif
         success = false;
     }
     return success;

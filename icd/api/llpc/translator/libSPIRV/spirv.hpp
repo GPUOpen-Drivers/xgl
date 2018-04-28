@@ -688,6 +688,9 @@ enum Capability {
 #if VKI_3RD_PARTY_IP_PROPERTY_ID
     CapabilityPropertyIdAttachmentAMD = 5022,
 #endif
+#if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
+    CapabilityAnisotropicLodCompensationAMD = 5049,
+#endif
     CapabilitySampleMaskOverrideCoverageNV = 5249,
     CapabilityGeometryShaderPassthroughNV = 5251,
     CapabilityShaderViewportIndexLayerEXT = 5254,
@@ -1059,6 +1062,12 @@ enum Op {
     OpGroupSMaxNonUniformAMD = 5007,
     OpFragmentMaskFetchAMD = 5011,
     OpFragmentFetchAMD = 5012,
+#if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
+    OpImageSampleAnisoLodAMD = 5050,
+    OpImageSampleDrefAnisoLodAMD = 5051,
+    OpImageGatherAnisoLodAMD = 5052,
+    OpImageDrefGatherAnisoLodAMD = 5053,
+#endif
     OpSubgroupShuffleINTEL = 5571,
     OpSubgroupShuffleDownINTEL = 5572,
     OpSubgroupShuffleUpINTEL = 5573,

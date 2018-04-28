@@ -72,10 +72,6 @@ void Image::CalcBarrierUsage(
     // By default, don't allow any layout usage other than uninitialized
     m_layoutUsageMask = Pal::LayoutUninitializedTarget;
 
-    // Always allow CPU and memory reads/writes
-    m_outputCacheMask = Pal::CoherCpu | Pal::CoherMemory;
-    m_inputCacheMask  = Pal::CoherCpu | Pal::CoherMemory;
-
     if (pPresentMode != nullptr)
     {
         if (*pPresentMode == Pal::PresentMode::Fullscreen)
@@ -101,25 +97,21 @@ void Image::CalcBarrierUsage(
         {
             m_layoutUsageMask |= Pal::LayoutResolveSrc;
         }
-        m_inputCacheMask  |= Pal::CoherCopy | Pal::CoherResolve | Pal::CoherClear;
     }
 
     if (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
     {
         m_layoutUsageMask |= Pal::LayoutCopyDst | Pal::LayoutResolveDst;
-        m_outputCacheMask |= Pal::CoherCopy | Pal::CoherResolve | Pal::CoherClear;
     }
 
     if ((usage & (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) != 0)
     {
         m_layoutUsageMask |= Pal::LayoutShaderRead;
-        m_inputCacheMask  |= Pal::CoherShader;
     }
 
     if (usage & VK_IMAGE_USAGE_STORAGE_BIT)
     {
         m_layoutUsageMask |= Pal::LayoutShaderWrite;
-        m_outputCacheMask |= Pal::CoherShader;
     }
 
     // Note that the below code enables clear support for color/depth targets because they can also be cleared inside
@@ -156,17 +148,12 @@ void Image::CalcBarrierUsage(
                 m_layoutUsageMask |= Pal::LayoutResolveDst;
             }
         }
-
-        m_outputCacheMask |= Pal::CoherColorTarget | Pal::CoherClear;
-        m_inputCacheMask  |= Pal::CoherColorTarget | Pal::CoherClear;
     }
 
     if (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
     {
         // See the above note for CoherClear.
         m_layoutUsageMask |= Pal::LayoutDepthStencilTarget;
-        m_outputCacheMask |= Pal::CoherDepthStencilTarget | Pal::CoherClear;
-        m_inputCacheMask  |= Pal::CoherDepthStencilTarget | Pal::CoherClear;
     }
 
     // We don't do anything special in case of transient attachment images
@@ -221,21 +208,22 @@ void Image::CalcMemoryPriority()
 
 // =====================================================================================================================
 Image::Image(
-    Device*                 pDevice,
-    VkImageCreateFlags      flags,
-    Pal::IImage**           pPalImages,
-    Pal::IGpuMemory**       pPalMemory,
-    VkExtent3D              tileSize,
-    uint32_t                mipLevels,
-    uint32_t                arraySize,
-    VkFormat                imageFormat,
-    VkSampleCountFlagBits   imageSamples,
-    VkImageTiling           imageTiling,
-    VkImageUsageFlags       usage,
-    VkSharingMode           sharingMode,
-    uint32_t                concurrentQueueFlags,
-    ImageFlags              internalFlags,
-    Pal::PresentMode*       pPresentMode)
+    Device*                     pDevice,
+    VkImageCreateFlags          flags,
+    Pal::IImage**               pPalImages,
+    Pal::IGpuMemory**           pPalMemory,
+    const ImageBarrierPolicy&   barrierPolicy,
+    VkExtent3D                  tileSize,
+    uint32_t                    mipLevels,
+    uint32_t                    arraySize,
+    VkFormat                    imageFormat,
+    VkSampleCountFlagBits       imageSamples,
+    VkImageTiling               imageTiling,
+    VkImageUsageFlags           usage,
+    VkSharingMode               sharingMode,
+    uint32_t                    concurrentQueueFlags,
+    ImageFlags                  internalFlags,
+    Pal::PresentMode*           pPresentMode)
     :
     m_pDevice(pDevice),
     m_flags(flags),
@@ -248,8 +236,7 @@ Image::Image(
     m_imageTiling(imageTiling),
     m_imageUsage(usage),
     m_layoutUsageMask(0),
-    m_outputCacheMask(0),
-    m_inputCacheMask(0),
+    m_barrierPolicy(barrierPolicy),
     m_sharingMode(sharingMode),
     m_concurrentQueueFlags(concurrentQueueFlags),
     m_pSwapChain(nullptr),
@@ -777,11 +764,17 @@ VkResult Image::Create(
     {
         imageFlags.internalMemBound = isSparse;
 
+        // Create barrier policy for the image.
+        ImageBarrierPolicy barrierPolicy(pDevice,
+                                         pImageCreateInfo->usage);
+
+        // Construct API image object.
         VK_PLACEMENT_NEW (pMemory) Image(
             pDevice,
             pImageCreateInfo->flags,
             pPalImages,
             pSparseMemory,
+            barrierPolicy,
             sparseTileSize,
             palCreateInfo.mipLevels,
             palCreateInfo.arraySize,
@@ -973,12 +966,17 @@ VkResult Image::CreatePresentableImage(
         imageFlags.internalMemBound  = false;
         imageFlags.dedicatedRequired = true;
 
-        // Create API image object
+        // Create barrier policy for the image.
+        ImageBarrierPolicy barrierPolicy(pDevice,
+                                         imageUsageFlags);
+
+        // Construct API image object.
         VK_PLACEMENT_NEW (pImgObjMemory) Image(
             pDevice,
             0,
             pPalImage,
             nullptr,
+            barrierPolicy,
             dummyTileSize,
             miplevels,
             arraySize,

@@ -59,6 +59,7 @@
 #include "palLib.h"
 #include "palMath.h"
 #include "palMsaaState.h"
+#include "palScreen.h"
 #include <vector>
 
 #undef max
@@ -2131,8 +2132,12 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
         if (result == VK_SUCCESS)
         {
             {
-                pSurfaceCapabilities->currentExtent.width   = swapChainProperties.currentExtent.width;
-                pSurfaceCapabilities->currentExtent.height  = swapChainProperties.currentExtent.height;
+                // From Vulkan spec, currentExtent of a valid window surface(Win32/Xlib/Xcb) must have both width
+                // and height greater than 0, or both of them 0.
+                pSurfaceCapabilities->currentExtent.width   =
+                    (swapChainProperties.currentExtent.height == 0) ? 0 : swapChainProperties.currentExtent.width;
+                pSurfaceCapabilities->currentExtent.height  =
+                    (swapChainProperties.currentExtent.width == 0) ? 0 : swapChainProperties.currentExtent.height;
                 pSurfaceCapabilities->minImageExtent.width  = swapChainProperties.minImageExtent.width;
                 pSurfaceCapabilities->minImageExtent.height = swapChainProperties.minImageExtent.height;
                 pSurfaceCapabilities->maxImageExtent.width  = swapChainProperties.maxImageExtent.width;
@@ -2468,6 +2473,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_TRINARY_MINMAX));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_EXPLICIT_VERTEX_PARAMETER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GCN_SHADER));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_BALLOT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DRAW_INDIRECT_COUNT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_BALLOT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_VOTE));
@@ -2524,6 +2530,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
          ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
           (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
     {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_HALF_FLOAT));
     }
 
     if ((pPhysicalDevice == nullptr) ||
@@ -3172,6 +3179,8 @@ void PhysicalDevice::GetDeviceProperties2(
             pSubgroupProperties->supportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
                                                        VK_SUBGROUP_FEATURE_VOTE_BIT |
                                                        VK_SUBGROUP_FEATURE_BALLOT_BIT |
+                                                       VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
+                                                       VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
                                                        VK_SUBGROUP_FEATURE_QUAD_BIT;
             pSubgroupProperties->quadOperationsInAllStages = VK_TRUE;
 
@@ -4263,6 +4272,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
 }
 #endif
 
+// =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,

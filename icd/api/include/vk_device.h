@@ -48,6 +48,7 @@
 #include "include/internal_mem_mgr.h"
 #include "include/render_state_cache.h"
 #include "include/virtual_stack_mgr.h"
+#include "include/barrier_policy.h"
 
 #include "palDevice.h"
 #include "palImage.h"
@@ -290,6 +291,11 @@ public:
     VK_FORCEINLINE InternalMemMgr* MemMgr()
         { return &m_internalMemMgr; }
 
+#ifdef ICD_BUILD_APPPROFILE
+    VK_FORCEINLINE ShaderOptimizer* GetShaderOptimizer()
+        { return &m_shaderOptimizer; }
+#endif
+
     VK_FORCEINLINE bool IsMultiGpu() const
         { return m_palDeviceCount > 1; }
 
@@ -491,19 +497,25 @@ public:
     VK_INLINE const EntryPoints& GetEntryPoints() const
         { return m_dispatchTable.GetEntryPoints(); }
 
+    VK_INLINE const DeviceBarrierPolicy& GetBarrierPolicy() const
+        { return m_barrierPolicy; }
+
 protected:
     Device(
         uint32_t                         deviceCount,
         PhysicalDevice**                 pPhysicalDevices,
         Pal::IDevice**                   pPalDevices,
+        const DeviceBarrierPolicy&       barrierPolicy,
         const DeviceExtensions::Enabled& enabledExtensions,
         const VkPhysicalDeviceFeatures*  pFeatures);
+
     VkResult CreateInternalComputePipeline(
         size_t                           codeByteSize,
         const uint8_t*                   pCode,
         uint32_t                         numUserDataNodes,
         const Llpc::ResourceMappingNode* pUserDataNodes,
         InternalPipeline*                pInternalPipeline);
+
     VkResult CreateInternalPipelines();
 
     void DestroyInternalPipeline(InternalPipeline* pPipeline);
@@ -527,6 +539,9 @@ protected:
     uint8_t*                            m_pPalQueueMemory;
 
     InternalMemMgr                      m_internalMemMgr;
+#ifdef ICD_BUILD_APPPROFILE
+    ShaderOptimizer                     m_shaderOptimizer;
+#endif
     RenderStateCache                    m_renderStateCache;
 
     DispatchableQueue*                  m_pQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily];
@@ -536,6 +551,8 @@ protected:
     static const uint32_t BltMsaaStateCount = 4;
 
     Pal::IMsaaState*                    m_pBltMsaaState[BltMsaaStateCount][MaxPalDevices];
+
+    const DeviceBarrierPolicy           m_barrierPolicy;        // Barrier policy to use for this device
 
     const DeviceExtensions::Enabled     m_enabledExtensions;    // Enabled device extensions
     DispatchTable                       m_dispatchTable;        // Device dispatch table

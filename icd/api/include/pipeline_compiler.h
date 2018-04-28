@@ -37,6 +37,8 @@
 #include "include/vk_shader_code.h"
 
 #include "llpc.h"
+#include "include/app_shader_optimizer.h"
+
 namespace Bil
 {
 
@@ -108,6 +110,9 @@ public:
         void*                                  pMappingBuffer;
         size_t                                 tempBufferStageSize;
         VkFormat                               dbFormat;
+#ifdef ICD_BUILD_APPPROFILE
+        PipelineOptimizerKey                   pipelineProfileKey;
+#endif
     };
 
     // Creation info parameters for all the necessary LLPC/SCPC state objects encapsulated
@@ -119,6 +124,9 @@ public:
         VkPipelineCreateFlags                  flags;
         void*                                  pMappingBuffer;
         size_t                                 tempBufferStageSize;
+#ifdef ICD_BUILD_APPPROFILE
+        PipelineOptimizerKey                   pipelineProfileKey;
+#endif
     };
 
     PipelineCompiler(PhysicalDevice* pPhysicalDevice);
@@ -191,6 +199,16 @@ public:
 
 private:
     VkResult CreateLlpcCompiler();
+
+#ifdef ICD_BUILD_APPPROFILE
+    void ApplyProfileOptions(
+        Device*                   pDevice,
+        ShaderStage               stage,
+        ShaderModule*             pShaderModule,
+        Llpc::PipelineShaderInfo* pShaderInfo,
+        PipelineOptimizerKey*     pProfileKey
+    );
+#endif
 
     static bool IsDualSourceBlend(VkBlendFactor blend);
 

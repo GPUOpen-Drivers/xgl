@@ -48,7 +48,11 @@
 
 using namespace llvm;
 
+#if defined(_WIN32)
+    #define FILE_STAT _stat
+#else
     #define FILE_STAT stat
+#endif
 
 namespace Llpc
 {
@@ -153,6 +157,16 @@ void VKAPI_CALL IPipelineDumper::DumpPipelineBinary(
     const BinaryData*        pPipelineBin) // [in] Pipeline binary (ELF)
 {
     PipelineDumper::DumpPipelineBinary(reinterpret_cast<PipelineDumpFile*>(pDumpFile), gfxIp, pPipelineBin);
+}
+
+// =====================================================================================================================
+// Gets shader module hash code.
+uint64_t VKAPI_CALL IPipelineDumper::GetShaderHash(
+    const void* pModuleData)   // [in] Pointer to the shader module data
+{
+    const ShaderModuleDataHeader* pModule =
+            reinterpret_cast<const ShaderModuleDataHeader*>(pModuleData);
+    return MetroHash::Compact64(reinterpret_cast<const MetroHash::Hash*>(&pModule->hash));
 }
 
 // =====================================================================================================================

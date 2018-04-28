@@ -48,6 +48,7 @@
 #include "include/stencil_ops_combiner.h"
 #include "include/vert_buf_binding_mgr.h"
 #include "include/virtual_stack_mgr.h"
+#include "include/barrier_policy.h"
 
 #include "renderpass/renderpass_builder.h"
 
@@ -556,20 +557,6 @@ public:
         return m_pPalCmdBuffers[idx];
     }
 
-    static Pal::uint32 ConvertBarrierSrcAccessFlags(const Device* pDevice, VkAccessFlags accessMask);
-    static Pal::uint32 ConvertBarrierDstAccessFlags(
-               const Device* pDevice,
-               VkAccessFlags accessMask,
-               uint32_t      combinedAccessMask);
-    static void ConvertBarrierCacheFlags(
-               const Device*           pDevice,
-               VkAccessFlags           srcAccess,
-               VkAccessFlags           dstAccess,
-               uint32_t                supportInputCacheMask,
-               uint32_t                supportOutputCacheMask,
-               uint32_t                barrierOptions,
-               Pal::BarrierTransition* pResult);
-
     VK_INLINE uint32_t GetQueueFamilyIndex() const { return m_queueFamilyIndex; }
     VK_INLINE Pal::QueueType GetPalQueueType() const { return m_palQueueType; }
     VK_INLINE Pal::EngineType GetPalEngineType() const { return m_palEngineType; }
@@ -793,7 +780,11 @@ public:
         uint32_t newToken);
 
 private:
-    CmdBuffer(Device* pDevice, CmdPool* pCmdPool, uint32_t queueFamilyIndex);
+    CmdBuffer(
+        Device*                         pDevice,
+        CmdPool*                        pCmdPool,
+        uint32_t                        queueFamilyIndex,
+        const DeviceBarrierPolicy&      barrierPolicy);
 
     VkResult Initialize(
         void*                           pPalMem,
@@ -878,6 +869,8 @@ private:
     bool                          m_isRecording;
     bool                          m_needResetState;
     VkResult                      m_recordingResult; // Tracks the result of recording commands to capture OOM errors
+
+    const DeviceBarrierPolicy     m_barrierPolicy;   // Barrier policy to use with this command buffer
 
     SqttCmdBufferState*           m_pSqttState; // Per-cmdbuf state for handling SQ thread-tracing annotations
 

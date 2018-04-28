@@ -368,9 +368,10 @@ Pal::Result CreateClearRects(
 
 // =====================================================================================================================
 CmdBuffer::CmdBuffer(
-    Device*  pDevice,
-    CmdPool* pCmdPool,
-    uint32_t queueFamilyIndex)
+    Device*                         pDevice,
+    CmdPool*                        pCmdPool,
+    uint32_t                        queueFamilyIndex,
+    const DeviceBarrierPolicy&      barrierPolicy)
     :
     m_pDevice(pDevice),
     m_pCmdPool(pCmdPool),
@@ -386,6 +387,7 @@ CmdBuffer::CmdBuffer(
     m_isRecording(false),
     m_needResetState(true),
     m_recordingResult(VK_SUCCESS),
+    m_barrierPolicy(barrierPolicy),
     m_pSqttState(nullptr),
     m_renderPassInstance(pDevice->VkInstance()->Allocator())
 {
@@ -454,6 +456,9 @@ VkResult CmdBuffer::Create(
 
     uint32_t allocCount = 0;
 
+    // Use device's barrier policy to create command buffer.
+    const DeviceBarrierPolicy& barrierPolicy = pDevice->GetBarrierPolicy();
+
     while ((result == VK_SUCCESS) && (allocCount < commandBufferCount))
     {
         // Allocate memory for the command buffer
@@ -465,7 +470,10 @@ VkResult CmdBuffer::Create(
             void* pPalMem = Util::VoidPtrInc(pMemory, apiSize);
             void* pVbMem  = Util::VoidPtrInc(pPalMem, palSize);
 
-            VK_INIT_API_OBJECT(CmdBuffer, pMemory, (pDevice, pCmdPool, queueFamilyIndex));
+            VK_INIT_API_OBJECT(CmdBuffer, pMemory, (pDevice,
+                                                    pCmdPool,
+                                                    queueFamilyIndex,
+                                                    barrierPolicy));
 
             pCommandBuffers[allocCount] = reinterpret_cast<VkCommandBuffer>(pMemory);
 
@@ -1043,7 +1051,7 @@ VkResult CmdBuffer::Begin(
 
     // Pal would still use ring buffer for CE RAM dumps if command buffer is nested.
     // Disable linear buffer for this case as a workaround until PAL has a solution.
-    if ((m_pDevice->GetRuntimeSettings().useRingBufferForCeRamDumps == false) && (m_is2ndLvl == false))
+    if (m_pDevice->GetRuntimeSettings().useLinearBufferForCeRamDumps && (m_is2ndLvl == false))
     {
         palFlags.useLinearBufferForCeRamDumps = 1;
     }
@@ -2879,205 +2887,6 @@ void CmdBuffer::ResetEvent(
 }
 
 // =====================================================================================================================
-// Given a bitmask of VkAccessFlags, computes the representative PAL CacheCoherencyUsageFlags that will be written
-// in the srcCacheMask field of a pipeline BarrierTransition.
-Pal::uint32 CmdBuffer::ConvertBarrierSrcAccessFlags(
-    const Device* pDevice,
-    VkAccessFlags accessMask)
-{
-    Pal::uint32 coher = 0;
-
-    if (accessMask & VK_ACCESS_HOST_WRITE_BIT)
-    {
-        coher |= Pal::CoherCpu;
-    }
-
-    if (accessMask & VK_ACCESS_SHADER_WRITE_BIT)
-    {
-        coher |= Pal::CoherShader;
-    }
-
-    if (accessMask & VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
-    {
-        coher |= Pal::CoherColorTarget | Pal::CoherClear;
-    }
-
-    if (accessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT)
-    {
-        coher |= Pal::CoherDepthStencilTarget | Pal::CoherClear;
-    }
-
-    if (accessMask & VK_ACCESS_TRANSFER_WRITE_BIT)
-    {
-        // Also need Pal::CoherShader here as vkCmdCopyQueryPoolResults uses a compute shader defined in the Vulkan
-        // API layer when used with timestamp queries.
-        coher |= Pal::CoherCopy | Pal::CoherResolve | Pal::CoherClear | Pal::CoherShader;
-
-        if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_BUFFER_MARKER))
-        {
-            coher |= Pal::CoherTimestamp;
-        }
-    }
-
-    if (accessMask & VK_ACCESS_MEMORY_WRITE_BIT)
-    {
-        coher |= Pal::CoherMemory;
-    }
-
-    // CoherQueueAtomic: Not used
-    // CoherTimestamp: Timestamp write syncs are handled by the timestamp-related write/query funcs and not barriers
-    // CoherCeLoad: Not used
-    // CoherCeDump: Not used
-    // CoherStreamOut: Not used
-
-    return coher;
-}
-
-// =====================================================================================================================
-// Given a bitmask of VkAccessFlags, computes the representative PAL CacheCoherencyUsageFlags that will be written
-// in the dstCacheMask field of a pipeline BarrierTransition.
-Pal::uint32 CmdBuffer::ConvertBarrierDstAccessFlags(
-    const Device* pDevice,
-    VkAccessFlags accessMask,
-    uint32_t      combinedAccessMask)
-{
-    // Assure that the resource barrier provide combined src/dst accessmask
-    // No need to concern that access masks are provided by separate barriers
-    if (combinedAccessMask)
-    {
-        Pal::uint32 coher = 0;
-
-        if (accessMask & VK_ACCESS_HOST_READ_BIT)
-        {
-            coher |= Pal::CoherCpu;
-        }
-
-        if (accessMask & VK_ACCESS_SHADER_READ_BIT)
-        {
-            coher |= Pal::CoherShader;
-        }
-
-        if (accessMask & VK_ACCESS_COLOR_ATTACHMENT_READ_BIT)
-        {
-            coher |= Pal::CoherColorTarget;
-        }
-
-        if (accessMask & VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT)
-        {
-            coher |= Pal::CoherDepthStencilTarget;
-        }
-
-        if (accessMask & VK_ACCESS_TRANSFER_READ_BIT)
-        {
-            // Also need Pal::CoherShader here as vkCmdCopyQueryPoolResults uses a compute shader defined in the Vulkan
-            // API layer when used with timestamp queries.
-            coher |= Pal::CoherCopy | Pal::CoherResolve | Pal::CoherShader;
-        }
-
-        if (accessMask & VK_ACCESS_MEMORY_READ_BIT)
-        {
-            coher |= Pal::CoherMemory;
-        }
-
-        if (accessMask & VK_ACCESS_INPUT_ATTACHMENT_READ_BIT)
-        {
-            coher |= Pal::CoherShader;
-        }
-
-        if (accessMask & VK_ACCESS_UNIFORM_READ_BIT)
-        {
-            coher |= Pal::CoherShader;
-        }
-
-        if (accessMask & VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT)
-        {
-            coher |= Pal::CoherShader;
-        }
-
-        if (accessMask & VK_ACCESS_INDEX_READ_BIT)
-        {
-            coher |= Pal::CoherIndexData;
-        }
-
-        if (accessMask & VK_ACCESS_INDEX_READ_BIT)
-        {
-            coher |= Pal::CoherIndexData;
-        }
-
-        if (accessMask & VK_ACCESS_INDIRECT_COMMAND_READ_BIT)
-        {
-            coher |= Pal::CoherIndirectArgs;
-        }
-
-        return coher;
-    }
-    else
-    {
-        // With the more loose memory barrier semantics introduced we practically have to always invalidate all relevant
-        // caches. The complete set is limited based on the usage allowed by the resource at the caller side.
-        // The current Vulkan Spec has language as:
-        //
-        // Memory dependency m guarantees that:
-        //   Memory writes in a' are made available.
-        //   Available memory writes, including those from a', are made visible to b'.
-        // Since PAL's model is to use both SrcAcess and DstAccess flag to define memory access dependency, it may not
-        // always to be able to take action for Vulkan a' available or previous write availablity with some type of Vulkan
-        // access masks, e.g. DstAccessMask = 0. I believe this is the reason Vulkan forces a conservertive dstAccessMask.
-        //
-        // Vulkan needs to be aware that for ASIC that has L2 coherency for most of the operations (but not all), what we
-        // do likely make all barriers with memory dependency to flush/inv L2.
-        constexpr uint32_t AllInputCaches = Pal::CoherCpu |
-                                            Pal::CoherShader |
-                                            Pal::CoherCopy |
-                                            Pal::CoherColorTarget |
-                                            Pal::CoherDepthStencilTarget |
-                                            Pal::CoherResolve |
-                                            Pal::CoherClear |
-                                            Pal::CoherIndirectArgs |
-                                            Pal::CoherIndexData |
-                                            Pal::CoherQueueAtomic |
-                                            Pal::CoherTimestamp |
-                                            Pal::CoherCeLoad |
-                                            Pal::CoherCeDump |
-                                            Pal::CoherStreamOut |
-                                            Pal::CoherMemory;
-        return AllInputCaches;
-    }
-
-}
-
-// =====================================================================================================================
-// Convert src access and dst access mask to the PAL CacheCoherencyUsageFlags that will be written
-// in the srcCacheMask and dstCacheMask field of a pipeline BarrierTransition.
-void CmdBuffer::ConvertBarrierCacheFlags(
-    const Device*           pDevice,
-    VkAccessFlags           srcAccess,
-    VkAccessFlags           dstAccess,
-    uint32_t                supportInputCacheMask,
-    uint32_t                supportOutputCacheMask,
-    uint32_t                barrierOptions,
-    Pal::BarrierTransition* pResult)
-{
-     pResult->srcCacheMask = supportOutputCacheMask & ConvertBarrierSrcAccessFlags(pDevice, srcAccess);
-
-     // srccachemask is 0 for all read only source access like VK_ACCESS_*_READ_BIT
-     // etc. hence, only validate against all input caches if we are going from write to any other access flag.
-     // The input shader caches only needs to be flushed if something was written and it hasn't been flushed.
-
-     if ((pResult->srcCacheMask == 0) && (barrierOptions & SkipDstCacheFlush))
-     {
-         pResult->dstCacheMask = 0;
-     }
-     else
-     {
-         pResult->dstCacheMask = supportInputCacheMask & ConvertBarrierDstAccessFlags(
-                                                            pDevice,
-                                                            dstAccess,
-                                                            (barrierOptions & CombinedAccessMasks));
-     }
-}
-
-// =====================================================================================================================
 // Helper function called from ExecuteBarriers
 void CmdBuffer::FlushBarriers(
     Pal::BarrierInfo*              pBarrier,
@@ -3148,12 +2957,9 @@ void CmdBuffer::ExecuteBarriers(
 
     for (uint32_t i = 0; i < memBarrierCount; ++i)
     {
-        ConvertBarrierCacheFlags(
-            m_pDevice,
+        m_barrierPolicy.ApplyBarrierCacheFlags(
             pMemoryBarriers[i].srcAccessMask,
             pMemoryBarriers[i].dstAccessMask,
-            0xFFFFFFFF, 0xFFFFFFFF,
-            barrierOptions,
             pNextMain);
 
         pNextMain->imageInfo.pImage = nullptr;
@@ -3173,16 +2979,10 @@ void CmdBuffer::ExecuteBarriers(
     for (uint32_t i = 0; i < bufferMemoryBarrierCount; ++i)
     {
         const Buffer* pBuffer = Buffer::ObjectFromHandle(pBufferMemoryBarriers[i].buffer);
-        uint32_t supportInputCoherMask = pBuffer->GetSupportedInputCoherMask();
-        uint32_t supportOutputCoherMask = pBuffer->GetSupportedOutputCoherMask();
 
-        ConvertBarrierCacheFlags(
-            m_pDevice,
+        pBuffer->GetBarrierPolicy().ApplyBarrierCacheFlags(
             pBufferMemoryBarriers[i].srcAccessMask,
             pBufferMemoryBarriers[i].dstAccessMask,
-            supportInputCoherMask,
-            supportOutputCoherMask,
-            barrierOptions,
             pNextMain);
 
         pNextMain->imageInfo.pImage = nullptr;
@@ -3215,17 +3015,11 @@ void CmdBuffer::ExecuteBarriers(
 
         const Image*           pImage                 = Image::ObjectFromHandle(pImageMemoryBarriers[i].image);
         VkFormat               format                 = pImage->GetFormat();
-        uint32_t               supportInputCoherMask  = pImage->GetSupportedInputCoherMask();
-        uint32_t               supportOutputCoherMask = pImage->GetSupportedOutputCoherMask();
         Pal::BarrierTransition barrierTransition      = { 0 };
 
-        ConvertBarrierCacheFlags(
-            m_pDevice,
+        pImage->GetBarrierPolicy().ApplyBarrierCacheFlags(
             pImageMemoryBarriers[i].srcAccessMask,
             pImageMemoryBarriers[i].dstAccessMask,
-            supportInputCoherMask,
-            supportOutputCoherMask,
-            barrierOptions,
             &barrierTransition);
 
         pNextMain->imageInfo.pImage = nullptr;
@@ -4549,13 +4343,9 @@ void CmdBuffer::RPSyncPoint(
 
             pGlobalTransition->imageInfo.pImage = nullptr;
 
-            ConvertBarrierCacheFlags(
-                m_pDevice,
+            m_barrierPolicy.ApplyBarrierCacheFlags(
                 rpBarrier.srcAccessMask,
                 rpBarrier.dstAccessMask,
-                0xffffffff,
-                0xffffffff,
-                barrierOptions,
                 pGlobalTransition);
 
             pGlobalTransition->srcCacheMask |= rpBarrier.implicitSrcCacheMask;

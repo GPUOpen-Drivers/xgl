@@ -211,6 +211,9 @@ SPIRVMap<SPIRVCapabilityKind, SPIRVCapVec>::init() {
 #if VKI_3RD_PARTY_IP_PROPERTY_ID
   ADD_VEC_INIT(CapabilityPropertyIdAttachmentAMD, { CapabilityShader });
 #endif
+#if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
+  ADD_VEC_INIT(CapabilityAnisotropicLodCompensationAMD, { CapabilityShader });
+#endif
 }
 
 template<> inline void

@@ -618,6 +618,9 @@ isValid(spv::Capability V) {
 #if VKI_3RD_PARTY_IP_PROPERTY_ID
     case CapabilityPropertyIdAttachmentAMD:
 #endif
+#if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
+    case CapabilityAnisotropicLodCompensationAMD:
+#endif
       return true;
     default:
       return false;
@@ -984,6 +987,12 @@ isValid(spv::Op V) {
     case OpGroupFMaxNonUniformAMD:
     case OpGroupUMaxNonUniformAMD:
     case OpGroupSMaxNonUniformAMD:
+#if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
+    case OpImageSampleAnisoLodAMD:
+    case OpImageSampleDrefAnisoLodAMD:
+    case OpImageGatherAnisoLodAMD:
+    case OpImageDrefGatherAnisoLodAMD:
+#endif
       return true;
     default:
       return false;

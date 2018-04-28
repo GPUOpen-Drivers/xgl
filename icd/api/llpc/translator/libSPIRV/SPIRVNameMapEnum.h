@@ -526,6 +526,9 @@ SPIRVMap<Capability, std::string>::init() {
 #if VKI_3RD_PARTY_IP_PROPERTY_ID
   add(CapabilityPropertyIdAttachmentAMD, "PropertyIdAttachmentAMD");
 #endif
+#if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
+  add(CapabilityAnisotropicLodCompensationAMD, "AnisotropicLodCompensationAMD");
+#endif
 }
 SPIRV_DEF_NAMEMAP(Capability, SPIRVCapabilityNameMap)
 

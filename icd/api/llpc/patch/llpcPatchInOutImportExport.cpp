@@ -2665,7 +2665,7 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
                                   pFrontFacing,
                                   ConstantInt::get(m_pContext->Int32Ty(),
                                   0));
-            pInput = CastInst::Create(Instruction::ZExt, pInput, m_pContext->Int8Ty(), "", pInsertPos);
+            pInput = CastInst::Create(Instruction::ZExt, pInput, m_pContext->Int32Ty(), "", pInsertPos);
             break;
         }
     case BuiltInPointCoord:
@@ -2699,7 +2699,7 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
             pInput = EmitCall(m_pModule, "llvm.amdgcn.ps.live", m_pContext->BoolTy(), args, attribs, pInsertPos);
             pInput = BinaryOperator::CreateNot(pInput, "", pInsertPos);
 
-            pInput = new ZExtInst(pInput, m_pContext->Int8Ty(), "", pInsertPos);
+            pInput = new ZExtInst(pInput, m_pContext->Int32Ty(), "", pInsertPos);
             break;
         }
     case BuiltInPrimitiveId:

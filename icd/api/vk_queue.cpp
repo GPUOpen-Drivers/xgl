@@ -908,8 +908,7 @@ VkResult Queue::BindSparseEntry(
 
             uint32_t depth = subResLayout.blockSize.depth ? subResLayout.blockSize.depth : memoryLayout.prtTileDepth;
             VkDeviceSize prtTileRowPitch   = subResLayout.rowPitch * subResLayout.blockSize.height * depth;
-
-            VkDeviceSize prtTileDepthPitch = prtTileRowPitch * subresExtentInTiles.height;
+            VkDeviceSize prtTileDepthPitch = subResLayout.depthPitch * depth;
 
             // Calculate the offsets in tiles
             const VkOffset3D offsetInTiles =

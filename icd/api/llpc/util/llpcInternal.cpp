@@ -34,9 +34,11 @@
 #include "llvm/Support/raw_os_ostream.h"
 #include "spirv.hpp"
 
+#if !defined(_WIN32)
     #include <sys/stat.h>
     #include <time.h>
     #include <unistd.h>
+#endif
 
 #include "SPIRVInternal.h"
 #include "llpcContext.h"
@@ -442,6 +444,32 @@ Value* ToInt32Value(
     return pValue;
 }
 
+#if defined(_WIN32)
+// =====================================================================================================================
+// Retrieves the frequency of the performance counter for CPU times.
+//
+// NOTE: Reference http://msdn.microsoft.com/en-us/library/windows/desktop/ms644905(v=vs.85).aspx
+int64_t GetPerfFrequency()
+{
+    LARGE_INTEGER freqQuery = { };
+    QueryPerformanceFrequency(&freqQuery);
+    return freqQuery.QuadPart;
+}
+
+// =====================================================================================================================
+// Retrieves the current value of the performance counter, which is a high resolution time stamp that can be used for
+// time-interval measurements.
+//
+// NOTE: Reference http://msdn.microsoft.com/en-us/library/windows/desktop/ms644904(v=vs.85).aspx
+int64_t GetPerfCpuTime()
+{
+    LARGE_INTEGER cpuTimeQuery = { };
+    QueryPerformanceCounter(&cpuTimeQuery);
+    return cpuTimeQuery.QuadPart;
+}
+
+#else
+
 // =====================================================================================================================
 // Retrieves the frequency of the performance counter for CPU times.
 //
@@ -472,6 +500,7 @@ int64_t GetPerfCpuTime()
 
     return time;
 }
+#endif
 
 // =====================================================================================================================
 // Checks whether the input data is actually a ELF binary

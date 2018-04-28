@@ -47,6 +47,7 @@ VkResult Surface::Create(
 
     VkIcdSurfaceXcb  xcbSurface  = {};
     VkIcdSurfaceXlib xlibSurface = {};
+    VkIcdSurfaceDisplay displaySurface = {};
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     VkIcdSurfaceWayland waylandSurface = {};
 #endif
@@ -57,6 +58,7 @@ VkResult Surface::Create(
 
         const VkXcbSurfaceCreateInfoKHR*             pVkXcbSurfaceCreateInfoKHR;
         const VkXlibSurfaceCreateInfoKHR*            pVkXlibSurfaceCreateInfoKHR;
+        const VkDisplaySurfaceCreateInfoKHR*         pVkDisplaySurfaceCreateInfoKHR;
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         const VkWaylandSurfaceCreateInfoKHR*     pVkWaylandSurfaceCreateInfoKHR;
 #endif
@@ -82,6 +84,20 @@ VkResult Surface::Create(
             xlibSurface.base.platform = VK_ICD_WSI_PLATFORM_XLIB;
             xlibSurface.dpy           = pVkXlibSurfaceCreateInfoKHR->dpy;
             xlibSurface.window        = pVkXlibSurfaceCreateInfoKHR->window;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_INFO_KHR:
+        {
+            displaySurface.base.platform = VK_ICD_WSI_PLATFORM_DISPLAY;
+            displaySurface.displayMode = pVkDisplaySurfaceCreateInfoKHR->displayMode;
+            displaySurface.planeIndex  = pVkDisplaySurfaceCreateInfoKHR->planeIndex;
+            displaySurface.planeStackIndex = pVkDisplaySurfaceCreateInfoKHR->planeStackIndex;
+            displaySurface.transform = pVkDisplaySurfaceCreateInfoKHR->transform;
+            displaySurface.globalAlpha = pVkDisplaySurfaceCreateInfoKHR->globalAlpha;
+            displaySurface.alphaMode   = pVkDisplaySurfaceCreateInfoKHR->alphaMode;
+            displaySurface.imageExtent.width  = pVkDisplaySurfaceCreateInfoKHR->imageExtent.width;
+            displaySurface.imageExtent.height = pVkDisplaySurfaceCreateInfoKHR->imageExtent.height;
             break;
         }
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
@@ -121,6 +137,10 @@ VkResult Surface::Create(
         if (xcbSurface.base.platform == VK_ICD_WSI_PLATFORM_XCB)
         {
             pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, osDisplayHandle, xcbSurface);
+        }
+        else if (displaySurface.base.platform == VK_ICD_WSI_PLATFORM_DISPLAY)
+        {
+            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, osDisplayHandle, displaySurface);
         }
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         else if (waylandSurface.base.platform == VK_ICD_WSI_PLATFORM_WAYLAND)

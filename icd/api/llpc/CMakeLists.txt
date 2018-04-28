@@ -70,6 +70,43 @@ if(UNIX)
     else()
         message(FATAL_ERROR "Using unknown compiler.")
     endif()
+elseif(WIN32)
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
+        # CMAKE-TODO: These are /W4 (level 4) warnings
+        target_compile_options(llpc
+            PRIVATE # Warnings in interface and src
+                /wd4005 # 'DEBUG' : macro redefinition ??? Defined in toolchain ??? importedllvmincludellvm/Support/Debug.h
+                /wd4018 # '<' : signed/unsigned mismatch
+                /wd4100 # unreferenced formal parameter
+                /wd4127 # conditional expression is constant
+                /wd4141 # 'inline' : used more than once
+                /wd4146 # unary minus operator applied to unsigned type, result still unsigned
+                /wd4189 # local variable is initialized but not referenced
+                /wd4201 # nonstandard extension used : nameless struct/union
+                /wd4244 # 'X' : conversion from 'Y' to 'Z', possible loss of data
+                /wd4245 # 'X' : conversion from 'Y' to 'Z', signed/unsigned mismatch
+                /wd4291 # no matching operator delete found; memory will not be freed if initialization throws an exception
+                /wd4267 # 'return' : conversion from 'size_t' to 'unsigned int', possible loss of data
+                /wd4389 # '==' : signed/unsigned mismatch
+                /wd4505 # unreferenced local function has been removed
+                /wd4510 # default constructor could not be generated
+                /wd4512 # assignment operator could not be generated
+                /wd4610 # struct 'X' can never be instantiated - user defined constructor required
+                /wd4624 # destructor could not be generated because a base class destructor is inaccessible or deleted
+                /wd4702 # unreachable code
+                /wd4706 # assignment within conditional expression
+                /wd4800 # forcing value to bool 'true' or 'false' (performance warning)
+                /wd6246 # Local declaration of 'S' hides declaration of the same name in outer scope
+                /wd6323 # Use of arithmetic operator on Boolean type(s)
+        )
+
+        target_compile_definitions(llpc PRIVATE _SCL_SECURE_NO_WARNINGS)
+        target_compile_definitions(llpc PRIVATE _CRT_SECURE_NO_WARNINGS)
+
+        message(STATUS "Configured ${PROJECT_NAME} compiler options for MSVC.")
+    else()
+        message(FATAL_ERROR "Using unknown compiler")
+    endif()
 endif()
 
 ### Defines/Includes/Sources ###########################################################################################
@@ -89,6 +126,14 @@ target_compile_definitions(llpc PRIVATE _SPIRV_LLVM_API)
 
 if(XGL_LLVM_UPSTREAM)
     target_compile_definitions(llpc PRIVATE XGL_LLVM_UPSTREAM=1)
+endif()
+
+if(WIN32)
+    target_compile_definitions(llpc PRIVATE
+        NOMINMAX    # windows.h defines min/max which conflicts with the use of std::min / max
+        UNICODE     # CMAKE-TODO: What is this used for?
+        _UNICODE
+    )
 endif()
 
 target_include_directories(llpc
@@ -117,6 +162,11 @@ target_include_directories(llpc
 
 # CMAKE-TODO: Figure out a better way to do this.
 target_include_directories(llpc PRIVATE ${PROJECT_SOURCE_DIR}/../include/khronos)
+
+if(WIN32)
+    target_compile_definitions(llpc PRIVATE VK_USE_PLATFORM_WIN32_KHR)
+    target_compile_definitions(llpc PRIVATE VKI_SDK_1_1=1)
+endif()
 
 # llpc/context
 target_sources(llpc PRIVATE
@@ -230,6 +280,8 @@ set(GEN_GLSL_OP_EMU_LIB_SCRIPT ${OP_EMU_LIB_GEN_DIR}/script/genGlslEmuLib.py)
 
 if(UNIX)
     set(BUILD_OS lnx)
+elseif(WIN32)
+    set(BUILD_OS win)
 endif()
 
 set(GEN_GLSL_EMU_LIB_DEPS
@@ -261,6 +313,8 @@ set(GEN_GLSL_EMU_LIB_DEPS
 
 if(UNIX)
     set(LLVM_BIN_DIR ${XGL_LLVM_BUILD_PATH}/bin/)
+elseif(WIN32)
+    set(LLVM_BIN_DIR ${XGL_LLVM_BUILD_PATH}/\$\(Configuration\)/bin/)
 endif()
 
 add_custom_target(
@@ -332,6 +386,8 @@ endif()
 
 if(UNIX)
     target_link_libraries(amdllpc PRIVATE llpc dl stdc++)
+elseif(WIN32)
+    target_link_libraries(amdllpc PRIVATE llpc)
 endif()
     llvm_map_components_to_libnames(llvm_libs amdgpucodegen amdgpuinfo amdgpuasmparser amdgpudisassembler LTO ipo analysis bitreader bitwriter codegen irreader linker mc passes support target transformutils coroutines aggressiveinstcombine)
 target_link_libraries(amdllpc PRIVATE ${llvm_libs})

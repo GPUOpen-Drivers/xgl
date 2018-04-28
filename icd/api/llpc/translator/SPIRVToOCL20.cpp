@@ -419,13 +419,21 @@ void SPIRVToOCL20::visitCallSPIRVGroupBuiltin(CallInst* CI, Op OC) {
     DemangledName = Prefix + DemangledName;
   } else {
     auto GO = getArgAs<spv::GroupOperation>(CI, 1);
-    StringRef Op = DemangledName;
-    Op = Op.drop_front(strlen(kSPIRVName::GroupPrefix));
-    bool Unsigned = Op.front() == 'u';
+    StringRef OpStr = DemangledName;
+    OpStr = OpStr.drop_front(strlen(kSPIRVName::GroupPrefix));
+    bool Unsigned = OpStr.front() == 'u';
     if (!Unsigned)
-      Op = Op.drop_front(1);
+      OpStr = OpStr.drop_front(1);
+    // map OpGroupXXXXNonUniformAMD to OpGroupNonUniformXXXX Op code
+    if (isGroupNonUniformAMDCode(OC))
+      OpStr = OpStr.drop_back(strlen("_AMD"));
+    // map OpGroupXXXX to OpGroupNonUniformXXXX Op code
+    if (hasGroupOperation(OC)) {
+      DemangledName = OpStr.str() + "_nonuniform";
+      OpStr = DemangledName;
+    }
     DemangledName = Prefix + kSPIRVName::GroupPrefix +
-        SPIRSPIRVGroupOperationMap::rmap(GO) + '_' + Op.str();
+      SPIRSPIRVGroupOperationMap::rmap(GO) + '_' + OpStr.str();
   }
   AttributeList Attrs = CI->getCalledFunction()->getAttributes();
   mutateCallInstOCL(M, CI, [=](CallInst *, std::vector<Value *> &Args){

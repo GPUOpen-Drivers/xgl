@@ -1261,11 +1261,7 @@ SPIRVValue *
 LLVMToSPIRV::transIntrinsicInst(IntrinsicInst *II, SPIRVBasicBlock *BB) {
   auto getMemoryAccess = [](MemIntrinsic *MI)->std::vector<SPIRVWord> {
     std::vector<SPIRVWord> MemoryAccess(1, MemoryAccessMaskNone);
-#if XGL_LLVM_UPSTREAM == 1
     if (SPIRVWord AlignVal = MI->getDestAlignment()) {
-#else
-    if (SPIRVWord AlignVal = MI->getAlignment()) {
-#endif
       MemoryAccess[0] |= MemoryAccessAlignedMask;
       MemoryAccess.push_back(AlignVal);
     }
@@ -1295,11 +1291,8 @@ LLVMToSPIRV::transIntrinsicInst(IntrinsicInst *II, SPIRVBasicBlock *BB) {
     ConstantInt *Val = dyn_cast<ConstantInt>(MSI->getValue());
     ConstantInt *Len = dyn_cast<ConstantInt>(MSI->getLength());
     if (AI && Val && Val->isZero() && Len &&
-#if XGL_LLVM_UPSTREAM == 1
         AI->getAlignment() == MSI->getDestAlignment() && Len->getZExtValue()*8 ==
-#else
-        AI->getAlignment() == MSI->getAlignment() && Len->getZExtValue()*8 ==
-#endif
+
         M->getDataLayout().getTypeSizeInBits(AI->getAllocatedType())) {
       SPIRVValue *Var = transValue(MSI->getDest(), BB);
       assert(Var && Var->isVariable());

@@ -152,8 +152,10 @@ target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 ### XGL Subprojects ####################################################################################################
 ### PAL ########################################################################
-add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
-
+# For Open source, MSVC build is for amdllpc only which does not depend on pal.
+if(ICD_OPEN_SOURCE AND (NOT "${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC"))
+    add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
+endif()
 ### XGL Sources ########################################################################################################
 
 ### ICD api ####################################################################
@@ -161,6 +163,7 @@ add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
 target_sources(xgl PRIVATE
     api/app_profile.cpp
     api/app_shader_optimizer.cpp
+    api/barrier_policy.cpp
     api/color_space_helper.cpp
     api/gpu_event_mgr.cpp
     api/internal_mem_mgr.cpp

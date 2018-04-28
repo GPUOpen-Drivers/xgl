@@ -724,12 +724,11 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
     size_t      palMemSize = 0;
     Pal::Result palResult  = Pal::Result::ErrorOutOfGpuMemory;
 
-    // Adjust alignment and size to page size
+    // Adjust alignment and size to allocation granularity
     Pal::GpuMemoryCreateInfo     localCreateInfo = createInfo;
     const Pal::DeviceProperties& palProperties   = m_pDevice->VkPhysicalDevice()->PalProperties();
 
-    const Pal::gpusize alignment = Util::Max(palProperties.gpuMemoryProperties.virtualMemAllocGranularity,
-                                             palProperties.gpuMemoryProperties.realMemAllocGranularity);
+    const Pal::gpusize alignment = palProperties.gpuMemoryProperties.realMemAllocGranularity;
 
     localCreateInfo.size      = Util::Pow2Align(localCreateInfo.size,      alignment);
     localCreateInfo.alignment = Util::Pow2Align(localCreateInfo.alignment, alignment);

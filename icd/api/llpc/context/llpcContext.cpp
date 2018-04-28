@@ -51,6 +51,7 @@
 #include "llpcMetroHash.h"
 #include "llpcPassNonNativeFuncRemove.h"
 #include "llpcShaderCache.h"
+#include "llpcShaderCacheManager.h"
 
 namespace llvm
 {
@@ -125,57 +126,60 @@ Context::Context(
     m_metaIds.range         = getMDKindID("range");
     m_metaIds.uniform       = getMDKindID("amdgpu.uniform");
 
-    ShaderCache contextCache;
     ShaderEntryState glslEmuLibEntryState = {};
     CacheEntryHandle hGlslEmuLibEntry = nullptr;
     ShaderEntryState nativeGlslEmuLibEntryState = {};
     CacheEntryHandle hNativeGlslEmuLibEntry = nullptr;
+    // Initialize shader cache
+    ShaderCacheCreateInfo    createInfo = {};
+    ShaderCacheAuxCreateInfo auxCreateInfo = {};
+    auxCreateInfo.pExecutableName = "__LLPC_CONTEXT_CACHE__";
+    auxCreateInfo.pCacheFilePath = getenv("AMD_SHADER_DISK_CACHE_PATH");
+
+    if (auxCreateInfo.pCacheFilePath == nullptr)
+    {
+#ifdef WIN_OS
+        auxCreateInfo.pCacheFilePath = getenv("LOCALAPPDATA");
+#else
+        auxCreateInfo.pCacheFilePath = getenv("HOME");
+#endif
+    }
 
     if (cl::EnableCacheEmuLibContext)
     {
-        // Initialize shader cache
-        ShaderCacheCreateInfo    createInfo = {};
-        ShaderCacheAuxCreateInfo auxCreateInfo = {};
         auxCreateInfo.shaderCacheMode = ShaderCacheEnableOnDisk;
-        auxCreateInfo.pExecutableName = "__LLPC_CONTEXT_CACHE__";
-        auxCreateInfo.pCacheFilePath  = getenv("AMD_SHADER_DISK_CACHE_PATH");
-        if (auxCreateInfo.pCacheFilePath == nullptr)
-        {
-#ifdef WIN_OS
-            auxCreateInfo.pCacheFilePath  = getenv("LOCALAPPDATA");
-#else
-            auxCreateInfo.pCacheFilePath  = getenv("HOME");
-#endif
-        }
+    }
+    else
+    {
+        auxCreateInfo.shaderCacheMode = ShaderCacheEnableRuntime;
+    }
 
-        contextCache.Init(&createInfo, &auxCreateInfo);
+    auto contextCache = ShaderCacheManager::GetShaderCacheManager()->GetShaderCacheObject(&createInfo, &auxCreateInfo);
+    MetroHash64 emuLibhasher;
+    emuLibhasher.Update(gfxIp);
+    MetroHash::Hash emuLibHash = {};
+    emuLibhasher.Finalize(emuLibHash.bytes);
+    glslEmuLibEntryState = contextCache->FindShader(emuLibHash, true, &hGlslEmuLibEntry);
+    if (glslEmuLibEntryState == ShaderEntryState::Ready)
+    {
+        BinaryData libBin = {};
+        auto result = contextCache->RetrieveShader(hGlslEmuLibEntry, &libBin.pCode, &libBin.codeSize);
+        m_pGlslEmuLib = LoadLibary(&libBin);
+    }
 
-        MetroHash64 emuLibhasher;
-        emuLibhasher.Update(gfxIp);
-        MetroHash::Hash emuLibHash = {};
-        emuLibhasher.Finalize(emuLibHash.bytes);
-        glslEmuLibEntryState = contextCache.FindShader(emuLibHash, true, &hGlslEmuLibEntry);
-        if (glslEmuLibEntryState == ShaderEntryState::Ready)
-        {
-            BinaryData libBin = {};
-            auto result = contextCache.RetrieveShader(hGlslEmuLibEntry, &libBin.pCode, &libBin.codeSize);
-            m_pGlslEmuLib = LoadLibary(&libBin);
-        }
+    bool isNativeLib = true;
+    MetroHash64 nativeEmuLibHasher;
+    nativeEmuLibHasher.Update(gfxIp);
+    nativeEmuLibHasher.Update(isNativeLib);
+    MetroHash::Hash nativeEmuLibHash = {};
+    nativeEmuLibHasher.Finalize(nativeEmuLibHash.bytes);
 
-        bool isNativeLib = true;
-        MetroHash64 nativeEmuLibHasher;
-        nativeEmuLibHasher.Update(gfxIp);
-        nativeEmuLibHasher.Update(isNativeLib);
-        MetroHash::Hash nativeEmuLibHash = {};
-        nativeEmuLibHasher.Finalize(nativeEmuLibHash.bytes);
-
-        nativeGlslEmuLibEntryState = contextCache.FindShader(nativeEmuLibHash, true, &hNativeGlslEmuLibEntry);
-        if (nativeGlslEmuLibEntryState == ShaderEntryState::Ready)
-        {
-            BinaryData libBin = {};
-            auto result = contextCache.RetrieveShader(hNativeGlslEmuLibEntry, &libBin.pCode, &libBin.codeSize);
-            m_pNativeGlslEmuLib = LoadLibary(&libBin);
-        }
+    nativeGlslEmuLibEntryState = contextCache->FindShader(nativeEmuLibHash, true, &hNativeGlslEmuLibEntry);
+    if (nativeGlslEmuLibEntryState == ShaderEntryState::Ready)
+    {
+        BinaryData libBin = {};
+        auto result = contextCache->RetrieveShader(hNativeGlslEmuLibEntry, &libBin.pCode, &libBin.codeSize);
+        m_pNativeGlslEmuLib = LoadLibary(&libBin);
     }
 
     // Load external LLVM libraries
@@ -232,7 +236,7 @@ Context::Context(
             SmallString<1024> glslEmuLibBin;
             raw_svector_ostream libBinStream(glslEmuLibBin);
             WriteBitcodeToFile(*m_pGlslEmuLib, libBinStream);
-            contextCache.InsertShader(hGlslEmuLibEntry, glslEmuLibBin.data(), glslEmuLibBin.size());
+            contextCache->InsertShader(hGlslEmuLibEntry, glslEmuLibBin.data(), glslEmuLibBin.size());
             hGlslEmuLibEntry = nullptr;
         }
 
@@ -253,7 +257,7 @@ Context::Context(
             SmallString<1024> nativeGlslEmuLibBin;
             raw_svector_ostream libBinStream(nativeGlslEmuLibBin);
             WriteBitcodeToFile(*m_pNativeGlslEmuLib, libBinStream);
-            contextCache.InsertShader(hNativeGlslEmuLibEntry, nativeGlslEmuLibBin.data(), nativeGlslEmuLibBin.size());
+            contextCache->InsertShader(hNativeGlslEmuLibEntry, nativeGlslEmuLibBin.data(), nativeGlslEmuLibBin.size());
         }
 
         EnableDebugOutput(true);

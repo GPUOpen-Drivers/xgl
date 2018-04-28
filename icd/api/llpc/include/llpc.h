@@ -446,6 +446,13 @@ public:
                                               GfxIpVersion             gfxIp,
                                               const BinaryData*        pPipelineBin);
 
+    /// Gets shader module hash code.
+    ///
+    /// @param [in]  pModuleData   Pointer to the shader module data.
+    ///
+    /// @returns Hash code associated this shader module.
+    static uint64_t VKAPI_CALL GetShaderHash(const void* pModuleData);
+
     /// Calculates graphics pipeline hash code.
     ///
     /// @param [in]  pPipelineInfo  Info to build this graphics pipeline

@@ -749,6 +749,12 @@ _SPIRV_OP(ImageSparseSampleProjImplicitLod)
 _SPIRV_OP(ImageSparseSampleProjExplicitLod)
 _SPIRV_OP(ImageSparseSampleProjDrefImplicitLod)
 _SPIRV_OP(ImageSparseSampleProjDrefExplicitLod)
+#if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
+_SPIRV_OP(ImageSampleAnisoLodAMD)
+_SPIRV_OP(ImageSampleDrefAnisoLodAMD)
+_SPIRV_OP(ImageGatherAnisoLodAMD)
+_SPIRV_OP(ImageDrefGatherAnisoLodAMD)
+#endif
 #undef _SPIRV_OP
 
 }

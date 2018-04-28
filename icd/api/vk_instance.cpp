@@ -54,6 +54,7 @@
 #include "palPlatform.h"
 #include "palOglPresent.h"
 #include "palListImpl.h"
+#include "palHashMapImpl.h"
 
 #include <new>
 
@@ -92,7 +93,7 @@ Instance::Instance(
 {
     m_flags.u32All = 0;
 
-    memset(m_pScreens, 0, sizeof(m_pScreens));
+    memset(m_screens, 0, sizeof(m_screens));
 }
 
 // =====================================================================================================================
@@ -430,7 +431,10 @@ VkResult Instance::Init(
             if (result == Pal::Result::Success)
             {
                 m_screenCount = screenCount;
-                memcpy(m_pScreens, pScreens, sizeof(m_pScreens));
+                for (uint32_t i = 0; i < m_screenCount; i++)
+                {
+                    m_screens[i].pPalScreen = pScreens[i];
+                }
                 m_pScreenStorage = pScreenStorage[0];
             }
             else
@@ -574,7 +578,7 @@ VkResult Instance::Destroy(void)
     // Destroy screens
     for (uint32_t i = 0; i < m_screenCount; ++i)
     {
-        m_pScreens[i]->Destroy();
+        m_screens[i].pPalScreen->Destroy();
     }
 
     FreeMem(m_pScreenStorage);
@@ -709,27 +713,92 @@ VkResult Instance::EnumerateExtensionProperties(
 }
 
 // =====================================================================================================================
+// Get mode list for specific screen.
+VkResult Instance::GetScreenModeList(
+    const Pal::IScreen*     pScreen,
+    uint32_t*               pModeCount,
+    Pal::ScreenMode**       ppModeList)
+{
+    VkResult result = VK_SUCCESS;
+    Pal::Result palResult = Pal::Result::Success;
+
+    for (uint32_t screenIdx = 0; screenIdx < m_screenCount; ++screenIdx)
+    {
+        if (m_screens[screenIdx].pPalScreen == pScreen)
+        {
+            if (ppModeList == nullptr)
+            {
+                palResult = pScreen->GetScreenModeList(pModeCount, nullptr);
+                VK_ASSERT(palResult == Pal::Result::Success);
+            }
+            else
+            {
+                if (m_screens[screenIdx].pModeList[0] == nullptr)
+                {
+                    uint32_t modeCount = 0;
+                    palResult = pScreen->GetScreenModeList(&modeCount, nullptr);
+                    VK_ASSERT(palResult == Pal::Result::Success);
+
+                    m_screens[screenIdx].pModeList[0] = reinterpret_cast<Pal::ScreenMode*>(
+                            AllocMem(modeCount * sizeof(Pal::ScreenMode), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE));
+
+                    for (uint32_t i = 1; i < modeCount; ++i)
+                    {
+                        m_screens[screenIdx].pModeList[i] = reinterpret_cast<Pal::ScreenMode*>(Util::VoidPtrInc(
+                                                                            m_screens[screenIdx].pModeList[0],
+                                                                            i * sizeof(Pal::ScreenMode)));
+                    }
+
+                    palResult = pScreen->GetScreenModeList(&modeCount, m_screens[screenIdx].pModeList[0]);
+                    VK_ASSERT(palResult == Pal::Result::Success);
+
+                    m_screens[screenIdx].modeCount = modeCount;
+                }
+
+                uint32_t loopCount = m_screens[screenIdx].modeCount;
+
+                if (*pModeCount < m_screens[screenIdx].modeCount)
+                {
+                    result = VK_INCOMPLETE;
+                    loopCount = *pModeCount;
+                }
+
+                for (uint32_t i = 0; i < loopCount; i++)
+                {
+                    ppModeList[i] = m_screens[screenIdx].pModeList[i];
+                }
+
+                *pModeCount = loopCount;
+                break;
+            }
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 // Finds the PAL screens attached to a given physical device
 VkResult Instance::FindScreens(
     const Pal::IDevice* pDevice,
-    uint32_t*           pDisplayCount,
+    uint32_t*           pScreenCount,
     Pal::IScreen**      ppScreens) const
 {
     VkResult       result = VK_SUCCESS;
     uint32_t       numFound = 0;
-    const uint32_t maxEntries = (ppScreens == nullptr) ? 0 : *pDisplayCount;
+    const uint32_t maxEntries = (ppScreens == nullptr) ? 0 : *pScreenCount;
 
     for (uint32_t screenIdx = 0; screenIdx < m_screenCount; ++screenIdx)
     {
         Pal::ScreenProperties props = {};
 
-        if (m_pScreens[screenIdx]->GetProperties(&props) == Pal::Result::Success)
+        if (m_screens[screenIdx].pPalScreen->GetProperties(&props) == Pal::Result::Success)
         {
             if (props.pMainDevice == pDevice)
             {
                 if (numFound < maxEntries)
                 {
-                    ppScreens[numFound] = m_pScreens[screenIdx];
+                    ppScreens[numFound] = m_screens[screenIdx].pPalScreen;
                 }
 
                 numFound++;
@@ -742,7 +811,7 @@ VkResult Instance::FindScreens(
         result = VK_INCOMPLETE;
     }
 
-    *pDisplayCount = numFound;
+    *pScreenCount = numFound;
 
     return result;
 }

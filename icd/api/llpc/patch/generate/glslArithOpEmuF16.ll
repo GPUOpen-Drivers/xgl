@@ -546,6 +546,7 @@ define half @llpc.atanh.f16(half %x) #0
 ; GLSL: float16_t pow(float16_t, float16_t)
 define half @llpc.pow.f16(half %x, half %y) #0
 {
+    ; pow(x, y) = exp2(y * log2(x))
     %1 = call half @llvm.log2.f16(half %x)
     %2 = fmul half %y, %1
     %3 = call half @llvm.exp2.f16(half %2)

@@ -50,7 +50,6 @@ public:
     virtual bool runOnModule(llvm::Module& module);
     virtual void visitLoadInst(llvm::LoadInst& loadInst);
     virtual void visitStoreInst(llvm::StoreInst& storeInst);
-    virtual void visitCallInst(llvm::CallInst& callInst);
 
     // Pass creator, creates the pass of SPIR-V lowering opertions for load and store operations on aggregate type
     static llvm::ModulePass* Create() { return new SpirvLowerAggregateLoadStore(); }

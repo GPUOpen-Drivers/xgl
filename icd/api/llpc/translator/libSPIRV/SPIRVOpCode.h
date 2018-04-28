@@ -150,7 +150,13 @@ inline bool isGroupOpCode(Op OpCode) {
 
 inline bool isGroupNonUniformOpCode(Op OpCode) {
     unsigned OC = OpCode;
-    return OpGroupNonUniformIAdd <= OC && OC <= OpGroupNonUniformLogicalXor;
+    return (OpGroupNonUniformIAdd <= OC && OC <= OpGroupNonUniformLogicalXor) ||
+      (OpGroupIAddNonUniformAMD <= OC && OC <= OpGroupSMaxNonUniformAMD);
+}
+
+inline bool isGroupNonUniformAMDCode(Op OpCode) {
+    unsigned OC = OpCode;
+    return (OpGroupIAddNonUniformAMD <= OC && OC <= OpGroupSMaxNonUniformAMD);
 }
 
 inline bool isPipeOpCode(Op OpCode) {

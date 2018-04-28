@@ -46,10 +46,10 @@
 
 #include "palDeveloperHooks.h"
 #include "palLib.h"
-#include "palScreen.h"
-#include "palSysMemory.h"
 #include "palList.h"
 #include "palMutex.h"
+#include "palScreen.h"
+#include "palSysMemory.h"
 
 namespace Pal
 {
@@ -177,6 +177,11 @@ public:
         Pal::OsWindowHandle     windowHandle,
         Pal::OsDisplayHandle    monitorHandle) const;
 
+    VkResult GetScreenModeList(
+        const Pal::IScreen*     pScreen,
+        uint32_t*               pModeCount,
+        Pal::ScreenMode**       ppModeList);
+
     VK_INLINE const DispatchTable& GetDispatchTable() const
         { return m_dispatchTable; }
 
@@ -284,9 +289,20 @@ private:
     AppProfile                          m_preInitAppProfile;
 #endif
 
-    uint32_t      m_screenCount;
-    Pal::IScreen* m_pScreens[Pal::MaxScreens];
-    void*         m_pScreenStorage;
+    struct ScreenObject
+    {
+        Pal::IScreen*       pPalScreen;
+        uint32_t            modeCount;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 401
+        Pal::ScreenMode*    pModeList[Pal::MaxModePerScreen];
+#else
+        Pal::ScreenMode*    pModeList[64];
+#endif
+    };
+
+    uint32_t        m_screenCount;
+    ScreenObject    m_screens[Pal::MaxScreens];
+    void*           m_pScreenStorage;
 
     DevModeMgr*   m_pDevModeMgr; // GPUOpen Developer Mode manager.
 #ifdef ICD_BUILD_APPPROFILE

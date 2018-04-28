@@ -136,6 +136,12 @@ VkResult ComputePipeline::Create(
     {
         ConvertComputePipelineInfo(pDevice, pCreateInfo, &createInfo);
 
+#ifdef ICD_BUILD_APPPROFILE
+        // Override pipeline creation parameters based on pipeline profile
+        pDevice->GetShaderOptimizer()->OverrideComputePipelineCreateInfo(
+            binaryCreateInfo.pipelineProfileKey,
+            nullptr);
+#endif
     }
 
     size_t pipelineSize = 0;

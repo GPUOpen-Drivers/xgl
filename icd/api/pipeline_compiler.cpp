@@ -894,6 +894,15 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 pShaderInfo,
                 vertexShader ? pVbInfo : nullptr);
         }
+
+#if ICD_BUILD_APPPROFILE
+        ApplyProfileOptions(pDevice,
+                            static_cast<ShaderStage>(stage),
+                            pShaderModule,
+                            pShaderInfo,
+                            &pCreateInfo->pipelineProfileKey
+                            );
+#endif
     }
 
     return result;
@@ -929,6 +938,8 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 {
     VkResult result    = VK_SUCCESS;
     auto     pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
+
     PipelineLayout* pLayout = nullptr;
     VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO);
 
@@ -990,8 +1001,60 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             nullptr);
     }
 
+#ifdef ICD_BUILD_APPPROFILE
+    ApplyProfileOptions(pDevice,
+                        ShaderStageCompute,
+                        pShaderModule,
+                        &pCreateInfo->pipelineInfo.cs,
+                        &pCreateInfo->pipelineProfileKey
+                        );
+#endif
+
     return result;
 }
+
+#ifdef ICD_BUILD_APPPROFILE
+// =====================================================================================================================
+// Builds app profile key and applies profile options.
+void PipelineCompiler::ApplyProfileOptions(
+    Device*                      pDevice,
+    ShaderStage                  stage,
+    ShaderModule*                pShaderModule,
+    Llpc::PipelineShaderInfo*    pShaderInfo,
+    PipelineOptimizerKey*        pProfileKey
+    )
+{
+    auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
+    PipelineShaderOptionsPtr options = {};
+    options.pOptions = &pShaderInfo->options;
+
+    auto& shaderKey = pProfileKey->shaders[stage];
+    if (settings.pipelineUseShaderHashAsProfileHash)
+    {
+        const void* pModuleData = pShaderInfo->pModuleData;
+        if (pModuleData == nullptr)
+        {
+            // Shader hash are same between LLPC and SCPC path, we only need a valid module data
+            pModuleData = pShaderModule->GetShaderData(false);
+        }
+
+        shaderKey.codeHash.lower = Llpc::IPipelineDumper::GetShaderHash(pModuleData);
+        shaderKey.codeHash.upper = 0;
+    }
+    else
+    {
+        // Populate the pipeline profile key.  The hash used by the profile is different from the default
+        // internal hash in that it only depends on the SPIRV code + entry point.  This is to reduce the
+        // chance that internal changes to our hash calculation logic drop us off pipeline profiles.
+        shaderKey.codeHash = pShaderModule->GetCodeHash(pShaderInfo->pEntryTarget);
+    }
+    shaderKey.codeSize = pShaderModule->GetCodeSize();
+
+    // Override the compile parameters based on any app profile
+    auto* pShaderOptimizer = pDevice->GetShaderOptimizer();
+    pShaderOptimizer->OverrideShaderCreateInfo(*pProfileKey, stage, options);
+}
+#endif
 
 // =====================================================================================================================
 // Free compute pipeline binary

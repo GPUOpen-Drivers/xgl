@@ -81,8 +81,6 @@ VkResult Memory::Create(
     bool isExternal                 = false;
     bool isHostMappedForeign        = false;
     void* pPinnedHostPtr            = nullptr; // If non-null, this memory is allocated as pinned system memory
-    const Pal::gpusize palAlignment = Util::Max(palProperties.gpuMemoryProperties.virtualMemAllocGranularity,
-                                                palProperties.gpuMemoryProperties.realMemAllocGranularity);
 
     // take the allocation count ahead of time.
     // it will set the VK_ERROR_TOO_MANY_OBJECTS
@@ -103,7 +101,10 @@ VkResult Memory::Create(
         switch (pHeader->sType)
         {
             case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO:
-                createInfo.size = pInfo->allocationSize;
+                // Get memory requirements calls don't pad to our allocation granularity, which is preferred for
+                // suballocation.  However, PAL requires that we respect this granularity on GPU memory allocs.
+                createInfo.size = Util::Pow2Align(pInfo->allocationSize,
+                                                  palProperties.gpuMemoryProperties.realMemAllocGranularity);
 
                 // Calculate the required base address alignment for the given memory type.  These alignments are
                 // roughly worst-case alignments required by images that may be hosted within this memory object.
@@ -215,15 +216,6 @@ VkResult Memory::Create(
                 }
                 break;
         }
-    }
-
-    if (pPinnedHostPtr == nullptr)
-    {
-        // Align size of non-pinned allocations to required multiple
-        const Pal::gpusize sizeAlignment = Util::Max(palProperties.gpuMemoryProperties.virtualMemAllocGranularity,
-                                                     palProperties.gpuMemoryProperties.realMemAllocGranularity);
-
-        createInfo.size = Util::Pow2Align(createInfo.size, sizeAlignment);
     }
 
     if (vkResult == VK_SUCCESS)

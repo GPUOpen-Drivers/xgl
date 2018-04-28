@@ -309,6 +309,60 @@ define spir_func i32 @_Z26SubgroupFirstInvocationKHRi(i32 %value)
     ret i32 %1
 }
 
+; GLSL: ivec2/uvec2 readFirstInvocation(ivec2/uvec2)
+define spir_func <2 x i32> @_Z26SubgroupFirstInvocationKHRDv2_i(<2 x i32> %value)
+{
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @_Z26SubgroupFirstInvocationKHRi(i32 %1)
+    %4 = call i32 @_Z26SubgroupFirstInvocationKHRi(i32 %2)
+
+    %5 = insertelement <2 x i32> undef, i32 %3, i32 0
+    %6 = insertelement <2 x i32> %5, i32 %4, i32 1
+
+    ret <2 x i32> %6
+}
+
+; GLSL: ivec3/uvec3 readFirstInvocation(ivec3/uvec3)
+define spir_func <3 x i32> @_Z26SubgroupFirstInvocationKHRDv3_i(<3 x i32> %value)
+{
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @_Z26SubgroupFirstInvocationKHRi(i32 %1)
+    %5 = call i32 @_Z26SubgroupFirstInvocationKHRi(i32 %2)
+    %6 = call i32 @_Z26SubgroupFirstInvocationKHRi(i32 %3)
+
+    %7 = insertelement <3 x i32> undef, i32 %4, i32 0
+    %8 = insertelement <3 x i32> %7, i32 %5, i32 1
+    %9 = insertelement <3 x i32> %8, i32 %6, i32 2
+
+    ret <3 x i32> %9
+}
+
+; GLSL: ivec4/uvec4 readFirstInvocation(ivec4/uvec4)
+define spir_func <4 x i32> @_Z26SubgroupFirstInvocationKHRDv4_i(<4 x i32> %value)
+{
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @_Z26SubgroupFirstInvocationKHRi(i32 %1)
+    %6 = call i32 @_Z26SubgroupFirstInvocationKHRi(i32 %2)
+    %7 = call i32 @_Z26SubgroupFirstInvocationKHRi(i32 %3)
+    %8 = call i32 @_Z26SubgroupFirstInvocationKHRi(i32 %4)
+
+    %9 = insertelement <4 x i32> undef, i32 %5, i32 0
+    %10 = insertelement <4 x i32> %9, i32 %6, i32 1
+    %11 = insertelement <4 x i32> %10, i32 %7, i32 2
+    %12 = insertelement <4 x i32> %11, i32 %8, i32 3
+
+    ret <4 x i32> %12
+}
+
 ; GLSL: float readFirstInvocation(float)
 define spir_func float @_Z26SubgroupFirstInvocationKHRf(float %value)
 {
@@ -317,6 +371,36 @@ define spir_func float @_Z26SubgroupFirstInvocationKHRf(float %value)
     %3 = bitcast i32 %2 to float
 
     ret float %3
+}
+
+; GLSL: vec2 readFirstInvocation(vec2)
+define spir_func <2 x float> @_Z26SubgroupFirstInvocationKHRDv2_f(<2 x float> %value)
+{
+    %1 = bitcast <2 x float> %value to <2 x i32>
+    %2 = call <2 x i32> @_Z26SubgroupFirstInvocationKHRDv2_i(<2 x i32> %1)
+    %3 = bitcast <2 x i32> %2 to <2 x float>
+
+    ret <2 x float> %3
+}
+
+; GLSL: vec3 readFirstInvocation(vec3)
+define spir_func <3 x float> @_Z26SubgroupFirstInvocationKHRDv3_f(<3 x float> %value)
+{
+    %1 = bitcast <3 x float> %value to <3 x i32>
+    %2 = call <3 x i32> @_Z26SubgroupFirstInvocationKHRDv3_i(<3 x i32> %1)
+    %3 = bitcast <3 x i32> %2 to <3 x float>
+
+    ret <3 x float> %3
+}
+
+; GLSL: vec4 readFirstInvocation(vec4)
+define spir_func <4 x float> @_Z26SubgroupFirstInvocationKHRDv4_f(<4 x float> %value)
+{
+    %1 = bitcast <4 x float> %value to <4 x i32>
+    %2 = call <4 x i32> @_Z26SubgroupFirstInvocationKHRDv4_i(<4 x i32> %1)
+    %3 = bitcast <4 x i32> %2 to <4 x float>
+
+    ret <4 x float> %3
 }
 
 ; GLSL: bool anyInvocation(bool)
@@ -1920,6 +2004,70 @@ define spir_func i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %x, i32 %y
     ret i32 %result
 }
 
+; GLSL: x [binary] y (int64_t/uint64_t)
+define spir_func i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %x, i64 %y)
+{
+.entry:
+    %x64 = bitcast i64 %x to double
+    %y64 = bitcast i64 %y to double
+    switch i32 %binaryOp, label %.default [i32 0,  label %.iadd
+                                           i32 1,  label %.imul
+                                           i32 2,  label %.smin
+                                           i32 3,  label %.smax
+                                           i32 4,  label %.umin
+                                           i32 5,  label %.umax
+                                           i32 6,  label %.and
+                                           i32 7,  label %.or
+                                           i32 8,  label %.xor
+                                           i32 9,  label %.fmul
+                                           i32 10, label %.fmin
+                                           i32 11, label %.fmax
+                                           i32 12, label %.fadd ]
+
+.iadd:
+    %i0 = add i64 %x, %y
+    ret i64 %i0
+.imul:
+    %i1 = mul i64 %x, %y
+    ret i64 %i1
+.smin:
+    %i2 = call i64 @llpc.sminnum.i64(i64 %x, i64 %y)
+    ret i64 %i2
+.smax:
+    %i3 = call i64 @llpc.smaxnum.i64(i64 %x, i64 %y)
+    ret i64 %i3
+.umin:
+    %i4 = call i64 @llpc.uminnum.i64(i64 %x, i64 %y)
+    ret i64 %i4
+.umax:
+    %i5 = call i64 @llpc.umaxnum.i64(i64 %x, i64 %y)
+    ret i64 %i5
+.and:
+    ret i64 0
+.or:
+    ret i64 0
+.xor:
+    ret i64 0
+.fadd:
+    %f0 = fadd double %x64, %y64
+    %iv0 = bitcast double %f0 to i64
+    ret i64 %iv0
+.fmul:
+    %f1 = fmul double %x64, %y64
+    %iv1 = bitcast double %f1 to i64
+    ret i64 %iv1
+.fmin:
+    %f2 = call double @llvm.minnum.f64(double %x64, double %y64)
+    %iv2 = bitcast double %f2 to i64
+    ret i64 %iv2
+.fmax:
+    %f3 = call double @llvm.maxnum.f64(double %x64, double %y64)
+    %iv3 = bitcast double %f3 to i64
+    ret i64 %iv3
+.default:
+    ret i64 0
+}
+
 ; GLSL: identity (32-bit)
 define spir_func i32 @llpc.subgroup.identity.i32(i32 %binaryOp)
 {
@@ -1937,6 +2085,7 @@ define spir_func i32 @llpc.subgroup.identity.i32(i32 %binaryOp)
                                        i32 10, label %.fmin
                                        i32 11, label %.fmax
                                        i32 12, label %.fadd ]
+
 .iadd:
     ret i32 0
 .imul:
@@ -1971,24 +2120,123 @@ define spir_func i32 @llpc.subgroup.identity.i32(i32 %binaryOp)
 .fadd:
     ret i32 0
 .end:
-    ret i32 undef
+    ret i32 0
+}
+
+; GLSL: identity (64-bit)
+define spir_func i64 @llpc.subgroup.identity.i64(i32 %binaryOp)
+{
+.entry:
+    switch i32 %binaryOp, label %.default [i32 0,  label %.iadd
+                                           i32 1,  label %.imul
+                                           i32 2,  label %.smin
+                                           i32 3,  label %.smax
+                                           i32 4,  label %.umin
+                                           i32 5,  label %.umax
+                                           i32 6,  label %.and
+                                           i32 7,  label %.or
+                                           i32 8,  label %.xor
+                                           i32 9,  label %.fmul
+                                           i32 10, label %.fmin
+                                           i32 11, label %.fmax
+                                           i32 12, label %.fadd ]
+
+.iadd:
+    ret i64 0
+.imul:
+    ret i64 1
+.smin:
+    ; 0x7FFF FFFF FFFF FFFF
+    ret i64 9223372036854775807
+.smax:
+    ; 0x8000 0000 0000 0000
+    ret i64 -9223372036854775808
+.umin:
+    ; 0xFFFF FFFF FFFF FFFF
+    ret i64 -1
+.umax:
+    ret i64 0
+.and:
+    ret i64 0
+.or:
+    ret i64 0
+.xor:
+    ret i64 0
+.fadd:
+    ret i64 0
+.fmul:
+    ; ‭3FF0,0000,0000,0000, 1.0
+    ret i64 4607182418800017408
+.fmin:
+    ; 7FF0,0000,0000,0000, 1.#INF00E+000
+    ret i64 9218868437227405312
+.fmax:
+    ; FFF0,0000,0000,0000, -1.#INF00E+000
+    ret i64 -4503599627370496
+.default:
+    ret i64 0
+}
+
+; Emulate ISA: v_cndmask_b32 (32-bit)
+define spir_func i32 @llpc.cndmask.i32(i64 %tidmask, i64 %mask, i32 %src0, i32 %src1)
+{
+    %1 = and i64 %tidmask, %mask
+    %2 = icmp ne i64 %1, 0
+    %3 = select i1 %2, i32 %src1, i32 %src0
+
+    ret i32 %3
+}
+
+; Emulate ISA: v_cndmask_b32 (64-bit)
+define spir_func i64 @llpc.cndmask.i64(i64 %tidmask, i64 %mask, i64 %src0, i64 %src1)
+{
+    %1 = and i64 %tidmask, %mask
+    %2 = icmp ne i64 %1, 0
+    %3 = select i1 %2, i64 %src1, i64 %src0
+
+    ret i64 %3
+}
+
+; Performs ds_swizzle on 64-bit data
+define spir_func i64 @llpc.swizzle.i64(i64 %value, i32 %offset)
+{
+    %value.v2 = bitcast i64 %value to <2 x i32>
+    %1 = extractelement <2 x i32> %value.v2, i32 0
+    %2 = extractelement <2 x i32> %value.v2, i32 1
+    %3 = call i32 @llvm.amdgcn.ds.swizzle(i32 %1, i32 %offset)
+    %4 = call i32 @llvm.amdgcn.ds.swizzle(i32 %2, i32 %offset)
+    %5 = insertelement <2 x i32> undef, i32 %3, i32 0
+    %6 = insertelement <2 x i32> %5, i32 %4, i32 1
+    %7 = bitcast <2 x i32> %6 to i64
+
+    ret i64 %7
+}
+
+; Performs readlane on 64-bit data
+define spir_func i64 @llpc.readlane.i64(i64 %value, i32 %id)
+{
+    %value.v2 = bitcast i64 %value to <2 x i32>
+    %1 = extractelement <2 x i32> %value.v2, i32 0
+    %2 = extractelement <2 x i32> %value.v2, i32 1
+    %3 = call i32 @llvm.amdgcn.readlane(i32 %1, i32 %id)
+    %4 = call i32 @llvm.amdgcn.readlane(i32 %2, i32 %id)
+    %5 = insertelement <2 x i32> undef, i32 %3, i32 0
+    %6 = insertelement <2 x i32> %5, i32 %4, i32 1
+    %7 = bitcast <2 x i32> %6 to i64
+
+    ret i64 %7
 }
 
 ; GLSL: int/uint/float subgroupXXX(int/uint/float)
 define spir_func i32 @llpc.subgroup.reduce.i32(i32 %binaryOp, i32 %value)
 {
-    ; Get identity value of binary ops value
-    %identity = call i32 @llpc.subgroup.identity.i32(i32 %binaryOp)
-    ; Set identity value for the inactive threads
-    %inactiveValue = call i32 @llvm.amdgcn.set.inactive.i32(i32 %value, i32 %identity)
-
     ; ds_swizzle work in 32 consecutive lanes/threads BIT mode
     ; log2(64) = 6 , so there are 6 iteration of binary ops needed
 
     ; 1055 ,bit mode, xor mask = 1 ->(SWAP, 1)
-    %i1.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %inactiveValue, i32 1055)
+    %i1.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %value, i32 1055)
     %i1.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i1.1)
-    %i1.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %inactiveValue, i32 %i1.2)
+    %i1.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %value, i32 %i1.2)
 
     ; 2079 ,bit mode, xor mask = 2 ->(SWAP, 2)
     %i2.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i1.3, i32 2079)
@@ -2017,476 +2265,6707 @@ define spir_func i32 @llpc.subgroup.reduce.i32(i32 %binaryOp, i32 %value)
     ret i32 %i6.3
 }
 
-; GLSL: int/uint/float subgroupInclusiveXXX(int/uint/float)
-define spir_func i32 @llpc.subgroup.inclusiveScan.i32(i32 %arithOp, i32 %value)
+; GLSL: int64_t/uint64_t subgroupXXX(int64_t/uint64_t)
+define spir_func i64 @llpc.subgroup.reduce.i64(i32 %binaryOp, i64 %value)
 {
-    ret i32 undef
+    ; ds_swizzle work in 32 consecutive lanes/threads BIT mode
+    ; log2(64) = 6 , so there are 6 iteration of binary ops needed
+
+    ; 1055 ,bit mode, xor mask = 1 ->(SWAP, 1)
+    %i1.1 = call i64 @llpc.swizzle.i64(i64 %value, i32 1055)
+    %i1.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i1.1)
+    %i1.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %value, i64 %i1.2)
+
+    ; 2079 ,bit mode, xor mask = 2 ->(SWAP, 2)
+    %i2.1 = call i64 @llpc.swizzle.i64(i64 %i1.3, i32 2079)
+    %i2.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i2.1)
+    %i2.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i1.3, i64 %i2.2)
+
+    ; 4127 ,bit mode, xor mask = 4 ->(SWAP, 4)
+    %i3.1 = call i64 @llpc.swizzle.i64(i64 %i2.3, i32 4127)
+    %i3.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i3.1)
+    %i3.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i2.3, i64 %i3.2)
+
+    ; 8223 ,bit mode, xor mask = 8 ->(SWAP, 8)
+    %i4.1 = call i64 @llpc.swizzle.i64(i64 %i3.3, i32 8223)
+    %i4.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i4.1)
+    %i4.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i3.3, i64 %i4.2)
+
+    ; 16415 ,bit mode, xor mask = 16 >(SWAP, 16)
+    %i5.1 = call i64 @llpc.swizzle.i64(i64 %i4.3, i32 16415)
+    %i5.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i5.1)
+    %i5.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i4.3, i64 %i5.2)
+    %i5.4 = call i64 @llvm.amdgcn.wwm.i64(i64 %i5.3)
+
+    %i6.1 = call i64 @llpc.readlane.i64(i64 %i5.4, i32 31)
+    %i6.2 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i6.1, i64 %i5.4)
+    %i6.3 = call i64 @llvm.amdgcn.wwm.i64(i64 %i6.2)
+    %i6.4 = call i64 @llpc.readlane.i64(i64 %i6.3, i32 63)
+
+    ret i64 %i6.4
 }
 
 ; GLSL: int/uint/float subgroupExclusiveXXX(int/uint/float)
-define spir_func i32 @llpc.subgroup.exclusiveScan.i32(i32 %arithOp, i32 %value)
+define spir_func i32 @llpc.subgroup.exclusiveScan.i32(i32 %binaryOp, i32 %value)
 {
-    ret i32 undef
+    %tid.lo =  call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #1
+    %tid = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %tid.lo) #1
+    %tid.64 = zext i32 %tid to i64
+    %tmask = shl i64 1, %tid.64
+    %tidmask = call i64 @llvm.amdgcn.wwm.i64(i64 %tmask)
+
+    ; ds_swizzle work in 32 consecutive lanes/threads BIT mode
+    ; 11 iteration of binary ops needed
+    ; 1055, bit mode, xor mask = 1 ->(SWAP, 1)
+    %i1.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %value, i32 1055)
+    %i1.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i1.1)
+    %i1.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %value, i32 %i1.2)
+    ; -6148914691236517206 = 0xAAAA,AAAA,AAAA,AAAA, update lanes/threads according to mask
+    %i1.4 = call i32 @llpc.cndmask.i32(i64 %tidmask , i64 -6148914691236517206, i32 %value, i32 %i1.3)
+    %i1.5 = call i32 @llvm.amdgcn.wwm.i32(i32 %i1.4)
+
+    ; 2079, bit mode, xor mask = 2 ->(SWAP, 2)
+    %i2.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i1.5, i32 2079)
+    %i2.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i2.1)
+    %i2.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i1.4, i32 %i2.2)
+    ; -8608480567731124088 = 0x8888,8888,8888,8888
+    %i2.4 = call i32 @llpc.cndmask.i32(i64 %tidmask ,i64 -8608480567731124088, i32 %i1.4, i32 %i2.3)
+
+    ; 4127, bit mode, xor mask = 4 ->(SWAP, 4)
+    %i3.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i2.4, i32 4127)
+    %i3.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i3.1)
+    %i3.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i2.4, i32 %i3.2)
+    ; -9187201950435737472 = 0x8080,8080,8080,8080
+    %i3.4 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 -9187201950435737472, i32 %i2.4, i32 %i3.3)
+
+    ; 8223, bit mode, xor mask = 8 >(SWAP, 8)
+    %i4.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i3.4, i32 8223)
+    %i4.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i4.1)
+    %i4.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i3.4, i32 %i4.2)
+    ; -9223231297218904064 = 0x8000,8000,8000,8000
+    %i4.4 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 -9223231297218904064, i32 %i3.4, i32 %i4.3)
+
+    ; 16415, bit mode, xor mask = 16 >(SWAP, 16)
+    %i5.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i4.4, i32 16415)
+    %i5.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i5.1)
+    %i5.3 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i4.4, i32 %i5.2)
+    ; -9223372034707292160 = 0x8000,0000,8000,0000
+    %i5.4 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 -9223372034707292160, i32 %i4.4, i32 %i5.3)
+
+    ; From now on, scan would be downward
+    %identity = call i32 @llpc.subgroup.identity.i32(i32 %binaryOp)
+    %i6.1 = call i32 @llvm.amdgcn.readlane(i32 %i5.4, i32 31)
+    %i6.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i6.1)
+    ; -9223372036854775808 = 0x8000,0000,0000,0000
+    %i6.3 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 -9223372036854775808, i32 %i5.4, i32 %i6.2)
+    ; 2147483648 = 0x0000,0000,8000,0000
+    %i6.4 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 2147483648, i32 %i6.3, i32 %identity)
+
+    ; 16415, bit mode, xor mask = 16 >(SWAP, 16)
+    %i7.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i6.4, i32 16415)
+    %i7.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i7.1)
+    ; 140737488388096 = 0x0000,8000,0000,8000
+    %i7.3 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 140737488388096, i32 %i6.4, i32 %i7.2)
+    %i7.4 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i7.2, i32 %i7.3)
+    ; -9223372034707292160 = 0x8000,0000,8000,0000
+    %i7.5 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 -9223372034707292160, i32 %i7.3, i32 %i7.4)
+
+    ; 8223, bit mode, xor mask = 8 >(SWAP, 8)
+    %i8.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i7.5, i32 8223)
+    %i8.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i8.1)
+    ; 36029346783166592 = 0x0080,0080,0080,0080
+    %i8.3 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 36029346783166592, i32 %i7.5, i32 %i8.2)
+    %i8.4 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i8.2, i32 %i8.3)
+    ; -9223231297218904064 = 0x8000,8000,8000,8000
+    %i8.5 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 -9223231297218904064, i32 %i8.3, i32 %i8.4)
+
+    ; 4127, bit mode, xor mask = 4 ->(SWAP, 4)
+    %i9.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i8.5, i32 4127)
+    %i9.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i9.1)
+    ; 578721382704613384 = 0x0808,0808,0808,0808
+    %i9.3 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 578721382704613384, i32 %i8.5, i32 %i9.2)
+    %i9.4 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i9.2, i32 %i9.3)
+    ; -9187201950435737472 = 0x8080,8080,8080,8080
+    %i9.5 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 -9187201950435737472, i32 %i9.3, i32 %i9.4)
+
+    ; 2079, bit mode, xor mask = 2 ->(SWAP, 2)
+    %i10.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i9.5, i32 2079)
+    %i10.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i10.1)
+    ; 2459565876494606882 = 0x2222,2222,2222,2222
+    %i10.3 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 2459565876494606882, i32 %i9.5, i32 %i10.2)
+    %i10.4 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i10.2, i32 %i10.3)
+    ; -8608480567731124088 = 0x8888,8888,8888,8888
+    %i10.5 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 -8608480567731124088, i32 %i10.3, i32 %i10.4)
+
+    ; 1055, bit mode, xor mask = 1 ->(SWAP, 1)
+    %i11.1 = call i32 @llvm.amdgcn.ds.swizzle(i32 %i10.5, i32 1055)
+    %i11.2 = call i32 @llvm.amdgcn.wwm.i32(i32 %i11.1)
+    ; 6148914691236517205 = 0x5555,5555,5555,5555
+    %i11.3 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 6148914691236517205, i32 %i10.5, i32 %i11.2)
+    %i11.4 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %i11.2, i32 %i11.3)
+    ; -6148914691236517206 = 0xAAAA,AAAA,AAAA,AAAA
+    %i11.5 = call i32 @llpc.cndmask.i32(i64 %tidmask, i64 -6148914691236517206, i32 %i11.3, i32 %i11.4)
+    %i11.6 = call i32 @llvm.amdgcn.wwm.i32(i32 %i11.5)
+
+    ret i32 %i11.6
+}
+
+; GLSL: int64_t/uint64_t subgroupExclusiveXXX(int64_t/uint64_t)
+define spir_func i64 @llpc.subgroup.exclusiveScan.i64(i32 %binaryOp, i64 %value)
+{
+    %tid.lo =  call i32 @llvm.amdgcn.mbcnt.lo(i32 -1, i32 0) #1
+    %tid = call i32 @llvm.amdgcn.mbcnt.hi(i32 -1, i32 %tid.lo) #1
+    %tid.64 = zext i32 %tid to i64
+    %tmask = shl i64 1, %tid.64
+    %tidmask = call i64 @llvm.amdgcn.wwm.i64(i64 %tmask)
+
+    ; ds_swizzle work in 32 consecutive lanes/threads BIT mode
+    ; 11 iteration of binary ops needed
+    ; 1055, bit mode, xor mask = 1 ->(SWAP, 1)
+    %i1.1 = call i64 @llpc.swizzle.i64(i64 %value, i32 1055)
+    %i1.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i1.1)
+    %i1.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %value, i64 %i1.2)
+    ; -6148914691236517206 = 0xAAAA,AAAA,AAAA,AAAA, update lanes/threads according to mask
+    %i1.4 = call i64 @llpc.cndmask.i64(i64 %tidmask , i64 -6148914691236517206, i64 %value, i64 %i1.3)
+    %i1.5 = call i64 @llvm.amdgcn.wwm.i64(i64 %i1.4)
+
+    ; 2079, bit mode, xor mask = 2 ->(SWAP, 2)
+    %i2.1 = call i64 @llpc.swizzle.i64(i64 %i1.5, i32 2079)
+    %i2.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i2.1)
+    %i2.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i1.4, i64 %i2.2)
+    ; -8608480567731124088 = 0x8888,8888,8888,8888
+    %i2.4 = call i64 @llpc.cndmask.i64(i64 %tidmask ,i64 -8608480567731124088, i64 %i1.4, i64 %i2.3)
+
+    ; 4127, bit mode, xor mask = 4 ->(SWAP, 4)
+    %i3.1 = call i64 @llpc.swizzle.i64(i64 %i2.4, i32 4127)
+    %i3.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i3.1)
+    %i3.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i2.4, i64 %i3.2)
+    ; -9187201950435737472 = 0x8080,8080,8080,8080
+    %i3.4 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 -9187201950435737472, i64 %i2.4, i64 %i3.3)
+
+    ; 8223, bit mode, xor mask = 8 >(SWAP, 8)
+    %i4.1 = call i64 @llpc.swizzle.i64(i64 %i3.4, i32 8223)
+    %i4.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i4.1)
+    %i4.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i3.4, i64 %i4.2)
+    ; -9223231297218904064 = 0x8000,8000,8000,8000
+    %i4.4 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 -9223231297218904064, i64 %i3.4, i64 %i4.3)
+
+    ; 16415, bit mode, xor mask = 16 >(SWAP, 16)
+    %i5.1 = call i64 @llpc.swizzle.i64(i64 %i4.4, i32 16415)
+    %i5.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i5.1)
+    %i5.3 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i4.4, i64 %i5.2)
+    ; -9223372034707292160 = 0x8000,0000,8000,0000
+    %i5.4 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 -9223372034707292160, i64 %i4.4, i64 %i5.3)
+
+    ; From now on, scan would be downward
+    %identity.i64 = call i64 @llpc.subgroup.identity.i64(i32 %binaryOp)
+    %i6.1 = call i64 @llpc.readlane.i64(i64 %i5.4, i32 31)
+    %i6.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i6.1)
+    ; -9223372036854775808 = 0x8000,0000,0000,0000
+    %i6.3 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 -9223372036854775808, i64 %i5.4, i64 %i6.2)
+    ; 2147483648 = 0x0000,0000,8000,0000
+    %i6.4 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 2147483648, i64 %i6.3, i64 %identity.i64)
+
+    ; 16415, bit mode, xor mask = 16 >(SWAP, 16)
+    %i7.1 = call i64 @llpc.swizzle.i64(i64 %i6.4, i32 16415)
+    %i7.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i7.1)
+    ; 140737488388096 = 0x0000,8000,0000,8000
+    %i7.3 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 140737488388096, i64 %i6.4, i64 %i7.2)
+    %i7.4 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i7.2, i64 %i7.3)
+    ; -9223372034707292160 = 0x8000,0000,8000,0000
+    %i7.5 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 -9223372034707292160, i64 %i7.3, i64 %i7.4)
+
+    ; 8223, bit mode, xor mask = 8 >(SWAP, 8)
+    %i8.1 = call i64 @llpc.swizzle.i64(i64 %i7.5, i32 8223)
+    %i8.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i8.1)
+    ; 36029346783166592 = 0x0080,0080,0080,0080
+    %i8.3 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 36029346783166592, i64 %i7.5, i64 %i8.2)
+    %i8.4 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i8.2, i64 %i8.3)
+    ; -9223231297218904064 = 0x8000,8000,8000,8000
+    %i8.5 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 -9223231297218904064, i64 %i8.3, i64 %i8.4)
+
+    ; 4127, bit mode, xor mask = 4 ->(SWAP, 4)
+    %i9.1 = call i64 @llpc.swizzle.i64(i64 %i8.5, i32 4127)
+    %i9.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i9.1)
+    ; 578721382704613384 = 0x0808,0808,0808,0808
+    %i9.3 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 578721382704613384, i64 %i8.5, i64 %i9.2)
+    %i9.4 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i9.2, i64 %i9.3)
+    ; -9187201950435737472 = 0x8080,8080,8080,8080
+    %i9.5 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 -9187201950435737472, i64 %i9.3, i64 %i9.4)
+
+    ; 2079, bit mode, xor mask = 2 ->(SWAP, 2)
+    %i10.1 = call i64 @llpc.swizzle.i64(i64 %i9.5, i32 2079)
+    %i10.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i10.1)
+    ; 2459565876494606882 = 0x2222,2222,2222,2222
+    %i10.3 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 2459565876494606882, i64 %i9.5, i64 %i10.2)
+    %i10.4 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i10.2, i64 %i10.3)
+    ; -8608480567731124088 = 0x8888,8888,8888,8888
+    %i10.5 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 -8608480567731124088, i64 %i10.3, i64 %i10.4)
+
+    ; 1055, bit mode, xor mask = 1 ->(SWAP, 1)
+    %i11.1 = call i64 @llpc.swizzle.i64(i64 %i10.5, i32 1055)
+    %i11.2 = call i64 @llvm.amdgcn.wwm.i64(i64 %i11.1)
+    ; 6148914691236517205 = 0x5555,5555,5555,5555
+    %i11.3 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 6148914691236517205, i64 %i10.5, i64 %i11.2)
+    %i11.4 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %i11.2, i64 %i11.3)
+    ; -6148914691236517206 = 0xAAAA,AAAA,AAAA,AAAA
+    %i11.5 = call i64 @llpc.cndmask.i64(i64 %tidmask, i64 -6148914691236517206, i64 %i11.3, i64 %i11.4)
+    %i11.6 = call i64 @llvm.amdgcn.wwm.i64(i64 %i11.5)
+
+    ret i64 %i11.6
+}
+
+; GLSL: int/uint/float subgroupInclusiveXXX(int/uint/float)
+define spir_func i32 @llpc.subgroup.inclusiveScan.i32(i32 %binaryOp, i32 %value)
+{
+    %1 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 %binaryOp, i32 %value)
+    %2 = call i32 @llpc.subgroup.arithmetic.i32(i32 %binaryOp, i32 %1, i32 %value)
+
+    ret i32 %2
+}
+
+; GLSL: int64_t/uint64_t subgroupInclusiveXXX(int64_t/uint64_t)
+define spir_func i64 @llpc.subgroup.inclusiveScan.i64(i32 %binaryOp, i64 %value)
+{
+    %1 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 %binaryOp, i64 %value)
+    %2 = call i64 @llpc.subgroup.arithmetic.i64(i32 %binaryOp, i64 %1, i64 %value)
+
+    ret i64 %2
+}
+
+; Set values to all inactive lanes (32 bit)
+define spir_func i32 @llpc.subgroup.set.inactive.i32(i32 %binaryOp, i32 %value)
+{
+    ; Get identity value of binary operations
+    %identity = call i32 @llpc.subgroup.identity.i32(i32 %binaryOp)
+    ; Set identity value for the inactive threads
+    %activeValue = call i32 @llvm.amdgcn.set.inactive.i32(i32 %value, i32 %identity)
+
+    ret i32 %activeValue
+}
+
+; Set values to all inactive lanes (64 bit)
+define spir_func i64 @llpc.subgroup.set.inactive.i64(i32 %binaryOp, i64 %value)
+{
+    %identity = call i64 @llpc.subgroup.identity.i64(i32 %binaryOp)
+    %activeValue = call i64 @llvm.amdgcn.set.inactive.i64(i64 %value, i64 %identity)
+
+    ret i64 %activeValue
 }
 
 ; GLSL: int/uint subgroupAdd(int/uint)
-;       int/uint subgroupInclusiveAdd(int/uint)
-;       int/uint subgroupExclusiveAdd(int/uint)
-define spir_func i32 @_Z19GroupNonUniformIAddiii(i32 %scope, i32 %groupOp, i32 %value)
+define spir_func i32 @_Z31sub_group_reduce_add_nonuniformi(i32 %value)
 {
     ; 0 = arithmetic iadd
-.entry:
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 0, i32 %value)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0, i32 %value)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0, i32 %value)
-    br label %.end
-.end:
-    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    ret i32 %result
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %value)
+    %2 = call i32 @llpc.subgroup.reduce.i32(i32 0, i32 %1)
+
+    ret i32 %2
 }
 
-; GLSL: int/uint subgroupMul(int/uint)
-;       int/uint subgroupInclusiveMul(int/uint)
-;       int/uint subgroupExclusiveMul(int/uint)
-define spir_func i32 @_Z19GroupNonUniformIMuliii(i32 %scope, i32 %groupOp, i32 %value)
+; GLSL: ivec2/uvec2 subgroupAdd(ivec2/uvec2)
+define spir_func <2 x i32> @_Z31sub_group_reduce_add_nonuniformDv2_i(<2 x i32> %value)
 {
-    ; 1 = arithmetic imul
-.entry:
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 1, i32 %value)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1, i32 %value)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1, i32 %value)
-    br label %.end
-.end:
-    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    ret i32 %result
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.reduce.i32(i32 0 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 0 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
 }
 
-; GLSL: float subgroupMul(float)
-;       float subgroupInclusiveMul(float)
-;       float subgroupExclusiveMul(float)
-define spir_func float @_Z19GroupNonUniformFMuliif(i32 %scope, i32 %groupOp, float %value)
+; GLSL: ivec3/uvec3 subgroupAdd(ivec3/uvec3)
+define spir_func <3 x i32> @_Z31sub_group_reduce_add_nonuniformDv3_i(<3 x i32> %value)
 {
-    ; 9 = arithmetic fmul
-.entry:
-    %value.i32 = bitcast float %value to i32
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 9, i32 %value.i32)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9, i32 %value.i32)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9, i32 %value.i32)
-    br label %.end
-.end:
-    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    %result = bitcast i32 %result.i32 to float
-    ret float %result
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 0 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 0 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 0 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
 }
 
-; GLSL: int subgroupMin(int)
-;       int subgroupInclusiveMin(int)
-;       int subgroupExclusiveMin(int)
-define spir_func i32 @_Z19GroupNonUniformSMiniii(i32 %scope, i32 %groupOp, i32 %value)
+; GLSL: ivec4/uvec4 subgroupAdd(ivec4/uvec4)
+define spir_func <4 x i32> @_Z31sub_group_reduce_add_nonuniformDv4_i(<4 x i32> %value)
 {
-    ; 2 = arithmetic smin
-.entry:
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 2, i32 %value)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2, i32 %value)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2, i32 %value)
-    br label %.end
-.end:
-    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    ret i32 %result
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 0 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 0 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 0 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 0 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
 }
 
-; GLSL: int subgroupMax(int)
-;       int subgroupInclusiveMax(int)
-;       int subgroupExclusiveMax(int)
-define spir_func i32 @_Z19GroupNonUniformSMaxiii(i32 %scope, i32 %groupOp, i32 %value)
+; GLSL: int/uint subgroupInclusiveAdd(int/uint)
+define spir_func i32 @_Z39sub_group_scan_inclusive_add_nonuniformi(i32 %value)
 {
-    ; 3 = arithmetic smax
-.entry:
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 3, i32 %value)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3, i32 %value)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3, i32 %value)
-    br label %.end
-.end:
-    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    ret i32 %result
+    ; 0 = arithmetic iadd
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %value)
+    %2 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0, i32 %1)
+
+    ret i32 %2
 }
 
-; GLSL: uint subgroupMin(uint)
-;       uint subgroupInclusiveMin(uint)
-;       uint subgroupExclusiveMin(uint)
-define spir_func i32 @_Z19GroupNonUniformUMiniii(i32 %scope, i32 %groupOp, i32 %value)
+; GLSL: ivec2/uvec2 subgroupInclusiveAdd(ivec2/uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_inclusive_add_nonuniformDv2_i(<2 x i32> %value)
 {
-    ; 4 = arithmetic umin
-.entry:
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 4, i32 %value)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4, i32 %value)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4, i32 %value)
-    br label %.end
-.end:
-    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    ret i32 %result
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
 }
 
-; GLSL: uint subgroupMax(uint)
-;       uint subgroupInclusiveMax(uint)
-;       uint subgroupExclusiveMax(uint)
-define spir_func i32 @_Z19GroupNonUniformUMaxiii(i32 %scope, i32 %groupOp, i32 %value)
+; GLSL: ivec3/uvec3 subgroupInclusiveAdd(ivec3/uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_inclusive_add_nonuniformDv3_i(<3 x i32> %value)
 {
-    ; 5 = arithmetic umax
-.entry:
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 5, i32 %value)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5, i32 %value)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5, i32 %value)
-    br label %.end
-.end:
-    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    ret i32 %result
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
 }
 
-; GLSL: float subgroupMin(float)
-;       float subgroupInclusiveMin(float)
-;       float subgroupExclusiveMin(float)
-define spir_func float @_Z19GroupNonUniformFMiniif(i32 %scope, i32 %groupOp, float %value)
+; GLSL: ivec4/uvec4 subgroupInclusiveAdd(ivec4/uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_inclusive_add_nonuniformDv4_i(<4 x i32> %value)
 {
-    ; 10 = arithmetic fmin
-.entry:
-    %value.i32 = bitcast float %value to i32
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 10, i32 %value.i32)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10, i32 %value.i32)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10, i32 %value.i32)
-    br label %.end
-.end:
-    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    %result = bitcast i32 %result.i32 to float
-    ret float %result
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 0 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
 }
 
-; GLSL: float subgroupMax(float)
-;       float subgroupInclusiveMax(float)
-;       float subgroupExclusiveMax(float)
-define spir_func float @_Z19GroupNonUniformFMaxiif(i32 %scope, i32 %groupOp, float %value)
+; GLSL: int/uint subgroupExclusiveAdd(int/uint)
+define spir_func i32 @_Z39sub_group_scan_exclusive_add_nonuniformi(i32 %value)
 {
-    ; 11 = arithmetic fmax
-.entry:
-    %value.i32 = bitcast float %value to i32
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 11, i32 %value.i32)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11, i32 %value.i32)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11, i32 %value.i32)
-    br label %.end
-.end:
-    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    %result = bitcast i32 %result.i32 to float
-    ret float %result
+    ; 0 = arithmetic iadd
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %value)
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupExclusiveAdd(ivec2/uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_exclusive_add_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupExclusiveAdd(ivec3/uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_exclusive_add_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupExclusiveAdd(ivec4/uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_exclusive_add_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 0, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 0 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
 }
 
 ; GLSL: float subgroupAdd(float)
-;       float subgroupInclusiveAdd(float)
-;       float subgroupExclusiveAdd(float)
-define spir_func float @_Z19GroupNonUniformFAddiif(i32 %scope, i32 %groupOp, float %value)
+define spir_func float @_Z31sub_group_reduce_add_nonuniformf(float %value)
 {
     ; 12 = arithmetic fadd
-.entry:
-    %value.i32 = bitcast float %value to i32
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 12, i32 %value.i32)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12, i32 %value.i32)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12, i32 %value.i32)
-    br label %.end
-.end:
-    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    %result = bitcast i32 %result.i32 to float
-    ret float %result
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %1)
+    %3 = call i32 @llpc.subgroup.reduce.i32(i32 12, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupAdd(vec2)
+define spir_func <2 x float> @_Z31sub_group_reduce_add_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 12 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 12 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupAdd(vec3)
+define spir_func <3 x float> @_Z31sub_group_reduce_add_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 12 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 12 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 12 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupAdd(vec4)
+define spir_func <4 x float> @_Z31sub_group_reduce_add_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 12 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 12 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 12 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.reduce.i32(i32 12 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: float subgroupInclusiveAdd(float)
+define spir_func float @_Z39sub_group_scan_inclusive_add_nonuniformf(float %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %1)
+    %3 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupInclusiveAdd(vec2)
+define spir_func <2 x float> @_Z39sub_group_scan_inclusive_add_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupInclusiveAdd(vec3)
+define spir_func <3 x float> @_Z39sub_group_scan_inclusive_add_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupInclusiveAdd(vec4)
+define spir_func <4 x float> @_Z39sub_group_scan_inclusive_add_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 12 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: float subgroupExclusiveAdd(float)
+define spir_func float @_Z39sub_group_scan_exclusive_add_nonuniformf(float %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %1)
+    %3 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupExclusiveAdd(vec2)
+define spir_func <2 x float> @_Z39sub_group_scan_exclusive_add_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupExclusiveAdd(vec3)
+define spir_func <3 x float> @_Z39sub_group_scan_exclusive_add_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupExclusiveAdd(vec4)
+define spir_func <4 x float> @_Z39sub_group_scan_exclusive_add_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 12, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 12 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: double subgroupAdd(double)
+define spir_func double @_Z31sub_group_reduce_add_nonuniformd(double %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %1)
+    %3 = call i64 @llpc.subgroup.reduce.i64(i32 12, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupAdd(dvec2)
+define spir_func <2 x double> @_Z31sub_group_reduce_add_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.reduce.i64(i32 12 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.reduce.i64(i32 12 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupAdd(dvec3)
+define spir_func <3 x double> @_Z31sub_group_reduce_add_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.reduce.i64(i32 12 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 12 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 12 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupAdd(dvec4)
+define spir_func <4 x double> @_Z31sub_group_reduce_add_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 12 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.reduce.i64(i32 12 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.reduce.i64(i32 12 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.reduce.i64(i32 12 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: double subgroupInclusiveAdd(double)
+define spir_func double @_Z39sub_group_scan_inclusive_add_nonuniformd(double %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %1)
+    %3 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupInclusiveAdd(dvec2)
+define spir_func <2 x double> @_Z39sub_group_scan_inclusive_add_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupInclusiveAdd(dvec3)
+define spir_func <3 x double> @_Z39sub_group_scan_inclusive_add_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupInclusiveAdd(dvec4)
+define spir_func <4 x double> @_Z39sub_group_scan_inclusive_add_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 12 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: double subgroupExclusiveAdd(double)
+define spir_func double @_Z39sub_group_scan_exclusive_add_nonuniformd(double %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %1)
+    %3 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupExclusiveAdd(dvec2)
+define spir_func <2 x double> @_Z39sub_group_scan_exclusive_add_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupExclusiveAdd(dvec3)
+define spir_func <3 x double> @_Z39sub_group_scan_exclusive_add_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupExclusiveAdd(dvec4)
+define spir_func <4 x double> @_Z39sub_group_scan_exclusive_add_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 12 = arithmetic fadd
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 12, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 12 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: int/uint subgroupMul(int/uint)
+define spir_func i32 @_Z31sub_group_reduce_mul_nonuniformi(i32 %value)
+{
+    ; 1 = arithmetic imul
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %value)
+    %2 = call i32 @llpc.subgroup.reduce.i32(i32 1, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupMul(ivec2/uvec2)
+define spir_func <2 x i32> @_Z31sub_group_reduce_mul_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 1 = arithmetic imul
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.reduce.i32(i32 1 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 1 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupMul(ivec3/uvec3)
+define spir_func <3 x i32> @_Z31sub_group_reduce_mul_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 1 = arithmetic imul
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 1 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 1 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 1 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupMul(ivec4/uvec4)
+define spir_func <4 x i32> @_Z31sub_group_reduce_mul_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 1 = arithmetic imul
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 1 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 1 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 1 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 1 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int/uint subgroupInclusiveMul(int/uint)
+define spir_func i32 @_Z39sub_group_scan_inclusive_mul_nonuniformi(i32 %value)
+{
+    ; 1 = arithmetic imul
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %value)
+    %2 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupInclusiveMul(ivec2/uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_inclusive_mul_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 1 = arithmetic imul
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupInclusiveMul(ivec3/uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_inclusive_mul_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 1 = arithmetic imul
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupInclusiveMul(ivec4/uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_inclusive_mul_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 1 = arithmetic imul
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 1 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int/uint subgroupExclusiveMul(int/uint)
+define spir_func i32 @_Z39sub_group_scan_exclusive_mul_nonuniformi(i32 %value)
+{
+    ; 1 = arithmetic imul
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %value)
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupExclusiveMul(ivec2/uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_exclusive_mul_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 1 = arithmetic imul
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupExclusiveMul(ivec3/uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_exclusive_mul_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 1 = arithmetic imul
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupExclusiveMul(ivec4/uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_exclusive_mul_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 1 = arithmetic imul
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 1, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 1 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: float subgroupMul(float)
+define spir_func float @_Z31sub_group_reduce_mul_nonuniformf(float %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %1)
+    %3 = call i32 @llpc.subgroup.reduce.i32(i32 9, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupMul(vec2)
+define spir_func <2 x float> @_Z31sub_group_reduce_mul_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 9 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 9 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupMul(vec3)
+define spir_func <3 x float> @_Z31sub_group_reduce_mul_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 9 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 9 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 9 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupMul(vec4)
+define spir_func <4 x float> @_Z31sub_group_reduce_mul_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 9 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 9 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 9 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.reduce.i32(i32 9 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: float subgroupInclusiveMul(float)
+define spir_func float @_Z39sub_group_scan_inclusive_mul_nonuniformf(float %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %1)
+    %3 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupInclusiveMul(vec2)
+define spir_func <2 x float> @_Z39sub_group_scan_inclusive_mul_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupInclusiveMul(vec3)
+define spir_func <3 x float> @_Z39sub_group_scan_inclusive_mul_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupInclusiveMul(vec4)
+define spir_func <4 x float> @_Z39sub_group_scan_inclusive_mul_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 9 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: float subgroupExclusiveMul(float)
+define spir_func float @_Z39sub_group_scan_exclusive_mul_nonuniformf(float %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %1)
+    %3 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupExclusiveMul(vec2)
+define spir_func <2 x float> @_Z39sub_group_scan_exclusive_mul_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupExclusiveMul(vec3)
+define spir_func <3 x float> @_Z39sub_group_scan_exclusive_mul_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupExclusiveMul(vec4)
+define spir_func <4 x float> @_Z39sub_group_scan_exclusive_mul_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 9, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 9 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: double subgroupMul(double)
+define spir_func double @_Z31sub_group_reduce_mul_nonuniformd(double %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %1)
+    %3 = call i64 @llpc.subgroup.reduce.i64(i32 9, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupMul(dvec2)
+define spir_func <2 x double> @_Z31sub_group_reduce_mul_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.reduce.i64(i32 9 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.reduce.i64(i32 9 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupMul(dvec3)
+define spir_func <3 x double> @_Z31sub_group_reduce_mul_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.reduce.i64(i32 9 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 9 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 9 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupMul(dvec4)
+define spir_func <4 x double> @_Z31sub_group_reduce_mul_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 9 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.reduce.i64(i32 9 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.reduce.i64(i32 9 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.reduce.i64(i32 9 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: double subgroupInclusiveMul(double)
+define spir_func double @_Z39sub_group_scan_inclusive_mul_nonuniformd(double %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %1)
+    %3 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupInclusiveMul(dvec2)
+define spir_func <2 x double> @_Z39sub_group_scan_inclusive_mul_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupInclusiveMul(dvec3)
+define spir_func <3 x double> @_Z39sub_group_scan_inclusive_mul_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupInclusiveMul(dvec4)
+define spir_func <4 x double> @_Z39sub_group_scan_inclusive_mul_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 9 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: double subgroupExclusiveMul(double)
+define spir_func double @_Z39sub_group_scan_exclusive_mul_nonuniformd(double %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %1)
+    %3 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupExclusiveMul(dvec2)
+define spir_func <2 x double> @_Z39sub_group_scan_exclusive_mul_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupExclusiveMul(dvec3)
+define spir_func <3 x double> @_Z39sub_group_scan_exclusive_mul_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupExclusiveMul(dvec4)
+define spir_func <4 x double> @_Z39sub_group_scan_exclusive_mul_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 9 = arithmetic fmul
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 9, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 9 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: int subgroupMin(int)
+define spir_func i32 @_Z31sub_group_reduce_min_nonuniformi(i32 %value)
+{
+    ; 2 = arithmetic imin
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %value)
+    %2 = call i32 @llpc.subgroup.reduce.i32(i32 2, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2 subgroupMin(ivec2)
+define spir_func <2 x i32> @_Z31sub_group_reduce_min_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 2 = arithmetic imin
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.reduce.i32(i32 2 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 2 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3 subgroupMin(ivec3)
+define spir_func <3 x i32> @_Z31sub_group_reduce_min_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 2 = arithmetic imin
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 2 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 2 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 2 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4 subgroupMin(ivec4)
+define spir_func <4 x i32> @_Z31sub_group_reduce_min_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 2 = arithmetic imin
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 2 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 2 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 2 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 2 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int subgroupInclusiveMin(int)
+define spir_func i32 @_Z39sub_group_scan_inclusive_min_nonuniformi(i32 %value)
+{
+    ; 2 = arithmetic imin
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %value)
+    %2 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2 subgroupInclusiveMin(ivec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_inclusive_min_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 2 = arithmetic imin
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3 subgroupInclusiveMin(ivec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_inclusive_min_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 2 = arithmetic imin
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4 subgroupInclusiveMin(ivec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_inclusive_min_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 2 = arithmetic imin
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 2 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int subgroupExclusiveMin(int)
+define spir_func i32 @_Z39sub_group_scan_exclusive_min_nonuniformi(i32 %value)
+{
+    ; 2 = arithmetic imin
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %value)
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2 subgroupExclusiveMin(ivec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_exclusive_min_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 2 = arithmetic imin
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3 subgroupExclusiveMin(ivec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_exclusive_min_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 2 = arithmetic imin
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4 subgroupExclusiveMin(ivec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_exclusive_min_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 2 = arithmetic imin
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 2, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 2 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: uint subgroupMin(uint)
+define spir_func i32 @_Z31sub_group_reduce_min_nonuniformj(i32 %value)
+{
+    ; 4 = arithmetic jmin
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %value)
+    %2 = call i32 @llpc.subgroup.reduce.i32(i32 4, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: uvec2 subgroupMin(uvec2)
+define spir_func <2 x i32> @_Z31sub_group_reduce_min_nonuniformDv2_j(<2 x i32> %value)
+{
+    ; 4 = arithmetic jmin
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.reduce.i32(i32 4 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 4 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: uvec3 subgroupMin(uvec3)
+define spir_func <3 x i32> @_Z31sub_group_reduce_min_nonuniformDv3_j(<3 x i32> %value)
+{
+    ; 4 = arithmetic jmin
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 4 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 4 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 4 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: uvec4 subgroupMin(uvec4)
+define spir_func <4 x i32> @_Z31sub_group_reduce_min_nonuniformDv4_j(<4 x i32> %value)
+{
+    ; 4 = arithmetic jmin
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 4 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 4 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 4 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 4 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: uint subgroupInclusiveMin(uint)
+define spir_func i32 @_Z39sub_group_scan_inclusive_min_nonuniformj(i32 %value)
+{
+    ; 4 = arithmetic jmin
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %value)
+    %2 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: uvec2 subgroupInclusiveMin(uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_inclusive_min_nonuniformDv2_j(<2 x i32> %value)
+{
+    ; 4 = arithmetic jmin
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: uvec3 subgroupInclusiveMin(uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_inclusive_min_nonuniformDv3_j(<3 x i32> %value)
+{
+    ; 4 = arithmetic jmin
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: uvec4 subgroupInclusiveMin(uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_inclusive_min_nonuniformDv4_j(<4 x i32> %value)
+{
+    ; 4 = arithmetic jmin
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 4 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: uint subgroupExclusiveMin(uint)
+define spir_func i32 @_Z39sub_group_scan_exclusive_min_nonuniformj(i32 %value)
+{
+    ; 4 = arithmetic jmin
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %value)
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: uvec2 subgroupExclusiveMin(uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_exclusive_min_nonuniformDv2_j(<2 x i32> %value)
+{
+    ; 4 = arithmetic jmin
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: uvec3 subgroupExclusiveMin(uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_exclusive_min_nonuniformDv3_j(<3 x i32> %value)
+{
+    ; 4 = arithmetic jmin
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: uvec4 subgroupExclusiveMin(uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_exclusive_min_nonuniformDv4_j(<4 x i32> %value)
+{
+    ; 4 = arithmetic jmin
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 4, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 4 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: float subgroupMin(float)
+define spir_func float @_Z31sub_group_reduce_min_nonuniformf(float %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %1)
+    %3 = call i32 @llpc.subgroup.reduce.i32(i32 10, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupMin(vec2)
+define spir_func <2 x float> @_Z31sub_group_reduce_min_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 10 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 10 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupMin(vec3)
+define spir_func <3 x float> @_Z31sub_group_reduce_min_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 10 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 10 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 10 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupMin(vec4)
+define spir_func <4 x float> @_Z31sub_group_reduce_min_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 10 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 10 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 10 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.reduce.i32(i32 10 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: float subgroupInclusiveMin(float)
+define spir_func float @_Z39sub_group_scan_inclusive_min_nonuniformf(float %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %1)
+    %3 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupInclusiveMin(vec2)
+define spir_func <2 x float> @_Z39sub_group_scan_inclusive_min_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupInclusiveMin(vec3)
+define spir_func <3 x float> @_Z39sub_group_scan_inclusive_min_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupInclusiveMin(vec4)
+define spir_func <4 x float> @_Z39sub_group_scan_inclusive_min_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 10 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: float subgroupExclusiveMin(float)
+define spir_func float @_Z39sub_group_scan_exclusive_min_nonuniformf(float %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %1)
+    %3 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupExclusiveMin(vec2)
+define spir_func <2 x float> @_Z39sub_group_scan_exclusive_min_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupExclusiveMin(vec3)
+define spir_func <3 x float> @_Z39sub_group_scan_exclusive_min_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupExclusiveMin(vec4)
+define spir_func <4 x float> @_Z39sub_group_scan_exclusive_min_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 10, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 10 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: double subgroupMin(double)
+define spir_func double @_Z31sub_group_reduce_min_nonuniformd(double %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %1)
+    %3 = call i64 @llpc.subgroup.reduce.i64(i32 10, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupMin(dvec2)
+define spir_func <2 x double> @_Z31sub_group_reduce_min_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.reduce.i64(i32 10 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.reduce.i64(i32 10 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupMin(dvec3)
+define spir_func <3 x double> @_Z31sub_group_reduce_min_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.reduce.i64(i32 10 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 10 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 10 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupMin(dvec4)
+define spir_func <4 x double> @_Z31sub_group_reduce_min_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 10 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.reduce.i64(i32 10 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.reduce.i64(i32 10 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.reduce.i64(i32 10 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: double subgroupInclusiveMin(double)
+define spir_func double @_Z39sub_group_scan_inclusive_min_nonuniformd(double %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %1)
+    %3 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupInclusiveMin(dvec2)
+define spir_func <2 x double> @_Z39sub_group_scan_inclusive_min_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupInclusiveMin(dvec3)
+define spir_func <3 x double> @_Z39sub_group_scan_inclusive_min_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupInclusiveMin(dvec4)
+define spir_func <4 x double> @_Z39sub_group_scan_inclusive_min_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 10 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: double subgroupExclusiveMin(double)
+define spir_func double @_Z39sub_group_scan_exclusive_min_nonuniformd(double %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %1)
+    %3 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupExclusiveMin(dvec2)
+define spir_func <2 x double> @_Z39sub_group_scan_exclusive_min_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupExclusiveMin(dvec3)
+define spir_func <3 x double> @_Z39sub_group_scan_exclusive_min_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupExclusiveMin(dvec4)
+define spir_func <4 x double> @_Z39sub_group_scan_exclusive_min_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 10 = arithmetic fmin
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 10, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 10 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: int subgroupMax(int)
+define spir_func i32 @_Z31sub_group_reduce_max_nonuniformi(i32 %value)
+{
+    ; 3 = arithmetic imax
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %value)
+    %2 = call i32 @llpc.subgroup.reduce.i32(i32 3, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2 subgroupMax(ivec2)
+define spir_func <2 x i32> @_Z31sub_group_reduce_max_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 3 = arithmetic imax
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.reduce.i32(i32 3 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 3 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3 subgroupMax(ivec3)
+define spir_func <3 x i32> @_Z31sub_group_reduce_max_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 3 = arithmetic imax
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 3 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 3 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 3 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4 subgroupMax(ivec4)
+define spir_func <4 x i32> @_Z31sub_group_reduce_max_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 3 = arithmetic imax
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 3 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 3 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 3 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 3 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int subgroupInclusiveMax(int)
+define spir_func i32 @_Z39sub_group_scan_inclusive_max_nonuniformi(i32 %value)
+{
+    ; 3 = arithmetic imax
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %value)
+    %2 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2 subgroupInclusiveMax(ivec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_inclusive_max_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 3 = arithmetic imax
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3 subgroupInclusiveMax(ivec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_inclusive_max_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 3 = arithmetic imax
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4 subgroupInclusiveMax(ivec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_inclusive_max_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 3 = arithmetic imax
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 3 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int subgroupExclusiveMax(int)
+define spir_func i32 @_Z39sub_group_scan_exclusive_max_nonuniformi(i32 %value)
+{
+    ; 3 = arithmetic imax
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %value)
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2 subgroupExclusiveMax(ivec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_exclusive_max_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 3 = arithmetic imax
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3 subgroupExclusiveMax(ivec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_exclusive_max_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 3 = arithmetic imax
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4 subgroupExclusiveMax(ivec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_exclusive_max_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 3 = arithmetic imax
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 3, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 3 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: uint subgroupMax(uint)
+define spir_func i32 @_Z31sub_group_reduce_max_nonuniformj(i32 %value)
+{
+    ; 5 = arithmetic jmax
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %value)
+    %2 = call i32 @llpc.subgroup.reduce.i32(i32 5, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: uvec2 subgroupMax(uvec2)
+define spir_func <2 x i32> @_Z31sub_group_reduce_max_nonuniformDv2_j(<2 x i32> %value)
+{
+    ; 5 = arithmetic jmax
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.reduce.i32(i32 5 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 5 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: uvec3 subgroupMax(uvec3)
+define spir_func <3 x i32> @_Z31sub_group_reduce_max_nonuniformDv3_j(<3 x i32> %value)
+{
+    ; 5 = arithmetic jmax
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 5 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 5 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 5 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: uvec4 subgroupMax(uvec4)
+define spir_func <4 x i32> @_Z31sub_group_reduce_max_nonuniformDv4_j(<4 x i32> %value)
+{
+    ; 5 = arithmetic jmax
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 5 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 5 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 5 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 5 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: uint subgroupInclusiveMax(uint)
+define spir_func i32 @_Z39sub_group_scan_inclusive_max_nonuniformj(i32 %value)
+{
+    ; 5 = arithmetic jmax
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %value)
+    %2 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: uvec2 subgroupInclusiveMax(uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_inclusive_max_nonuniformDv2_j(<2 x i32> %value)
+{
+    ; 5 = arithmetic jmax
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: uvec3 subgroupInclusiveMax(uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_inclusive_max_nonuniformDv3_j(<3 x i32> %value)
+{
+    ; 5 = arithmetic jmax
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: uvec4 subgroupInclusiveMax(uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_inclusive_max_nonuniformDv4_j(<4 x i32> %value)
+{
+    ; 5 = arithmetic jmax
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 5 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: uint subgroupExclusiveMax(uint)
+define spir_func i32 @_Z39sub_group_scan_exclusive_max_nonuniformj(i32 %value)
+{
+    ; 5 = arithmetic jmax
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %value)
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: uvec2 subgroupExclusiveMax(uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_exclusive_max_nonuniformDv2_j(<2 x i32> %value)
+{
+    ; 5 = arithmetic jmax
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: uvec3 subgroupExclusiveMax(uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_exclusive_max_nonuniformDv3_j(<3 x i32> %value)
+{
+    ; 5 = arithmetic jmax
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: uvec4 subgroupExclusiveMax(uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_exclusive_max_nonuniformDv4_j(<4 x i32> %value)
+{
+    ; 5 = arithmetic jmax
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 5, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 5 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: float subgroupMax(float)
+define spir_func float @_Z31sub_group_reduce_max_nonuniformf(float %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %1)
+    %3 = call i32 @llpc.subgroup.reduce.i32(i32 11, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupMax(vec2)
+define spir_func <2 x float> @_Z31sub_group_reduce_max_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 11 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 11 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupMax(vec3)
+define spir_func <3 x float> @_Z31sub_group_reduce_max_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 11 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 11 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 11 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupMax(vec4)
+define spir_func <4 x float> @_Z31sub_group_reduce_max_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 11 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 11 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 11 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.reduce.i32(i32 11 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: float subgroupInclusiveMax(float)
+define spir_func float @_Z39sub_group_scan_inclusive_max_nonuniformf(float %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %1)
+    %3 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupInclusiveMax(vec2)
+define spir_func <2 x float> @_Z39sub_group_scan_inclusive_max_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupInclusiveMax(vec3)
+define spir_func <3 x float> @_Z39sub_group_scan_inclusive_max_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupInclusiveMax(vec4)
+define spir_func <4 x float> @_Z39sub_group_scan_inclusive_max_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 11 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: float subgroupExclusiveMax(float)
+define spir_func float @_Z39sub_group_scan_exclusive_max_nonuniformf(float %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast float %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %1)
+    %3 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11, i32 %2)
+    %4 = bitcast i32 %3 to float
+
+    ret float %4
+}
+
+; GLSL: vec2 subgroupExclusiveMax(vec2)
+define spir_func <2 x float> @_Z39sub_group_scan_exclusive_max_nonuniformDv2_f(<2 x float> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <2 x float> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = bitcast <2 x i32> %9 to <2 x float>
+
+    ret <2 x float> %10
+}
+
+; GLSL: vec3 subgroupExclusiveMax(vec3)
+define spir_func <3 x float> @_Z39sub_group_scan_exclusive_max_nonuniformDv3_f(<3 x float> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <3 x float> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = bitcast <3 x i32> %13 to <3 x float>
+
+    ret <3 x float> %14
+}
+
+; GLSL: vec4 subgroupExclusiveMax(vec4)
+define spir_func <4 x float> @_Z39sub_group_scan_exclusive_max_nonuniformDv4_f(<4 x float> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <4 x float> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 11, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 11 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = bitcast <4 x i32> %17 to <4 x float>
+
+    ret <4 x float> %18
+}
+
+; GLSL: double subgroupMax(double)
+define spir_func double @_Z31sub_group_reduce_max_nonuniformd(double %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %1)
+    %3 = call i64 @llpc.subgroup.reduce.i64(i32 11, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupMax(dvec2)
+define spir_func <2 x double> @_Z31sub_group_reduce_max_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.reduce.i64(i32 11 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.reduce.i64(i32 11 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupMax(dvec3)
+define spir_func <3 x double> @_Z31sub_group_reduce_max_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.reduce.i64(i32 11 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 11 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 11 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupMax(dvec4)
+define spir_func <4 x double> @_Z31sub_group_reduce_max_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 11 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.reduce.i64(i32 11 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.reduce.i64(i32 11 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.reduce.i64(i32 11 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: double subgroupInclusiveMax(double)
+define spir_func double @_Z39sub_group_scan_inclusive_max_nonuniformd(double %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %1)
+    %3 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupInclusiveMax(dvec2)
+define spir_func <2 x double> @_Z39sub_group_scan_inclusive_max_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupInclusiveMax(dvec3)
+define spir_func <3 x double> @_Z39sub_group_scan_inclusive_max_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupInclusiveMax(dvec4)
+define spir_func <4 x double> @_Z39sub_group_scan_inclusive_max_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 11 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
+}
+
+; GLSL: double subgroupExclusiveMax(double)
+define spir_func double @_Z39sub_group_scan_exclusive_max_nonuniformd(double %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast double %value to i64
+    %2 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %1)
+    %3 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11, i64 %2)
+    %4 = bitcast i64 %3 to double
+
+    ret double %4
+}
+
+; GLSL: dvec2 subgroupExclusiveMax(dvec2)
+define spir_func <2 x double> @_Z39sub_group_scan_exclusive_max_nonuniformDv2_d(<2 x double> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <2 x double> %value to <2 x i64>
+
+    %2 = extractelement <2 x i64> %1, i32 0
+    %3 = extractelement <2 x i64> %1, i32 1
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %2)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %3)
+
+    %6 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11 ,i64 %4)
+    %7 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11 ,i64 %5)
+
+    %8 = insertelement <2 x i64> undef, i64 %6, i64 0
+    %9 = insertelement <2 x i64> %8, i64 %7, i64 1
+    %10 = bitcast <2 x i64> %9 to <2 x double>
+
+    ret <2 x double> %10
+}
+
+; GLSL: dvec3 subgroupExclusiveMax(dvec3)
+define spir_func <3 x double> @_Z39sub_group_scan_exclusive_max_nonuniformDv3_d(<3 x double> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <3 x double> %value to <3 x i64>
+
+    %2 = extractelement <3 x i64> %1, i32 0
+    %3 = extractelement <3 x i64> %1, i32 1
+    %4 = extractelement <3 x i64> %1, i32 2
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %3)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %4)
+
+    %8 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11 ,i64 %6)
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11 ,i64 %7)
+
+    %11 = insertelement <3 x i64> undef, i64 %8, i64 0
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 1
+    %13 = insertelement <3 x i64> %12, i64 %10, i64 2
+    %14 = bitcast <3 x i64> %13 to <3 x double>
+
+    ret <3 x double> %14
+}
+
+; GLSL: dvec4 subgroupExclusiveMax(dvec4)
+define spir_func <4 x double> @_Z39sub_group_scan_exclusive_max_nonuniformDv4_d(<4 x double> %value)
+{
+    ; 11 = arithmetic fmax
+    %1 = bitcast <4 x double> %value to <4 x i64>
+
+    %2 = extractelement <4 x i64> %1, i32 0
+    %3 = extractelement <4 x i64> %1, i32 1
+    %4 = extractelement <4 x i64> %1, i32 2
+    %5 = extractelement <4 x i64> %1, i32 3
+
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %4)
+    %9 = call i64 @llpc.subgroup.set.inactive.i64(i32 11, i64 %5)
+
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11 ,i64 %8)
+    %13 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 11 ,i64 %9)
+
+    %14 = insertelement <4 x i64> undef, i64 %10, i64 0
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 1
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 2
+    %17 = insertelement <4 x i64> %16, i64 %13, i64 3
+    %18 = bitcast <4 x i64> %17 to <4 x double>
+
+    ret <4 x double> %18
 }
 
 ; GLSL: int/uint subgroupAnd(int/uint)
-;       int/uint subgroupInclusiveAnd(int/uint)
-;       int/uint subgroupExclusiveAnd(int/uint)
-define spir_func i32 @_Z25GroupNonUniformBitwiseAndiii(i32 %scope, i32 %groupOp, i32 %value)
+define spir_func i32 @_Z31sub_group_reduce_and_nonuniformi(i32 %value)
 {
-    ; 6 = arithmetic and
-.entry:
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 6, i32 %value)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6, i32 %value)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6, i32 %value)
-    br label %.end
-.end:
-    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    ret i32 %result
+    ; 6 = arithmetic iand
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %value)
+    %2 = call i32 @llpc.subgroup.reduce.i32(i32 6, i32 %1)
+
+    ret i32 %2
 }
 
-; GLSL: int/uint subgroupOr(int/uint)
-;       int/uint subgroupInclusiveOr(int/uint)
-;       int/uint subgroupExclusiveOr(int/uint)
-define spir_func i32 @_Z24GroupNonUniformBitwiseOriii(i32 %scope, i32 %groupOp, i32 %value)
+; GLSL: ivec2/uvec2 subgroupAnd(ivec2/uvec2)
+define spir_func <2 x i32> @_Z31sub_group_reduce_and_nonuniformDv2_i(<2 x i32> %value)
 {
-    ; 7 = arithmetic or
-.entry:
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 7, i32 %value)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7, i32 %value)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7, i32 %value)
-    br label %.end
-.end:
-    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    ret i32 %result
+    ; 6 = arithmetic iand
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
 }
 
-; GLSL: int/uint subgroupXor(int/uint)
-;       int/uint subgroupInclusiveXor(int/uint)
-;       int/uint subgroupExclusiveXor(int/uint)
-define spir_func i32 @_Z25GroupNonUniformBitwiseXoriii(i32 %scope, i32 %groupOp, i32 %value)
+; GLSL: ivec3/uvec3 subgroupAnd(ivec3/uvec3)
+define spir_func <3 x i32> @_Z31sub_group_reduce_and_nonuniformDv3_i(<3 x i32> %value)
 {
-    ; 8 = arithmetic xor
-.entry:
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 8, i32 %value)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8, i32 %value)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8, i32 %value)
-    br label %.end
-.end:
-    %result = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    ret i32 %result
+    ; 6 = arithmetic iand
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupAnd(ivec4/uvec4)
+define spir_func <4 x i32> @_Z31sub_group_reduce_and_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 6 = arithmetic iand
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int/uint subgroupInclusiveAnd(int/uint)
+define spir_func i32 @_Z39sub_group_scan_inclusive_and_nonuniformi(i32 %value)
+{
+    ; 6 = arithmetic iand
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %value)
+    %2 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupInclusiveAnd(ivec2/uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_inclusive_and_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 6 = arithmetic iand
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupInclusiveAnd(ivec3/uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_inclusive_and_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 6 = arithmetic iand
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupInclusiveAnd(ivec4/uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_inclusive_and_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 6 = arithmetic iand
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int/uint subgroupExclusiveAnd(int/uint)
+define spir_func i32 @_Z39sub_group_scan_exclusive_and_nonuniformi(i32 %value)
+{
+    ; 6 = arithmetic iand
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %value)
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupExclusiveAnd(ivec2/uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_exclusive_and_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 6 = arithmetic iand
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupExclusiveAnd(ivec3/uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_exclusive_and_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 6 = arithmetic iand
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupExclusiveAnd(ivec4/uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_exclusive_and_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 6 = arithmetic iand
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
 }
 
 ; GLSL: bool subgroupAnd(bool)
-;       bool subgroupInclusiveAnd(bool)
-;       bool subgroupExclusiveAnd(bool)
-define spir_func i1 @_Z25GroupNonUniformLogicalAndiib(i32 %scope, i32 %groupOp, i1 %value)
+define spir_func i1 @_Z31sub_group_reduce_and_nonuniformb(i1 %value)
 {
-    ; 6 = arithmetic and
-.entry:
-    %value.i32 = zext i1 %value to i32
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 6, i32 %value.i32)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6, i32 %value.i32)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6, i32 %value.i32)
-    br label %.end
-.end:
-    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    %result = trunc i32 %result.i32 to i1
+    ; 6 = arithmetic band
+    %1 = zext i1 %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %3 = call i32 @llpc.subgroup.reduce.i32(i32 6, i32 %2)
+    %4 = trunc i32 %3 to i1
 
-    ret i1 %result
+    ret i1 %4
+}
+
+; GLSL: bvec2 subgroupAnd(bvec2)
+define spir_func <2 x i1> @_Z31sub_group_reduce_and_nonuniformDv2_b(<2 x i1> %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext <2 x i1> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = trunc <2 x i32> %9 to <2 x i1>
+
+    ret <2 x i1> %10
+}
+
+; GLSL: bvec3 subgroupAnd(bvec3)
+define spir_func <3 x i1> @_Z31sub_group_reduce_and_nonuniformDv3_b(<3 x i1> %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext <3 x i1> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = trunc <3 x i32> %13 to <3 x i1>
+
+    ret <3 x i1> %14
+}
+
+; GLSL: bvec4 subgroupAnd(bvec4)
+define spir_func <4 x i1> @_Z31sub_group_reduce_and_nonuniformDv4_b(<4 x i1> %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext <4 x i1> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.reduce.i32(i32 6 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = trunc <4 x i32> %17 to <4 x i1>
+
+    ret <4 x i1> %18
+}
+
+; GLSL: bool subgroupInclusiveAnd(bool)
+define spir_func i1 @_Z39sub_group_scan_inclusive_and_nonuniformb(i1 %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext i1 %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %3 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6, i32 %2)
+    %4 = trunc i32 %3 to i1
+
+    ret i1 %4
+}
+
+; GLSL: bvec2 subgroupInclusiveAnd(bvec2)
+define spir_func <2 x i1> @_Z39sub_group_scan_inclusive_and_nonuniformDv2_b(<2 x i1> %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext <2 x i1> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = trunc <2 x i32> %9 to <2 x i1>
+
+    ret <2 x i1> %10
+}
+
+; GLSL: bvec3 subgroupInclusiveAnd(bvec3)
+define spir_func <3 x i1> @_Z39sub_group_scan_inclusive_and_nonuniformDv3_b(<3 x i1> %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext <3 x i1> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = trunc <3 x i32> %13 to <3 x i1>
+
+    ret <3 x i1> %14
+}
+
+; GLSL: bvec4 subgroupInclusiveAnd(bvec4)
+define spir_func <4 x i1> @_Z39sub_group_scan_inclusive_and_nonuniformDv4_b(<4 x i1> %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext <4 x i1> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 6 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = trunc <4 x i32> %17 to <4 x i1>
+
+    ret <4 x i1> %18
+}
+
+; GLSL: bool subgroupExclusiveAnd(bool)
+define spir_func i1 @_Z39sub_group_scan_exclusive_and_nonuniformb(i1 %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext i1 %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %1)
+    %3 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6, i32 %2)
+    %4 = trunc i32 %3 to i1
+
+    ret i1 %4
+}
+
+; GLSL: bvec2 subgroupExclusiveAnd(bvec2)
+define spir_func <2 x i1> @_Z39sub_group_scan_exclusive_and_nonuniformDv2_b(<2 x i1> %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext <2 x i1> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = trunc <2 x i32> %9 to <2 x i1>
+
+    ret <2 x i1> %10
+}
+
+; GLSL: bvec3 subgroupExclusiveAnd(bvec3)
+define spir_func <3 x i1> @_Z39sub_group_scan_exclusive_and_nonuniformDv3_b(<3 x i1> %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext <3 x i1> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = trunc <3 x i32> %13 to <3 x i1>
+
+    ret <3 x i1> %14
+}
+
+; GLSL: bvec4 subgroupExclusiveAnd(bvec4)
+define spir_func <4 x i1> @_Z39sub_group_scan_exclusive_and_nonuniformDv4_b(<4 x i1> %value)
+{
+    ; 6 = arithmetic band
+    %1 = zext <4 x i1> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 6, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 6 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = trunc <4 x i32> %17 to <4 x i1>
+
+    ret <4 x i1> %18
+}
+
+; GLSL: int/uint subgroupOr(int/uint)
+define spir_func i32 @_Z30sub_group_reduce_or_nonuniformi(i32 %value)
+{
+    ; 7 = arithmetic ior
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %value)
+    %2 = call i32 @llpc.subgroup.reduce.i32(i32 7, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupOr(ivec2/uvec2)
+define spir_func <2 x i32> @_Z30sub_group_reduce_or_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 7 = arithmetic ior
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupOr(ivec3/uvec3)
+define spir_func <3 x i32> @_Z30sub_group_reduce_or_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 7 = arithmetic ior
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupOr(ivec4/uvec4)
+define spir_func <4 x i32> @_Z30sub_group_reduce_or_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 7 = arithmetic ior
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int/uint subgroupInclusiveOr(int/uint)
+define spir_func i32 @_Z38sub_group_scan_inclusive_or_nonuniformi(i32 %value)
+{
+    ; 7 = arithmetic ior
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %value)
+    %2 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupInclusiveOr(ivec2/uvec2)
+define spir_func <2 x i32> @_Z38sub_group_scan_inclusive_or_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 7 = arithmetic ior
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupInclusiveOr(ivec3/uvec3)
+define spir_func <3 x i32> @_Z38sub_group_scan_inclusive_or_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 7 = arithmetic ior
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupInclusiveOr(ivec4/uvec4)
+define spir_func <4 x i32> @_Z38sub_group_scan_inclusive_or_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 7 = arithmetic ior
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int/uint subgroupExclusiveOr(int/uint)
+define spir_func i32 @_Z38sub_group_scan_exclusive_or_nonuniformi(i32 %value)
+{
+    ; 7 = arithmetic ior
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %value)
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupExclusiveOr(ivec2/uvec2)
+define spir_func <2 x i32> @_Z38sub_group_scan_exclusive_or_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 7 = arithmetic ior
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupExclusiveOr(ivec3/uvec3)
+define spir_func <3 x i32> @_Z38sub_group_scan_exclusive_or_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 7 = arithmetic ior
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupExclusiveOr(ivec4/uvec4)
+define spir_func <4 x i32> @_Z38sub_group_scan_exclusive_or_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 7 = arithmetic ior
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
 }
 
 ; GLSL: bool subgroupOr(bool)
-;       bool subgroupInclusiveOr(bool)
-;       bool subgroupExclusiveOr(bool)
-define spir_func i1 @_Z24GroupNonUniformLogicalOriib(i32 %scope, i32 %groupOp, i1 %value)
+define spir_func i1 @_Z30sub_group_reduce_or_nonuniformb(i1 %value)
 {
-    ; 7 = arithmetic or
-.entry:
-    %value.i32 = zext i1 %value to i32
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 7, i32 %value.i32)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7, i32 %value.i32)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7, i32 %value.i32)
-    br label %.end
-.end:
-    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    %result = trunc i32 %result.i32 to i1
-    ret i1 %result
+    ; 7 = arithmetic bor
+    %1 = zext i1 %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %3 = call i32 @llpc.subgroup.reduce.i32(i32 7, i32 %2)
+    %4 = trunc i32 %3 to i1
+
+    ret i1 %4
+}
+
+; GLSL: bvec2 subgroupOr(bvec2)
+define spir_func <2 x i1> @_Z30sub_group_reduce_or_nonuniformDv2_b(<2 x i1> %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext <2 x i1> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = trunc <2 x i32> %9 to <2 x i1>
+
+    ret <2 x i1> %10
+}
+
+; GLSL: bvec3 subgroupOr(bvec3)
+define spir_func <3 x i1> @_Z30sub_group_reduce_or_nonuniformDv3_b(<3 x i1> %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext <3 x i1> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = trunc <3 x i32> %13 to <3 x i1>
+
+    ret <3 x i1> %14
+}
+
+; GLSL: bvec4 subgroupOr(bvec4)
+define spir_func <4 x i1> @_Z30sub_group_reduce_or_nonuniformDv4_b(<4 x i1> %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext <4 x i1> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.reduce.i32(i32 7 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = trunc <4 x i32> %17 to <4 x i1>
+
+    ret <4 x i1> %18
+}
+
+; GLSL: bool subgroupInclusiveOr(bool)
+define spir_func i1 @_Z38sub_group_scan_inclusive_or_nonuniformb(i1 %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext i1 %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %3 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7, i32 %2)
+    %4 = trunc i32 %3 to i1
+
+    ret i1 %4
+}
+
+; GLSL: bvec2 subgroupInclusiveOr(bvec2)
+define spir_func <2 x i1> @_Z38sub_group_scan_inclusive_or_nonuniformDv2_b(<2 x i1> %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext <2 x i1> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = trunc <2 x i32> %9 to <2 x i1>
+
+    ret <2 x i1> %10
+}
+
+; GLSL: bvec3 subgroupInclusiveOr(bvec3)
+define spir_func <3 x i1> @_Z38sub_group_scan_inclusive_or_nonuniformDv3_b(<3 x i1> %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext <3 x i1> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = trunc <3 x i32> %13 to <3 x i1>
+
+    ret <3 x i1> %14
+}
+
+; GLSL: bvec4 subgroupInclusiveOr(bvec4)
+define spir_func <4 x i1> @_Z38sub_group_scan_inclusive_or_nonuniformDv4_b(<4 x i1> %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext <4 x i1> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 7 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = trunc <4 x i32> %17 to <4 x i1>
+
+    ret <4 x i1> %18
+}
+
+; GLSL: bool subgroupExclusiveOr(bool)
+define spir_func i1 @_Z38sub_group_scan_exclusive_or_nonuniformb(i1 %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext i1 %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %1)
+    %3 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7, i32 %2)
+    %4 = trunc i32 %3 to i1
+
+    ret i1 %4
+}
+
+; GLSL: bvec2 subgroupExclusiveOr(bvec2)
+define spir_func <2 x i1> @_Z38sub_group_scan_exclusive_or_nonuniformDv2_b(<2 x i1> %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext <2 x i1> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = trunc <2 x i32> %9 to <2 x i1>
+
+    ret <2 x i1> %10
+}
+
+; GLSL: bvec3 subgroupExclusiveOr(bvec3)
+define spir_func <3 x i1> @_Z38sub_group_scan_exclusive_or_nonuniformDv3_b(<3 x i1> %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext <3 x i1> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = trunc <3 x i32> %13 to <3 x i1>
+
+    ret <3 x i1> %14
+}
+
+; GLSL: bvec4 subgroupExclusiveOr(bvec4)
+define spir_func <4 x i1> @_Z38sub_group_scan_exclusive_or_nonuniformDv4_b(<4 x i1> %value)
+{
+    ; 7 = arithmetic bor
+    %1 = zext <4 x i1> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 7, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 7 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = trunc <4 x i32> %17 to <4 x i1>
+
+    ret <4 x i1> %18
+}
+
+; GLSL: int/uint subgroupXor(int/uint)
+define spir_func i32 @_Z31sub_group_reduce_xor_nonuniformi(i32 %value)
+{
+    ; 8 = arithmetic ixor
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %value)
+    %2 = call i32 @llpc.subgroup.reduce.i32(i32 8, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupXor(ivec2/uvec2)
+define spir_func <2 x i32> @_Z31sub_group_reduce_xor_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 8 = arithmetic ixor
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupXor(ivec3/uvec3)
+define spir_func <3 x i32> @_Z31sub_group_reduce_xor_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 8 = arithmetic ixor
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupXor(ivec4/uvec4)
+define spir_func <4 x i32> @_Z31sub_group_reduce_xor_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 8 = arithmetic ixor
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int/uint subgroupInclusiveXor(int/uint)
+define spir_func i32 @_Z39sub_group_scan_inclusive_xor_nonuniformi(i32 %value)
+{
+    ; 8 = arithmetic ixor
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %value)
+    %2 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupInclusiveXor(ivec2/uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_inclusive_xor_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 8 = arithmetic ixor
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupInclusiveXor(ivec3/uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_inclusive_xor_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 8 = arithmetic ixor
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupInclusiveXor(ivec4/uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_inclusive_xor_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 8 = arithmetic ixor
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
+}
+
+; GLSL: int/uint subgroupExclusiveXor(int/uint)
+define spir_func i32 @_Z39sub_group_scan_exclusive_xor_nonuniformi(i32 %value)
+{
+    ; 8 = arithmetic ixor
+    %1 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %value)
+    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8, i32 %1)
+
+    ret i32 %2
+}
+
+; GLSL: ivec2/uvec2 subgroupExclusiveXor(ivec2/uvec2)
+define spir_func <2 x i32> @_Z39sub_group_scan_exclusive_xor_nonuniformDv2_i(<2 x i32> %value)
+{
+    ; 8 = arithmetic ixor
+
+    %1 = extractelement <2 x i32> %value, i32 0
+    %2 = extractelement <2 x i32> %value, i32 1
+
+    %3 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+
+    %5 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %3)
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %4)
+
+    %7 = insertelement <2 x i32> undef, i32 %5, i32 0
+    %8 = insertelement <2 x i32> %7, i32 %6, i32 1
+
+    ret <2 x i32> %8
+}
+
+; GLSL: ivec3/uvec3 subgroupExclusiveXor(ivec3/uvec3)
+define spir_func <3 x i32> @_Z39sub_group_scan_exclusive_xor_nonuniformDv3_i(<3 x i32> %value)
+{
+    ; 8 = arithmetic ixor
+
+    %1 = extractelement <3 x i32> %value, i32 0
+    %2 = extractelement <3 x i32> %value, i32 1
+    %3 = extractelement <3 x i32> %value, i32 2
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %4)
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %6)
+
+    %10 = insertelement <3 x i32> undef, i32 %7, i32 0
+    %11 = insertelement <3 x i32> %10, i32 %8, i32 1
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 2
+
+    ret <3 x i32> %12
+}
+
+; GLSL: ivec4/uvec4 subgroupExclusiveXor(ivec4/uvec4)
+define spir_func <4 x i32> @_Z39sub_group_scan_exclusive_xor_nonuniformDv4_i(<4 x i32> %value)
+{
+    ; 8 = arithmetic ixor
+
+    %1 = extractelement <4 x i32> %value, i32 0
+    %2 = extractelement <4 x i32> %value, i32 1
+    %3 = extractelement <4 x i32> %value, i32 2
+    %4 = extractelement <4 x i32> %value, i32 3
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %4)
+
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %5)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %8)
+
+    %13 = insertelement <4 x i32> undef, i32 %9, i32 0
+    %14 = insertelement <4 x i32> %13, i32 %10, i32 1
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 2
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 3
+
+    ret <4 x i32> %16
 }
 
 ; GLSL: bool subgroupXor(bool)
-;       bool subgroupInclusiveXor(bool)
-;       bool subgroupExclusiveXor(bool)
-define spir_func i1 @_Z25GroupNonUniformLogicalXoriib(i32 %scope, i32 %groupOp, i1 %value)
+define spir_func i1 @_Z31sub_group_reduce_xor_nonuniformb(i1 %value)
 {
-    ; 8 = arithmetic xor
-.entry:
-    %value.i32 = zext i1 %value to i32
-    switch i32 %groupOp, label %.end [i32 0, label %.reduce
-                                      i32 1, label %.inclusiveScan
-                                      i32 2, label %.exclusiveScan ]
-.reduce:
-    %0 = call i32 @llpc.subgroup.reduce.i32(i32 8, i32 %value.i32)
-    br label %.end
-.inclusiveScan:
-    %1 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8, i32 %value.i32)
-    br label %.end
-.exclusiveScan:
-    %2 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8, i32 %value.i32)
-    br label %.end
-.end:
-    %result.i32 = phi i32 [undef, %.entry], [%0, %.reduce], [%1, %.inclusiveScan], [%2, %.exclusiveScan]
-    %result = trunc i32 %result.i32 to i1
-    ret i1 %result
+    ; 8 = arithmetic bxor
+    %1 = zext i1 %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %3 = call i32 @llpc.subgroup.reduce.i32(i32 8, i32 %2)
+    %4 = trunc i32 %3 to i1
+
+    ret i1 %4
 }
 
-;       vec subgroupInclusiveAdd(vec)
-;       vec subgroupExclusiveAdd(vec)
+; GLSL: bvec2 subgroupXor(bvec2)
+define spir_func <2 x i1> @_Z31sub_group_reduce_xor_nonuniformDv2_b(<2 x i1> %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext <2 x i1> %value to <2 x i32>
 
-; GLSL: dvec subgroupAdd(dvec)
-;       dvec subgroupInclusiveAdd(dvec)
-;       dvec subgroupExclusiveAdd(dvec)
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
 
-;       ivec/uvec subgroupInclusiveMul(ivec/uvec)
-;       ivec/uvec subgroupExclusiveMul(ivec/uvec)
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
 
-;       vec subgroupInclusiveMul(vec)
-;       vec subgroupExclusiveMul(vec)
+    %6 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %5)
 
-; GLSL: dvec subgroupMul(dvec)
-;       dvec subgroupInclusiveMul(dvec)
-;       dvec subgroupExclusiveMul(dvec)
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = trunc <2 x i32> %9 to <2 x i1>
 
-;       ivec subgroupInclusiveMin(ivec)
-;       ivec subgroupExclusiveMin(ivec)
+    ret <2 x i1> %10
+}
 
-;       uvec subgroupInclusiveMin(uvec)
-;       uvec subgroupExclusiveMin(uvec)
+; GLSL: bvec3 subgroupXor(bvec3)
+define spir_func <3 x i1> @_Z31sub_group_reduce_xor_nonuniformDv3_b(<3 x i1> %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext <3 x i1> %value to <3 x i32>
 
-;       vec subgroupInclusiveMin(vec)
-;       vec subgroupExclusiveMin(vec)
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
 
-; GLSL: dvec subgroupMin(dvec)
-;       dvec subgroupInclusiveMin(dvec)
-;       dvec subgroupExclusiveMin(dvec)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %4)
 
-;       ivec subgroupInclusiveMax(ivec)
-;       ivec subgroupExclusiveMax(ivec)
-;       uvec subgroupInclusiveMax(uvec)
-;       uvec subgroupExclusiveMax(uvec)
+    %8 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %7)
 
-;       vec subgroupInclusiveMax(vec)
-;       vec subgroupExclusiveMax(vec)
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = trunc <3 x i32> %13 to <3 x i1>
 
-; GLSL: dvec subgroupMax(dvec)
-;       dvec subgroupInclusiveMax(dvec)
-;       dvec subgroupExclusiveMax(dvec)
+    ret <3 x i1> %14
+}
 
-;       ivec/uvec subgroupInclusiveAnd(ivec/uvec)
-;       ivec/uvec subgroupExclusiveAnd(ivec/uvec)
+; GLSL: bvec4 subgroupXor(bvec4)
+define spir_func <4 x i1> @_Z31sub_group_reduce_xor_nonuniformDv4_b(<4 x i1> %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext <4 x i1> %value to <4 x i32>
 
-;       ivec/uvec subgroupInclusiveOr(ivec/uvec)
-;       ivec/uvec subgroupExclusiveOr(ivec/uvec)
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
 
-;       ivec/uvec subgroupInclusiveXor(ivec/uvec)
-;       ivec/uvec subgroupExclusiveXor(ivec/uvec)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %5)
 
-;       bvec subgroupInclusiveAnd(bvec)
-;       bvec subgroupExclusiveAnd(bvec)
+    %10 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.reduce.i32(i32 8 ,i32 %9)
 
-;       bvec subgroupInclusiveOr(bvec)
-;       bvec subgroupExclusiveOr(bvec)
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = trunc <4 x i32> %17 to <4 x i1>
 
-;       bvec subgroupInclusiveXor(bvec)
-;       bvec subgroupExclusiveXor(bvec)
+    ret <4 x i1> %18
+}
+
+; GLSL: bool subgroupInclusiveXor(bool)
+define spir_func i1 @_Z39sub_group_scan_inclusive_xor_nonuniformb(i1 %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext i1 %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %3 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8, i32 %2)
+    %4 = trunc i32 %3 to i1
+
+    ret i1 %4
+}
+
+; GLSL: bvec2 subgroupInclusiveXor(bvec2)
+define spir_func <2 x i1> @_Z39sub_group_scan_inclusive_xor_nonuniformDv2_b(<2 x i1> %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext <2 x i1> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = trunc <2 x i32> %9 to <2 x i1>
+
+    ret <2 x i1> %10
+}
+
+; GLSL: bvec3 subgroupInclusiveXor(bvec3)
+define spir_func <3 x i1> @_Z39sub_group_scan_inclusive_xor_nonuniformDv3_b(<3 x i1> %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext <3 x i1> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = trunc <3 x i32> %13 to <3 x i1>
+
+    ret <3 x i1> %14
+}
+
+; GLSL: bvec4 subgroupInclusiveXor(bvec4)
+define spir_func <4 x i1> @_Z39sub_group_scan_inclusive_xor_nonuniformDv4_b(<4 x i1> %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext <4 x i1> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.inclusiveScan.i32(i32 8 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = trunc <4 x i32> %17 to <4 x i1>
+
+    ret <4 x i1> %18
+}
+
+; GLSL: bool subgroupExclusiveXor(bool)
+define spir_func i1 @_Z39sub_group_scan_exclusive_xor_nonuniformb(i1 %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext i1 %value to i32
+    %2 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %1)
+    %3 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8, i32 %2)
+    %4 = trunc i32 %3 to i1
+
+    ret i1 %4
+}
+
+; GLSL: bvec2 subgroupExclusiveXor(bvec2)
+define spir_func <2 x i1> @_Z39sub_group_scan_exclusive_xor_nonuniformDv2_b(<2 x i1> %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext <2 x i1> %value to <2 x i32>
+
+    %2 = extractelement <2 x i32> %1, i32 0
+    %3 = extractelement <2 x i32> %1, i32 1
+
+    %4 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+
+    %6 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %4)
+    %7 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %5)
+
+    %8 = insertelement <2 x i32> undef, i32 %6, i32 0
+    %9 = insertelement <2 x i32> %8, i32 %7, i32 1
+    %10 = trunc <2 x i32> %9 to <2 x i1>
+
+    ret <2 x i1> %10
+}
+
+; GLSL: bvec3 subgroupExclusiveXor(bvec3)
+define spir_func <3 x i1> @_Z39sub_group_scan_exclusive_xor_nonuniformDv3_b(<3 x i1> %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext <3 x i1> %value to <3 x i32>
+
+    %2 = extractelement <3 x i32> %1, i32 0
+    %3 = extractelement <3 x i32> %1, i32 1
+    %4 = extractelement <3 x i32> %1, i32 2
+
+    %5 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %4)
+
+    %8 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %5)
+    %9 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %6)
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %7)
+
+    %11 = insertelement <3 x i32> undef, i32 %8, i32 0
+    %12 = insertelement <3 x i32> %11, i32 %9, i32 1
+    %13 = insertelement <3 x i32> %12, i32 %10, i32 2
+    %14 = trunc <3 x i32> %13 to <3 x i1>
+
+    ret <3 x i1> %14
+}
+
+; GLSL: bvec4 subgroupExclusiveXor(bvec4)
+define spir_func <4 x i1> @_Z39sub_group_scan_exclusive_xor_nonuniformDv4_b(<4 x i1> %value)
+{
+    ; 8 = arithmetic bxor
+    %1 = zext <4 x i1> %value to <4 x i32>
+
+    %2 = extractelement <4 x i32> %1, i32 0
+    %3 = extractelement <4 x i32> %1, i32 1
+    %4 = extractelement <4 x i32> %1, i32 2
+    %5 = extractelement <4 x i32> %1, i32 3
+
+    %6 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %2)
+    %7 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %3)
+    %8 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %4)
+    %9 = call i32 @llpc.subgroup.set.inactive.i32(i32 8, i32 %5)
+
+    %10 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %6)
+    %11 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %7)
+    %12 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %8)
+    %13 = call i32 @llpc.subgroup.exclusiveScan.i32(i32 8 ,i32 %9)
+
+    %14 = insertelement <4 x i32> undef, i32 %10, i32 0
+    %15 = insertelement <4 x i32> %14, i32 %11, i32 1
+    %16 = insertelement <4 x i32> %15, i32 %12, i32 2
+    %17 = insertelement <4 x i32> %16, i32 %13, i32 3
+    %18 = trunc <4 x i32> %17 to <4 x i1>
+
+    ret <4 x i1> %18
+}
+
+; GLSL: int64_t/uint64_t subgroupAdd(int64_t/uint64_t)
+define spir_func i64 @_Z31sub_group_reduce_add_nonuniforml(i64 %value)
+{
+    ; 0 = arithmetic iadd
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %value)
+    %2 = call i64 @llpc.subgroup.reduce.i64(i32 0, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: i64vec2/u64vec2 subgroupAdd(i64vec2/u64vec2)
+define spir_func <2 x i64> @_Z31sub_group_reduce_add_nonuniformDv2_l(<2 x i64> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.reduce.i64(i32 0 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.reduce.i64(i32 0 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: i64vec3/u64vec3 subgroupAdd(i64vec3/u64vec3)
+define spir_func <3 x i64> @_Z31sub_group_reduce_add_nonuniformDv3_l(<3 x i64> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.reduce.i64(i32 0 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.reduce.i64(i32 0 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 0 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: i64vec4/u64vec4 subgroupAdd(i64vec4/u64vec4)
+define spir_func <4 x i64> @_Z31sub_group_reduce_add_nonuniformDv4_l(<4 x i64> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 0 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 0 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.reduce.i64(i32 0 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.reduce.i64(i32 0 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: int64_t/uint64_t subgroupInclusiveAdd(int64_t/uint64_t)
+define spir_func i64 @_Z39sub_group_scan_inclusive_add_nonuniforml(i64 %value)
+{
+    ; 0 = arithmetic iadd
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %value)
+    %2 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: i64vec2/u64vec2 subgroupInclusiveAdd(i64vec2/u64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_inclusive_add_nonuniformDv2_l(<2 x i64> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: i64vec3/u64vec3 subgroupInclusiveAdd(i64vec3/u64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_inclusive_add_nonuniformDv3_l(<3 x i64> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: i64vec4/u64vec4 subgroupInclusiveAdd(i64vec4/u64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_inclusive_add_nonuniformDv4_l(<4 x i64> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 0 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: int64_t/uint64_t subgroupExclusiveAdd(int64_t/uint64_t)
+define spir_func i64 @_Z39sub_group_scan_exclusive_add_nonuniforml(i64 %value)
+{
+    ; 0 = arithmetic iadd
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %value)
+    %2 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: i64vec2/u64vec2 subgroupExclusiveAdd(i64vec2/u64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_exclusive_add_nonuniformDv2_l(<2 x i64> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: i64vec3/u64vec3 subgroupExclusiveAdd(i64vec3/u64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_exclusive_add_nonuniformDv3_l(<3 x i64> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: i64vec4/u64vec4 subgroupExclusiveAdd(i64vec4/u64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_exclusive_add_nonuniformDv4_l(<4 x i64> %value)
+{
+    ; 0 = arithmetic iadd
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 0, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 0 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: int64_t subgroupMin(int64_t)
+define spir_func i64 @_Z31sub_group_reduce_min_nonuniforml(i64 %value)
+{
+    ; 2 = arithmetic smin
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %value)
+    %2 = call i64 @llpc.subgroup.reduce.i64(i32 2, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: i64vec2 subgroupMin(i64vec2)
+define spir_func <2 x i64> @_Z31sub_group_reduce_min_nonuniformDv2_l(<2 x i64> %value)
+{
+    ; 2 = arithmetic smin
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.reduce.i64(i32 2 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.reduce.i64(i32 2 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: i64vec3 subgroupMin(i64vec3)
+define spir_func <3 x i64> @_Z31sub_group_reduce_min_nonuniformDv3_l(<3 x i64> %value)
+{
+    ; 2 = arithmetic smin
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.reduce.i64(i32 2 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.reduce.i64(i32 2 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 2 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: i64vec4 subgroupMin(i64vec4)
+define spir_func <4 x i64> @_Z31sub_group_reduce_min_nonuniformDv4_l(<4 x i64> %value)
+{
+    ; 2 = arithmetic smin
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 2 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 2 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.reduce.i64(i32 2 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.reduce.i64(i32 2 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: int64_t subgroupInclusiveMin(int64_t)
+define spir_func i64 @_Z39sub_group_scan_inclusive_min_nonuniforml(i64 %value)
+{
+    ; 2 = arithmetic smin
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %value)
+    %2 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: i64vec2 subgroupInclusiveMin(i64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_inclusive_min_nonuniformDv2_l(<2 x i64> %value)
+{
+    ; 2 = arithmetic smin
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: i64vec3 subgroupInclusiveMin(i64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_inclusive_min_nonuniformDv3_l(<3 x i64> %value)
+{
+    ; 2 = arithmetic smin
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: i64vec4 subgroupInclusiveMin(i64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_inclusive_min_nonuniformDv4_l(<4 x i64> %value)
+{
+    ; 2 = arithmetic smin
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 2 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: int64_t subgroupExclusiveMin(int64_t)
+define spir_func i64 @_Z39sub_group_scan_exclusive_min_nonuniforml(i64 %value)
+{
+    ; 2 = arithmetic smin
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %value)
+    %2 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: i64vec2 subgroupExclusiveMin(i64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_exclusive_min_nonuniformDv2_l(<2 x i64> %value)
+{
+    ; 2 = arithmetic smin
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: i64vec3 subgroupExclusiveMin(i64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_exclusive_min_nonuniformDv3_l(<3 x i64> %value)
+{
+    ; 2 = arithmetic smin
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: i64vec4 subgroupExclusiveMin(i64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_exclusive_min_nonuniformDv4_l(<4 x i64> %value)
+{
+    ; 2 = arithmetic smin
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 2, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 2 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: uint64_t subgroupMin(uint64_t)
+define spir_func i64 @_Z31sub_group_reduce_min_nonuniformm(i64 %value)
+{
+    ; 4 = arithmetic umin
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %value)
+    %2 = call i64 @llpc.subgroup.reduce.i64(i32 4, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: u64vec2 subgroupMin(u64vec2)
+define spir_func <2 x i64> @_Z31sub_group_reduce_min_nonuniformDv2_m(<2 x i64> %value)
+{
+    ; 4 = arithmetic umin
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.reduce.i64(i32 4 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.reduce.i64(i32 4 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: u64vec3 subgroupMin(u64vec3)
+define spir_func <3 x i64> @_Z31sub_group_reduce_min_nonuniformDv3_m(<3 x i64> %value)
+{
+    ; 4 = arithmetic umin
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.reduce.i64(i32 4 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.reduce.i64(i32 4 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 4 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: u64vec4 subgroupMin(u64vec4)
+define spir_func <4 x i64> @_Z31sub_group_reduce_min_nonuniformDv4_m(<4 x i64> %value)
+{
+    ; 4 = arithmetic umin
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 4 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 4 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.reduce.i64(i32 4 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.reduce.i64(i32 4 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: uint64_t subgroupInclusiveMin(uint64_t)
+define spir_func i64 @_Z39sub_group_scan_inclusive_min_nonuniformm(i64 %value)
+{
+    ; 4 = arithmetic umin
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %value)
+    %2 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: u64vec2 subgroupInclusiveMin(u64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_inclusive_min_nonuniformDv2_m(<2 x i64> %value)
+{
+    ; 4 = arithmetic umin
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: u64vec3 subgroupInclusiveMin(u64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_inclusive_min_nonuniformDv3_m(<3 x i64> %value)
+{
+    ; 4 = arithmetic umin
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: u64vec4 subgroupInclusiveMin(u64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_inclusive_min_nonuniformDv4_m(<4 x i64> %value)
+{
+    ; 4 = arithmetic umin
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 4 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: uint64_t subgroupExclusiveMin(uint64_t)
+define spir_func i64 @_Z39sub_group_scan_exclusive_min_nonuniformm(i64 %value)
+{
+    ; 4 = arithmetic umin
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %value)
+    %2 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: u64vec2 subgroupExclusiveMin(u64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_exclusive_min_nonuniformDv2_m(<2 x i64> %value)
+{
+    ; 4 = arithmetic umin
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: u64vec3 subgroupExclusiveMin(u64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_exclusive_min_nonuniformDv3_m(<3 x i64> %value)
+{
+    ; 4 = arithmetic umin
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: u64vec4 subgroupExclusiveMin(u64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_exclusive_min_nonuniformDv4_m(<4 x i64> %value)
+{
+    ; 4 = arithmetic umin
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 4, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 4 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: int64_t subgroupMax(int64_t)
+define spir_func i64 @_Z31sub_group_reduce_max_nonuniforml(i64 %value)
+{
+    ; 3 = arithmetic smax
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %value)
+    %2 = call i64 @llpc.subgroup.reduce.i64(i32 3, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: i64vec2 subgroupMax(i64vec2)
+define spir_func <2 x i64> @_Z31sub_group_reduce_max_nonuniformDv2_l(<2 x i64> %value)
+{
+    ; 3 = arithmetic smax
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.reduce.i64(i32 3 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.reduce.i64(i32 3 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: i64vec3 subgroupMax(i64vec3)
+define spir_func <3 x i64> @_Z31sub_group_reduce_max_nonuniformDv3_l(<3 x i64> %value)
+{
+    ; 3 = arithmetic smax
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.reduce.i64(i32 3 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.reduce.i64(i32 3 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 3 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: i64vec4 subgroupMax(i64vec4)
+define spir_func <4 x i64> @_Z31sub_group_reduce_max_nonuniformDv4_l(<4 x i64> %value)
+{
+    ; 3 = arithmetic smax
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 3 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 3 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.reduce.i64(i32 3 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.reduce.i64(i32 3 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: int64_t subgroupInclusiveMax(int64_t)
+define spir_func i64 @_Z39sub_group_scan_inclusive_max_nonuniforml(i64 %value)
+{
+    ; 3 = arithmetic smax
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %value)
+    %2 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: i64vec2 subgroupInclusiveMax(i64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_inclusive_max_nonuniformDv2_l(<2 x i64> %value)
+{
+    ; 3 = arithmetic smax
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: i64vec3 subgroupInclusiveMax(i64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_inclusive_max_nonuniformDv3_l(<3 x i64> %value)
+{
+    ; 3 = arithmetic smax
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: i64vec4 subgroupInclusiveMax(i64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_inclusive_max_nonuniformDv4_l(<4 x i64> %value)
+{
+    ; 3 = arithmetic smax
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 3 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: int64_t subgroupExclusiveMax(int64_t)
+define spir_func i64 @_Z39sub_group_scan_exclusive_max_nonuniforml(i64 %value)
+{
+    ; 3 = arithmetic smax
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %value)
+    %2 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: i64vec2 subgroupExclusiveMax(i64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_exclusive_max_nonuniformDv2_l(<2 x i64> %value)
+{
+    ; 3 = arithmetic smax
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: i64vec3 subgroupExclusiveMax(i64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_exclusive_max_nonuniformDv3_l(<3 x i64> %value)
+{
+    ; 3 = arithmetic smax
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: i64vec4 subgroupExclusiveMax(i64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_exclusive_max_nonuniformDv4_l(<4 x i64> %value)
+{
+    ; 3 = arithmetic smax
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 3, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 3 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: uint64_t subgroupMax(uint64_t)
+define spir_func i64 @_Z31sub_group_reduce_max_nonuniformm(i64 %value)
+{
+    ; 5 = arithmetic umax
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %value)
+    %2 = call i64 @llpc.subgroup.reduce.i64(i32 5, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: u64vec2 subgroupMax(u64vec2)
+define spir_func <2 x i64> @_Z31sub_group_reduce_max_nonuniformDv2_m(<2 x i64> %value)
+{
+    ; 5 = arithmetic umax
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.reduce.i64(i32 5 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.reduce.i64(i32 5 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: u64vec3 subgroupMax(u64vec3)
+define spir_func <3 x i64> @_Z31sub_group_reduce_max_nonuniformDv3_m(<3 x i64> %value)
+{
+    ; 5 = arithmetic umax
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.reduce.i64(i32 5 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.reduce.i64(i32 5 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 5 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: u64vec4 subgroupMax(u64vec4)
+define spir_func <4 x i64> @_Z31sub_group_reduce_max_nonuniformDv4_m(<4 x i64> %value)
+{
+    ; 5 = arithmetic umax
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.reduce.i64(i32 5 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.reduce.i64(i32 5 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.reduce.i64(i32 5 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.reduce.i64(i32 5 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: uint64_t subgroupInclusiveMax(uint64_t)
+define spir_func i64 @_Z39sub_group_scan_inclusive_max_nonuniformm(i64 %value)
+{
+    ; 5 = arithmetic umax
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %value)
+    %2 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: u64vec2 subgroupInclusiveMax(u64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_inclusive_max_nonuniformDv2_m(<2 x i64> %value)
+{
+    ; 5 = arithmetic umax
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: u64vec3 subgroupInclusiveMax(u64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_inclusive_max_nonuniformDv3_m(<3 x i64> %value)
+{
+    ; 5 = arithmetic umax
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: u64vec4 subgroupInclusiveMax(u64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_inclusive_max_nonuniformDv4_m(<4 x i64> %value)
+{
+    ; 5 = arithmetic umax
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.inclusiveScan.i64(i32 5 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
+
+; GLSL: uint64_t subgroupExclusiveMax(uint64_t)
+define spir_func i64 @_Z39sub_group_scan_exclusive_max_nonuniformm(i64 %value)
+{
+    ; 5 = arithmetic umax
+    %1 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %value)
+    %2 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5, i64 %1)
+
+    ret i64 %2
+}
+
+; GLSL: u64vec2 subgroupExclusiveMax(u64vec2)
+define spir_func <2 x i64> @_Z39sub_group_scan_exclusive_max_nonuniformDv2_m(<2 x i64> %value)
+{
+    ; 5 = arithmetic umax
+
+    %1 = extractelement <2 x i64> %value, i32 0
+    %2 = extractelement <2 x i64> %value, i32 1
+
+    %3 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %1)
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %2)
+
+    %5 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5 ,i64 %3)
+    %6 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5 ,i64 %4)
+
+    %7 = insertelement <2 x i64> undef, i64 %5, i64 0
+    %8 = insertelement <2 x i64> %7, i64 %6, i64 1
+
+    ret <2 x i64> %8
+}
+
+; GLSL: u64vec3 subgroupExclusiveMax(u64vec3)
+define spir_func <3 x i64> @_Z39sub_group_scan_exclusive_max_nonuniformDv3_m(<3 x i64> %value)
+{
+    ; 5 = arithmetic umax
+
+    %1 = extractelement <3 x i64> %value, i32 0
+    %2 = extractelement <3 x i64> %value, i32 1
+    %3 = extractelement <3 x i64> %value, i32 2
+
+    %4 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %1)
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %2)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %3)
+
+    %7 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5 ,i64 %4)
+    %8 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5 ,i64 %5)
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5 ,i64 %6)
+
+    %10 = insertelement <3 x i64> undef, i64 %7, i64 0
+    %11 = insertelement <3 x i64> %10, i64 %8, i64 1
+    %12 = insertelement <3 x i64> %11, i64 %9, i64 2
+
+    ret <3 x i64> %12
+}
+
+; GLSL: u64vec4 subgroupExclusiveMax(u64vec4)
+define spir_func <4 x i64> @_Z39sub_group_scan_exclusive_max_nonuniformDv4_m(<4 x i64> %value)
+{
+    ; 5 = arithmetic umax
+
+    %1 = extractelement <4 x i64> %value, i32 0
+    %2 = extractelement <4 x i64> %value, i32 1
+    %3 = extractelement <4 x i64> %value, i32 2
+    %4 = extractelement <4 x i64> %value, i32 3
+
+    %5 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %1)
+    %6 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %2)
+    %7 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %3)
+    %8 = call i64 @llpc.subgroup.set.inactive.i64(i32 5, i64 %4)
+
+    %9 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5 ,i64 %5)
+    %10 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5 ,i64 %6)
+    %11 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5 ,i64 %7)
+    %12 = call i64 @llpc.subgroup.exclusiveScan.i64(i32 5 ,i64 %8)
+
+    %13 = insertelement <4 x i64> undef, i64 %9, i64 0
+    %14 = insertelement <4 x i64> %13, i64 %10, i64 1
+    %15 = insertelement <4 x i64> %14, i64 %11, i64 2
+    %16 = insertelement <4 x i64> %15, i64 %12, i64 3
+
+    ret <4 x i64> %16
+}
 
 ; GLSL: int/uint subgroupQuadBroadcast(int/uint, uint)
 define spir_func i32 @_Z28GroupNonUniformQuadBroadcastiii(i32 %scope, i32 %value, i32 %id)
@@ -2948,510 +9427,6 @@ define spir_func <4 x i1> @_Z23GroupNonUniformQuadSwapiDv4_bi(i32 %scope, <4 x i
     %2 = call <4 x i32> @_Z23GroupNonUniformQuadSwapiDv4_ii(i32 %scope, <4 x i32> %1, i32 %direction)
     %3 = trunc <4 x i32> %2 to <4 x i1>
     ret <4 x i1> %3
-}
-
-; GLSL: int/uint addInvocations(int/uint)
-define spir_func i32 @_Z20sub_group_reduce_addi(i32 %value)
-{
-    ; 3 = subgroup (scope), 0 = reduce (group operation)
-    %1 = call spir_func i32 @_Z19GroupNonUniformIAddiii(i32 3, i32 0, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float addInvocations(float)
-define spir_func float @_Z20sub_group_reduce_addf(float %value)
-{
-    ; 3 = subgroup (scope), 0 = reduce (group operation)
-    %1 = call spir_func float @_Z19GroupNonUniformFAddiif(i32 3, i32 0, float %value)
-    ret float %1
-}
-
-; GLSL: double addInvocations(double)
-define spir_func double @_Z20sub_group_reduce_addd(double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t/uint64_t addInvocations(int64_t/uint64_t)
-define spir_func i64 @_Z20sub_group_reduce_addl(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int minInvocations(int)
-define spir_func i32 @_Z20sub_group_reduce_mini(i32 %value)
-{
-    ; 3 = subgroup (scope), 0 = reduce (group operation)
-    %1 = call spir_func i32 @_Z19GroupNonUniformSMiniii(i32 3, i32 0, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: uint minInvocations(uint)
-define spir_func i32 @_Z20sub_group_reduce_minj(i32 %value)
-{
-    ; 3 = subgroup (scope), 0 = reduce (group operation)
-    %1 = call spir_func i32 @_Z19GroupNonUniformUMiniii(i32 3, i32 0, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float minInvocations(float)
-define spir_func float @_Z20sub_group_reduce_minf(float %value)
-{
-    ; 3 = subgroup (scope), 0 = reduce (group operation)
-    %1 = call spir_func float @_Z19GroupNonUniformFMiniif(i32 3, i32 0, float %value)
-    ret float %1
-}
-
-; GLSL: double minInvocations(double)
-define spir_func double @_Z20sub_group_reduce_mind(double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t minInvocations(int64_t)
-define spir_func i64 @_Z20sub_group_reduce_minl(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: uint64_t minInvocations(uint64_t)
-define spir_func i64 @_Z20sub_group_reduce_minm(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int maxInvocations(int)
-define spir_func i32 @_Z20sub_group_reduce_maxi(i32 %value)
-{
-    ; 3 = subgroup (scope), 0 = reduce (group operation)
-    %1 = call spir_func i32 @_Z19GroupNonUniformSMaxiii(i32 3, i32 0, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: uint maxInvocations(uint)
-define spir_func i32 @_Z20sub_group_reduce_maxj(i32 %value)
-{
-    ; 3 = subgroup (scope), 0 = reduce (group operation)
-    %1 = call spir_func i32 @_Z19GroupNonUniformUMaxiii(i32 3, i32 0, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float maxInvocations(float)
-define spir_func float @_Z20sub_group_reduce_maxf(float %value)
-{
-    ; 3 = subgroup (scope), 0 = reduce (group operation)
-    %1 = call spir_func float @_Z19GroupNonUniformFMaxiif(i32 3, i32 0, float %value)
-    ret float %1
-}
-
-; GLSL: double maxInvocations(double)
-define spir_func double @_Z20sub_group_reduce_maxd(double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t maxInvocations(int64_t)
-define spir_func i64 @_Z20sub_group_reduce_maxl(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: uint64_t maxInvocations(uint64_t)
-define spir_func i64 @_Z20sub_group_reduce_maxm(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int/uint addInvocationsInclusiveScan(int/uint)
-define spir_func i32 @_Z28sub_group_scan_inclusive_addi(i32 %value)
-{
-    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformIAddiii(i32 3, i32 1, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float addInvocationsInclusiveScan(float)
-define spir_func float @_Z28sub_group_scan_inclusive_addf(float %value)
-{
-    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
-    %1 = call float @_Z19GroupNonUniformFAddiif(i32 3, i32 1, float %value)
-    ret float %1
-}
-
-; GLSL: double addInvocationsInclusiveScan(double)
-define spir_func double @_Z28sub_group_scan_inclusive_addd(double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t/uint64_t addInvocationsInclusiveScan(int64_t/uint64_t)
-define spir_func i64 @_Z28sub_group_scan_inclusive_addl(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int minInvocationsInclusiveScan(int)
-define spir_func i32 @_Z28sub_group_scan_inclusive_mini(i32 %value)
-{
-    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformSMiniii(i32 3, i32 1, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: uint minInvocationsInclusiveScan(uint)
-define spir_func i32 @_Z28sub_group_scan_inclusive_minj(i32 %value)
-{
-    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformUMiniii(i32 3, i32 1, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float minInvocationsInclusiveScan(float)
-define spir_func float @_Z28sub_group_scan_inclusive_minf(float %value)
-{
-    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
-    %1 = call float @_Z19GroupNonUniformFMiniif(i32 3, i32 1, float %value)
-    ret float %1
-}
-
-; GLSL: double minInvocationsInclusiveScan(double)
-define spir_func double @_Z28sub_group_scan_inclusive_mind(double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t minInvocationsInclusiveScan(int64_t)
-define spir_func i64 @_Z28sub_group_scan_inclusive_minl(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: uint64_t minInvocationsInclusiveScan(uint64_t)
-define spir_func i64 @_Z28sub_group_scan_inclusive_minm(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int maxInvocationsInclusiveScan(int)
-define spir_func i32 @_Z28sub_group_scan_inclusive_maxi(i32 %value)
-{
-    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformSMaxiii(i32 3, i32 1, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: uint maxInvocationsInclusiveScan(uint)
-define spir_func i32 @_Z28sub_group_scan_inclusive_maxj(i32 %value)
-{
-    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformUMaxiii(i32 3, i32 1, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float maxInvocationsInclusiveScan(float)
-define spir_func float @_Z28sub_group_scan_inclusive_maxf(float %value)
-{
-    ; 3 = subgroup (scope), 1 = inclusive scan (group operation)
-    %1 = call float @_Z19GroupNonUniformFMaxiif(i32 3, i32 1, float %value)
-    ret float %1
-}
-
-; GLSL: double maxInvocationsInclusiveScan(double)
-define spir_func double @_Z28sub_group_scan_inclusive_maxd(double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t maxInvocationsInclusiveScan(int64_t)
-define spir_func i64 @_Z28sub_group_scan_inclusive_maxl(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: uint64_t maxInvocationsInclusiveScan(uint64_t)
-define spir_func i64 @_Z28sub_group_scan_inclusive_maxm(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int/uint addInvocationsExclusiveScan(int/uint)
-define spir_func i32 @_Z28sub_group_scan_exclusive_addi(i32 %value)
-{
-    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformIAddiii(i32 3, i32 2, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float addInvocationsExclusiveScan(float)
-define spir_func float @_Z28sub_group_scan_exclusive_addf(float %value)
-{
-    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
-    %1 = call float @_Z19GroupNonUniformFAddiif(i32 3, i32 2, float %value)
-    ret float %1
-}
-
-; GLSL: double addInvocationsExclusiveScan(double)
-define spir_func double @_Z28sub_group_scan_exclusive_addd(double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t/uint64_t addInvocationsExclusiveScan(int64_t/uint64_t)
-define spir_func i64 @_Z28sub_group_scan_exclusive_addl(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int minInvocationsExclusiveScan(int)
-define spir_func i32 @_Z28sub_group_scan_exclusive_mini(i32 %value)
-{
-    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformSMiniii(i32 3, i32 2, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: uint minInvocationsExclusiveScan(uint)
-define spir_func i32 @_Z28sub_group_scan_exclusive_minj(i32 %value)
-{
-    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformUMiniii(i32 3, i32 2, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float minInvocationsExclusiveScan(float)
-define spir_func float @_Z28sub_group_scan_exclusive_minf(float %value)
-{
-    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
-    %1 = call float @_Z19GroupNonUniformFMiniif(i32 3, i32 2, float %value)
-    ret float %1
-}
-
-; GLSL: double minInvocationsExclusiveScan(double)
-define spir_func double @_Z28sub_group_scan_exclusive_mind(double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t minInvocationsExclusiveScan(int64_t)
-define spir_func i64 @_Z28sub_group_scan_exclusive_minl(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: uint64_t minInvocationsExclusiveScan(uint64_t)
-define spir_func i64 @_Z28sub_group_scan_exclusive_minm(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int maxInvocationsExclusiveScan(int)
-define spir_func i32 @_Z28sub_group_scan_exclusive_maxi(i32 %value)
-{
-    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformSMaxiii(i32 3, i32 2, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: uint maxInvocationsExclusiveScan(uint)
-define spir_func i32 @_Z28sub_group_scan_exclusive_maxj(i32 %value)
-{
-    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
-    %1 = call i32 @_Z19GroupNonUniformUMaxiii(i32 3, i32 2, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float maxInvocationsExclusiveScan(float)
-define spir_func float @_Z28sub_group_scan_exclusive_maxf(float %value)
-{
-    ; 3 = subgroup (scope), 2 = exclusive scan (group operation)
-    %1 = call float @_Z19GroupNonUniformFMaxiif(i32 3, i32 2, float %value)
-    ret float %1
-}
-
-; GLSL: double maxInvocationsExclusiveScan(double)
-define spir_func double @_Z28sub_group_scan_exclusive_maxd(double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t maxInvocationsExclusiveScan(int64_t)
-define spir_func i64 @_Z28sub_group_scan_exclusive_maxl(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: uint64_t maxInvocationsExclusiveScan(uint64_t)
-define spir_func i64 @_Z28sub_group_scan_exclusive_maxm(i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int/uint addInvocationsNonUniform(int/uint)
-;       int/uint addInvocationsInclusiveScanNonUniform(int/uint)
-;       int/uint addInvocationsExclusiveScanNonUniform(int/uint)
-define spir_func i32 @_Z22GroupIAddNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
-{
-    %1 = call i32 @_Z19GroupNonUniformIAddiii(i32 %scope, i32 %groupOp, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float addInvocationsNonUniform(float)
-;       float addInvocationsInclusiveScanNonUniform(float)
-;       float addInvocationsExclusiveScanNonUniform(float)
-define spir_func float @_Z22GroupFAddNonUniformAMDiif(i32 %scope, i32 %groupOp, float %value)
-{
-    %1 = call float @_Z19GroupNonUniformFAddiif(i32 %scope, i32 %groupOp, float %value)
-    ret float %1
-}
-
-; GLSL: double addInvocationsNonUniform(double)
-;       double addInvocationsInclusiveScanNonUniform(double)
-;       double addInvocationsExclusiveScanNonUniform(double)
-define spir_func double @_Z22GroupFAddNonUniformAMDiid(i32 %scope, i32 %groupOp, double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t/uint64_t addInvocationsNonUniform(int64_t/uint64_t)
-;       int64_t/uint64_t addInvocationsInclusiveScanNonUniform(int64_t/uint64_t)
-;       int64_t/uint64_t addInvocationsExclusiveScanNonUniform(int64_t/uint64_t)
-define spir_func i64 @_Z22GroupIAddNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int minInvocationsNonUniform(int)
-;       int minInvocationsInclusiveScanNonUniform(int)
-;       int minInvocationsExclusiveScanNonUniform(int)
-define spir_func i32 @_Z22GroupSMinNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
-{
-    %1 = call i32 @_Z19GroupNonUniformSMiniii(i32 %scope, i32 %groupOp, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: uint minInvocationsNonUniform(uint)
-;       uint minInvocationsInclusiveScanNonUniform(uint)
-;       uint minInvocationsExclusiveScanNonUniform(uint)
-define spir_func i32 @_Z22GroupUMinNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
-{
-    %1 = call i32 @_Z19GroupNonUniformUMiniii(i32 %scope, i32 %groupOp, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float minInvocationsNonUniform(float)
-;       float minInvocationsInclusiveScanNonUniform(float)
-;       float minInvocationsExclusiveScanNonUniform(float)
-define spir_func float @_Z22GroupFMinNonUniformAMDiif(i32 %scope, i32 %groupOp, float %value)
-{
-    %1 = call float @_Z19GroupNonUniformFMiniif(i32 %scope, i32 %groupOp, float %value)
-    ret float %1
-}
-
-; GLSL: double minInvocationsNonUniform(double)
-;       double minInvocationsInclusiveScanNonUniform(double)
-;       double minInvocationsExclusiveScanNonUniform(double)
-define spir_func double @_Z22GroupFMinNonUniformAMDiid(i32 %scope, i32 %groupOp, double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t minInvocationsNonUniform(int64_t)
-;       int64_t minInvocationsInclusiveScanNonUniform(int64_t)
-;       int64_t minInvocationsExclusiveScanNonUniform(int64_t)
-define spir_func i64 @_Z22GroupSMinNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: uint64_t minInvocationsNonUniform(uint64_t)
-;       uint64_t minInvocationsInclusiveScanNonUniform(uint64_t)
-;       uint64_t minInvocationsExclusiveScanNonUniform(uint64_t)
-define spir_func i64 @_Z22GroupUMinNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: int maxInvocationsNonUniform(int)
-;       int maxInvocationsInclusiveScanNonUniform(int)
-;       int maxInvocationsExclusiveScanNonUniform(int)
-define spir_func i32 @_Z22GroupSMaxNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
-{
-    %1 = call i32 @_Z19GroupNonUniformSMaxiii(i32 %scope, i32 %groupOp, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: uint maxInvocationsNonUniform(uint)
-;       uint maxInvocationsInclusiveScanNonUniform(uint)
-;       uint maxInvocationsExclusiveScanNonUniform(uint)
-define spir_func i32 @_Z22GroupUMaxNonUniformAMDiii(i32 %scope, i32 %groupOp, i32 %value)
-{
-    %1 = call i32 @_Z19GroupNonUniformUMaxiii(i32 %scope, i32 %groupOp, i32 %value)
-    ret i32 %1
-}
-
-; GLSL: float maxInvocationsNonUniform(float)
-;       float maxInvocationsInclusiveScanNonUniform(float)
-;       float maxInvocationsExclusiveScanNonUniform(float)
-define spir_func float @_Z22GroupFMaxNonUniformAMDiif(i32 %scope, i32 %groupOp, float %value)
-{
-    %1 = call float @_Z19GroupNonUniformFMaxiif(i32 %scope, i32 %groupOp, float %value)
-    ret float %1
-}
-
-; GLSL: double maxInvocationsNonUniform(double)
-;       double maxInvocationsInclusiveScanNonUniform(double)
-;       double maxInvocationsExclusiveScanNonUniform(double)
-define spir_func double @_Z22GroupFMaxNonUniformAMDiid(i32 %scope, i32 %groupOp, double %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret double 0.0
-}
-
-; GLSL: int64_t minInvocationsNonUniform(int64_t)
-;       int64_t minInvocationsInclusiveScanNonUniform(int64_t)
-;       int64_t minInvocationsExclusiveScanNonUniform(int64_t)
-define spir_func i64 @_Z22GroupSMaxNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
-}
-
-; GLSL: uint64_t minInvocationsNonUniform(uint64_t)
-;       uint64_t minInvocationsInclusiveScanNonUniform(uint64_t)
-;       uint64_t minInvocationsExclusiveScanNonUniform(uint64_t)
-define spir_func i64 @_Z22GroupUMaxNonUniformAMDiil(i32 %scope, i32 %groupOp, i64 %value)
-{
-    ; TODO: Support 64-bit subgroup arithmetic operations.
-    ret i64 0
 }
 
 ; GLSL: int/uint swizzleInvocations(int/uint, uvec4)
@@ -3987,6 +9962,7 @@ declare i32 @llvm.amdgcn.writelane(i32, i32, i32) #2
 declare i64 @llvm.amdgcn.icmp.i32(i32, i32, i32) #2
 declare i32 @llvm.amdgcn.mbcnt.lo(i32, i32) #1
 declare i32 @llvm.amdgcn.mbcnt.hi(i32, i32) #1
+declare i1 @llvm.amdgcn.ps.live() #1
 declare i64 @llvm.cttz.i64(i64, i1) #0
 declare i64 @llvm.ctlz.i64(i64, i1) #0
 declare i64 @llvm.ctpop.i64(i64) #0
@@ -3996,14 +9972,25 @@ declare float @llvm.amdgcn.cubema(float, float, float) #1
 declare float @llvm.amdgcn.cubetc(float, float, float) #1
 declare i64 @llvm.amdgcn.s.memtime() #0
 declare i32 @llvm.amdgcn.wwm.i32(i32) #1
+declare i64 @llvm.amdgcn.wwm.i64(i64) #1
+declare <2 x i32> @llvm.amdgcn.wwm.v2i32(<2 x i32>) #1
 declare i32 @llvm.amdgcn.set.inactive.i32(i32, i32) #2
-
+declare i64 @llvm.amdgcn.set.inactive.i64(i64, i64) #2
+declare <2 x i32> @llvm.amdgcn.set.inactive.v2i32(<2 x i32>, <2 x i32>) #2
+declare <3 x i32> @llvm.amdgcn.set.inactive.v3i32(<3 x i32>, <3 x i32>) #2
+declare <4 x i32> @llvm.amdgcn.set.inactive.v4i32(<4 x i32>, <4 x i32>) #2
 declare i32 @llpc.sminnum.i32(i32, i32) #0
 declare i32 @llpc.smaxnum.i32(i32, i32) #0
 declare i32 @llpc.uminnum.i32(i32, i32) #0
 declare i32 @llpc.umaxnum.i32(i32, i32) #0
+declare i64 @llpc.sminnum.i64(i64, i64) #0
+declare i64 @llpc.smaxnum.i64(i64, i64) #0
+declare i64 @llpc.uminnum.i64(i64, i64) #0
+declare i64 @llpc.umaxnum.i64(i64, i64) #0
 declare float @llvm.minnum.f32(float, float) #0
 declare float @llvm.maxnum.f32(float, float) #0
+declare double @llvm.minnum.f64(double, double) #0
+declare double @llvm.maxnum.f64(double, double) #0
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readnone }

@@ -31,11 +31,7 @@
 #define DEBUG_TYPE "llpc-code-gen-manager"
 
 #include "llvm/Bitcode/BitcodeWriter.h"
-#if XGL_LLVM_UPSTREAM == 1
 #include "llvm/CodeGen/CommandFlags.inc"
-#else
-#include "llvm/CodeGen/CommandFlags.def"
-#endif
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DiagnosticInfo.h"
 #include "llvm/IR/DiagnosticPrinter.h"

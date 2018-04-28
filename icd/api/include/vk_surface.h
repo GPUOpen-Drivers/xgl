@@ -64,6 +64,16 @@ public:
 protected:
     virtual ~Surface() {}
 
+    Surface(Instance*               pInstance,
+        Pal::OsDisplayHandle        osDisplayHandle,
+        const VkIcdSurfaceDisplay&  displaySurface)
+        :
+        m_displaySurface(displaySurface),
+        m_pInstance(pInstance),
+        m_osDisplayHandle(osDisplayHandle)
+    {
+    }
+
     Surface(Instance*           pInstance,
         Pal::OsDisplayHandle    osDisplayHandle,
         const VkIcdSurfaceXcb&  xcbSurface)
@@ -98,6 +108,7 @@ protected:
     {
         VkIcdSurfaceXcb     m_xcbSurface;
         VkIcdSurfaceXlib    m_xlibSurface;
+        VkIcdSurfaceDisplay m_displaySurface;
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         VkIcdSurfaceWayland m_waylandSurface;
 #endif

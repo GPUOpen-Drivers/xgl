@@ -168,6 +168,7 @@ Device::Device(
     uint32_t                            palDeviceCount,
     PhysicalDevice**                    pPhysicalDevices,
     Pal::IDevice**                      pPalDevices,
+    const DeviceBarrierPolicy&          barrierPolicy,
     const DeviceExtensions::Enabled&    enabledExtensions,
     const VkPhysicalDeviceFeatures*     pFeatures)
     :
@@ -177,7 +178,11 @@ Device::Device(
     m_supportedBarrierQueues(0),
     m_pPalQueueMemory(nullptr),
     m_internalMemMgr(this, pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
+#if defined(ICD_BUILD_APPPROFILE)
+    m_shaderOptimizer(this, pPhysicalDevices[DefaultDeviceIndex]),
+#endif
     m_renderStateCache(this),
+    m_barrierPolicy(barrierPolicy),
     m_enabledExtensions(enabledExtensions),
     m_dispatchTable(DispatchTable::Type::DEVICE, m_pInstance, this),
     m_pSqttMgr(nullptr)
@@ -205,6 +210,9 @@ Device::Device(
     m_allocatedCount = 0;
     m_maxAllocations = pPhysicalDevices[DefaultDeviceIndex]->GetLimits().maxMemoryAllocationCount;
 
+#ifdef ICD_BUILD_APPPROFILE
+    m_shaderOptimizer.Init();
+#endif
 }
 
 // =====================================================================================================================
@@ -428,10 +436,17 @@ VkResult Device::Create(
         // Ensure success - we have a PAL result here.
         if (palResult == Pal::Result::Success)
         {
+            // Create barrier policy for the device.
+            DeviceBarrierPolicy barrierPolicy(pPhysicalDevice,
+                                              pCreateInfo,
+                                              enabledDeviceExtensions);
+
+            // Construct API device object.
             VK_INIT_DISPATCHABLE(Device, pMemory, (
                 numDevices,
                 pPhysicalDevices,
                 pPalDevices,
+                barrierPolicy,
                 enabledDeviceExtensions,
                 pCreateInfo->pEnabledFeatures));
 

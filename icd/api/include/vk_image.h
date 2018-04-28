@@ -41,6 +41,8 @@
 #include "include/vk_memory.h"
 #include "include/vk_physical_device.h"
 
+#include "include/barrier_policy.h"
+
 #include "palCmdBuffer.h"
 #include "palQueue.h"
 
@@ -140,12 +142,6 @@ public:
     VkImageUsageFlags GetImageUsage() const
         { return m_imageUsage; }
 
-    uint32_t GetSupportedOutputCoherMask() const
-        { return m_outputCacheMask; }
-
-    uint32_t GetSupportedInputCoherMask() const
-        { return m_inputCacheMask; }
-
     uint32_t GetSupportedLayouts() const
         { return m_layoutUsageMask; }
 
@@ -234,6 +230,10 @@ public:
         uint32_t         queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED) const;
 
     bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
+
+    VK_INLINE const ImageBarrierPolicy& GetBarrierPolicy() const
+        { return m_barrierPolicy; }
+
 private:
     // SwapChain object needs to be able to instantiate API image objects for presentable images
     friend class SwapChain;
@@ -260,21 +260,22 @@ private:
     };
 
     Image(
-        Device*                 pDevice,
-        VkImageCreateFlags      flags,
-        Pal::IImage**           pPalImage,
-        Pal::IGpuMemory**       pPalMemory,
-        VkExtent3D              tileSize,
-        uint32_t                mipLevels,
-        uint32_t                arraySize,
-        VkFormat                imageFormat,
-        VkSampleCountFlagBits   imageSamples,
-        VkImageTiling           imageTiling,
-        VkImageUsageFlags       usage,
-        VkSharingMode           sharingMode,
-        uint32_t                concurrentQueueFlags,
-        ImageFlags              internalFlags,
-        Pal::PresentMode*       pPresentMode = nullptr);
+        Device*                     pDevice,
+        VkImageCreateFlags          flags,
+        Pal::IImage**               pPalImage,
+        Pal::IGpuMemory**           pPalMemory,
+        const ImageBarrierPolicy&   barrierPolicy,
+        VkExtent3D                  tileSize,
+        uint32_t                    mipLevels,
+        uint32_t                    arraySize,
+        VkFormat                    imageFormat,
+        VkSampleCountFlagBits       imageSamples,
+        VkImageTiling               imageTiling,
+        VkImageUsageFlags           usage,
+        VkSharingMode               sharingMode,
+        uint32_t                    concurrentQueueFlags,
+        ImageFlags                  internalFlags,
+        Pal::PresentMode*           pPresentMode = nullptr);
 
     void CalcBarrierUsage(
         VkImageUsageFlags usage,
@@ -328,10 +329,7 @@ private:
 
     uint32_t                m_layoutUsageMask;              // This is the maximum set of supported layouts
                                                             // calculated from enabled image usage.
-    uint32_t                m_outputCacheMask;              // This is the maximum set of supported output
-                                                            // caches this image can touch.
-    uint32_t                m_inputCacheMask;               // This is the maximum set of supported input
-                                                            // caches this image can touch.
+    ImageBarrierPolicy      m_barrierPolicy;                // Barrier policy to use for this image
 
     Pal::IGpuMemory* m_pSampleLocationsMetaDataMemory[MaxPalDevices]; // Bound image memory
 

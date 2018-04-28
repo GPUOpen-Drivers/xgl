@@ -33,6 +33,8 @@
 #include "include/vk_dispatch.h"
 #include "include/vk_utils.h"
 
+#include "include/barrier_policy.h"
+
 namespace Pal
 {
 
@@ -87,12 +89,6 @@ public:
     VkDeviceSize GetSize() const
         { return m_size; }
 
-    uint32_t GetSupportedOutputCoherMask() const
-        { return m_outputCacheMask; }
-
-    uint32_t GetSupportedInputCoherMask() const
-        { return m_inputCacheMask; }
-
     // We have to treat the buffer sparse if any of these flags are set
     static const VkBufferCreateFlags SparseEnablingFlags =
         VK_BUFFER_CREATE_SPARSE_BINDING_BIT |
@@ -102,6 +98,9 @@ public:
         { return (m_flags & SparseEnablingFlags) != 0; }
 
     bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
+
+    VK_INLINE const BufferBarrierPolicy& GetBarrierPolicy() const
+        { return m_barrierPolicy; }
 
 private:
 
@@ -124,12 +123,9 @@ private:
            VkBufferCreateFlags          flags,
            VkBufferUsageFlags           usage,
            Pal::IGpuMemory**            pGpuMemory,
+           const BufferBarrierPolicy&   barrierPolicy,
            VkDeviceSize                 size,
            BufferFlags                  internalFlags);
-
-    void CalcBarrierUsage(
-        const Device*      pDevice,
-        VkBufferUsageFlags usage);
 
     Pal::IGpuMemory*        m_pGpuMemory[MaxPalDevices];
     Pal::gpusize            m_gpuVirtAddr[MaxPalDevices];
@@ -141,10 +137,7 @@ private:
     Device* const           m_pDevice;
     VkBufferCreateFlags     m_flags;
     VkBufferUsageFlags      m_usage;
-    uint32_t                m_outputCacheMask;  // This is the maximum set of supported output caches this buffer can
-                                                // touch.
-    uint32_t                m_inputCacheMask;   // This is the maximum set of supported input caches this buffer can
-                                                // touch.
+    BufferBarrierPolicy     m_barrierPolicy;    // Barrier policy to use for this buffer
     BufferFlags             m_internalFlags;    // Flags describing the properties of this buffer
 };
 

@@ -148,7 +148,6 @@ constexpr AppProfilePatternEntry AppNameF1_2017 =
 
 constexpr AppProfilePatternEntry AppNameRiseOfTheTombra =
 {
-    //# AppName = "RiseOfTheTombra"
     PatternAppNameLower,
     {
         0xc9910bfa,

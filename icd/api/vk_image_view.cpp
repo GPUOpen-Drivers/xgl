@@ -317,7 +317,6 @@ VkResult ImageView::Create(
         if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead &&
             (pImage->GetImageSamples() > VK_SAMPLE_COUNT_1_BIT)    &&
             (imageInfo.usageFlags.shaderRead   != 0)               &&
-            (imageInfo.usageFlags.shaderWrite  == 0)               &&
             (imageInfo.usageFlags.depthStencil == 0)               &&
             ((memoryLayout.metadataSize + memoryLayout.metadataHeaderSize) > 0)) // Has metadata
         {

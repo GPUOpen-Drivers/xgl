@@ -1787,27 +1787,19 @@ SPIRVToLLVM::transValueWithoutDecoration(SPIRVValue *BV, Function *F,
     Src = widenBoolValue(Src, BB);
     auto Dst = transValue(BS->getDst(), F, BB);
 
-    // NOTE: This is to workaround a glslang bug. Bool variable defined
-    // in a structure, which acts as a block member, will cause mismatch
-    // load/store when we visit this bool variable. This issue exists in
-    // DOOM4 released version, we have to keep the workaround.
-    if (Dst->getType()->getPointerElementType() != Src->getType()) {
-      SI = transSPIRVBuiltinFromInst(BS, BB);
-    } else {
-      // NOTE: For those storage classes that will not involve memory
-      // operations, we clear "volatile" access mask.
-      bool IsVolatile = BS->SPIRVMemoryAccess::isVolatile();
-      SPIRVStorageClassKind StorageClass =
-        BS->getDst()->getType()->getPointerStorageClass();
-      if (StorageClass == StorageClassInput ||
-          StorageClass == StorageClassOutput ||
-          StorageClass == StorageClassPrivate ||
-          StorageClass == StorageClassFunction)
-        IsVolatile = false;
+    // NOTE: For those storage classes that will not involve memory
+    // operations, we clear "volatile" access mask.
+    bool IsVolatile = BS->SPIRVMemoryAccess::isVolatile();
+    SPIRVStorageClassKind StorageClass =
+      BS->getDst()->getType()->getPointerStorageClass();
+    if (StorageClass == StorageClassInput ||
+        StorageClass == StorageClassOutput ||
+        StorageClass == StorageClassPrivate ||
+        StorageClass == StorageClassFunction)
+      IsVolatile = false;
 
-      SI = new StoreInst(Src, Dst, IsVolatile,
-                         BS->SPIRVMemoryAccess::getAlignment(), BB);
-    }
+    SI = new StoreInst(Src, Dst, IsVolatile,
+                       BS->SPIRVMemoryAccess::getAlignment(), BB);
 
     if (BS->SPIRVMemoryAccess::isNonTemporal())
       transNonTemporalMetadata(SI);
@@ -4877,11 +4869,11 @@ Instruction *SPIRVToLLVM::transOCLRelational(SPIRVInstruction *I, BasicBlock *BB
 Type *SPIRVToLLVM::widenBoolType(Type *Ty) {
   if (auto ITy = dyn_cast<IntegerType>(Ty))
     if (ITy->getBitWidth() == 1)
-      return Type::getInt8Ty(*Context);
+      return Type::getInt32Ty(*Context);
   if (auto VTy = dyn_cast<VectorType>(Ty))
     if (auto ITy = dyn_cast<IntegerType>(VTy->getElementType()))
       if (ITy->getBitWidth() == 1)
-        return VectorType::get(Type::getInt8Ty(*Context), VTy->getNumElements());
+        return VectorType::get(Type::getInt32Ty(*Context), VTy->getNumElements());
   return Ty;
 }
 

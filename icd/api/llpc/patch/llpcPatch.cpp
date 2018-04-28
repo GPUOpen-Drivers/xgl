@@ -43,9 +43,7 @@
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Scalar.h"
-#if XGL_LLVM_UPSTREAM == 1
 #include "llvm/Transforms/Utils.h"
-#endif
 #include "llpcContext.h"
 #include "llpcInternal.h"
 #include "llpcPassDeadFuncRemove.h"

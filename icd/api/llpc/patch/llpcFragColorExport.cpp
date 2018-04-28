@@ -1696,15 +1696,15 @@ ExportFormat FragColorExport::ComputeExportFormat(
     GfxIpVersion gfxIp = m_pContext->GetGfxIpVersion();
 
     bool waCbNoLt16BitIntClamp = false;
-    if ((gfxIp.major == 6) || (gfxIp.major == 7))
+    if (gfxIp.major == 6)
     {
-        // NOTE: GFX6 and part of GFX7 hardware, the CB does not properly clamp its input if the shader
+        // NOTE: For GFX6 hardware, the CB does not properly clamp its input if the shader
         // export format is "UINT16" or "SINT16" and the CB format is less than 16 bits per channel.
-        waCbNoLt16BitIntClamp = false;
+        waCbNoLt16BitIntClamp = true;
     }
 
     bool gfx8RbPlusEnable = false;
-    if ((gfxIp.major == 8) || (gfxIp.minor == 1))
+    if ((gfxIp.major == 8) && (gfxIp.minor == 1))
     {
         gfx8RbPlusEnable = true;
     }

@@ -42,69 +42,12 @@ namespace vk
 {
 
 // =====================================================================================================================
-// This function computes certain "maximum" cache coherency masks that this buffer can possibly affect
-// based on its declared usage bits at create time.  These masks come in handy when trying to decide optimal PAL
-// caches coherency flags during a pipeline barrier.
-void Buffer::CalcBarrierUsage(
-    const Device*      pDevice,
-    VkBufferUsageFlags usage)
-{
-    m_inputCacheMask  = 0;
-    m_outputCacheMask = Pal::CoherCpu | Pal::CoherMemory;   // Always allow CPU writes and memory writes
-
-    if (usage & VK_BUFFER_USAGE_TRANSFER_SRC_BIT)
-    {
-        m_inputCacheMask |= Pal::CoherCopy;
-    }
-
-    if (usage & VK_BUFFER_USAGE_TRANSFER_DST_BIT)
-    {
-        // Also need Pal::CoherShader here as vkCmdCopyQueryPoolResults uses a compute shader defined in the Vulkan
-        // API layer when used with timestamp queries.
-        m_outputCacheMask |= Pal::CoherCopy | Pal::CoherShader;
-
-        // Buffer markers fall under the same PAL coherency rules as timestamp writes
-        if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_BUFFER_MARKER))
-        {
-            m_inputCacheMask  |= Pal::CoherTimestamp;
-            m_outputCacheMask |= Pal::CoherTimestamp;
-        }
-    }
-
-    if (usage & (VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT | VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT))
-    {
-        m_inputCacheMask |= Pal::CoherShader;
-    }
-
-    if (usage & (VK_BUFFER_USAGE_STORAGE_BUFFER_BIT | VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT))
-    {
-        m_outputCacheMask |= Pal::CoherShader;
-        m_inputCacheMask  |= Pal::CoherShader;
-    }
-
-    if (usage & VK_BUFFER_USAGE_INDEX_BUFFER_BIT)
-    {
-        m_inputCacheMask |= Pal::CoherIndexData;
-    }
-
-    if (usage & VK_BUFFER_USAGE_VERTEX_BUFFER_BIT)
-    {
-        m_inputCacheMask |= Pal::CoherShader;
-    }
-
-    if (usage & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT)
-    {
-        m_inputCacheMask |= Pal::CoherIndirectArgs;
-    }
-
-}
-
-// =====================================================================================================================
 Buffer::Buffer(
     Device*                     pDevice,
     VkBufferCreateFlags         flags,
     VkBufferUsageFlags          usage,
     Pal::IGpuMemory**           pGpuMemory,
+    const BufferBarrierPolicy&  barrierPolicy,
     VkDeviceSize                size,
     BufferFlags                 internalFlags)
     :
@@ -113,7 +56,8 @@ Buffer::Buffer(
     m_memOffset(0),
     m_pDevice(pDevice),
     m_flags(flags),
-    m_usage(usage)
+    m_usage(usage),
+    m_barrierPolicy(barrierPolicy)
 {
     m_internalFlags.u32All = internalFlags.u32All;
 
@@ -128,8 +72,6 @@ Buffer::Buffer(
             m_gpuVirtAddr[deviceIdx] = pGpuMemory[deviceIdx]->Desc().gpuVirtAddr;
         }
     }
-
-    CalcBarrierUsage(pDevice, usage);
 }
 
 // =====================================================================================================================
@@ -265,10 +207,16 @@ VkResult Buffer::Create(
     {
         bufferFlags.internalMemBound = isSparse;
 
+        // Create barrier policy for the buffer.
+        BufferBarrierPolicy barrierPolicy(pDevice,
+                                          pCreateInfo->usage);
+
+        // Construct API buffer object.
         VK_PLACEMENT_NEW (pMemory) Buffer (pDevice,
                                            pCreateInfo->flags,
                                            pCreateInfo->usage,
                                            pGpuMemory,
+                                           barrierPolicy,
                                            size,
                                            bufferFlags);
 

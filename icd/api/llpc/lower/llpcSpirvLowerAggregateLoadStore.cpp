@@ -131,36 +131,6 @@ void SpirvLowerAggregateLoadStore::visitStoreInst(
 }
 
 // =====================================================================================================================
-// Visits "call" instruction.
-void SpirvLowerAggregateLoadStore::visitCallInst(
-    CallInst& callInst) // [in] "Call" instruction
-{
-    auto pCallee = callInst.getCalledFunction();
-    if (pCallee == nullptr)
-    {
-        return;
-    }
-
-    auto mangledName = pCallee->getName();
-
-    if (mangledName.find("_Z5Store") == 0)
-    {
-        Value* pStoreValue  = callInst.getOperand(0);
-        Value* pStoreDest = callInst.getOperand(1);
-
-        // NOTE: Here, we expand "store" call, which might encounters type mismatch. It is a glslang bug.
-        if (pStoreDest->getType()->getPointerAddressSpace() == SPIRAS_Private)
-        {
-            auto pStoreTy = pStoreDest->getType()->getPointerElementType();
-
-            std::vector<uint32_t> idxs;
-            ExpandStoreInst(pStoreValue, pStoreDest, pStoreTy, idxs, &callInst);
-            m_storeInsts.insert(&callInst);
-        }
-    }
-}
-
-// =====================================================================================================================
 // Expands the "store" instruction operating on aggregate type to several basic "store" instructions operating on
 // vector or scalar type.
 void SpirvLowerAggregateLoadStore::ExpandStoreInst(
@@ -195,53 +165,19 @@ void SpirvLowerAggregateLoadStore::ExpandStoreInst(
         Value* pElemValue = nullptr;
         Value* pElemPtr = nullptr;
 
-        if (idxStack.empty())
+        pElemValue = ExtractValueInst::Create(pStoreValue, idxStack, "", pInsertPos);
+        std::vector<Value*> idxs;
+        idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
+        for (uint32_t i = 0, idxCount = idxStack.size(); i < idxCount; ++i)
         {
-            pElemValue = pStoreValue;
-            pElemPtr = pStorePtr;
-        }
-        else
-        {
-            pElemValue = ExtractValueInst::Create(pStoreValue, idxStack, "", pInsertPos);
-            std::vector<Value*> idxs;
-            idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), 0));
-            for (uint32_t i = 0, idxCount = idxStack.size(); i < idxCount; ++i)
-            {
-                idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), idxStack[i]));
-            }
-
-            pElemPtr = GetElementPtrInst::CreateInBounds(pStorePtr, idxs,"", pInsertPos);
+            idxs.push_back(ConstantInt::get(m_pContext->Int32Ty(), idxStack[i]));
         }
 
-        if (pElemPtr->getType()->getPointerElementType() != pElemValue->getType())
-        {
-            // Type mismatch (only occurs for the store of uint32 <-> uint8)
-            auto pElemValueTy = pElemValue->getType();
-            auto pElemPointeeTy = pElemPtr->getType()->getPointerElementType();
-            LLPC_ASSERT((pElemValueTy->getScalarType() == m_pContext->Int8Ty() &&
-                         pElemPointeeTy->getScalarType() == m_pContext->Int32Ty())||
-                        (pElemPointeeTy->getScalarType() == m_pContext->Int8Ty() &&
-                         pElemValueTy->getScalarType() == m_pContext->Int32Ty()));
+        pElemPtr = GetElementPtrInst::CreateInBounds(pStorePtr, idxs,"", pInsertPos);
 
-            if (pElemValueTy->getScalarType() == m_pContext->Int8Ty())
-            {
-                // uint8 -> uint32
-                pElemValue = BitCastInst::Create(Instruction::ZExt, pElemValue, pElemPointeeTy, "", pInsertPos);
-                new StoreInst(pElemValue, pElemPtr, pInsertPos);
-            }
-            else
-            {
-                // uint32 -> uint8
-                auto pZero = pElemPointeeTy->isVectorTy() ? ConstantAggregateZero::get(pElemPointeeTy) :
-                                                     ConstantInt::get(m_pContext->Int32Ty(), 0);
-                pElemValue = BitCastInst::Create(Instruction::Trunc, pElemValue, pElemPointeeTy,"", pInsertPos);
-                new StoreInst(pElemValue, pElemPtr, pInsertPos);
-            }
-        }
-        else
-        {
-            new StoreInst(pElemValue, pElemPtr, pInsertPos);
-        }
+        LLPC_ASSERT(pElemPtr->getType()->getPointerElementType() != pElemValue->getType());
+
+        new StoreInst(pElemValue, pElemPtr, pInsertPos);
     }
 }
 

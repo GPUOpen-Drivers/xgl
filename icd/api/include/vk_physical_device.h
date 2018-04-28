@@ -433,8 +433,9 @@ protected:
     RuntimeSettings                  m_settings;
     VkPhysicalDeviceLimits           m_limits;
     VkFormatProperties               m_formatFeaturesTable[VK_SUPPORTED_FORMAT_COUNT];
-    uint16_t                         m_formatFeatureMsaaTarget[(VK_SUPPORTED_FORMAT_COUNT + (sizeof(uint16_t) << 3) - 1) /
-                                                               (sizeof(uint16_t) << 3)];
+    uint32_t                         m_formatFeatureMsaaTarget[Util::RoundUpQuotient(
+                                                                    static_cast<uint32_t>(VK_SUPPORTED_FORMAT_COUNT),
+                                                                    static_cast<uint32_t>(sizeof(uint32_t) << 3))];
     uint32_t                         m_vrHighPrioritySubEngineIndex;
     uint32_t                         m_queueFamilyCount;
     struct
