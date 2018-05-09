@@ -319,7 +319,7 @@ endif()
 
 add_custom_target(
     RunHeapGlslOpEmuLibGenerator
-    COMMAND ${PYTHON_CMD} ${GEN_GLSL_OP_EMU_LIB_SCRIPT} ${LLVM_BIN_DIR}  ${LLVM_BIN_DIR}  ${BUILD_OS}
+    COMMAND ${PYTHON_CMD} ${GEN_GLSL_OP_EMU_LIB_SCRIPT} ${LLVM_BIN_DIR}  ${LLVM_BIN_DIR}  ${BUILD_OS} False
     DEPENDS ${GEN_OP_EMU_LIB_FILES}
     COMMENT "Checking if re-generation is required for g_llpcGlslOpEmuLib.h"
 )

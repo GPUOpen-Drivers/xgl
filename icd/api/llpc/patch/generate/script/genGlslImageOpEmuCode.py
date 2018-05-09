@@ -27,6 +27,8 @@ import os
 import sys
 import string
 
+ENABLE_DIM_AWARE_IMAGE_INTRINSIC = False
+
 ### Global definitions
 # Contains LLVM function attributes
 LLVM_ATTRIBUTES = \
@@ -67,15 +69,6 @@ LLPC_DESCRIPTOR_LOAD_FMASK                  = "llpc.descriptor.load.fmask"
 
 LLPC_PATCH_IMAGE_READWRITEATOMIC_DESCRIPTOR_CUBE = "llpc.patch.image.readwriteatomic.descriptor.cube"
 
-# LLVM image load/store intrinsic flags, meaning of these flags are:
-# glc, slc, lwe
-LLVM_IMAGE_INTRINSIC_LOADSTORE_FLAGS         = "i1 0, i1 0, i1 0"
-LLVM_IMAGE_INTRINSIC_LOADSTORE_FLAGS_DYNAMIC = "i1 %glc, i1 %slc, i1 0"
-# LLVM buffer load/store intrinsic flags, meaning of these flags are:
-# glc, slc
-LLVM_BUFFER_INTRINSIC_LOADSTORE_FLAGS         = "i1 0, i1 0"
-LLVM_BUFFER_INTRINSIC_LOADSTORE_FLAGS_DYNAMIC = "i1 %glc, i1 %slc"
-
 # GFX level
 GFX6 = 6.0
 GFX9 = 9.0
@@ -107,6 +100,45 @@ def rFind(dict, v):
             return i[0]
     return "rFind() find nothing"
 
+# Static variable names
+class VarNames:
+    sampler          = "%sampler"
+    resource         = "%resource"
+    patchedResource  = "%patchedResource"
+    fmask            = "%fmask"
+    samplerSet       = "%samplerDescSet"
+    samplerBinding   = "%samplerBinding"
+    samplerIndex     = "%samplerIdx"
+    resourceSet      = "%resourceDescSet"
+    resourceBinding  = "%resourceBinding"
+    resourceIndex    = "%resourceIdx"
+    coord            = "%coord"
+    texel            = "%texel"
+    comp             = "%comp"
+    dRef             = "%dRef"
+    proj             = "%proj"
+    bias             = "%bias"
+    lod              = "%lod"
+    gradX            = "%gradX"
+    gradY            = "%gradY"
+    offset           = "%offset"
+    constOffsets     = "%constOffsets"
+    sample           = "%sample"
+    minlod           = "%minlod"
+    atomicData       = "%atomicData"
+    atomicComparator = "%atomicComparator"
+    glc              = "%glc"
+    slc              = "%slc"
+
+# LLVM image load/store intrinsic flags, meaning of these flags are:
+# glc, slc, lwe
+LLVM_IMAGE_INTRINSIC_LOADSTORE_FLAGS         = "i1 0, i1 0, i1 0"
+LLVM_IMAGE_INTRINSIC_LOADSTORE_FLAGS_DYNAMIC = "i1 %s, i1 %s, i1 0" % (VarNames.glc, VarNames.slc)
+# LLVM buffer load/store intrinsic flags, meaning of these flags are:
+# glc, slc
+LLVM_BUFFER_INTRINSIC_LOADSTORE_FLAGS         = "i1 0, i1 0"
+LLVM_BUFFER_INTRINSIC_LOADSTORE_FLAGS_DYNAMIC = "i1 %s, i1 %s" % (VarNames.glc, VarNames.slc)
+
 # Enums and corresponding name map
 class SpirvDim:
     Dim1D          = 0
@@ -119,6 +151,7 @@ class SpirvDim:
     Undef          = 7
 SPIRV_DIM_DICT = setupClassNameToAttrMap(SpirvDim)
 
+# Dimension name used in SPIRV
 class SpirvDimToCoordNum:
     Dim1D          = 1
     Dim2D          = 2
@@ -128,6 +161,17 @@ class SpirvDimToCoordNum:
     DimBuffer      = 1
     DimSubpassData = 2
 SPIRV_DIM_TO_COORD_NUM_DICT = setupClassNameToAttrMap(SpirvDimToCoordNum)
+
+# Dimension name used in AMDGPU backend
+class AMDGPUDimName:
+    Dim1D          = "1d"
+    Dim2D          = "2d"
+    Dim3D          = "3d"
+    DimCube        = "cube"
+    Dim1DArray     = "1darray"
+    Dim2DArray     = "2darray"
+    Dim2DMsaa      = "2dmsaa"
+    Dim2DArrayMsaa = "2darraymsaa"
 
 class SpirvImageOpKind:
     sample              = 0
@@ -186,32 +230,6 @@ class SpirvSampledType:
     f16         = 3
 SPIRV_SAMPLED_TYPE_DICT = setupClassNameToAttrMap(SpirvSampledType)
 
-class VarNames:
-    sampler          = "%sampler"
-    resource         = "%resource"
-    fmask            = "%fmask"
-    samplerSet       = "%samplerDescSet"
-    samplerBinding   = "%samplerBinding"
-    samplerIndex     = "%samplerIdx"
-    resourceSet      = "%resourceDescSet"
-    resourceBinding  = "%resourceBinding"
-    resourceIndex    = "%resourceIdx"
-    coord            = "%coord"
-    texel            = "%texel"
-    comp             = "%comp"
-    dRef             = "%dRef"
-    proj             = "%proj"
-    bias             = "%bias"
-    lod              = "%lod"
-    gradX            = "%gradX"
-    gradY            = "%gradY"
-    offset           = "%offset"
-    constOffsets     = "%constOffsets"
-    sample           = "%sample"
-    minlod           = "%minlod"
-    atomicData       = "%atomicData"
-    atomicComparator = "%atomicComparator"
-
 # Helper functions (internally used)
 LLPC_TRANSFORM_CUBE_GRAD = "llpc.image.transformCubeGrad"
 
@@ -261,6 +279,7 @@ class FuncDef(object):
         self._cubeMa            = other._cubeMa
         self._cubeId            = other._cubeId
         self._atomicData        = other._atomicData
+        self._resource          = other._resource
 
         self._supportLzOptimization    = other._supportLzOptimization
         self._supportSparse     = other._supportSparse
@@ -304,6 +323,7 @@ class FuncDef(object):
         self._cubeMa            = FuncDef.INVALID_VAR
         self._cubeId            = FuncDef.INVALID_VAR
         self._atomicData        = FuncDef.INVALID_VAR
+        self._resource          = VarNames.resource
 
         # For zero-LOD optimization, will generate 2 version of function, a lz optimized version which uses
         # zero-LOD instruction, and a normal version uses lod instruction.
@@ -475,7 +495,10 @@ class CodeGen(FuncDef):
             if self.isAtomicOp():
                 intrinGen = ImageAtomicGen(self)
             elif self._opKind == SpirvImageOpKind.read or self._opKind == SpirvImageOpKind.fetch:
-                intrinGen = ImageLoadGen(self)
+                if ENABLE_DIM_AWARE_IMAGE_INTRINSIC:
+                    intrinGen = DimAwareImageLoadGen(self)
+                else:
+                    intrinGen = ImageLoadGen(self)
             elif self._opKind == SpirvImageOpKind.write:
                 intrinGen = ImageStoreGen(self)
             elif self._opKind == SpirvImageOpKind.sample or self._opKind == SpirvImageOpKind.gather or \
@@ -633,10 +656,10 @@ class CodeGen(FuncDef):
             params.append("i32 %s" % (VarNames.atomicComparator))
 
         if self.isAtomicOp():
-            params.append("i1 %slc")
+            params.append("i1 %s" % (VarNames.slc))
         elif self._opKind == SpirvImageOpKind.read or self._opKind == SpirvImageOpKind.write:
-            params.append("i1 %glc")
-            params.append("i1 %slc")
+            params.append("i1 %s" % (VarNames.glc))
+            params.append("i1 %s" % (VarNames.slc))
 
         # imageCallMeta isn't used by generated code, it is for image patch pass
         params.append("i32 %imageCallMeta")
@@ -1044,8 +1067,10 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
         fmaskDesc       = "<8 x i32> %s," % (VarNames.fmask)
         fmaskVal        = self.acquireLocalVar()
         flags           = LLVM_IMAGE_INTRINSIC_LOADSTORE_FLAGS + ", i1 0"
-        loadFmask       = "    %s = call <4 x float> @llvm.amdgcn.image.load.v4f32.v4i32.v8i32(%s %s, %s i32 15, %s)\n" % \
+        funcName        = "llvm.amdgcn.image.load.v4f32.v4i32.v8i32"
+        loadFmask       = "    %s = call <4 x float> @%s(%s %s, %s i32 15, %s)\n" % \
                       (fmaskVal, \
+                       funcName, \
                        vaddrRegType, \
                        vaddrReg, \
                        fmaskDesc, \
@@ -1054,6 +1079,13 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
         temp        = self.acquireLocalVar()
         bitcast     = "    %s = bitcast <4 x float> %s to <4 x i32>\n" % (temp, fmaskVal)
         irOut.write(bitcast)
+
+        if not hasLlvmDecl(funcName):
+            # Adds LLVM declaration for this function
+            funcExternalDecl = "declare <4 x float> @%s(<4 x i32>, <8 x i32>, i32, i1, i1, i1, i1) %s\n" % \
+                               (funcName, self._attr)
+            addLlvmDecl(funcName, funcExternalDecl)
+
         return temp
 
     # Generates return value for F-mask only fetch.
@@ -1348,6 +1380,65 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
         else:
             return LITERAL_INT_ZERO
 
+    # Gets dimension name used in AMDGPU backend, it's for dimension awared image instrinsics
+    def getDimAwareDimName(self):
+        dimName = ""
+        if self._dim == SpirvDim.Dim1D:
+            dimName = AMDGPUDimName.Dim1D
+        elif self._dim == SpirvDim.Dim2D:
+            dimName = AMDGPUDimName.Dim2D
+        elif self._dim == SpirvDim.Dim3D:
+            dimName = AMDGPUDimName.Dim3D
+        elif self._dim == SpirvDim.DimCube:
+            dimName = AMDGPUDimName.DimCube
+        elif self._dim == SpirvDim.DimRect:
+            dimName = AMDGPUDimName.Dim2D
+        elif self._dim == SpirvDim.DimSubpassData:
+            dimName = AMDGPUDimName.Dim2D
+
+        if self._arrayed:
+            assert self._dim != SpirvDim.DimRect
+            assert self._dim != SpirvDim.Dim3D
+
+            if self._dim != SpirvDim.DimCube:
+                dimName += "array"
+
+        if self._hasSample:
+            assert self._dim == SpirvDim.Dim2D or self._dim == SpirvDim.DimSubpassData
+            dimName += "msaa"
+
+        return "." + dimName
+
+    # Gets TFE bit and LWE bit
+    def getTfeLwe(self, irOut):
+        # TODO: Add TFE and LWE support, not supported in AMDGPU backend yet
+        return "0"
+
+    # Gets TFE bit and LWE bit
+    def getGlcSlc(self, irOut):
+        retVal = "0"
+        if self._opKind == SpirvImageOpKind.read or self._opKind == SpirvImageOpKind.write:
+            # GLC bit and SLC bit are packed into one i32 value
+            # GLC: bit0
+            # SLC: bit1
+            glc = self.acquireLocalVar()
+            irZExt = "    %s = zext i1 %s to i32\n" % (glc, VarNames.glc)
+            irOut.write(irZExt)
+
+            slc = self.acquireLocalVar()
+            irZExt = "    %s = zext i1 %s to i32\n" % (slc, VarNames.slc)
+            irOut.write(irZExt)
+
+            slcShifted = self.acquireLocalVar()
+            irShl  = "    %s = shl i32 %s, 1\n" % (slcShifted, slc)
+            irOut.write(irShl)
+
+            retVal = self.acquireLocalVar()
+            irOr   = "    %s = or i32 %s, %s\n" % (retVal, slcShifted, glc)
+            irOut.write(irOr)
+
+        return retVal
+
 # Represents buffer atomic intrinsic based code generation.
 class BufferAtomicGen(CodeGen):
     def __init__(self, codeGenBase):
@@ -1472,7 +1563,7 @@ class ImageAtomicGen(CodeGen):
 
         resourceName = VarNames.resource;
         if self._dim == SpirvDim.DimCube:
-            resourceName = "%patchedResource"
+            resourceName = VarNames.patchedResource
             irPatchCall = "    %s = call <8 x i32> @%s(<8 x i32> %s)\n" \
                 % (resourceName,
                    LLPC_PATCH_IMAGE_READWRITEATOMIC_DESCRIPTOR_CUBE,
@@ -1676,7 +1767,7 @@ class ImageLoadGen(CodeGen):
 
         resourceName = VarNames.resource;
         if self._dim == SpirvDim.DimCube:
-            resourceName = "%patchedResource"
+            resourceName = VarNames.patchedResource
             irPatchCall = "    %s = call <8 x i32> @%s(<8 x i32> %s)\n" \
                 % (resourceName,
                    LLPC_PATCH_IMAGE_READWRITEATOMIC_DESCRIPTOR_CUBE,
@@ -1727,6 +1818,144 @@ class ImageLoadGen(CodeGen):
         return funcName
         pass
 
+# Represents dimension aware image load intrinsic based code generation.
+class DimAwareImageLoadGen(CodeGen):
+    def __init__(self, codeGenBase):
+        super(DimAwareImageLoadGen, self).__init__(codeGenBase, codeGenBase._gfxLevel)
+        pass
+
+    # Generates call to amdgcn intrinsic function.
+    def genIntrinsicCall(self, irOut):
+        assert self._dim != SpirvDim.DimBuffer
+        assert self._opKind == SpirvImageOpKind.read or self._opKind == SpirvImageOpKind.fetch
+
+        if self._dim == SpirvDim.DimCube:
+            self._resource = VarNames.patchedResource
+            irPatchCall = "    %s = call <8 x i32> @%s(<8 x i32> %s)\n" \
+                % (self._resource,
+                   LLPC_PATCH_IMAGE_READWRITEATOMIC_DESCRIPTOR_CUBE,
+                   VarNames.resource)
+            irOut.write(irPatchCall)
+
+        # Process image load, fetch
+        retType         = self.getBackendRetType()
+        retVal          = FuncDef.INVALID_VAR
+        intrinsicName   = self.getIntrinsicName()
+        intrinsicParams = self.getIntrinsicParam(False, irOut)
+
+        retVal      = self.acquireLocalVar()
+        irCall = "    %s = call %s @%s(%s)\n" \
+            % (retVal,
+               retType,
+               intrinsicName,
+               intrinsicParams)
+        irOut.write(irCall)
+
+        retVal = self.genCastReturnValToSampledType(retVal, irOut)
+
+        return retVal
+
+    # Gets image load intrinsic parameters
+    def getIntrinsicParam(self, paramTypeOnly, irOut):
+        # DMask
+        if paramTypeOnly:
+            params = "i32"
+        else:
+            params = "i32 15"
+
+        # Coordinates
+        if self._dim == SpirvDim.Dim1D:
+            if paramTypeOnly:
+                params += ", i32"
+            else:
+                params += ", i32 %s" % (self._coordXYZW[0])
+        elif self._dim == SpirvDim.Dim2D or self._dim == SpirvDim.DimRect or self._dim == SpirvDim.DimSubpassData:
+            if paramTypeOnly:
+                params += ", i32, i32"
+            else:
+                params += ", i32 %s, i32 %s" % (self._coordXYZW[0], self._coordXYZW[1])
+        if self._dim == SpirvDim.Dim3D or self._dim == SpirvDim.DimCube:
+            if paramTypeOnly:
+                params += ", i32, i32, i32"
+            else:
+                params += ", i32 %s, i32 %s, i32 %s" % (self._coordXYZW[0], self._coordXYZW[1], self._coordXYZW[2])
+
+        # Array slice
+        if self._arrayed:
+            assert self._dim != SpirvDim.Dim3D
+            assert self._dim != SpirvDim.DimRect
+
+            if self._dim != SpirvDim.DimCube:
+                if paramTypeOnly:
+                    params += ", i32"
+                else:
+                    arrayIndex = self.getCoordNumComponents(False, False, False)
+                    params += ", i32 %s" % (self._coordXYZW[arrayIndex])
+
+        # Lod
+        if self._hasLod:
+            if paramTypeOnly:
+                params += ", i32"
+            else:
+                params += ", i32 %s" % (self._lod)
+
+        # Sample ID
+        if self._hasSample:
+            assert self._dim == SpirvDim.Dim2D or self._dim == SpirvDim.DimSubpassData
+            if paramTypeOnly:
+                params += ", i32"
+            else:
+                params += ", i32 %s" % (self._sample)
+
+        # Rsrc
+        if paramTypeOnly:
+            params += ", <8 x i32>"
+        else:
+            params += ", <8 x i32> %s" % (self._resource)
+
+        # TFE and LWE bit
+        if paramTypeOnly:
+            params += ", i32"
+        else:
+            tfeLwe = self.getTfeLwe(irOut)
+            params += ", i32 %s" % (tfeLwe)
+
+        # GLC and SLC bit
+        if paramTypeOnly:
+            params += ", i32"
+        else:
+            glcSlc = self.getGlcSlc(irOut)
+            params += ", i32 %s" % (glcSlc)
+
+        return params
+
+    # Gets image load intrinsic function name
+    def getIntrinsicName(self):
+        funcName = "llvm.amdgcn.image.load"
+
+        if self._hasLod:
+            funcName += ".mip"
+
+        funcName += self.getDimAwareDimName()
+
+        if self._sampledType == SpirvSampledType.f16:
+            funcName += ".v4f16"
+        else:
+            funcName += ".v4f32"
+
+        funcName += ".i32"
+
+        if not hasLlvmDecl(funcName):
+            # Adds LLVM declaration for this function
+            if self._opKind != SpirvImageOpKind.write:
+                params = self.getIntrinsicParam(True, None)
+                funcExternalDecl = "declare %s @%s(%s) %s\n" % \
+                                   (self.getBackendRetType(), funcName, params, \
+                                    self._attr)
+            addLlvmDecl(funcName, funcExternalDecl)
+        return funcName
+        pass
+
 # Represents image store intrinsic based code generation.
 class ImageStoreGen(CodeGen):
     def __init__(self, codeGenBase):
@@ -1747,7 +1976,7 @@ class ImageStoreGen(CodeGen):
         flag = LLVM_IMAGE_INTRINSIC_LOADSTORE_FLAGS_DYNAMIC + self.getDAFlag()
         resourceName = VarNames.resource;
         if self._dim == SpirvDim.DimCube:
-            resourceName = "%patchedResource"
+            resourceName = VarNames.patchedResource
             irPatchCall = "    %s = call <8 x i32> @%s(<8 x i32> %s)\n" \
                 % (resourceName,
                    LLPC_PATCH_IMAGE_READWRITEATOMIC_DESCRIPTOR_CUBE,
@@ -1821,13 +2050,13 @@ class ImageSampleGen(CodeGen):
             # Patch descriptor for gather
             if self._gfxLevel < GFX9:
                 if self._sampledType == SpirvSampledType.i32:
-                    resourceName = "%patchedResource"
+                    resourceName = VarNames.patchedResource
                     irPatchCall = "    %s = call <8 x i32> @llpc.patch.image.gather.descriptor.u32(<8 x i32> %s)\n" \
                         % (resourceName,
                            VarNames.resource)
                     irOut.write(irPatchCall)
                 elif self._sampledType == SpirvSampledType.u32:
-                    resourceName = "%patchedResource"
+                    resourceName = VarNames.patchedResource
                     irPatchCall = "    %s = call <8 x i32> @llpc.patch.image.gather.descriptor.u32(<8 x i32> %s)\n" \
                         % (resourceName,
                            VarNames.resource)
@@ -2297,7 +2526,9 @@ def initLlvmDecls(gfxLevel):
         addLlvmDecl("llpc.patch.image.gather.texel.i32",
                     "declare <4 x float> @llpc.patch.image.gather.texel.i32(<8 x i32>, <4 x float>) #0\n")
 
-def main(inFile, outFile, gfxLevelStr):
+def main(inFile, outFile, gfxLevelStr, dimAwareImageIntrinsic):
+    global ENABLE_DIM_AWARE_IMAGE_INTRINSIC
+    ENABLE_DIM_AWARE_IMAGE_INTRINSIC = dimAwareImageIntrinsic == "True" and True or False
     gfxLevel = float(gfxLevelStr[3:])
     irOut = open(outFile, 'wt')
 
@@ -2313,4 +2544,4 @@ def main(inFile, outFile, gfxLevelStr):
     irOut.close()
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    main(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])

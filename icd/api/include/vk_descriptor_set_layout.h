@@ -62,6 +62,7 @@ public:
     struct BindingInfo
     {
         VkDescriptorSetLayoutBinding info;  // Vulkan binding information
+        uint32_t bindingFlags;              // Binding flags for descriptor binding
         BindingSectionInfo  sta;            // Information specific to the static section of the descriptor binding
         BindingSectionInfo  dyn;            // Information specific to the dynamic section of the descriptor binding
         BindingSectionInfo  imm;            // Information specific to the immutable section of the descriptor binding

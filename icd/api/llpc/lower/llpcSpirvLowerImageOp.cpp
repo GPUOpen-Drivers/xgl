@@ -179,6 +179,9 @@ void SpirvLowerImageOp::visitCallInst(
                                    &pMemoryQualifier);
 
                 m_imageLoads.insert(pLoadCall);
+
+                m_imageLoadOperands.insert(pLoadResource);
+                m_imageLoadOperands.insert(pLoadSampler);
             }
             else if (mangledName.find("_Z5Image") == 0)
             {

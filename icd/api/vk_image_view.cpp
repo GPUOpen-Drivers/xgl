@@ -95,8 +95,6 @@ void ImageView::BuildImageSrds(
     info.minLod       = minLod;
 
     // Create all possible SRD variants
-    VK_ASSERT(pImage->GetSupportedLayouts() & (Pal::LayoutShaderRead | Pal::LayoutShaderWrite));
-
     static_assert(SrdCount == 2, "More SRD types were added; need to create them below");
 
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
@@ -398,7 +396,7 @@ VkResult ImageView::Create(
                        pImage->GetMipLevels(),
                        pImage->GetArraySize(),
                        palRanges,
-                       palRangeCount);
+                       &palRangeCount);
 
     Pal::Result result = Pal::Result::Success;
 
@@ -441,7 +439,7 @@ VkResult ImageView::Create(
     // Build the color target view if needed
     if ((colorViewSegmentSize > 0) && (result == Pal::Result::Success))
     {
-        VK_ASSERT(pImage->GetSupportedLayouts() & Pal::LayoutColorTarget);
+        VK_ASSERT(pImage->GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutColorTarget);
 
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {

@@ -175,7 +175,6 @@ Device::Device(
     m_pInstance(pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_settings(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings()),
     m_palDeviceCount(palDeviceCount),
-    m_supportedBarrierQueues(0),
     m_pPalQueueMemory(nullptr),
     m_internalMemMgr(this, pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
 #if defined(ICD_BUILD_APPPROFILE)
@@ -723,17 +722,6 @@ VkResult Device::Initialize(
     m_properties.palSizes.depthStencilView = PalDevice(DefaultDeviceIndex)->GetDepthStencilViewSize(nullptr);
 
     m_properties.connectThroughThunderBolt = (deviceProps.pciProperties.flags.gpuConnectedViaThunderbolt) ? true : false;
-
-    m_supportedBarrierQueues = 0;
-
-    for (uint32_t queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; ++queueFamilyIndex)
-    {
-        if (m_pQueues[queueFamilyIndex][0] != nullptr)
-        {
-            m_supportedBarrierQueues |=
-                            VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex);
-        }
-    }
 
     if (result == VK_SUCCESS)
     {
@@ -2586,6 +2574,16 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
             case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_SUPPORT:
             {
                 pSupport->supported = VK_TRUE;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_LAYOUT_SUPPORT_EXT:
+            {
+                VkDescriptorSetVariableDescriptorCountLayoutSupportEXT * pDescCountLayoutSupport =
+                    reinterpret_cast<VkDescriptorSetVariableDescriptorCountLayoutSupportEXT *>(pHeader);
+
+                pDescCountLayoutSupport->maxVariableDescriptorCount = UINT_MAX;
+
                 break;
             }
 

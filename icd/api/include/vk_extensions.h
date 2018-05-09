@@ -254,6 +254,7 @@ public:
         EXT_DEPTH_RANGE_UNRESTRICTED,
         AMD_SHADER_CORE_PROPERTIES,
         EXT_QUEUE_FAMILY_FOREIGN,
+        EXT_DESCRIPTOR_INDEXING,
 
         Count
     };

@@ -293,20 +293,8 @@ VkResult SwapChain::Create(
 
     // Initialize sharing mode to concurrent and use all available queue's flag for the image layout.
     VkSharingMode sharingMode     = VK_SHARING_MODE_CONCURRENT;
-    uint32_t concurrentQueueFlags = pDevice->GetSupportedBarrierQueues();
 
     sharingMode = pCreateInfo->imageSharingMode;
-
-    if (sharingMode == VK_SHARING_MODE_CONCURRENT)
-    {
-        // In case of concurrent sharing mode collect the image layout queue flags to be used.
-        concurrentQueueFlags = 0;
-
-        for (uint32_t i = 0; i < pCreateInfo->queueFamilyIndexCount; ++i)
-        {
-            concurrentQueueFlags |= pDevice->GetQueueFamilyPalImageLayoutFlag(pCreateInfo->pQueueFamilyIndices[i]);
-        }
-    }
 
     for (properties.imageCount = 0; properties.imageCount < swapImageCount; ++properties.imageCount)
     {
@@ -322,7 +310,8 @@ VkResult SwapChain::Create(
                 &properties.images[properties.imageCount],
                 properties.imageFormat,
                 sharingMode,
-                concurrentQueueFlags,
+                pCreateInfo->queueFamilyIndexCount,
+                pCreateInfo->pQueueFamilyIndices,
                 &properties.imageMemory[properties.imageCount]);
         }
 

@@ -390,9 +390,6 @@ public:
         uint32_t                     bindInfoCount,
         const VkBindImageMemoryInfo* pBindInfos) const;
 
-    VK_FORCEINLINE uint32_t GetSupportedBarrierQueues() const
-        { return m_supportedBarrierQueues; }
-
     VK_INLINE const VkPhysicalDeviceFeatures& GetEnabledFeatures() const
         { return m_enabledFeatures;}
 
@@ -491,13 +488,13 @@ public:
         VkExternalMemoryHandleTypeFlagBits handleType,
         const void*                        pExternalPtr) const;
 
-    VK_INLINE const DispatchTable& GetDispatchTable() const
+    VK_FORCEINLINE const DispatchTable& GetDispatchTable() const
         { return m_dispatchTable; }
 
-    VK_INLINE const EntryPoints& GetEntryPoints() const
+    VK_FORCEINLINE const EntryPoints& GetEntryPoints() const
         { return m_dispatchTable.GetEntryPoints(); }
 
-    VK_INLINE const DeviceBarrierPolicy& GetBarrierPolicy() const
+    VK_FORCEINLINE const DeviceBarrierPolicy& GetBarrierPolicy() const
         { return m_barrierPolicy; }
 
 protected:
@@ -535,7 +532,6 @@ protected:
     Pal::ICmdAllocator*                 m_pSharedPalCmdAllocator[MaxPalDevices];
     Properties                          m_properties;
 
-    uint32_t                            m_supportedBarrierQueues;
     uint8_t*                            m_pPalQueueMemory;
 
     InternalMemMgr                      m_internalMemMgr;

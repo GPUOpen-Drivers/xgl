@@ -268,6 +268,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
     {
         const VkStructHeader*                                 pHeader;
         const VkDescriptorSetLayoutCreateInfo*                pInfo;
+        const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT* pBindingFlags;
     };
 
     pOut->activeStageMask = VK_SHADER_STAGE_ALL; // TODO set this up properly enumerating the active stages.
@@ -290,6 +291,24 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
         {
         case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO:
             {
+
+               EXTRACT_VK_STRUCTURES_0(
+                   BindingFlag,
+                   DescriptorSetLayoutBindingFlagsCreateInfoEXT,
+                   pBindingFlags,
+                   DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT)
+
+                if (pDescriptorSetLayoutBindingFlagsCreateInfoEXT != nullptr)
+                {
+                    VK_ASSERT(pDescriptorSetLayoutBindingFlagsCreateInfoEXT->bindingCount == pOut->count);
+
+                    for (uint32_t inIndex = 0; inIndex < pInfo->bindingCount; ++inIndex)
+                    {
+                        const VkDescriptorSetLayoutBinding& currentBinding = pInfo->pBindings[inIndex];
+                        pOutBindings[currentBinding.binding].bindingFlags  =
+                            pDescriptorSetLayoutBindingFlagsCreateInfoEXT->pBindingFlags[inIndex];
+                    }
+                }
 
                 // Bindings numbers are allowed to come in out-of-order, as well as with gaps.
                 // We compute offsets using the size we've seen so far as we iterate, so we need to handle
@@ -314,6 +333,13 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
                     // Determine the alignment requirement of descriptors in dwords.
                     uint32_t descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32_t);
+
+                    // If the last binding has the VARIABLE_DESCRIPTOR_COUNT_BIT set, write the varDescDwStride
+                    if ((bindingNumber == (pOut->count - 1)) &&
+                        (pBinding->bindingFlags & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT))
+                    {
+                        pOut->varDescDwStride = GetDescStaticSectionDwSize(pDevice, pBinding->info.descriptorType);
+                    }
 
                     // Construct the information specific to the static section of the descriptor set layout.
                     ConvertBindingInfo(

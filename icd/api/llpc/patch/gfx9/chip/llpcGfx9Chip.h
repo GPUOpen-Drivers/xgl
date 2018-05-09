@@ -185,7 +185,7 @@ struct LsHsRegConfig
 };
 
 // =====================================================================================================================
-// Represents configuration of static registers relevant to hardware embedded-geometry merged shader.
+// Represents configuration of static registers relevant to hardware export-geometry merged shader.
 struct EsGsRegConfig
 {
     DEF_REG(SPI_SHADER_PGM_RSRC1_GS);

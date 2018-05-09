@@ -71,23 +71,25 @@ namespace
 // destination layouts.  In the event that no layout transitions are required, a single transition is still returned
 // to handle cache syncs.
 void FindDepthStencilLayoutTransitionRanges(
-    const uint32_t oldLayouts[MaxRangePerAttachment],
-    const uint32_t newLayouts[MaxRangePerAttachment],
-    uint32_t*      pStartRange,
-    uint32_t*      pNumRangeTransitions)
+    const Pal::ImageLayout  oldLayouts[MaxRangePerAttachment],
+    const Pal::ImageLayout  newLayouts[MaxRangePerAttachment],
+    uint32_t*               pStartRange,
+    uint32_t*               pNumRangeTransitions)
 {
     // Assume the default case that both transitions are required.
     uint32_t startRange = 0;
     uint32_t numTransitions = MaxRangePerAttachment;
 
-    if (oldLayouts[0] == newLayouts[0])
+    if ((oldLayouts[0].usages  == newLayouts[0].usages) &&
+        (oldLayouts[0].engines == newLayouts[0].engines))
     {
         // Skip the depth transition
         numTransitions--;
 
         startRange++;
     }
-    else if (oldLayouts[1] == newLayouts[1])
+    else if ((oldLayouts[1].usages  == newLayouts[1].usages) &&
+             (oldLayouts[1].engines == newLayouts[1].engines))
     {
         // Skip the stencil transition
         numTransitions--;
@@ -1925,8 +1927,10 @@ void CmdBuffer::CopyImage(
         const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat());
         const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat());
 
-        const Pal::ImageLayout palSrcImgLayout = pSrcImage->GetTransferLayout(srcImageLayout, this);
-        const Pal::ImageLayout palDstImgLayout = pDstImage->GetTransferLayout(destImageLayout, this);
+        const Pal::ImageLayout palSrcImgLayout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, srcImageLayout, GetQueueFamilyIndex());
+        const Pal::ImageLayout palDstImgLayout = pDstImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, destImageLayout, GetQueueFamilyIndex());
 
         for (uint32_t regionIdx = 0; regionIdx < regionCount;)
         {
@@ -1985,8 +1989,10 @@ void CmdBuffer::BlitImage(
 
         Pal::ScaledCopyInfo palCopyInfo = {};
 
-        palCopyInfo.srcImageLayout = pSrcImage->GetTransferLayout(srcImageLayout, this);
-        palCopyInfo.dstImageLayout = pDstImage->GetTransferLayout(destImageLayout, this);
+        palCopyInfo.srcImageLayout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, srcImageLayout, GetQueueFamilyIndex());
+        palCopyInfo.dstImageLayout = pDstImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, destImageLayout, GetQueueFamilyIndex());
 
         // Maps blit filters to their PAL equivalent
         palCopyInfo.filter   = VkToPalTexFilter(VK_FALSE, filter, filter, VK_SAMPLER_MIPMAP_MODE_NEAREST);
@@ -2046,7 +2052,8 @@ void CmdBuffer::CopyBufferToImage(
         const Pal::gpusize srcMemOffset  = pSrcBuffer->MemOffset();
         const Image* pDstImage           = Image::ObjectFromHandle(destImage);
 
-        const Pal::ImageLayout layout = pDstImage->GetTransferLayout(destImageLayout, this);
+        const Pal::ImageLayout layout = pDstImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, destImageLayout, GetQueueFamilyIndex());
 
         for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx += regionBatch)
         {
@@ -2101,7 +2108,8 @@ void CmdBuffer::CopyImageToBuffer(
         Pal::IGpuMemory* const pDstMemory = pDstBuffer->PalMemory(DefaultDeviceIndex);
         const Pal::gpusize dstMemOffset   = pDstBuffer->MemOffset();
 
-        const Pal::ImageLayout layout = pSrcImage->GetTransferLayout(srcImageLayout, this);
+        const Pal::ImageLayout layout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, srcImageLayout, GetQueueFamilyIndex());
 
         for (uint32_t regionIdx = 0; regionIdx < regionCount; regionIdx += regionBatch)
         {
@@ -2198,7 +2206,8 @@ void CmdBuffer::ClearColorImage(
 
     if (pPalRanges != nullptr)
     {
-        const Pal::ImageLayout layout = pImage->GetTransferLayout(imageLayout, this);
+        const Pal::ImageLayout layout = pImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, imageLayout, GetQueueFamilyIndex());
 
         for (uint32_t rangeIdx = 0; rangeIdx < rangeCount;)
         {
@@ -2215,7 +2224,7 @@ void CmdBuffer::ClearColorImage(
                                    pImage->GetMipLevels(),
                                    pImage->GetArraySize(),
                                    pPalRanges,
-                                   palRangeCount);
+                                   &palRangeCount);
 
                 ++rangeIdx;
             }
@@ -2297,7 +2306,8 @@ void CmdBuffer::ClearDepthStencilImage(
     if (pPalRanges != nullptr)
     {
         const Image* pImage           = Image::ObjectFromHandle(image);
-        const Pal::ImageLayout layout = pImage->GetTransferLayout(imageLayout, this);
+        const Pal::ImageLayout layout = pImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, imageLayout, GetQueueFamilyIndex());
 
         for (uint32_t rangeIdx = 0; rangeIdx < rangeCount;)
         {
@@ -2314,7 +2324,7 @@ void CmdBuffer::ClearDepthStencilImage(
                                    pImage->GetMipLevels(),
                                    pImage->GetArraySize(),
                                    pPalRanges,
-                                   palRangeCount);
+                                   &palRangeCount);
 
                 ++rangeIdx;
             }
@@ -2814,10 +2824,13 @@ void CmdBuffer::ResolveImage(
     {
         const Image* const pSrcImage              = Image::ObjectFromHandle(srcImage);
         const Image* const pDstImage              = Image::ObjectFromHandle(destImage);
-        const Pal::ImageLayout palSrcImageLayout  = pSrcImage->GetTransferLayout(srcImageLayout, this);
-        const Pal::ImageLayout palDestImageLayout = pDstImage->GetTransferLayout(destImageLayout, this);
         const Pal::SwizzledFormat srcFormat       = VkToPalFormat(pSrcImage->GetFormat());
         const Pal::SwizzledFormat dstFormat       = VkToPalFormat(pDstImage->GetFormat());
+
+        const Pal::ImageLayout palSrcImageLayout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, srcImageLayout, GetQueueFamilyIndex());
+        const Pal::ImageLayout palDestImageLayout = pDstImage->GetBarrierPolicy().GetTransferLayout(
+            m_pDevice, destImageLayout, GetQueueFamilyIndex());
 
         for (uint32_t rectIdx = 0; rectIdx < rectCount;)
         {
@@ -3024,29 +3037,29 @@ void CmdBuffer::ExecuteBarriers(
 
         pNextMain->imageInfo.pImage = nullptr;
 
-        uint32_t oldLayoutUsages[MaxRangePerAttachment];
-        uint32_t newLayoutUsages[MaxRangePerAttachment];
+        Pal::ImageLayout oldLayouts[MaxRangePerAttachment];
+        Pal::ImageLayout newLayouts[MaxRangePerAttachment];
 
-        VkToPalImageLayoutUsages(pImageMemoryBarriers[i].oldLayout, format, oldLayoutUsages);
-        VkToPalImageLayoutUsages(pImageMemoryBarriers[i].newLayout, format, newLayoutUsages);
+        pImage->GetBarrierPolicy().GetLayouts(
+            m_pDevice,
+            pImageMemoryBarriers[i].oldLayout,
+            GetEffectiveQueueFamilyIndex(pImageMemoryBarriers[i].srcQueueFamilyIndex),
+            oldLayouts);
 
-        Pal::ImageLayout oldLayout = pImage->GetLayoutFromUsage(
-            oldLayoutUsages[0],
-            this,
-            pImageMemoryBarriers[i].srcQueueFamilyIndex);
+        pImage->GetBarrierPolicy().GetLayouts(
+            m_pDevice,
+            pImageMemoryBarriers[i].newLayout,
+            GetEffectiveQueueFamilyIndex(pImageMemoryBarriers[i].dstQueueFamilyIndex),
+            newLayouts);
 
-        Pal::ImageLayout newLayout = pImage->GetLayoutFromUsage(
-            newLayoutUsages[0],
-            this,
-            pImageMemoryBarriers[i].dstQueueFamilyIndex);
+        bool layoutChanging = ((oldLayouts[0].usages != newLayouts[0].usages) ||
+                               (oldLayouts[1].usages != newLayouts[1].usages));
 
-        bool layoutChanging = ((oldLayoutUsages[0] != newLayoutUsages[0]) ||
-                               (oldLayoutUsages[1] != newLayoutUsages[1]));
+        // Engine mask should be identical for all aspect's layout.
+        VK_ASSERT((oldLayouts[0].engines == oldLayouts[1].engines) &&
+                  (newLayouts[0].engines == newLayouts[1].engines));
 
-        // check if we need to load the sample pattern.
-        uint32_t imageSamples = pImage->GetImageSamples();
-
-        if (oldLayout.engines != newLayout.engines)
+        if (oldLayouts[0].engines != newLayouts[0].engines)
         {
             // For exclusive sharing access, the application is responsible for inserting two identical "hand-shaking"
             // barriers on each queue's command buffers: one copy to release ownership on the src queue, and another
@@ -3075,14 +3088,14 @@ void CmdBuffer::ExecuteBarriers(
             pImage->GetMipLevels(),
             pImage->GetArraySize(),
             palRanges,
-            palRangeCount);
+            &palRangeCount);
 
         bool hasDepthAndStencil = ((pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) &&
                                    (pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT));
 
         // If image has a depth/stencil format with both depth and stencil components, then aspectMask member of
         // subresourceRange must include both VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT
-        VK_ASSERT(hasDepthAndStencil == (Formats::HasDepth(format) && Formats::HasStencil(format)));
+        VK_ASSERT(hasDepthAndStencil == pImage->HasDepthAndStencil());
 
         if (hasDepthAndStencil)
         {
@@ -3092,8 +3105,8 @@ void CmdBuffer::ExecuteBarriers(
             // Combined depth and stencil images may transition independently based on their layouts, so determine
             // the appropriate subset of ranges to transition in case one can be skipped.
             FindDepthStencilLayoutTransitionRanges(
-                oldLayoutUsages,
-                newLayoutUsages,
+                oldLayouts,
+                newLayouts,
                 &palRangeIdx,
                 &palRangeCount);
         }
@@ -3132,26 +3145,8 @@ void CmdBuffer::ExecuteBarriers(
                 pDestTransition[transitionIdx].dstCacheMask          = barrierTransition.dstCacheMask;
                 pDestTransition[transitionIdx].imageInfo.pImage      = pImage->PalImage(DefaultDeviceIndex);
                 pDestTransition[transitionIdx].imageInfo.subresRange = palRanges[palRangeIdx];
-
-                if ((hasDepthAndStencil) && (palRangeIdx == 1))
-                {
-                    // This is the stencil aspect of a combined depth-stencil format.  The two subres ranges may
-                    // transition independently, so use the correct layout for stencil.
-                    pDestTransition[transitionIdx].imageInfo.oldLayout = pImage->GetLayoutFromUsage(
-                        oldLayoutUsages[palRangeIdx],
-                        this,
-                        pImageMemoryBarrier->srcQueueFamilyIndex);
-
-                    pDestTransition[transitionIdx].imageInfo.newLayout = pImage->GetLayoutFromUsage(
-                        newLayoutUsages[palRangeIdx],
-                        this,
-                        pImageMemoryBarrier->dstQueueFamilyIndex);
-                }
-                else
-                {
-                    pDestTransition[transitionIdx].imageInfo.oldLayout = oldLayout;
-                    pDestTransition[transitionIdx].imageInfo.newLayout = newLayout;
-                }
+                pDestTransition[transitionIdx].imageInfo.oldLayout   = oldLayouts[transitionIdx];
+                pDestTransition[transitionIdx].imageInfo.newLayout   = newLayouts[transitionIdx];
 
                 if (pSampleLocationsInfoEXT == nullptr)
                 {
@@ -4398,7 +4393,7 @@ void CmdBuffer::RPSyncPoint(
                          if (attachment.pImage->IsSampleLocationsCompatibleDepth() &&
                              tr.flags.isInitialLayoutTransition)
                          {
-                             VK_ASSERT(Formats::HasDepth(attachment.pImage->GetFormat()));
+                             VK_ASSERT(attachment.pImage->HasDepth());
 
                              // Use the provided sample locations for this attachment if this is its
                              // initial layout transition

@@ -47,10 +47,12 @@ define float @llpc.dpdx.f32(float %p) #0
     ; Broadcast channel 1 to whole quad (32853 = 0x8055)
     %p.i32 = bitcast float %p to i32
     %p0.i32 = call i32 @llvm.amdgcn.ds.swizzle(i32 %p.i32, i32 32853)
-    %p0 = bitcast i32 %p0.i32 to float
+    %p0.i32.wqm = call i32 @llvm.amdgcn.wqm.i32(i32 %p0.i32)
+    %p0 = bitcast i32 %p0.i32.wqm to float
     ; Broadcast channel 0 to whole quad (32768 = 0x8000)
     %p1.i32 = call i32 @llvm.amdgcn.ds.swizzle(i32 %p.i32, i32 32768)
-    %p1 = bitcast i32 %p1.i32 to float
+    %p1.i32.wqm = call i32 @llvm.amdgcn.wqm.i32(i32 %p1.i32)
+    %p1 = bitcast i32 %p1.i32.wqm to float
 
     ; Calculate the delta value
     %dpdx = fsub float %p0, %p1
@@ -64,10 +66,12 @@ define float @llpc.dpdy.f32(float %p) #0
     ; Broadcast channel 2 to whole quad (32938 = 0x80AA)
     %p.i32 = bitcast float %p to i32
     %p0.i32 = call i32 @llvm.amdgcn.ds.swizzle(i32 %p.i32, i32 32938)
-    %p0 = bitcast i32 %p0.i32 to float
+    %p0.i32.wqm = call i32 @llvm.amdgcn.wqm.i32(i32 %p0.i32)
+    %p0 = bitcast i32 %p0.i32.wqm to float
     ; Broadcast channel 0 to whole quad (32768 = 0x8000)
     %p1.i32 = call i32 @llvm.amdgcn.ds.swizzle(i32 %p.i32, i32 32768)
-    %p1 = bitcast i32 %p1.i32 to float
+    %p1.i32.wqm = call i32 @llvm.amdgcn.wqm.i32(i32 %p1.i32)
+    %p1 = bitcast i32 %p1.i32.wqm to float
 
     ; Calculate the delta value
     %dpdy = fsub float %p0, %p1
@@ -92,10 +96,12 @@ define float @llpc.dpdxFine.f32(float %p) #0
     ; Swizzle channels in quad (1 -> 0, 1 -> 1, 3 -> 2, 3 -> 3) (33013 = 0x80F5)
     %p.i32 = bitcast float %p to i32
     %p0.i32 = call i32 @llvm.amdgcn.ds.swizzle(i32 %p.i32, i32 33013)
-    %p0 = bitcast i32 %p0.i32 to float
+    %p0.i32.wqm = call i32 @llvm.amdgcn.wqm.i32(i32 %p0.i32)
+    %p0 = bitcast i32 %p0.i32.wqm to float
     ; Swizzle channels in quad (0 -> 0, 0 -> 1, 2 -> 2, 2 -> 3) (32928 = 0x80A0)
     %p1.i32 = call i32 @llvm.amdgcn.ds.swizzle(i32 %p.i32, i32 32928)
-    %p1 = bitcast i32 %p1.i32 to float
+    %p1.i32.wqm = call i32 @llvm.amdgcn.wqm.i32(i32 %p1.i32)
+    %p1 = bitcast i32 %p1.i32.wqm to float
 
     ; Calculate the delta value
     %dpdx = fsub float %p0, %p1
@@ -109,10 +115,12 @@ define float @llpc.dpdyFine.f32(float %p) #0
     ; Swizzle channels in quad (2 -> 0, 3 -> 1, 2 -> 2, 3 -> 3) (33006 = 0x80EE)
     %p.i32 = bitcast float %p to i32
     %p0.i32 = call i32 @llvm.amdgcn.ds.swizzle(i32 %p.i32, i32 33006)
-    %p0 = bitcast i32 %p0.i32 to float
+    %p0.i32.wqm = call i32 @llvm.amdgcn.wqm.i32(i32 %p0.i32)
+    %p0 = bitcast i32 %p0.i32.wqm to float
     ; Swizzle channels in quad (0 -> 0, 1 -> 1, 0 -> 2, 1 -> 3) (32836 = 0x8044)
     %p1.i32 = call i32 @llvm.amdgcn.ds.swizzle(i32 %p.i32, i32 32836)
-    %p1 = bitcast i32 %p1.i32 to float
+    %p1.i32.wqm = call i32 @llvm.amdgcn.wqm.i32(i32 %p1.i32)
+    %p1 = bitcast i32 %p1.i32.wqm to float
 
     ; Calculate the delta value
     %dpdy = fsub float %p0, %p1
@@ -9991,6 +9999,7 @@ declare float @llvm.minnum.f32(float, float) #0
 declare float @llvm.maxnum.f32(float, float) #0
 declare double @llvm.minnum.f64(double, double) #0
 declare double @llvm.maxnum.f64(double, double) #0
+declare i32 @llvm.amdgcn.wqm.i32(i32) #1
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readnone }

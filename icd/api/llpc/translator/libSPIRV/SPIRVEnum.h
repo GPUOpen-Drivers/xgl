@@ -214,6 +214,20 @@ SPIRVMap<SPIRVCapabilityKind, SPIRVCapVec>::init() {
 #if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
   ADD_VEC_INIT(CapabilityAnisotropicLodCompensationAMD, { CapabilityShader });
 #endif
+  ADD_VEC_INIT(CapabilityVariablePointersStorageBuffer, { CapabilityShader });
+  ADD_VEC_INIT(CapabilityVariablePointers, { CapabilityVariablePointersStorageBuffer });
+  ADD_VEC_INIT(CapabilityShaderNonUniformEXT, { CapabilityShader });
+  ADD_VEC_INIT(CapabilityRuntimeDescriptorArrayEXT, { CapabilityShader });
+  ADD_VEC_INIT(CapabilityInputAttachmentArrayDynamicIndexingEXT, { CapabilityInputAttachment });
+  ADD_VEC_INIT(CapabilityUniformTexelBufferArrayDynamicIndexingEXT, { CapabilitySampledBuffer });
+  ADD_VEC_INIT(CapabilityStorageTexelBufferArrayDynamicIndexingEXT, { CapabilityImageBuffer });
+  ADD_VEC_INIT(CapabilityUniformBufferArrayNonUniformIndexingEXT, { CapabilityShaderNonUniformEXT });
+  ADD_VEC_INIT(CapabilitySampledImageArrayNonUniformIndexingEXT, { CapabilityShaderNonUniformEXT });
+  ADD_VEC_INIT(CapabilityStorageBufferArrayNonUniformIndexingEXT, { CapabilityShaderNonUniformEXT });
+  ADD_VEC_INIT(CapabilityStorageImageArrayNonUniformIndexingEXT, { CapabilityShaderNonUniformEXT });
+  ADD_VEC_INIT(CapabilityInputAttachmentArrayNonUniformIndexingEXT, { CapabilityInputAttachment });
+  ADD_VEC_INIT(CapabilityUniformTexelBufferArrayNonUniformIndexingEXT, { CapabilitySampledBuffer });
+  ADD_VEC_INIT(CapabilityStorageTexelBufferArrayNonUniformIndexingEXT, { CapabilityImageBuffer });
 }
 
 template<> inline void
@@ -376,6 +390,7 @@ SPIRVMap<Decoration, SPIRVCapVec>::init() {
   ADD_VEC_INIT(DecorationNoContraction, { CapabilityShader });
   ADD_VEC_INIT(DecorationInputAttachmentIndex, { CapabilityInputAttachment });
   ADD_VEC_INIT(DecorationAlignment, { CapabilityKernel });
+  ADD_VEC_INIT(DecorationNonUniformEXT, { CapabilityShaderNonUniformEXT });
 }
 
 template<> inline void

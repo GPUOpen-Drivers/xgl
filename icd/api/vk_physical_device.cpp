@@ -2976,6 +2976,35 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT:
+            {
+                VkPhysicalDeviceDescriptorIndexingFeaturesEXT * pDescIndexingFeatures =
+                    reinterpret_cast<VkPhysicalDeviceDescriptorIndexingFeaturesEXT *>(pHeader);
+
+                pDescIndexingFeatures->shaderInputAttachmentArrayDynamicIndexing           = VK_FALSE;
+                pDescIndexingFeatures->shaderUniformTexelBufferArrayDynamicIndexing        = VK_TRUE;
+                pDescIndexingFeatures->shaderStorageTexelBufferArrayDynamicIndexing        = VK_TRUE;
+                pDescIndexingFeatures->shaderUniformBufferArrayNonUniformIndexing          = VK_TRUE;
+                pDescIndexingFeatures->shaderSampledImageArrayNonUniformIndexing           = VK_TRUE;
+                pDescIndexingFeatures->shaderStorageBufferArrayNonUniformIndexing          = VK_TRUE;
+                pDescIndexingFeatures->shaderStorageImageArrayNonUniformIndexing           = VK_TRUE;
+                pDescIndexingFeatures->shaderInputAttachmentArrayNonUniformIndexing        = VK_FALSE;
+                pDescIndexingFeatures->shaderUniformTexelBufferArrayNonUniformIndexing     = VK_TRUE;
+                pDescIndexingFeatures->shaderStorageTexelBufferArrayNonUniformIndexing     = VK_TRUE;
+                pDescIndexingFeatures->descriptorBindingUniformBufferUpdateAfterBind       = VK_TRUE;
+                pDescIndexingFeatures->descriptorBindingSampledImageUpdateAfterBind        = VK_TRUE;
+                pDescIndexingFeatures->descriptorBindingStorageImageUpdateAfterBind        = VK_TRUE;
+                pDescIndexingFeatures->descriptorBindingStorageBufferUpdateAfterBind       = VK_TRUE;
+                pDescIndexingFeatures->descriptorBindingUniformTexelBufferUpdateAfterBind  = VK_TRUE;
+                pDescIndexingFeatures->descriptorBindingStorageTexelBufferUpdateAfterBind  = VK_TRUE;
+                pDescIndexingFeatures->descriptorBindingUpdateUnusedWhilePending           = VK_TRUE;
+                pDescIndexingFeatures->descriptorBindingPartiallyBound                     = VK_TRUE;
+                pDescIndexingFeatures->descriptorBindingVariableDescriptorCount            = VK_TRUE;
+                pDescIndexingFeatures->runtimeDescriptorArray                              = VK_TRUE;
+
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -3099,6 +3128,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceExternalMemoryHostPropertiesEXT*         pExternalMemoryHostProperties;
         VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*        pMinMaxProperties;
         VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
+        VkPhysicalDeviceDescriptorIndexingPropertiesEXT*         pDescriptorIndexingProperties;
 
     };
 
@@ -3226,6 +3256,33 @@ void PhysicalDevice::GetDeviceProperties2(
             pShaderCoreProperties->minVgprAllocation = props.gfxipProperties.shaderCore.minVgprAlloc;
             pShaderCoreProperties->maxVgprAllocation = props.gfxipProperties.shaderCore.numAvailableVgprs;
             pShaderCoreProperties->vgprAllocationGranularity = props.gfxipProperties.shaderCore.vgprAllocGranularity;
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT:
+        {
+            pDescriptorIndexingProperties->maxUpdateAfterBindDescriptorsInAllPools                  = UINT32_MAX;
+            pDescriptorIndexingProperties->shaderUniformBufferArrayNonUniformIndexingNative         = VK_FALSE;
+            pDescriptorIndexingProperties->shaderSampledImageArrayNonUniformIndexingNative          = VK_FALSE;
+            pDescriptorIndexingProperties->shaderStorageBufferArrayNonUniformIndexingNative         = VK_FALSE;
+            pDescriptorIndexingProperties->shaderStorageImageArrayNonUniformIndexingNative          = VK_FALSE;
+            pDescriptorIndexingProperties->shaderInputAttachmentArrayNonUniformIndexingNative       = VK_FALSE;
+            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindSamplers             = UINT32_MAX;
+            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindUniformBuffers       = UINT32_MAX;
+            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindStorageBuffers       = UINT32_MAX;
+            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindSampledImages        = UINT32_MAX;
+            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindStorageImages        = UINT32_MAX;
+            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindInputAttachments     = UINT32_MAX;
+            pDescriptorIndexingProperties->maxPerStageUpdateAfterBindResources                      = UINT32_MAX;
+            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindSamplers                  = UINT32_MAX;
+            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindUniformBuffers            = UINT32_MAX;
+            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic     = MaxDynamicUniformDescriptors;
+            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindStorageBuffers            = UINT32_MAX;
+            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic     = MaxDynamicStorageDescriptors;
+            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindSampledImages             = UINT32_MAX;
+            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindStorageImages             = UINT32_MAX;
+            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindInputAttachments          = UINT32_MAX;
 
             break;
         }

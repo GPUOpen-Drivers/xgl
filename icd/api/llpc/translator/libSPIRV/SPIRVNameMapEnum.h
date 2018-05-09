@@ -346,6 +346,7 @@ SPIRVMap<Decoration, std::string>::init() {
   add(DecorationAlignment, "Alignment");
   add(DecorationMaxByteOffset, "MaxByteOffset");
   add(DecorationExplicitInterpAMD, "ExplicitInterpAMD");
+  add(DecorationNonUniformEXT, "NonUniformEXT");
 }
 SPIRV_DEF_NAMEMAP(Decoration, SPIRVDecorationNameMap)
 
@@ -529,6 +530,20 @@ SPIRVMap<Capability, std::string>::init() {
 #if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
   add(CapabilityAnisotropicLodCompensationAMD, "AnisotropicLodCompensationAMD");
 #endif
+  add(CapabilityVariablePointersStorageBuffer, "VariablePointersStorageBuffer");
+  add(CapabilityVariablePointers, "VariablePointers");
+  add(CapabilityShaderNonUniformEXT, "ShaderNonUniformEXT");
+  add(CapabilityRuntimeDescriptorArrayEXT, "RuntimeDescriptorArrayEXT");
+  add(CapabilityInputAttachmentArrayDynamicIndexingEXT, "InputAttachmentArrayDynamicIndexingEXT");
+  add(CapabilityUniformTexelBufferArrayDynamicIndexingEXT, "UniformTexelBufferArrayDynamicIndexingEXT");
+  add(CapabilityStorageTexelBufferArrayDynamicIndexingEXT, "StorageTexelBufferArrayDynamicIndexingEXT");
+  add(CapabilityUniformBufferArrayNonUniformIndexingEXT, "UniformBufferArrayNonUniformIndexingEXT");
+  add(CapabilitySampledImageArrayNonUniformIndexingEXT, "SampledImageArrayNonUniformIndexingEXT");
+  add(CapabilityStorageBufferArrayNonUniformIndexingEXT, "StorageBufferArrayNonUniformIndexingEXT");
+  add(CapabilityStorageImageArrayNonUniformIndexingEXT, "StorageImageArrayNonUniformIndexingEXT");
+  add(CapabilityInputAttachmentArrayNonUniformIndexingEXT, "InputAttachmentArrayNonUniformIndexingEXT");
+  add(CapabilityUniformTexelBufferArrayNonUniformIndexingEXT, "UniformTexelBufferArrayNonUniformIndexingEXT");
+  add(CapabilityStorageTexelBufferArrayNonUniformIndexingEXT, "StorageTexelBufferArrayNonUniformIndexingEXT");
 }
 SPIRV_DEF_NAMEMAP(Capability, SPIRVCapabilityNameMap)
 

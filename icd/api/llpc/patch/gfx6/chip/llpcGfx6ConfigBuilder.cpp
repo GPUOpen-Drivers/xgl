@@ -775,12 +775,12 @@ Result ConfigBuilder::BuildHsRegConfig(
 }
 
 // =====================================================================================================================
-// Builds register configuration for hardware embedded shader.
+// Builds register configuration for hardware export shader.
 template <typename T>
 Result ConfigBuilder::BuildEsRegConfig(
     Context*            pContext,       // [in] LLPC context
     ShaderStage         shaderStage,    // Current shader stage (from API side)
-    T*                  pConfig)        // [out] Register configuration for embedded-shader-specific pipeline
+    T*                  pConfig)        // [out] Register configuration for export-shader-specific pipeline
 {
     Result result = Result::Success;
 

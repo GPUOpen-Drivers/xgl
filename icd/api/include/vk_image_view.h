@@ -162,7 +162,8 @@ const void* ImageView::Descriptor(
     uint32_t      deviceIdx,
     size_t        srdSize) const
 {
-    VK_ASSERT((m_pImage->GetSupportedLayouts() & (Pal::LayoutShaderRead | Pal::LayoutShaderWrite)) != 0);
+    VK_ASSERT((m_pImage->GetBarrierPolicy().GetSupportedLayoutUsageMask() &
+               (Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead | Pal::LayoutShaderWrite)) != 0);
 
     static_assert(
         SrdReadOnly == 0 &&

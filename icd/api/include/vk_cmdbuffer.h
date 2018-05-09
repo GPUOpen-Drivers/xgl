@@ -557,11 +557,11 @@ public:
         return m_pPalCmdBuffers[idx];
     }
 
-    VK_INLINE uint32_t GetQueueFamilyIndex() const { return m_queueFamilyIndex; }
-    VK_INLINE Pal::QueueType GetPalQueueType() const { return m_palQueueType; }
-    VK_INLINE Pal::EngineType GetPalEngineType() const { return m_palEngineType; }
+    VK_FORCEINLINE uint32_t GetQueueFamilyIndex() const { return m_queueFamilyIndex; }
+    VK_FORCEINLINE Pal::QueueType GetPalQueueType() const { return m_palQueueType; }
+    VK_FORCEINLINE Pal::EngineType GetPalEngineType() const { return m_palEngineType; }
 
-    VK_INLINE VirtualStackAllocator* GetStackAllocator() { return m_pStackAllocator; }
+    VK_FORCEINLINE VirtualStackAllocator* GetStackAllocator() { return m_pStackAllocator; }
 
     void RequestRenderPassEvents(uint32_t eventCount, GpuEvents*** pppGpuEvents);
 
@@ -778,6 +778,13 @@ public:
     VK_INLINE static bool IsStaticStateDifferent(
         uint32_t oldToken,
         uint32_t newToken);
+
+    // Replaces VK_QUEUE_FAMILY_IGNORED with the current command buffer's queue family index if necessary.
+    VK_FORCEINLINE uint32_t GetEffectiveQueueFamilyIndex(
+        uint32_t queueFamilyIndex) const
+    {
+        return (queueFamilyIndex == VK_QUEUE_FAMILY_IGNORED) ? GetQueueFamilyIndex() : queueFamilyIndex;
+    }
 
 private:
     CmdBuffer(

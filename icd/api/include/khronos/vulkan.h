@@ -59,7 +59,6 @@
 #include "devext/vk_khx_device_group_creation.h"
 
 #include "devext/vk_amd_gpa_interface.h"
-#include "devext/vk_amd_shader_core_properties.h"
 
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,

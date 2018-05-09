@@ -99,7 +99,7 @@ public:
 
     bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
 
-    VK_INLINE const BufferBarrierPolicy& GetBarrierPolicy() const
+    VK_FORCEINLINE const BufferBarrierPolicy& GetBarrierPolicy() const
         { return m_barrierPolicy; }
 
 private:

@@ -138,7 +138,20 @@ public:
         const VkDeviceCreateInfo*           pCreateInfo,
         const DeviceExtensions::Enabled&    enabledExtensions);
 
+    VK_FORCEINLINE uint32_t GetSupportedLayoutEngineMask() const
+        { return m_supportedLayoutEngineMask; }
+
 protected:
+    void InitDeviceLayoutEnginePolicy(
+        PhysicalDevice*                     pPhysicalDevice,
+        const VkDeviceCreateInfo*           pCreateInfo,
+        const DeviceExtensions::Enabled&    enabledExtensions);
+
+    void InitDeviceCachePolicy(
+        PhysicalDevice*                     pPhysicalDevice,
+        const DeviceExtensions::Enabled&    enabledExtensions);
+
+    uint32_t    m_supportedLayoutEngineMask;        // Mask including all supported image layout engine flags.
 };
 
 // =====================================================================================================================
@@ -150,9 +163,59 @@ class ImageBarrierPolicy : public BarrierPolicy
 public:
     ImageBarrierPolicy(
         Device*                             pDevice,
-        VkImageUsageFlags                   usage);
+        VkImageUsageFlags                   usage,
+        VkSharingMode                       sharingMode,
+        uint32_t                            queueFamilyIndexCount,
+        const uint32_t*                     pQueueFamilyIndices,
+        bool                                multisampled,
+        uint32_t                            extraLayoutUsages = 0);
+
+    VK_FORCEINLINE uint32_t GetSupportedLayoutUsageMask() const
+        { return m_supportedLayoutUsageMask; }
+
+    Pal::ImageLayout GetTransferLayout(
+        const Device*                       pDevice,
+        VkImageLayout                       layout,
+        uint32_t                            queueFamilyIndex) const;
+
+    Pal::ImageLayout GetAspectLayout(
+        const Device*                       pDevice,
+        VkImageLayout                       layout,
+        uint32_t                            aspectIndex,
+        uint32_t                            queueFamilyIndex) const;
+
+    void GetLayouts(
+        const Device*                       pDevice,
+        VkImageLayout                       layout,
+        uint32_t                            queueFamilyIndex,
+        Pal::ImageLayout                    results[MaxPalDepthAspectsPerMask]) const;
 
 protected:
+    void InitImageLayoutUsagePolicy(
+        Device*                             pDevice,
+        VkImageUsageFlags                   usage,
+        bool                                multisampled,
+        uint32_t                            extraLayoutUsages);
+
+    void InitImageLayoutEnginePolicy(
+        Device*                             pDevice,
+        VkSharingMode                       sharingMode,
+        uint32_t                            queueFamilyIndexCount,
+        const uint32_t*                     pQueueFamilyIndices);
+
+    void InitImageCachePolicy(
+        Device*                             pDevice,
+        VkImageUsageFlags                   usage);
+
+    uint32_t GetQueueFamilyLayoutEngineMask(
+        const Device*                       pDevice,
+        uint32_t                            queueFamilyIndex) const;
+
+    uint32_t    m_supportedLayoutUsageMask;         // Mask including all supported layout usage flags for the image.
+    uint32_t    m_supportedLayoutEngineMask;        // Mask including all supported layout engine flags for the image.
+    uint32_t    m_alwaysSetLayoutEngineMask;        // Mask including layout engine flags that should be always set.
+                                                    // This contains all engines in the scope of concurrent sharing
+                                                    // mode to allow concurrent well-defined access to the image.
 };
 
 // =====================================================================================================================
@@ -167,6 +230,9 @@ public:
         VkBufferUsageFlags                  usage);
 
 protected:
+    void InitBufferCachePolicy(
+        Device*                             pDevice,
+        VkBufferUsageFlags                  usage);
 };
 
 } //namespace vk

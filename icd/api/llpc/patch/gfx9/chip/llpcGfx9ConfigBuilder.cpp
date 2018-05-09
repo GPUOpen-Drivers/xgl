@@ -893,13 +893,13 @@ Result ConfigBuilder::BuildLsHsRegConfig(
 }
 
 // =====================================================================================================================
-// Builds register configuration for hardware embedded-geometry merged shader.
+// Builds register configuration for hardware export-geometry merged shader.
 template <typename T>
 Result ConfigBuilder::BuildEsGsRegConfig(
     Context*            pContext,       // [in] LLPC context
     ShaderStage         shaderStage1,   // Current first shader stage (from API side)
     ShaderStage         shaderStage2,   // Current second shader stage (from API side)
-    T*                  pConfig)        // [out] Register configuration for embedded-geometry-shader-specific pipeline
+    T*                  pConfig)        // [out] Register configuration for export-geometry-shader-specific pipeline
 {
     Result result = Result::Success;
 

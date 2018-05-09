@@ -40,6 +40,7 @@
 #include "include/vk_dispatch.h"
 #include "include/vk_memory.h"
 #include "include/vk_physical_device.h"
+#include "include/vk_cmdbuffer.h"
 
 #include "include/barrier_policy.h"
 
@@ -91,7 +92,8 @@ public:
         VkImage*                                pImage,
         VkFormat                                pImageFormat,
         VkSharingMode                           sharingMode,
-        uint32_t                                concurrentQueueFlags,
+        uint32_t                                queueFamilyIndexCount,
+        const uint32_t*                         pQueueFamilyIndices,
         VkDeviceMemory*                         pDeviceMemory);
 
     VkSharingMode GetSharingMode() const
@@ -141,9 +143,6 @@ public:
 
     VkImageUsageFlags GetImageUsage() const
         { return m_imageUsage; }
-
-    uint32_t GetSupportedLayouts() const
-        { return m_layoutUsageMask; }
 
     uint32_t GetMipLevels() const
         { return m_mipLevels; }
@@ -213,26 +212,36 @@ public:
 
     uint32_t GetImageSamples() const { return static_cast<uint32_t>(m_imageSamples); }
 
-    VK_INLINE Pal::ImageLayout GetTransferLayout(
-        VkImageLayout    layout,
-        const CmdBuffer* pCmdBuffer,
-        uint32_t         queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED) const;
-
     Pal::ImageLayout GetAttachmentLayout(
         const RPImageLayout& layout,
         Pal::ImageAspect     aspect,
         const CmdBuffer*     pCmdBuffer
         ) const;
 
-    Pal::ImageLayout GetLayoutFromUsage(
-        uint32_t         palLayoutUsages,
-        const CmdBuffer* pCmdBuffer,
-        uint32_t         queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED) const;
-
     bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
 
-    VK_INLINE const ImageBarrierPolicy& GetBarrierPolicy() const
+    VK_FORCEINLINE const ImageBarrierPolicy& GetBarrierPolicy() const
         { return m_barrierPolicy; }
+
+    // Returns true if the image has a color format.
+    VK_FORCEINLINE bool IsColorFormat() const
+        { return m_internalFlags.isColorFormat == 1; }
+
+    // Returns true if the image has a depth, stencil, or depth-stencil format.
+    VK_FORCEINLINE bool IsDepthStencilFormat() const
+        { return (m_internalFlags.hasDepth | m_internalFlags.hasStencil) == 1; }
+
+    // Returns true if the image has depth components.
+    VK_FORCEINLINE bool HasDepth() const
+        { return m_internalFlags.hasDepth == 1; }
+
+    // Returns true if the image has stencil components.
+    VK_FORCEINLINE bool HasStencil() const
+        { return m_internalFlags.hasStencil == 1; }
+
+    // Returns true if the image has depth and stencil components.
+    VK_FORCEINLINE bool HasDepthAndStencil() const
+        { return (m_internalFlags.hasDepth & m_internalFlags.hasStencil) == 1; }
 
 private:
     // SwapChain object needs to be able to instantiate API image objects for presentable images
@@ -254,7 +263,10 @@ private:
             uint32_t androidPresentable     : 1;  // True if this image is created as Android presentable image.
             uint32_t externalPinnedHost     : 1;  // True if image backing memory is compatible with pinned sysmem.
             uint32_t externalD3DHandle      : 1;  // True if image is backed by a D3D11 image
-            uint32_t reserved               : 24;
+            uint32_t isColorFormat          : 1;  // True if the image has a color format
+            uint32_t hasDepth               : 1;  // True if the image has depth components
+            uint32_t hasStencil             : 1;  // True if the image has stencil components
+            uint32_t reserved               : 21;
         };
         uint32_t     u32All;
     };
@@ -273,19 +285,9 @@ private:
         VkImageTiling               imageTiling,
         VkImageUsageFlags           usage,
         VkSharingMode               sharingMode,
-        uint32_t                    concurrentQueueFlags,
-        ImageFlags                  internalFlags,
-        Pal::PresentMode*           pPresentMode = nullptr);
-
-    void CalcBarrierUsage(
-        VkImageUsageFlags usage,
-        Pal::PresentMode* pPresentMode);
+        ImageFlags                  internalFlags);
 
     void CalcMemoryPriority();
-
-    VK_INLINE uint32_t GetLayoutEngines(
-        const CmdBuffer* pCmdBuffer,
-        uint32_t         queueFamilyIndex = VK_QUEUE_FAMILY_IGNORED) const;
 
     // This function is used to register presentable images with swap chains
     VK_FORCEINLINE void RegisterPresentableImageWithSwapChain(SwapChain* pSwapChain)
@@ -327,8 +329,6 @@ private:
 
     VkImageUsageFlags       m_imageUsage;                   // Bitmask describing the intended image usage
 
-    uint32_t                m_layoutUsageMask;              // This is the maximum set of supported layouts
-                                                            // calculated from enabled image usage.
     ImageBarrierPolicy      m_barrierPolicy;                // Barrier policy to use for this image
 
     Pal::IGpuMemory* m_pSampleLocationsMetaDataMemory[MaxPalDevices]; // Bound image memory
@@ -337,9 +337,6 @@ private:
                                                                       // sample locations meta data
 
     VkSharingMode            m_sharingMode;                // Image sharing mode.
-
-    uint32_t                 m_concurrentQueueFlags;       // Image layout queue flags in case of concurrent
-                                                           // sharing mode.
 
     SwapChain*               m_pSwapChain;                 // If this image is a presentable image this tells
                                                            // which swap chain the image belongs to
@@ -354,33 +351,6 @@ private:
     // Minimum priority assigned to any VkMemory object that this image is bound to.
     MemoryPriority m_priority;
 };
-
-// =====================================================================================================================
-// This function converts a given VkImageLayout and queue family index to a compatible PAL ImageLayout.  For more
-// information about the queue family and pCmdBuffer requirements, see the lower level GetLayoutFromUsage().
-VK_INLINE Pal::ImageLayout Image::GetTransferLayout(
-    VkImageLayout    layout,
-    const CmdBuffer* pCmdBuffer,
-    uint32_t         queueFamilyIndex
-    ) const
-{
-    uint32_t palLayoutUsages[MaxRangePerAttachment];
-
-    VkToPalImageLayoutUsages(layout, m_format, palLayoutUsages);
-
-    // Under no condition should the layout argument specify separate layouts for depth and stencil subresources at this
-    // point, since only the below layouts are permitted for transfer queues.  This provided layout is applicable to
-    // whatever aspect(s) are specified using VkImageAspectFlags for the transfer.  That being said, if an aspect isn't
-    // specified for the transfer, it's current layout may very well not match that of the aspect that is.
-    VK_ASSERT((palLayoutUsages[1] == 0) ||
-              (palLayoutUsages[1] == palLayoutUsages[0]));
-    VK_ASSERT((layout == VK_IMAGE_LAYOUT_GENERAL) ||
-              (layout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL) ||
-              (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) ||
-              (layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR));
-
-    return GetLayoutFromUsage(palLayoutUsages[0], pCmdBuffer, queueFamilyIndex);
-}
 
 namespace entry
 {

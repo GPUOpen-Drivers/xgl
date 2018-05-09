@@ -416,6 +416,7 @@ isValid(spv::Decoration V) {
     case DecorationAlignment:
     case DecorationMaxByteOffset:
     case DecorationExplicitInterpAMD:
+    case DecorationNonUniformEXT:
       return true;
     default:
       return false;
@@ -621,6 +622,20 @@ isValid(spv::Capability V) {
 #if VKI_3RD_PARTY_IP_ANISOTROPIC_LOD_COMPENSATION
     case CapabilityAnisotropicLodCompensationAMD:
 #endif
+    case CapabilityVariablePointersStorageBuffer:
+    case CapabilityVariablePointers:
+    case CapabilityShaderNonUniformEXT:
+    case CapabilityRuntimeDescriptorArrayEXT:
+    case CapabilityInputAttachmentArrayDynamicIndexingEXT:
+    case CapabilityUniformTexelBufferArrayDynamicIndexingEXT:
+    case CapabilityStorageTexelBufferArrayDynamicIndexingEXT:
+    case CapabilityUniformBufferArrayNonUniformIndexingEXT:
+    case CapabilitySampledImageArrayNonUniformIndexingEXT:
+    case CapabilityStorageBufferArrayNonUniformIndexingEXT:
+    case CapabilityStorageImageArrayNonUniformIndexingEXT:
+    case CapabilityInputAttachmentArrayNonUniformIndexingEXT:
+    case CapabilityUniformTexelBufferArrayNonUniformIndexingEXT:
+    case CapabilityStorageTexelBufferArrayNonUniformIndexingEXT:
       return true;
     default:
       return false;

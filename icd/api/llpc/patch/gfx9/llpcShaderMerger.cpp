@@ -128,7 +128,7 @@ Result ShaderMerger::BuildLsHsMergedShader(
 // =====================================================================================================================
 // Builds LLVM module for hardware ES-GS merged shader.
 Result ShaderMerger::BuildEsGsMergedShader(
-    Module*  pEsModule,     // [in] Hardware embedded shader (ES)
+    Module*  pEsModule,     // [in] Hardware export shader (ES)
     Module*  pGsModule,     // [in] Hardware geometry shader (GS)
     Module** ppEsGsModule   // [out] Hardware ES-GS merged shader
     ) const

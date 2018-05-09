@@ -1098,33 +1098,33 @@ Value* VertexFetch::Run(
             {
                 // NOTE: For format "SNORM 10_10_10_2", vertex fetches incorrectly return the alpha channel
                 // as unsigned. We have to somehow remap the values { 0.0, 0.33, 0.66, 1.00 } to { 0.0, 1.0,
-                // -1.0, -1.0 } respectively. We can observe in the IEEE representation of the returned values
-                // and notice that bits 23-24 practically have the values 00, 01, 10, 11. Given this we can perform
-                // the sign extension here by doing a "shl" 7, "ashr" 30, "sitofp", and finally an "maxnum.f32"
-                // with -1.0.
+                // -1.0, -1.0 } respectively.
 
-                // %a = shl %a, 7
-                pAlpha = BinaryOperator::CreateShl(pAlpha,
-                                                   ConstantInt::get(m_pContext->Int32Ty(), 7),
+                // %a = bitcast %a to f32
+                pAlpha = new BitCastInst(pAlpha, m_pContext->FloatTy(), "", pInsertPos);
+
+                // %a = mul %a, 3.0f
+                pAlpha = BinaryOperator::CreateFMul(pAlpha,
+                                                   ConstantFP::get(m_pContext->FloatTy(), 3.0f),
                                                    "",
                                                    pInsertPos);
 
-                // %a = ashr %a, 30
-                pAlpha = BinaryOperator::CreateAShr(pAlpha,
-                                                    ConstantInt::get(m_pContext->Int32Ty(), 30),
-                                                    "",
-                                                    pInsertPos);
-                // %a = sitofp %a to float
-                pAlpha = new SIToFPInst(pAlpha, m_pContext->FloatTy(), "", pInsertPos);
+                // %cond = ugt %a, 1.5f
+                auto pCond = new FCmpInst(pInsertPos,
+                                          FCmpInst::FCMP_UGT,
+                                          pAlpha,
+                                          ConstantFP::get(m_pContext->FloatTy(), 1.5f),
+                                          "");
 
-                // %a = @llvm.maxnum.f32(%a, -1.0)
-                std::vector<Value*> args;
-                args.push_back(pAlpha);
-                args.push_back(ConstantFP::get(m_pContext->FloatTy(), -1.0));
-                pAlpha = EmitCall(m_pModule, "llvm.maxnum.f32", m_pContext->FloatTy(), args, NoAttrib, pInsertPos);
+                // %a = select %cond, -1.0f, pAlpha
+                pAlpha = SelectInst::Create(pCond,
+                                            ConstantFP::get(m_pContext->FloatTy(), -1.0f),
+                                            pAlpha,
+                                            "",
+                                            pInsertPos);
 
                 // %a = bitcast %a to i32
-                pAlpha = new BitCastInst(pAlpha, m_pContext->FloatTy(), "", pInsertPos);
+                pAlpha = new BitCastInst(pAlpha, m_pContext->Int32Ty(), "", pInsertPos);
             }
             else if (pFormatInfo->nfmt == BUF_NUM_FORMAT_SSCALED)
             {
@@ -1132,6 +1132,9 @@ Value* VertexFetch::Run(
                 // as unsigned. We have to somehow remap the values { 0.0, 1.0, 2.0, 3.0 } to { 0.0, 1.0,
                 // -2.0, -1.0 } respectively. We can perform the sign extension here by doing a "fptosi", "shl" 30,
                 // "ashr" 30, and finally "sitofp".
+
+               // %a = bitcast %a to float
+                pAlpha = new BitCastInst(pAlpha, m_pContext->FloatTy(), "", pInsertPos);
 
                 // %a = fptosi %a to i32
                 pAlpha = new FPToSIInst(pAlpha, m_pContext->Int32Ty(), "", pInsertPos);
@@ -1152,7 +1155,7 @@ Value* VertexFetch::Run(
                 pAlpha = new SIToFPInst(pAlpha, m_pContext->FloatTy(), "", pInsertPos);
 
                 // %a = bitcast %a to i32
-                pAlpha = new BitCastInst(pAlpha, m_pContext->FloatTy(), "", pInsertPos);
+                pAlpha = new BitCastInst(pAlpha, m_pContext->Int32Ty(), "", pInsertPos);
             }
             else
             {

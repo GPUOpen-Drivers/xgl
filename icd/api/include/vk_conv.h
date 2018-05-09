@@ -942,7 +942,7 @@ VK_INLINE void VkToPalSubresRange(
     uint32_t                        mipLevels,
     uint32_t                        arraySize,
     Pal::SubresRange*               pPalSubresRanges,
-    uint32_t&                       palSubresRangeIndex)
+    uint32_t*                       pPalSubresRangeIndex)
 {
     constexpr uint32_t WHOLE_SIZE_UINT32 = (uint32_t)VK_WHOLE_SIZE;
 
@@ -958,7 +958,7 @@ VK_INLINE void VkToPalSubresRange(
     do
     {
         palSubresRange.startSubres.aspect = VkToPalImageAspectExtract(format, aspectMask);
-        pPalSubresRanges[palSubresRangeIndex++] = palSubresRange;
+        pPalSubresRanges[(*pPalSubresRangeIndex)++] = palSubresRange;
     }
     while (aspectMask != 0);
 }
@@ -2133,113 +2133,6 @@ VK_INLINE VkMemoryHeapFlags PalGpuHeapToVkMemoryHeapFlags(Pal::GpuHeap heap)
 }
 
 // =====================================================================================================================
-// Returns the PAL image layout usage(s) given a Vulkan image layout.  This should further be pruned by calling the
-// Image-specific Image::GetLayoutFromUsage() function.
-//
-// NOTE: There are two layout usages to handle the case of combined depth-stencil images with different layouts,
-//       one for each aspect.
-VK_INLINE void VkToPalImageLayoutUsages(
-    VkImageLayout imgLayout,
-    VkFormat      imgFormat,
-    uint32_t      layoutUsages[MaxRangePerAttachment])
-{
-    constexpr uint32_t AllImgLayoutUsages =
-        Pal::LayoutUninitializedTarget |
-        Pal::LayoutColorTarget |
-        Pal::LayoutDepthStencilTarget |
-        Pal::LayoutShaderRead |
-        Pal::LayoutShaderFmaskBasedRead |
-        Pal::LayoutShaderWrite |
-        Pal::LayoutCopySrc |
-        Pal::LayoutCopyDst |
-        Pal::LayoutResolveSrc |
-        Pal::LayoutResolveDst |
-        Pal::LayoutPresentWindowed |
-        Pal::LayoutPresentFullscreen;
-
-    constexpr uint32_t Usages[] =
-    {
-        // VK_IMAGE_LAYOUT_UNDEFINED
-        Pal::LayoutUninitializedTarget,
-
-        // VK_IMAGE_LAYOUT_GENERAL
-        (AllImgLayoutUsages & ~Pal::LayoutUninitializedTarget), // Will be masked down later based on usage flags
-
-        // VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL
-        Pal::LayoutColorTarget,
-
-        // VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL
-        Pal::LayoutDepthStencilTarget,
-
-        // VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL
-        Pal::LayoutDepthStencilTarget | Pal::LayoutShaderRead,
-
-        // VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-        Pal::LayoutShaderRead,
-
-        // VK_IMAGE_LAYOUT_TRANSFER_SOURCE_OPTIMAL
-        Pal::LayoutCopySrc |                // For vkCmdCopy* source
-        Pal::LayoutResolveSrc,              // For vkCmdResolve* source
-
-        // VK_IMAGE_LAYOUT_TRANSFER_DESTINATION_OPTIMAL
-        Pal::LayoutCopyDst |                // Required for vkCmdCopy* dest
-        Pal::LayoutResolveDst |             // Required for vkCmdResolve* dest
-        Pal::LayoutColorTarget |            // For vkCmdClearColorImage gfx clear followed by color render
-        Pal::LayoutDepthStencilTarget |     // For vkCmdClearDepthStencilImage gfx clear followed by depth render
-        Pal::LayoutShaderWrite,             // For vkCmdClear* compute clear followed by UAV writes
-
-        // VK_IMAGE_LAYOUT_PREINITIALIZED
-        Pal::LayoutUninitializedTarget
-    };
-
-    static_assert(
-        (VK_ARRAY_SIZE(Usages) == VK_IMAGE_LAYOUT_RANGE_SIZE) &&
-        (VK_IMAGE_LAYOUT_UNDEFINED == 0) &&
-        (VK_IMAGE_LAYOUT_GENERAL == 1) &&
-        (VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL == 2) &&
-        (VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL == 3) &&
-        (VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL == 4) &&
-        (VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL == 5) &&
-        (VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL == 6) &&
-        (VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL == 7) &&
-        (VK_IMAGE_LAYOUT_PREINITIALIZED == 8) &&
-        (VK_IMAGE_LAYOUT_RANGE_SIZE == 9),
-        "Need to update the table above as the VkImageLayout enum has changed");
-
-    if (static_cast<uint32_t>(imgLayout) < VK_IMAGE_LAYOUT_RANGE_SIZE)
-    {
-        layoutUsages[0] = Usages[imgLayout];
-        layoutUsages[1] = (Formats::HasStencil(imgFormat) && Formats::HasDepth(imgFormat)) ? layoutUsages[0] : 0;
-    }
-    else
-    {
-        switch (static_cast<int32_t>(imgLayout))
-        {
-        case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR: //from VkImageLayout
-            // We set both usages, the calculated layout usage mask will make sure only the relevant one is kept
-            layoutUsages[0] = Pal::LayoutPresentFullscreen | Pal::LayoutPresentWindowed;
-            layoutUsages[1] = 0;
-            break;
-        case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
-            VK_ASSERT(Formats::HasStencil(imgFormat) && Formats::HasDepth(imgFormat));
-            layoutUsages[0] = Usages[VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL];
-            layoutUsages[1] = Usages[VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL];
-            break;
-        case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
-            VK_ASSERT(Formats::HasStencil(imgFormat) && Formats::HasDepth(imgFormat));
-            layoutUsages[0] = Usages[VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL];
-            layoutUsages[1] = Usages[VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL];
-            break;
-        default:
-            VK_ASSERT(!"Unexpected image layout extension");
-            layoutUsages[0] = 0;
-            layoutUsages[1] = 0;
-            break;
-        }
-    }
-}
-
-// =====================================================================================================================
 // Returns the Vulkan format feature flags corresponding to the given PAL format feature flags.
 VK_INLINE VkFormatFeatureFlags PalToVkFormatFeatureFlags(Pal::FormatFeatureFlags flags)
 {
@@ -2278,11 +2171,11 @@ VK_INLINE VkFormatFeatureFlags PalToVkFormatFeatureFlags(Pal::FormatFeatureFlags
     if (flags & Pal::FormatFeatureImageShaderWrite)
     {
         retFlags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
-    }
 
-    if (flags & Pal::FormatFeatureImageShaderAtomics)
-    {
-        retFlags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
+        if (flags & Pal::FormatFeatureImageShaderAtomics)
+        {
+            retFlags |= VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
+        }
     }
 
     if (flags & Pal::FormatFeatureMemoryShaderRead)

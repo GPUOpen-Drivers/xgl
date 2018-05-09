@@ -144,7 +144,7 @@ struct HsRegConfig
 };
 
 // =====================================================================================================================
-// Represents configuration of static registers relevant to hardware embedded shader.
+// Represents configuration of static registers relevant to hardware export shader.
 struct EsRegConfig
 {
     DEF_REG(SPI_SHADER_PGM_RSRC1_ES);

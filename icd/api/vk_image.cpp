@@ -50,117 +50,6 @@ namespace vk
 {
 
 // =====================================================================================================================
-// This function computes certain "maximum" PAL layout usage and cache coher masks that this image can possibly affect
-// based on its declared usage bits at create time.  These masks come in handy when trying to decide optimal PAL layouts
-// and caches coherency flags given an input VkImageLayout during a pipeline barrier.
-//
-// For example, in Vulkan the GENERAL layout is a valid layout.  In such a layout, all operations supported by the
-// image's usage are legal without an explicit layout transition in between.  For the GENERAL layout, we would use this
-// computed layout mask directly.
-//
-// In another case, PAL can flexibly clear and copy images in a number of ways.  When transitioning to a
-// TRANSFER_DST layout in preparation of a vkCmdClear* command, it may be beneficial to still maintain things
-// like "LayoutDepthStencilTarget" if the image has declared such a usage so that PAL does not accidentally decompress
-// the image.  To do this, a very lenient TRANSFER_DST mask is computed for various kinds of clears, which is
-// then pruned to a legal subset based on this mask.
-//
-// See Image::GetLayoutFromUsage() where this is used.
-void Image::CalcBarrierUsage(
-    VkImageUsageFlags           usage,
-    Pal::PresentMode*           pPresentMode)
-{
-    // By default, don't allow any layout usage other than uninitialized
-    m_layoutUsageMask = Pal::LayoutUninitializedTarget;
-
-    if (pPresentMode != nullptr)
-    {
-        if (*pPresentMode == Pal::PresentMode::Fullscreen)
-        {
-            m_layoutUsageMask |= (Pal::LayoutPresentWindowed | Pal::LayoutPresentFullscreen);
-        }
-        else if (*pPresentMode == Pal::PresentMode::Windowed)
-        {
-            m_layoutUsageMask |= Pal::LayoutPresentWindowed;
-        }
-        else
-        {
-            VK_ASSERT(!"Unexpected present mode");
-        }
-    }
-
-    if (usage & VK_IMAGE_USAGE_TRANSFER_SRC_BIT)
-    {
-        m_layoutUsageMask |= Pal::LayoutCopySrc;
-
-        // for single sample image, there is no true need to be in resolve source layout
-        if (m_imageSamples > VK_SAMPLE_COUNT_1_BIT)
-        {
-            m_layoutUsageMask |= Pal::LayoutResolveSrc;
-        }
-    }
-
-    if (usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT)
-    {
-        m_layoutUsageMask |= Pal::LayoutCopyDst | Pal::LayoutResolveDst;
-    }
-
-    if ((usage & (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) != 0)
-    {
-        m_layoutUsageMask |= Pal::LayoutShaderRead;
-    }
-
-    if (usage & VK_IMAGE_USAGE_STORAGE_BIT)
-    {
-        m_layoutUsageMask |= Pal::LayoutShaderWrite;
-    }
-
-    // Note that the below code enables clear support for color/depth targets because they can also be cleared inside
-    // render passes (either as load op clears or vkCmdClearAttachments) which do not require the transfer destination
-    // bit to be set.
-
-    if (usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)
-    {
-        m_layoutUsageMask |= Pal::LayoutColorTarget;
-
-        VK_ASSERT(m_pDevice != VK_NULL_HANDLE);
-        const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
-
-        // Note here that we enable resolve support when color attachment bit is set, because MSAA color attachment image
-        // is always expected to support ResolveSrc layout for render pass resolves sourcing it which needn't
-        // TRANSFER_SRC_BIT to be specified. single sample color attachment image is always expected to support ResolveDst
-        // layout for render pass resolves targeting it which needn't TRANSFER_DST_BIT to be specified.
-        if (m_imageSamples > VK_SAMPLE_COUNT_1_BIT)
-        {
-            m_layoutUsageMask |= Pal::LayoutResolveSrc;
-        }
-        else
-        {
-            // If application creates image with usage bit of color_target and then use general layout
-            // for the image to be resolve target, we need m_layoutUsageMask to cover
-            // resolve_dst layout.
-            // If app uses transfer dst usage bit instead, we should be safely covered. The benefit of
-            // not setting resolvedst layout bit is, If application create image with usage of
-            // color target and sampling, but some how use general layout the change between the read
-            // and the write layout, having resolve_dst bit for all current ASICs means meta data needs to be
-            // decompressed. That is not ideal.
-            if (settings.optColorTargetUsageDoesNotContainResolveLayout == false)
-            {
-                m_layoutUsageMask |= Pal::LayoutResolveDst;
-            }
-        }
-    }
-
-    if (usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)
-    {
-        // See the above note for CoherClear.
-        m_layoutUsageMask |= Pal::LayoutDepthStencilTarget;
-    }
-
-    // We don't do anything special in case of transient attachment images
-    VK_IGNORE(VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
-}
-
-// =====================================================================================================================
 // Given a runtime priority setting value, this function updates the given priority/offset pair if the setting's
 // priority is higher level.
 static void UpgradeToHigherPriority(
@@ -185,22 +74,22 @@ void Image::CalcMemoryPriority()
 
     UpgradeToHigherPriority(settings.memoryPriorityImageAny, &m_priority);
 
-    if (m_layoutUsageMask & Pal::LayoutShaderRead)
+    if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & (Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead))
     {
         UpgradeToHigherPriority(settings.memoryPriorityImageShaderRead, &m_priority);
     }
 
-    if (m_layoutUsageMask & Pal::LayoutShaderWrite)
+    if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutShaderWrite)
     {
         UpgradeToHigherPriority(settings.memoryPriorityImageShaderWrite, &m_priority);
     }
 
-    if (m_layoutUsageMask & Pal::LayoutColorTarget)
+    if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutColorTarget)
     {
         UpgradeToHigherPriority(settings.memoryPriorityImageColorTarget, &m_priority);
     }
 
-    if (m_layoutUsageMask & Pal::LayoutDepthStencilTarget)
+    if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutDepthStencilTarget)
     {
         UpgradeToHigherPriority(settings.memoryPriorityImageDepthStencil, &m_priority);
     }
@@ -221,9 +110,7 @@ Image::Image(
     VkImageTiling               imageTiling,
     VkImageUsageFlags           usage,
     VkSharingMode               sharingMode,
-    uint32_t                    concurrentQueueFlags,
-    ImageFlags                  internalFlags,
-    Pal::PresentMode*           pPresentMode)
+    ImageFlags                  internalFlags)
     :
     m_pDevice(pDevice),
     m_flags(flags),
@@ -235,14 +122,26 @@ Image::Image(
     m_imageSamples(imageSamples),
     m_imageTiling(imageTiling),
     m_imageUsage(usage),
-    m_layoutUsageMask(0),
     m_barrierPolicy(barrierPolicy),
     m_sharingMode(sharingMode),
-    m_concurrentQueueFlags(concurrentQueueFlags),
     m_pSwapChain(nullptr),
     m_baseAddrOffset(0)
 {
     m_internalFlags.u32All = internalFlags.u32All;
+
+    // Set hasDepth and hasStencil flags based on the image's format.
+    if (Formats::IsColorFormat(imageFormat))
+    {
+        m_internalFlags.isColorFormat = 1;
+    }
+    if (Formats::HasDepth(imageFormat))
+    {
+        m_internalFlags.hasDepth = 1;
+    }
+    if (Formats::HasStencil(imageFormat))
+    {
+        m_internalFlags.hasStencil = 1;
+    }
 
     memset(m_pPalImages, 0, sizeof(m_pPalImages));
     memset(m_pPalMemory, 0, sizeof(m_pPalMemory));
@@ -257,7 +156,6 @@ Image::Image(
     memset(m_pSampleLocationsMetaDataMemory, 0, sizeof(m_pSampleLocationsMetaDataMemory));
     memset(m_sampleLocationsMetaDataOffset, 0, sizeof(m_sampleLocationsMetaDataOffset));
 
-    CalcBarrierUsage(usage, pPresentMode);
     CalcMemoryPriority();
 }
 
@@ -265,12 +163,8 @@ Image::Image(
 static VkResult ConvertImageCreateInfo(
     const Device*            pDevice,
     const VkImageCreateInfo* pCreateInfo,
-    Pal::ImageCreateInfo*    pPalCreateInfo,
-    uint32_t*                pConcurrentQueueFlags)
+    Pal::ImageCreateInfo*    pPalCreateInfo)
 {
-    // Initialize sharing mode to concurrent and use all available queue's flags for the image layout.
-    *pConcurrentQueueFlags = pDevice->GetSupportedBarrierQueues();
-
     VkResult               result     = VK_SUCCESS;
     VkImageUsageFlags      imageUsage = pCreateInfo->usage;
     const RuntimeSettings& settings   = pDevice->GetRuntimeSettings();
@@ -325,17 +219,6 @@ static VkResult ConvertImageCreateInfo(
     // have to set this bit for PAL to be able to support this.  This may have performance implications
     // regarding DCC.
     pPalCreateInfo->flags.perSubresInit = 1;
-
-    if (pCreateInfo->sharingMode == VK_SHARING_MODE_CONCURRENT)
-    {
-        // In case of concurrent sharing mode collect the image layout queue flags to be used.
-        *pConcurrentQueueFlags = 0;
-
-        for (uint32_t i = 0; i < pCreateInfo->queueFamilyIndexCount; ++i)
-        {
-            *pConcurrentQueueFlags |= pDevice->GetQueueFamilyPalImageLayoutFlag(pCreateInfo->pQueueFamilyIndices[i]);
-        }
-    }
 
     return result;
 }
@@ -543,7 +426,6 @@ VkResult Image::Create(
 {
     // Convert input create info
     Pal::ImageCreateInfo palCreateInfo  = {};
-    uint32_t concurrentQueueFlags    = 0;
     Pal::PresentableImageCreateInfo presentImageCreateInfo = {};
 
     const VkImageCreateInfo*  pImageCreateInfo = nullptr;
@@ -576,7 +458,7 @@ VkResult Image::Create(
         {
             VK_ASSERT(pCreateInfo == pVkImageCreateInfo);
             pImageCreateInfo = pVkImageCreateInfo;
-            result = ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo, &concurrentQueueFlags);
+            result = ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo);
 
             break;
         }
@@ -671,12 +553,13 @@ VkResult Image::Create(
             pDevice,
             &presentImageCreateInfo,
             pAllocator,
-            pCreateInfo->usage,
+            pImageCreateInfo->usage,
             Pal::PresentMode::Windowed,
             pImage,
-            pCreateInfo->format,
-            pCreateInfo->sharingMode,
-            concurrentQueueFlags,
+            pImageCreateInfo->format,
+            pImageCreateInfo->sharingMode,
+            pImageCreateInfo->queueFamilyIndexCount,
+            pImageCreateInfo->pQueueFamilyIndices,
             &pDeviceMemory);
         Image* pTempImage = Image::ObjectFromHandle(*pImage);
         pTempImage->m_pMemory = Memory::ObjectFromHandle(pDeviceMemory);
@@ -766,7 +649,11 @@ VkResult Image::Create(
 
         // Create barrier policy for the image.
         ImageBarrierPolicy barrierPolicy(pDevice,
-                                         pImageCreateInfo->usage);
+                                         pImageCreateInfo->usage,
+                                         pImageCreateInfo->sharingMode,
+                                         pImageCreateInfo->queueFamilyIndexCount,
+                                         pImageCreateInfo->pQueueFamilyIndices,
+                                         pImageCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT);
 
         // Construct API image object.
         VK_PLACEMENT_NEW (pMemory) Image(
@@ -783,7 +670,6 @@ VkResult Image::Create(
             pImageCreateInfo->tiling,
             pImageCreateInfo->usage,
             pImageCreateInfo->sharingMode,
-            concurrentQueueFlags,
             imageFlags);
 
         imageHandle = Image::HandleFromVoidPointer(pMemory);
@@ -842,7 +728,8 @@ VkResult Image::CreatePresentableImage(
     VkImage*                                pImage,
     VkFormat                                imageFormat,
     VkSharingMode                           sharingMode,
-    uint32_t                                concurrentQueueFlags,
+    uint32_t                                queueFamilyIndexCount,
+    const uint32_t*                         pQueueFamilyIndices,
     VkDeviceMemory*                         pDeviceMemory)
 {
     Pal::Result palResult;
@@ -966,9 +853,33 @@ VkResult Image::CreatePresentableImage(
         imageFlags.internalMemBound  = false;
         imageFlags.dedicatedRequired = true;
 
+        uint32_t presentLayoutUsage = 0;
+
+        switch (presentMode)
+        {
+        case Pal::PresentMode::Fullscreen:
+            // In case of fullscreen presentation mode we may need to temporarily switch to windowed presents
+            // so include both flags here.
+            presentLayoutUsage = Pal::LayoutPresentWindowed | Pal::LayoutPresentFullscreen;
+            break;
+
+        case Pal::PresentMode::Windowed:
+            presentLayoutUsage = Pal::LayoutPresentWindowed;
+            break;
+
+        default:
+            VK_NEVER_CALLED();
+            break;
+        }
+
         // Create barrier policy for the image.
         ImageBarrierPolicy barrierPolicy(pDevice,
-                                         imageUsageFlags);
+                                         imageUsageFlags,
+                                         sharingMode,
+                                         queueFamilyIndexCount,
+                                         pQueueFamilyIndices,
+                                         false, // presentable images are never multisampled
+                                         presentLayoutUsage);
 
         // Construct API image object.
         VK_PLACEMENT_NEW (pImgObjMemory) Image(
@@ -985,9 +896,7 @@ VkResult Image::CreatePresentableImage(
             VK_IMAGE_TILING_OPTIMAL,
             imageUsageFlags,
             sharingMode,
-            concurrentQueueFlags,
-            imageFlags,
-            &presentMode);
+            imageFlags);
 
         *pImage = Image::HandleFromVoidPointer(pImgObjMemory);
 
@@ -1243,10 +1152,8 @@ VkResult Image::BindSwapchainMemory(
     Image*  pSwapchainImage    = Image::ObjectFromHandle(properties.images[swapChainImageIndex]);
     Memory* pSwapchainImageMem = Memory::ObjectFromHandle(properties.imageMemory[swapChainImageIndex]);
 
-    constexpr uint32_t presentMask = (Pal::LayoutPresentWindowed | Pal::LayoutPresentFullscreen);
-
-    // Clear present flags and inherit from the swapchain image that owns the underlying memory
-    m_layoutUsageMask |= pSwapchainImage->GetSupportedLayouts();
+    // Inherit the barrier policy from the swapchain image.
+    m_barrierPolicy = pSwapchainImage->GetBarrierPolicy();
 
     uint8_t bindIndices[MaxPalDevices];
     GenerateBindIndices(numDevices,
@@ -1344,9 +1251,9 @@ void Image::GetSparseMemoryRequirements(
         bool                  available;
     } aspects[] =
     {
-        {Pal::ImageAspect::Color,   VK_IMAGE_ASPECT_COLOR_BIT,   vk::Formats::IsColorFormat(m_format)},
-        {Pal::ImageAspect::Depth,   VK_IMAGE_ASPECT_DEPTH_BIT,   vk::Formats::HasDepth     (m_format)},
-        {Pal::ImageAspect::Stencil, VK_IMAGE_ASPECT_STENCIL_BIT, vk::Formats::HasStencil   (m_format)}
+        {Pal::ImageAspect::Color,   VK_IMAGE_ASPECT_COLOR_BIT,   IsColorFormat()},
+        {Pal::ImageAspect::Depth,   VK_IMAGE_ASPECT_DEPTH_BIT,   HasDepth()},
+        {Pal::ImageAspect::Stencil, VK_IMAGE_ASPECT_STENCIL_BIT, HasStencil()}
     };
     uint32_t supportedAspectsCount = sizeof(aspects) / sizeof(aspects[0]);
 
@@ -1489,48 +1396,6 @@ void Image::GetSparseMemoryRequirements(
 }
 
 // =====================================================================================================================
-// This function converts a set of PAL layout usages to a full PAL ImageLayout which includes which queues this layout
-// will also be used for.  The usages ("palLayoutUsages") can be obtained from a VkImageLayout by calling
-// VkToPalImageLayoutUsages() or by calling the simpler function GetLayout().
-//
-// The PAL ImageLayout also contains a description of which queue types this layout is compatible with and this depends
-// on the image's sharing mode.  If queueFamilyIndex is VK_QUEUE_FAMILY_IGNORED and the image's sharing mode is
-// VK_SHARING_MODE_EXCLUSIVE, then pCmdBuffer must not be nullptr as that command buffer's queue family is substituted.
-//
-// If the image's sharing mode is VK_SHARING_MODE_CONCURRENT, then queueFamilyIndex is always ignored and the layout
-// will always be compatible on all queue families that were declared during image creation.
-Pal::ImageLayout Image::GetLayoutFromUsage(
-    uint32_t         palLayoutUsages,
-    const CmdBuffer* pCmdBuffer,
-    uint32_t         queueFamilyIndex
-    ) const
-{
-    Pal::ImageLayout layout;
-
-    // Exclude layout usages that the image usage flags themselves prohibit.
-    layout.usages = (palLayoutUsages & m_layoutUsageMask);
-
-    if ((layout.usages & Pal::LayoutShaderRead)                  &&
-        m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead &&
-        (PalImage()->GetImageCreateInfo().samples > 1)          &&
-        PalImage()->GetImageCreateInfo().usageFlags.shaderRead  &&
-        PalImage()->GetImageCreateInfo().usageFlags.colorTarget)
-    {
-        // Replace LayoutShaderRead with LayoutShaderFmaskBasedRead for resources that support FMASK based read
-        layout.usages &= ~(Pal::LayoutShaderRead);
-        layout.usages |= Pal::LayoutShaderFmaskBasedRead;
-    }
-
-    layout.engines = GetLayoutEngines(pCmdBuffer, queueFamilyIndex);
-
-    // If the layout usage is 0, it likely means that an application is trying to transition to an image layout that
-    // is not supported by that image's usage flags.
-    VK_ASSERT(layout.usages != 0);
-
-    return layout;
-}
-
-// =====================================================================================================================
 // Get the image's memory requirements
 VkResult Image::GetMemoryRequirements(
     VkMemoryRequirements* pReqs)
@@ -1593,85 +1458,41 @@ Pal::ImageLayout Image::GetAttachmentLayout(
 {
     Pal::ImageLayout palLayout;
 
-    if (((aspect == Pal::ImageAspect::Color)   && Formats::IsColorFormat(m_format)) ||
-        ((aspect == Pal::ImageAspect::Depth)   && Formats::HasDepth(m_format))      ||
-        ((aspect == Pal::ImageAspect::Stencil) && Formats::HasStencil(m_format)))
+    if (((aspect == Pal::ImageAspect::Color)   && IsColorFormat()) ||
+        ((aspect == Pal::ImageAspect::Depth)   && HasDepth())      ||
+        ((aspect == Pal::ImageAspect::Stencil) && HasStencil()))
     {
-        // Convert the Vulkan image layout to PAL image layout usages (these may be aspect specific)
-        uint32_t palLayoutUsages[MaxRangePerAttachment];
-
-        VkToPalImageLayoutUsages(layout.layout, m_format, palLayoutUsages);
-
-        uint32_t layoutUsage;
+        uint32_t aspectIndex = 0;
 
         if ((aspect == Pal::ImageAspect::Color) ||
             (aspect == Pal::ImageAspect::Depth) ||
-            (Formats::HasDepth(m_format) == false)) // Stencil aspect for stencil-only format
+            (HasDepth() == false)) // Stencil aspect for stencil-only format
         {
-            layoutUsage = palLayoutUsages[0];
+            aspectIndex = 0;
         }
         else
         {
             // Stencil-aspect usages for combined depth-stencil formats usages are returned in usages[1]
-            VK_ASSERT(aspect == Pal::ImageAspect::Stencil && Formats::HasDepth(m_format));
+            VK_ASSERT(aspect == Pal::ImageAspect::Stencil && HasDepth());
 
-            layoutUsage = palLayoutUsages[1];
+            aspectIndex = 1;
         }
 
-        // Add any requested extra PAL usage
-        layoutUsage |= layout.extraUsage;
+        palLayout = GetBarrierPolicy().GetAspectLayout(
+            m_pDevice, layout.layout, aspectIndex, pCmdBuffer->GetQueueFamilyIndex());
 
-        // Return full optimized layout
-        palLayout = GetLayoutFromUsage(layoutUsage, pCmdBuffer, VK_QUEUE_FAMILY_IGNORED);
+        // Add any requested extra PAL usage
+        palLayout.usages |= layout.extraUsage;
     }
     else
     {
         // Return a null-usage layout (set the engine still because there are some PAL asserts that hit)
-        palLayout.usages  = 0;
-        palLayout.engines = GetLayoutEngines(pCmdBuffer, VK_QUEUE_FAMILY_IGNORED);
+        palLayout = GetBarrierPolicy().GetAspectLayout(
+            m_pDevice, layout.layout, 0, pCmdBuffer->GetQueueFamilyIndex());
+        palLayout.usages = 0;
     }
 
     return palLayout;
-}
-
-// =====================================================================================================================
-// Returns the Pal::ImageLayout::engines part of a PAL image layout.  Called by a number of the more general layout
-// conversion routines within this class.
-VK_INLINE uint32_t Image::GetLayoutEngines(
-    const CmdBuffer* pCmdBuffer,
-    uint32_t         queueFamilyIndex
-    ) const
-{
-    uint32_t engines;
-    // For now, we only want to full decompress the image if queueFamilyIndex is VK_QUEUE_FAMILY_EXTERNAL_KHR
-    // or VK_QUEUE_FAMILY_FOREIGN_EXT, and it's equal to set engines to Pal::LayoutAllEngines.
-    if (queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL_KHR ||
-        queueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT)
-    {
-        engines = Pal::LayoutAllEngines;
-    }
-    else if (m_sharingMode == VK_SHARING_MODE_EXCLUSIVE)
-    {
-        if (queueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-        {
-            queueFamilyIndex = pCmdBuffer->GetQueueFamilyIndex();
-        }
-
-        // In case of exclusive sharing mode simply use the target queue flag.
-        engines = m_pDevice->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex);
-
-        // The target queue flag should identify one of the queue types requested at device creation.
-        VK_ASSERT((m_pDevice->GetSupportedBarrierQueues() & engines) != 0);
-    }
-    else
-    {
-        VK_ASSERT(m_sharingMode == VK_SHARING_MODE_CONCURRENT);
-
-        // In case of concurrent sharing mode, use the concurrent queue flags determined at image creation time.
-        engines = m_concurrentQueueFlags;
-    }
-
-    return engines;
 }
 
 namespace entry

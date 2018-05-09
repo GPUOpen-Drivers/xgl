@@ -67,6 +67,7 @@ VK_EXT_global_priority
 VK_AMD_buffer_marker
 VK_EXT_external_memory_host
 VK_EXT_depth_range_unrestricted
+VK_EXT_descriptor_indexing
 VK_KHR_device_group
 VK_KHR_maintenance3
 VK_KHR_multiview
