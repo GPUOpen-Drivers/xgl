@@ -401,6 +401,64 @@ define i32 @llpc.image.fetch.u32.SubpassData.fmaskvalue(
     ret i32 %8
 }
 
+; Dimension aware version of fetching fmask value
+define i32 @llpc.image.fetch.u32.2D.fmaskvalue.dimaware(
+    i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx, <2 x i32> %coord, i32 %imageCallMeta) #0
+{
+    %resource = call <8 x i32> @llpc.descriptor.load.resource(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %fmask = call <8 x i32> @llpc.descriptor.load.fmask(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %1 = extractelement <2 x i32> %coord, i32 0
+    %2 = extractelement <2 x i32> %coord, i32 1
+    %3 = call <4 x float> @llvm.amdgcn.image.load.2d.v4f32.i32(i32 15,
+                                                               i32 %1,
+                                                               i32 %2,
+                                                               <8 x i32> %fmask,
+                                                               i32 0,
+                                                               i32 0)
+    %4 = bitcast <4 x float> %3 to <4 x i32>
+    %5 = extractelement <4 x i32> %4, i32 0
+    ret i32 %5
+}
+
+define i32 @llpc.image.fetch.u32.2DArray.fmaskvalue.dimaware(
+    i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx, <3 x i32> %coord, i32 %imageCallMeta) #0
+{
+    %resource = call <8 x i32> @llpc.descriptor.load.resource(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %fmask = call <8 x i32> @llpc.descriptor.load.fmask(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %1 = extractelement <3 x i32> %coord, i32 0
+    %2 = extractelement <3 x i32> %coord, i32 1
+    %3 = extractelement <3 x i32> %coord, i32 2
+    ; NOTE: When loading FMask, DA flag should not be set, 2darray intrinsic will set DA flag, so here use 3d intrinsic instead
+    %4 = call <4 x float> @llvm.amdgcn.image.load.3d.v4f32.i32(i32 15,
+                                                               i32 %1,
+                                                               i32 %2,
+                                                               i32 %3,
+                                                               <8 x i32> %fmask,
+                                                               i32 0,
+                                                               i32 0)
+    %5 = bitcast <4 x float> %4 to <4 x i32>
+    %6 = extractelement <4 x i32> %5, i32 0
+    ret i32 %6
+}
+
+define i32 @llpc.image.fetch.u32.SubpassData.fmaskvalue.dimaware(
+    i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx, <2 x i32> %coord, i32 %imageCallMeta) #0
+{
+    %resource = call <8 x i32> @llpc.descriptor.load.resource(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %fmask = call <8 x i32> @llpc.descriptor.load.fmask(i32 %resourceDescSet, i32 %resourceBinding, i32 %resourceIdx)
+    %1 = extractelement <2 x i32> %coord, i32 0
+    %2 = extractelement <2 x i32> %coord, i32 1
+    %3 = call <4 x float> @llvm.amdgcn.image.load.2d.v4f32.i32(i32 15,
+                                                               i32 %1,
+                                                               i32 %2,
+                                                               <8 x i32> %fmask,
+                                                               i32 0,
+                                                               i32 0)
+    %4 = bitcast <4 x float> %3 to <4 x i32>
+    %5 = extractelement <4 x i32> %4, i32 0
+    ret i32 %5
+}
+
 declare <8 x i32> @llpc.descriptor.load.fmask(i32 , i32 , i32) #0
 
 declare <8 x i32> @llpc.descriptor.load.resource(i32 , i32 , i32) #0
@@ -412,6 +470,9 @@ declare <4 x float> @llvm.amdgcn.image.getresinfo.v4f32.i32.v8i32(i32 , <8 x i32
 declare <4 x float> @llvm.amdgcn.image.load.v4f32.v4i32.v8i32(<4 x i32>, <8 x i32>,  i32, i1, i1, i1, i1) #0
 
 declare i32 @llvm.amdgcn.ubfe.i32(i32, i32, i32) #1
+
+declare <4 x float> @llvm.amdgcn.image.load.2d.v4f32.i32(i32, i32, i32, <8 x i32>, i32, i32) #0
+declare <4 x float> @llvm.amdgcn.image.load.3d.v4f32.i32(i32, i32, i32, i32, <8 x i32>, i32, i32) #0
 
 attributes #0 = { nounwind }
 attributes #1 = { nounwind readnone }

@@ -28,8 +28,6 @@
  * @brief LLPC source file: contains implementation of class Llpc::Patch.
  ***********************************************************************************************************************
  */
-#define DEBUG_TYPE "llpc-patch"
-
 #include "llvm/Bitcode/BitcodeReader.h"
 #include "llvm/Bitcode/BitcodeWriter.h"
 #include "llvm/Bitcode/BitstreamReader.h"
@@ -41,6 +39,7 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Utils.h"
@@ -57,6 +56,8 @@
 #include "llpcPatchInOutImportExport.h"
 #include "llpcPatchPushConstOp.h"
 #include "llpcPatchResourceCollect.h"
+
+#define DEBUG_TYPE "llpc-patch"
 
 using namespace llvm;
 

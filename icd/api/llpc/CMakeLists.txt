@@ -53,6 +53,7 @@ if(UNIX)
             -Wno-unused
             -Wno-ignored-qualifiers
             -Wno-missing-field-initializers
+            -Wno-invalid-offsetof           # offsetof within non-standard-layout type 'x' is undefined
         >)
 
         target_compile_options(llpc PRIVATE -fno-strict-aliasing)
@@ -319,7 +320,7 @@ endif()
 
 add_custom_target(
     RunHeapGlslOpEmuLibGenerator
-    COMMAND ${PYTHON_CMD} ${GEN_GLSL_OP_EMU_LIB_SCRIPT} ${LLVM_BIN_DIR}  ${LLVM_BIN_DIR}  ${BUILD_OS} False
+    COMMAND ${PYTHON_CMD} ${GEN_GLSL_OP_EMU_LIB_SCRIPT} ${LLVM_BIN_DIR}  ${LLVM_BIN_DIR}  ${BUILD_OS}
     DEPENDS ${GEN_OP_EMU_LIB_FILES}
     COMMENT "Checking if re-generation is required for g_llpcGlslOpEmuLib.h"
 )

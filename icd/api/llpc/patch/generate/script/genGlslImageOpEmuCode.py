@@ -27,8 +27,6 @@ import os
 import sys
 import string
 
-ENABLE_DIM_AWARE_IMAGE_INTRINSIC = False
-
 ### Global definitions
 # Contains LLVM function attributes
 LLVM_ATTRIBUTES = \
@@ -61,6 +59,8 @@ SPIRV_IMAGE_OPERAND_FMASKBASED_MODIFIER     = "fmaskbased"
 SPIRV_IMAGE_OPERAND_FMASKID_MODIFIER        = "fmaskid"
 SPIRV_IMAGE_DIM_PREFIX                      = "Dim"
 SPIRV_IMAGE_ARRAY_MODIFIER                  = "Array"
+
+LLPC_IMAGE_DIM_AWARE_SUFFIX                 = "dimaware"
 
 LLPC_DESCRIPTOR_LOAD_RESOURCE               = "llpc.descriptor.load.resource"
 LLPC_DESCRIPTOR_LOAD_TEXELBUFFER            = "llpc.descriptor.load.texelbuffer"
@@ -460,7 +460,18 @@ class CodeGen(FuncDef):
                                                           SPIRV_IMAGE_OPERAND_LOD_MODIFIER)
         # Generate normal version
         codeGen = CodeGen(self, self._gfxLevel)
+        codeGen._genWithDimAware(irOut)
+        pass
+
+    # Generate both dimension aware image intrinsic version and old image intrinsic version
+    def _genWithDimAware(self, irOut):
+        # Generate old image intrinsic version
+        codeGen = CodeGen(self, self._gfxLevel)
         codeGen._genInternal(irOut)
+
+        # Generate dimension aware image intrinsic version
+        codeGen = CodeGen(self, self._gfxLevel)
+        codeGen._genInternalWithDimAware(irOut)
         pass
 
     # Generates image function implementation.
@@ -495,10 +506,7 @@ class CodeGen(FuncDef):
             if self.isAtomicOp():
                 intrinGen = ImageAtomicGen(self)
             elif self._opKind == SpirvImageOpKind.read or self._opKind == SpirvImageOpKind.fetch:
-                if ENABLE_DIM_AWARE_IMAGE_INTRINSIC:
-                    intrinGen = DimAwareImageLoadGen(self)
-                else:
-                    intrinGen = ImageLoadGen(self)
+                intrinGen = ImageLoadGen(self)
             elif self._opKind == SpirvImageOpKind.write:
                 intrinGen = ImageStoreGen(self)
             elif self._opKind == SpirvImageOpKind.sample or self._opKind == SpirvImageOpKind.gather or \
@@ -522,6 +530,82 @@ class CodeGen(FuncDef):
             intrinGen.processReturn(retVal, intrinGen, irOut)
 
         irOut.write('}\n\n')
+
+    # Generates image function implementation.
+    def _genInternalWithDimAware(self, irOut):
+        # Create AMDGCN intrinsics based code generator
+        supportDimAware = False
+        if self._dim != SpirvDim.DimBuffer:
+            if self.isAtomicOp():
+                # TODO: Support dimension aware image atomic intrinsics
+                pass
+            elif self._opKind == SpirvImageOpKind.read or self._opKind == SpirvImageOpKind.fetch:
+                supportDimAware = True
+            elif self._opKind == SpirvImageOpKind.write:
+                # TODO: Support dimension aware image store intrinsics
+                pass
+            elif self._opKind == SpirvImageOpKind.sample or self._opKind == SpirvImageOpKind.gather:
+                # TODO: Support dimension aware image sample intrinsics
+                pass
+            elif self._opKind == SpirvImageOpKind.querylod:
+                # Querylod opcode is not supported in dimension aware intrinsics
+                pass
+            else:
+                shouldNeverCall("")
+
+        if supportDimAware:
+            retType = self._supportSparse and self.getSparseReturnType(self.getReturnType()) or self.getReturnType()
+
+            funcName = self.getFunctionName()
+            funcName += "." + LLPC_IMAGE_DIM_AWARE_SUFFIX
+            irFuncDef = "define %s @%s(%s) %s\n" % (retType,
+                                                    funcName,
+                                                    self.getParamList(),
+                                                    self._attr)
+            irOut.write(irFuncDef)
+            irOut.write('{\n')
+            self.genLoadSamplerAndResource(irOut)
+            self.genCoord(irOut)
+            if self._hasDref:
+                self.genDref(irOut)
+            self.genImageOperands(irOut)
+
+            if (self._gfxLevel == GFX9):
+                self.patchGfx91Dand1DArray()
+
+            assert self._dim != SpirvDim.DimBuffer
+            if self.isAtomicOp():
+                # TODO: Support dimension aware image atomic intrinsics
+                shouldNeverCall("")
+            elif self._opKind == SpirvImageOpKind.read or self._opKind == SpirvImageOpKind.fetch:
+                intrinGen = DimAwareImageLoadGen(self)
+            elif self._opKind == SpirvImageOpKind.write:
+                # TODO: Support dimension aware image store intrinsics
+                shouldNeverCall("")
+            elif self._opKind == SpirvImageOpKind.sample or self._opKind == SpirvImageOpKind.gather:
+                # TODO: Support dimension aware image sample intrinsics
+                shouldNeverCall("")
+            elif self._opKind == SpirvImageOpKind.querylod:
+                # Querylod opcode is not supported in dimension aware intrinsics
+                shouldNeverCall("")
+            else:
+                shouldNeverCall("")
+
+            if intrinGen._returnFmaskId:
+                # Fetch fmask only
+                fmaskVal    = intrinGen.genLoadFmask(irOut)
+                retVal      = intrinGen.genReturnFmaskValue(fmaskVal, irOut)
+                irOut.write("    ret %s %s\n" % (intrinGen.getReturnType(), retVal))
+            else:
+                if intrinGen._isFmaskBased:
+                    # Get sampleId from fmask value
+                    fmaskVal            = intrinGen.genLoadFmask(irOut)
+                    intrinGen._sample   = intrinGen.genGetSampleIdFromFmaskValue(fmaskVal, irOut)
+
+                retVal    = intrinGen.genIntrinsicCall(irOut)
+                intrinGen.processReturn(retVal, intrinGen, irOut)
+
+            irOut.write('}\n\n')
 
     # Gets return type of image operation, which is type of texel.
     def getReturnType(self):
@@ -2526,9 +2610,7 @@ def initLlvmDecls(gfxLevel):
         addLlvmDecl("llpc.patch.image.gather.texel.i32",
                     "declare <4 x float> @llpc.patch.image.gather.texel.i32(<8 x i32>, <4 x float>) #0\n")
 
-def main(inFile, outFile, gfxLevelStr, dimAwareImageIntrinsic):
-    global ENABLE_DIM_AWARE_IMAGE_INTRINSIC
-    ENABLE_DIM_AWARE_IMAGE_INTRINSIC = dimAwareImageIntrinsic == "True" and True or False
+def main(inFile, outFile, gfxLevelStr):
     gfxLevel = float(gfxLevelStr[3:])
     irOut = open(outFile, 'wt')
 
@@ -2544,4 +2626,4 @@ def main(inFile, outFile, gfxLevelStr, dimAwareImageIntrinsic):
     irOut.close()
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4])
+    main(sys.argv[1], sys.argv[2], sys.argv[3])

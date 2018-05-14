@@ -502,6 +502,13 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkDebugReportMessageEXT                         );
     INIT_DISPATCH_ENTRY(vkCmdWriteBufferMarkerAMD                       );
     INIT_DISPATCH_ENTRY(vkGetMemoryHostPointerPropertiesEXT             );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayPropertiesKHR         );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayPlanePropertiesKHR    );
+    INIT_DISPATCH_ENTRY(vkGetDisplayPlaneSupportedDisplaysKHR           );
+    INIT_DISPATCH_ENTRY(vkGetDisplayModePropertiesKHR                   );
+    INIT_DISPATCH_ENTRY(vkCreateDisplayModeKHR                          );
+    INIT_DISPATCH_ENTRY(vkGetDisplayPlaneCapabilitiesKHR                );
+    INIT_DISPATCH_ENTRY(vkCreateDisplayPlaneSurfaceKHR                  );
 }
 
 // =====================================================================================================================

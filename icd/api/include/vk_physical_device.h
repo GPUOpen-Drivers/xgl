@@ -360,6 +360,35 @@ public:
         return m_vrHighPrioritySubEngineIndex;
     }
 
+    VkResult GetDisplayProperties(
+        uint32_t*                                   pPropertyCount,
+        VkDisplayPropertiesKHR*                     pProperties);
+
+    VkResult GetDisplayPlaneProperties(
+        uint32_t*                                   pPropertyCount,
+        VkDisplayPlanePropertiesKHR*                pProperties);
+
+    VkResult GetDisplayPlaneSupportedDisplays(
+        uint32_t                                    planeIndex,
+        uint32_t*                                   pDisplayCount,
+        VkDisplayKHR*                               pDisplays);
+
+    VkResult GetDisplayModeProperties(
+        VkDisplayKHR                                display,
+        uint32_t*                                   pPropertyCount,
+        VkDisplayModePropertiesKHR*                 pProperties);
+
+    VkResult CreateDisplayMode(
+            VkDisplayKHR                                display,
+            const VkDisplayModeCreateInfoKHR*           pCreateInfo,
+            const VkAllocationCallbacks*                pAllocator,
+            VkDisplayModeKHR*                           pMode);
+
+    VkResult GetDisplayPlaneCapabilities(
+            VkDisplayModeKHR                            mode,
+            uint32_t                                    planeIndex,
+            VkDisplayPlaneCapabilitiesKHR*              pCapabilities);
+
     VkResult EnumerateExtensionProperties(
         const char*                 pLayerName,
         uint32_t*                   pPropertyCount,
@@ -641,6 +670,47 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(
     VkSurfaceKHR                                surface,
     uint32_t*                                   pRectCount,
     VkRect2D*                                   pRects);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPropertiesKHR*                     pProperties);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPlanePropertiesKHR*                pProperties);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneSupportedDisplaysKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t                                    planeIndex,
+    uint32_t*                                   pDisplayCount,
+    VkDisplayKHR*                               pDisplays);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayModePropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayModePropertiesKHR*                 pProperties);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayModeKHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display,
+    const VkDisplayModeCreateInfoKHR*           pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDisplayModeKHR*                           pMode);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneCapabilitiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayModeKHR                            mode,
+    uint32_t                                    planeIndex,
+    VkDisplayPlaneCapabilitiesKHR*              pCapabilities);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayPlaneSurfaceKHR(
+    VkInstance                                  instance,
+    const VkDisplaySurfaceCreateInfoKHR*        pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSurfaceKHR*                               pSurface);
 
 } // namespace entry
 

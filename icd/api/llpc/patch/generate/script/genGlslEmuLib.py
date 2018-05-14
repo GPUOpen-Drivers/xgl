@@ -38,9 +38,6 @@ LLVM_AS_DIR = sys.argv[1]
 LLVM_LINK_DIR = sys.argv[2]
 OS_TYPE = sys.argv[3]
 
-# Enable image dimension-aware intrinsics
-DIM_AWARE = sys.argv[4]
-
 # LLVM utility binaries
 LLVM_AS = LLVM_AS_DIR + "llvm-as"
 LLVM_LINK = LLVM_LINK_DIR + "llvm-link"
@@ -84,12 +81,12 @@ genGlslArithOpEmuCode.main("./script/genGlslArithOpEmuCodeI64.txt", "g_glslArith
 print("*******************************************************************************")
 print("                   Generate LLVM Emulation IR (GLSL Image) for %s             "%("GFX6"))
 print("*******************************************************************************")
-genGlslImageOpEmuCode.main("./script/genGlslImageOpEmuCode.txt", "g_glslImageOpEmu.ll", "gfx6", DIM_AWARE)
+genGlslImageOpEmuCode.main("./script/genGlslImageOpEmuCode.txt", "g_glslImageOpEmu.ll", "gfx6")
 
 print("*******************************************************************************")
 print("                   Generate LLVM Emulation IR (GLSL Image) for %s             "%("GFX9"))
 print("*******************************************************************************")
-genGlslImageOpEmuCode.main("./script/genGlslImageOpEmuCode.txt", "gfx9/g_glslImageOpEmu.ll", "gfx9", DIM_AWARE)
+genGlslImageOpEmuCode.main("./script/genGlslImageOpEmuCode.txt", "gfx9/g_glslImageOpEmu.ll", "gfx9")
 
 # Generate .lib file
 print("*******************************************************************************")

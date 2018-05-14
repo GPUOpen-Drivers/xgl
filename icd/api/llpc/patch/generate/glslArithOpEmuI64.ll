@@ -117,4 +117,45 @@ define i64 @llpc.uclamp.i64(i64 %x, i64 %minVal, i64 %maxVal) #0
     ret i64 %2
 }
 
+; =====================================================================================================================
+; >>>  Integer Functions
+; =====================================================================================================================
+
+; GLSL: int/uint findLSB(int64_t/uint64_t)
+define i32 @llpc.findIlsb.i64(i64 %value) #0
+{
+    %1 = call i64 @llvm.cttz.i64(i64 %value, i1 1)
+    %2 = trunc i64 %1 to i32
+    ret i32 %2
+}
+
+; GLSL: uint findMSB(uint64_t)
+define i32 @llpc.findUMsb.i64(i64 %value) #0
+{
+    %lz = call i64 @llvm.ctlz.i64(i64 %value, i1 1)
+    %bitp = sub i64 63, %lz
+    %cond = icmp eq i64 %value, 0
+    %end = select i1 %cond, i64 -1, i64 %bitp
+    %end.i32 = trunc i64 %end to i32
+    ret i32 %end.i32
+}
+
+; GLSL: int findMSB(int64_t)
+define i32 @llpc.findSMsb.i64(i64 %value) #0
+{
+    %lz = call i64 @llvm.ctlz.i64(i64 %value, i1 1)
+    %positive = icmp sgt i64 %value, 0
+    %bit1p = sub i64 63, %lz
+    %bitp = select i1 %positive, i64 %bit1p, i64 %lz
+    %neg1 = icmp eq i64 %value, -1
+    %zero = icmp eq i64 %value, 0
+    %bocon = or i1 %neg1, %zero
+    %end = select i1 %bocon, i64 -1, i64 %bitp
+    %end.i32 = trunc i64 %end to i32
+    ret i32 %end.i32
+}
+
+declare i64 @llvm.cttz.i64(i64, i1) #0
+declare i64 @llvm.ctlz.i64(i64, i1) #0
 attributes #0 = { nounwind }
+attributes #1 = { nounwind readnone }

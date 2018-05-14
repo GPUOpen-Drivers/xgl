@@ -204,6 +204,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateWaylandSurfaceKHR(
 #endif
 
 // =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayPlaneSurfaceKHR(
+    VkInstance                                  instance,
+    const VkDisplaySurfaceCreateInfoKHR*        pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSurfaceKHR*                               pSurface)
+{
+    return Surface::Create(Instance::ObjectFromHandle(instance),
+        reinterpret_cast<const VkStructHeader*>(pCreateInfo), pAllocator, pSurface);
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkDestroySurfaceKHR(
     VkInstance                                   instance,
     VkSurfaceKHR                                 surface,

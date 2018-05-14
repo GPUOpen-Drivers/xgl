@@ -58,21 +58,16 @@ namespace Gfx9
 #define DEF_REG_VAL_GFX9(_reg)      reg##_reg##__GFX09  _reg##__GFX09_VAL;
 #define DEF_REG_VAL(_reg)           struct { uint32_t u32All; } _reg##_VAL;
 
-#define DEF_REG_ID_GFX10(_reg)
-#define DEF_REG_VAL_GFX10(_reg)
-
 #define DEF_REG_GFX(_reg) \
     union \
     { \
         DEF_REG_ID_GFX9(_reg)   \
-        DEF_REG_ID_GFX10(_reg)  \
         DEF_REG_ID(_reg)        \
     }; \
     \
     union \
     { \
         DEF_REG_VAL_GFX9(_reg)  \
-        DEF_REG_VAL_GFX10(_reg) \
         DEF_REG_VAL(_reg)       \
     };
 
@@ -284,7 +279,7 @@ struct PipelineVsFsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  OFFSETOF(PipelineVsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  offsetof(PipelineVsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };
@@ -321,7 +316,7 @@ struct PipelineVsTsFsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  OFFSETOF(PipelineVsTsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  offsetof(PipelineVsTsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };
@@ -357,7 +352,7 @@ struct PipelineVsGsFsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  OFFSETOF(PipelineVsGsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  offsetof(PipelineVsGsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };
@@ -399,7 +394,7 @@ struct PipelineVsTsGsFsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  OFFSETOF(PipelineVsTsGsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  offsetof(PipelineVsTsGsFsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };
@@ -439,13 +434,13 @@ struct PipelineCsRegConfig: public PipelineRegConfig
     // Get total register's count of this pipeline
     uint32_t GetRegCount() const
     {
-        return  OFFSETOF(PipelineCsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
+        return  offsetof(PipelineCsRegConfig, m_dynRegs) / sizeof(Util::Abi::PalMetadataNoteEntry) +
                 m_dynRegCount;
     }
 };
 
 // Map from register ID to its name string
-static std::unordered_map<uint32_t, const char*>    RegNameMap;      // Common for both GFX9 and GFX10
+static std::unordered_map<uint32_t, const char*>    RegNameMap;
 static std::unordered_map<uint32_t, const char*>    RegNameMapGfx9;  // GFX9 specific
 
 // Adds entries to register name map.

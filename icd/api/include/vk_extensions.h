@@ -188,6 +188,7 @@ public:
         KHR_EXTERNAL_SEMAPHORE_CAPABILITIES,
         KHR_EXTERNAL_FENCE_CAPABILITIES,
         EXT_DEBUG_REPORT,
+        KHR_DISPLAY,
         Count
     };
 };

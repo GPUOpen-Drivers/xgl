@@ -365,6 +365,7 @@ namespace gSPIRVName {
   const static char ImageCallModPatchFmaskUsage[]         = ".patchfmaskusage";
   const static char ImageCallQueryNonLodPrefix[]          = ".querynonlod";
   const static char ImageCallQueryLodPrefix[]             = ".querylod";
+  const static char ImageCallDimAwareSuffix[]             = ".dimaware";
 }
 
 namespace kSPIRVPostfix {

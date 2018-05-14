@@ -172,14 +172,6 @@ vkGetImageSparseMemoryRequirements2                 @device     @core(1.1)
 vkTrimCommandPool                                   @device     @core(1.1)
 vkUpdateDescriptorSetWithTemplate                   @device     @core(1.1)
 
-vkGetPhysicalDeviceFeatures2KHR                     @instance   @iext(KHR_get_physical_device_properties2)
-vkGetPhysicalDeviceProperties2KHR                   @instance   @iext(KHR_get_physical_device_properties2)
-vkGetPhysicalDeviceFormatProperties2KHR             @instance   @iext(KHR_get_physical_device_properties2)
-vkGetPhysicalDeviceImageFormatProperties2KHR        @instance   @iext(KHR_get_physical_device_properties2)
-vkGetPhysicalDeviceQueueFamilyProperties2KHR        @instance   @iext(KHR_get_physical_device_properties2)
-vkGetPhysicalDeviceMemoryProperties2KHR             @instance   @iext(KHR_get_physical_device_properties2)
-vkGetPhysicalDeviceSparseImageFormatProperties2KHR  @instance   @iext(KHR_get_physical_device_properties2)
-
 vkEnumeratePhysicalDeviceGroupsKHR                  @instance   @iext(KHR_device_group_creation)
 
 vkGetDeviceGroupPeerMemoryFeaturesKHR               @device     @dext(KHR_device_group)
@@ -302,3 +294,20 @@ vkDestroyDebugReportCallbackEXT                     @instance   @iext(EXT_debug_
 vkDebugReportMessageEXT                             @instance   @iext(EXT_debug_report)
 
 vkGetMemoryHostPointerPropertiesEXT                 @device     @dext(EXT_external_memory_host)
+
+vkGetPhysicalDeviceDisplayPropertiesKHR             @instance   @iext(KHR_display)
+vkGetPhysicalDeviceDisplayPlanePropertiesKHR        @instance   @iext(KHR_display)
+vkGetDisplayPlaneSupportedDisplaysKHR               @instance   @iext(KHR_display)
+vkGetDisplayModePropertiesKHR                       @instance   @iext(KHR_display)
+vkCreateDisplayModeKHR                              @instance   @iext(KHR_display)
+vkGetDisplayPlaneCapabilitiesKHR                    @instance   @iext(KHR_display)
+vkCreateDisplayPlaneSurfaceKHR                      @instance   @iext(KHR_display)
+
+vkGetPhysicalDeviceFeatures2KHR                     @instance   @iext(KHR_get_physical_device_properties2)
+vkGetPhysicalDeviceProperties2KHR                   @instance   @iext(KHR_get_physical_device_properties2)
+vkGetPhysicalDeviceFormatProperties2KHR             @instance   @iext(KHR_get_physical_device_properties2)
+vkGetPhysicalDeviceImageFormatProperties2KHR        @instance   @iext(KHR_get_physical_device_properties2)
+vkGetPhysicalDeviceQueueFamilyProperties2KHR        @instance   @iext(KHR_get_physical_device_properties2)
+vkGetPhysicalDeviceMemoryProperties2KHR             @instance   @iext(KHR_get_physical_device_properties2)
+vkGetPhysicalDeviceSparseImageFormatProperties2KHR  @instance   @iext(KHR_get_physical_device_properties2)
+

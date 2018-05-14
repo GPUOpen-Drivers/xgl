@@ -10,3 +10,8 @@ genI64Type smax genI64Type x genI64Type y : llpc.smaxnum.i64 #0
 genI64Type umax genI64Type x genI64Type y : llpc.umaxnum.i64 #0
 genI64Type sclamp genI64Type x genI64Type minVal genI64Type maxVal : llpc.sclamp.i64 #0
 genU64Type uclamp genU64Type x genU64Type minVal genU64Type maxVal : llpc.uclamp.i64 #0
+
+# Integer Functions
+genIType findILsb genU64Type value : llpc.findIlsb.i64 #0
+genIType findUMsb genU64Type value : llpc.findUMsb.i64 #0
+genIType findSMsb genI64Type value : llpc.findSMsb.i64 #0

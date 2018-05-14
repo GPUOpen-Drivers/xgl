@@ -13,6 +13,7 @@ VK_KHR_external_fence_capabilities
 VK_KHX_device_group_creation
 VK_EXT_debug_report
 VK_KHR_device_group_creation
+VK_KHR_display
 
 ###############################################################################
 # DEVICE EXTENSIONS

@@ -293,11 +293,7 @@ private:
     {
         Pal::IScreen*       pPalScreen;
         uint32_t            modeCount;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 401
         Pal::ScreenMode*    pModeList[Pal::MaxModePerScreen];
-#else
-        Pal::ScreenMode*    pModeList[64];
-#endif
     };
 
     uint32_t        m_screenCount;

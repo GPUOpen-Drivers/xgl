@@ -42,6 +42,21 @@
 using namespace llvm;
 using namespace Llpc;
 
+namespace llvm
+{
+
+namespace cl
+{
+
+// -enable-dim-aware-image-intrinsic
+opt<bool> EnableDimAwareImageIntrinsic(
+    "enable-dim-aware-image-intrinsic",
+    desc("Enable dimension-aware image instrinsic in AMDGPU backend"),
+    init(false));
+}
+
+}
+
 namespace Llpc
 {
 
@@ -389,9 +404,19 @@ void SpirvLowerImageOp::visitCallInst(
             }
         }
 
-        // Change the name prefix of image call (from "spirv.image." to "llpc.image.")
+        // Change the name prefix of image call (from "spirv.image" to "llpc.image")
         StringRef prefix(gSPIRVName::ImageCallPrefix);
         std::string callName = LlpcName::ImageCallPrefix + mangledName.substr(prefix.size());
+
+        // Choose dimension aware image intrinsic or old image intrinsic
+        if (cl::EnableDimAwareImageIntrinsic && (imageCallMeta.Dim != DimBuffer))
+        {
+            if ((imageCallMeta.OpKind == ImageOpFetch) ||
+                (imageCallMeta.OpKind == ImageOpRead))
+            {
+                callName += gSPIRVName::ImageCallDimAwareSuffix;
+            }
+        }
 
         // Image call replacement
         CallInst* pImageCall = cast<CallInst>(EmitCall(m_pModule, callName, callInst.getType(), args, NoAttrib, &callInst));

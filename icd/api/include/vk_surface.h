@@ -140,6 +140,12 @@ namespace entry
         VkSurfaceKHR*                               pSurface);
 #endif
 
+    VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayPlaneSurfaceKHR(
+        VkInstance                                  instance,
+        const VkDisplaySurfaceCreateInfoKHR*        pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator,
+        VkSurfaceKHR*                               pSurface);
+
 VKAPI_ATTR void VKAPI_CALL vkDestroySurfaceKHR(
     VkInstance                                  instance,
     VkSurfaceKHR                                surface,

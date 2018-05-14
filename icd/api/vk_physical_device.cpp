@@ -3206,12 +3206,15 @@ void PhysicalDevice::GetDeviceProperties2(
                                                        VK_SHADER_STAGE_GEOMETRY_BIT |
                                                        VK_SHADER_STAGE_FRAGMENT_BIT |
                                                        VK_SHADER_STAGE_COMPUTE_BIT;
+
             pSubgroupProperties->supportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
                                                        VK_SUBGROUP_FEATURE_VOTE_BIT |
+                                                       VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
                                                        VK_SUBGROUP_FEATURE_BALLOT_BIT |
                                                        VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
                                                        VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
                                                        VK_SUBGROUP_FEATURE_QUAD_BIT;
+
             pSubgroupProperties->quadOperationsInAllStages = VK_TRUE;
 
             break;
@@ -3909,6 +3912,260 @@ static void VerifyProperties(
 }
 #endif
 
+// =====================================================================================================================
+VkResult PhysicalDevice::GetDisplayProperties(
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPropertiesKHR*                     pProperties)
+{
+    uint32_t  screenCount   = 0;
+    uint32_t  count         = 0;
+
+    Pal::IScreen*   pScreens      = nullptr;
+    uint32_t        propertyCount = *pPropertyCount;
+
+    if (pProperties == nullptr)
+    {
+        VkInstance()->FindScreens(PalDevice(), pPropertyCount, nullptr);
+        return VK_SUCCESS;
+    }
+
+    Pal::IScreen* pAttachedScreens[Pal::MaxScreens];
+
+    VkResult result = VkInstance()->FindScreens(PalDevice(), &propertyCount, pAttachedScreens);
+
+    uint32_t loopCount = Util::Min(*pPropertyCount, propertyCount);
+
+    for (uint32_t i = 0; i < loopCount; i++)
+    {
+        Pal::ScreenProperties props = {};
+
+        pAttachedScreens[i]->GetProperties(&props);
+
+        pProperties[count].display = reinterpret_cast<VkDisplayKHR>(pAttachedScreens[i]);
+        pProperties[count].displayName = nullptr;
+        pProperties[count].physicalDimensions.width  = props.physicalDimension.width;
+        pProperties[count].physicalDimensions.height = props.physicalDimension.height;
+        pProperties[count].physicalResolution.width  = props.physicalResolution.width;
+        pProperties[count].physicalResolution.height = props.physicalResolution.height;
+        pProperties[count].supportedTransforms       = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        pProperties[count].planeReorderPossible      = false;
+        pProperties[count].persistentContent         = false;
+    }
+
+    *pPropertyCount = loopCount;
+
+    return result;
+}
+
+// =====================================================================================================================
+// So far we don't support overlay and underlay. Therefore, it will just return the main plane.
+VkResult PhysicalDevice::GetDisplayPlaneProperties(
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPlanePropertiesKHR*                pProperties)
+{
+    uint32_t        propertyCount = *pPropertyCount;
+
+    if (pProperties == nullptr)
+    {
+        VkInstance()->FindScreens(PalDevice(), pPropertyCount, nullptr);
+        return VK_SUCCESS;
+    }
+
+    Pal::IScreen* pAttachedScreens[Pal::MaxScreens];
+
+    VkResult result = VkInstance()->FindScreens(PalDevice(), &propertyCount, pAttachedScreens);
+
+    uint32_t loopCount = Util::Min(*pPropertyCount, propertyCount);
+
+    for (uint32_t i = 0; i < loopCount; i++)
+    {
+        pProperties[i].currentDisplay = reinterpret_cast<VkDisplayKHR>(pAttachedScreens[i]);
+        pProperties[i].currentStackIndex = 0;
+    }
+
+    *pPropertyCount = loopCount;
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult PhysicalDevice::GetDisplayPlaneSupportedDisplays(
+    uint32_t                                    planeIndex,
+    uint32_t*                                   pDisplayCount,
+    VkDisplayKHR*                               pDisplays)
+{
+    VK_ASSERT(planeIndex == 0);
+
+    uint32_t displayCount = *pDisplayCount;
+
+    if (pDisplays == nullptr)
+    {
+        VkInstance()->FindScreens(PalDevice(), pDisplayCount, nullptr);
+        return VK_SUCCESS;
+    }
+
+    Pal::IScreen* pAttachedScreens[Pal::MaxScreens];
+
+    VkResult result = VkInstance()->FindScreens(PalDevice(), &displayCount, pAttachedScreens);
+
+    uint32_t loopCount = Util::Min(*pDisplayCount, displayCount);
+
+    for (uint32_t i = 0; i < loopCount; i++)
+    {
+        pDisplays[i] = reinterpret_cast<VkDisplayKHR>(pAttachedScreens[i]);
+    }
+
+    *pDisplayCount = loopCount;
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult PhysicalDevice::GetDisplayModeProperties(
+    VkDisplayKHR                                display,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayModePropertiesKHR*                 pProperties)
+{
+    VK_ASSERT(display);
+
+    VkResult result = VK_SUCCESS;
+
+    Pal::IScreen* pScreen = reinterpret_cast<Pal::IScreen*>(display);
+
+    if (pProperties == nullptr)
+    {
+        return VkInstance()->GetScreenModeList(pScreen, pPropertyCount, nullptr);
+    }
+
+    Pal::ScreenMode* pScreenMode[Pal::MaxModePerScreen];
+
+    uint32_t propertyCount = *pPropertyCount;
+
+    result = VkInstance()->GetScreenModeList(pScreen, &propertyCount, pScreenMode);
+
+    uint32_t loopCount = Util::Min(*pPropertyCount, propertyCount);
+
+    for (uint32_t i = 0; i < loopCount; i++)
+    {
+        pProperties[i].displayMode = reinterpret_cast<VkDisplayModeKHR>(pScreenMode[i]);
+        pProperties[i].parameters.visibleRegion.width  = pScreenMode[i]->extent.width;
+        pProperties[i].parameters.visibleRegion.height = pScreenMode[i]->extent.height;
+        // The refresh rate returned by pal is HZ.
+        // Spec requires refresh rate to be "the number of times the display is refreshed each second
+        // multiplied by 1000", in other words, HZ * 1000
+        pProperties[i].parameters.refreshRate = pScreenMode[i]->refreshRate * 1000;
+    }
+
+    *pPropertyCount = loopCount;
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult PhysicalDevice::GetDisplayPlaneCapabilities(
+    VkDisplayModeKHR                            mode,
+    uint32_t                                    planeIndex,
+    VkDisplayPlaneCapabilitiesKHR*              pCapabilities)
+{
+    Pal::ScreenMode* pMode = reinterpret_cast<Pal::ScreenMode*>(mode);
+    VK_ASSERT(planeIndex == 0);
+    VK_ASSERT(pCapabilities != nullptr);
+
+    pCapabilities->supportedAlpha = VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR;
+    pCapabilities->minSrcPosition.x = 0;
+    pCapabilities->minSrcPosition.y = 0;
+    pCapabilities->maxSrcPosition.x = 0;
+    pCapabilities->maxSrcPosition.y = 0;
+    pCapabilities->minDstPosition.x = 0;
+    pCapabilities->minDstPosition.y = 0;
+    pCapabilities->maxDstPosition.x = 0;
+    pCapabilities->maxDstPosition.y = 0;
+
+    pCapabilities->minSrcExtent.width  = pMode->extent.width;
+    pCapabilities->minSrcExtent.height = pMode->extent.height;
+    pCapabilities->maxSrcExtent.width  = pMode->extent.width;
+    pCapabilities->maxSrcExtent.height = pMode->extent.height;
+    pCapabilities->minDstExtent.width  = pMode->extent.width;
+    pCapabilities->minDstExtent.height = pMode->extent.height;
+    pCapabilities->maxDstExtent.width  = pMode->extent.width;
+    pCapabilities->maxDstExtent.height = pMode->extent.height;
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+// So far, we don't support customized mode.
+// we only create/insert mode if it matches existing mode.
+VkResult PhysicalDevice::CreateDisplayMode(
+    VkDisplayKHR                                display,
+    const VkDisplayModeCreateInfoKHR*           pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDisplayModeKHR*                           pMode)
+{
+    Pal::IScreen*    pScreen = reinterpret_cast<Pal::IScreen*>(display);
+
+    VkResult result = VK_SUCCESS;
+
+    Pal::ScreenMode* pScreenMode[Pal::MaxModePerScreen];
+    uint32_t propertyCount = Pal::MaxModePerScreen;
+
+    VkInstance()->GetScreenModeList(pScreen, &propertyCount, pScreenMode);
+
+    bool isValidMode = false;
+
+    for (uint32_t i = 0; i < propertyCount; i++)
+    {
+        // The modes are considered as identical if the dimension as well as the refresh rate are the same.
+        if ((pCreateInfo->parameters.visibleRegion.width  == pScreenMode[i]->extent.width) &&
+            (pCreateInfo->parameters.visibleRegion.height == pScreenMode[i]->extent.height) &&
+            (pCreateInfo->parameters.refreshRate          == pScreenMode[i]->refreshRate * 1000))
+        {
+            isValidMode = true;
+            break;
+        }
+    }
+
+    if (isValidMode)
+    {
+        Pal::ScreenMode* pNewMode = nullptr;
+        if (pAllocator)
+        {
+            pNewMode = reinterpret_cast<Pal::ScreenMode*>(
+                pAllocator->pfnAllocation(
+                pAllocator->pUserData,
+                sizeof(Pal::ScreenMode),
+                VK_DEFAULT_MEM_ALIGN,
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+        }
+        else
+        {
+            pNewMode = reinterpret_cast<Pal::ScreenMode*>(VkInstance()->AllocMem(
+                sizeof(Pal::ScreenMode),
+                VK_DEFAULT_MEM_ALIGN,
+                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+        }
+
+        if (pNewMode)
+        {
+            pNewMode->extent.width  = pCreateInfo->parameters.visibleRegion.width;
+            pNewMode->extent.height = pCreateInfo->parameters.visibleRegion.height;
+            pNewMode->refreshRate   = pCreateInfo->parameters.refreshRate;
+            pNewMode->flags.u32All  = 0;
+            *pMode = reinterpret_cast<VkDisplayModeKHR>(pNewMode);
+        }
+        else
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
+    else
+    {
+        result = VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    return result;
+}
+
 // C-style entry points
 namespace entry
 {
@@ -4340,6 +4597,78 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(
     // VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_MULTI_DEVICE_BIT_KHR.
     *pRectCount = 0;
     return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPropertiesKHR*                     pProperties)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayProperties(pPropertyCount, pProperties);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPlanePropertiesKHR*                pProperties)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayPlaneProperties(pPropertyCount, pProperties);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneSupportedDisplaysKHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t                                    planeIndex,
+    uint32_t*                                   pDisplayCount,
+    VkDisplayKHR*                               pDisplays)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayPlaneSupportedDisplays(
+                                                planeIndex,
+                                                pDisplayCount,
+                                                pDisplays);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayModePropertiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayModePropertiesKHR*                 pProperties)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayModeProperties(
+                                                display,
+                                                pPropertyCount,
+                                                pProperties);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayModeKHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display,
+    const VkDisplayModeCreateInfoKHR*           pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDisplayModeKHR*                           pMode)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->CreateDisplayMode(
+                                                display,
+                                                pCreateInfo,
+                                                pAllocator,
+                                                pMode);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneCapabilitiesKHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayModeKHR                            mode,
+    uint32_t                                    planeIndex,
+    VkDisplayPlaneCapabilitiesKHR*              pCapabilities)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayPlaneCapabilities(
+                                                mode,
+                                                planeIndex,
+                                                pCapabilities);
 }
 
 }
