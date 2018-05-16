@@ -63,7 +63,7 @@ Buffer::Buffer(
 
     memset(m_gpuVirtAddr, 0, sizeof(m_gpuVirtAddr));
     memset(m_pGpuMemory, 0, sizeof(m_pGpuMemory));
-
+    test to break the build;
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
         if (pGpuMemory[deviceIdx] != nullptr)
