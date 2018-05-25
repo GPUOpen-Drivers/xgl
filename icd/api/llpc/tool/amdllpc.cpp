@@ -215,7 +215,7 @@ static Result Init(
             "-simplifycfg-sink-common",  "-simplifycfg-sink-common=false",
             "-amdgpu-vgpr-index-mode",   "-amdgpu-vgpr-index-mode",         // force VGPR indexing on GFX8
             "-filetype",                 "-filetype=obj",   // target = obj, ELF binary; target = asm, ISA assembly text
-            "-enable-cache-emu-lib-context", "-enable-cache-emu-lib-context",
+            "-enable-cache-emu-lib-context", "-enable-cache-emu-lib-context=1",
         };
 
         // Build new arguments, starting with those supplied in command line
@@ -1003,6 +1003,18 @@ int32_t main(
             if (result == Result::Success)
             {
                 result = GetSpirvBinaryFromFile(spvBinFile, &spvBin);
+
+                // Disassemble SPIR-V code
+                uint32_t textSize = spvBin.codeSize * 10 + 1024;
+                char* pSpvText = new char[textSize];
+                LLPC_ASSERT(pSpvText != nullptr);
+                memset(pSpvText, 0, textSize);
+
+                LLPC_OUTS("\nSPIR-V disassembly for " << inFile << "\n");
+                spvDisassembleSpirv(spvBin.codeSize, spvBin.pCode, textSize, pSpvText);
+                LLPC_OUTS(pSpvText << "\n");
+
+                delete[] pSpvText;
             }
 
             if ((result == Result::Success) && Validate)
@@ -1194,7 +1206,8 @@ int32_t main(
 
     if (result == Result::Success)
     {
-        LLPC_OUTS("\n=====  AMDLLPC SUCCESS  =====\n");
+        outs().flush();
+        printf("\n=====  AMDLLPC SUCCESS  =====\n");
     }
 
     return (result == Result::Success) ? 0 : 1;

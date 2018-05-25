@@ -1451,7 +1451,12 @@ void SpirvLowerResourceCollect::CollectInOutUsage(
         else
         {
             // Generic input/output
-            const uint32_t startLoc = inOutMeta.Value;
+            const uint32_t startLoc = inOutMeta.Value + inOutMeta.Index;
+            if ((inOutMeta.Value == 0) && (inOutMeta.Index == 1))
+            {
+                // Dual source blending is detected
+                m_pResUsage->inOutUsage.fs.dualSourceBlend = true;
+            }
 
             pBaseTy = pInOutTy;
             locCount = (pInOutTy->getPrimitiveSizeInBits() / 8 > SizeOfVec4) ? 2 : 1;

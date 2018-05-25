@@ -33,7 +33,7 @@ target triple = "spir64-unknown-unknown"
 ; GLSL: void kill()
 define spir_func void @_Z4Killv() #0
 {
-    call void @llvm.AMDGPU.kilp()
+    call void @llvm.AMDGPU.kill(float -1.0)
     ret void
 }
 
@@ -9954,7 +9954,7 @@ define spir_func i64 @_Z7TimeAMDv()
     ret i64 %2
 }
 
-declare void @llvm.AMDGPU.kilp() #0
+declare void @llvm.AMDGPU.kill(float) #0
 declare float @llvm.fabs.f32(float) #0
 declare i32 @llvm.amdgcn.ds.swizzle(i32, i32) #2
 declare void @llvm.amdgcn.s.waitcnt(i32) #0

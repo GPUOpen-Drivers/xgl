@@ -190,8 +190,9 @@ define spir_func <4 x double> @_Z4modfDv4_dPDv4_d(
 ; GLSL: double clamp(double, double ,double)
 define double @llpc.fclamp.f64(double %x, double %minVal, double %maxVal) #0
 {
-    %1 = call double @llvm.amdgcn.fmed3.f64(double %x, double %minVal, double %maxVal)
-    ret double %1
+    %1 = call double @llvm.maxnum.f64(double %x, double %minVal)
+    %2 = call double @llvm.minnum.f64(double %1, double %maxVal)
+    ret double %2
 }
 
 ; GLSL: double mix(double, double, double)

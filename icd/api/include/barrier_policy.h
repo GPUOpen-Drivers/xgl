@@ -184,11 +184,15 @@ public:
         uint32_t                            aspectIndex,
         uint32_t                            queueFamilyIndex) const;
 
-    void GetLayouts(
+    bool ApplyBarrierLayoutChanges(
         const Device*                       pDevice,
-        VkImageLayout                       layout,
-        uint32_t                            queueFamilyIndex,
-        Pal::ImageLayout                    results[MaxPalDepthAspectsPerMask]) const;
+        VkImageLayout                       oldLayout,
+        VkImageLayout                       newLayout,
+        uint32_t                            currentQueueFamilyIndex,
+        uint32_t                            srcQueueFamilyIndex,
+        uint32_t                            dstQueueFamilyIndex,
+        Pal::ImageLayout                    oldPalLayouts[MaxPalDepthAspectsPerMask],
+        Pal::ImageLayout                    newPalLayouts[MaxPalDepthAspectsPerMask]) const;
 
 protected:
     void InitImageLayoutUsagePolicy(
@@ -206,6 +210,12 @@ protected:
     void InitImageCachePolicy(
         Device*                             pDevice,
         VkImageUsageFlags                   usage);
+
+    void GetLayouts(
+        const Device*                       pDevice,
+        VkImageLayout                       layout,
+        uint32_t                            queueFamilyIndex,
+        Pal::ImageLayout                    results[MaxPalDepthAspectsPerMask]) const;
 
     uint32_t GetQueueFamilyLayoutEngineMask(
         const Device*                       pDevice,

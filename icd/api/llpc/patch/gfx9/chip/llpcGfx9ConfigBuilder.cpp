@@ -1242,7 +1242,8 @@ Result ConfigBuilder::BuildPsRegConfig(
     {
         LLPC_ASSERT(((interpInfo[i].loc     == InvalidFsInterpInfo.loc) &&
                      (interpInfo[i].flat    == InvalidFsInterpInfo.flat) &&
-                     (interpInfo[i].custom  == InvalidFsInterpInfo.custom)) == false);
+                     (interpInfo[i].custom  == InvalidFsInterpInfo.custom) &&
+                     (interpInfo[i].is16bit == InvalidFsInterpInfo.is16bit)) == false);
 
         regSPI_PS_INPUT_CNTL_0 spiPsInputCntl = {};
         spiPsInputCntl.bits.FLAT_SHADE = interpInfo[i].flat;
@@ -1253,7 +1254,16 @@ Result ConfigBuilder::BuildPsRegConfig(
             // NOTE: Force parameter cache data to be read in passthrough mode.
             static const uint32_t PassThroughMode = (1 << 5);
             spiPsInputCntl.bits.FLAT_SHADE = true;
-            spiPsInputCntl.bitfields.OFFSET |= PassThroughMode;
+            spiPsInputCntl.bits.OFFSET |= PassThroughMode;
+        }
+        else
+        {
+            if (interpInfo[i].is16bit)
+            {
+                // NOTE: Enable 16-bit interpolation mode for non-passthrough mode. Attribute 0 is always valid.
+                spiPsInputCntl.bits.FP16_INTERP_MODE = true;
+                spiPsInputCntl.bits.ATTR0_VALID = true;
+            }
         }
 
         if (pointCoordLoc == i)
@@ -1262,7 +1272,7 @@ Result ConfigBuilder::BuildPsRegConfig(
 
             // NOTE: Set the offset value to force hardware to select input defaults (no VS match).
             static const uint32_t UseDefaultVal = (1 << 5);
-            spiPsInputCntl.bitfields.OFFSET = UseDefaultVal;
+            spiPsInputCntl.bits.OFFSET = UseDefaultVal;
         }
 
         SET_DYN_REG(pConfig, mmSPI_PS_INPUT_CNTL_0 + i, spiPsInputCntl.u32All);

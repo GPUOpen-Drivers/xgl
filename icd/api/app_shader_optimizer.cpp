@@ -28,7 +28,6 @@
 * @brief Functions for tuning specific shader compile parameters for optimized code generation.
 **************************************************************************************************
 */
-#ifdef ICD_BUILD_APPPROFILE
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
 #include "include/vk_physical_device.h"
@@ -1176,5 +1175,3 @@ void ShaderOptimizer::BuildRuntimeProfile()
 #endif // ICD_RUNTIME_APP_PROFILE
 
 };
-
-#endif // ICD_BUILD_APPPROFILE

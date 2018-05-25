@@ -1122,11 +1122,15 @@ OCL20ToSPIRV::visitCallGetImageSize(CallInst* CI,
         }
         return NCI;
       }
-      unsigned I = StringSwitch<unsigned>(DemangledName)
-          .Case(kOCLBuiltinName::GetImageWidth, 0)
-          .Case(kOCLBuiltinName::GetImageHeight, 1)
-          .Case(kOCLBuiltinName::GetImageDepth, 2)
-          .Case(kOCLBuiltinName::GetImageArraySize, Dim - 1);
+      unsigned I = 0;
+      if (DemangledName == kOCLBuiltinName::GetImageWidth)
+        I = 0;
+      else if (DemangledName == kOCLBuiltinName::GetImageHeight)
+        I = 1;
+      else if (DemangledName == kOCLBuiltinName::GetImageDepth)
+        I = 2;
+      else if (DemangledName == kOCLBuiltinName::GetImageArraySize)
+        I = Dim - 1;
       return ExtractElementInst::Create(NCI, getUInt32(M, I), "",
           NCI->getNextNode());
     },

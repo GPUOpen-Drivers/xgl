@@ -67,11 +67,8 @@ static VkAllocationCallbacks g_privateCallbacks = allocator::g_DefaultAllocCallb
 Instance::Instance(
     const VkAllocationCallbacks*        pAllocCb,
     uint32_t                            apiVersion,
-    const InstanceExtensions::Enabled&  enabledExtensions
-#ifdef ICD_BUILD_APPPROFILE
-    ,
+    const InstanceExtensions::Enabled&  enabledExtensions,
     AppProfile                          preInitProfile
-#endif
     )
     :
     m_pPalPlatform(nullptr),
@@ -83,9 +80,7 @@ Instance::Instance(
     m_apiVersion(apiVersion),
     m_enabledExtensions(enabledExtensions),
     m_dispatchTable(DispatchTable::Type::INSTANCE, this),
-#ifdef ICD_BUILD_APPPROFILE
     m_preInitAppProfile(preInitProfile),
-#endif
     m_screenCount(0),
     m_pScreenStorage(nullptr),
     m_pDevModeMgr(nullptr),
@@ -114,10 +109,8 @@ VkResult Instance::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkInstance*                     pInstance)
 {
-#ifdef ICD_BUILD_APPPROFILE
     // Detect an initial app profile (if any).  This may later be overridden by private panel settings.
     AppProfile preInitAppProfile = ScanApplicationProfile(*pCreateInfo);
-#endif
 
     const VkAllocationCallbacks* pAllocCb = pAllocator;
     const VkApplicationInfo* pAppInfo = pCreateInfo->pApplicationInfo;
@@ -198,11 +191,8 @@ VkResult Instance::Create(
     pNewInstance = reinterpret_cast<Instance*>(pInstanceData);
     new (pInstanceData) Instance(pAllocCb,
                                  apiVersion,
-                                 enabledInstanceExtensions
-#ifdef ICD_BUILD_APPPROFILE
-                                 , preInitAppProfile
-#endif
-                                 );
+                                 enabledInstanceExtensions,
+                                 preInitAppProfile);
 
     // Two-step initialization
     result = pNewInstance->Init(pAppInfo);
@@ -507,32 +497,22 @@ void Instance::InitDispatchTable()
 VkResult Instance::LoadAndCommitSettings(
     uint32_t         deviceCount,
     Pal::IDevice**   ppDevices,
-    RuntimeSettings* pSettings
-#ifdef ICD_BUILD_APPPROFILE
-    ,
-    AppProfile*      pAppProfiles
-#endif
-    )
+    RuntimeSettings* pSettings,
+    AppProfile*      pAppProfiles)
 {
     VkResult result = VK_SUCCESS;
 
     for (uint32_t deviceIdx = 0; deviceIdx < deviceCount; ++deviceIdx)
     {
-#ifdef ICD_BUILD_APPPROFILE
         pAppProfiles[deviceIdx] = m_preInitAppProfile;
-#endif
 
         // Load per-device settings
         ProcessSettings(ppDevices[deviceIdx],
-#ifdef ICD_BUILD_APPPROFILE
                         &pAppProfiles[deviceIdx],
-#endif
                         &pSettings[deviceIdx]);
 
-#ifdef ICD_BUILD_APPPROFILE
         // Overlay the application profile from Radeon Settings
         QueryApplicationProfile(&pSettings[deviceIdx]);
-#endif
 
         // Make sure the final settings have legal values and update dependant parameters
         ValidateSettings(ppDevices[deviceIdx], &pSettings[deviceIdx]);
@@ -954,7 +934,6 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
     }
 }
 
-#ifdef ICD_BUILD_APPPROFILE
 // =====================================================================================================================
 // Query dynamic applicaiton profile settings
 VkResult Instance::QueryApplicationProfile(RuntimeSettings* pRuntimeSettings)
@@ -966,7 +945,6 @@ VkResult Instance::QueryApplicationProfile(RuntimeSettings* pRuntimeSettings)
     }
     return result;
 }
-#endif
 
 // =====================================================================================================================
 // Callback function used to route debug prints to the VK_EXT_debug_report extension

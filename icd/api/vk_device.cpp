@@ -136,23 +136,48 @@ namespace vk
     { -7, -8 }
 
 // =====================================================================================================================
-// Returns true if all requested features are supported.
-static bool VerifyRequestedPhysicalDeviceFeatures(const VkPhysicalDeviceFeatures* pSupportedFeatures,
-                                                  const VkPhysicalDeviceFeatures* pRequestedFeatures)
+// Returns VK_SUCCESS if all requested features are supported, VK_ERROR_FEATURE_NOT_PRESENT otherwise.
+template <typename T>
+static VkResult VerifyRequestedPhysicalDeviceFeatures(
+    const PhysicalDevice* pPhysicalDevice,
+    const T*              pRequestedFeatures)
 {
-    const size_t numFeatures = sizeof(VkPhysicalDeviceFeatures) / sizeof(VkBool32);
-    const auto   supported   = reinterpret_cast<const VkBool32*>(pSupportedFeatures);
-    const auto   requested   = reinterpret_cast<const VkBool32*>(pRequestedFeatures);
+    T      supportedFeatures;
+    size_t headerSize;
+
+    // Start by making a copy of the requested features all so that uninitialized struct padding always matches below.
+    memcpy(&supportedFeatures, pRequestedFeatures, sizeof(T));
+
+    if (std::is_same<T, VkPhysicalDeviceFeatures>::value)
+    {
+        pPhysicalDevice->GetFeatures(reinterpret_cast<VkPhysicalDeviceFeatures*>(&supportedFeatures));
+
+        // The original VkPhysicalDeviceFeatures struct doesn't contain a VkStructHeader
+        headerSize = 0;
+    }
+    else
+    {
+        VkStructHeaderNonConst* pHeader = reinterpret_cast<VkStructHeaderNonConst*>(&supportedFeatures);
+
+        pHeader->pNext = nullptr; // Make sure GetFeatures2 doesn't clobber the original requested features chain
+        pPhysicalDevice->GetFeatures2(pHeader);
+
+        headerSize = offsetof(VkPhysicalDeviceFeatures2, features);
+    }
+
+    const size_t numFeatures = (sizeof(T) - headerSize) / sizeof(VkBool32); // Struct padding may give us extra features
+    const auto   supported   = static_cast<const VkBool32*>(Util::VoidPtrInc(&supportedFeatures, headerSize));
+    const auto   requested   = static_cast<const VkBool32*>(Util::VoidPtrInc(pRequestedFeatures, headerSize));
 
     for (size_t featureNdx = 0; featureNdx < numFeatures; ++featureNdx)
     {
         if (requested[featureNdx] && !supported[featureNdx])
         {
-            return false;
+            return VK_ERROR_FEATURE_NOT_PRESENT;
         }
     }
 
-    return true;
+    return VK_SUCCESS;
 }
 
 // =====================================================================================================================
@@ -177,9 +202,7 @@ Device::Device(
     m_palDeviceCount(palDeviceCount),
     m_pPalQueueMemory(nullptr),
     m_internalMemMgr(this, pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
-#if defined(ICD_BUILD_APPPROFILE)
     m_shaderOptimizer(this, pPhysicalDevices[DefaultDeviceIndex]),
-#endif
     m_renderStateCache(this),
     m_barrierPolicy(barrierPolicy),
     m_enabledExtensions(enabledExtensions),
@@ -209,9 +232,7 @@ Device::Device(
     m_allocatedCount = 0;
     m_maxAllocations = pPhysicalDevices[DefaultDeviceIndex]->GetLimits().maxMemoryAllocationCount;
 
-#ifdef ICD_BUILD_APPPROFILE
     m_shaderOptimizer.Init();
-#endif
 }
 
 // =====================================================================================================================
@@ -297,24 +318,13 @@ VkResult Device::Create(
                   enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1)             == false);
     }
 
-    // Make sure only supported features are requested.
-    if (pCreateInfo->pEnabledFeatures != nullptr)
-    {
-        VkPhysicalDeviceFeatures physicalDeviceFeatures;
-        pPhysicalDevice->GetFeatures(&physicalDeviceFeatures);
-
-        if (!VerifyRequestedPhysicalDeviceFeatures(&physicalDeviceFeatures, pCreateInfo->pEnabledFeatures))
-        {
-            return VK_ERROR_FEATURE_NOT_PRESENT;
-        }
-    }
-
     uint32_t        numDevices       = 1;
     PhysicalDevice* pPhysicalDevices[MaxPalDevices] = { pPhysicalDevice              };
     Pal::IDevice*   pPalDevices[MaxPalDevices]      = { pPhysicalDevice->PalDevice() };
     Instance*       pInstance                       = pPhysicalDevice->VkInstance();
+    bool            physicalDeviceFeaturesVerified  = false;
 
-    for (pDeviceCreateInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    for (pDeviceCreateInfo = pCreateInfo; ((pHeader != nullptr) && (vkResult == VK_SUCCESS)); pHeader = pHeader->pNext)
     {
         switch (static_cast<int>(pHeader->sType))
         {
@@ -340,14 +350,98 @@ VkResult Device::Create(
             }
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFeatures2>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceFeatures2*>(pHeader));
+
+            // If present, VkPhysicalDeviceFeatures2 controls which features are enabled instead of pEnabledFeatures
+            physicalDeviceFeaturesVerified = true;
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevice16BitStorageFeatures>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDevice16BitStorageFeatures*>(pHeader));
+
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_FEATURES_AMD:
         {
-            // Nothing to be done here
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceGpaFeaturesAMD>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceGpaFeaturesAMD*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceSamplerYcbcrConversionFeatures>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceSamplerYcbcrConversionFeatures*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVariablePointerFeatures>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceVariablePointerFeatures*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceProtectedMemoryFeatures>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceProtectedMemoryFeatures*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceMultiviewFeatures>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceMultiviewFeatures*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderDrawParameterFeatures>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceShaderDrawParameterFeatures*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceDescriptorIndexingFeaturesEXT *>(pHeader));
+
             break;
         }
         default:
             break;
         }
+    }
+
+    // If not checked already with VkPhysicalDeviceFeatures2, make sure only supported features are requested.
+    if ((physicalDeviceFeaturesVerified == false) &&
+        (pCreateInfo->pEnabledFeatures  != nullptr))
+    {
+        vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFeatures>(
+            pPhysicalDevice,
+            pCreateInfo->pEnabledFeatures);
+    }
+
+    if (vkResult != VK_SUCCESS)
+    {
+        return vkResult;
     }
 
     uint32_t totalQueues = 0;

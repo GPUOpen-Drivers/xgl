@@ -3729,11 +3729,17 @@ SPIRVToLLVM::transShaderDecoration(SPIRVValue *BV, Value *V) {
       InOutDec.Interp.Loc = InterpLocCenter;
       InOutDec.PerPatch = false;
       InOutDec.StreamId = 0;
+      InOutDec.Index = 0;
 
       SPIRVWord Loc = SPIRVID_INVALID;
       if (BV->hasDecorate(DecorationLocation, 0, &Loc)) {
         InOutDec.IsBuiltIn = false;
         InOutDec.Value.Loc = Loc;
+      }
+
+      SPIRVWord Index = SPIRVID_INVALID;
+      if (BV->hasDecorate(DecorationIndex, 0, &Index)) {
+          InOutDec.Index = Index;
       }
 
       SPIRVWord BuiltIn = SPIRVID_INVALID;
@@ -4007,6 +4013,11 @@ SPIRVToLLVM::buildShaderInOutMetadata(SPIRVType *BT,
     InOutDec.IsBuiltIn = false;
   }
 
+  SPIRVWord Index = SPIRVID_INVALID;
+  if (BT->hasDecorate(DecorationIndex, 0, &Index)) {
+      InOutDec.Index = Index;
+  }
+
   SPIRVWord BuiltIn = SPIRVID_INVALID;
   if (BT->hasDecorate(DecorationBuiltIn, 0, &BuiltIn)) {
     InOutDec.Value.BuiltIn = BuiltIn;
@@ -4055,6 +4066,7 @@ SPIRVToLLVM::buildShaderInOutMetadata(SPIRVType *BT,
       InOutMD.IsLoc = true;
       InOutMD.IsBuiltIn = false;
       InOutMD.Value = InOutDec.Value.Loc;
+      InOutMD.Index = InOutDec.Index;
     }
 
     InOutMD.Component = InOutDec.Component;

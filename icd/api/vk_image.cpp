@@ -333,42 +333,6 @@ static VkResult InitSparseVirtualMemory(
 }
 
 // =====================================================================================================================
-static VkResult BindNullSparseMemory(
-    Device*                         pDevice,
-    VkImage                         sparseImage,
-    const Pal::GpuMemoryCreateInfo& sparseMemCreateInfo)
-{
-    VkBindSparseInfo                  bindSparseInfo        = {};
-    VkSparseImageOpaqueMemoryBindInfo imageOpaqueBind       = {};
-    VkSparseMemoryBind                imageOpaqueMemoryBind = {};
-    VkQueue                           universalQueue        = VK_NULL_HANDLE;
-    vk::Queue*                        universalQueuePtr     = nullptr;
-
-    VkResult result = pDevice->GetQueue(Pal::EngineTypeUniversal, 0, &universalQueue);
-
-    if (result == VK_SUCCESS)
-    {
-        VK_ASSERT(universalQueue != VK_NULL_HANDLE);
-
-        universalQueuePtr = ApiQueue::ObjectFromHandle(universalQueue);
-
-        imageOpaqueMemoryBind.size           = sparseMemCreateInfo.size;
-
-        imageOpaqueBind.image                = sparseImage;
-        imageOpaqueBind.bindCount            = 1;
-        imageOpaqueBind.pBinds               = &imageOpaqueMemoryBind;
-
-        bindSparseInfo.sType                 = VK_STRUCTURE_TYPE_BIND_SPARSE_INFO;
-        bindSparseInfo.imageOpaqueBindCount  = 1;
-        bindSparseInfo.pImageOpaqueBinds     = &imageOpaqueBind;
-
-        result = universalQueuePtr->BindSparse(1, &bindSparseInfo, VK_NULL_HANDLE);
-    }
-
-    return result;
-}
-
-// =====================================================================================================================
 // Create a new PAL image object (internal function)
 VkResult Image::CreateImageInternal(
     Device*                         pDevice,
@@ -673,15 +637,6 @@ VkResult Image::Create(
             imageFlags);
 
         imageHandle = Image::HandleFromVoidPointer(pMemory);
-    }
-
-    if (isSparse && (result == VK_SUCCESS))
-    {
-        // In order to disable page faults for this image in KMD, we need to explicitly bind null
-        // physical memory to the virtual memory.
-        VK_ASSERT(imageHandle != VK_NULL_HANDLE);
-
-        result = BindNullSparseMemory(pDevice, imageHandle, sparseMemCreateInfo);
     }
 
     if (result == VK_SUCCESS)

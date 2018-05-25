@@ -591,19 +591,8 @@ class CodeGen(FuncDef):
             else:
                 shouldNeverCall("")
 
-            if intrinGen._returnFmaskId:
-                # Fetch fmask only
-                fmaskVal    = intrinGen.genLoadFmask(irOut)
-                retVal      = intrinGen.genReturnFmaskValue(fmaskVal, irOut)
-                irOut.write("    ret %s %s\n" % (intrinGen.getReturnType(), retVal))
-            else:
-                if intrinGen._isFmaskBased:
-                    # Get sampleId from fmask value
-                    fmaskVal            = intrinGen.genLoadFmask(irOut)
-                    intrinGen._sample   = intrinGen.genGetSampleIdFromFmaskValue(fmaskVal, irOut)
-
-                retVal    = intrinGen.genIntrinsicCall(irOut)
-                intrinGen.processReturn(retVal, intrinGen, irOut)
+            retVal = intrinGen.genIntrinsicCall(irOut)
+            intrinGen.processReturn(retVal, intrinGen, irOut)
 
             irOut.write('}\n\n')
 
@@ -1913,6 +1902,19 @@ class DimAwareImageLoadGen(CodeGen):
         assert self._dim != SpirvDim.DimBuffer
         assert self._opKind == SpirvImageOpKind.read or self._opKind == SpirvImageOpKind.fetch
 
+        if self._returnFmaskId:
+            # Fetch fmask only
+            # FMask is only supported for read and fetch
+            fmaskVal    = self.genLoadFmaskDimAware(irOut)
+            retVal      = self.genReturnFmaskValue(fmaskVal, irOut)
+            return retVal
+        else:
+            if self._isFmaskBased:
+                # Get sampleId from fmask value
+                # FMask is only supported for read and fetch
+                fmaskVal        = self.genLoadFmaskDimAware(irOut)
+                self._sample    = self.genGetSampleIdFromFmaskValue(fmaskVal, irOut)
+
         if self._dim == SpirvDim.DimCube:
             self._resource = VarNames.patchedResource
             irPatchCall = "    %s = call <8 x i32> @%s(<8 x i32> %s)\n" \
@@ -1924,8 +1926,8 @@ class DimAwareImageLoadGen(CodeGen):
         # Process image load, fetch
         retType         = self.getBackendRetType()
         retVal          = FuncDef.INVALID_VAR
-        intrinsicName   = self.getIntrinsicName()
-        intrinsicParams = self.getIntrinsicParam(False, irOut)
+        intrinsicName   = self.getIntrinsicName(False)
+        intrinsicParams = self.getIntrinsicParam(False, False, irOut)
 
         retVal      = self.acquireLocalVar()
         irCall = "    %s = call %s @%s(%s)\n" \
@@ -1940,7 +1942,7 @@ class DimAwareImageLoadGen(CodeGen):
         return retVal
 
     # Gets image load intrinsic parameters
-    def getIntrinsicParam(self, paramTypeOnly, irOut):
+    def getIntrinsicParam(self, paramTypeOnly, isFetchingFromFmask, irOut):
         # DMask
         if paramTypeOnly:
             params = "i32"
@@ -1984,7 +1986,7 @@ class DimAwareImageLoadGen(CodeGen):
                 params += ", i32 %s" % (self._lod)
 
         # Sample ID
-        if self._hasSample:
+        if self._hasSample and not isFetchingFromFmask:
             assert self._dim == SpirvDim.Dim2D or self._dim == SpirvDim.DimSubpassData
             if paramTypeOnly:
                 params += ", i32"
@@ -1995,7 +1997,10 @@ class DimAwareImageLoadGen(CodeGen):
         if paramTypeOnly:
             params += ", <8 x i32>"
         else:
-            params += ", <8 x i32> %s" % (self._resource)
+            if isFetchingFromFmask:
+                params += ", <8 x i32> %s" % (VarNames.fmask)
+            else:
+                params += ", <8 x i32> %s" % (self._resource)
 
         # TFE and LWE bit
         if paramTypeOnly:
@@ -2014,15 +2019,22 @@ class DimAwareImageLoadGen(CodeGen):
         return params
 
     # Gets image load intrinsic function name
-    def getIntrinsicName(self):
+    def getIntrinsicName(self, isFetchingFromFmask):
         funcName = "llvm.amdgcn.image.load"
 
         if self._hasLod:
             funcName += ".mip"
 
-        funcName += self.getDimAwareDimName()
+        if isFetchingFromFmask:
+            assert self._dim == SpirvDim.Dim2D or self._dim == SpirvDim.DimSubpassData
+            # NOTE: When accessing FMask, DA flag should not be set. To avoid setting DA flag,
+            # here 3D intrinsic is used to access 2darray FMask.
+            dimName = self._arrayed and AMDGPUDimName.Dim3D or AMDGPUDimName.Dim2D
+        else:
+            dimName = self.getDimAwareDimName()
+        funcName += dimName
 
-        if self._sampledType == SpirvSampledType.f16:
+        if self._sampledType == SpirvSampledType.f16 and not isFetchingFromFmask:
             funcName += ".v4f16"
         else:
             funcName += ".v4f32"
@@ -2032,13 +2044,38 @@ class DimAwareImageLoadGen(CodeGen):
         if not hasLlvmDecl(funcName):
             # Adds LLVM declaration for this function
             if self._opKind != SpirvImageOpKind.write:
-                params = self.getIntrinsicParam(True, None)
+                params = self.getIntrinsicParam(True, isFetchingFromFmask, None)
+                retType = isFetchingFromFmask and "<4 x float>" or self.getBackendRetType()
                 funcExternalDecl = "declare %s @%s(%s) %s\n" % \
-                                   (self.getBackendRetType(), funcName, params, \
+                                   (retType, funcName, params, \
                                     self._attr)
             addLlvmDecl(funcName, funcExternalDecl)
         return funcName
         pass
+
+    def genLoadFmaskDimAware(self, irOut):
+        assert self._dim != SpirvDim.DimBuffer
+        assert self._opKind == SpirvImageOpKind.read or self._opKind == SpirvImageOpKind.fetch
+
+        # Process image load, fetch
+        intrinsicName   = self.getIntrinsicName(True)
+        intrinsicParams = self.getIntrinsicParam(False, True, irOut)
+
+        retType     = "<4 x float>"
+        fmaskVal    = self.acquireLocalVar()
+
+        irCall = "    %s = call %s @%s(%s)\n" \
+            % (fmaskVal,
+               retType,
+               intrinsicName,
+               intrinsicParams)
+        irOut.write(irCall)
+
+        temp        = self.acquireLocalVar()
+        bitcast     = "    %s = bitcast <4 x float> %s to <4 x i32>\n" % (temp, fmaskVal)
+        irOut.write(bitcast)
+
+        return temp
 
 # Represents image store intrinsic based code generation.
 class ImageStoreGen(CodeGen):

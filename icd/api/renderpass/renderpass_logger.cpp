@@ -188,6 +188,8 @@ static const char* ImageLayoutString(
             return compact ? "DS_OPT" : "DEPTH_STENCIL_ATTACHMENT_OPTIMAL";
         case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
             return compact ? "DS_RD_OPT" : "DEPTH_STENCIL_READ_ONLY_OPTIMAL";
+        case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
+            return compact ? "D_RD_S_OPT" : "DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL";
         case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
             return compact ? "SHADER_RD_OPT" : "SHADER_READ_ONLY_OPTIMAL";
         case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:

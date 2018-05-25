@@ -100,9 +100,7 @@ public:
         PhysicalDeviceManager*  pPhysicalDeviceManager,
         Pal::IDevice*           pPalDevice,
         const RuntimeSettings&  settings,
-#ifdef ICD_BUILD_APPPROFILE
         AppProfile              appProfile,
-#endif
         VkPhysicalDevice*       pPhysicalDevice);
 
     VkResult Destroy(void);
@@ -250,7 +248,7 @@ public:
         VkSparseImageFormatProperties2*                 pProperties);
 
     void GetFeatures2(
-        VkPhysicalDeviceFeatures2*                  pFeatures);
+        VkStructHeaderNonConst*                     pFeatures) const;
 
     void GetMemoryProperties2(
         VkPhysicalDeviceMemoryProperties2*          pMemoryProperties);
@@ -418,10 +416,8 @@ public:
 #endif
     }
 
-#ifdef ICD_BUILD_APPPROFILE
     VK_INLINE AppProfile GetAppProfile() const
         { return m_appProfile; }
-#endif
 
     VK_INLINE const PhysicalDeviceGpaProperties& GetGpaProperties() const
         { return m_gpaProps; }
@@ -435,11 +431,8 @@ public:
 protected:
     PhysicalDevice(PhysicalDeviceManager* pPhysicalDeviceManager,
                    Pal::IDevice*          pPalDevice,
-                   const RuntimeSettings& settings
-#ifdef ICD_BUILD_APPPROFILE
-                   ,
+                   const RuntimeSettings& settings,
                    AppProfile             appProfile
-#endif
                    );
 
     VkResult Initialize();
@@ -475,9 +468,7 @@ protected:
         VkQueueFamilyProperties      properties;
     } m_queueFamilies[Queue::MaxQueueFamilies];
 
-#ifdef ICD_BUILD_APPPROFILE
     const AppProfile                 m_appProfile;
-#endif
 
     DeviceExtensions::Supported      m_supportedExtensions;
 

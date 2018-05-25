@@ -88,13 +88,14 @@ typedef std::vector<DescriptorBinding> DescriptorSet;
 // Represents interpolation info of fragment shader input
 struct FsInterpInfo
 {
-    uint32_t loc;     // Mapped input location (tightly packed)
-    bool     flat;    // Whether it is "flat" interpolation
-    bool     custom;  // Whether it is "custom" interpolation
+    uint32_t loc;           // Mapped input location (tightly packed)
+    bool     flat;          // Whether it is "flat" interpolation
+    bool     custom;        // Whether it is "custom" interpolation
+    bool     is16bit;       // Whether it is 16-bit interpolation
 };
 
 // Invalid interpolation info
-static const FsInterpInfo InvalidFsInterpInfo = { InvalidValue, false, false };
+static const FsInterpInfo InvalidFsInterpInfo = { InvalidValue, false, false, false };
 
 // Represents descriptor set/binding pair.
 union DescriptorPair
@@ -443,11 +444,20 @@ struct ResourceUsage
 
         struct
         {
+            // Original shader specified locations before location map (from tightly packed locations to shader
+            // specified locations)
+            //
+            // NOTE: This collected info is used to revise the calculated CB shader channel mask. Hardware requires
+            // the targets of fragment color export (MRTs) to be tightly packed while the CB shader channel masks
+            // should correspond to original shader specified targets.
+            uint32_t outputOrigLocs[MaxColorTargets];
+
             std::vector<FsInterpInfo> interpInfo;       // Array of interpolation info
             ExportFormat expFmts[MaxColorTargets];      // Shader export formats
             BasicType    outputTypes[MaxColorTargets];  // Array of basic types of fragment outputs
             uint32_t     cbShaderMask;                  // CB shader channel mask (correspond to register CB_SHADER_MASK)
             llvm::Value* pViewIndex;                    // View Index
+            bool         dualSourceBlend;               // Whether dual source blending is detected
         } fs;
     } inOutUsage;
 };

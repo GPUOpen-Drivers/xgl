@@ -406,20 +406,14 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
         }
     }
 
-#ifdef ICD_BUILD_APPPROFILE
     AppProfile appProfiles[Pal::MaxDevices] = {};
-#endif
 
     // Process panel settings for all PAL devices.  This needs to happen globally up front because some instance-level
     // work must occur in between after loading settings but prior to finalizing all devices (mainly developer driver
     // related).
     if (result == VK_SUCCESS)
     {
-        result = m_pInstance->LoadAndCommitSettings(palDeviceCount, pPalDeviceList, pSettings
-#ifdef ICD_BUILD_APPPROFILE
-        , appProfiles
-#endif
-        );
+        result = m_pInstance->LoadAndCommitSettings(palDeviceCount, pPalDeviceList, pSettings, appProfiles);
     }
 
     if (result == VK_SUCCESS)
@@ -434,9 +428,7 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
                 this,
                 pPalDeviceList[i],
                 pSettings[i],
-#ifdef ICD_BUILD_APPPROFILE
                 appProfiles[i],
-#endif
                 &newPhysicalDevice);
 
             if (result == VK_SUCCESS)

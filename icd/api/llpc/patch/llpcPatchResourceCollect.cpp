@@ -1046,6 +1046,12 @@ void PatchResourceCollect::MatchGenericInOut()
             inOutUsage.outputMapLocCount = std::max(inOutUsage.outputMapLocCount, locMap.second + 1);
             LLPC_OUTS("(" << GetShaderStageAbbreviation(m_shaderStage, true) << ") Output: loc = "
                           << locMap.first << "  =>  Mapped = " << locMap.second << "\n");
+
+            if (m_shaderStage == ShaderStageFragment)
+            {
+                auto& outOrigLocs = inOutUsage.fs.outputOrigLocs;
+                outOrigLocs[locMap.second] = locMap.first;
+            }
         }
         LLPC_OUTS("\n");
     }

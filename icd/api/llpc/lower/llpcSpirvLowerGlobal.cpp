@@ -1860,7 +1860,8 @@ void SpirvLowerGlobal::AddCallInstForOutputExport(
             instName = LlpcName::OutputExportGeneric;
             instName += GetTypeNameForScalarOrVector(pOutputTy);
 
-            auto pLoc = ConstantInt::get(m_pContext->Int32Ty(), outputMeta.Value);
+            LLPC_ASSERT(((outputMeta.Index == 1) && (outputMeta.Value == 0)) || (outputMeta.Index == 0));
+            auto pLoc = ConstantInt::get(m_pContext->Int32Ty(), outputMeta.Value + outputMeta.Index);
 
             // NOTE: If the relative location offset is not specified, initialize it to 0.
             if (pLocOffset == nullptr)
@@ -2012,7 +2013,9 @@ Value* SpirvLowerGlobal::LoadInOutMember(
                                                 //   - Vertex no. (0 ~ 2) for "InterpLocCustom"
     Instruction*               pInsertPos)      // [in] Where to insert calculation instructions
 {
-    LLPC_ASSERT((m_shaderStage == ShaderStageTessControl) || (m_shaderStage == ShaderStageTessEval));
+    LLPC_ASSERT((m_shaderStage == ShaderStageTessControl) ||
+                (m_shaderStage == ShaderStageTessEval) ||
+                (m_shaderStage == ShaderStageFragment));
 
     Value* pLoadValue = nullptr;
 

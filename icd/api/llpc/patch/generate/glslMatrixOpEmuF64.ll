@@ -3625,7 +3625,7 @@ define spir_func double @llpc.dot4.f64(
 }
 
 ; GLSL: dmat2 = inverse(dmat2)
-define spir_func [2 x <2 x double>] @_Z13dmatrixInverseDv2_Dv2_d(
+define spir_func [2 x <2 x double>] @_Z13matrixInverseDv2_Dv2_d(
     [2 x <2 x double>] %m) #0
 {
     ; [ x0   x1 ]                    [  y1 -x1 ]
@@ -3657,7 +3657,7 @@ define spir_func [2 x <2 x double>] @_Z13dmatrixInverseDv2_Dv2_d(
 }
 
 ; GLSL: dmat3 = inverse(dmat3)
-define spir_func [3 x <3 x double>] @_Z13dmatrixInverseDv3_Dv3_d(
+define spir_func [3 x <3 x double>] @_Z13matrixInverseDv3_Dv3_d(
     [3 x <3 x double>] %m) #0
 {
     ; [ x0   x1   x2 ]                   [ Adj(x0) Adj(x1) Adj(x2) ] T
@@ -3737,7 +3737,7 @@ define spir_func [3 x <3 x double>] @_Z13dmatrixInverseDv3_Dv3_d(
 }
 
 ; GLSL: dmat4 = inverse(dmat4)
-define spir_func [4 x <4 x double>] @_Z13dmatrixInverseDv4_Dv4_d(
+define spir_func [4 x <4 x double>] @_Z13matrixInverseDv4_Dv4_d(
     [4 x <4 x double>] %m) #0
 {
     ; [ x0   x1   x2   x3 ]                   [ Adj(x0) Adj(x1) Adj(x2) Adj(x3) ] T

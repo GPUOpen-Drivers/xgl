@@ -241,11 +241,8 @@ static bool VerifyBCFormatSupport(
 PhysicalDevice::PhysicalDevice(
     PhysicalDeviceManager*  pPhysicalDeviceManager,
     Pal::IDevice*           pPalDevice,
-    const RuntimeSettings&  settings
-#ifdef ICD_BUILD_APPPROFILE
-    ,
+    const RuntimeSettings&  settings,
     AppProfile              appProfile
-#endif
     )
     :
     m_pPhysicalDeviceManager(pPhysicalDeviceManager),
@@ -254,9 +251,7 @@ PhysicalDevice::PhysicalDevice(
     m_settings(settings),
     m_vrHighPrioritySubEngineIndex(UINT32_MAX),
     m_queueFamilyCount(0),
-#ifdef ICD_BUILD_APPPROFILE
     m_appProfile(appProfile),
-#endif
     m_supportedExtensions(),
     m_compiler(this)
 {
@@ -278,9 +273,7 @@ VkResult PhysicalDevice::Create(
     PhysicalDeviceManager* pPhysicalDeviceManager,
     Pal::IDevice*          pPalDevice,
     const RuntimeSettings& settings,
-#ifdef ICD_BUILD_APPPROFILE
     AppProfile             appProfile,
-#endif
     VkPhysicalDevice*      pPhysicalDevice)
 {
     VK_ASSERT(pPhysicalDeviceManager != nullptr);
@@ -294,11 +287,7 @@ VkResult PhysicalDevice::Create(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-#ifdef ICD_BUILD_APPPROFILE
     VK_INIT_DISPATCHABLE(PhysicalDevice, pMemory, (pPhysicalDeviceManager, pPalDevice, settings, appProfile));
-#else
-    VK_INIT_DISPATCHABLE(PhysicalDevice, pMemory, (pPhysicalDeviceManager, pPalDevice, settings));
-#endif
 
     VkPhysicalDevice handle = reinterpret_cast<VkPhysicalDevice>(pMemory);
 
@@ -425,7 +414,9 @@ VkResult PhysicalDevice::Initialize()
 
         finalizeInfo.indirectUserDataTable[tableId].offsetInDwords = vertBufTableCeRamOffset;
         finalizeInfo.indirectUserDataTable[tableId].sizeInDwords   = vertBufTableCeRamSize;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 403
         finalizeInfo.indirectUserDataTable[tableId].ringSize       = m_settings.vbTableInstanceRingSize;
+#endif
 
         if (m_settings.fullScreenFrameMetadataSupport)
         {
@@ -812,13 +803,11 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 }
 
 // =====================================================================================================================
-// Retrieve format properites. Called in response to vkGetPhysicalDeviceFeatures
+// Retrieve device feature support. Called in response to vkGetPhysicalDeviceFeatures
 VkResult PhysicalDevice::GetFeatures(
     VkPhysicalDeviceFeatures* pFeatures
     ) const
 {
-    memset(pFeatures, 0, sizeof(VkPhysicalDeviceFeatures));
-
     pFeatures->robustBufferAccess                       = VK_TRUE;
     pFeatures->fullDrawIndexUint32                      = VK_TRUE;
     pFeatures->imageCubeArray                           = VK_TRUE;
@@ -1093,9 +1082,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     uint32_t*                       pPropertyCount,
     VkSparseImageFormatProperties*  pProperties) const
 {
-    uint32_t bytesPerPixel = Pal::Formats::BytesPerPixel(VkToPalFormat(format).format);
-
-    const struct
+    const struct AspectLookup
     {
         Pal::ImageAspect      aspectPal;
         VkImageAspectFlagBits aspectVk;
@@ -1108,7 +1095,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     };
     const uint32_t nAspects = sizeof(aspects) / sizeof(aspects[0]);
 
-    bytesPerPixel = Util::Pow2Pad(bytesPerPixel);
+    uint32_t bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(VkToPalFormat(format).format));
 
     bool supported = true
         // Currently we only support optimally tiled sparse images
@@ -1132,145 +1119,173 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     if (aspects[1].available || aspects[2].available)
     {
         supported &= ((PalProperties().imageProperties.prtFeatures & Pal::PrtFeatureImageDepthStencil) != 0);
+
+        // PAL doesn't expose all the information required to support a planar depth/stencil format.
+        if (aspects[1].available && aspects[2].available)
+        {
+            supported = false;
+        }
     }
 
     if (supported)
     {
-        *pPropertyCount = 1;
+        const uint32_t requiredPropertyCount = (aspects[0].available ? 1 : 0)
+                                             + (aspects[1].available ? 1 : 0)
+                                             + (aspects[2].available ? 1 : 0); // Stencil is in a separate plane
 
-        if (pProperties != nullptr)
+        VK_ASSERT(pPropertyCount != nullptr);
+
+        if (pProperties == nullptr)
         {
-            pProperties->aspectMask = 0;
+            *pPropertyCount = requiredPropertyCount;
+        }
+        else
+        {
+            uint32_t writtenPropertyCount = 0;
 
-            for (uint32_t nAspect = 0; nAspect < nAspects; ++nAspect)
+            for (const AspectLookup* pAspect = aspects; pAspect != aspects + nAspects; ++pAspect)
             {
-                const auto& currentAspect = aspects[nAspect];
-
-                if (currentAspect.available)
+                if (!pAspect->available)
                 {
-                    pProperties->aspectMask |= currentAspect.aspectVk;
+                    continue;
                 }
-            }
 
-            // Determine pixel size index (log2 of the pixel byte size, used to index into the tables below)
-            // Note that we only support standard block shapes currently
-            const uint32_t pixelSizeIndex = Util::Log2(bytesPerPixel);
-
-            if ((type == VK_IMAGE_TYPE_2D) && (samples == VK_SAMPLE_COUNT_1_BIT))
-            {
-                // Report standard 2D sparse block shapes
-                static const VkExtent3D Std2DBlockShapes[] =
+                if (writtenPropertyCount == *pPropertyCount)
                 {
-                    {   256,    256,    1   },  // 8-bit
-                    {   256,    128,    1   },  // 16-bit
-                    {   128,    128,    1   },  // 32-bit
-                    {   128,    64,     1   },  // 64-bit
-                    {   64,     64,     1   },  // 128-bit
-                };
+                    break;
+                }
 
-                VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std2DBlockShapes));
+                pProperties->aspectMask = pAspect->aspectVk;
 
-                pProperties->imageGranularity = Std2DBlockShapes[pixelSizeIndex];
-            }
-            else if (type == VK_IMAGE_TYPE_3D)
-            {
-                if (GetPrtFeatures() & Pal::PrtFeatureImage3D)
+                const VkFormat aspectFormat = vk::Formats::GetAspectFormat(format, pAspect->aspectVk);
+                bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(VkToPalFormat(aspectFormat).format));
+
+                // Determine pixel size index (log2 of the pixel byte size, used to index into the tables below)
+                // Note that we only support standard block shapes currently
+                const uint32_t pixelSizeIndex = Util::Log2(bytesPerPixel);
+
+                if ((type == VK_IMAGE_TYPE_2D) && (samples == VK_SAMPLE_COUNT_1_BIT))
                 {
-                    // Report standard 3D sparse block shapes
-                    static const VkExtent3D Std3DBlockShapes[] =
+                    // Report standard 2D sparse block shapes
+                    static const VkExtent3D Std2DBlockShapes[] =
                     {
-                        {   64,     32,     32  },  // 8-bit
-                        {   32,     32,     32  },  // 16-bit
-                        {   32,     32,     16  },  // 32-bit
-                        {   32,     16,     16  },  // 64-bit
-                        {   16,     16,     16  },  // 128-bit
+                        {   256,    256,    1   },  // 8-bit
+                        {   256,    128,    1   },  // 16-bit
+                        {   128,    128,    1   },  // 32-bit
+                        {   128,    64,     1   },  // 64-bit
+                        {   64,     64,     1   },  // 128-bit
                     };
 
-                    VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std3DBlockShapes));
+                    VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std2DBlockShapes));
 
-                    pProperties->imageGranularity = Std3DBlockShapes[pixelSizeIndex];
+                    pProperties->imageGranularity = Std2DBlockShapes[pixelSizeIndex];
+                }
+                else if (type == VK_IMAGE_TYPE_3D)
+                {
+                    if (GetPrtFeatures() & Pal::PrtFeatureImage3D)
+                    {
+                        // Report standard 3D sparse block shapes
+                        static const VkExtent3D Std3DBlockShapes[] =
+                        {
+                            {   64,     32,     32  },  // 8-bit
+                            {   32,     32,     32  },  // 16-bit
+                            {   32,     32,     16  },  // 32-bit
+                            {   32,     16,     16  },  // 64-bit
+                            {   16,     16,     16  },  // 128-bit
+                        };
+
+                        VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std3DBlockShapes));
+
+                        pProperties->imageGranularity = Std3DBlockShapes[pixelSizeIndex];
+                    }
+                    else
+                    {
+                        VK_ASSERT((GetPrtFeatures() & Pal::PrtFeatureNonStandardImage3D) != 0);
+
+                        // When standard shapes aren't supported, report shapes with a depth equal to the tile
+                        // thickness, 4, except for 128-bit, which would cause a tile split. PAL chooses PRT thick mode
+                        // for 3D images, and addrlib uses these unmodified for CI/VI.
+                        static const VkExtent3D NonStd3DBlockShapes[] =
+                        {
+                            {   128,    128,    4  },  // 8-bit
+                            {   128,    64,     4  },  // 16-bit
+                            {   64,     64,     4  },  // 32-bit
+                            {   64,     32,     4  },  // 64-bit
+                            {   64,     64,     1  },  // 128-bit
+                        };
+
+                        VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(NonStd3DBlockShapes));
+
+                        pProperties->imageGranularity = NonStd3DBlockShapes[pixelSizeIndex];
+                    }
+                }
+                else if ((type == VK_IMAGE_TYPE_2D) && (samples != VK_SAMPLE_COUNT_1_BIT))
+                {
+                    // Report standard MSAA sparse block shapes
+                    static const VkExtent3D StdMSAABlockShapes[][5] =
+                    {
+                        { // 2x MSAA
+                            {   128,    256,    1   },  // 8-bit
+                            {   128,    128,    1   },  // 16-bit
+                            {   64,     128,    1   },  // 32-bit
+                            {   64,     64,     1   },  // 64-bit
+                            {   32,     64,     1   },  // 128-bit
+                        },
+                        { // 4x MSAA
+                            {   128,    128,    1   },  // 8-bit
+                            {   128,    64,     1   },  // 16-bit
+                            {   64,     64,     1   },  // 32-bit
+                            {   64,     32,     1   },  // 64-bit
+                            {   32,     32,     1   },  // 128-bit
+                        },
+                        { // 8x MSAA
+                            {   64,     128,    1   },  // 8-bit
+                            {   64,     64,     1   },  // 16-bit
+                            {   32,     64,     1   },  // 32-bit
+                            {   32,     32,     1   },  // 64-bit
+                            {   16,     32,     1   },  // 128-bit
+                        },
+                        { // 16x MSAA
+                            {   64,     64,     1   },  // 8-bit
+                            {   64,     32,     1   },  // 16-bit
+                            {   32,     32,     1   },  // 32-bit
+                            {   32,     16,     1   },  // 64-bit
+                            {   16,     16,     1   },  // 128-bit
+                        },
+                    };
+
+                    const uint32_t sampleCountIndex = Util::Log2(static_cast<uint32_t>(samples)) - 1;
+
+                    VK_ASSERT(sampleCountIndex < VK_ARRAY_SIZE(StdMSAABlockShapes));
+                    VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(StdMSAABlockShapes[0]));
+
+                    pProperties->imageGranularity = StdMSAABlockShapes[sampleCountIndex][pixelSizeIndex];
                 }
                 else
                 {
-                    VK_ASSERT((GetPrtFeatures() & Pal::PrtFeatureNonStandardImage3D) != 0);
-
-                    // When standard shapes aren't supported, report shapes with a depth equal to the tile thickness, 4,
-                    // except for 128-bit, which would cause a tile split.  PAL chooses PRT thick mode for 3D images,
-                    // and addrlib uses these unmodified for CI/VI.
-                    static const VkExtent3D NonStd3DBlockShapes[] =
-                    {
-                        {   128,    128,    4  },  // 8-bit
-                        {   128,    64,     4  },  // 16-bit
-                        {   64,     64,     4  },  // 32-bit
-                        {   64,     32,     4  },  // 64-bit
-                        {   64,     64,     1  },  // 128-bit
-                    };
-
-                    VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(NonStd3DBlockShapes));
-
-                    pProperties->imageGranularity = NonStd3DBlockShapes[pixelSizeIndex];
+                    VK_ASSERT(!"Unexpected parameter combination");
                 }
-            }
-            else if ((type == VK_IMAGE_TYPE_2D) && (samples != VK_SAMPLE_COUNT_1_BIT))
-            {
-                // Report standard MSAA sparse block shapes
-                static const VkExtent3D StdMSAABlockShapes[][5] =
+
+                pProperties->flags = 0;
+
+                // If per-layer miptail isn't supported then set SINGLE_MIPTAIL_BIT
+                if ((GetPrtFeatures() & Pal::PrtFeaturePerSliceMipTail) == 0)
                 {
-                    { // 2x MSAA
-                        {   128,    256,    1   },  // 8-bit
-                        {   128,    128,    1   },  // 16-bit
-                        {   64,     128,    1   },  // 32-bit
-                        {   64,     64,     1   },  // 64-bit
-                        {   32,     64,     1   },  // 128-bit
-                    },
-                    { // 4x MSAA
-                        {   128,    128,    1   },  // 8-bit
-                        {   128,    64,     1   },  // 16-bit
-                        {   64,     64,     1   },  // 32-bit
-                        {   64,     32,     1   },  // 64-bit
-                        {   32,     32,     1   },  // 128-bit
-                    },
-                    { // 8x MSAA
-                        {   64,     128,    1   },  // 8-bit
-                        {   64,     64,     1   },  // 16-bit
-                        {   32,     64,     1   },  // 32-bit
-                        {   32,     32,     1   },  // 64-bit
-                        {   16,     32,     1   },  // 128-bit
-                    },
-                    { // 16x MSAA
-                        {   64,     64,     1   },  // 8-bit
-                        {   64,     32,     1   },  // 16-bit
-                        {   32,     32,     1   },  // 32-bit
-                        {   32,     16,     1   },  // 64-bit
-                        {   16,     16,     1   },  // 128-bit
-                    },
-                };
+                    pProperties->flags |= VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT;
+                }
 
-                const uint32_t sampleCountIndex = Util::Log2(static_cast<uint32_t>(samples)) - 1;
+                // If unaligned mip size isn't supported then set ALIGNED_MIP_SIZE_BIT
+                if ((GetPrtFeatures() & Pal::PrtFeatureUnalignedMipSize) == 0)
+                {
+                    pProperties->flags |= VK_SPARSE_IMAGE_FORMAT_ALIGNED_MIP_SIZE_BIT;
+                }
 
-                VK_ASSERT(sampleCountIndex < VK_ARRAY_SIZE(StdMSAABlockShapes));
-                VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(StdMSAABlockShapes[0]));
+                ++writtenPropertyCount;
+                ++pProperties;
 
-                pProperties->imageGranularity = StdMSAABlockShapes[sampleCountIndex][pixelSizeIndex];
-            }
-            else
-            {
-                VK_ASSERT(!"Unexpected parameter combination");
-            }
+            } // for pAspect
 
-            pProperties->flags = 0;
-
-            // If per-layer miptail isn't supported then set SINGLE_MIPTAIL_BIT
-            if ((GetPrtFeatures() & Pal::PrtFeaturePerSliceMipTail) == 0)
-            {
-                pProperties->flags |= VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT;
-            }
-
-            // If unaligned mip size isn't supported then set ALIGNED_MIP_SIZE_BIT
-            if ((GetPrtFeatures() & Pal::PrtFeatureUnalignedMipSize) == 0)
-            {
-                pProperties->flags |= VK_SPARSE_IMAGE_FORMAT_ALIGNED_MIP_SIZE_BIT;
-            }
+            *pPropertyCount = writtenPropertyCount;
         }
     }
     else
@@ -1278,10 +1293,6 @@ void PhysicalDevice::GetSparseImageFormatProperties(
         // Combination not supported
         *pPropertyCount = 0;
     }
-
-    // aspectMask - Handle the case of depth/stencil
-    // imageGranularity - Need to be able to determine format specific tile size
-    // flags - Need to take care of handling per-layer miptail and aligned miptail
 }
 
 // =====================================================================================================================
@@ -1294,9 +1305,6 @@ uint32_t PhysicalDevice::GetSupportedAPIVersion() const
     // For sanity check we do at least want to make sure that all the necessary extensions are supported and exposed.
     // The spec does not require Vulkan 1.1 implementations to expose the corresponding 1.0 extensions, but we'll
     // continue doing so anyways to maximize application compatibility (which is why the spec allows this).
-    // NOTE: We intentionally exclude VK_KHR_variable_pointers from the list because while variable pointers in core
-    // Vulkan 1.1 are completely optional, the extension version does require support for at least storage buffer
-    // variable pointers, which we can't support at the moment.
     VK_ASSERT( IsExtensionSupported(DeviceExtensions::KHR_16BIT_STORAGE)
             && IsExtensionSupported(DeviceExtensions::KHR_BIND_MEMORY2)
             && IsExtensionSupported(DeviceExtensions::KHR_DEDICATED_ALLOCATION)
@@ -1318,7 +1326,9 @@ uint32_t PhysicalDevice::GetSupportedAPIVersion() const
             && IsExtensionSupported(DeviceExtensions::KHR_RELAXED_BLOCK_LAYOUT)
 //            && IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION)
             && IsExtensionSupported(DeviceExtensions::KHR_SHADER_DRAW_PARAMETERS)
-            && IsExtensionSupported(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS));
+            && IsExtensionSupported(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS)
+//            && IsExtensionSupported(DeviceExtensions::KHR_VARIABLE_POINTERS)
+        );
 
     return apiVersion;
 }
@@ -2877,10 +2887,13 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
 }
 
 // =====================================================================================================================
+// Retrieve device feature support. Called in response to vkGetPhysicalDeviceFeatures2
+// NOTE: Don't memset here.  Otherwise, VerifyRequestedPhysicalDeviceFeatures needs to compare member by member
 void PhysicalDevice::GetFeatures2(
-    VkPhysicalDeviceFeatures2*                  pFeatures)
+    VkStructHeaderNonConst* pFeatures
+    ) const
 {
-    VkStructHeaderNonConst* pHeader = reinterpret_cast<VkStructHeaderNonConst*>(pFeatures);
+    VkStructHeaderNonConst* pHeader = pFeatures;
 
     while (pHeader)
     {
@@ -2888,9 +2901,10 @@ void PhysicalDevice::GetFeatures2(
         {
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
             {
-                VK_ASSERT(static_cast<void*>(pHeader) == static_cast<void*>(pFeatures) );
+                VkPhysicalDeviceFeatures2* pPhysicalDeviceFeatures2 =
+                    reinterpret_cast<VkPhysicalDeviceFeatures2*>(pHeader);
 
-                GetFeatures(&pFeatures->features);
+                GetFeatures(&pPhysicalDeviceFeatures2->features);
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES:
@@ -2950,7 +2964,6 @@ void PhysicalDevice::GetFeatures2(
 
                 pVariablePointerFeatures->variablePointers              = VK_FALSE;
                 pVariablePointerFeatures->variablePointersStorageBuffer = VK_FALSE;
-
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
@@ -2969,9 +2982,18 @@ void PhysicalDevice::GetFeatures2(
                     reinterpret_cast<VkPhysicalDeviceMultiviewFeatures*>(pHeader);
 
                 pMultiviewFeatures->multiview                   = VK_TRUE;
-                //                       there are extra primitives rendered on the view 0.
                 pMultiviewFeatures->multiviewGeometryShader     = VK_FALSE;
                 pMultiviewFeatures->multiviewTessellationShader = VK_TRUE;
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES:
+            {
+                VkPhysicalDeviceShaderDrawParameterFeatures* pShaderDrawParameterFeatures =
+                    reinterpret_cast<VkPhysicalDeviceShaderDrawParameterFeatures*>(pHeader);
+
+                pShaderDrawParameterFeatures->shaderDrawParameters = VK_TRUE;
 
                 break;
             }
@@ -2984,13 +3006,13 @@ void PhysicalDevice::GetFeatures2(
                 pDescIndexingFeatures->shaderInputAttachmentArrayDynamicIndexing           = VK_FALSE;
                 pDescIndexingFeatures->shaderUniformTexelBufferArrayDynamicIndexing        = VK_TRUE;
                 pDescIndexingFeatures->shaderStorageTexelBufferArrayDynamicIndexing        = VK_TRUE;
-                pDescIndexingFeatures->shaderUniformBufferArrayNonUniformIndexing          = VK_TRUE;
-                pDescIndexingFeatures->shaderSampledImageArrayNonUniformIndexing           = VK_TRUE;
-                pDescIndexingFeatures->shaderStorageBufferArrayNonUniformIndexing          = VK_TRUE;
-                pDescIndexingFeatures->shaderStorageImageArrayNonUniformIndexing           = VK_TRUE;
+                pDescIndexingFeatures->shaderUniformBufferArrayNonUniformIndexing          = VK_FALSE;
+                pDescIndexingFeatures->shaderSampledImageArrayNonUniformIndexing           = VK_FALSE;
+                pDescIndexingFeatures->shaderStorageBufferArrayNonUniformIndexing          = VK_FALSE;
+                pDescIndexingFeatures->shaderStorageImageArrayNonUniformIndexing           = VK_FALSE;
                 pDescIndexingFeatures->shaderInputAttachmentArrayNonUniformIndexing        = VK_FALSE;
-                pDescIndexingFeatures->shaderUniformTexelBufferArrayNonUniformIndexing     = VK_TRUE;
-                pDescIndexingFeatures->shaderStorageTexelBufferArrayNonUniformIndexing     = VK_TRUE;
+                pDescIndexingFeatures->shaderUniformTexelBufferArrayNonUniformIndexing     = VK_FALSE;
+                pDescIndexingFeatures->shaderStorageTexelBufferArrayNonUniformIndexing     = VK_FALSE;
                 pDescIndexingFeatures->descriptorBindingUniformBufferUpdateAfterBind       = VK_TRUE;
                 pDescIndexingFeatures->descriptorBindingSampledImageUpdateAfterBind        = VK_TRUE;
                 pDescIndexingFeatures->descriptorBindingStorageImageUpdateAfterBind        = VK_TRUE;
@@ -3320,14 +3342,39 @@ void PhysicalDevice::GetSparseImageFormatProperties2(
     VkSparseImageFormatProperties2*                     pProperties)
 {
     VK_ASSERT(pFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2);
-    GetSparseImageFormatProperties(
-        pFormatInfo->format,
-        pFormatInfo->type,
-        pFormatInfo->samples,
-        pFormatInfo->usage,
-        pFormatInfo->tiling,
-        pPropertyCount,
-        pProperties ? &pProperties->properties : nullptr);
+
+    if (pProperties == nullptr)
+    {
+        GetSparseImageFormatProperties(
+            pFormatInfo->format,
+            pFormatInfo->type,
+            pFormatInfo->samples,
+            pFormatInfo->usage,
+            pFormatInfo->tiling,
+            pPropertyCount,
+            nullptr);
+    }
+    else
+    {
+        // Assume that, at most, we will write two property structures (for depth and stencil)
+        VkSparseImageFormatProperties contiguousProperties[2] = {};
+
+        *pPropertyCount = Util::Min(*pPropertyCount, 2u);
+
+        GetSparseImageFormatProperties(
+            pFormatInfo->format,
+            pFormatInfo->type,
+            pFormatInfo->samples,
+            pFormatInfo->usage,
+            pFormatInfo->tiling,
+            pPropertyCount,
+            contiguousProperties);
+
+        for (uint32_t i = 0; i < *pPropertyCount; ++i)
+        {
+            pProperties[i].properties = contiguousProperties[i];
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -4026,11 +4073,10 @@ VkResult PhysicalDevice::GetDisplayModeProperties(
     uint32_t*                                   pPropertyCount,
     VkDisplayModePropertiesKHR*                 pProperties)
 {
-    VK_ASSERT(display);
-
     VkResult result = VK_SUCCESS;
 
     Pal::IScreen* pScreen = reinterpret_cast<Pal::IScreen*>(display);
+    VK_ASSERT(pScreen != nullptr);
 
     if (pProperties == nullptr)
     {
@@ -4416,7 +4462,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceFeatures2(
     VkPhysicalDevice                            physicalDevice,
     VkPhysicalDeviceFeatures2*                  pFeatures)
 {
-    ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetFeatures2(pFeatures);
+    ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetFeatures2(
+        reinterpret_cast<VkStructHeaderNonConst*>(pFeatures));
 }
 
 // =====================================================================================================================

@@ -14,7 +14,7 @@ genDType round genDType x : llpc.round.f64 #0
 genDType roundEven genDType x : llvm.rint.f64 #0
 genDType ceil genDType x : llvm.ceil.f64 #0
 genDType fract genDType x : llpc.fract.f64 #0
-genDType mod genDType x genDType y : llpc.mod.f64 #0
+genDType fmod genDType x genDType y : llpc.mod.f64 #0
 genDType fmin genDType x genDType y : llvm.minnum.f64 #0
 genDType fmax genDType x genDType y : llvm.maxnum.f64 #0
 genDType fclamp genDType x genDType minVal genDType maxVal : llpc.fclamp.f64 #0

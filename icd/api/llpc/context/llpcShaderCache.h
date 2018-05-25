@@ -65,10 +65,11 @@ enum class ShaderEntryState : uint32_t
 // Enumerates modes used in shader cache.
 enum ShaderCacheMode
 {
-    ShaderCacheDisable       = 0,  // Disabled
-    ShaderCacheEnableRuntime = 1,  // Enabled for runtime use only
-    ShaderCacheEnableOnDisk  = 2,  // Enabled with on-disk file
+    ShaderCacheDisable       = 0,             // Disabled
+    ShaderCacheEnableRuntime = 1,             // Enabled for runtime use only
+    ShaderCacheEnableOnDisk  = 2,             // Enabled with on-disk file
     ShaderCacheForceInternalCacheOnDisk = 3,  // Force to use internal cache on disk
+    ShaderCacheEnableOnDiskReadOnly = 4,      // Only read on-disk file with write-protection
 };
 
 // Stores data in the hash map of cached shaders and helps correlated a shader in the hash to a location in the

@@ -83,8 +83,6 @@ endif()
 ### Build Definitions ##################################################################################################
 target_compile_definitions(xgl PRIVATE ${TARGET_ARCHITECTURE_ENDIANESS}ENDIAN_CPU)
 
-target_compile_definitions(xgl PRIVATE ICD_BUILD_APPPROFILE)
-
 # Internal developer build
 if(VK_INTERNAL_DEVELOPER)
     target_compile_definitions(xgl PRIVATE VK_INTERNAL_DEVELOPER)

@@ -35,9 +35,7 @@
 #pragma once
 
 #include "include/khronos/vulkan.h"
-#ifdef ICD_BUILD_APPPROFILE
 #include "include/app_profile.h"
-#endif
 #include "include/vk_alloccb.h"
 #include "include/vk_dispatch.h"
 #include "include/vk_utils.h"
@@ -199,11 +197,8 @@ public:
     VkResult LoadAndCommitSettings(
         uint32_t         deviceCount,
         Pal::IDevice**   ppDevices,
-        RuntimeSettings* pSettings
-#ifdef ICD_BUILD_APPPROFILE
-        ,
+        RuntimeSettings* pSettings,
         AppProfile*      pAppProfiles
-#endif
         );
 
     VkResult QueryApplicationProfile(RuntimeSettings* pRuntimeSettings = nullptr);
@@ -232,11 +227,8 @@ private:
     Instance(
         const VkAllocationCallbacks*        pAllocCb,
         uint32_t                            apiVersion,
-        const InstanceExtensions::Enabled&  enabledExtensions
-#ifdef ICD_BUILD_APPPROFILE
-        ,
+        const InstanceExtensions::Enabled&  enabledExtensions,
         AppProfile                          preInitProfile
-#endif
         );
 
     bool DetermineNullGpuSupport(Pal::NullGpuId* pNullGpuId) const;
@@ -282,12 +274,10 @@ private:
         uint32_t u32All;
     } m_flags;
 
-#ifdef ICD_BUILD_APPPROFILE
     // The application profile that's been detected from the application name or other pattern
     // detection.  Nobody should use this value for anything because it may be overridden by
     // panel setting.  Instead, use the value tracked by the PhysicalDevice.
     AppProfile                          m_preInitAppProfile;
-#endif
 
     struct ScreenObject
     {
@@ -301,9 +291,7 @@ private:
     void*           m_pScreenStorage;
 
     DevModeMgr*   m_pDevModeMgr; // GPUOpen Developer Mode manager.
-#ifdef ICD_BUILD_APPPROFILE
     ChillSettings m_chillSettings; // Dynamic chill settings structure
-#endif
 
     Util::List<DebugReportCallback*, PalAllocator>  m_debugReportCallbacks;             // List of registered Debug
                                                                                         // Report Callbacks

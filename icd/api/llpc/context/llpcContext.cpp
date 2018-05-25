@@ -60,9 +60,9 @@ namespace cl
 {
 
 // -enable-cache-emu-lib-context: enable the cache of context of GLSL emulation library to file.
-static opt<bool> EnableCacheEmuLibContext("enable-cache-emu-lib-context",
-                                        desc("Enable the cache of context of GLSL emulation library to file"),
-                                        init(false));
+static opt<uint32_t> EnableCacheEmuLibContext("enable-cache-emu-lib-context",
+                                         desc("Enable the cache of context of GLSL emulation library to file"),
+                                         init(0));
 
 } // cl
 
@@ -145,9 +145,13 @@ Context::Context(
 #endif
     }
 
-    if (cl::EnableCacheEmuLibContext)
+    if (cl::EnableCacheEmuLibContext == 1)
     {
         auxCreateInfo.shaderCacheMode = ShaderCacheEnableOnDisk;
+    }
+    else if (cl::EnableCacheEmuLibContext == 2)
+    {
+        auxCreateInfo.shaderCacheMode = ShaderCacheEnableOnDiskReadOnly;
     }
     else
     {

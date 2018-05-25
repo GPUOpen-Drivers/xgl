@@ -239,8 +239,10 @@ void PatchImageOp::visitCallInst(
                                                     m_pContext->Int32x3Ty(),
                                                     "",
                                                     &callInst);
-                        callName = callName.substr(0, callName.find_last_of('.'));
-                        callName +=".SubpassDataArray";
+
+                        // Replace dimension SubpassData with SubpassDataArray
+                        std::string dimSubpassData = SPIRVDimNameMap::map(DimSubpassData);
+                        callName.replace(callName.find(dimSubpassData), dimSubpassData.length(), dimSubpassData + "Array");
                     }
                     else
                     {

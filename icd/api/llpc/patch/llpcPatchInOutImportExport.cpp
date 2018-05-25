@@ -549,7 +549,7 @@ void PatchInOutImportExport::visitCallInst(
                     uint32_t interpMode = InterpModeSmooth;
                     uint32_t interpLoc = InterpLocCenter;
 
-                    Value* pElemIdx = callInst.getOperand(1);
+                    Value* pElemIdx = callInst.getOperand(isInterpolantInputImport ? 2 : 1);
                     LLPC_ASSERT(IsDontCareValue(pElemIdx) == false);
 
                     Value* pAuxInterpValue = nullptr;
@@ -1513,7 +1513,8 @@ void PatchInOutImportExport::visitReturnInst(
                 // Set CB shader mask
                 auto pResUsage = m_pContext->GetShaderResourceUsage(ShaderStageFragment);
                 const uint32_t channelMask = ((1 << compCount) - 1);
-                pResUsage->inOutUsage.fs.cbShaderMask |= (channelMask << (4 * location));
+                const uint32_t origLoc = pResUsage->inOutUsage.fs.outputOrigLocs[location];
+                pResUsage->inOutUsage.fs.cbShaderMask |= (channelMask << (4 * origLoc));
 
                 // Construct exported fragment colors
                 if (compCount == 1)
@@ -1706,13 +1707,25 @@ Value* PatchInOutImportExport::PatchFsGenericInputImport(
     {
         interpInfo.push_back(InvalidFsInterpInfo);
     }
-    interpInfo[location] = { location, (interpMode == InterpModeFlat), (interpMode == InterpModeCustom) };
+    interpInfo[location] =
+    {
+        location,
+        (interpMode == InterpModeFlat),
+        (interpMode == InterpModeCustom),
+        (pInputTy->getScalarSizeInBits() == 16),
+    };
 
     if (locCount > 1)
     {
         // The input occupies two consecutive locations
         LLPC_ASSERT(locCount == 2);
-        interpInfo[location + 1] = { location + 1, (interpMode == InterpModeFlat), (interpMode == InterpModeCustom) };
+        interpInfo[location + 1] =
+        {
+            location + 1,
+            (interpMode == InterpModeFlat),
+            (interpMode == InterpModeCustom),
+            false,
+        };
     }
 
     auto& entryArgIdxs = m_pContext->GetShaderInterfaceData(ShaderStageFragment)->entryArgIdxs.fs;
@@ -1811,39 +1824,65 @@ Value* PatchInOutImportExport::PatchFsGenericInputImport(
         {
             LLPC_ASSERT((pBasicTy->isHalfTy() || pBasicTy->isFloatTy()) && (numChannels <= 4));
 
-            args.clear();
-            args.push_back(pI);                                             // i
-            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), i));     // attr_chan
-            args.push_back(pLoc);                                           // attr
-            args.push_back(pPrimMask);                                      // m0
-
-            pCompValue = EmitCall(m_pModule,
-                                  "llvm.amdgcn.interp.p1",
-                                  m_pContext->FloatTy(),
-                                  args,
-                                  attribs,
-                                  pInsertPos);
-
-            args.clear();
-            args.push_back(pCompValue);                                     // p1
-            args.push_back(pJ);                                             // j
-            args.push_back(ConstantInt::get(m_pContext->Int32Ty(), i));     // attr_chan
-            args.push_back(pLoc);                                           // attr
-            args.push_back(pPrimMask);                                      // m0
-
-            pCompValue = EmitCall(m_pModule,
-                                  "llvm.amdgcn.interp.p2",
-                                  m_pContext->FloatTy(),
-                                  args,
-                                  attribs,
-                                  pInsertPos);
-
-            // TODO: Support 16-bit interpolation.
             if (bitWidth == 16)
             {
-                pCompValue = new BitCastInst(pCompValue, m_pContext->Int32Ty(), "", pInsertPos);
-                pCompValue = new TruncInst(pCompValue, m_pContext->Int16Ty(), "", pInsertPos);
-                pCompValue = new BitCastInst(pCompValue, m_pContext->Float16Ty(), "", pInsertPos);
+                args.clear();
+                args.push_back(pI);                                             // i
+                args.push_back(ConstantInt::get(m_pContext->Int32Ty(), i));     // attr_chan
+                args.push_back(pLoc);                                           // attr
+                args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // high
+                args.push_back(pPrimMask);                                      // m0
+
+                pCompValue = EmitCall(m_pModule,
+                                      "llvm.amdgcn.interp.p1.f16",
+                                      m_pContext->FloatTy(),
+                                      args,
+                                      attribs,
+                                      pInsertPos);
+
+                args.clear();
+                args.push_back(pCompValue);                                     // p1
+                args.push_back(pJ);                                             // j
+                args.push_back(ConstantInt::get(m_pContext->Int32Ty(), i));     // attr_chan
+                args.push_back(pLoc);                                           // attr
+                args.push_back(ConstantInt::get(m_pContext->BoolTy(), false));  // high
+                args.push_back(pPrimMask);                                      // m0
+
+                pCompValue = EmitCall(m_pModule,
+                                      "llvm.amdgcn.interp.p2.f16",
+                                      m_pContext->Float16Ty(),
+                                      args,
+                                      attribs,
+                                      pInsertPos);
+            }
+            else
+            {
+                args.clear();
+                args.push_back(pI);                                             // i
+                args.push_back(ConstantInt::get(m_pContext->Int32Ty(), i));     // attr_chan
+                args.push_back(pLoc);                                           // attr
+                args.push_back(pPrimMask);                                      // m0
+
+                pCompValue = EmitCall(m_pModule,
+                                      "llvm.amdgcn.interp.p1",
+                                      m_pContext->FloatTy(),
+                                      args,
+                                      attribs,
+                                      pInsertPos);
+
+                args.clear();
+                args.push_back(pCompValue);                                     // p1
+                args.push_back(pJ);                                             // j
+                args.push_back(ConstantInt::get(m_pContext->Int32Ty(), i));     // attr_chan
+                args.push_back(pLoc);                                           // attr
+                args.push_back(pPrimMask);                                      // m0
+
+                pCompValue = EmitCall(m_pModule,
+                                      "llvm.amdgcn.interp.p2",
+                                      m_pContext->FloatTy(),
+                                      args,
+                                      attribs,
+                                      pInsertPos);
             }
         }
         else
@@ -2678,7 +2717,7 @@ Value* PatchInOutImportExport::PatchFsBuiltInInputImport(
             {
                 interpInfo.push_back(InvalidFsInterpInfo);
             }
-            interpInfo[loc] = { loc, false, false };
+            interpInfo[loc] = { loc, false, false, false };
 
             // Emulation for "in vec2 gl_PointCoord"
             pInput = PatchFsGenericInputImport(pInputTy,

@@ -643,14 +643,12 @@ VkResult GraphicsPipeline::Create(
     {
         ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &createInfo);
 
-#ifdef ICD_BUILD_APPPROFILE
         // Override the Scpc::GraphicsPipelineCreateInfo parameters based on any active app profile
         pDevice->GetShaderOptimizer()->OverrideGraphicsPipelineCreateInfo(
             binaryCreateInfo.pipelineProfileKey,
             createInfo.activeStages,
             &createInfo.pipeline,
             &createInfo.immedInfo.graphicsWaveLimitParams);
-#endif
     }
 
     RenderStateCache* pRSCache = pDevice->GetRenderStateCache();

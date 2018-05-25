@@ -161,6 +161,52 @@ protected:
 static const LayoutUsageHelper g_LayoutUsageHelper;
 
 // =====================================================================================================================
+// Helper class to determine which queue family has to perform the layout changes when an onwership transfer between
+// queue families happens.
+class OwnershipTransferHelper
+{
+public:
+    // Constructor initializes the lookup table.
+    OwnershipTransferHelper()
+    {
+        // By default all engine types have a priority of 1 (to be higher than priority 0 used for external sharing).
+        for (uint32_t i = 0; i < Pal::EngineTypeCount; ++i)
+        {
+            m_ownershipTransferPriority[i] = 1;
+        }
+
+        // The universal and graphics engines are always preferred because they support all forms of compression and
+        // corresponding layout transitions.
+        m_ownershipTransferPriority[Pal::EngineTypeUniversal]               = 3;
+        m_ownershipTransferPriority[Pal::EngineTypeHighPriorityUniversal]   = 3;
+        m_ownershipTransferPriority[Pal::EngineTypeHighPriorityGraphics]    = 3;
+
+        // The compute engines should still be preferred compared to other engines because they support some forms of
+        // compression and corresponding layout transitions.
+        m_ownershipTransferPriority[Pal::EngineTypeCompute]                 = 2;
+        m_ownershipTransferPriority[Pal::EngineTypeExclusiveCompute]        = 2;
+    }
+
+    // Returns the owernship transfer priority corresponding to a queue family index.
+    VK_FORCEINLINE uint32_t GetPriority(const Device* pDevice, uint32_t queueFamilyIndex) const
+    {
+        if ((queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL) || (queueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT))
+        {
+            return 0;
+        }
+        else
+        {
+            return m_ownershipTransferPriority[pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex)];
+        }
+    }
+
+protected:
+    uint32_t    m_ownershipTransferPriority[Pal::EngineTypeCount];
+};
+
+static const OwnershipTransferHelper g_OwnershipTransferHelper;
+
+// =====================================================================================================================
 // Converts source access flags to source cache coherency flags.
 static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask)
 {
@@ -778,6 +824,44 @@ void ImageBarrierPolicy::GetLayouts(
 
     // Calculate engine mask.
     results[0].engines = results[1].engines = GetQueueFamilyLayoutEngineMask(pDevice, queueFamilyIndex);
+}
+
+// =====================================================================================================================
+// Returns whether layout changes have to be performed for this barrier.
+// If yes, also constructs the PAL layouts corresponding to a Vulkan layouts for each aspect in the output parameters.
+bool ImageBarrierPolicy::ApplyBarrierLayoutChanges(
+    const Device*                       pDevice,
+    VkImageLayout                       oldLayout,
+    VkImageLayout                       newLayout,
+    uint32_t                            currentQueueFamilyIndex,
+    uint32_t                            srcQueueFamilyIndex,
+    uint32_t                            dstQueueFamilyIndex,
+    Pal::ImageLayout                    oldPalLayouts[MaxPalDepthAspectsPerMask],
+    Pal::ImageLayout                    newPalLayouts[MaxPalDepthAspectsPerMask]) const
+{
+    // By default try to transition the layout on the source queue family in case of ownership transfers.
+    bool applyLayoutChanges = (currentQueueFamilyIndex == srcQueueFamilyIndex);
+
+    // Flip that decision if it turns out the destination queue family's ownership transfer priority is greater than
+    // that of the source queue family.
+    bool isDstQueueFamilyPreferred = (g_OwnershipTransferHelper.GetPriority(pDevice, dstQueueFamilyIndex) >
+                                      g_OwnershipTransferHelper.GetPriority(pDevice, srcQueueFamilyIndex));
+    applyLayoutChanges = (applyLayoutChanges != isDstQueueFamilyPreferred);
+
+    if (applyLayoutChanges)
+    {
+        // Determine PAL layouts.
+        GetLayouts(pDevice, oldLayout, srcQueueFamilyIndex, oldPalLayouts);
+        GetLayouts(pDevice, newLayout, dstQueueFamilyIndex, newPalLayouts);
+
+        // If old and new PAL layouts match then no need to apply layout changes.
+        if (memcmp(oldPalLayouts, newPalLayouts, sizeof(Pal::ImageLayout) * MaxPalDepthAspectsPerMask) == 0)
+        {
+            applyLayoutChanges = false;
+        }
+    }
+
+    return applyLayoutChanges;
 }
 
 // =====================================================================================================================

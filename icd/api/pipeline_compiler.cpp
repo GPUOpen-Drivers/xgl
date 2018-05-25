@@ -192,9 +192,7 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     const uint32_t         MaxLlpcOptions   = 32;
     Llpc::ICompiler*       pCompiler        = nullptr;
     const RuntimeSettings& settings         = m_pPhysicalDevice->GetRuntimeSettings();
-#ifdef ICD_BUILD_APPPROFILE
     AppProfile             appProfile       = m_pPhysicalDevice->GetAppProfile();
-#endif
     // Get the executable name and path
     char  executableNameBuffer[PATH_MAX];
     char* pExecutablePtr;
@@ -301,14 +299,12 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
 
     // NOTE: For testing consistency, these options should be kept the same as those of
     // "amdllpc" (Init()).
-    llpcOptions[numOptions++] = "-pragma-unroll-threshold=4096";
     llpcOptions[numOptions++] = "-unroll-allow-partial";
     llpcOptions[numOptions++] = "-lower-dyn-index";
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
 
     ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
-#ifdef ICD_BUILD_APPPROFILE
     if ((appProfile == AppProfile::Talos) ||
         (appProfile == AppProfile::MadMax) ||
         (appProfile == AppProfile::SeriousSamFusion))
@@ -326,11 +322,15 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
         shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
     }
 
-    if(appProfile == AppProfile::RiseOfTheTombra)
+    if (appProfile == AppProfile::RiseOfTheTombra)
     {
-        llpcOptions[numOptions++] = "-disable-gs-onchip=0";
+        // Disable loop unroll
+        llpcOptions[numOptions++] = "-pragma-unroll-threshold=1";
     }
-#endif
+    else
+    {
+        llpcOptions[numOptions++] = "-pragma-unroll-threshold=4096";
+    }
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);
     ++optionLength;
@@ -895,14 +895,12 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 vertexShader ? pVbInfo : nullptr);
         }
 
-#if ICD_BUILD_APPPROFILE
         ApplyProfileOptions(pDevice,
                             static_cast<ShaderStage>(stage),
                             pShaderModule,
                             pShaderInfo,
                             &pCreateInfo->pipelineProfileKey
                             );
-#endif
     }
 
     return result;
@@ -1001,19 +999,16 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             nullptr);
     }
 
-#ifdef ICD_BUILD_APPPROFILE
     ApplyProfileOptions(pDevice,
                         ShaderStageCompute,
                         pShaderModule,
                         &pCreateInfo->pipelineInfo.cs,
                         &pCreateInfo->pipelineProfileKey
                         );
-#endif
 
     return result;
 }
 
-#ifdef ICD_BUILD_APPPROFILE
 // =====================================================================================================================
 // Builds app profile key and applies profile options.
 void PipelineCompiler::ApplyProfileOptions(
@@ -1054,7 +1049,6 @@ void PipelineCompiler::ApplyProfileOptions(
     auto* pShaderOptimizer = pDevice->GetShaderOptimizer();
     pShaderOptimizer->OverrideShaderCreateInfo(*pProfileKey, stage, options);
 }
-#endif
 
 // =====================================================================================================================
 // Free compute pipeline binary

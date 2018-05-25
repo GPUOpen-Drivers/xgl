@@ -32,7 +32,6 @@
 #ifndef __APP_SHADER_OPTIMIZER_H__
 #define __APP_SHADER_OPTIMIZER_H__
 #pragma once
-#ifdef ICD_BUILD_APPPROFILE
 #include "include/khronos/vulkan.h"
 
 #include "include/vk_shader_code.h"
@@ -310,5 +309,4 @@ private:
 };
 
 };
-#endif /* ICD_BUILD_APPPROFILE */
 #endif /* __APP_SHADER_OPTIMIZER_H__ */

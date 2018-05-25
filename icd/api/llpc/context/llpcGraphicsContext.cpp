@@ -55,7 +55,7 @@ opt<bool> EnableTessOffChip("enable-tess-offchip",
 // -disable-gs-onchip: disable geometry shader on-chip mode
 opt<bool> DisableGsOnChip("disable-gs-onchip",
                           desc("Disable geometry shader on-chip mode"),
-                          init(true));
+                          init(false));
 
 } // cl
 
@@ -264,7 +264,7 @@ void GraphicsContext::InitShaderInfoForNullFs()
     ++m_activeStageCount;
 
     // Add usage info for dummy input
-    FsInterpInfo interpInfo = { 0, false };
+    FsInterpInfo interpInfo = { 0, false, false, false };
     pResUsage->builtInUsage.fs.smooth = true;
     pResUsage->inOutUsage.inputLocMap[0] = InvalidValue;
     pResUsage->inOutUsage.fs.interpInfo.push_back(interpInfo);

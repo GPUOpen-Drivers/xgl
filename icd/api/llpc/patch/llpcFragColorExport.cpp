@@ -1188,13 +1188,23 @@ Value* FragColorExport::Run(
 
     Type* pOutputTy = pOutput->getType();
 
-    auto expFmt = ComputeExportFormat(pOutputTy, location); // TODO: Support dual source blend.
+    ExportFormat expFmt = EXP_FORMAT_ZERO;
+    if (pPipelineInfo->cbState.dualSourceBlendEnable)
+    {
+        // Dual source blending is enabled
+        expFmt= ComputeExportFormat(pOutputTy, 0);
+    }
+    else if (pResUsage->inOutUsage.fs.dualSourceBlend == false)
+    {
+        expFmt = ComputeExportFormat(pOutputTy, location);
+    }
 
     pResUsage->inOutUsage.fs.expFmts[location] = expFmt;
     if (expFmt == EXP_FORMAT_ZERO)
     {
         // Clear channel mask if shader export format is ZERO
-        pResUsage->inOutUsage.fs.cbShaderMask &= ~(0xF << (4 * location));
+        const uint32_t origLoc = pResUsage->inOutUsage.fs.outputOrigLocs[location];
+        pResUsage->inOutUsage.fs.cbShaderMask &= ~(0xF << (4 * origLoc));
     }
 
     const uint32_t bitWidth = pOutputTy->getScalarSizeInBits();

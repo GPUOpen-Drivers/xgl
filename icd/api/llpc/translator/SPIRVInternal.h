@@ -1214,6 +1214,7 @@ union ShaderInOutMetadata {
   struct
   {
     uint32_t Value              : 16; // Generic location or SPIR-V built-in ID
+    uint32_t Index              : 1;  // Output index for dual source blending
     uint32_t IsLoc              : 1;  // Whether value is a location
     uint32_t IsBuiltIn          : 1;  // Whether value is a SPIR-V built-in ID
     uint32_t Component          : 2;  // Component offset of inputs and outputs
@@ -1240,6 +1241,8 @@ struct ShaderInOutDecorate {
 
     uint32_t     U32All;
   } Value;
+
+  uint32_t       Index;             // Output index for dual source blending
 
   bool           IsBuiltIn;         // Whether this is a SPIR-V built-in
 

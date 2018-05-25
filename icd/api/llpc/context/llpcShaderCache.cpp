@@ -311,7 +311,8 @@ Result ShaderCache::Init(
         }
         // If we're in on-disk mode try to load the cache from file.
         else if ((pAuxCreateInfo->shaderCacheMode == ShaderCacheEnableOnDisk) ||
-            (pAuxCreateInfo->shaderCacheMode == ShaderCacheForceInternalCacheOnDisk))
+                 (pAuxCreateInfo->shaderCacheMode == ShaderCacheForceInternalCacheOnDisk) ||
+                 (pAuxCreateInfo->shaderCacheMode == ShaderCacheEnableOnDiskReadOnly))
         {
             // Default to false because the cache file is invalid if it's brand new
             bool cacheFileExists = false;
@@ -328,7 +329,14 @@ Result ShaderCache::Init(
                 // Open the storage file if it exists
                 if (cacheFileExists)
                 {
-                    result = m_onDiskFile.Open(m_fileFullPath, (FileAccessReadUpdate | FileAccessBinary));
+                    if (pAuxCreateInfo->shaderCacheMode == ShaderCacheEnableOnDiskReadOnly)
+                    {
+                        result = m_onDiskFile.Open(m_fileFullPath, (FileAccessRead | FileAccessBinary));
+                    }
+                    else
+                    {
+                        result = m_onDiskFile.Open(m_fileFullPath, (FileAccessReadUpdate | FileAccessBinary));
+                    }
                 }
                 else
                 // Create the storage file if it does not exist
@@ -344,6 +352,11 @@ Result ShaderCache::Init(
                 if (cacheFileExists)
                 {
                     loadResult = LoadCacheFromFile();
+                    if ((pAuxCreateInfo->shaderCacheMode == ShaderCacheEnableOnDiskReadOnly) &&
+                        (loadResult == Result::Success))
+                    {
+                        m_onDiskFile.Close();
+                    }
                 }
                 else
                 {

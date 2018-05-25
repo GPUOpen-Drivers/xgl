@@ -1051,13 +1051,6 @@ VkResult CmdBuffer::Begin(
         palFlags.prefetchShaders = 1;
     }
 
-    // Pal would still use ring buffer for CE RAM dumps if command buffer is nested.
-    // Disable linear buffer for this case as a workaround until PAL has a solution.
-    if (m_pDevice->GetRuntimeSettings().useLinearBufferForCeRamDumps && (m_is2ndLvl == false))
-    {
-        palFlags.useLinearBufferForCeRamDumps = 1;
-    }
-
     uint32_t currentSubPass = 0;
     for (pInfo = pBeginInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
@@ -3040,43 +3033,15 @@ void CmdBuffer::ExecuteBarriers(
         Pal::ImageLayout oldLayouts[MaxRangePerAttachment];
         Pal::ImageLayout newLayouts[MaxRangePerAttachment];
 
-        pImage->GetBarrierPolicy().GetLayouts(
+        bool layoutChanging = pImage->GetBarrierPolicy().ApplyBarrierLayoutChanges(
             m_pDevice,
             pImageMemoryBarriers[i].oldLayout,
-            GetEffectiveQueueFamilyIndex(pImageMemoryBarriers[i].srcQueueFamilyIndex),
-            oldLayouts);
-
-        pImage->GetBarrierPolicy().GetLayouts(
-            m_pDevice,
             pImageMemoryBarriers[i].newLayout,
+            GetQueueFamilyIndex(),
+            GetEffectiveQueueFamilyIndex(pImageMemoryBarriers[i].srcQueueFamilyIndex),
             GetEffectiveQueueFamilyIndex(pImageMemoryBarriers[i].dstQueueFamilyIndex),
+            oldLayouts,
             newLayouts);
-
-        bool layoutChanging = ((oldLayouts[0].usages != newLayouts[0].usages) ||
-                               (oldLayouts[1].usages != newLayouts[1].usages));
-
-        // Engine mask should be identical for all aspect's layout.
-        VK_ASSERT((oldLayouts[0].engines == oldLayouts[1].engines) &&
-                  (newLayouts[0].engines == newLayouts[1].engines));
-
-        if (oldLayouts[0].engines != newLayouts[0].engines)
-        {
-            // For exclusive sharing access, the application is responsible for inserting two identical "hand-shaking"
-            // barriers on each queue's command buffers: one copy to release ownership on the src queue, and another
-            // copy to acquire ownership on the destination queue.  We want to execute the layout transition part
-            // only on one of them, and we always want to pick the graphics queue.  However, both queues must execute
-            // the rest of the barrier.
-            if ((pImage->GetSharingMode() == VK_SHARING_MODE_EXCLUSIVE) &&
-                (GetPalQueueType() != Pal::QueueTypeUniversal))
-            {
-                // Skip the layout transition if we are not the graphics queue
-                layoutChanging = false;
-            }
-            else
-            {
-                layoutChanging = true;
-            }
-        }
 
         uint32_t         palRangeIdx   = 0;
         uint32_t         palRangeCount = 0;
@@ -3097,7 +3062,7 @@ void CmdBuffer::ExecuteBarriers(
         // subresourceRange must include both VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT
         VK_ASSERT(hasDepthAndStencil == pImage->HasDepthAndStencil());
 
-        if (hasDepthAndStencil)
+        if (layoutChanging && hasDepthAndStencil)
         {
             // With both depth and stencil, there should be two ranges
             VK_ASSERT(palRangeCount == MaxPalDepthAspectsPerMask);

@@ -41,9 +41,7 @@
 #include "include/vk_physical_device.h"
 #include "include/vk_queue.h"
 
-#ifdef ICD_BUILD_APPPROFILE
 #include "include/app_shader_optimizer.h"
-#endif
 
 #include "include/internal_mem_mgr.h"
 #include "include/render_state_cache.h"
@@ -291,10 +289,8 @@ public:
     VK_FORCEINLINE InternalMemMgr* MemMgr()
         { return &m_internalMemMgr; }
 
-#ifdef ICD_BUILD_APPPROFILE
     VK_FORCEINLINE ShaderOptimizer* GetShaderOptimizer()
         { return &m_shaderOptimizer; }
-#endif
 
     VK_FORCEINLINE bool IsMultiGpu() const
         { return m_palDeviceCount > 1; }
@@ -457,10 +453,8 @@ public:
     VK_INLINE bool IsExtensionEnabled(DeviceExtensions::ExtensionId id) const
         { return m_enabledExtensions.IsExtensionEnabled(id); }
 
-#ifdef ICD_BUILD_APPPROFILE
     VK_INLINE AppProfile GetAppProfile() const
         { return VkPhysicalDevice()->GetAppProfile(); }
-#endif
 
     VK_INLINE SqttMgr* GetSqttMgr()
         { return m_pSqttMgr; }
@@ -535,9 +529,9 @@ protected:
     uint8_t*                            m_pPalQueueMemory;
 
     InternalMemMgr                      m_internalMemMgr;
-#ifdef ICD_BUILD_APPPROFILE
+
     ShaderOptimizer                     m_shaderOptimizer;
-#endif
+
     RenderStateCache                    m_renderStateCache;
 
     DispatchableQueue*                  m_pQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily];

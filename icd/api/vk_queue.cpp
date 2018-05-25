@@ -883,32 +883,11 @@ VkResult Queue::BindSparseEntry(
                 goto End;
             }
 
-            // Calculate the extents of the subresource in tiles
-            const VkExtent3D subresExtentInTiles =
-            {
-                Util::RoundUpToMultiple(Util::Max(subResLayout.paddedExtent.width, 1u),
-                tileSize.width) / tileSize.width,
-                Util::RoundUpToMultiple(Util::Max(subResLayout.paddedExtent.height, 1u),
-                tileSize.height) / tileSize.height,
-                Util::RoundUpToMultiple(Util::Max(subResLayout.paddedExtent.depth, 1u),
-                tileSize.depth) / tileSize.depth
-            };
-
             // Calculate subresource row and depth pitch in tiles
             // In Gfx9, the tiles within same mip level may not continuous thus we have to take
             // the mipChainPitch into account when calculate the offset of next tile.
-
-            // If no blockSize.depth is reported, our prtTileDepth better match the reported tileSize.depth for the
-            // mapping of block depth to HW tile thickness to match.  If it can't for some reason, additional block
-            // dimensions can be exposed and then the matching imageGranularity can be returned for the image via
-            // vkGetImageSparseMemoryRequirements so that they do match.
-            const Pal::ImageMemoryLayout& memoryLayout = image.PalImage(DefaultDeviceIndex)->GetMemoryLayout();
-
-            VK_ASSERT((subResLayout.blockSize.depth != 0) || (tileSize.depth == memoryLayout.prtTileDepth));
-
-            uint32_t depth = subResLayout.blockSize.depth ? subResLayout.blockSize.depth : memoryLayout.prtTileDepth;
-            VkDeviceSize prtTileRowPitch   = subResLayout.rowPitch * subResLayout.blockSize.height * depth;
-            VkDeviceSize prtTileDepthPitch = subResLayout.depthPitch * depth;
+            VkDeviceSize prtTileRowPitch   = subResLayout.rowPitch * tileSize.height * tileSize.depth;
+            VkDeviceSize prtTileDepthPitch = subResLayout.depthPitch * tileSize.depth;
 
             // Calculate the offsets in tiles
             const VkOffset3D offsetInTiles =

@@ -43,7 +43,6 @@ extern void ReadSettings(const Pal::IDevice* pPalDevice, RuntimeSettings* pSetti
 
 static void ReadPublicSettings(Pal::IDevice* pPalDevice, RuntimeSettings* pSettings);
 
-#ifdef ICD_BUILD_APPPROFILE
 // =====================================================================================================================
 // Override defaults based on application profile.  This occurs before any CCC settings or private panel settings are
 // applied.
@@ -96,7 +95,6 @@ static void OverrideProfiledSettings(
     }
 
 }
-#endif
 
 // =====================================================================================================================
 // Processes public and private panel settings for a particular PAL GPU.  Vulkan private settings and public CCC
@@ -104,20 +102,16 @@ static void OverrideProfiledSettings(
 // need to be updated based on the Vulkan settings, the PAL structure will also be updated.
 void ProcessSettings(
     Pal::IDevice*      pPalDevice,
-#ifdef ICD_BUILD_APPPROFILE
     AppProfile*        pAppProfile,
-#endif
     RuntimeSettings*   pSettings)
 {
 
     // Setup default values for the settings.
     SetupDefaults(pSettings);
 
-#ifdef ICD_BUILD_APPPROFILE
     const AppProfile origProfile = *pAppProfile;
     // Override defaults based on application profile
     OverrideProfiledSettings(pPalDevice, *pAppProfile, pSettings);
-#endif
 
     // Read in the public settings from the Catalyst Control Center
     ReadPublicSettings(pPalDevice, pSettings);
@@ -125,15 +119,12 @@ void ProcessSettings(
     // Read settings from the registry
     ReadSettings(pPalDevice, pSettings);
 
-#ifdef ICD_BUILD_APPPROFILE
     if (pSettings->forceAppProfileEnable)
     {
         // Update application profile to the one from the panel
         *pAppProfile = static_cast<AppProfile>(pSettings->forceAppProfileValue);
     }
-#endif
 
-#ifdef ICD_BUILD_APPPROFILE
     // If we are changing profile via panel setting (i.e. forcing a specific profile), then
     // reload all settings.  This is because certain app profiles may override the default
     // values, and this allows the panel-mandated profile to override those defaults as well.
@@ -141,7 +132,6 @@ void ProcessSettings(
     {
         ProcessSettings(pPalDevice, pAppProfile, pSettings);
     }
-#endif
 }
 
 // =====================================================================================================================

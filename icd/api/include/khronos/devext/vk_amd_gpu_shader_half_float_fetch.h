@@ -23,39 +23,24 @@
  *
  **********************************************************************************************************************/
 /**
- ***********************************************************************************************************************
- * @file  settings.h
- * @brief Loads runtime settings for Vulkan applications.
- ***********************************************************************************************************************
+ **********************************************************************************************************************
+ * @file  vk_amd_gpu_shader_half_float_fetch.h
+ * @brief Temporary internal header for GPU shader half float fetchextension. Should be removed once the extension is
+ *        published and the API gets included in the official Vulkan header.
+ **********************************************************************************************************************
  */
+#ifndef VK_AMD_GPU_SHADER_HALF_FLOAT_FETCH_H_
+#define VK_AMD_GPU_SHADER_HALF_FLOAT_FETCH_H_
 
-#ifndef __SETTINGS_SETTINGS_H__
-#define __SETTINGS_SETTINGS_H__
+#include "vk_internal_ext_helper.h"
 
-#include "include/app_profile.h"
+#define VK_AMD_gpu_shader_half_float_fetch                             1
+#define VK_AMD_GPU_SHADER_HALF_FLOAT_FETCH_SPEC_VERSION                1
+#define VK_AMD_GPU_SHADER_HALF_FLOAT_FETCH_EXTENSION_NAME              "VK_AMD_gpu_shader_half_float_fetch"
 
-#include "g_settings.h"
+#define VK_AMD_GPU_SHADER_HALF_FLOAT_FETCH_EXTENSION_NUMBER            44
 
-namespace Pal
-{
-class IPhysicalGpu;
-}
+#define VK_AMD_GPU_SHADER_HALF_FLOAT_FETCH_ENUM(type, offset) \
+    VK_EXTENSION_ENUM(VK_AMD_GPU_SHADER_HALF_FLOAT_FETCH_EXTENSION_NUMBER, type, offset)
 
-namespace vk
-{
-
-extern void ProcessSettings(
-    Pal::IDevice*    pPalDevice,
-    AppProfile*      pAppProfile,
-    RuntimeSettings* pSettings);
-
-extern void ValidateSettings(
-    Pal::IDevice*    pPalDevice,
-    RuntimeSettings* pSettings);
-
-extern void UpdatePalSettings(
-    Pal::IDevice*          pPalDevice,
-    const RuntimeSettings* pSettings);
-};
-
-#endif // __SETTINGS_SETTINGS_H__
+#endif /* VK_AMD_GPU_SHADER_HALF_FLOAT_FETCH_H_ */
