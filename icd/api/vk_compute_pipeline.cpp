@@ -35,7 +35,6 @@
 #include "include/vk_memory.h"
 
 #include "palPipeline.h"
-#include "palShader.h"
 #include "llpc.h"
 
 namespace vk

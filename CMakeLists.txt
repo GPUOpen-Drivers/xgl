@@ -143,7 +143,10 @@ set(PERL_CMD ${PERL_EXECUTABLE})
 
 ### Add Subdirectories #################################################################################################
 
-### ICD api/llpc ###############################################################
+### LLPC ###############################################################
+set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is read-only.")
+set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/icd/api/llpc CACHE PATH "Specify the path to the LLPC.")
+
 if(ICD_BUILD_LLPC)
     set(LLVM_ENABLE_ASSERTIONS ${CMAKE_BUILD_TYPE_DEBUG} CACHE BOOL Force)
     set(LLVM_TARGETS_TO_BUILD AMDGPU CACHE STRING Force)
@@ -163,7 +166,7 @@ if(ICD_BUILD_LLPC)
     add_subdirectory(${XGL_LLVM_SRC_PATH} ${PROJECT_BINARY_DIR}/llvm)
     set(XGL_LLVM_BUILD_PATH ${CMAKE_BINARY_DIR}/llvm)
 
-    add_subdirectory(icd/api/llpc ${CMAKE_BINARY_DIR}/llpc)
+    add_subdirectory(${XGL_LLPC_PATH} ${CMAKE_BINARY_DIR}/llpc)
 endif()
 
 if(ICD_BUILD_SPVONLY)

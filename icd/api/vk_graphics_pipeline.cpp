@@ -40,7 +40,6 @@
 #include "palCmdBuffer.h"
 #include "palDevice.h"
 #include "palPipeline.h"
-#include "palShader.h"
 #include "palInlineFuncs.h"
 
 #include <float.h>

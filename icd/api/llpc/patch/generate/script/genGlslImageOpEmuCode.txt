@@ -96,9 +96,9 @@ llpc.image|sparse.sample.Dim1D|2D|3D|Rect.proj.grad.constoffset
 llpc.image|sparse.sample.Dim1D|2D|3D|Rect.proj.dref.grad.constoffset
 
 # Fetch instructions
-llpc.image|sparse.fetch.Dim1D|2D|3D|1DArray|2DArray.lod
+llpc.image|sparse.fetch.Dim1D|2D|3D|1DArray|2DArray.lod|lodz
 llpc.image|sparse.fetch.Dim1D|2D|3D|1DArray|2DArray|Rect|Buffer
-llpc.image|sparse.fetch.Dim1D|2D|3D|1DArray|2DArray.lod.constoffset
+llpc.image|sparse.fetch.Dim1D|2D|3D|1DArray|2DArray.lod|lodz.constoffset
 llpc.image|sparse.fetch.DimRect.constoffset
 llpc.image|sparse.fetch.Dim2D|2DArray|SubpassData.sample
 llpc.image|sparse.fetch.Dim2D|2DArray.sample.fmaskbased

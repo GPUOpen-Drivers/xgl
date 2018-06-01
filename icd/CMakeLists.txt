@@ -142,7 +142,7 @@ target_include_directories(xgl PRIVATE
 )
 
 if(ICD_BUILD_LLPC)
-    target_include_directories(xgl PRIVATE api/llpc/include)
+    target_include_directories(xgl PRIVATE ${XGL_LLPC_PATH}/include)
     target_link_libraries(xgl PRIVATE llpc)
 endif()
 

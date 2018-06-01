@@ -76,10 +76,10 @@ namespace cl
 {
 
 // -pipeline-dump-dir: directory where pipeline info are dumped
-static opt<std::string> PipelineDumpDir("pipeline-dump-dir",
-                                        desc("Directory where pipeline shader info are dumped"),
-                                        value_desc("directory"),
-                                        init("."));
+opt<std::string> PipelineDumpDir("pipeline-dump-dir",
+                                 desc("Directory where pipeline shader info are dumped"),
+                                 value_desc("directory"),
+                                 init("."));
 
 static opt<uint32_t> FilterPipelineDumpByType("filter-pipeline-dump-by-type",
                                               desc("Filter which types of pipeline dump are disabled\n"

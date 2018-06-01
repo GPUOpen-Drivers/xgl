@@ -413,7 +413,7 @@ Result ShaderCache::BuildFileName(
     {
         length = snprintf(hashedFileName, MaxFilePathLen, "%s%s", pCacheFilePath, CacheFileSubPath);
         std::error_code errCode = sys::fs::create_directories(hashedFileName);
-        if (errCode.value() == 0)
+        if (!errCode)
         {
             result = Result::Success;
         }

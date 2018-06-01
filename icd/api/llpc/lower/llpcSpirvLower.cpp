@@ -63,6 +63,8 @@ static opt<bool> LowerDynIndex("lower-dyn-index", desc("Lower SPIR-V dynamic (no
 // -disable-lower-opt: disable optimization for SPIR-V lowering
 static opt<bool> DisableLowerOpt("disable-lower-opt", desc("Disable optimization for SPIR-V lowering"));
 
+extern opt<bool> EnableDumpCfg;
+
 } // cl
 
 } // llvm
@@ -77,6 +79,11 @@ Result SpirvLower::Run(
 {
     Result result = Result::Success;
     Context* pContext = static_cast<Context*>(&pModule->getContext());
+
+    if (cl::EnableDumpCfg)
+    {
+        DumpCfg("Original", pModule);
+    }
 
     legacy::PassManager passMgr;
 
@@ -138,6 +145,11 @@ Result SpirvLower::Run(
 
     if (result == Result::Success)
     {
+        if (cl::EnableDumpCfg)
+        {
+            DumpCfg("Lowered", pModule);
+        }
+
         std::string errMsg;
         raw_string_ostream errStream(errMsg);
         if (verifyModule(*pModule, &errStream))

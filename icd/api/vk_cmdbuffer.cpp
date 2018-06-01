@@ -4606,6 +4606,8 @@ void CmdBuffer::RPResolveAttachments(
                 regions[idx][aspectRegionIndex].extent.depth   = 1;
                 regions[idx][aspectRegionIndex].numSlices      = sliceCount;
                 regions[idx][aspectRegionIndex].swizzledFormat = Pal::UndefinedSwizzledFormat;
+
+                regions[idx][aspectRegionIndex].pQuadSamplePattern = nullptr;
             }
         }
 

@@ -411,7 +411,9 @@ void SpirvLowerImageOp::visitCallInst(
         // Choose dimension aware image intrinsic or old image intrinsic
         if (cl::EnableDimAwareImageIntrinsic && (imageCallMeta.Dim != DimBuffer))
         {
-            if ((imageCallMeta.OpKind == ImageOpFetch) ||
+            if ((imageCallMeta.OpKind == ImageOpSample) ||
+                (imageCallMeta.OpKind == ImageOpGather) ||
+                (imageCallMeta.OpKind == ImageOpFetch) ||
                 (imageCallMeta.OpKind == ImageOpRead))
             {
                 callName += gSPIRVName::ImageCallDimAwareSuffix;

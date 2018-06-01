@@ -60,6 +60,7 @@
 #include "palMath.h"
 #include "palMsaaState.h"
 #include "palScreen.h"
+#include "palHashLiteralString.h"
 #include <vector>
 
 #undef max
@@ -1392,13 +1393,17 @@ VkResult PhysicalDevice::GetDeviceProperties(
     // This UUID identifies whether a previously created pipeline cache is compatible with the currently installed
     // device/driver.  The UUID below is probably not accurate enough and needs to be re-evaluated once we actually
     // implement serialization support.
-    constexpr uint32_t PalMajorVersion = PAL_INTERFACE_MAJOR_VERSION;
-    constexpr uint32_t PalMinorVersion = PAL_INTERFACE_MINOR_VERSION;
+    constexpr uint16_t PalMajorVersion  = PAL_INTERFACE_MAJOR_VERSION;
+    constexpr uint8_t  PalMinorVersion  = PAL_INTERFACE_MINOR_VERSION;
+    constexpr uint8_t  UuidVersion      = 1;
 
-    const uint8_t* pVendorId = reinterpret_cast<const uint8_t*>(&palProps.vendorId);
-    const uint8_t* pDeviceId = reinterpret_cast<const uint8_t*>(&palProps.deviceId);
-    const uint8_t* pPalMajor = reinterpret_cast<const uint8_t*>(&PalMajorVersion);
-    const uint8_t* pPalMinor = reinterpret_cast<const uint8_t*>(&PalMinorVersion);
+    constexpr char timestamp[]    = __DATE__ __TIME__;
+    const uint32_t timestampHash  = Util::HashLiteralString<sizeof(timestamp)>(timestamp);
+
+    const uint8_t* pVendorId      = reinterpret_cast<const uint8_t*>(&palProps.vendorId);
+    const uint8_t* pDeviceId      = reinterpret_cast<const uint8_t*>(&palProps.deviceId);
+    const uint8_t* pPalMajor      = reinterpret_cast<const uint8_t*>(&PalMajorVersion);
+    const uint8_t* pTimestampHash = reinterpret_cast<const uint8_t*>(&timestampHash);
 
     pProperties->pipelineCacheUUID[0] = pVendorId[0];
     pProperties->pipelineCacheUUID[1] = pVendorId[1];
@@ -1412,13 +1417,13 @@ VkResult PhysicalDevice::GetDeviceProperties(
 
     pProperties->pipelineCacheUUID[8]  = pPalMajor[0];
     pProperties->pipelineCacheUUID[9]  = pPalMajor[1];
-    pProperties->pipelineCacheUUID[10] = pPalMajor[2];
-    pProperties->pipelineCacheUUID[11] = pPalMajor[3];
+    pProperties->pipelineCacheUUID[10] = PalMinorVersion;
+    pProperties->pipelineCacheUUID[11] = UuidVersion;
 
-    pProperties->pipelineCacheUUID[12] = pPalMinor[0];
-    pProperties->pipelineCacheUUID[13] = pPalMinor[1];
-    pProperties->pipelineCacheUUID[14] = pPalMinor[2];
-    pProperties->pipelineCacheUUID[15] = pPalMinor[3];
+    pProperties->pipelineCacheUUID[12] = pTimestampHash[0];
+    pProperties->pipelineCacheUUID[13] = pTimestampHash[1];
+    pProperties->pipelineCacheUUID[14] = pTimestampHash[2];
+    pProperties->pipelineCacheUUID[15] = pTimestampHash[3];
 
     return VK_SUCCESS;
 }

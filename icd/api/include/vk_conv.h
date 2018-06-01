@@ -43,7 +43,6 @@
 #include "palPipeline.h"
 #include "palQueryPool.h"
 #include "palScreen.h"
-#include "palShader.h"
 #include "palSwapChain.h"
 
 namespace vk

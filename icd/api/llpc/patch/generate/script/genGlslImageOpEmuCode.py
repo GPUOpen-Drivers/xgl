@@ -238,6 +238,7 @@ LLPC_TRANSFORM_CUBE_GRAD = "llpc.image.transformCubeGrad"
 # Represents an image function definition base.
 class FuncDef(object):
     INVALID_VAR = ""
+    INVALID_TYPE = ""
 
     def copyFrom(self, other):
         self._opKind            = other._opKind
@@ -423,6 +424,7 @@ class CodeGen(FuncDef):
         super(CodeGen, self).__init__(funcDefBase._mangledName, funcDefBase._sampledType)
         super(CodeGen, self).copyFrom(funcDefBase)
         self._gfxLevel = gfxLevel
+        self._residencyCode = 0
         pass
 
     # Start code generation
@@ -452,7 +454,7 @@ class CodeGen(FuncDef):
             self._mangledName = self._mangledName.replace(SPIRV_IMAGE_OPERAND_LODLODZ_MODIFIER,
                                                           SPIRV_IMAGE_OPERAND_LODZ_MODIFIER)
             codeGen = CodeGen(self, self._gfxLevel)
-            codeGen._genInternal(irOut)
+            codeGen._genWithDimAware(irOut)
 
             # Turn off zero-LOD optimization
             self._supportLzOptimization = False
@@ -531,7 +533,7 @@ class CodeGen(FuncDef):
 
         irOut.write('}\n\n')
 
-    # Generates image function implementation.
+    # Generates image function implementation with dimension aware intrinsics.
     def _genInternalWithDimAware(self, irOut):
         # Create AMDGCN intrinsics based code generator
         supportDimAware = False
@@ -545,7 +547,7 @@ class CodeGen(FuncDef):
                 # TODO: Support dimension aware image store intrinsics
                 pass
             elif self._opKind == SpirvImageOpKind.sample or self._opKind == SpirvImageOpKind.gather:
-                # TODO: Support dimension aware image sample intrinsics
+                supportDimAware = True
                 pass
             elif self._opKind == SpirvImageOpKind.querylod:
                 # Querylod opcode is not supported in dimension aware intrinsics
@@ -583,8 +585,7 @@ class CodeGen(FuncDef):
                 # TODO: Support dimension aware image store intrinsics
                 shouldNeverCall("")
             elif self._opKind == SpirvImageOpKind.sample or self._opKind == SpirvImageOpKind.gather:
-                # TODO: Support dimension aware image sample intrinsics
-                shouldNeverCall("")
+                intrinGen = DimAwareImageSampleGen(self)
             elif self._opKind == SpirvImageOpKind.querylod:
                 # Querylod opcode is not supported in dimension aware intrinsics
                 shouldNeverCall("")
@@ -798,8 +799,10 @@ class CodeGen(FuncDef):
         if self._supportSparse:
             # Return value of sparse instruction is struct
             sparseRetType = self.getSparseReturnType(retType)
+            residencyCode = self.getResidencyCode()
+
             tempRetVal = self.acquireLocalVar()
-            irOut.write("    %s = insertvalue %s undef, i32 1, 0\n" % (tempRetVal, sparseRetType))
+            irOut.write("    %s = insertvalue %s undef, i32 %s, 0\n" % (tempRetVal, sparseRetType, residencyCode))
             dataRetVal = retVal
             retVal = self.acquireLocalVar()
             irOut.write("    %s = insertvalue %s %s, %s %s, 1\n" % (retVal, sparseRetType, tempRetVal, retType, dataRetVal))
@@ -1388,9 +1391,63 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
         if self._sampledType == SpirvSampledType.i32 or \
            self._sampledType == SpirvSampledType.u32:
             newRetVal = self.acquireLocalVar()
-            irBitcast = "    %s = bitcast <4x float> %s to <4 x i32>\n" % (newRetVal, retVal)
+            irBitcast = "    %s = bitcast <4 x float> %s to <4 x i32>\n" % (newRetVal, retVal)
             irOut.write(irBitcast)
         return newRetVal
+
+    # Gets image return value and sparse residency code from sparse intrinsic return value
+    def genProcessSparseReturnVal(self, sparseRetVal, sparseRetType, retType, retCompType, retNumComp, irOut):
+        assert self._supportSparse
+        assert sparseRetType != self.INVALID_TYPE
+        assert retType != self.INVALID_TYPE
+        assert retNumComp != -1
+
+        # Return value components are before sparse residency code component
+        # Extract return value
+        retVal = self.acquireLocalVar()
+        shuffleMask = "i32 0"
+        for i in range(1, retNumComp):
+            shuffleMask += ", i32 %d" % (i)
+        irShuffle = "    %s = shufflevector %s %s, %s undef, <%d x i32> <%s>\n" % (retVal,
+                                                                                   sparseRetType,
+                                                                                   sparseRetVal,
+                                                                                   sparseRetType,
+                                                                                   retNumComp,
+                                                                                   shuffleMask)
+        irOut.write(irShuffle)
+
+        # Extract residency code
+        temp = self.acquireLocalVar()
+        irExtract = "    %s = extractelement %s %s, i32 %d\n" % (temp,
+                                                                 sparseRetType,
+                                                                 sparseRetVal,
+                                                                 retNumComp)
+        irOut.write(irExtract)
+
+        if retCompType == "half":
+            temp2 = self.acquireLocalVar()
+            irBitcast = "    %s = bitcast %s %s to i16\n" % (temp2, retCompType, temp)
+            irOut.write(irBitcast)
+
+            residencyCode = self.acquireLocalVar()
+            irZExt    = "    %s = zext i16 %s to i32\n" % (residencyCode, temp2)
+            irOut.write(irZExt)
+            pass
+        else:
+            residencyCode = self.acquireLocalVar()
+            irBitcast = "    %s = bitcast %s %s to i32\n" % (residencyCode, retCompType, temp)
+            irOut.write(irBitcast)
+
+        return retVal, residencyCode
+
+    # Sets residency code
+    def setResidencyCode(self, residencyCode):
+        self._residencyCode = residencyCode
+
+    # Gets residency code
+    def getResidencyCode(self):
+        assert self._supportSparse
+        return self._residencyCode
 
     # Generates instruction to cast texel value from sampled type to type which is required by LLVM intrinsic.
     def genCastTexelToSampledType(self, texel, irOut):
@@ -1413,6 +1470,27 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
                 return "<4 x half>"
             else:
                 return "<4 x float>"
+
+    # Gets return type of llvm dimension aware image intrinsic.
+    def getDimAwareBackendRetType(self, isSparse):
+        sparseRetType = self.INVALID_TYPE
+        retType = self.INVALID_TYPE
+        retNumComp = -1
+        if self._opKind == SpirvImageOpKind.write:
+            retType = "void"
+        elif self.isAtomicOp():
+            retType = "i32"
+        else:
+            if self._sampledType == SpirvSampledType.f16:
+                sparseRetType   = "<8 x half>"
+                retType         = "<4 x half>"
+                retNumComp      = 4
+            else:
+                sparseRetType   = "<8 x float>"
+                retType         = "<4 x float>"
+                retNumComp      = 4
+
+        return sparseRetType, retType, retNumComp
 
     def getDAFlag(self):
         if self._arrayed or \
@@ -1484,8 +1562,11 @@ float %s, float %s, float %s, float %s, float %s, float %s)\n" % \
 
     # Gets TFE bit and LWE bit
     def getTfeLwe(self, irOut):
-        # TODO: Add TFE and LWE support, not supported in AMDGPU backend yet
-        return "0"
+        # TFE bit is encoded in bit0 of i32 value
+        retVal = "0"
+        if self._supportSparse:
+            retVal = "1"
+        return retVal
 
     # Gets TFE bit and LWE bit
     def getGlcSlc(self, irOut):
@@ -1865,7 +1946,7 @@ class ImageLoadGen(CodeGen):
     def getFuncName(self):
         funcName = "llvm.amdgcn.image.load"
 
-        if self._hasLod:
+        if self._hasLod and not self._supportLzOptimization:
             funcName += ".mip"
 
         if self._hasConstOffset:
@@ -1924,18 +2005,24 @@ class DimAwareImageLoadGen(CodeGen):
             irOut.write(irPatchCall)
 
         # Process image load, fetch
-        retType         = self.getBackendRetType()
+        sparseRetType, retType, retNumComp = self.getDimAwareBackendRetType(self._supportSparse)
         retVal          = FuncDef.INVALID_VAR
+        retCompType     = self.getVDataRegCompType()
         intrinsicName   = self.getIntrinsicName(False)
         intrinsicParams = self.getIntrinsicParam(False, False, irOut)
 
         retVal      = self.acquireLocalVar()
         irCall = "    %s = call %s @%s(%s)\n" \
             % (retVal,
-               retType,
+               self._supportSparse and sparseRetType or retType,
                intrinsicName,
                intrinsicParams)
         irOut.write(irCall)
+
+        # For sparse intrinsic, extract return value and residency code
+        if self._supportSparse:
+            retVal, residencyCode = self.genProcessSparseReturnVal(retVal, sparseRetType, retType, retCompType, retNumComp, irOut)
+            self.setResidencyCode(residencyCode)
 
         retVal = self.genCastReturnValToSampledType(retVal, irOut)
 
@@ -2006,15 +2093,21 @@ class DimAwareImageLoadGen(CodeGen):
         if paramTypeOnly:
             params += ", i32"
         else:
-            tfeLwe = self.getTfeLwe(irOut)
-            params += ", i32 %s" % (tfeLwe)
+            if isFetchingFromFmask:
+                params += ", i32 0"
+            else:
+                tfeLwe = self.getTfeLwe(irOut)
+                params += ", i32 %s" % (tfeLwe)
 
         # GLC and SLC bit
         if paramTypeOnly:
             params += ", i32"
         else:
-            glcSlc = self.getGlcSlc(irOut)
-            params += ", i32 %s" % (glcSlc)
+            if isFetchingFromFmask:
+                params += ", i32 0"
+            else:
+                glcSlc = self.getGlcSlc(irOut)
+                params += ", i32 %s" % (glcSlc)
 
         return params
 
@@ -2034,21 +2127,23 @@ class DimAwareImageLoadGen(CodeGen):
             dimName = self.getDimAwareDimName()
         funcName += dimName
 
-        if self._sampledType == SpirvSampledType.f16 and not isFetchingFromFmask:
-            funcName += ".v4f16"
-        else:
+        if isFetchingFromFmask:
             funcName += ".v4f32"
+        elif self._sampledType == SpirvSampledType.f16:
+            funcName += self._supportSparse and ".v8f16" or ".v4f16"
+        else:
+            funcName += self._supportSparse and ".v8f32" or ".v4f32"
 
         funcName += ".i32"
 
         if not hasLlvmDecl(funcName):
             # Adds LLVM declaration for this function
-            if self._opKind != SpirvImageOpKind.write:
-                params = self.getIntrinsicParam(True, isFetchingFromFmask, None)
-                retType = isFetchingFromFmask and "<4 x float>" or self.getBackendRetType()
-                funcExternalDecl = "declare %s @%s(%s) %s\n" % \
-                                   (retType, funcName, params, \
-                                    self._attr)
+            params = self.getIntrinsicParam(True, isFetchingFromFmask, None)
+            sparseRetType, retType, retNumComp = self.getDimAwareBackendRetType(self._supportSparse)
+            funcExternalDecl = "declare %s @%s(%s) %s\n" % ((self._supportSparse and not isFetchingFromFmask) and sparseRetType or retType,
+                                                            funcName,
+                                                            params,
+                                                            self._attr)
             addLlvmDecl(funcName, funcExternalDecl)
         return funcName
         pass
@@ -2154,7 +2249,7 @@ class ImageSampleGen(CodeGen):
                 self._opKind == SpirvImageOpKind.querylod
 
         retType     = self.getBackendRetType()
-        retElemType = self.getVDataRegCompType()
+        retCompType = self.getVDataRegCompType()
         funcName    = self.getFuncName()
         resourceName = VarNames.resource
         # Dmask for gather4 instructions
@@ -2221,7 +2316,7 @@ class ImageSampleGen(CodeGen):
                    flags)
             irOut.write(irCall)
             if self._gfxLevel < GFX9 and self._opKind == SpirvImageOpKind.gather:
-                # Patch descriptor for gather
+                # Patch return type for gather
                 if self._sampledType == SpirvSampledType.i32:
                     patchedRetVals[i]  = self.acquireLocalVar()
                     irPatchCall = "    %s = call <4 x float> @llpc.patch.image.gather.texel.i32(<8 x i32> %s, <4 x float> %s)\n" \
@@ -2249,7 +2344,7 @@ class ImageSampleGen(CodeGen):
                 irExtract  = "    %s = extractelement %s %s, i32 3\n" % (tempComp, retType, retVals[i])
                 irOut.write(irExtract)
                 retVal = self.acquireLocalVar()
-                irInsert   = "    %s = insertelement %s %s, %s %s, i32 %d\n" % (retVal, retType, tempRetVal, retElemType, tempComp, i)
+                irInsert   = "    %s = insertelement %s %s, %s %s, i32 %d\n" % (retVal, retType, tempRetVal, retCompType, tempComp, i)
                 tempRetVal = retVal
                 irOut.write(irInsert)
             retVal = self.genCastReturnValToSampledType(retVal, irOut)
@@ -2304,6 +2399,296 @@ class ImageSampleGen(CodeGen):
                                 self._attr)
             addLlvmDecl(funcName, funcExternalDecl)
         return funcName
+
+# Represents dimension aware image sample intrinsic based code generation.
+class DimAwareImageSampleGen(CodeGen):
+    def __init__(self, codeGenBase):
+        super(DimAwareImageSampleGen, self).__init__(codeGenBase, codeGenBase._gfxLevel)
+        pass
+
+    # Generates call to amdgcn intrinsic function.
+    def genIntrinsicCall(self, irOut):
+        assert self._dim != SpirvDim.DimBuffer
+        assert self._opKind == SpirvImageOpKind.sample or self._opKind == SpirvImageOpKind.gather
+
+        sparseRetType, retType, retNumComp = self.getDimAwareBackendRetType(self._supportSparse)
+        retCompType     = self.getVDataRegCompType()
+        intrinsicName   = self.getIntrinsicName()
+        # Dmask for gather4 instructions
+        dmask = "15"
+        if self._opKind == SpirvImageOpKind.gather:
+            if not self._hasDref:
+                # Gather component transformed in to dmask as: dmask = 1 << comp
+                dmask = self.acquireLocalVar()
+                irShiftLeft = "    %s = shl i32 1, %s\n" % (dmask, VarNames.comp)
+                irOut.write(irShiftLeft)
+            else:
+                # Gather component is 1 for shadow textures
+                dmask = "1"
+            # Patch descriptor for gather
+            if self._gfxLevel < GFX9:
+                if self._sampledType == SpirvSampledType.i32:
+                    irPatchCall = "    %s = call <8 x i32> @llpc.patch.image.gather.descriptor.u32(<8 x i32> %s)\n" \
+                        % (VarNames.patchedResource,
+                           VarNames.resource)
+                    irOut.write(irPatchCall)
+                    self._resource = VarNames.patchedResource
+                elif self._sampledType == SpirvSampledType.u32:
+                    irPatchCall = "    %s = call <8 x i32> @llpc.patch.image.gather.descriptor.u32(<8 x i32> %s)\n" \
+                        % (VarNames.patchedResource,
+                           VarNames.resource)
+                    irOut.write(irPatchCall)
+                    self._resource = VarNames.patchedResource
+
+        # Process image sample, image gather, image fetch
+        retVals = [FuncDef.INVALID_VAR, FuncDef.INVALID_VAR, \
+                   FuncDef.INVALID_VAR, FuncDef.INVALID_VAR]
+
+        patchedRetVals =  [FuncDef.INVALID_VAR, FuncDef.INVALID_VAR, \
+                           FuncDef.INVALID_VAR, FuncDef.INVALID_VAR]
+
+        # For OpImageGather* with offsets, we need to generate 4 gather4 instructions
+        # other image instructions will only generate 1 instruction
+        callNum     = self._hasConstOffsets and 4 or 1
+        for i in range(callNum):
+            params          = self.getIntrinsicParam(False, i, irOut)
+            retVals[i]      = self.acquireLocalVar()
+
+            irCall     = "    %s = call %s @%s(%s)\n" \
+                % (retVals[i],
+                   self._supportSparse and sparseRetType or retType,
+                   intrinsicName,
+                   params)
+            irOut.write(irCall)
+
+            # For sparse intrinsic, extract return value and residency code
+            if self._supportSparse:
+                retVals[i], residencyCode = self.genProcessSparseReturnVal(retVals[i], sparseRetType, retType, retCompType, retNumComp, irOut)
+                self.setResidencyCode(residencyCode)
+
+            if self._gfxLevel < GFX9 and self._opKind == SpirvImageOpKind.gather:
+                # Patch return type for gather
+                if self._sampledType == SpirvSampledType.i32:
+                    patchedRetVals[i]  = self.acquireLocalVar()
+                    irPatchCall = "    %s = call <4 x float> @llpc.patch.image.gather.texel.i32(<8 x i32> %s, <4 x float> %s)\n" \
+                        % (patchedRetVals[i],
+                           VarNames.resource,
+                           retVals[i])
+                    irOut.write(irPatchCall)
+                    retVals[i] = patchedRetVals[i]
+                elif self._sampledType == SpirvSampledType.u32:
+                    patchedRetVals[i]  = self.acquireLocalVar()
+                    irPatchCall = "    %s = call <4 x float> @llpc.patch.image.gather.texel.u32(<8 x i32> %s, <4 x float> %s)\n" \
+                        % (patchedRetVals[i],
+                           VarNames.resource,
+                           retVals[i])
+                    irOut.write(irPatchCall)
+                    retVals[i] = patchedRetVals[i]
+
+        if not self._hasConstOffsets:
+            retVal  = self.genCastReturnValToSampledType(retVals[0], irOut)
+        else:
+            # Extract w component which is i0j0 texel from each gather4 result, and construct the return value
+            tempRetVal = "undef"
+            for i in range(callNum):
+                tempComp   = self.acquireLocalVar()
+                irExtract  = "    %s = extractelement %s %s, i32 3\n" % (tempComp, retType, retVals[i])
+                irOut.write(irExtract)
+                retVal = self.acquireLocalVar()
+                irInsert   = "    %s = insertelement %s %s, %s %s, i32 %d\n" % (retVal, retType, tempRetVal, retCompType, tempComp, i)
+                tempRetVal = retVal
+                irOut.write(irInsert)
+            retVal = self.genCastReturnValToSampledType(retVal, irOut)
+
+        return retVal
+
+    # Gets image sample intrinsic function name
+    def getIntrinsicName(self):
+        funcName = "llvm.amdgcn"
+        if self._opKind == SpirvImageOpKind.sample:
+            funcName += ".image.sample"
+        elif self._opKind == SpirvImageOpKind.gather:
+            funcName += ".image.gather4"
+        else:
+            shouldNeverCall()
+
+        if self._hasDref:
+            funcName += ".c"
+
+        if self._opKind == SpirvImageOpKind.gather and not self._hasLod and not self._hasBias:
+            funcName += ".lz"
+
+        if self._hasBias:
+            funcName += ".b"
+        elif self._hasLod and not self._supportLzOptimization:
+            funcName += ".l"
+        elif self._hasLod and self._supportLzOptimization:
+            funcName += ".lz"
+        elif self._hasGrad:
+            funcName += ".d"
+
+        if self._hasMinLod:
+            funcName += ".cl"
+
+        if self._hasConstOffset or self._hasOffset or self._hasConstOffsets:
+            funcName += ".o"
+
+        dimName = self.getDimAwareDimName()
+        funcName += dimName
+
+        if self._sampledType == SpirvSampledType.f16:
+            if self._supportSparse:
+                funcName += ".v8f16"
+            else:
+                funcName += ".v4f16"
+        else:
+            if self._supportSparse:
+                funcName += ".v8f32"
+            else:
+                funcName += ".v4f32"
+
+        # Parameter type for bias and grad
+        if self._hasBias or self._hasGrad:
+            funcName += ".f32"
+
+        # Parameter type for address body
+        funcName += ".f32"
+
+        if not hasLlvmDecl(funcName):
+            # Adds LLVM declaration for this function
+            params = self.getIntrinsicParam(True)
+            sparseRetType, retType, retNumComp = self.getDimAwareBackendRetType(self._supportSparse)
+            funcExternalDecl = "declare %s @%s(%s) %s\n" % (self._supportSparse and sparseRetType or retType,
+                                                                funcName,
+                                                                params,
+                                                                self._attr)
+            addLlvmDecl(funcName, funcExternalDecl)
+
+        return funcName
+
+    # Gets image sample intrinsic parameters
+    def getIntrinsicParam(self,
+                          paramTypeOnly,
+                          constOffsetsIndex = 0,
+                          irOut=None):
+        # DMask
+        if paramTypeOnly:
+            params = "i32"
+        else:
+            params = "i32 15"
+
+        # Offset
+        if self._hasConstOffset or self._hasOffset:
+            if paramTypeOnly:
+                params += ", i32"
+            else:
+                offset = self.acquireLocalVar()
+                irBitcast = "    %s = bitcast float %s to i32\n" % (offset, self._packedOffset)
+                irOut.write(irBitcast)
+                params += ", i32 %s" % (offset)
+
+        # Const Offsets
+        if self._hasConstOffsets:
+            if paramTypeOnly:
+                params += ", i32"
+            else:
+                offset = self.acquireLocalVar()
+                irBitcast = "    %s = bitcast float %s to i32\n" % (offset, self._packedOffsets[constOffsetsIndex])
+                irOut.write(irBitcast)
+                params += ", i32 %s" % (offset)
+
+        # Bias
+        if self._hasBias:
+            if paramTypeOnly:
+                params += ", float"
+            else:
+                params += ", float %s" % (self._bias)
+
+        # Dref
+        if self._dRef:
+            if paramTypeOnly:
+                params += ", float"
+            else:
+                params += ", float %s" % (self._dRef)
+
+        # Grad
+        if self._gradX[0]:
+            numGradComponents = self.getCoordNumComponents(False, False, False)
+            if self._dim == SpirvDim.DimCube:
+                numGradComponents = 2
+
+            for i in range(numGradComponents):
+                if paramTypeOnly:
+                    params += ", float"
+                else:
+                    params += ", float %s" % (self._gradX[i])
+            for i in range(numGradComponents):
+                if paramTypeOnly:
+                    params += ", float"
+                else:
+                    params += ", float %s" % (self._gradY[i])
+
+        # Coordinate
+        for i in range(self.getCoordNumComponents(True, False, False)):
+            if paramTypeOnly:
+                params += ", float"
+            else:
+                params += ", float %s" % (self._coordXYZW[i])
+
+        # Sample ID
+        if self._hasSample:
+            if paramTypeOnly:
+                params += ", float"
+            else:
+                params += ", float %s" % (self._sample)
+
+        # Minlod
+        if self._minlod:
+            if paramTypeOnly:
+                params += ", float"
+            else:
+                params += ", float %s" % (self._minlod)
+
+        # Lod
+        if self._hasLod and not self._supportLzOptimization:
+            if paramTypeOnly:
+                params += ", float"
+            else:
+                params += ", float %s" % (self._lod)
+
+        # Resource
+        if paramTypeOnly:
+            params += ", <8 x i32>"
+        else:
+            params += ", <8 x i32> %s" % (self._resource)
+
+        # Sampler
+        if paramTypeOnly:
+            params += ", <4 x i32>"
+        else:
+            params += ", <4 x i32> %s" % (VarNames.sampler)
+
+        # Unorm
+        if paramTypeOnly:
+            params += ", i1"
+        else:
+            params += ", i1 0"
+
+        # TFE and LWE bit
+        if paramTypeOnly:
+            params += ", i32"
+        else:
+            tfeLwe = self.getTfeLwe(irOut)
+            params += ", i32 %s" % (tfeLwe)
+
+        # GLC and SLC bit
+        if paramTypeOnly:
+            params += ", i32"
+        else:
+            glcSlc = self.getGlcSlc(irOut)
+            params += ", i32 %s" % (glcSlc)
+
+        return params
 
 # Processess a mangled function configuration.
 def processLine(irOut, funcConfig, gfxLevel):

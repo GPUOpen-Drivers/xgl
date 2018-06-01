@@ -154,7 +154,7 @@ void RedirectLogOutput(
                 std::error_code errCode;
 
                 static raw_fd_ostream dbgFile(cl::LogFileDbgs.c_str(), errCode, sys::fs::F_Text);
-                assert(!errCode);
+                LLPC_ASSERT(!errCode);
                 if (pDbgFile == nullptr)
                 {
                     dbgFile.SetUnbuffered();
@@ -179,7 +179,7 @@ void RedirectLogOutput(
                 std::error_code errCode;
 
                 static raw_fd_ostream outFile(cl::LogFileOuts.c_str(), errCode, sys::fs::F_Text);
-                assert(!errCode);
+                LLPC_ASSERT(!errCode);
                 if (pOutFile == nullptr)
                 {
                     outFile.SetUnbuffered();

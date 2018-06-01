@@ -29,24 +29,24 @@
 ************************************************************************************************************************
 */
 
-#include "include/vk_alloccb.h"
 #include "include/query_dlist.h"
 
 namespace vk
 {
 
 // =====================================================================================================================
-// Query primary device verdor ID and device ID
-void QueryPrimaryDeviceInfo(unsigned int* pVendorId, unsigned int* pDeviceId)
+// Use GDI APIs to enumerate all the adapters, query AMD adapter whether it is a Hybrid Graphics platform
+bool IsHybridGraphicsSupported()
 {
+    bool isHybridGraphics = false;
+
+    return isHybridGraphics;
 }
 
 // =====================================================================================================================
-// Use GDI APIs to enumerate all the adapters, query AMD adapter whether it is in a hybrid graphics platform, then call
-// Dlist interface to query AMD Radeon Settings configuration
-void QueryDlistForApplication(
-    bool* pIsHybridGraphics,
-    bool* pRunOnDiscreteGpu)
+// Call DXGI interface to query the specified GPU adapter configured by MS Graphics Settings or AMD Radeon Settings for
+// Hybrid Graphics, which will make Vulkan GPU adapter selection behavior consistent with DX APIs.
+void QueryOsSettingsForApplication(unsigned int* pVendorId, unsigned int* pDeviceId)
 {
 }
 

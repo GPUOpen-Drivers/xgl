@@ -204,6 +204,9 @@ int64_t GetPerfCpuTime();
 // Checks whether the input data is actually a ELF binary
 bool IsElfBinary(const void* pData, size_t dataSize);
 
+// Dump module's CFG graph
+void DumpCfg(const char* pPostfixStr, llvm::Module* pModule);
+
 // =====================================================================================================================
 // Represents the result of CPU time profiling.
 struct TimeProfileResult
@@ -243,4 +246,3 @@ void InitOptimizer();
 
 // Do optimization for the specified LLVM mode, codes are ported from LLVM "opt.exe"
 bool OptimizeModule(llvm::Module* M);
-

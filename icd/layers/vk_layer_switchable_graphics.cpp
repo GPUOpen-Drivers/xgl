@@ -168,18 +168,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     if (result == VK_SUCCESS)
     {
         bool isHybridGraphics = false;
-        bool runOnDiscreteGpu = true;
-
-        // HG I+A/I+eA/I+A+eA platforms report 2 physical devices here, one from Intel ICD and one from AMD ICD
-        if (physicalDeviceCount == 2)
+        if (physicalDeviceCount >= 2)
         {
-            // Query the primary display device
-            uint32_t vendorId = 0;
-            uint32_t deviceId = 0;
-            QueryPrimaryDeviceInfo(&vendorId, &deviceId);
-
-            // Query whether it is a hybrid graphics platform and which GPU the app should run on
-            QueryDlistForApplication(&isHybridGraphics, &runOnDiscreteGpu);
+            isHybridGraphics = IsHybridGraphicsSupported();
             if (isHybridGraphics)
             {
                 if (pPhysicalDevices != nullptr)
@@ -187,32 +178,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
                     pPhysicalDevices[0] = pLayerPhysicalDevices[0];
 
                     VkPhysicalDeviceProperties properties = {};
-                    g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[0], &properties);
+                    uint32_t vendorId = 0;
+                    uint32_t deviceId = 0;
+                    QueryOsSettingsForApplication(&vendorId, &deviceId);
 
-                    if (runOnDiscreteGpu)
-                    {
-                        // AMD is always the discrete GPU for HG A+I
-                        if ((properties.vendorID != VENDOR_ID_AMD) && (properties.vendorID != VENDOR_ID_ATI))
-                        {
-                            // Report the specified physical device to loader
-                            pPhysicalDevices[0] = pLayerPhysicalDevices[1];
-                        }
-                    }
-                    else
-                    {
-                        if ((properties.vendorID == VENDOR_ID_AMD) || (properties.vendorID == VENDOR_ID_ATI))
-                        {
-                            // Report the specified physical device to loader
-                            pPhysicalDevices[0] = pLayerPhysicalDevices[1];
-                        }
-                    }
-
-                    // If HG local display is enabled, report the local display connected physical device
                     for (uint32_t i = 0; i < physicalDeviceCount; i++)
                     {
                         g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[i], &properties);
-                        if ((properties.vendorID == vendorId) && (properties.deviceID == deviceId) &&
-                            (properties.deviceType != VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU))
+                        if ((properties.vendorID == vendorId) && (properties.deviceID == deviceId))
                         {
                             pPhysicalDevices[0] = pLayerPhysicalDevices[i];
                             break;

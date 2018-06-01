@@ -30,7 +30,6 @@
 
 #include "palGpuMemoryBindable.h"
 #include "palPipeline.h"
-#include "palShader.h"
 #include "palMetroHash.h"
 
 #include "llpc.h"

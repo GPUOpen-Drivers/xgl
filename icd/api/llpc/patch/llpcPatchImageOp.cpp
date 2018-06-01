@@ -348,7 +348,9 @@ void PatchImageOp::visitCallInst(
             }
         }
 
-        if ((imageCallMeta.OpKind == ImageOpSample) || (imageCallMeta.OpKind == ImageOpGather))
+        if ((imageCallMeta.OpKind == ImageOpSample) ||
+            (imageCallMeta.OpKind == ImageOpGather) ||
+            (imageCallMeta.OpKind == ImageOpFetch))
         {
             // Call optimized version if LOD is provided with constant 0 value
             if (mangledName.find(gSPIRVName::ImageCallModLod) != std::string::npos)
@@ -361,8 +363,7 @@ void PatchImageOp::visitCallInst(
 
                 // If LOD argument is constant 0, call zero-LOD version of image operation implementation
                 auto pLod = callInst.getArgOperand(lodArgIdx);
-                if (isa<ConstantFP>(*pLod) &&
-                    cast<ConstantFP>(*pLod).isZero())
+                if (isa<Constant>(*pLod) && cast<Constant>(pLod)->isZeroValue())
                 {
                     for (uint32_t i = 0; i < callInst.getNumArgOperands(); ++i)
                     {

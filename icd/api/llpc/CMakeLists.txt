@@ -162,7 +162,7 @@ target_include_directories(llpc
 )
 
 # CMAKE-TODO: Figure out a better way to do this.
-target_include_directories(llpc PRIVATE ${PROJECT_SOURCE_DIR}/../include/khronos)
+target_include_directories(llpc PRIVATE ${XGL_ICD_PATH}/api/include/khronos)
 
 if(WIN32)
     target_compile_definitions(llpc PRIVATE VK_USE_PLATFORM_WIN32_KHR)
@@ -366,7 +366,7 @@ PRIVATE
     ${LLVM_INCLUDE_DIRS}
 )
 
-target_include_directories(amdllpc PRIVATE ${PROJECT_SOURCE_DIR}/../include/khronos)
+target_include_directories(amdllpc PRIVATE ${XGL_ICD_PATH}/api/include/khronos)
 
 if(UNIX)
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")

@@ -30,6 +30,8 @@
  */
 #define DEBUG_TYPE "llpc-internal"
 
+#include "llvm/Analysis/CFGPrinter.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/Support/raw_os_ostream.h"
 #include "spirv.hpp"
@@ -47,6 +49,21 @@
 #include "llpcInternal.h"
 
 using namespace llvm;
+
+namespace llvm
+{
+
+namespace cl
+{
+
+// -dump-cfg: enable to dump CFG into a .dot graph.
+opt<bool> EnableDumpCfg("dump-cfg", desc("Enable to dump Cfg into a .dot graph."), init(false));
+
+extern opt<std::string> PipelineDumpDir;
+
+} // cl
+
+} // llvm
 
 namespace Llpc
 {
@@ -515,6 +532,48 @@ bool IsElfBinary(
         isElfBin = pHeader->e_ident32[EI_MAG0] == ElfMagic;
     }
     return isElfBin;
+}
+
+// =====================================================================================================================
+// Dump module's CFG graph
+void DumpCfg(
+    const char*  pPostfixStr,               // [in] A postfix string
+    Module*      pModule)                   // [in] LLVM module for dump
+{
+    Context* pContext = static_cast<Context*>(&pModule->getContext());
+    std::string cfgFileName;
+    char str[256] = {};
+
+    uint64_t hash = pContext->GetPiplineHashCode();
+    snprintf(str, 256, "Pipe_0x%016" PRIX64 "_%s_%s_", hash,
+        GetShaderStageName(GetShaderStageFromModule(pModule)),
+        pPostfixStr);
+
+    for (Function &function : *pModule)
+    {
+        if (function.empty())
+        {
+            continue;
+        }
+
+        cfgFileName = str;
+        cfgFileName += function.getName();
+        cfgFileName += ".dot";
+        cfgFileName = cl::PipelineDumpDir + "/" + cfgFileName;
+
+        LLPC_OUTS("Dumping CFG '" << cfgFileName << "'...\n");
+
+        std::error_code errCode;
+        raw_fd_ostream cfgFile(cfgFileName, errCode, sys::fs::F_Text);
+        if (!errCode)
+        {
+            WriteGraph(cfgFile, static_cast<const Function*>(&function));
+        }
+        else
+        {
+            LLPC_ERRS(" Error: fail to open file for writing!");
+        }
+    }
 }
 
 } // Llpc
