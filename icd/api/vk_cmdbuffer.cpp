@@ -2986,9 +2986,9 @@ void CmdBuffer::ExecuteBarriers(
     {
         const Buffer* pBuffer = Buffer::ObjectFromHandle(pBufferMemoryBarriers[i].buffer);
 
-        pBuffer->GetBarrierPolicy().ApplyBarrierCacheFlags(
-            pBufferMemoryBarriers[i].srcAccessMask,
-            pBufferMemoryBarriers[i].dstAccessMask,
+        pBuffer->GetBarrierPolicy().ApplyBufferMemoryBarrier(
+            GetQueueFamilyIndex(),
+            pBufferMemoryBarriers[i],
             pNextMain);
 
         pNextMain->imageInfo.pImage = nullptr;
@@ -3022,26 +3022,20 @@ void CmdBuffer::ExecuteBarriers(
         const Image*           pImage                 = Image::ObjectFromHandle(pImageMemoryBarriers[i].image);
         VkFormat               format                 = pImage->GetFormat();
         Pal::BarrierTransition barrierTransition      = { 0 };
-
-        pImage->GetBarrierPolicy().ApplyBarrierCacheFlags(
-            pImageMemoryBarriers[i].srcAccessMask,
-            pImageMemoryBarriers[i].dstAccessMask,
-            &barrierTransition);
-
-        pNextMain->imageInfo.pImage = nullptr;
-
+        bool                   layoutChanging         = false;
         Pal::ImageLayout oldLayouts[MaxRangePerAttachment];
         Pal::ImageLayout newLayouts[MaxRangePerAttachment];
 
-        bool layoutChanging = pImage->GetBarrierPolicy().ApplyBarrierLayoutChanges(
+        pImage->GetBarrierPolicy().ApplyImageMemoryBarrier(
             m_pDevice,
-            pImageMemoryBarriers[i].oldLayout,
-            pImageMemoryBarriers[i].newLayout,
             GetQueueFamilyIndex(),
-            GetEffectiveQueueFamilyIndex(pImageMemoryBarriers[i].srcQueueFamilyIndex),
-            GetEffectiveQueueFamilyIndex(pImageMemoryBarriers[i].dstQueueFamilyIndex),
+            pImageMemoryBarriers[i],
+            &barrierTransition,
+            &layoutChanging,
             oldLayouts,
             newLayouts);
+
+        pNextMain->imageInfo.pImage = nullptr;
 
         uint32_t         palRangeIdx   = 0;
         uint32_t         palRangeCount = 0;

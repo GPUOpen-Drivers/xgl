@@ -827,18 +827,28 @@ void ImageBarrierPolicy::GetLayouts(
 }
 
 // =====================================================================================================================
-// Returns whether layout changes have to be performed for this barrier.
-// If yes, also constructs the PAL layouts corresponding to a Vulkan layouts for each aspect in the output parameters.
-bool ImageBarrierPolicy::ApplyBarrierLayoutChanges(
+// Applies the barrier policy to an image memory barrier as follows:
+//   * Converts access masks and writes them to pPalBarrierTransition
+//   * Determines whether the barrier is a layout changing one and returns the information in pLayoutChanging
+//   * If it's a layout changing barrier then returns the old and new PAL layouts in oldPalLayouts and newPalLayouts
+void ImageBarrierPolicy::ApplyImageMemoryBarrier(
     const Device*                       pDevice,
-    VkImageLayout                       oldLayout,
-    VkImageLayout                       newLayout,
     uint32_t                            currentQueueFamilyIndex,
-    uint32_t                            srcQueueFamilyIndex,
-    uint32_t                            dstQueueFamilyIndex,
+    const VkImageMemoryBarrier&         barrier,
+    Pal::BarrierTransition*             pPalBarrierTransition,
+    bool*                               pLayoutChanging,
     Pal::ImageLayout                    oldPalLayouts[MaxPalDepthAspectsPerMask],
     Pal::ImageLayout                    newPalLayouts[MaxPalDepthAspectsPerMask]) const
 {
+    // Determine effective queue family indices.
+    uint32_t srcQueueFamilyIndex = (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+                                 ? currentQueueFamilyIndex : barrier.srcQueueFamilyIndex;
+    uint32_t dstQueueFamilyIndex = (barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+                                 ? currentQueueFamilyIndex : barrier.dstQueueFamilyIndex;
+
+    // Either the source or the destination queue family has to match the current queue family.
+    VK_ASSERT((srcQueueFamilyIndex == currentQueueFamilyIndex) || (dstQueueFamilyIndex == currentQueueFamilyIndex));
+
     // By default try to transition the layout on the source queue family in case of ownership transfers.
     bool applyLayoutChanges = (currentQueueFamilyIndex == srcQueueFamilyIndex);
 
@@ -851,8 +861,8 @@ bool ImageBarrierPolicy::ApplyBarrierLayoutChanges(
     if (applyLayoutChanges)
     {
         // Determine PAL layouts.
-        GetLayouts(pDevice, oldLayout, srcQueueFamilyIndex, oldPalLayouts);
-        GetLayouts(pDevice, newLayout, dstQueueFamilyIndex, newPalLayouts);
+        GetLayouts(pDevice, barrier.oldLayout, srcQueueFamilyIndex, oldPalLayouts);
+        GetLayouts(pDevice, barrier.newLayout, dstQueueFamilyIndex, newPalLayouts);
 
         // If old and new PAL layouts match then no need to apply layout changes.
         if (memcmp(oldPalLayouts, newPalLayouts, sizeof(Pal::ImageLayout) * MaxPalDepthAspectsPerMask) == 0)
@@ -861,7 +871,31 @@ bool ImageBarrierPolicy::ApplyBarrierLayoutChanges(
         }
     }
 
-    return applyLayoutChanges;
+    // Apply barrier cache flags to the PAL barrier transition.
+    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, pPalBarrierTransition);
+
+    // If this is a queue family ownership transfer barrier, then we can exclude all cache masks from the barrier that
+    // don't have to have an immediately visible effect as ownership transfers can only happen at command buffer
+    // boundaries and we already flush and invalidate all caches at command buffer boundaries. Due to layout changes,
+    // however, the source cache mask has to be preserved on the releasing side, and the destination cache mask has
+    // to be preserved on the acquiring side to make previous/subsequent operations coherent with the layout
+    // transition itself.
+    if (srcQueueFamilyIndex != dstQueueFamilyIndex)
+    {
+        const uint32_t immediatelyVisibleCacheMask = Pal::CoherCpu | Pal::CoherMemory;
+
+        if ((applyLayoutChanges == false) || (currentQueueFamilyIndex == dstQueueFamilyIndex))
+        {
+            pPalBarrierTransition->srcCacheMask &= immediatelyVisibleCacheMask;
+        }
+
+        if ((applyLayoutChanges == false) || (currentQueueFamilyIndex == srcQueueFamilyIndex))
+        {
+            pPalBarrierTransition->dstCacheMask &= immediatelyVisibleCacheMask;
+        }
+    }
+
+    *pLayoutChanging = applyLayoutChanges;
 }
 
 // =====================================================================================================================
@@ -969,6 +1003,40 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
     InitCachePolicy(pDevice->VkPhysicalDevice(),
                     supportedOutputCacheMask,
                     supportedInputCacheMask);
+}
+
+// =====================================================================================================================
+// Applies the barrier policy to an image memory barrier as follows:
+//   * Converts access masks and writes them to pPalBarrierTransition
+//   * Determines whether the barrier is a layout changing one and returns the information in pLayoutChanging
+//   * If it's a layout changing barrier then returns the old and new PAL layouts in oldPalLayouts and newPalLayouts
+void BufferBarrierPolicy::ApplyBufferMemoryBarrier(
+    uint32_t                            currentQueueFamilyIndex,
+    const VkBufferMemoryBarrier&        barrier,
+    Pal::BarrierTransition*             pPalBarrierTransition) const
+{
+    // Determine effective queue family indices.
+    uint32_t srcQueueFamilyIndex = (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+                                 ? currentQueueFamilyIndex : barrier.srcQueueFamilyIndex;
+    uint32_t dstQueueFamilyIndex = (barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
+                                 ? currentQueueFamilyIndex : barrier.dstQueueFamilyIndex;
+
+    // Either the source or the destination queue family has to match the current queue family.
+    VK_ASSERT((srcQueueFamilyIndex == currentQueueFamilyIndex) || (dstQueueFamilyIndex == currentQueueFamilyIndex));
+
+    // Apply barrier cache flags to the PAL barrier transition.
+    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, pPalBarrierTransition);
+
+    // If this is a queue family ownership transfer barrier, then we can exclude all cache masks from the barrier that
+    // don't have to have an immediately visible effect as ownership transfers can only happen at command buffer
+    // boundaries and we already flush and invalidate all caches at command buffer boundaries.
+    if (srcQueueFamilyIndex != dstQueueFamilyIndex)
+    {
+        const uint32_t immediatelyVisibleCacheMask = Pal::CoherCpu | Pal::CoherMemory;
+
+        pPalBarrierTransition->srcCacheMask &= immediatelyVisibleCacheMask;
+        pPalBarrierTransition->dstCacheMask &= immediatelyVisibleCacheMask;
+    }
 }
 
 } //namespace vk

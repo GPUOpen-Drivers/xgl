@@ -63,6 +63,7 @@ Buffer::Buffer(
 
     memset(m_gpuVirtAddr, 0, sizeof(m_gpuVirtAddr));
     memset(m_pGpuMemory, 0, sizeof(m_pGpuMemory));
+    memset(m_multiInstanceIndices, 0, sizeof(m_multiInstanceIndices));
 
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {

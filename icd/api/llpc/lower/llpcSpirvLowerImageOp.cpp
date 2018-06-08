@@ -52,7 +52,7 @@ namespace cl
 opt<bool> EnableDimAwareImageIntrinsic(
     "enable-dim-aware-image-intrinsic",
     desc("Enable dimension-aware image instrinsic in AMDGPU backend"),
-    init(false));
+    init(true));
 }
 
 }

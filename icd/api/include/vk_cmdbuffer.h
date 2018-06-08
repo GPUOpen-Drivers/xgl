@@ -779,13 +779,6 @@ public:
         uint32_t oldToken,
         uint32_t newToken);
 
-    // Replaces VK_QUEUE_FAMILY_IGNORED with the current command buffer's queue family index if necessary.
-    VK_FORCEINLINE uint32_t GetEffectiveQueueFamilyIndex(
-        uint32_t queueFamilyIndex) const
-    {
-        return (queueFamilyIndex == VK_QUEUE_FAMILY_IGNORED) ? GetQueueFamilyIndex() : queueFamilyIndex;
-    }
-
 private:
     CmdBuffer(
         Device*                         pDevice,

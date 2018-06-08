@@ -145,6 +145,9 @@ Image::Image(
 
     memset(m_pPalImages, 0, sizeof(m_pPalImages));
     memset(m_pPalMemory, 0, sizeof(m_pPalMemory));
+    memset(m_multiInstanceIndices, 0, sizeof(m_multiInstanceIndices));
+    memset(m_pSampleLocationsMetaDataMemory, 0, sizeof(m_pSampleLocationsMetaDataMemory));
+    memset(m_sampleLocationsMetaDataOffset, 0, sizeof(m_sampleLocationsMetaDataOffset));
 
     memcpy(m_pPalImages, pPalImages, sizeof(pPalImages[0]) * pDevice->NumPalDevices());
 
@@ -152,9 +155,6 @@ Image::Image(
     {
         memcpy(m_pPalMemory, pPalMemory, sizeof(pPalMemory[0]) * pDevice->NumPalDevices());
     }
-
-    memset(m_pSampleLocationsMetaDataMemory, 0, sizeof(m_pSampleLocationsMetaDataMemory));
-    memset(m_sampleLocationsMetaDataOffset, 0, sizeof(m_sampleLocationsMetaDataOffset));
 
     CalcMemoryPriority();
 }

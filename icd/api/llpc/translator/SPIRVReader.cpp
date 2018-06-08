@@ -103,6 +103,9 @@ cl::opt<bool> SPIRVGenFastMath("spirv-gen-fast-math",
     cl::init(true), cl::desc("Enable fast math mode with generating floating"
                               "point binary ops"));
 
+cl::opt<int> SPIRVLoopUnrollCount("spirv-loop-unroll-count",
+    cl::init(32), cl::desc("Set loop unroll count"));
+
 // Prefix for placeholder global variable name.
 const char* kPlaceholderPrefix = "placeholder.";
 
@@ -976,7 +979,7 @@ SPIRVToLLVM::setLLVMLoopMetadata(SPIRVLoopMerge* LM, BranchInst* BI) {
     if (EnableLoopUnroll) {
       Name = llvm::MDString::get(*Context, "llvm.loop.unroll.count");
       MD = ConstantAsMetadata::get(
-        ConstantInt::get(Type::getInt32Ty(*Context), 32));
+        ConstantInt::get(Type::getInt32Ty(*Context), SPIRVLoopUnrollCount));
     } else {
       BI->setMetadata("llvm.loop", Self);
       return;

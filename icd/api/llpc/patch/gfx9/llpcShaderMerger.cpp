@@ -221,6 +221,20 @@ FunctionType* ShaderMerger::GenerateLsHsEntryPointType(
         userDataCount = std::max(pIntfData->userDataCount, userDataCount);
     }
 
+    if (m_hasTcs && m_hasVs)
+    {
+        auto pVsIntfData = m_pContext->GetShaderInterfaceData(ShaderStageVertex);
+        auto pTcsIntfData = m_pContext->GetShaderInterfaceData(ShaderStageTessControl);
+
+        if ((pVsIntfData->spillTable.sizeInDwords == 0) &&
+            (pTcsIntfData->spillTable.sizeInDwords > 0))
+        {
+            pVsIntfData->userDataUsage.spillTable = userDataCount;
+            ++userDataCount;
+            LLPC_ASSERT(userDataCount <= m_pContext->GetGpuProperty()->maxUserDataCount);
+        }
+    }
+
     if (userDataCount > 0)
     {
         argTys.push_back(VectorType::get(m_pContext->Int32Ty(), userDataCount));
@@ -549,9 +563,21 @@ void ShaderMerger::GenerateLsHsEntryPoint(
             else
             {
                 LLPC_ASSERT(pHsArgTy->isIntegerTy());
-
+                uint32_t actualUserDataIdx = userDataIdx;
+                if (pIntfData->spillTable.sizeInDwords > 0)
+                {
+                    if (pIntfData->userDataUsage.spillTable == userDataIdx)
+                    {
+                        if (m_hasVs)
+                        {
+                            auto pVsIntfData = m_pContext->GetShaderInterfaceData(ShaderStageVertex);
+                            LLPC_ASSERT(pVsIntfData->userDataUsage.spillTable > 0);
+                            actualUserDataIdx = pVsIntfData->userDataUsage.spillTable;
+                        }
+                    }
+                }
                 auto pHsUserData = ExtractElementInst::Create(pUserData,
-                                                              ConstantInt::get(m_pContext->Int32Ty(), userDataIdx),
+                                                              ConstantInt::get(m_pContext->Int32Ty(), actualUserDataIdx),
                                                               "",
                                                               pBeginHsBlock);
                 args.push_back(pHsUserData);
@@ -627,6 +653,37 @@ FunctionType* ShaderMerger::GenerateEsGsEntryPointType(
 
     const auto pIntfData = m_pContext->GetShaderInterfaceData(ShaderStageGeometry);
     userDataCount = std::max(pIntfData->userDataCount, userDataCount);
+
+    LLPC_ASSERT(pIntfData->userDataUsage.gs.esGsLdsSize == 0);
+    if (hasTs)
+    {
+        if (m_hasTes)
+        {
+            const auto pTesIntfData = m_pContext->GetShaderInterfaceData(ShaderStageTessEval);
+            LLPC_ASSERT(pTesIntfData->userDataUsage.tes.viewIndex == pIntfData->userDataUsage.gs.viewIndex);
+            if ((pIntfData->spillTable.sizeInDwords > 0) &&
+                (pTesIntfData->spillTable.sizeInDwords == 0))
+            {
+                pTesIntfData->userDataUsage.spillTable = userDataCount;
+                ++userDataCount;
+                LLPC_ASSERT(userDataCount <= m_pContext->GetGpuProperty()->maxUserDataCount);
+            }
+        }
+    }
+    else
+    {
+        if (m_hasVs)
+        {
+            const auto pVsIntfData = m_pContext->GetShaderInterfaceData(ShaderStageVertex);
+            LLPC_ASSERT(pVsIntfData->userDataUsage.tes.viewIndex == pIntfData->userDataUsage.gs.viewIndex);
+            if ((pIntfData->spillTable.sizeInDwords > 0) &&
+                (pVsIntfData->spillTable.sizeInDwords == 0))
+            {
+                pVsIntfData->userDataUsage.spillTable = userDataCount;
+                ++userDataCount;
+            }
+        }
+    }
 
     if (userDataCount > 0)
     {
@@ -845,6 +902,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
     Value* pInstanceId    = (pArg + 8);
 
     // Construct ".begines" block
+    uint32_t spillTableIdx = 0;
     if ((hasTs && m_hasTes) || ((hasTs == false) && m_hasVs))
     {
         // Call ES main function
@@ -852,6 +910,7 @@ void ShaderMerger::GenerateEsGsEntryPoint(
 
         auto pIntfData = m_pContext->GetShaderInterfaceData(hasTs ? ShaderStageTessEval : ShaderStageVertex);
         const uint32_t userDataCount = pIntfData->userDataCount;
+        spillTableIdx = pIntfData->userDataUsage.spillTable;
 
         auto pEsEntryPoint = pEsGsModule->getFunction(LlpcName::EsEntryPoint);
         LLPC_ASSERT(pEsEntryPoint != nullptr);
@@ -1085,9 +1144,19 @@ void ShaderMerger::GenerateEsGsEntryPoint(
             else
             {
                 LLPC_ASSERT(pGsArgTy->isIntegerTy());
-
+                uint32_t actualUserDataIdx = userDataIdx;
+                if (pIntfData->spillTable.sizeInDwords > 0)
+                {
+                    if (pIntfData->userDataUsage.spillTable == userDataIdx)
+                    {
+                        if (spillTableIdx > 0)
+                        {
+                            actualUserDataIdx = spillTableIdx;
+                        }
+                    }
+                }
                 auto pGsUserData = ExtractElementInst::Create(pUserData,
-                                                              ConstantInt::get(m_pContext->Int32Ty(), userDataIdx),
+                                                              ConstantInt::get(m_pContext->Int32Ty(), actualUserDataIdx),
                                                               "",
                                                               pBeginGsBlock);
                 args.push_back(pGsUserData);

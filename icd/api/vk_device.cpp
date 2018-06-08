@@ -677,7 +677,8 @@ queue_fail:
                 }
                 else
                 {
-                    vkResult = pDeviceAndQueues->device->Initialize(&pQueues[0][0], pPalQueueMemory);
+                    vkResult = pDeviceAndQueues->device->Initialize(
+                        &pQueues[0][0], pPalQueueMemory, enabledDeviceExtensions);
 
                     // If we've failed to Initialize, make sure we destroy anything we might have allocated.
                     if (vkResult != VK_SUCCESS)
@@ -709,8 +710,9 @@ queue_fail:
 // =====================================================================================================================
 // Bring up the Vulkan device.
 VkResult Device::Initialize(
-    DispatchableQueue** pQueues,
-    uint8_t*            pPalQueueMemory)
+    DispatchableQueue**                 pQueues,
+    uint8_t*                            pPalQueueMemory,
+    const DeviceExtensions::Enabled&    enabled)
 {
     // Initialize the internal memory manager
     VkResult result = m_internalMemMgr.Init();

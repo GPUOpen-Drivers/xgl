@@ -2066,7 +2066,7 @@ class DimAwareImageLoadGen(CodeGen):
                     params += ", i32 %s" % (self._coordXYZW[arrayIndex])
 
         # Lod
-        if self._hasLod:
+        if self._hasLod and not self._supportLzOptimization:
             if paramTypeOnly:
                 params += ", i32"
             else:
@@ -2115,7 +2115,7 @@ class DimAwareImageLoadGen(CodeGen):
     def getIntrinsicName(self, isFetchingFromFmask):
         funcName = "llvm.amdgcn.image.load"
 
-        if self._hasLod:
+        if self._hasLod and not self._supportLzOptimization:
             funcName += ".mip"
 
         if isFetchingFromFmask:
@@ -2414,18 +2414,9 @@ class DimAwareImageSampleGen(CodeGen):
         sparseRetType, retType, retNumComp = self.getDimAwareBackendRetType(self._supportSparse)
         retCompType     = self.getVDataRegCompType()
         intrinsicName   = self.getIntrinsicName()
-        # Dmask for gather4 instructions
-        dmask = "15"
+
+        # Patch descriptor for gather
         if self._opKind == SpirvImageOpKind.gather:
-            if not self._hasDref:
-                # Gather component transformed in to dmask as: dmask = 1 << comp
-                dmask = self.acquireLocalVar()
-                irShiftLeft = "    %s = shl i32 1, %s\n" % (dmask, VarNames.comp)
-                irOut.write(irShiftLeft)
-            else:
-                # Gather component is 1 for shadow textures
-                dmask = "1"
-            # Patch descriptor for gather
             if self._gfxLevel < GFX9:
                 if self._sampledType == SpirvSampledType.i32:
                     irPatchCall = "    %s = call <8 x i32> @llpc.patch.image.gather.descriptor.u32(<8 x i32> %s)\n" \
@@ -2575,7 +2566,17 @@ class DimAwareImageSampleGen(CodeGen):
         if paramTypeOnly:
             params = "i32"
         else:
-            params = "i32 15"
+            dmask = "15"
+            if self._opKind == SpirvImageOpKind.gather:
+                if not self._hasDref:
+                    # Gather component transformed in to dmask as: dmask = 1 << comp
+                    dmask = self.acquireLocalVar()
+                    irShiftLeft = "    %s = shl i32 1, %s\n" % (dmask, VarNames.comp)
+                    irOut.write(irShiftLeft)
+                else:
+                    # Gather component is 1 for shadow textures
+                    dmask = "1"
+            params = "i32 %s" % (dmask)
 
         # Offset
         if self._hasConstOffset or self._hasOffset:

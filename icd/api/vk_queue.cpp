@@ -29,19 +29,20 @@
  ***********************************************************************************************************************
  */
 
+#include "include/vk_buffer.h"
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_display.h"
 #include "include/vk_fence.h"
+#include "include/vk_image.h"
 #include "include/vk_instance.h"
 #include "include/vk_memory.h"
-#include "include/vk_image.h"
 #include "include/vk_object.h"
 #include "include/vk_queue.h"
-#include "include/vk_buffer.h"
 #include "include/vk_semaphore.h"
 #include "include/vk_swapchain.h"
+#include "include/vk_utils.h"
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
@@ -277,9 +278,11 @@ VkResult Queue::Submit(
 
             if ((result == VK_SUCCESS) && (submitInfo.waitSemaphoreCount > 0))
             {
-                result = PalWaitSemaphores(submitInfo.waitSemaphoreCount,
-                                           submitInfo.pWaitSemaphores,
-                                           pDeviceGroupInfo);
+                result = PalWaitSemaphores(
+                    submitInfo.waitSemaphoreCount,
+                    submitInfo.pWaitSemaphores,
+                    (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->waitSemaphoreCount          : 0),
+                    (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pWaitSemaphoreDeviceIndices : nullptr));
             }
 
             // Allocate space to store the PAL command buffer handles
@@ -379,9 +382,11 @@ VkResult Queue::Submit(
 
             if ((result == VK_SUCCESS) && (submitInfo.signalSemaphoreCount > 0))
             {
-                result = PalSignalSemaphores(submitInfo.signalSemaphoreCount,
-                                             submitInfo.pSignalSemaphores,
-                                             pDeviceGroupInfo);
+                result = PalSignalSemaphores(
+                    submitInfo.signalSemaphoreCount,
+                    submitInfo.pSignalSemaphores,
+                    (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->signalSemaphoreCount          : 0),
+                    (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pSignalSemaphoreDeviceIndices : nullptr));
             }
 
         }
@@ -406,10 +411,13 @@ VkResult Queue::WaitIdle(void)
 
 // =====================================================================================================================
 // Signal a queue semaphore
+// If semaphoreCount > semaphoreDeviceIndicesCount, the last device index will be used for the remaining semaphores.
+// This can be used with semaphoreDeviceIndicesCount = 1 to signal all semaphores from the same device.
 VkResult Queue::PalSignalSemaphores(
-    uint32_t                       semaphoreCount,
-    const VkSemaphore*             pSemaphores,
-    const VkDeviceGroupSubmitInfo* pDeviceGroupInfo)
+    uint32_t            semaphoreCount,
+    const VkSemaphore*  pSemaphores,
+    const uint32_t      semaphoreDeviceIndicesCount,
+    const uint32_t*     pSemaphoreDeviceIndices)
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
     DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
@@ -420,11 +428,15 @@ VkResult Queue::PalSignalSemaphores(
 #endif
 
     Pal::Result palResult = Pal::Result::Success;
+    uint32_t    deviceIdx = DefaultDeviceIndex;
 
     for (uint32_t i = 0; (i < semaphoreCount) && (palResult == Pal::Result::Success); ++i)
     {
-        const uint32_t deviceIdx = (pDeviceGroupInfo != nullptr) ?
-                                    pDeviceGroupInfo->pSignalSemaphoreDeviceIndices[i] : DefaultDeviceIndex;
+        if (i < semaphoreDeviceIndicesCount)
+        {
+            VK_ASSERT(pSemaphoreDeviceIndices != nullptr);
+            deviceIdx = pSemaphoreDeviceIndices[i];
+        }
 
         VK_ASSERT(deviceIdx < m_pDevice->NumPalDevices());
 
@@ -457,12 +469,16 @@ VkResult Queue::PalSignalSemaphores(
 
 // =====================================================================================================================
 // Wait for a queue semaphore to become signaled
+// If semaphoreCount > semaphoreDeviceIndicesCount, the last device index will be used for the remaining semaphores.
+// This can be used with semaphoreDeviceIndicesCount = 1 to signal all semaphores from the same device.
 VkResult Queue::PalWaitSemaphores(
-    uint32_t                       semaphoreCount,
-    const VkSemaphore*             pSemaphores,
-    const VkDeviceGroupSubmitInfo* pDeviceGroupInfo)
+    uint32_t            semaphoreCount,
+    const VkSemaphore*  pSemaphores,
+    const uint32_t      semaphoreDeviceIndicesCount,
+    const uint32_t*     pSemaphoreDeviceIndices)
 {
     Pal::Result palResult = Pal::Result::Success;
+    uint32_t    deviceIdx = DefaultDeviceIndex;
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
     DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
@@ -477,8 +493,11 @@ VkResult Queue::PalWaitSemaphores(
         Semaphore*  pSemaphore              = Semaphore::ObjectFromHandle(pSemaphores[i]);
         Pal::IQueueSemaphore* pPalSemaphore = nullptr;
 
-        const uint32_t deviceIdx = (pDeviceGroupInfo != nullptr) ?
-                                    pDeviceGroupInfo->pWaitSemaphoreDeviceIndices[i] : DefaultDeviceIndex;
+        if (i < semaphoreDeviceIndicesCount)
+        {
+            VK_ASSERT(pSemaphoreDeviceIndices != nullptr);
+            deviceIdx = pSemaphoreDeviceIndices[i];
+        }
 
         VK_ASSERT(deviceIdx < m_pDevice->NumPalDevices());
 
@@ -609,6 +628,7 @@ VkResult Queue::Present(
         result = PalWaitSemaphores(
             pPresentInfo->waitSemaphoreCount,
             pPresentInfo->pWaitSemaphores,
+            0,
             nullptr);
     }
 
@@ -696,6 +716,7 @@ VkResult Queue::Present(
 // =====================================================================================================================
 // Adds an entry to the remap range array.
 VkResult Queue::AddVirtualRemapRange(
+    uint32_t           resourceDeviceIndex,
     Pal::IGpuMemory*   pVirtualGpuMem,
     VkDeviceSize       virtualOffset,
     Pal::IGpuMemory*   pRealGpuMem,
@@ -709,7 +730,7 @@ VkResult Queue::AddVirtualRemapRange(
 
     Pal::VirtualMemoryRemapRange* pRemapRange = &pRemapState->pRanges[pRemapState->rangeCount++];
 
-    if (m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureStrictNull)
+    if (m_pDevice->VkPhysicalDevice(resourceDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureStrictNull)
     {
         pRemapRange->virtualAccessMode = Pal::VirtualGpuMemAccessMode::ReadZero;
     }
@@ -727,7 +748,7 @@ VkResult Queue::AddVirtualRemapRange(
     // If we've hit our limit of batched remaps, send them to PAL and reset
     if (pRemapState->rangeCount >= pRemapState->maxRangeCount)
     {
-        result = CommitVirtualRemapRanges(nullptr, pRemapState);
+        result = CommitVirtualRemapRanges(resourceDeviceIndex, nullptr, pRemapState);
     }
 
     return result;
@@ -737,6 +758,7 @@ VkResult Queue::AddVirtualRemapRange(
 // Sends any pending virtual remap ranges to PAL and resets the state.  This function also handles remap fence
 // signaling if requested.
 VkResult Queue::CommitVirtualRemapRanges(
+    uint32_t           deviceIndex,
     Pal::IFence*       pFence,
     VirtualRemapState* pRemapState)
 {
@@ -744,7 +766,7 @@ VkResult Queue::CommitVirtualRemapRanges(
 
     if (pRemapState->rangeCount > 0)
     {
-        result = PalQueue(DefaultDeviceIndex)->RemapVirtualMemoryPages(
+        result = PalQueue(deviceIndex)->RemapVirtualMemoryPages(
             pRemapState->rangeCount,
             pRemapState->pRanges,
             true,
@@ -758,7 +780,7 @@ VkResult Queue::CommitVirtualRemapRanges(
 
         submitInfo.pFence = pFence;
 
-        result = PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
+        result = PalQueue(deviceIndex)->Submit(submitInfo);
     }
 
     return (result == Pal::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
@@ -768,6 +790,8 @@ VkResult Queue::CommitVirtualRemapRanges(
 // Generate virtual remap entries for a single bind sparse info record
 VkResult Queue::BindSparseEntry(
     const VkBindSparseInfo& bindInfo,
+    uint32_t                resourceDeviceIndex,
+    uint32_t                memoryDeviceIndex,
     VkDeviceSize            prtTileSize,
     VirtualRemapState*      pRemapState)
 {
@@ -780,7 +804,7 @@ VkResult Queue::BindSparseEntry(
 
         VK_ASSERT(buffer.IsSparse());
 
-        Pal::IGpuMemory* pVirtualGpuMem = buffer.PalMemory(DefaultDeviceIndex);
+        Pal::IGpuMemory* pVirtualGpuMem = buffer.PalMemory(resourceDeviceIndex);
 
         for (uint32_t k = 0; k < bufBindInfo.bindCount; ++k)
         {
@@ -789,12 +813,13 @@ VkResult Queue::BindSparseEntry(
 
             if (bind.memory != VK_NULL_HANDLE)
             {
-                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(DefaultDeviceIndex);
+                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(memoryDeviceIndex);
             }
 
             VK_ASSERT(bind.flags == 0);
 
             result = AddVirtualRemapRange(
+                resourceDeviceIndex,
                 pVirtualGpuMem,
                 bind.resourceOffset,
                 pRealGpuMem,
@@ -816,7 +841,7 @@ VkResult Queue::BindSparseEntry(
 
         VK_ASSERT(image.IsSparse());
 
-        Pal::IGpuMemory* pVirtualGpuMem = image.PalMemory(DefaultDeviceIndex);
+        Pal::IGpuMemory* pVirtualGpuMem = image.PalMemory(resourceDeviceIndex);
 
         for (uint32_t k = 0; k < imgBindInfo.bindCount; ++k)
         {
@@ -825,10 +850,11 @@ VkResult Queue::BindSparseEntry(
 
             if (bind.memory != VK_NULL_HANDLE)
             {
-                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(DefaultDeviceIndex);
+                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(memoryDeviceIndex);
             }
 
             result = AddVirtualRemapRange(
+                resourceDeviceIndex,
                 pVirtualGpuMem,
                 bind.resourceOffset,
                 pRealGpuMem,
@@ -852,7 +878,7 @@ VkResult Queue::BindSparseEntry(
 
         const VkExtent3D& tileSize = image.GetTileSize();
 
-        Pal::IGpuMemory* pVirtualGpuMem = image.PalMemory(DefaultDeviceIndex);
+        Pal::IGpuMemory* pVirtualGpuMem = image.PalMemory(resourceDeviceIndex);
 
         for (uint32_t k = 0; k < imgBindInfo.bindCount; ++k)
         {
@@ -864,7 +890,7 @@ VkResult Queue::BindSparseEntry(
 
             if (bind.memory != VK_NULL_HANDLE)
             {
-                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(DefaultDeviceIndex);
+                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(memoryDeviceIndex);
             }
 
             // Get the subresource layout to be able to figure out its offset
@@ -876,7 +902,7 @@ VkResult Queue::BindSparseEntry(
             subResId.mipLevel   = bind.subresource.mipLevel;
             subResId.arraySlice = bind.subresource.arrayLayer;
 
-            palResult = image.PalImage(DefaultDeviceIndex)->GetSubresourceLayout(subResId, &subResLayout);
+            palResult = image.PalImage(resourceDeviceIndex)->GetSubresourceLayout(subResId, &subResLayout);
 
             if (palResult != Pal::Result::Success)
             {
@@ -920,6 +946,7 @@ VkResult Queue::BindSparseEntry(
                         (offsetInTiles.z + tileZ) * prtTileDepthPitch;
 
                     result = AddVirtualRemapRange(
+                        resourceDeviceIndex,
                         pVirtualGpuMem,
                         virtualOffset,
                         pRealGpuMem,
@@ -940,6 +967,50 @@ VkResult Queue::BindSparseEntry(
 
 End:
     return result;
+}
+
+// =====================================================================================================================
+// Peek the resource and memory device indices from a chained VkDeviceGroupBindSparseInfo structure.
+static bool PeekDeviceGroupBindSparseDeviceIndices(
+    const VkBindSparseInfo& bindInfo,
+    uint32_t*               pResourceDeviceIndex,
+    uint32_t*               pMemoryDeviceIndex)
+{
+    union
+    {
+        const VkStructHeader*               pHeader;
+        const VkDeviceGroupBindSparseInfo*  pDeviceGroupBindSparseInfo;
+    };
+
+    for (pHeader  = static_cast<const VkStructHeader*>(bindInfo.pNext);
+         pHeader != nullptr;
+         pHeader  = pHeader->pNext)
+    {
+        switch (pHeader->sType)
+        {
+            case VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO:
+            {
+                if (pResourceDeviceIndex != nullptr)
+                {
+                    *pResourceDeviceIndex = pDeviceGroupBindSparseInfo->resourceDeviceIndex;
+                }
+                if (pMemoryDeviceIndex != nullptr)
+                {
+                    *pMemoryDeviceIndex = pDeviceGroupBindSparseInfo->memoryDeviceIndex;
+                }
+
+                // Ignore anything else that follows
+                return true;
+            }
+
+            default:
+                // Skip any unknown extension structures
+                break;
+        }
+    }
+
+    // Indices not found
+    return false;
 }
 
 // =====================================================================================================================
@@ -972,67 +1043,94 @@ VkResult Queue::BindSparse(
         result = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    // Byte size of a PRT sparse tile
-    const VkDeviceSize prtTileSize =
-        m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().imageProperties.prtTileSize;
-
-    // Get the fence that should be signaled after all remap operations are completed
-    Pal::IFence* pPalFence = nullptr;
-
-    if (Fence::ObjectFromHandle(fence) != VK_NULL_HANDLE)
-    {
-        Fence* pFence = Fence::ObjectFromHandle(fence);
-        pFence->SetActiveDevice(DefaultDeviceIndex);
-        pPalFence = pFence->PalFence();
-    }
+    // Fence will be signalled after the remaps
+    uint32_t signalFenceDeviceMask = 0;
 
     for (uint32_t i = 0; (i < bindInfoCount) && (result == VK_SUCCESS); ++i)
     {
-        const bool  lastEntry = (i == (bindInfoCount - 1));
-        const auto& bindInfo  = pBindInfo[i];
+        const bool  lastEntry               = (i == (bindInfoCount - 1));
+        const auto& bindInfo                = pBindInfo[i];
+        uint32_t    resourceDeviceIndex     = DefaultDeviceIndex;
+        uint32_t    memoryDeviceIndex       = DefaultDeviceIndex;
+        uint32_t    nextResourceDeviceIndex = DefaultDeviceIndex;
+
+        PeekDeviceGroupBindSparseDeviceIndices(bindInfo, &resourceDeviceIndex, &memoryDeviceIndex);
+
+        if (!lastEntry)
+        {
+            PeekDeviceGroupBindSparseDeviceIndices(pBindInfo[i + 1], &nextResourceDeviceIndex, nullptr);
+        }
+
+        // Keep track of the PAL devices that need to signal the fence
+        signalFenceDeviceMask |= (1 << resourceDeviceIndex);
 
         if (bindInfo.waitSemaphoreCount > 0)
         {
             result = PalWaitSemaphores(
                     bindInfo.waitSemaphoreCount,
                     bindInfo.pWaitSemaphores,
-                    nullptr);
+                    1,  // number of device indices
+                    &resourceDeviceIndex);
         }
 
         if (result == VK_SUCCESS)
         {
-            result = BindSparseEntry(bindInfo, prtTileSize, &remapState);
+            // Byte size of a PRT sparse tile
+            const VkDeviceSize prtTileSize =
+                m_pDevice->VkPhysicalDevice(resourceDeviceIndex)->PalProperties().imageProperties.prtTileSize;
+
+            result = BindSparseEntry(
+                bindInfo,
+                resourceDeviceIndex,
+                memoryDeviceIndex,
+                prtTileSize,
+                &remapState);
         }
 
-        // Commit any batched remap operations immediately if either this is the last batch or the app is requesting us
-        // to signal a queue semaphore when operations complete.
-        if (lastEntry || (bindInfo.signalSemaphoreCount > 0))
+        // Commit any batched remap operations immediately if:
+        // - this is the last batch,
+        // - resourceDeviceIndex is going to change,
+        // - the app is requesting us to signal a queue semaphore.
+        if (lastEntry || (nextResourceDeviceIndex != resourceDeviceIndex) || (bindInfo.signalSemaphoreCount > 0))
         {
-            // Commit any remaining remaps (this also signals the fence even if there are no remaining remaps)
+            // Commit any remaining remaps
             if (result == VK_SUCCESS)
             {
-                result = CommitVirtualRemapRanges(lastEntry ? pPalFence : nullptr, &remapState);
+                result = CommitVirtualRemapRanges(resourceDeviceIndex, nullptr, &remapState);
             }
 
             // Signal any semaphores depending on the preceding remap operations
             if (result == VK_SUCCESS)
             {
-
                 result = PalSignalSemaphores(
                     bindInfo.signalSemaphoreCount,
                     bindInfo.pSignalSemaphores,
-                    nullptr);
+                    1,  // number of device indices
+                    &resourceDeviceIndex);
             }
         }
     }
 
-    // In cases where this function is called with no actual work, but a fence handle is given (there is a test
-    // for this), signal the fence
-    if ((bindInfoCount == 0) && (pPalFence != nullptr))
+    // We always signal the fence separately, after we know which devices appeared in resourceDeviceIndex
+    if (fence != VK_NULL_HANDLE)
     {
         VK_ASSERT(remapState.rangeCount == 0);
+        Fence* pFence = Fence::ObjectFromHandle(fence);
 
-        result = CommitVirtualRemapRanges(pPalFence, &remapState);
+        // The fence must be signalled even if there's no actual work (there is a test for this)
+        if (signalFenceDeviceMask == 0)
+        {
+            signalFenceDeviceMask = (1 << DefaultDeviceIndex);
+        }
+
+        utils::IterateMask deviceGroup(signalFenceDeviceMask);
+        while (result == VK_SUCCESS && deviceGroup.Iterate())
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+            Pal::IFence*   pPalFence = pFence->PalFence(deviceIdx);
+
+            result = CommitVirtualRemapRanges(deviceIdx, pPalFence, &remapState);
+        }
     }
 
     // Clean up

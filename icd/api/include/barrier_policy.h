@@ -184,13 +184,12 @@ public:
         uint32_t                            aspectIndex,
         uint32_t                            queueFamilyIndex) const;
 
-    bool ApplyBarrierLayoutChanges(
+    void ApplyImageMemoryBarrier(
         const Device*                       pDevice,
-        VkImageLayout                       oldLayout,
-        VkImageLayout                       newLayout,
         uint32_t                            currentQueueFamilyIndex,
-        uint32_t                            srcQueueFamilyIndex,
-        uint32_t                            dstQueueFamilyIndex,
+        const VkImageMemoryBarrier&         barrier,
+        Pal::BarrierTransition*             pPalBarrierTransition,
+        bool*                               pLayoutChanging,
         Pal::ImageLayout                    oldPalLayouts[MaxPalDepthAspectsPerMask],
         Pal::ImageLayout                    newPalLayouts[MaxPalDepthAspectsPerMask]) const;
 
@@ -238,6 +237,11 @@ public:
     BufferBarrierPolicy(
         Device*                             pDevice,
         VkBufferUsageFlags                  usage);
+
+    void ApplyBufferMemoryBarrier(
+        uint32_t                            currentQueueFamilyIndex,
+        const VkBufferMemoryBarrier&        barrier,
+        Pal::BarrierTransition*             pPalBarrierTransition) const;
 
 protected:
     void InitBufferCachePolicy(

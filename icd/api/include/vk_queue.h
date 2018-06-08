@@ -87,14 +87,16 @@ public:
     VkResult WaitIdle(void);
 
     VkResult PalSignalSemaphores(
-        uint32_t                       semaphoreCount,
-        const VkSemaphore*             pSemaphores,
-        const VkDeviceGroupSubmitInfo* pDeviceGroupInfo);
+        uint32_t            semaphoreCount,
+        const VkSemaphore*  pSemaphores,
+        const uint32_t      semaphoreDeviceIndicesCount,    // May be 0 to use DefaultDeviceIndex
+        const uint32_t*     pSemaphoreDeviceIndices);
 
     VkResult PalWaitSemaphores(
-        uint32_t                       semaphoreCount,
-        const VkSemaphore*             pSemaphores,
-        const VkDeviceGroupSubmitInfo* pDeviceGroupInfo);
+        uint32_t            semaphoreCount,
+        const VkSemaphore*  pSemaphores,
+        const uint32_t      semaphoreDeviceIndicesCount,    // May be 0 to use DefaultDeviceIndex
+        const uint32_t*     pSemaphoreDeviceIndices);
 
     VkResult Present(
         const VkPresentInfoKHR* pPresentInfo);
@@ -163,10 +165,13 @@ protected:
 
     VK_INLINE VkResult BindSparseEntry(
         const VkBindSparseInfo& bindInfo,
+        uint32_t                resourceDeviceIndex,
+        uint32_t                memoryDeviceIndex,
         VkDeviceSize            prtTileSize,
         VirtualRemapState*      pRemapState);
 
     VkResult AddVirtualRemapRange(
+        uint32_t           resourceDeviceIndex,
         Pal::IGpuMemory*   pVirtualGpuMem,
         VkDeviceSize       virtualOffset,
         Pal::IGpuMemory*   pRealGpuMem,
@@ -175,6 +180,7 @@ protected:
         VirtualRemapState* pRemapState);
 
     VkResult CommitVirtualRemapRanges(
+        uint32_t           deviceIndex,
         Pal::IFence*       pFence,
         VirtualRemapState* pRemapState);
 

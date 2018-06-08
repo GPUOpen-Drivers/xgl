@@ -278,8 +278,10 @@ public:
         VkSemaphore                                 semaphore,
         VkSemaphoreImportFlags                      importFlags);
 
-    VkResult Initialize(DispatchableQueue** pQueues,
-                        uint8_t*            pPalQueueMemory);
+    VkResult Initialize(
+        DispatchableQueue**                         pQueues,
+        uint8_t*                                    pPalQueueMemory,
+        const DeviceExtensions::Enabled&            enabled);
 
     void InitDispatchTable();
 
