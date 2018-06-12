@@ -1077,7 +1077,7 @@ VkResult CmdBuffer::Begin(
                 break;
             }
 
-            if (pInfo->pInheritanceInfo != nullptr)
+            if (m_is2ndLvl && pInfo->pInheritanceInfo != nullptr)
             {
                 pRenderPass = RenderPass::ObjectFromHandle(pInfo->pInheritanceInfo->renderPass);
                 pFramebuffer = Framebuffer::ObjectFromHandle(pInfo->pInheritanceInfo->framebuffer);
