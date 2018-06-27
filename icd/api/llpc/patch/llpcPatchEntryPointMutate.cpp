@@ -960,8 +960,13 @@ FunctionType* PatchEntryPointMutate::GenerateEntryPointType(
             }
         }
     }
-    const auto enableMultiView = (static_cast<const GraphicsPipelineBuildInfo*>(
-                            m_pContext->GetPipelineBuildInfo()))->iaState.enableMultiView;
+    bool enableMultiView = false;
+    if (m_shaderStage != ShaderStageCompute)
+    {
+        enableMultiView = (static_cast<const GraphicsPipelineBuildInfo*>(
+            m_pContext->GetPipelineBuildInfo()))
+            ->iaState.enableMultiView;
+    }
 
     switch (m_shaderStage)
     {
