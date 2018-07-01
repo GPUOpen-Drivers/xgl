@@ -1,0 +1,63 @@
+               OpCapability SampledBuffer
+               OpCapability StorageImageExtendedFormats
+               OpCapability ImageBuffer
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %1 "main" %gl_GlobalInvocationID
+               OpExecutionMode %1 LocalSize 64 1 1
+               OpMemberDecorate %_struct_3 0 Offset 0
+               OpMemberDecorate %_struct_3 1 Offset 4
+               OpMemberDecorate %_struct_3 2 Offset 8
+               OpMemberDecorate %_struct_3 3 Offset 12
+               OpDecorate %_struct_3 Block
+               OpDecorate %gl_GlobalInvocationID BuiltIn GlobalInvocationId
+               OpDecorate %4 DescriptorSet 4
+               OpDecorate %4 Binding 0
+               OpDecorate %5 DescriptorSet 4
+               OpDecorate %5 Binding 69
+       %uint = OpTypeInt 32 0
+        %int = OpTypeInt 32 1
+     %uint_4 = OpConstant %uint 4
+     %uint_2 = OpConstant %uint 2
+  %_struct_3 = OpTypeStruct %uint %uint %uint %uint
+%_ptr_Uniform__struct_3 = OpTypePointer Uniform %_struct_3
+         %11 = OpTypeImage %uint Buffer 0 0 0 2 R32ui
+%_ptr_UniformConstant_11 = OpTypePointer UniformConstant %11
+       %void = OpTypeVoid
+         %14 = OpTypeFunction %void
+     %uint_3 = OpConstant %uint 3
+    %uint_64 = OpConstant %uint 64
+     %uint_0 = OpConstant %uint 0
+     %uint_1 = OpConstant %uint 1
+     %v3uint = OpTypeVector %uint 3
+%_ptr_Input_v3uint = OpTypePointer Input %v3uint
+      %int_0 = OpConstant %int 0
+       %bool = OpTypeBool
+%_ptr_Uniform_uint = OpTypePointer Uniform %uint
+          %4 = OpVariable %_ptr_Uniform__struct_3 Uniform
+          %5 = OpVariable %_ptr_UniformConstant_11 UniformConstant
+%gl_GlobalInvocationID = OpVariable %_ptr_Input_v3uint Input
+          %1 = OpFunction %void None %14
+         %24 = OpLabel
+         %25 = OpAccessChain %_ptr_Uniform_uint %4 %int_0
+         %26 = OpLoad %uint %25
+         %27 = OpLoad %11 %5
+         %28 = OpLoad %v3uint %gl_GlobalInvocationID
+         %29 = OpCompositeExtract %uint %28 0
+         %30 = OpULessThan %bool %29 %26
+               OpSelectionMerge %31 None
+               OpBranchConditional %30 %32 %31
+         %32 = OpLabel
+         %33 = OpIMul %uint %29 %uint_4
+         %34 = OpIAdd %uint %33 %uint_0
+               OpImageWrite %27 %34 %uint_64
+         %35 = OpIAdd %uint %33 %uint_1
+               OpImageWrite %27 %35 %uint_0
+         %36 = OpIAdd %uint %33 %uint_2
+               OpImageWrite %27 %36 %uint_0
+         %37 = OpIAdd %uint %33 %uint_3
+               OpImageWrite %27 %37 %uint_0
+               OpBranch %31
+         %31 = OpLabel
+               OpReturn
+               OpFunctionEnd

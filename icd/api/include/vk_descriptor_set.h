@@ -50,18 +50,6 @@ class Device;
 class DescriptorPool;
 class BufferView;
 
-// Flags for the descriptor set.
-union DescriptorSetFlags
-{
-    struct
-    {
-        uint32_t fmaskBasedMsaaReadEnabled: 1;  // Cached value of associated RuntimeSetting.
-        uint32_t robustBufferAccess       : 1;  // Cached value of whether robust buffer access is used
-        uint32_t reserved                 : 30;
-    };
-    uint32_t u32All;
-};
-
 struct DescriptorAddr
 {
     Pal::gpusize  staticGpuAddr;
@@ -82,7 +70,7 @@ public:
         uint32_t*                       pDestAddr,
         uint32_t                        count,
         uint32_t                        dwStride,
-        size_t                          descriptorStrideInBytes);
+        size_t                          descriptorStrideInBytes = 0);
 
     template <size_t imageDescSize, size_t samplerDescSize>
     static void WriteImageSamplerDescriptors(
@@ -91,7 +79,7 @@ public:
         uint32_t*                       pDestAddr,
         uint32_t                        count,
         uint32_t                        dwStride,
-        size_t                          descriptorStrideInBytes);
+        size_t                          descriptorStrideInBytes = 0);
 
     template <size_t imageDescSize>
     static void WriteImageDescriptors(
@@ -100,7 +88,7 @@ public:
         uint32_t*                       pDestAddr,
         uint32_t                        count,
         uint32_t                        dwStride,
-        size_t                          descriptorStrideInBytes);
+        size_t                          descriptorStrideInBytes = 0);
 
     template <size_t imageDescSize>
     static void WriteFmaskDescriptors(
@@ -109,7 +97,7 @@ public:
         uint32_t*                       pDestAddr,
         uint32_t                        count,
         uint32_t                        dwStride,
-        size_t                          descriptorStrideInBytes);
+        size_t                          descriptorStrideInBytes = 0);
 
     template <VkDescriptorType type>
     static void WriteBufferInfoDescriptors(
@@ -119,7 +107,7 @@ public:
         uint32_t*                       pDestAddr,
         uint32_t                        count,
         uint32_t                        dwStride,
-        size_t                          descriptorStrideInBytes);
+        size_t                          descriptorStrideInBytes = 0);
 
     template <size_t bufferDescSize, VkDescriptorType type>
     static void WriteBufferDescriptors(
@@ -128,13 +116,7 @@ public:
         uint32_t*                       pDestAddr,
         uint32_t                        count,
         uint32_t                        dwStride,
-        size_t                          descriptorStrideInBytes);
-
-    const VK_INLINE bool FmaskBasedMsaaReadEnabled() const
-        { return m_flags.fmaskBasedMsaaReadEnabled; }
-
-    const VK_INLINE bool RobustBufferAccess() const
-        { return m_flags.robustBufferAccess; }
+        size_t                          descriptorStrideInBytes = 0);
 
     const DescriptorSetLayout* Layout() const
         { return m_pLayout; }
@@ -163,14 +145,16 @@ public:
     }
 
     uint32_t* DynamicDescriptorData()
-        { return m_dynamicDescriptorData; }
+        { return reinterpret_cast<uint32_t*>(m_dynamicDescriptorData); }
 
-    VkResult Destroy(Device* pDevice);
+    uint64_t* DynamicDescriptorDataQw()
+        { return m_dynamicDescriptorData; }
 
     VK_INLINE static DescriptorSet* StateFromHandle(VkDescriptorSet set);
     VK_INLINE static Pal::gpusize GpuAddressFromHandle(uint32_t deviceIdx, VkDescriptorSet set);
     VK_INLINE static void UserDataPtrValueFromHandle(VkDescriptorSet set, uint32_t deviceIdx, uint32_t* pUserData);
 
+    template <bool robustBufferAccess>
     VK_INLINE static void PatchedDynamicDataFromHandle(
         VkDescriptorSet set,
         uint32_t*       pUserData,
@@ -180,10 +164,7 @@ public:
     static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
 
 protected:
-    DescriptorSet(
-        DescriptorPool*    pPool,
-        uint32_t           heapIndex,
-        DescriptorSetFlags flags);
+    DescriptorSet(uint32_t heapIndex);
 
     ~DescriptorSet()
         { PAL_NEVER_CALLED(); }
@@ -191,7 +172,11 @@ protected:
     template <uint32_t numPalDevices>
     static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
 
-    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, uint32_t numPalDevices>
+    template <uint32_t numPalDevices, bool fmaskBasedMsaaReadEnabled>
+    static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
+
+    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, uint32_t numPalDevices,
+              bool fmaskBasedMsaaReadEnabled>
     static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(
         VkDevice                                    device,
         uint32_t                                    descriptorWriteCount,
@@ -199,15 +184,14 @@ protected:
         uint32_t                                    descriptorCopyCount,
         const VkCopyDescriptorSet*                  pDescriptorCopies);
 
-    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize>
+    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, bool fmaskBasedMsaaReadEnabled>
     static void WriteDescriptorSets(
         const Device*                pDevice,
         uint32_t                     deviceIdx,
         uint32_t                     descriptorWriteCount,
-        const VkWriteDescriptorSet*  pDescriptorWrites,
-         size_t                      descriptorStrideInBytes = 0);
+        const VkWriteDescriptorSet*  pDescriptorWrites);
 
-    template <size_t imageDescSize>
+    template <size_t imageDescSize, bool fmaskBasedMsaaReadEnabled>
     static void CopyDescriptorSets(
         const Device*                pDevice,
         uint32_t                     deviceIdx,
@@ -233,15 +217,14 @@ protected:
     void*                       m_pAllocHandle;
     DescriptorAddr              m_addresses[MaxPalDevices];
 
-    DescriptorPool* const       m_pPool;
     uint32_t                    m_heapIndex;
-
-    const DescriptorSetFlags    m_flags;
 
     // NOTE: This is hopefully only needed temporarily until SC implements proper support for buffer descriptors
     // with dynamic offsets. Until then we have to store the static portion of dynamic buffer descriptors in client
     // memory together with the descriptor set so that we are able to supply the patched version of the descriptors.
-    uint32_t                    m_dynamicDescriptorData[MaxDynamicDescriptors * PipelineLayout::DynDescRegCount];
+    // This field needs to be qword aligned because it is accessed as qwords in PatchedDynamicDataFromHandle().
+    // Since allocating in qwords, need to divide the number of registers by 2 to get the correct size.
+    uint64_t                    m_dynamicDescriptorData[MaxDynamicDescriptors * PipelineLayout::DynDescRegCount / 2];
 
     friend class DescriptorPool;
     friend class DescriptorSetHeap;
@@ -283,6 +266,7 @@ void DescriptorSet::UserDataPtrValueFromHandle(
 // NOTE: This function assumes that we directly store the whole buffer SRDs in user data and treats the SRD data in a
 // white-box fashion. Probably would be better if we'd have a PAL function to do the patching of the dynamic offset,
 // but this is expected to be temporary anyways until we'll have proper support for dynamic descriptors in SC.
+template <bool robustBufferAccess>
 void DescriptorSet::PatchedDynamicDataFromHandle(
     VkDescriptorSet set,
     uint32_t*       pUserData,
@@ -293,8 +277,8 @@ void DescriptorSet::PatchedDynamicDataFromHandle(
 
     DescriptorSet* pSet  = StateFromHandle(set);
     uint64_t* pDstQwords = reinterpret_cast<uint64_t*>(pUserData);
-    uint64_t* pSrcQwords = reinterpret_cast<uint64_t*>(pSet->DynamicDescriptorData());
-    const uint32_t dynDataNumQwords = pSet->RobustBufferAccess() ? 2 : 1;
+    uint64_t* pSrcQwords = pSet->DynamicDescriptorDataQw();
+    const uint32_t dynDataNumQwords = robustBufferAccess ? 2 : 1;
     for (uint32_t i = 0; i < numDynamicDescriptors; ++i)
     {
         const uint64_t baseAddressMask = 0x0000FFFFFFFFFFFFull;
@@ -308,7 +292,7 @@ void DescriptorSet::PatchedDynamicDataFromHandle(
 
         pDstQwords[i * dynDataNumQwords] = hiBits | baseAddress;
 
-        if (pSet->RobustBufferAccess())
+        if (robustBufferAccess)
         {
             pDstQwords[i * dynDataNumQwords + 1] = pSrcQwords[i * dynDataNumQwords + 1];
         }

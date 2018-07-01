@@ -889,7 +889,8 @@ void Device::InitDispatchTable()
     // Override dispatch table entries.
     EntryPoints* ep = m_dispatchTable.OverrideEntryPoints();
 
-    ep->vkUpdateDescriptorSets = DescriptorSet::GetUpdateDescriptorSetsFunc(this);
+    ep->vkUpdateDescriptorSets  = DescriptorSet::GetUpdateDescriptorSetsFunc(this);
+    ep->vkCmdBindDescriptorSets = CmdBuffer::GetCmdBindDescriptorSetsFunc(this);
 
     // =================================================================================================================
     // After generic overrides, apply any internal layer specific dispatch table override.
@@ -1170,6 +1171,9 @@ VkResult Device::CreateInternalComputePipeline(
         pShaderInfo->pEntryTarget        = "main";
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
+        pCompiler->ApplyDefaultShaderOptions(&pShaderInfo->options
+                                             );
+
         result = pCompiler->CreateComputePipelineBinary(this,
                                                         0,
                                                         nullptr,

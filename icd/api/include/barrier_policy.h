@@ -34,6 +34,7 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/vk_physical_device.h"
+#include "include/vk_queue.h"
 #include "include/vk_extensions.h"
 
 #include "palCmdBuffer.h"
@@ -127,6 +128,30 @@ private:
 };
 
 // =====================================================================================================================
+// Ownership transfer priority.
+enum class OwnershipTransferPriority : uint32_t
+{
+    None        = 0,
+    Low         = 1,
+    Medium      = 2,
+    High        = 3,
+};
+
+// =====================================================================================================================
+// Queue family barrier policy structure.
+// Helps limiting the scope of barriers to those applicable to a particular queue family.
+struct QueueFamilyBarrierPolicy
+{
+    uint32_t    palLayoutEngineMask;                // PAL layout engine mask corresponding to the queue family.
+    uint32_t    supportedCacheMask;                 // Mask including all caches that are supported in the queue
+                                                    // family's scope.
+    uint32_t    supportedLayoutUsageMask;           // Mask including all supported image layout usage flags in the
+                                                    // queue family's scope.
+    OwnershipTransferPriority ownershipTransferPriority;    // Priority this queue family has in performing ownership
+                                                            // transfers.
+};
+
+// =====================================================================================================================
 // Device barrier policy class.
 // Limits the scope of barriers to those applicable to this device.
 // Used to control the policy for global memory barriers.
@@ -141,6 +166,20 @@ public:
     VK_FORCEINLINE uint32_t GetSupportedLayoutEngineMask() const
         { return m_supportedLayoutEngineMask; }
 
+    VK_FORCEINLINE const QueueFamilyBarrierPolicy& GetQueueFamilyPolicy(
+        uint32_t                            queueFamilyIndex) const
+    {
+        if ((queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL) || (queueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT))
+        {
+            return m_externalQueueFamilyPolicy;
+        }
+        else
+        {
+            VK_ASSERT(queueFamilyIndex < Queue::MaxQueueFamilies);
+            return m_queueFamilyPolicy[queueFamilyIndex];
+        }
+    }
+
 protected:
     void InitDeviceLayoutEnginePolicy(
         PhysicalDevice*                     pPhysicalDevice,
@@ -151,14 +190,55 @@ protected:
         PhysicalDevice*                     pPhysicalDevice,
         const DeviceExtensions::Enabled&    enabledExtensions);
 
+    void InitQueueFamilyPolicies(
+        PhysicalDevice*                     pPhysicalDevice,
+        const VkDeviceCreateInfo*           pCreateInfo,
+        const DeviceExtensions::Enabled&    enabledExtensions);
+
     uint32_t    m_supportedLayoutEngineMask;        // Mask including all supported image layout engine flags.
+    uint32_t    m_allowedConcurrentCacheMask;       // Mask including all caches that can be affected by operations
+                                                    // outside of the current queue (other queues or host).
+    QueueFamilyBarrierPolicy m_queueFamilyPolicy[Queue::MaxQueueFamilies];  // Per queue family policy info.
+    QueueFamilyBarrierPolicy m_externalQueueFamilyPolicy;   // Policy for external/foreign queue families.
+};
+
+// =====================================================================================================================
+// Resource barrier policy class.
+// Limits the scope of barriers to those applicable to a particular resource.
+// Contains common code for buffer and image barrier policies.
+class ResourceBarrierPolicy : public BarrierPolicy
+{
+public:
+    ResourceBarrierPolicy(
+        Device*                             pDevice,
+        VkSharingMode                       sharingMode,
+        uint32_t                            queueFamilyIndexCount,
+        const uint32_t*                     pQueueFamilyIndices);
+
+protected:
+    void InitConcurrentCachePolicy(
+        Device*                             pDevice,
+        VkSharingMode                       sharingMode,
+        uint32_t                            queueFamilyIndexCount,
+        const uint32_t*                     pQueueFamilyIndices);
+
+    VK_FORCEINLINE const QueueFamilyBarrierPolicy& GetQueueFamilyPolicy(
+        uint32_t                            queueFamilyIndex) const
+    {
+        return m_pDevicePolicy->GetQueueFamilyPolicy(queueFamilyIndex);
+    }
+
+    const DeviceBarrierPolicy* m_pDevicePolicy;     // Device barrier policy.
+
+    uint32_t    m_concurrentCacheMask;              // Mask including all caches supported by any queue family in the
+                                                    // concurrent sharing scope.
 };
 
 // =====================================================================================================================
 // Image barrier policy class.
 // Limits the scope of barriers to those applicable to this particular image.
 // Used to control the policy for image memory barriers.
-class ImageBarrierPolicy : public BarrierPolicy
+class ImageBarrierPolicy : public ResourceBarrierPolicy
 {
 public:
     ImageBarrierPolicy(
@@ -173,25 +253,33 @@ public:
     VK_FORCEINLINE uint32_t GetSupportedLayoutUsageMask() const
         { return m_supportedLayoutUsageMask; }
 
+    VK_FORCEINLINE uint32_t GetSupportedLayoutUsageMask(
+        uint32_t                            queueFamilyIndex) const
+    {
+        // This version of the function returns the supported layout usage masks in the scope of the specified queue
+        // family. Accordingly, the image's supported layout usage mask is limited to the layout usage mask that
+        // is supported by the specified queue family or by other queue families that are allowed to concurrently
+        // access the image.
+        return m_supportedLayoutUsageMask &
+               (GetQueueFamilyPolicy(queueFamilyIndex).supportedLayoutUsageMask | m_concurrentLayoutUsageMask);
+    }
+
     Pal::ImageLayout GetTransferLayout(
-        const Device*                       pDevice,
         VkImageLayout                       layout,
         uint32_t                            queueFamilyIndex) const;
 
     Pal::ImageLayout GetAspectLayout(
-        const Device*                       pDevice,
         VkImageLayout                       layout,
         uint32_t                            aspectIndex,
         uint32_t                            queueFamilyIndex) const;
 
     void ApplyImageMemoryBarrier(
-        const Device*                       pDevice,
         uint32_t                            currentQueueFamilyIndex,
         const VkImageMemoryBarrier&         barrier,
-        Pal::BarrierTransition*             pPalBarrierTransition,
+        Pal::BarrierTransition*             pPalBarrier,
         bool*                               pLayoutChanging,
-        Pal::ImageLayout                    oldPalLayouts[MaxPalDepthAspectsPerMask],
-        Pal::ImageLayout                    newPalLayouts[MaxPalDepthAspectsPerMask]) const;
+        Pal::ImageLayout                    oldPalLayouts[MaxPalAspectsPerMask],
+        Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask]) const;
 
 protected:
     void InitImageLayoutUsagePolicy(
@@ -199,6 +287,12 @@ protected:
         VkImageUsageFlags                   usage,
         bool                                multisampled,
         uint32_t                            extraLayoutUsages);
+
+    void InitConcurrentLayoutUsagePolicy(
+        Device*                             pDevice,
+        VkSharingMode                       sharingMode,
+        uint32_t                            queueFamilyIndexCount,
+        const uint32_t*                     pQueueFamilyIndices);
 
     void InitImageLayoutEnginePolicy(
         Device*                             pDevice,
@@ -211,13 +305,11 @@ protected:
         VkImageUsageFlags                   usage);
 
     void GetLayouts(
-        const Device*                       pDevice,
         VkImageLayout                       layout,
         uint32_t                            queueFamilyIndex,
-        Pal::ImageLayout                    results[MaxPalDepthAspectsPerMask]) const;
+        Pal::ImageLayout                    results[MaxPalAspectsPerMask]) const;
 
     uint32_t GetQueueFamilyLayoutEngineMask(
-        const Device*                       pDevice,
         uint32_t                            queueFamilyIndex) const;
 
     uint32_t    m_supportedLayoutUsageMask;         // Mask including all supported layout usage flags for the image.
@@ -225,28 +317,36 @@ protected:
     uint32_t    m_alwaysSetLayoutEngineMask;        // Mask including layout engine flags that should be always set.
                                                     // This contains all engines in the scope of concurrent sharing
                                                     // mode to allow concurrent well-defined access to the image.
+    uint32_t    m_concurrentLayoutUsageMask;        // Mask including all layout usage flags supported by any queue
+                                                    // family in the concurrent sharing scope.
 };
 
 // =====================================================================================================================
 // Buffer barrier policy class.
 // Limits the scope of barriers to those applicable to this particular buffer.
 // Used to control the policy for buffer memory barriers.
-class BufferBarrierPolicy : public BarrierPolicy
+class BufferBarrierPolicy : public ResourceBarrierPolicy
 {
 public:
     BufferBarrierPolicy(
         Device*                             pDevice,
-        VkBufferUsageFlags                  usage);
+        VkBufferUsageFlags                  usage,
+        VkSharingMode                       sharingMode,
+        uint32_t                            queueFamilyIndexCount,
+        const uint32_t*                     pQueueFamilyIndices);
 
     void ApplyBufferMemoryBarrier(
         uint32_t                            currentQueueFamilyIndex,
         const VkBufferMemoryBarrier&        barrier,
-        Pal::BarrierTransition*             pPalBarrierTransition) const;
+        Pal::BarrierTransition*             pPalBarrier) const;
 
 protected:
     void InitBufferCachePolicy(
         Device*                             pDevice,
-        VkBufferUsageFlags                  usage);
+        VkBufferUsageFlags                  usage,
+        VkSharingMode                       sharingMode,
+        uint32_t                            queueFamilyIndexCount,
+        const uint32_t*                     pQueueFamilyIndices);
 };
 
 } //namespace vk

@@ -34,8 +34,6 @@
 #include "include/vk_dispatch.h"
 #include "include/vk_object.h"
 #include "include/vk_framebuffer.h"
-
-#include "renderpass/renderpass_types.h"
 #include "utils/temp_mem_arena.h"
 
 #include "palList.h"
@@ -55,6 +53,8 @@ struct RuntimeSettings;
 class RenderPass;
 class RenderPassLogger;
 struct RenderPassCreateInfo;
+struct AttachmentDescription;
+struct SubpassDescription;
 
 // =====================================================================================================================
 // This class is a temporarily instantiated class that builds a RenderPassExecuteInfo during vkCreateRenderPass().
@@ -77,9 +77,9 @@ public:
     // State tracked per attachment during building
     struct AttachmentState
     {
-        AttachmentState(const VkAttachmentDescription* pDesc);
+        AttachmentState(const AttachmentDescription* pDesc);
 
-        const VkAttachmentDescription* pDesc;
+        const AttachmentDescription*   pDesc;
 
         uint32_t                       firstUseSubpass;             // Subpass that first references this attachment
         uint32_t                       finalUseSubpass;             // Subpass that lasts references this attachment
@@ -110,13 +110,13 @@ public:
     // State tracked per subpass during building (build-time version of RPExecuteSubpassInfo)
     struct SubpassState
     {
-        SubpassState(const VkSubpassDescription* pDesc, utils::TempMemArena* pArena);
+        SubpassState(const SubpassDescription* pDesc, utils::TempMemArena* pArena);
         ~SubpassState();
 
         size_t GetExtraSize() const;
         void* Finalize(void* pStorage, RPExecuteSubpassInfo* pResult) const;
 
-        const VkSubpassDescription*                 pDesc;
+        const SubpassDescription*                          pDesc;
 
         // Build-time state for RPExecuteBeginSubpassInfo:
         SyncPointState                                     syncTop;
@@ -153,13 +153,9 @@ public:
     ~RenderPassBuilder();
 
     VkResult Build(
-        const VkRenderPassCreateInfo&                                 apiInfo,
-        const RenderPassCreateInfo&                                   info,
-        const VkAllocationCallbacks*                                  pAllocator,
-        RenderPassExecuteInfo**                                       ppResult);
-
-    const VkRenderPassCreateInfo* GetApiInfo() const
-        { return m_pApiInfo; }
+        const RenderPassCreateInfo*     pRenderPassInfo,
+        const VkAllocationCallbacks*    pAllocator,
+        RenderPassExecuteInfo**         ppResult);
 
     const RenderPassCreateInfo* GetInfo() const
         { return m_pInfo; }
@@ -179,9 +175,9 @@ private:
     Pal::Result BuildSubpassDependencies(uint32_t subpass, SyncPointState* pSync);
     Pal::Result BuildImplicitDependencies(uint32_t subpass, SyncPointState* pSync);
     Pal::Result BuildLoadOps(uint32_t subpass, uint32_t attachment);
-    Pal::Result BuildColorAttachmentReferences(uint32_t subpass, const VkSubpassDescription& desc);
-    Pal::Result BuildDepthStencilAttachmentReferences(uint32_t subpass, const VkSubpassDescription& desc);
-    Pal::Result BuildInputAttachmentReferences(uint32_t subpass, const VkSubpassDescription& desc);
+    Pal::Result BuildColorAttachmentReferences(uint32_t subpass, const SubpassDescription& desc);
+    Pal::Result BuildDepthStencilAttachmentReferences(uint32_t subpass, const SubpassDescription& desc);
+    Pal::Result BuildInputAttachmentReferences(uint32_t subpass, const SubpassDescription& desc);
     Pal::Result BuildResolveAttachmentReferences(uint32_t subpass);
 
     Pal::Result BuildSamplePatternMemoryStore(uint32_t attachment);
@@ -201,7 +197,6 @@ private:
     void PostProcessSyncPoint(SyncPointState* pSyncPoint);
     size_t GetTotalExtraSize() const;
 
-    const VkRenderPassCreateInfo*            m_pApiInfo;            // API create info
     const RenderPassCreateInfo*              m_pInfo;               // Internal create info
     Device* const                            m_pDevice;             // Device pointer
     utils::TempMemArena*                     m_pArena;              // Arena for allocating build-time scratch memory

@@ -111,6 +111,7 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->trapPresent = true;
                 }
+
             }
 
         }
@@ -333,6 +334,76 @@ void ShaderOptimizer::BuildAppProfile()
         return;
     }
 
+    else if (appProfile == AppProfile::Doom)
+    {
+        if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
+        {
+            // Apply late VS alloc to all (graphics) pipelines
+            m_appProfile.entryCount = 1;
+            m_appProfile.entries[0].pattern.match.always = 1;
+            m_appProfile.entries[0].action.createInfo.apply.lateAllocVsLimit = true;
+            m_appProfile.entries[0].action.createInfo.lateAllocVsLimit       = 0;
+        }
+    }
+    else if (appProfile == AppProfile::DoomVFR)
+    {
+        if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
+        {
+            // Apply late VS alloc to all (graphics) pipelines
+            m_appProfile.entryCount = 2;
+
+            m_appProfile.entries[0].pattern.match.always = 1;
+            m_appProfile.entries[0].action.createInfo.apply.lateAllocVsLimit = true;
+            m_appProfile.entries[0].action.createInfo.lateAllocVsLimit       = 0;
+
+            // Temporal SSAA Shader Optimization
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xc31ffadc08a19564;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x8f4c2a80158dea86;
+
+            m_appProfile.entries[1].action.shaders[ShaderStageFragment].shaderCreate.apply.optStrategyFlags = true;
+            m_appProfile.entries[1].action.shaders[ShaderStageFragment].shaderCreate.apply.minVgprOptions = true;
+            m_appProfile.entries[1].action.shaders[ShaderStageFragment].shaderCreate.apply.vgprLimit = true;
+
+        }
+    }
+    else if (appProfile == AppProfile::WolfensteinII)
+    {
+        if (Pal::GfxIpLevel::GfxIp8 <= gfxIpLevel)
+        {
+            m_appProfile.entryCount = 3;
+
+            // Enable shader compiler optimization for PS to reduce VGPR count
+            // For PS shader that likely has large VGPR count.
+            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].match.codeSizeLessThan = true;
+            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].codeSizeLessThanValue = 0x10000;
+
+            m_appProfile.entries[0].action.shaders[ShaderStageFragment].shaderCreate.apply.optStrategyFlags = true;
+            m_appProfile.entries[0].action.shaders[ShaderStageFragment].shaderCreate.apply.minVgprOptions = true;
+
+            // Enable shader compiler optimization for in game motion blur CS to reduce VGPR.
+            // 2 hashes to cover both high motion blur quality and medium quality. Low quality motion
+            // blur shader does not have occupancy issue.
+            m_appProfile.entries[1].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xe255e1ba355d3de2;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xb93c2f32daf532ef;
+
+            m_appProfile.entries[1].action.shaders[ShaderStageCompute].shaderCreate.apply.optStrategyFlags = 1;
+            m_appProfile.entries[1].action.shaders[ShaderStageCompute].shaderCreate.apply.minVgprOptions = 1;
+
+            m_appProfile.entries[2].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[2].pattern.shaders[ShaderStageCompute].match.codeHash    = true;
+            m_appProfile.entries[2].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xbf9550fc8441df60;
+            m_appProfile.entries[2].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xe4618043b8ad99c3;
+
+            m_appProfile.entries[2].action.shaders[ShaderStageCompute].shaderCreate.apply.optStrategyFlags = 1;
+            m_appProfile.entries[2].action.shaders[ShaderStageCompute].shaderCreate.apply.minVgprOptions = 1;
+
+        }
+    }
 }
 
 #if PAL_ENABLE_PRINTS_ASSERTS
@@ -714,7 +785,7 @@ static bool ParseJsonProfileActionShader(
         "cuEnableMask",
         "maxThreadGroupsPerCu",
         "trapPresent",
-        "debugMode"
+        "debugMode",
     };
 
     success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);

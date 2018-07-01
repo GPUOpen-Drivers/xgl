@@ -186,6 +186,7 @@ target_sources(xgl PRIVATE
     api/vk_display_manager.cpp
     api/vk_event.cpp
     api/vk_fence.cpp
+    api/vk_formats.cpp
     api/vk_framebuffer.cpp
     api/vk_physical_device.cpp
     api/vk_physical_device_manager.cpp
@@ -209,7 +210,6 @@ target_sources(xgl PRIVATE
     api/vk_gpa_session.cpp
     api/vk_descriptor_update_template.cpp
     api/render_state_cache.cpp
-    api/peer_resource.cpp
     api/renderpass/renderpass_builder.cpp
     api/renderpass/renderpass_logger.cpp
     api/utils/temp_mem_arena.cpp

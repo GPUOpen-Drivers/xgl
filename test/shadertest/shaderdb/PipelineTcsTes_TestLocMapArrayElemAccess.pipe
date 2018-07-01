@@ -1,0 +1,44 @@
+[TcsGlsl]
+#version 450 core
+
+layout(vertices = 3) out;
+
+layout(location = 0) out vec4 outColor[];
+
+layout(location = 3) out vec4 outData[][4];
+
+void main (void)
+{
+    outColor[gl_InvocationID] = gl_in[gl_InvocationID].gl_Position;
+
+    outData[gl_InvocationID][1] = vec4(1.5);
+    outData[gl_InvocationID][3] = vec4(3.0);
+
+    gl_TessLevelInner[1] = 1.0;
+    gl_TessLevelOuter[1] = 2.0;
+}
+
+[TcsInfo]
+entryPoint = main
+
+[TesGlsl]
+#version 450 core
+
+layout(triangles) in;
+
+layout(location = 0) in vec4 inColor[];
+layout(location = 0) out vec4 outColor;
+
+layout(location = 3) in vec4 inData[][4];
+
+void main()
+{
+    outColor += gl_in[1].gl_Position;
+    outColor = inColor[0] + inColor[1] + inColor[2] + inData[0][3];
+}
+
+[TesInfo]
+entryPoint = main
+
+[GraphicsPipelineState]
+patchControlPoints = 3

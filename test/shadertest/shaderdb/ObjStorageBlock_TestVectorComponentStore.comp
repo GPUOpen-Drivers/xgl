@@ -1,0 +1,14 @@
+#version 450
+layout(set = 0, binding = 0) buffer BO
+{
+    vec4 m;
+};
+
+layout(local_size_x = 1) in;
+void main()
+{
+    vec4 v = vec4(0, 0, 0, 0);
+    v.y = m.y;
+    m.y = v.y;
+}
+

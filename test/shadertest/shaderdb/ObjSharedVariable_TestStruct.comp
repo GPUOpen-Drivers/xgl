@@ -1,0 +1,21 @@
+#version 450
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+struct StrType {
+    uint s1;
+    uint sa1[gl_WorkGroupSize.x];
+};
+
+shared StrType str1;
+
+uint g_ui;
+
+void main()
+{
+    str1.s1 = gl_LocalInvocationID.x;
+    str1.sa1[gl_LocalInvocationID.x] = str1.s1;
+
+    g_ui = str1.sa1[gl_LocalInvocationID.x];
+}
+

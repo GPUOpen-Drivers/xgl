@@ -522,7 +522,7 @@ VkResult SwapChain::AcquireNextImage(
         if (result == VK_SUCCESS)
         {
             acquireInfo.timeout    = timeout;
-            acquireInfo.pSemaphore = (pSemaphore != nullptr) ? pSemaphore->PalSemaphore() : nullptr;
+            acquireInfo.pSemaphore = (pSemaphore != nullptr) ? pSemaphore->PalSemaphore(DefaultDeviceIndex) : nullptr;
             acquireInfo.pFence     = (pFence != nullptr) ? pFence->PalFence(presentationDeviceIdx) : nullptr;
 
             result = PalToVkResult(m_pPalSwapChain[presentationDeviceIdx]->AcquireNextImage(acquireInfo, pImageIndex));
@@ -741,7 +741,7 @@ bool FullscreenMgr::TryEnterExclusive(
                     if (m_mode != Implicit)
                     {
                         m_colorParams.format     = VkToPalFormat(props.fullscreenSurfaceFormat.format).format;
-                        m_colorParams.colorSpace = vk::convert::ScreenColorSpace(props.fullscreenSurfaceFormat.colorSpace);
+                        m_colorParams.colorSpace = VkToPalScreenSpace(props.fullscreenSurfaceFormat);
                         m_colorParams.u32All     = 0;
 
                         m_pScreen->SetColorConfiguration(&m_colorParams);

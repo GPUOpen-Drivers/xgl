@@ -1075,13 +1075,13 @@ VkResult PhysicalDevice::GetImageFormatProperties(
 // =====================================================================================================================
 // Retrieve format properites. Called in response to vkGetPhysicalDeviceImageFormatProperties
 void PhysicalDevice::GetSparseImageFormatProperties(
-    VkFormat                        format,
-    VkImageType                     type,
-    VkSampleCountFlagBits           samples,
-    VkImageUsageFlags               usage,
-    VkImageTiling                   tiling,
-    uint32_t*                       pPropertyCount,
-    VkSparseImageFormatProperties*  pProperties) const
+    VkFormat                                        format,
+    VkImageType                                     type,
+    VkSampleCountFlagBits                           samples,
+    VkImageUsageFlags                               usage,
+    VkImageTiling                                   tiling,
+    uint32_t*                                       pPropertyCount,
+    utils::ArrayView<VkSparseImageFormatProperties> properties) const
 {
     const struct AspectLookup
     {
@@ -1136,7 +1136,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
         VK_ASSERT(pPropertyCount != nullptr);
 
-        if (pProperties == nullptr)
+        if (properties.IsNull())
         {
             *pPropertyCount = requiredPropertyCount;
         }
@@ -1156,9 +1156,11 @@ void PhysicalDevice::GetSparseImageFormatProperties(
                     break;
                 }
 
+                VkSparseImageFormatProperties* const pProperties = &properties[writtenPropertyCount];
+
                 pProperties->aspectMask = pAspect->aspectVk;
 
-                const VkFormat aspectFormat = vk::Formats::GetAspectFormat(format, pAspect->aspectVk);
+                const VkFormat aspectFormat = Formats::GetAspectFormat(format, pAspect->aspectVk);
                 bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(VkToPalFormat(aspectFormat).format));
 
                 // Determine pixel size index (log2 of the pixel byte size, used to index into the tables below)
@@ -1179,7 +1181,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                     VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std2DBlockShapes));
 
-                    pProperties->imageGranularity = Std2DBlockShapes[pixelSizeIndex];
+                    pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
+                                                                              Std2DBlockShapes[pixelSizeIndex]);
                 }
                 else if (type == VK_IMAGE_TYPE_3D)
                 {
@@ -1197,7 +1200,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                         VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std3DBlockShapes));
 
-                        pProperties->imageGranularity = Std3DBlockShapes[pixelSizeIndex];
+                        pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
+                                                                                  Std3DBlockShapes[pixelSizeIndex]);
                     }
                     else
                     {
@@ -1217,7 +1221,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                         VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(NonStd3DBlockShapes));
 
-                        pProperties->imageGranularity = NonStd3DBlockShapes[pixelSizeIndex];
+                        pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
+                                                                                  NonStd3DBlockShapes[pixelSizeIndex]);
                     }
                 }
                 else if ((type == VK_IMAGE_TYPE_2D) && (samples != VK_SAMPLE_COUNT_1_BIT))
@@ -1282,7 +1287,6 @@ void PhysicalDevice::GetSparseImageFormatProperties(
                 }
 
                 ++writtenPropertyCount;
-                ++pProperties;
 
             } // for pAspect
 
@@ -2490,6 +2494,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GCN_SHADER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_BALLOT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DRAW_INDIRECT_COUNT));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DRAW_INDIRECT_COUNT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_BALLOT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_VOTE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_STENCIL_EXPORT));
@@ -2592,6 +2597,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_RANGE_UNRESTRICTED));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_QUEUE_FAMILY_FOREIGN));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DESCRIPTOR_INDEXING));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_ATTRIBUTE_DIVISOR));
 
     return availableExtensions;
 }
@@ -3157,6 +3165,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
         VkPhysicalDeviceDescriptorIndexingPropertiesEXT*         pDescriptorIndexingProperties;
 
+        VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -3223,9 +3232,7 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES:
         {
-            const Pal::DeviceProperties& palProps = PalProperties();
-
-            pSubgroupProperties->subgroupSize        = palProps.gfxipProperties.shaderCore.wavefrontSize;
+            pSubgroupProperties->subgroupSize        = GetSubgroupSize();
 
             pSubgroupProperties->supportedStages     = VK_SHADER_STAGE_VERTEX_BIT |
                                                        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
@@ -3317,6 +3324,11 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
+        {
+            pVertexAttributeDivisorProperties->maxVertexAttribDivisor = UINT32_MAX;
+            break;
+        }
         default:
             break;
         }
@@ -3348,8 +3360,6 @@ void PhysicalDevice::GetSparseImageFormatProperties2(
 {
     VK_ASSERT(pFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2);
 
-    if (pProperties == nullptr)
-    {
         GetSparseImageFormatProperties(
             pFormatInfo->format,
             pFormatInfo->type,
@@ -3357,29 +3367,7 @@ void PhysicalDevice::GetSparseImageFormatProperties2(
             pFormatInfo->usage,
             pFormatInfo->tiling,
             pPropertyCount,
-            nullptr);
-    }
-    else
-    {
-        // Assume that, at most, we will write two property structures (for depth and stencil)
-        VkSparseImageFormatProperties contiguousProperties[2] = {};
-
-        *pPropertyCount = Util::Min(*pPropertyCount, 2u);
-
-        GetSparseImageFormatProperties(
-            pFormatInfo->format,
-            pFormatInfo->type,
-            pFormatInfo->samples,
-            pFormatInfo->usage,
-            pFormatInfo->tiling,
-            pPropertyCount,
-            contiguousProperties);
-
-        for (uint32_t i = 0; i < *pPropertyCount; ++i)
-        {
-            pProperties[i].properties = contiguousProperties[i];
-        }
-    }
+            utils::ArrayView<VkSparseImageFormatProperties>(pProperties, &pProperties->properties));
 }
 
 // =====================================================================================================================
@@ -4344,7 +4332,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties(
     VkSparseImageFormatProperties*              pProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSparseImageFormatProperties(
-        format, type, samples, usage, tiling, pPropertyCount, pProperties);
+        format,
+        type,
+        samples,
+        usage,
+        tiling,
+        pPropertyCount,
+        utils::ArrayView<VkSparseImageFormatProperties>(pProperties));
 }
 
 // =====================================================================================================================

@@ -1,0 +1,13 @@
+#version 450 core
+
+layout(set = 0, binding = 0, rg16) uniform imageBuffer img2D;
+
+layout(set = 0, binding = 1) buffer BO
+{
+    vec4 mIn;
+};
+
+void main()
+{
+    imageStore(img2D, 0, mIn);
+}

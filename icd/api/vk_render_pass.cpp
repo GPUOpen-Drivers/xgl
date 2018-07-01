@@ -33,9 +33,7 @@
 #include "include/vk_render_pass.h"
 #include "include/vk_framebuffer.h"
 #include "include/vk_cmdbuffer.h"
-
-#include "renderpass/renderpass_builder.h"
-#include "renderpass/renderpass_logger.h"
+#include "include/vk_utils.h"
 
 #include "palVectorImpl.h"
 #include "palMetroHash.h"
@@ -43,193 +41,119 @@
 namespace vk
 {
 
-static uint64_t GenerateRenderPassHash(const VkRenderPassCreateInfo* pIn);
-
-struct RenderPassExtCreateInfo
-{
-    const VkRenderPassMultiviewCreateInfo*               pMultiview;
-};
-
 // =====================================================================================================================
-static void ConvertRenderPassCreateInfo(
-    const VkRenderPassCreateInfo*  pIn,
-    const RenderPassExtCreateInfo& renderPassExtCreateInfo,
-    RenderPassCreateInfo*          pInfo,
-    VkAttachmentReference* const   pSubpassColorAttachments)
+static void GenerateHashFromAttachmentDescription(
+    Util::MetroHash64*              pHasher,
+    const AttachmentDescription&    desc)
 {
-    // !!! IMPORTANT !!!
-    //
-    // Please be conscious that any changes to this function or other information derived from the render pass
-    // create info should also be reflected with updates to the GenerateRenderPassHash() function.
-    //
-    // !!! IMPORTANT !!!
-
-    memcpy(pInfo->pAttachments, pIn->pAttachments, pInfo->attachmentCount * sizeof(VkAttachmentDescription));
-
-    VkAttachmentReference* pNextColorAttachments = pSubpassColorAttachments;
-
-    for (uint32_t subIter = 0; subIter < pInfo->subpassCount; ++subIter)
-    {
-        pInfo->pSubpasses[subIter].pColorAttachments = pNextColorAttachments;
-
-        VK_PLACEMENT_NEW(&pInfo->pSubpasses[subIter]) RenderSubPass(subIter, *pIn);
-
-        pNextColorAttachments += pIn->pSubpasses[subIter].colorAttachmentCount;
-
-        pInfo->pSubpasses[subIter].viewMask = (renderPassExtCreateInfo.pMultiview != nullptr) ?
-                                               renderPassExtCreateInfo.pMultiview->pViewMasks[subIter] : 0;
-    }
-
-    // pInfo->pSubpassSampleCounts will contain the color and depth sample counts per subpass.
-    memset(pInfo->pSubpassSampleCounts, 0, pInfo->subpassCount * sizeof(SubpassSampleCounts));
-
-    // Calculate the color and depth sample counts.
-    uint32_t subpassColorSampleCount = 0;
-    uint32_t subpassDepthSampleCount = 0;
-    uint32_t subpassMaxSampleCount   = 0;
-
-    for (uint32_t subpassIndex = 0; subpassIndex < pInfo->subpassCount; subpassIndex++)
-    {
-        uint32_t colorAttachmentCount = pInfo->pSubpasses[subpassIndex].colorAttachmentCount;
-
-        for (uint32_t subpassAttachmentIdx = 0; subpassAttachmentIdx < colorAttachmentCount; subpassAttachmentIdx++)
-        {
-            uint32_t subpassColorAttachment =
-                pInfo->pSubpasses[subpassIndex].pColorAttachments[subpassAttachmentIdx].attachment;
-
-            if (subpassColorAttachment != VK_ATTACHMENT_UNUSED)
-            {
-                for (uint32_t attachIdx = 0; attachIdx < pInfo->attachmentCount; ++attachIdx)
-                {
-                    if (attachIdx == subpassColorAttachment)
-                    {
-                        subpassColorSampleCount = pInfo->pAttachments[attachIdx].samples != 0 ?
-                            pInfo->pAttachments[attachIdx].samples : 1;
-
-                        // All sample counts within the subpass must match. We can exist as soon
-                        // as we've calculated the sample count for the first attachment we find.
-                        break;
-                    }
-                }
-            }
-        }
-
-        // In case there are no color attachments, check depth.
-        uint32_t subpassDepthAttachment = pInfo->pSubpasses[subpassIndex].depthStencilAttachment.attachment;
-
-        if (subpassDepthAttachment != VK_ATTACHMENT_UNUSED)
-        {
-            for (uint32_t attachIdx = 0; attachIdx < pInfo->attachmentCount; ++attachIdx)
-            {
-                if (attachIdx == subpassDepthAttachment)
-                {
-                    subpassDepthSampleCount = pInfo->pAttachments[attachIdx].samples != 0 ?
-                        pInfo->pAttachments[attachIdx].samples : 1;
-
-                    // There is only one depth attachment. Exit the loop when we find it.
-                    break;
-                }
-            }
-        }
-
-        pInfo->pSubpassSampleCounts[subpassIndex].colorCount = subpassColorSampleCount;
-        pInfo->pSubpassSampleCounts[subpassIndex].depthCount = subpassDepthSampleCount;
-    }
-
-    pInfo->hash = GenerateRenderPassHash(pIn);
+    pHasher->Update(desc.flags);
+    pHasher->Update(desc.format);
+    pHasher->Update(desc.samples);
+    pHasher->Update(desc.loadOp);
+    pHasher->Update(desc.storeOp);
+    pHasher->Update(desc.stencilLoadOp);
+    pHasher->Update(desc.stencilStoreOp);
+    pHasher->Update(desc.initialLayout);
+    pHasher->Update(desc.finalLayout);
 }
 
 // =====================================================================================================================
-static void GenerateHashFromSubPassDesc(
-    Util::MetroHash64*          pHasher,
-    const VkSubpassDescription& desc)
+static void GenerateHashFromAttachmentReference(
+    Util::MetroHash64*              pHasher,
+    const AttachmentReference&      desc)
 {
-    uint32_t inputCount    = desc.inputAttachmentCount;
-    uint32_t colorCount    = desc.colorAttachmentCount;
-    uint32_t preserveCount = desc.preserveAttachmentCount;
+    pHasher->Update(desc.attachment);
+    pHasher->Update(desc.layout);
+    pHasher->Update(desc.aspectMask);
+}
 
+// =====================================================================================================================
+static void GenerateHashFromSubpassDependency(
+    Util::MetroHash64*              pHasher,
+    const SubpassDependency&        desc)
+{
+    pHasher->Update(desc.srcSubpass);
+    pHasher->Update(desc.dstSubpass);
+    pHasher->Update(desc.srcStageMask);
+    pHasher->Update(desc.dstStageMask);
+    pHasher->Update(desc.srcAccessMask);
+    pHasher->Update(desc.dstAccessMask);
+    pHasher->Update(desc.dependencyFlags);
+    pHasher->Update(desc.viewOffset);
+}
+
+// =====================================================================================================================
+static void GenerateHashFromSubpassDescription(
+    Util::MetroHash64*          pHasher,
+    const SubpassDescription&   desc)
+{
     pHasher->Update(desc.flags);
     pHasher->Update(desc.pipelineBindPoint);
+    pHasher->Update(desc.viewMask);
     pHasher->Update(desc.inputAttachmentCount);
     pHasher->Update(desc.colorAttachmentCount);
     pHasher->Update(desc.preserveAttachmentCount);
+    GenerateHashFromAttachmentReference(pHasher, desc.depthStencilAttachment);
+    pHasher->Update(desc.subpassSampleCount);
 
-    if (inputCount > 0)
+    for (uint32_t i = 0; i < desc.inputAttachmentCount; ++i)
     {
-        pHasher->Update(
-            reinterpret_cast<const uint8_t*>(desc.pInputAttachments),
-            static_cast<uint64_t>(inputCount * sizeof(desc.pInputAttachments[0])));
+        GenerateHashFromAttachmentReference(pHasher, desc.pInputAttachments[i]);
     }
-    if (colorCount > 0)
+
+    for (uint32_t i = 0; i < desc.colorAttachmentCount; ++i)
     {
-        pHasher->Update(
-            reinterpret_cast<const uint8_t*>(desc.pColorAttachments),
-            static_cast<uint64_t>(colorCount * sizeof(desc.pColorAttachments[0])));
+        GenerateHashFromAttachmentReference(pHasher, desc.pColorAttachments[i]);
     }
-    if (preserveCount > 0)
+
+    if (desc.pResolveAttachments != nullptr)
+    {
+        for (uint32_t i = 0; i < desc.colorAttachmentCount; ++i)
+        {
+            GenerateHashFromAttachmentReference(pHasher, desc.pResolveAttachments[i]);
+        }
+    }
+
+    if (desc.preserveAttachmentCount > 0)
     {
         pHasher->Update(
             reinterpret_cast<const uint8_t*>(desc.pPreserveAttachments),
-            static_cast<uint64_t>(preserveCount * sizeof(desc.pPreserveAttachments[0])));
-    }
-    if ((desc.pResolveAttachments != nullptr) && (colorCount > 0))
-    {
-        pHasher->Update(
-            reinterpret_cast<const uint8_t*>(desc.pResolveAttachments),
-            static_cast<uint64_t>(colorCount * sizeof(desc.pResolveAttachments[0])));
-    }
-    if (desc.pDepthStencilAttachment != nullptr)
-    {
-        pHasher->Update(
-            reinterpret_cast<const uint8_t*>(desc.pDepthStencilAttachment),
-            static_cast<uint64_t>(sizeof(desc.pDepthStencilAttachment[0])));
+            static_cast<uint64_t>(desc.preserveAttachmentCount * sizeof(uint32_t)));
     }
 }
 
 // =====================================================================================================================
-void GenerateHashFromCreateInfo(
-    Util::MetroHash64*            pHasher,
-    const VkRenderPassCreateInfo& info)
+static uint64_t GenerateRenderPassHash(
+    const RenderPassCreateInfo* pRenderPassInfo)
 {
-    VkRenderPassCreateInfo copy = info;
-
-    copy.pAttachments  = nullptr;
-    copy.pSubpasses    = nullptr;
-    copy.pDependencies = nullptr;
-
-    pHasher->Update(copy);
-    if (info.attachmentCount > 0)
-    {
-        pHasher->Update(
-            reinterpret_cast<const uint8_t*>(info.pAttachments),
-            static_cast<uint64_t>(info.attachmentCount * sizeof(VkAttachmentDescription)));
-    }
-
-    if (info.dependencyCount > 0)
-    {
-        pHasher->Update(
-            reinterpret_cast<const uint8_t*>(info.pDependencies),
-            static_cast<uint64_t>(info.dependencyCount * sizeof(VkSubpassDependency)));
-    }
-
-    for (uint32_t i = 0; i < info.subpassCount; ++i)
-    {
-        GenerateHashFromSubPassDesc(pHasher, info.pSubpasses[i]);
-    }
-}
-
-// =====================================================================================================================
-uint64_t GenerateRenderPassHash(
-    const VkRenderPassCreateInfo* pIn)
-{
-    if (pIn == nullptr)
-    {
-        return 0;
-    }
-
     Util::MetroHash64 hasher;
 
-    GenerateHashFromCreateInfo(&hasher, *pIn);
+    hasher.Update(pRenderPassInfo->flags);
+    hasher.Update(pRenderPassInfo->attachmentCount);
+    hasher.Update(pRenderPassInfo->subpassCount);
+    hasher.Update(pRenderPassInfo->dependencyCount);
+
+    for (uint32_t i = 0; i < pRenderPassInfo->attachmentCount; ++i)
+    {
+        GenerateHashFromAttachmentDescription(&hasher, pRenderPassInfo->pAttachments[i]);
+    }
+
+    for (uint32_t i = 0; i < pRenderPassInfo->dependencyCount; ++i)
+    {
+        GenerateHashFromSubpassDependency(&hasher, pRenderPassInfo->pDependencies[i]);
+    }
+
+    for (uint32_t i = 0; i < pRenderPassInfo->subpassCount; ++i)
+    {
+        GenerateHashFromSubpassDescription(&hasher, pRenderPassInfo->pSubpasses[i]);
+    }
+
+    if (pRenderPassInfo->correlatedViewMaskCount > 0)
+    {
+        hasher.Update(
+            reinterpret_cast<const uint8_t*>(pRenderPassInfo->pCorrelatedViewMasks),
+            static_cast<uint64_t>(pRenderPassInfo->correlatedViewMaskCount * sizeof(uint32_t)));
+    }
 
     uint64_t hash;
     hasher.Finalize(reinterpret_cast<uint8_t* const>(&hash));
@@ -238,59 +162,454 @@ uint64_t GenerateRenderPassHash(
 }
 
 // =====================================================================================================================
-// Creates a render pass
-VkResult RenderPass::Create(
-    Device*                       pDevice,
-    const VkRenderPassCreateInfo* pCreateInfo,
-    const VkAllocationCallbacks*  pAllocator,
-    VkRenderPass*                 pRenderPass)
+AttachmentReference::AttachmentReference()
+    :
+    attachment  (VK_ATTACHMENT_UNUSED),
+    layout      (VK_IMAGE_LAYOUT_UNDEFINED),
+    aspectMask  (VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM)
 {
-    VkResult result = VK_SUCCESS;
+}
+
+// =====================================================================================================================
+void AttachmentReference::Init(const VkAttachmentReference& attachRef)
+{
+    attachment  = attachRef.attachment;
+    layout      = attachRef.layout;
+    aspectMask  = VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM;
+}
+
+// =====================================================================================================================
+AttachmentDescription::AttachmentDescription()
+    :
+    flags           (0),
+    format          (VK_FORMAT_UNDEFINED),
+    samples         (VK_SAMPLE_COUNT_1_BIT),
+    loadOp          (VK_ATTACHMENT_LOAD_OP_DONT_CARE),
+    storeOp         (VK_ATTACHMENT_STORE_OP_DONT_CARE),
+    stencilLoadOp   (VK_ATTACHMENT_LOAD_OP_DONT_CARE),
+    stencilStoreOp  (VK_ATTACHMENT_STORE_OP_DONT_CARE),
+    initialLayout   (VK_IMAGE_LAYOUT_UNDEFINED),
+    finalLayout     (VK_IMAGE_LAYOUT_UNDEFINED)
+{
+}
+
+// =====================================================================================================================
+void AttachmentDescription::Init(const VkAttachmentDescription& attachDesc)
+{
+    flags           = attachDesc.flags;
+    format          = attachDesc.format;
+    samples         = attachDesc.samples;
+    loadOp          = attachDesc.loadOp;
+    storeOp         = attachDesc.storeOp;
+    stencilLoadOp   = attachDesc.stencilLoadOp;
+    stencilStoreOp  = attachDesc.stencilStoreOp;
+    initialLayout   = attachDesc.initialLayout;
+    finalLayout     = attachDesc.finalLayout;
+}
+
+// =====================================================================================================================
+SubpassDependency::SubpassDependency()
+    :
+    srcSubpass      (0),
+    dstSubpass      (0),
+    srcStageMask    (VK_PIPELINE_STAGE_FLAG_BITS_MAX_ENUM),
+    dstStageMask    (VK_PIPELINE_STAGE_FLAG_BITS_MAX_ENUM),
+    srcAccessMask   (VK_ACCESS_FLAG_BITS_MAX_ENUM),
+    dstAccessMask   (VK_ACCESS_FLAG_BITS_MAX_ENUM),
+    dependencyFlags (0),
+    viewOffset      (0)
+{
+}
+
+// =====================================================================================================================
+void SubpassDependency::Init(
+    uint32_t                        subpassDepIndex,
+    const VkSubpassDependency&      subpassDep,
+    const RenderPassExtCreateInfo&  renderPassExt)
+{
+    srcSubpass      = subpassDep.srcSubpass;
+    dstSubpass      = subpassDep.dstSubpass;
+    srcStageMask    = subpassDep.srcStageMask;
+    dstStageMask    = subpassDep.dstStageMask;
+    srcAccessMask   = subpassDep.srcAccessMask;
+    dstAccessMask   = subpassDep.dstAccessMask;
+    dependencyFlags = subpassDep.dependencyFlags;
+    viewOffset      = 0;
+
+    // The multiview implementation broadcasts 3D primities by
+    // issuing multiple draw calls (one per each view),
+    // therefore all view-local dependencies are treated as view-global.
+    if (renderPassExt.pMultiviewCreateInfo != nullptr)
+    {
+        if (renderPassExt.pMultiviewCreateInfo->dependencyCount > 0)
+        {
+            viewOffset = renderPassExt.pMultiviewCreateInfo->pViewOffsets[subpassDepIndex];
+        }
+    }
+}
+
+// =====================================================================================================================
+SubpassDescription::SubpassDescription()
+    :
+    flags                   (0),
+    pipelineBindPoint       (VK_PIPELINE_BIND_POINT_MAX_ENUM),
+    viewMask                (0),
+    inputAttachmentCount    (0),
+    pInputAttachments       (nullptr),
+    colorAttachmentCount    (0),
+    pColorAttachments       (nullptr),
+    pResolveAttachments     (nullptr),
+    preserveAttachmentCount (0),
+    pPreserveAttachments    (nullptr)
+{
+}
+
+// =====================================================================================================================
+template <typename SubpassDescriptionType>
+static size_t GetSubpassDescriptionBaseMemorySize(const SubpassDescriptionType& subpassDesc)
+{
+    size_t subpassMemorySize = 0;
+
+    subpassMemorySize += subpassDesc.inputAttachmentCount * sizeof(AttachmentReference);
+    subpassMemorySize += subpassDesc.colorAttachmentCount * sizeof(AttachmentReference);
+
+    if (subpassDesc.pResolveAttachments != nullptr)
+    {
+        subpassMemorySize += subpassDesc.colorAttachmentCount * sizeof(AttachmentReference);
+    }
+    subpassMemorySize += subpassDesc.preserveAttachmentCount * sizeof(uint32_t);
+
+    return subpassMemorySize;
+}
+
+// =====================================================================================================================
+template <typename SubpassDescriptionType>
+static void InitSubpassDescription(
+    uint32_t                        subpassIndex,
+    const SubpassDescriptionType&   subpassDesc,
+    const RenderPassExtCreateInfo&  renderPassExt,
+    const AttachmentDescription*    pAttachments,
+    uint32_t                        attachmentCount,
+    void*                           pMemoryPtr,
+    size_t                          memorySize,
+    SubpassDescription*             outDesc)
+{
+    void* nextPtr = pMemoryPtr;
+
+    outDesc->flags             = subpassDesc.flags;
+    outDesc->pipelineBindPoint = subpassDesc.pipelineBindPoint;
+
+    // Copy input attachments references
+    outDesc->inputAttachmentCount = subpassDesc.inputAttachmentCount;
+    outDesc->pInputAttachments    = static_cast<AttachmentReference*>(nextPtr);
+
+    for (uint32_t attachIndex = 0; attachIndex < subpassDesc.inputAttachmentCount; ++attachIndex)
+    {
+        outDesc->pInputAttachments[attachIndex].Init(subpassDesc.pInputAttachments[attachIndex]);
+    }
+
+    nextPtr = Util::VoidPtrInc(nextPtr, subpassDesc.inputAttachmentCount * sizeof(AttachmentReference));
+    VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
+
+    // Copy color attachments references
+    outDesc->colorAttachmentCount = subpassDesc.colorAttachmentCount;
+    outDesc->pColorAttachments    = reinterpret_cast<AttachmentReference*>(nextPtr);
+
+    for (uint32_t attachIndex = 0; attachIndex < subpassDesc.colorAttachmentCount; ++attachIndex)
+    {
+        outDesc->pColorAttachments[attachIndex].Init(subpassDesc.pColorAttachments[attachIndex]);
+    }
+
+    nextPtr = Util::VoidPtrInc(nextPtr, subpassDesc.colorAttachmentCount * sizeof(AttachmentReference));
+    VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
+
+    // Copy resolve attachments references
+    if (subpassDesc.pResolveAttachments != nullptr)
+    {
+        outDesc->pResolveAttachments = reinterpret_cast<AttachmentReference*>(nextPtr);
+
+        for (uint32_t attachIndex = 0; attachIndex < subpassDesc.colorAttachmentCount; ++attachIndex)
+        {
+            outDesc->pResolveAttachments[attachIndex].Init(subpassDesc.pResolveAttachments[attachIndex]);
+        }
+
+        nextPtr = Util::VoidPtrInc(nextPtr, subpassDesc.colorAttachmentCount * sizeof(AttachmentReference));
+        VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
+    }
+
+    // Copy depth stencil attachment reference
+    if (subpassDesc.pDepthStencilAttachment != nullptr)
+    {
+        outDesc->depthStencilAttachment.Init(*subpassDesc.pDepthStencilAttachment);
+    }
+
+    // Copy preserve attachments indices
+    outDesc->preserveAttachmentCount = subpassDesc.preserveAttachmentCount;
+    outDesc->pPreserveAttachments    = reinterpret_cast<uint32_t*>(nextPtr);
+
+    memcpy(
+        outDesc->pPreserveAttachments,
+        subpassDesc.pPreserveAttachments,
+        subpassDesc.preserveAttachmentCount * sizeof(uint32_t));
+
+    nextPtr = Util::VoidPtrInc(nextPtr, subpassDesc.preserveAttachmentCount * sizeof(uint32_t));
+    VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
+
+    // Even if pMultiviewCreateInfo == null, outDesc->viewMask was already handled in the calling function
+    if (renderPassExt.pMultiviewCreateInfo != nullptr)
+    {
+        if (renderPassExt.pMultiviewCreateInfo->subpassCount > 0)
+        {
+            outDesc->viewMask = renderPassExt.pMultiviewCreateInfo->pViewMasks[subpassIndex];
+        }
+        else
+        {
+            outDesc->viewMask = 0;
+        }
+    }
+
+    // Calculate the color and depth sample counts
+    outDesc->subpassSampleCount.colorCount = 0;
+    outDesc->subpassSampleCount.depthCount = 0;
+
+    for (uint32_t subpassAttachIdx = 0; subpassAttachIdx < subpassDesc.colorAttachmentCount; ++subpassAttachIdx)
+    {
+        uint32_t subpassColorAttachment = outDesc->pColorAttachments[subpassAttachIdx].attachment;
+
+        if (subpassColorAttachment != VK_ATTACHMENT_UNUSED && subpassColorAttachment < attachmentCount)
+        {
+            outDesc->subpassSampleCount.colorCount = pAttachments[subpassColorAttachment].samples != 0 ?
+                pAttachments[subpassColorAttachment].samples : 1;
+
+            // All sample counts within the subpass must match. We can exist as soon
+            // as we've calculated the sample count for the first attachment we find.
+            break;
+        }
+    }
+
+    uint32_t subpassDepthAttachment = outDesc->depthStencilAttachment.attachment;
+
+    if (subpassDepthAttachment != VK_ATTACHMENT_UNUSED && subpassDepthAttachment < attachmentCount)
+    {
+        outDesc->subpassSampleCount.depthCount = pAttachments[subpassDepthAttachment].samples != 0 ?
+            pAttachments[subpassDepthAttachment].samples : 1;
+    }
+}
+
+// =====================================================================================================================
+void SubpassDescription::Init(
+    uint32_t                        subpassIndex,
+    const VkSubpassDescription&     subpassDesc,
+    const RenderPassExtCreateInfo&  renderPassExt,
+    const AttachmentDescription*    pAttachments,
+    uint32_t                        attachmentCount,
+    void*                           pMemoryPtr,
+    size_t                          memorySize)
+{
+    InitSubpassDescription<VkSubpassDescription>(
+        subpassIndex,
+        subpassDesc,
+        renderPassExt,
+        pAttachments,
+        attachmentCount,
+        pMemoryPtr,
+        memorySize,
+        this);
+}
+
+// =====================================================================================================================
+RenderPassCreateInfo::RenderPassCreateInfo()
+    :
+    flags                   (0),
+    attachmentCount         (0),
+    pAttachments            (nullptr),
+    subpassCount            (0),
+    pSubpasses              (nullptr),
+    dependencyCount         (0),
+    pDependencies           (nullptr),
+    correlatedViewMaskCount (0),
+    pCorrelatedViewMasks    (nullptr),
+    hash                    (0)
+{
+}
+
+// =====================================================================================================================
+template<typename RenderPassCreateInfoType>
+static size_t GetRenderPassCreateInfoRequiredMemorySize(
+    const RenderPassCreateInfoType*     pCreateInfo,
+    const RenderPassExtCreateInfo&      renderPassExt)
+{
+    size_t createInfoSize = 0;
+
+    createInfoSize += pCreateInfo->attachmentCount * sizeof(AttachmentDescription);
+    createInfoSize += pCreateInfo->subpassCount * sizeof(SubpassDescription);
+    createInfoSize += pCreateInfo->dependencyCount * sizeof(SubpassDependency);
+
+    for (uint32_t subpassIndex = 0; subpassIndex < pCreateInfo->subpassCount; ++subpassIndex)
+    {
+        const auto& subpassDesc = pCreateInfo->pSubpasses[subpassIndex];
+
+        createInfoSize += GetSubpassDescriptionBaseMemorySize(subpassDesc);
+    }
+
+    if (renderPassExt.pMultiviewCreateInfo != nullptr)
+    {
+        createInfoSize += renderPassExt.pMultiviewCreateInfo->correlationMaskCount * sizeof(uint32_t);
+    }
+
+    return createInfoSize;
+}
+
+// =====================================================================================================================
+// Creates a render pass
+template <typename RenderPassCreateInfoType>
+static void InitRenderPassCreateInfo(
+    const RenderPassCreateInfoType*     pCreateInfo,
+    const RenderPassExtCreateInfo&      renderPassExt,
+    void*                               pMemoryPtr,
+    size_t                              memorySize,
+    RenderPassCreateInfo*               outRenderPassInfo)
+{
+    void* nextPtr = pMemoryPtr;
+
+    outRenderPassInfo->flags = pCreateInfo->flags;
+
+    // The multiview implementation does not exploit any coherence between views.
+    if (renderPassExt.pMultiviewCreateInfo != nullptr)
+    {
+        outRenderPassInfo->correlatedViewMaskCount = renderPassExt.pMultiviewCreateInfo->correlationMaskCount;
+        outRenderPassInfo->pCorrelatedViewMasks    = static_cast<uint32_t*>(nextPtr);
+
+        memcpy(
+            outRenderPassInfo->pCorrelatedViewMasks,
+            renderPassExt.pMultiviewCreateInfo->pCorrelationMasks,
+            outRenderPassInfo->correlatedViewMaskCount * sizeof(uint32_t));
+    }
+
+    nextPtr = Util::VoidPtrInc(nextPtr, outRenderPassInfo->correlatedViewMaskCount * sizeof(uint32_t));
+    VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
+
+    outRenderPassInfo->attachmentCount  = pCreateInfo->attachmentCount;
+    outRenderPassInfo->pAttachments     = static_cast<AttachmentDescription*>(nextPtr);
+
+    for (uint32_t attachIndex = 0; attachIndex < pCreateInfo->attachmentCount; ++attachIndex)
+    {
+        outRenderPassInfo->pAttachments[attachIndex].Init(pCreateInfo->pAttachments[attachIndex]);
+    }
+
+    nextPtr = Util::VoidPtrInc(nextPtr, pCreateInfo->attachmentCount * sizeof(AttachmentDescription));
+    VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
+
+    outRenderPassInfo->subpassCount = pCreateInfo->subpassCount;
+    outRenderPassInfo->pSubpasses   = static_cast<SubpassDescription*>(nextPtr);
+
+    nextPtr = Util::VoidPtrInc(nextPtr, pCreateInfo->subpassCount * sizeof(SubpassDescription));
+    VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
+
+    void*   subpassDescMemory        = nextPtr;
+    size_t  subpassDescAllMemorySize = 0;
+
+    for (uint32_t subpassIndex = 0; subpassIndex < pCreateInfo->subpassCount; ++subpassIndex)
+    {
+        const auto&    subpassDesc           = pCreateInfo->pSubpasses[subpassIndex];
+        const size_t   subpassDescMemorySize = GetSubpassDescriptionBaseMemorySize(subpassDesc);
+
+        VK_PLACEMENT_NEW(&outRenderPassInfo->pSubpasses[subpassIndex]) SubpassDescription();
+
+        outRenderPassInfo->pSubpasses[subpassIndex].Init(
+            subpassIndex,
+            subpassDesc,
+            renderPassExt,
+            outRenderPassInfo->pAttachments,
+            outRenderPassInfo->attachmentCount,
+            subpassDescMemory,
+            subpassDescMemorySize);
+
+        subpassDescMemory = Util::VoidPtrInc(subpassDescMemory, subpassDescMemorySize);
+
+        subpassDescAllMemorySize += subpassDescMemorySize;
+    }
+
+    nextPtr = Util::VoidPtrInc(nextPtr, subpassDescAllMemorySize);
+    VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
+
+    outRenderPassInfo->dependencyCount = pCreateInfo->dependencyCount;
+    outRenderPassInfo->pDependencies   = static_cast<SubpassDependency*>(nextPtr);
+
+    for (uint32_t depIndex = 0; depIndex < pCreateInfo->dependencyCount; ++depIndex)
+    {
+        outRenderPassInfo->pDependencies[depIndex].Init(
+            depIndex,
+            pCreateInfo->pDependencies[depIndex],
+            renderPassExt);
+    }
+
+    nextPtr = Util::VoidPtrInc(nextPtr, pCreateInfo->dependencyCount * sizeof(SubpassDependency));
+    VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);
+
+    outRenderPassInfo->hash = GenerateRenderPassHash(outRenderPassInfo);
+}
+
+// =====================================================================================================================
+void RenderPassCreateInfo::Init(
+    const VkRenderPassCreateInfo*       pCreateInfo,
+    const RenderPassExtCreateInfo&      renderPassExt,
+    void*                               pMemoryPtr,
+    size_t                              memorySize)
+{
+    InitRenderPassCreateInfo<VkRenderPassCreateInfo>(
+        pCreateInfo,
+        renderPassExt,
+        pMemoryPtr,
+        memorySize,
+        this);
+}
+
+// =====================================================================================================================
+RenderPass::RenderPass(
+    const RenderPassCreateInfo*     pCreateInfo,
+    const RenderPassExecuteInfo*    pExecuteInfo)
+    :
+    m_pCreateInfo   (pCreateInfo),
+    m_pExecuteInfo  (pExecuteInfo)
+{
+}
+
+// =====================================================================================================================
+// Creates a render pass
+template <typename RenderPassCreateInfoType>
+static VkResult CreateRenderPass(
+    Device*                             pDevice,
+    const RenderPassCreateInfoType*     pCreateInfo,
+    const VkAllocationCallbacks*        pAllocator,
+    VkRenderPass*                       pOutRenderPass)
+{
+    VkResult result  = VK_SUCCESS;
+    void*    pMemory = nullptr;
 
     utils::TempMemArena buildArena(pAllocator, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
 
-    RenderPassCreateInfo info = {};
-    void* pMemory = nullptr;
-    const auto& settings = pDevice->GetRuntimeSettings();
-
-    const VkRenderPassCreateInfo* pRenderPassHeader = nullptr;
-    RenderPassExtCreateInfo renderPassExt = {};
+    RenderPassExtCreateInfo renderPassExt;
 
     union
     {
-        const VkStructHeader*                                         pHeader;
-        const VkRenderPassCreateInfo*                                 pRenderPassCreateInfo;
-        const VkRenderPassMultiviewCreateInfo*                        pMultiviewCreateInfo;
+        const VkStructHeader*                                           pHeader;
+        const VkRenderPassMultiviewCreateInfo*                          pMultiviewCreateInfo;
     };
 
-    for (pRenderPassCreateInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    for (pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext); pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO:
-            {
-                info.subpassCount    = pCreateInfo->subpassCount;
-                info.attachmentCount = pCreateInfo->attachmentCount;
-                pRenderPassHeader    = pRenderPassCreateInfo;
-            }
-            break;
-
         case VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO:
-            {
-                VK_ASSERT(info.subpassCount == pMultiviewCreateInfo->subpassCount);
-
-                // The multiview implementation broadcasts 3D primities by
-                // issuing multiple draw calls (one per each view),
-                // therefore all view-local dependencies are treated as view-global.
-                VK_IGNORE(pMultiviewCreateInfo->pViewOffsets);
-
-                // The multiview implementation does not exploit any coherence between views.
-                VK_IGNORE(pMultiviewCreateInfo->correlationMaskCount);
-                VK_IGNORE(pMultiviewCreateInfo->pCorrelationMasks);
-
-                renderPassExt.pMultiview = pMultiviewCreateInfo;
-            }
-            break;
+        {
+            VK_ASSERT(pMultiviewCreateInfo->subpassCount == 0 ||
+                     (pMultiviewCreateInfo->subpassCount == pCreateInfo->subpassCount));
+            VK_ASSERT(pMultiviewCreateInfo->dependencyCount == 0 ||
+                     (pMultiviewCreateInfo->dependencyCount == pCreateInfo->dependencyCount));
+            renderPassExt.pMultiviewCreateInfo = pMultiviewCreateInfo;
+        }
+        break;
 
         default:
             // Skip any unknown extension structures
@@ -298,58 +617,34 @@ VkResult RenderPass::Create(
         }
     }
 
-    if (pRenderPassHeader == nullptr)
+    const size_t apiSize        = sizeof(RenderPass);
+    const size_t infoStructSize = sizeof(RenderPassCreateInfo);
+    const size_t infoMemorySize = GetRenderPassCreateInfoRequiredMemorySize<RenderPassCreateInfoType>(pCreateInfo, renderPassExt);
+
+    const size_t memorySize = apiSize
+        + infoStructSize
+        + infoMemorySize;
+
+    pMemory = pDevice->AllocApiObject(memorySize, pAllocator);
+
+    if (pMemory == nullptr)
     {
-        result = VK_ERROR_INITIALIZATION_FAILED;
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    if (result == VK_SUCCESS)
-    {
-        const size_t apiSize               = sizeof(RenderPass);
-        const size_t attachmentSize        = info.attachmentCount * sizeof(VkAttachmentDescription);
-        const size_t subpassSize           = info.subpassCount * sizeof(RenderSubPass);
-        const size_t sampleCountsSize      = info.subpassCount * sizeof(SubpassSampleCounts);
-        size_t       subpassAttachmentSize = 0;
+    void* nextPtr = Util::VoidPtrInc(pMemory, apiSize);
 
-        for (uint32_t i = 0; i < info.subpassCount; ++i)
-        {
-            subpassAttachmentSize += pCreateInfo->pSubpasses[i].colorAttachmentCount * sizeof(VkAttachmentReference);
-        }
+    VK_PLACEMENT_NEW(nextPtr) RenderPassCreateInfo();
 
-        const size_t objSize = apiSize
-                             + attachmentSize
-                             + subpassSize
-                             + subpassAttachmentSize
-                             + sampleCountsSize;
+    RenderPassCreateInfo* pRenderPassInfo = static_cast<RenderPassCreateInfo*>(nextPtr);
 
-        pMemory = pDevice->AllocApiObject(objSize, pAllocator);
+    nextPtr = Util::VoidPtrInc(nextPtr, infoStructSize);
 
-        if (pMemory != nullptr)
-        {
-            void* nextPtr = Util::VoidPtrInc(pMemory, apiSize);
-
-            info.pAttachments = static_cast<VkAttachmentDescription*>(nextPtr);
-            nextPtr = Util::VoidPtrInc(nextPtr, attachmentSize);
-
-            info.pSubpasses = static_cast<RenderSubPass*>(nextPtr);
-            nextPtr = Util::VoidPtrInc(nextPtr, subpassSize);
-
-            VkAttachmentReference* pSubpassColorAttachments = static_cast<VkAttachmentReference*>(nextPtr);
-            nextPtr = Util::VoidPtrInc(nextPtr, subpassAttachmentSize);
-
-            info.pSubpassSampleCounts = static_cast<SubpassSampleCounts*>(nextPtr);
-
-            ConvertRenderPassCreateInfo(
-                pRenderPassHeader,
-                renderPassExt,
-                &info,
-                pSubpassColorAttachments);
-        }
-        else
-        {
-            result = VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-    }
+    pRenderPassInfo->Init(
+        pCreateInfo,
+        renderPassExt,
+        nextPtr,
+        infoMemorySize);
 
     RenderPassExecuteInfo* pExecuteInfo = nullptr;
     RenderPassLogger*      pLogger      = nullptr;
@@ -360,35 +655,20 @@ VkResult RenderPass::Create(
     pLogger = &logger;
 #endif
 
-    if (result == VK_SUCCESS)
-    {
-        RenderPassLogBegin(pLogger, *pCreateInfo, info);
+    RenderPassLogBegin(pLogger, pRenderPassInfo);
 
-        RenderPassBuilder builder(pDevice, &buildArena, pLogger);
+    RenderPassBuilder builder(pDevice, &buildArena, pLogger);
 
-        result = builder.Build(*pCreateInfo,
-                               info,
-                               pAllocator,
-                               &pExecuteInfo);
-    }
+    result = builder.Build(
+        pRenderPassInfo,
+        pAllocator,
+        &pExecuteInfo);
 
-    if (result == VK_SUCCESS)
-    {
-        RenderPassLogExecuteInfo(pLogger, pExecuteInfo);
-
-        RenderPassLogEnd(pLogger);
-    }
-
-    if (result == VK_SUCCESS)
-    {
-        VK_PLACEMENT_NEW(pMemory) RenderPass(info, pExecuteInfo);
-
-        *pRenderPass = RenderPass::HandleFromVoidPointer(pMemory);
-    }
-    else
+    if (result != VK_SUCCESS)
     {
         if (pExecuteInfo != nullptr)
         {
+            pExecuteInfo->~RenderPassExecuteInfo();
             pAllocator->pfnFree(pAllocator->pUserData, pExecuteInfo);
         }
 
@@ -396,19 +676,33 @@ VkResult RenderPass::Create(
         {
             pAllocator->pfnFree(pAllocator->pUserData, pMemory);
         }
+
+        return result;
     }
+
+    RenderPassLogExecuteInfo(pLogger, pExecuteInfo);
+
+    RenderPassLogEnd(pLogger);
+
+    VK_PLACEMENT_NEW(pMemory) RenderPass(pRenderPassInfo, pExecuteInfo);
+
+    *pOutRenderPass = RenderPass::HandleFromVoidPointer(pMemory);
 
     return result;
 }
 
 // =====================================================================================================================
-RenderPass::RenderPass(
-    const RenderPassCreateInfo& info,
-    RenderPassExecuteInfo*      pExecuteInfo)
-    :
-    m_createInfo(info),
-    m_pExecuteInfo(pExecuteInfo)
+VkResult RenderPass::Create(
+    Device*                             pDevice,
+    const VkRenderPassCreateInfo*       pCreateInfo,
+    const VkAllocationCallbacks*        pAllocator,
+    VkRenderPass*                       pRenderPass)
 {
+    return CreateRenderPass<VkRenderPassCreateInfo>(
+        pDevice,
+        pCreateInfo,
+        pAllocator,
+        pRenderPass);
 }
 
 // =====================================================================================================================
@@ -418,14 +712,14 @@ VkFormat RenderPass::GetColorAttachmentFormat(
     uint32_t colorTarget
     ) const
 {
-    const RenderSubPass& subPass = m_createInfo.pSubpasses[subpassIndex];
-    const uint32_t attachIndex   = subPass.pColorAttachments[colorTarget].attachment;
+    const SubpassDescription& subPass = m_pCreateInfo->pSubpasses[subpassIndex];
+    const uint32_t attachIndex        = subPass.pColorAttachments[colorTarget].attachment;
 
     VkFormat format;
 
     if (subPass.colorAttachmentCount > 0 && attachIndex != VK_ATTACHMENT_UNUSED)
     {
-        format = m_createInfo.pAttachments[attachIndex].format;
+        format = m_pCreateInfo->pAttachments[attachIndex].format;
     }
     else
     {
@@ -443,13 +737,13 @@ VkFormat RenderPass::GetDepthStencilAttachmentFormat(
 {
     VkFormat format;
 
-    const RenderSubPass& subpass = m_createInfo.pSubpasses[subpassIndex];
+    const SubpassDescription& subpass = m_pCreateInfo->pSubpasses[subpassIndex];
 
     if (subpass.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED)
     {
         const uint32_t attachIndex = subpass.depthStencilAttachment.attachment;
 
-        format = m_createInfo.pAttachments[attachIndex].format;
+        format = m_pCreateInfo->pAttachments[attachIndex].format;
     }
     else
     {
@@ -466,14 +760,14 @@ uint32_t RenderPass::GetColorAttachmentSamples(
     uint32_t colorTarget
     ) const
 {
-    const RenderSubPass& subPass = m_createInfo.pSubpasses[subpassIndex];
-    const uint32_t attachIndex = subPass.pColorAttachments[colorTarget].attachment;
+    const SubpassDescription& subPass = m_pCreateInfo->pSubpasses[subpassIndex];
+    const uint32_t attachIndex        = subPass.pColorAttachments[colorTarget].attachment;
 
     uint32_t samples;
 
     if (attachIndex != VK_ATTACHMENT_UNUSED)
     {
-        samples = m_createInfo.pAttachments[attachIndex].samples;
+        samples = m_pCreateInfo->pAttachments[attachIndex].samples;
     }
     else
     {
@@ -491,13 +785,13 @@ uint32_t RenderPass::GetDepthStencilAttachmentSamples(
 {
     uint32_t samples;
 
-    const RenderSubPass& subPass = m_createInfo.pSubpasses[subPassIndex];
+    const SubpassDescription& subPass = m_pCreateInfo->pSubpasses[subPassIndex];
 
     if (subPass.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED)
     {
         const uint32_t attachIndex = subPass.depthStencilAttachment.attachment;
 
-        samples = m_createInfo.pAttachments[attachIndex].samples;
+        samples = m_pCreateInfo->pAttachments[attachIndex].samples;
     }
     else
     {
@@ -513,34 +807,34 @@ uint32_t RenderPass::GetSubpassColorReferenceCount(
     uint32_t subpassIndex
     ) const
 {
-    return m_createInfo.pSubpasses[subpassIndex].colorAttachmentCount;
+    return m_pCreateInfo->pSubpasses[subpassIndex].colorAttachmentCount;
 }
 
 // =====================================================================================================================
-const VkAttachmentReference& RenderPass::GetSubpassColorReference(
+const AttachmentReference& RenderPass::GetSubpassColorReference(
     uint32_t subpass,
     uint32_t index
     ) const
 {
-    return m_createInfo.pSubpasses[subpass].pColorAttachments[index];
+    return m_pCreateInfo->pSubpasses[subpass].pColorAttachments[index];
 }
 
 // =====================================================================================================================
-const VkAttachmentReference& RenderPass::GetSubpassDepthStencilReference(
+const AttachmentReference& RenderPass::GetSubpassDepthStencilReference(
     uint32_t subpass
     ) const
 {
-    return m_createInfo.pSubpasses[subpass].depthStencilAttachment;
+    return m_pCreateInfo->pSubpasses[subpass].depthStencilAttachment;
 }
 
 // =====================================================================================================================
-const VkAttachmentDescription& RenderPass::GetAttachmentDesc(
+const AttachmentDescription& RenderPass::GetAttachmentDesc(
     uint32_t attachmentIndex
     ) const
 {
-    VK_ASSERT(attachmentIndex < m_createInfo.attachmentCount);
+    VK_ASSERT(attachmentIndex < m_pCreateInfo->attachmentCount);
 
-    return m_createInfo.pAttachments[attachmentIndex];
+    return m_pCreateInfo->pAttachments[attachmentIndex];
 }
 
 // =====================================================================================================================
@@ -549,7 +843,7 @@ VkResult RenderPass::Destroy(
     const Device*                   pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-    pAllocator->pfnFree(pAllocator->pUserData, m_pExecuteInfo);
+    pAllocator->pfnFree(pAllocator->pUserData, const_cast<RenderPassExecuteInfo*>(m_pExecuteInfo));
 
     // Call destructor
     Util::Destructor(this);
@@ -559,30 +853,6 @@ VkResult RenderPass::Destroy(
 
     // Cannot fail
     return VK_SUCCESS;
-}
-
-// =====================================================================================================================
-RenderSubPass::RenderSubPass(
-    uint32_t                      subPassIndex,
-    const VkRenderPassCreateInfo& info)
-{
-    const VkSubpassDescription& desc = info.pSubpasses[subPassIndex];
-
-    // Copy color attachment references
-
-    colorAttachmentCount = desc.colorAttachmentCount;
-    memcpy(pColorAttachments, desc.pColorAttachments, sizeof(VkAttachmentReference) * colorAttachmentCount);
-
-    // Copy depth stencil attachment references
-    if (desc.pDepthStencilAttachment != nullptr)
-    {
-        depthStencilAttachment = *desc.pDepthStencilAttachment;
-    }
-    else
-    {
-        depthStencilAttachment.attachment = VK_ATTACHMENT_UNUSED;
-        depthStencilAttachment.layout = VK_IMAGE_LAYOUT_UNDEFINED;
-    }
 }
 
 namespace entry

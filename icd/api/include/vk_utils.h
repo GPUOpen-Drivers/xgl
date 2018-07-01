@@ -239,6 +239,57 @@ private:
     uint32_t    m_mask;
 };
 
+// =====================================================================================================================
+// A "view" into an array of elements that are not tightly packed in memory. The use case is iterating over structures
+// nested in an array of structures, e.g. VkSparseImageMemoryRequirements inside VkSparseImageMemoryRequirements2.
+template<class ElementT>
+class ArrayView
+{
+    // The constness of char* must match that of ElementT*
+    template<class T> struct InferCharType          { typedef       char type; };
+    template<class T> struct InferCharType<const T> { typedef const char type; };
+
+    using CharT = typename InferCharType<ElementT>::type;
+
+public:
+    // Create a view into an array of ElementT with stride determined by OuterT.
+    template<class OuterT>
+    VK_INLINE ArrayView(OuterT* pData, ElementT* pFirstElement) :
+        m_pData(reinterpret_cast<CharT*>(pData)),
+        m_stride(sizeof(OuterT))
+    {
+        if (m_pData != nullptr)
+        {
+            const auto offset = reinterpret_cast<CharT*>(pFirstElement) - m_pData;
+
+            VK_ASSERT((offset >= 0) && ((offset + sizeof(ElementT)) <= sizeof(OuterT)));
+
+            m_pData += offset;
+        }
+    }
+
+    // Use this form to achieve tight packing of elements, if needed.
+    VK_INLINE explicit ArrayView(ElementT* pData) :
+        m_pData(reinterpret_cast<CharT*>(pData)),
+        m_stride(sizeof(ElementT))
+    {
+    }
+
+    VK_INLINE bool IsNull() const
+    {
+        return m_pData == nullptr;
+    }
+
+    VK_INLINE ElementT& operator[](int32_t ndx) const
+    {
+        return *reinterpret_cast<ElementT*>(m_pData + ndx * m_stride);
+    }
+
+private:
+    CharT*  m_pData;
+    size_t  m_stride;
+};
+
 } // namespace utils
 
 } // namespace vk

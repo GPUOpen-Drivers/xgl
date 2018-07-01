@@ -1,0 +1,120 @@
+#version 450 core
+
+layout(set = 0, binding = 0,  r32i) uniform iimage1D        img1D;
+layout(set = 0, binding = 1,  r32i) uniform iimage2D        img2D;
+layout(set = 0, binding = 2,  r32i) uniform iimage3D        img3D;
+layout(set = 0, binding = 3,  r32i) uniform iimage2DRect    img2DRect;
+layout(set = 0, binding = 4,  r32i) uniform iimageCube      imgCube;
+layout(set = 0, binding = 5,  r32i) uniform iimageBuffer    imgBuffer;
+layout(set = 0, binding = 6,  r32i) uniform iimage1DArray   img1DArray;
+layout(set = 0, binding = 7,  r32i) uniform iimage2DArray   img2DArray;
+layout(set = 0, binding = 8,  r32i) uniform iimageCubeArray imgCubeArray;
+layout(set = 0, binding = 9,  r32i) uniform iimage2DMS      img2DMS;
+layout(set = 0, binding = 10, r32i) uniform iimage2DMSArray img2DMSArray;
+
+layout(set = 1, binding = 0) buffer BO
+{
+    int m1;
+};
+
+void main()
+{
+    int temp;
+    temp  = imageAtomicAdd(img1D,        7,                 9);
+    temp  = imageAtomicAdd(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicAdd(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAdd(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicAdd(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAdd(imgBuffer,    7,                 9);
+    temp  = imageAtomicAdd(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicAdd(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAdd(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAdd(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicAdd(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicMin(img1D,        7,                 9);
+    temp  = imageAtomicMin(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicMin(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMin(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicMin(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMin(imgBuffer,    7,                 9);
+    temp  = imageAtomicMin(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicMin(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMin(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMin(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicMin(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicMax(img1D,        7,                 9);
+    temp  = imageAtomicMax(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicMax(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMax(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicMax(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMax(imgBuffer,    7,                 9);
+    temp  = imageAtomicMax(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicMax(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMax(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMax(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicMax(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicAnd(img1D,        7,                 9);
+    temp  = imageAtomicAnd(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicAnd(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAnd(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicAnd(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAnd(imgBuffer,    7,                 9);
+    temp  = imageAtomicAnd(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicAnd(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAnd(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAnd(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicAnd(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicOr(img1D,        7,                 9);
+    temp  = imageAtomicOr(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicOr(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicOr(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicOr(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicOr(imgBuffer,    7,                 9);
+    temp  = imageAtomicOr(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicOr(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicOr(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicOr(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicOr(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicXor(img1D,        7,                 9);
+    temp  = imageAtomicXor(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicXor(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicXor(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicXor(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicXor(imgBuffer,    7,                 9);
+    temp  = imageAtomicXor(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicXor(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicXor(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicXor(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicXor(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicExchange(img1D,        7,                 9);
+    temp  = imageAtomicExchange(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicExchange(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicExchange(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicExchange(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicExchange(imgBuffer,    7,                 9);
+    temp  = imageAtomicExchange(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicExchange(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicExchange(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicExchange(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicExchange(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicCompSwap(img1D,        7,                 3, 9);
+    temp  = imageAtomicCompSwap(img2D,        ivec2(7, 7),       3, 9);
+    temp  = imageAtomicCompSwap(img3D,        ivec3(7, 7, 7),    3, 9);
+    temp  = imageAtomicCompSwap(img2DRect,    ivec2(7, 7),       3, 9);
+    temp  = imageAtomicCompSwap(imgCube,      ivec3(7, 7, 7),    3, 9);
+    temp  = imageAtomicCompSwap(imgBuffer,    7,                 3, 9);
+    temp  = imageAtomicCompSwap(img1DArray,   ivec2(7, 7),       3, 9);
+    temp  = imageAtomicCompSwap(img2DArray,   ivec3(7, 7, 7),    3, 9);
+    temp  = imageAtomicCompSwap(imgCubeArray, ivec3(7, 7, 7),    3, 9);
+    temp  = imageAtomicCompSwap(img2DMS,      ivec2(7, 7),    5, 3, 9);
+    temp  = imageAtomicCompSwap(img2DMSArray, ivec3(7, 7, 7), 5, 3, 9);
+
+    m1 = temp;
+}

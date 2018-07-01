@@ -40,7 +40,6 @@
 #include "include/vk_object.h"
 #include "include/vk_swapchain.h"
 #include "include/vk_queue.h"
-#include "include/peer_resource.h"
 
 #include "palGpuMemory.h"
 #include "palImage.h"
@@ -282,7 +281,7 @@ static VkResult InitSparseVirtualMemory(
         pCreateInfo->usage,
         pCreateInfo->tiling,
         &propertyCount,
-        &sparseFormatProperties);
+        utils::ArrayView<VkSparseImageFormatProperties>(&sparseFormatProperties));
 
     *pSparseTileSize = sparseFormatProperties.imageGranularity;
 
@@ -725,12 +724,9 @@ VkResult Image::CreatePresentableImage(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    const size_t peerMemorySize = PeerMemory::GetMemoryRequirements(
-        pDevice, multiInstanceHeap, allocateDeviceMask, static_cast<uint32_t>(palMemSize));
-
     void* pMemObjMemory = pAllocator->pfnAllocation(
         pAllocator->pUserData,
-        sizeof(Memory) + (palMemSize * numDevices) + peerMemorySize,
+        sizeof(Memory) + (palMemSize * numDevices),
         VK_DEFAULT_MEM_ALIGN,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -764,32 +760,6 @@ VkResult Image::CreatePresentableImage(
         palImgOffset += palImgSize;
         palMemOffset += palMemSize;
     }
-
-    PeerMemory* pPeerMemory = nullptr;
-    if (peerMemorySize > 0)
-    {
-        pPeerMemory = VK_PLACEMENT_NEW(Util::VoidPtrInc(pMemObjMemory, palMemOffset)) PeerMemory(
-            pDevice, pPalMemory, static_cast<uint32_t>(palMemSize));
-    }
-
-#ifdef DEBUG
-    Pal::PeerImageOpenInfo peerInfo = {};
-    peerInfo.pOriginalImage = pPalImage[0];
-
-    for (uint32_t deviceIdx = 1; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-    {
-        size_t peerImgSize = 0;
-        size_t peerMemSize = 0;
-
-        pDevice->PalDevice(deviceIdx)->GetPeerImageSizes(peerInfo, &peerImgSize, &peerMemSize, &palResult);
-
-        // If any of these asserts begins firing, we will have a memory overwrite problem
-        // in VkResult Image::BindSwapchainMemory()
-        VK_ASSERT(palResult == Pal::Result::Success);
-        VK_ASSERT(peerImgSize <= palImgSize);
-        VK_ASSERT(peerMemSize <= palMemSize);
-    }
-#endif
 
     // from PAL, toomanyflippableAllocation is a warning, instead of a failure. the allocate should be success.
     // but when they warn us, future flippable image allocation may fail based on OS.
@@ -855,8 +825,8 @@ VkResult Image::CreatePresentableImage(
 
         *pImage = Image::HandleFromVoidPointer(pImgObjMemory);
 
-        // Create API memory object
-        pMemory = VK_PLACEMENT_NEW(pMemObjMemory) Memory(pDevice, pPalMemory, pPeerMemory, allocateDeviceMask);
+        // Create API memory object with multiInstance set to false
+        pMemory = VK_PLACEMENT_NEW(pMemObjMemory) Memory(pDevice, pPalMemory, false);
 
         *pDeviceMemory = Memory::HandleFromObject(pMemory);
 
@@ -1023,15 +993,7 @@ VkResult Image::BindMemory(
 
             if (m_pMemory != nullptr)
             {
-                if ((localDeviceIdx == sourceMemInst) || m_pMemory->IsMirroredAllocation(localDeviceIdx))
-                {
-                    pGpuMem = m_pMemory->PalMemory(localDeviceIdx);
-                }
-                else
-                {
-                    pGpuMem = m_pMemory->GetPeerMemory()->AllocatePeerMemory(
-                        m_pDevice->PalDevice(localDeviceIdx), localDeviceIdx, sourceMemInst);
-                }
+                pGpuMem = m_pMemory->PalMemory(localDeviceIdx, sourceMemInst);
 
                 // The bind offset within the memory should already be pre-aligned
                 VK_ASSERT(Util::IsPow2Aligned(memOffset, reqs.alignment));
@@ -1137,8 +1099,7 @@ VkResult Image::BindSwapchainMemory(
             Pal::PeerImageOpenInfo peerInfo = {};
             peerInfo.pOriginalImage = pPalImage;
 
-            Pal::IGpuMemory* pGpuMemory = m_pMemory->GetPeerMemory()->AllocatePeerMemory(
-                m_pDevice->PalDevice(localDeviceIdx), localDeviceIdx, sourceMemInst);
+            Pal::IGpuMemory* pGpuMemory = m_pMemory->PalMemory(localDeviceIdx, sourceMemInst);
 
             void* pImageMem = m_pPalImages[localDeviceIdx];
 
@@ -1188,8 +1149,8 @@ VkResult Image::GetSubresourceLayout(
 // =====================================================================================================================
 // Implementation of vkGetImageSparseMemoryRequirements
 void Image::GetSparseMemoryRequirements(
-    uint32_t*                        pNumRequirements,
-    VkSparseImageMemoryRequirements* pSparseMemoryRequirements)
+    uint32_t*                                           pNumRequirements,
+    utils::ArrayView<VkSparseImageMemoryRequirements>   sparseMemoryRequirements)
 {
     // TODO: Use PAL interface for probing aspect availability, once it is introduced.
     uint32_t               usedAspectsCount    = 0;
@@ -1234,10 +1195,14 @@ void Image::GetSparseMemoryRequirements(
     {
         *pNumRequirements = usedAspectsCount;
     }
-    else if (isSparse && (pSparseMemoryRequirements != nullptr) && (*pNumRequirements >= 1))
+    else if (isSparse && (sparseMemoryRequirements.IsNull() == false) && (*pNumRequirements >= 1))
     {
-        const uint32_t aspectsToReportCount = Util::Min(*pNumRequirements, usedAspectsCount);
-        uint32_t       reportedAspectsCount = 0;
+        const uint32_t       aspectsToReportCount = Util::Min(*pNumRequirements, usedAspectsCount);
+        uint32_t             reportedAspectsCount = 0;
+        VkMemoryRequirements memReqs = {};
+
+        VkResult result = GetMemoryRequirements(&memReqs);
+        VK_ASSERT(result == VK_SUCCESS);
 
         // Get the memory layout of the sparse image
 
@@ -1245,7 +1210,7 @@ void Image::GetSparseMemoryRequirements(
         {
             const auto&                      currentAspect       = aspects[nAspect];
             Pal::SubresLayout                miptailLayouts[2]   = {};
-            VkSparseImageMemoryRequirements* pCurrentRequirement = pSparseMemoryRequirements + reportedAspectsCount;
+            VkSparseImageMemoryRequirements* pCurrentRequirement = &sparseMemoryRequirements[reportedAspectsCount];
 
             // Is this aspect actually available?
             if (!currentAspect.available)
@@ -1309,8 +1274,11 @@ void Image::GetSparseMemoryRequirements(
             }
 
             pCurrentRequirement->imageMipTailFirstLod = memoryLayout.prtMinPackedLod;
-            pCurrentRequirement->imageMipTailSize     = memoryLayout.prtMipTailTileCount *
+            const auto mipTailSize                    = memoryLayout.prtMipTailTileCount *
                                                         physDevice->PalProperties().imageProperties.prtTileSize;
+
+            // If PAL reports alignment > size, then we have no choice but to increase the size to match.
+            pCurrentRequirement->imageMipTailSize = Util::RoundUpToMultiple(mipTailSize, memReqs.alignment);
 
             // for per-slice-miptail, the miptail should only take one tile and the base address is tile aligned.
             // for single-miptail, the offset of first in-miptail mip level of slice 0 refers to the offset of miptail.
@@ -1323,17 +1291,14 @@ void Image::GetSparseMemoryRequirements(
 
         if (needsMetadataAspect && reportedAspectsCount < *pNumRequirements)
         {
-            VkSparseImageMemoryRequirements* pCurrentRequirement = pSparseMemoryRequirements + reportedAspectsCount;
-            Pal::GpuMemoryRequirements       palReqs             = {};
-
-            PalImage()->GetGpuMemoryRequirements(&palReqs);
+            VkSparseImageMemoryRequirements* pCurrentRequirement = &sparseMemoryRequirements[reportedAspectsCount];
 
             pCurrentRequirement->formatProperties.aspectMask       = VK_IMAGE_ASPECT_METADATA_BIT;
             pCurrentRequirement->formatProperties.flags            = VK_SPARSE_IMAGE_FORMAT_SINGLE_MIPTAIL_BIT;
             pCurrentRequirement->formatProperties.imageGranularity = {0};
             pCurrentRequirement->imageMipTailFirstLod              = 0;
             pCurrentRequirement->imageMipTailSize                  = Util::RoundUpToMultiple(memoryLayout.metadataSize,
-                                                                                             palReqs.alignment);
+                                                                                             memReqs.alignment);
             pCurrentRequirement->imageMipTailOffset                = memoryLayout.metadataOffset;
             pCurrentRequirement->imageMipTailStride                = 0;
 
@@ -1434,7 +1399,7 @@ Pal::ImageLayout Image::GetAttachmentLayout(
         }
 
         palLayout = GetBarrierPolicy().GetAspectLayout(
-            m_pDevice, layout.layout, aspectIndex, pCmdBuffer->GetQueueFamilyIndex());
+            layout.layout, aspectIndex, pCmdBuffer->GetQueueFamilyIndex());
 
         // Add any requested extra PAL usage
         palLayout.usages |= layout.extraUsage;
@@ -1443,7 +1408,7 @@ Pal::ImageLayout Image::GetAttachmentLayout(
     {
         // Return a null-usage layout (set the engine still because there are some PAL asserts that hit)
         palLayout = GetBarrierPolicy().GetAspectLayout(
-            m_pDevice, layout.layout, 0, pCmdBuffer->GetQueueFamilyIndex());
+            layout.layout, 0, pCmdBuffer->GetQueueFamilyIndex());
         palLayout.usages = 0;
     }
 
@@ -1498,7 +1463,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements(
 {
     Image::ObjectFromHandle(image)->GetSparseMemoryRequirements(
         pSparseMemoryRequirementCount,
-        pSparseMemoryRequirements);
+        utils::ArrayView<VkSparseImageMemoryRequirements>(pSparseMemoryRequirements));
 }
 
 // =====================================================================================================================
@@ -1571,13 +1536,15 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSparseMemoryRequirements2(
     };
 
     pRequirementsInfo2 = pInfo;
-    pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_SPARSE_IMAGE_MEMORY_REQUIREMENTS_2);
+    pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_IMAGE_SPARSE_MEMORY_REQUIREMENTS_INFO_2);
 
     if (pHeader != nullptr)
     {
-        VkSparseImageMemoryRequirements* pMemReq = &pSparseMemoryRequirements->memoryRequirements;
         Image* pImage = Image::ObjectFromHandle(pRequirementsInfo2->image);
-        pImage->GetSparseMemoryRequirements(pSparseMemoryRequirementCount, pMemReq);
+        auto memReqsView = utils::ArrayView<VkSparseImageMemoryRequirements>(
+            pSparseMemoryRequirements,
+            &pSparseMemoryRequirements->memoryRequirements);
+        pImage->GetSparseMemoryRequirements(pSparseMemoryRequirementCount, memReqsView);
     }
 }
 

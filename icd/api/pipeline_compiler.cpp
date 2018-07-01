@@ -134,7 +134,6 @@ VkResult PipelineCompiler::Initialize()
     // Initialzie GfxIp informations per PAL device properties
     Pal::DeviceProperties info;
     pPalDevice->GetProperties(&info);
-    m_gfxIpLevel = info.gfxLevel;
 
     switch (info.gfxLevel)
     {
@@ -307,7 +306,8 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
     if ((appProfile == AppProfile::Talos) ||
         (appProfile == AppProfile::MadMax) ||
-        (appProfile == AppProfile::SeriousSamFusion))
+        (appProfile == AppProfile::SeriousSamFusion) ||
+        (appProfile == AppProfile::SedpEngine))
     {
         llpcOptions[numOptions++] = "-enable-si-scheduler";
     }
@@ -316,7 +316,8 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     if ((shaderCacheMode == ShaderCacheEnableRuntimeOnly) &&
          ((appProfile == AppProfile::MadMax) ||
           (appProfile == AppProfile::SeriousSamFusion) ||
-          (appProfile == AppProfile::F1_2017)))
+          (appProfile == AppProfile::F1_2017) ||
+          (appProfile == AppProfile::Feral3DEngine)))
     {
         // Force to use internal disk cache.
         shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
@@ -895,6 +896,9 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 vertexShader ? pVbInfo : nullptr);
         }
 
+        ApplyDefaultShaderOptions(&pShaderInfo->options
+                                  );
+
         ApplyProfileOptions(pDevice,
                             static_cast<ShaderStage>(stage),
                             pShaderModule,
@@ -999,6 +1003,9 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             nullptr);
     }
 
+    ApplyDefaultShaderOptions(&pCreateInfo->pipelineInfo.cs.options
+                              );
+
     ApplyProfileOptions(pDevice,
                         ShaderStageCompute,
                         pShaderModule,
@@ -1007,6 +1014,15 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
                         );
 
     return result;
+}
+
+// =====================================================================================================================
+// Set any non-zero shader option defaults
+void PipelineCompiler::ApplyDefaultShaderOptions(
+    Llpc::PipelineShaderOptions* pShaderOptions
+    ) const
+{
+
 }
 
 // =====================================================================================================================

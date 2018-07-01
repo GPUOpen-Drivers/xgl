@@ -1,0 +1,15 @@
+#version 450 core
+
+layout(set = 0, binding = 0, rgba8i)  uniform iimage2D img2Di;
+layout(set = 0, binding = 1, rgba8ui) uniform uimage2D img2Du;
+
+layout(set = 1, binding = 0) buffer BO
+{
+    ivec4 mIn;
+};
+
+void main()
+{
+    imageStore(img2Di, ivec2(0, 0), mIn);
+    imageStore(img2Du, ivec2(0, 0), mIn);
+}

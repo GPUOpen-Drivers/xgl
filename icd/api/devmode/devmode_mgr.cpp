@@ -56,6 +56,7 @@
 #include "msgTransport.h"
 #include "protocols/rgpServer.h"
 #include "protocols/driverControlServer.h"
+#include "protocols/etwClient.h"
 
 namespace vk
 {
@@ -91,11 +92,42 @@ static VkResult DevDriverToVkResult(
 }
 
 // =====================================================================================================================
+// Translates a DevDriver result to a Pal::Result.
+static Pal::Result DevDriverToPalResult(
+    DevDriver::Result devResult)
+{
+    Pal::Result result;
+
+    switch (devResult)
+    {
+    case DevDriver::Result::Success:
+        result = Pal::Result::Success;
+        break;
+    case DevDriver::Result::Error:
+        result = Pal::Result::ErrorUnknown;
+        break;
+    case DevDriver::Result::Unavailable:
+        result = Pal::Result::ErrorUnavailable;
+        break;
+    case DevDriver::Result::NotReady:
+        result = Pal::Result::NotReady;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        result = Pal::Result::ErrorInitializationFailed;
+        break;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 DevModeMgr::DevModeMgr(Instance* pInstance)
     :
     m_pInstance(pInstance),
     m_pDevDriverServer(pInstance->PalPlatform()->GetDevDriverServer()),
     m_pRGPServer(nullptr),
+    m_pEtwClient(nullptr),
     m_hardwareSupportsTracing(false),
     m_rgpServerSupportsTracing(false),
     m_finalized(false),
@@ -397,6 +429,91 @@ Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
         (pState->pBeginFence->GetStatus() != Pal::Result::NotReady) && // "Trace begin" cmdbuf has retired
         (pState->pEndFence->GetStatus()   != Pal::Result::NotReady))   // "Trace end" cmdbuf has retired
     {
+        // Process ETW events if we have a connected client.
+        if (m_pEtwClient != nullptr)
+        {
+            // Disable tracing on the ETW client.
+            size_t numGpuEvents = 0;
+            DevDriver::Result devDriverResult = m_pEtwClient->DisableTracing(&numGpuEvents);
+
+            // Inject any external signal and wait events if we have any.
+            if ((devDriverResult == DevDriver::Result::Success) && (numGpuEvents > 0))
+            {
+                // Allocate memory for the gpu events.
+                DevDriver::GpuEvent* pGpuEvents = reinterpret_cast<DevDriver::GpuEvent*>(m_pInstance->AllocMem(
+                    sizeof(DevDriver::GpuEvent) * numGpuEvents,
+                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE));
+                if (pGpuEvents == nullptr)
+                {
+                    devDriverResult = DevDriver::Result::InsufficientMemory;
+                }
+                else if (devDriverResult == DevDriver::Result::Success)
+                {
+                    devDriverResult = m_pEtwClient->GetTraceData(pGpuEvents, numGpuEvents);
+                }
+
+                if (devDriverResult == DevDriver::Result::Success)
+                {
+                    for (uint32_t eventIndex = 0; eventIndex < static_cast<uint32_t>(numGpuEvents); ++eventIndex)
+                    {
+                        Pal::Result palResult = Pal::Result::Success;
+
+                        const DevDriver::GpuEvent* pGpuEvent = &pGpuEvents[eventIndex];
+                        if (pGpuEvent->type == DevDriver::GpuEventType::QueueSignal)
+                        {
+                            GpuUtil::TimedQueueSemaphoreInfo signalInfo = {};
+                            signalInfo.semaphoreID = pGpuEvent->queue.fenceObject;
+
+                            palResult =
+                                pState->pGpaSession->ExternalTimedSignalQueueSemaphore(
+                                    pGpuEvent->queue.contextIdentifier,
+                                    pGpuEvent->submissionTime,
+                                    pGpuEvent->completionTime,
+                                    signalInfo);
+                        }
+                        else if (pGpuEvent->type == DevDriver::GpuEventType::QueueWait)
+                        {
+                            GpuUtil::TimedQueueSemaphoreInfo waitInfo = {};
+                            waitInfo.semaphoreID = pGpuEvent->queue.fenceObject;
+
+                            palResult =
+                                pState->pGpaSession->ExternalTimedWaitQueueSemaphore(
+                                    pGpuEvent->queue.contextIdentifier,
+                                    pGpuEvent->submissionTime,
+                                    pGpuEvent->completionTime,
+                                    waitInfo);
+                        }
+
+                        // Traces sometimes capture events that don't belong to an API level queue.
+                        // In that case, PAL will return ErrorIncompatibleQueue which means we should ignore
+                        // the event. If we get a result that's not incompatible queue or success, then treat it
+                        // as an error and break out of the loop.
+                        if ((palResult != Pal::Result::ErrorIncompatibleQueue) &&
+                            (palResult != Pal::Result::Success))
+                        {
+                            devDriverResult = DevDriver::Result::Error;
+                            break;
+                        }
+                    }
+                }
+
+                // Free the memory for the gpu events.
+                if (pGpuEvents != nullptr)
+                {
+                    m_pInstance->FreeMem(pGpuEvents);
+                    pGpuEvents = nullptr;
+                }
+            }
+
+            // Throw an assert and clean up the etw client if we fail to capture gpu events.
+            // It's not a critical error though so it shouldn't abort the trace.
+            if (devDriverResult != DevDriver::Result::Success)
+            {
+                VK_ASSERT(false);
+                CleanupEtwClient();
+            }
+        }
+
         bool success = false;
 
         // Fetch required trace data size from GPA session
@@ -680,6 +797,22 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
     if (result == Pal::Result::Success)
     {
         result = pBeginCmdBuf->End();
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        // Enable tracing on the ETW client if it's connected.
+        if (m_pEtwClient != nullptr)
+        {
+            const DevDriver::Result devDriverResult = m_pEtwClient->EnableTracing(Util::GetIdOfCurrentProcess());
+
+            // If an error occurs, cleanup the ETW client so it doesn't continue to cause issues for future traces.
+            if (devDriverResult != DevDriver::Result::Success)
+            {
+                VK_ASSERT(false);
+                CleanupEtwClient();
+            }
+        }
     }
 
     // Reset the trace-begin fence
@@ -1116,6 +1249,13 @@ void DevModeMgr::FinishOrAbortTrace(
     if (pState->pGpaSession != nullptr)
     {
         pState->pGpaSession->Reset();
+    }
+
+    // Disable tracing on the ETW client if it exists.
+    if (aborted && m_pEtwClient != nullptr)
+    {
+        DevDriver::Result devDriverResult = m_pEtwClient->DisableTracing(nullptr);
+        VK_ASSERT(devDriverResult == DevDriver::Result::Success);
     }
 
     // Reset tracing state to idle
@@ -1731,6 +1871,16 @@ Pal::Result DevModeMgr::InitRGPTracing(
         result = Pal::Result::ErrorInitializationFailed;
     }
 
+    // Attempt to initialize the ETW client for use with RGP traces. This might fail if there's no ETW server
+    // available on the message bus. Failure just means that we won't be able to get extra information about
+    // queue signal and wait events. Just trigger an assert in the case of failure.
+    if ((result == Pal::Result::Success) &&
+        (settings.devModeSemaphoreQueueTimingEnable == false))
+    {
+        Pal::Result etwInitResult = InitEtwClient();
+        VK_ASSERT(etwInitResult == Pal::Result::Success);
+    }
+
     if (result != Pal::Result::Success)
     {
         // If we've failed to initialize tracing, permanently disable traces
@@ -1963,7 +2113,68 @@ void DevModeMgr::PipelineCreated(
     }
 }
 
+Pal::Result DevModeMgr::InitEtwClient()
+{
+    // We should never have a valid etw client pointer already.
+    VK_ASSERT(m_pEtwClient == nullptr);
+
+    Pal::Result result = Pal::Result::Success;
+
+    void* pStorage = m_pInstance->AllocMem(sizeof(DevDriver::ETWProtocol::ETWClient),
+                                           VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+
+    // Attempt to create an ETW client for rgp traces.
+    if (pStorage != nullptr)
+    {
+        m_pEtwClient = VK_PLACEMENT_NEW(pStorage)
+            DevDriver::ETWProtocol::ETWClient(m_pDevDriverServer->GetMessageChannel());
+    }
+    else
+    {
+        result = Pal::Result::ErrorOutOfMemory;
+    }
+
+    // Attempt to locate an ETW server.
+    DevDriver::ClientId etwProviderId = DevDriver::kBroadcastClientId;
+
+    if (result == Pal::Result::Success)
+    {
+        DevDriver::ClientMetadata filter = {};
+        filter.clientType = DevDriver::Component::Server;
+        filter.protocols.etw = 1;
+
+        result =
+            DevDriverToPalResult(m_pDevDriverServer->GetMessageChannel()->FindFirstClient(filter, &etwProviderId));
+    }
+
+    // Connect to the server
+    if (result == Pal::Result::Success)
+    {
+        result = DevDriverToPalResult(m_pEtwClient->Connect(etwProviderId));
+    }
+
+    if ((result != Pal::Result::Success) && (m_pEtwClient != nullptr))
+    {
+        Util::Destructor(m_pEtwClient);
+        m_pInstance->FreeMem(m_pEtwClient);
+        m_pEtwClient = nullptr;
+    }
+
+    return result;
+}
+
+void DevModeMgr::CleanupEtwClient()
+{
+    if (m_pEtwClient != nullptr)
+    {
+        m_pEtwClient->Disconnect();
+
+        Util::Destructor(m_pEtwClient);
+        m_pInstance->FreeMem(m_pEtwClient);
+        m_pEtwClient = nullptr;
+    }
+}
+
 }; // namespace vk
 
 #endif
-

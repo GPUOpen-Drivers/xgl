@@ -1,0 +1,47 @@
+[VsGlsl]
+#version 450 core
+
+layout(location = 2) out dvec4 gsInData1;
+layout(location = 5) out float gsInData2;
+
+void main()
+{
+    gsInData1 = dvec4(0);
+    gsInData2 = 0;
+    gl_Position = vec4(0);
+}
+
+[VsInfo]
+entryPoint = main
+
+[GsGlsl]
+#version 450 core
+layout(triangles) in;
+layout(triangle_strip, max_vertices = 3) out;
+
+layout(location = 2) in dvec4 gsInData1[];
+layout(location = 5) in float gsInData2[];
+
+void main()
+{
+    for (int i = 0; i < gl_in.length(); ++i)
+    {
+        gl_Position.x = float(gsInData1[i].z / gsInData1[i].y);
+        gl_Position.y = gsInData2[i];
+
+        EmitVertex();
+    }
+
+    EndPrimitive();
+}
+
+[GsInfo]
+entryPoint = main
+
+[GraphicsPipelineState]
+patchControlPoints = 0
+alphaToCoverageEnable = 0
+dualSourceBlendEnable = 0
+colorBuffer[0].format = VK_FORMAT_B8G8R8A8_UNORM
+colorBuffer[0].blendEnable = 0
+colorBuffer[0].blendSrcAlphaToColor = 0

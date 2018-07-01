@@ -1,0 +1,15 @@
+#version 440
+precision highp uimageCubeArray;
+
+layout (local_size_x = 1, local_size_y = 1, local_size_z = 1) in;
+layout (r32ui, binding=0) coherent uniform uimageCubeArray u_resultImage;
+
+void main (void)
+{
+	int gx = int(gl_GlobalInvocationID.x);
+	int gy = int(gl_GlobalInvocationID.y);
+	int gz = int(gl_GlobalInvocationID.z);
+	imageAtomicAdd(u_resultImage, ivec3(gx % 64,gy,gz), uint(gx*gx + gy*gy + gz*gz));
+}
+
+

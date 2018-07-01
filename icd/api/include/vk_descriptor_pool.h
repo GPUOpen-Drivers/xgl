@@ -147,7 +147,6 @@ public:
 
     VkResult Init(
         Device*                         pDevice,
-        DescriptorPool*                 pPool,
         VkDescriptorPoolCreateFlags     poolUsage,
         uint32_t                        maxSets);
 

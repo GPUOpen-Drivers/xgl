@@ -1,0 +1,99 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 2
+; Bound: 49
+; Schema: 0
+               OpCapability Shader
+               OpCapability Float16
+               OpCapability StorageBuffer16BitAccess
+               OpCapability UniformAndStorageBuffer16BitAccess
+               OpExtension "SPV_KHR_16bit_storage"
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main"
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource GLSL 450
+               OpName %4 "main"
+               OpName %10 "Buffers"
+               OpMemberName %10 0 "f16v1"
+               OpMemberName %10 1 "f16v2"
+               OpMemberName %10 2 "f16v3"
+               OpMemberName %10 3 "f16v4"
+               OpName %12 ""
+               OpName %19 "Uniforms"
+               OpMemberName %19 0 "fv1"
+               OpMemberName %19 1 "fv2"
+               OpMemberName %19 2 "fv3"
+               OpMemberName %19 3 "fv4"
+               OpName %21 ""
+               OpMemberDecorate %10 0 Offset 0
+               OpMemberDecorate %10 1 Offset 4
+               OpMemberDecorate %10 2 Offset 8
+               OpMemberDecorate %10 3 Offset 16
+               OpDecorate %10 BufferBlock
+               OpDecorate %12 DescriptorSet 0
+               OpDecorate %12 Binding 1
+               OpMemberDecorate %19 0 Offset 0
+               OpMemberDecorate %19 1 Offset 8
+               OpMemberDecorate %19 2 Offset 16
+               OpMemberDecorate %19 3 Offset 32
+               OpDecorate %19 Block
+               OpDecorate %21 DescriptorSet 0
+               OpDecorate %21 Binding 0
+               OpDecorate %25 FPRoundingMode RTZ
+               OpDecorate %32 FPRoundingMode RTE
+               OpDecorate %39 FPRoundingMode RTP
+               OpDecorate %46 FPRoundingMode RTN
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %6 = OpTypeFloat 16
+          %7 = OpTypeVector %6 2
+          %8 = OpTypeVector %6 3
+          %9 = OpTypeVector %6 4
+         %10 = OpTypeStruct %6 %7 %8 %9
+         %11 = OpTypePointer Uniform %10
+         %12 = OpVariable %11 Uniform
+         %13 = OpTypeInt 32 1
+         %14 = OpConstant %13 0
+         %15 = OpTypeFloat 32
+         %16 = OpTypeVector %15 2
+         %17 = OpTypeVector %15 3
+         %18 = OpTypeVector %15 4
+         %19 = OpTypeStruct %15 %16 %17 %18
+         %20 = OpTypePointer Uniform %19
+         %21 = OpVariable %20 Uniform
+         %22 = OpTypePointer Uniform %15
+         %26 = OpTypePointer Uniform %6
+         %28 = OpConstant %13 1
+         %29 = OpTypePointer Uniform %16
+         %33 = OpTypePointer Uniform %7
+         %35 = OpConstant %13 2
+         %36 = OpTypePointer Uniform %17
+         %40 = OpTypePointer Uniform %8
+         %42 = OpConstant %13 3
+         %43 = OpTypePointer Uniform %18
+         %47 = OpTypePointer Uniform %9
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+         %23 = OpAccessChain %22 %21 %14
+         %24 = OpLoad %15 %23
+         %25 = OpFConvert %6 %24
+         %27 = OpAccessChain %26 %12 %14
+               OpStore %27 %25
+         %30 = OpAccessChain %29 %21 %28
+         %31 = OpLoad %16 %30
+         %32 = OpFConvert %7 %31
+         %34 = OpAccessChain %33 %12 %28
+               OpStore %34 %32
+         %37 = OpAccessChain %36 %21 %35
+         %38 = OpLoad %17 %37
+         %39 = OpFConvert %8 %38
+         %41 = OpAccessChain %40 %12 %35
+               OpStore %41 %39
+         %44 = OpAccessChain %43 %21 %42
+         %45 = OpLoad %18 %44
+         %46 = OpFConvert %9 %45
+         %48 = OpAccessChain %47 %12 %42
+               OpStore %48 %46
+               OpReturn
+               OpFunctionEnd

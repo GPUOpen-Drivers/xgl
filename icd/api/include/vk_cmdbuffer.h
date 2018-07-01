@@ -238,15 +238,6 @@ public:
         uint32_t                                    cmdBufferCount,
         const VkCommandBuffer*                      pCmdBuffers);
 
-    void BindDescriptorSets(
-        VkPipelineBindPoint                         pipelineBindPoint,
-        VkPipelineLayout                            layout,
-        uint32_t                                    firstSet,
-        uint32_t                                    setCount,
-        const VkDescriptorSet*                      pDescriptorSets,
-        uint32_t                                    dynamicOffsetCount,
-        const uint32_t*                             pDynamicOffsets);
-
     void BindIndexBuffer(
         VkBuffer                                    buffer,
         VkDeviceSize                                offset,
@@ -499,7 +490,9 @@ public:
         const VkRenderPassBeginInfo* pRenderPassBegin,
         VkSubpassContents            contents);
 
-    void NextSubPass(VkSubpassContents contents);
+    void NextSubPass(
+        VkSubpassContents            contents);
+
     void EndRenderPass();
 
     void PushConstants(
@@ -779,6 +772,8 @@ public:
         uint32_t oldToken,
         uint32_t newToken);
 
+    static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
+
 private:
     CmdBuffer(
         Device*                         pDevice,
@@ -849,6 +844,30 @@ private:
 #if VK_ENABLE_DEBUG_BARRIERS
     void DbgCmdBarrier(bool preCmd);
 #endif
+
+    template <uint32_t numPalDevices, bool robustBufferAccess>
+    void BindDescriptorSets(
+        VkPipelineBindPoint                         pipelineBindPoint,
+        VkPipelineLayout                            layout,
+        uint32_t                                    firstSet,
+        uint32_t                                    setCount,
+        const VkDescriptorSet*                      pDescriptorSets,
+        uint32_t                                    dynamicOffsetCount,
+        const uint32_t*                             pDynamicOffsets);
+
+    template<uint32_t numPalDevices, bool robustBufferAccess>
+    static VKAPI_ATTR void VKAPI_CALL CmdBindDescriptorSets(
+        VkCommandBuffer                             cmdBuffer,
+        VkPipelineBindPoint                         pipelineBindPoint,
+        VkPipelineLayout                            layout,
+        uint32_t                                    firstSet,
+        uint32_t                                    descriptorSetCount,
+        const VkDescriptorSet*                      pDescriptorSets,
+        uint32_t                                    dynamicOffsetCount,
+        const uint32_t*                             pDynamicOffsets);
+
+    template <uint32_t numPalDevices>
+    static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
 
     Device* const                 m_pDevice;
     CmdPool* const                m_pCmdPool;

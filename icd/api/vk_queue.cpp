@@ -441,13 +441,13 @@ VkResult Queue::PalSignalSemaphores(
         VK_ASSERT(deviceIdx < m_pDevice->NumPalDevices());
 
         Semaphore* pVkSemaphore = Semaphore::ObjectFromHandle(pSemaphores[i]);
-        Pal::IQueueSemaphore* pPalSemaphore = pVkSemaphore->PalSemaphore();
+        Pal::IQueueSemaphore* pPalSemaphore = pVkSemaphore->PalSemaphore(deviceIdx);
 
         if (timedQueueEvents == false)
         {
-            if (pVkSemaphore->PalTemporarySemaphore())
+            if (pVkSemaphore->PalTemporarySemaphore(deviceIdx))
             {
-                pPalSemaphore = pVkSemaphore->PalTemporarySemaphore();
+                pPalSemaphore = pVkSemaphore->PalTemporarySemaphore(deviceIdx);
             }
 
             palResult = PalQueue(deviceIdx)->SignalQueueSemaphore(pPalSemaphore);
@@ -502,14 +502,14 @@ VkResult Queue::PalWaitSemaphores(
         VK_ASSERT(deviceIdx < m_pDevice->NumPalDevices());
 
         // Wait for the temporary semaphore.
-        if (pSemaphore->PalTemporarySemaphore() != nullptr)
+        if (pSemaphore->PalTemporarySemaphore(deviceIdx) != nullptr)
         {
-            pPalSemaphore = pSemaphore->PalTemporarySemaphore();
-            pSemaphore->SetPalTemporarySemaphore(nullptr);
+            pPalSemaphore = pSemaphore->PalTemporarySemaphore(deviceIdx);
+            pSemaphore->ClearPalTemporarySemaphore();
         }
         else
         {
-            pPalSemaphore = pSemaphore->PalSemaphore();
+            pPalSemaphore = pSemaphore->PalSemaphore(deviceIdx);
         }
 
         if (pPalSemaphore != nullptr)
@@ -657,7 +657,9 @@ VkResult Queue::Present(
         bool syncFlip = false;
         bool postFrameTimerSubmission = false;
         bool needFramePacing = NeedPacePresent(&presentInfo, pSwapChain, &syncFlip, &postFrameTimerSubmission);
-        const Pal::IGpuMemory* pGpuMemory = pSwapChain->GetPresentableImageMemory(imageIndex)->PalMemory();
+        const Pal::IGpuMemory* pGpuMemory =
+            pSwapChain->GetPresentableImageMemory(imageIndex)->PalMemory(DefaultDeviceIndex);
+
         result = NotifyFlipMetadataBeforePresent(&presentInfo, pGpuMemory);
         if (result != VK_SUCCESS)
         {
@@ -813,7 +815,7 @@ VkResult Queue::BindSparseEntry(
 
             if (bind.memory != VK_NULL_HANDLE)
             {
-                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(memoryDeviceIndex);
+                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(resourceDeviceIndex, memoryDeviceIndex);
             }
 
             VK_ASSERT(bind.flags == 0);
@@ -850,7 +852,7 @@ VkResult Queue::BindSparseEntry(
 
             if (bind.memory != VK_NULL_HANDLE)
             {
-                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(memoryDeviceIndex);
+                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(resourceDeviceIndex, memoryDeviceIndex);
             }
 
             result = AddVirtualRemapRange(
@@ -890,7 +892,7 @@ VkResult Queue::BindSparseEntry(
 
             if (bind.memory != VK_NULL_HANDLE)
             {
-                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(memoryDeviceIndex);
+                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(resourceDeviceIndex, memoryDeviceIndex);
             }
 
             // Get the subresource layout to be able to figure out its offset
@@ -914,6 +916,17 @@ VkResult Queue::BindSparseEntry(
             // the mipChainPitch into account when calculate the offset of next tile.
             VkDeviceSize prtTileRowPitch   = subResLayout.rowPitch * tileSize.height * tileSize.depth;
             VkDeviceSize prtTileDepthPitch = subResLayout.depthPitch * tileSize.depth;
+
+            // tileSize is in texels, prtTileRowPitch and prtTileDepthPitch shall be adjusted for compressed
+            // formats. depth of blockDim will always be 1 so skip the adjustment.
+            const VkFormat aspectFormat = vk::Formats::GetAspectFormat(image.GetFormat(), bind.subresource.aspectMask);
+            const Pal::ChNumFormat palAspectFormat = VkToPalFormat(aspectFormat).format;
+            if (Pal::Formats::IsBlockCompressed(palAspectFormat))
+            {
+                Pal::Extent3d blockDim = Pal::Formats::CompressedBlockDim(palAspectFormat);
+                VK_ASSERT(blockDim.depth == 1);
+                prtTileRowPitch /= blockDim.height;
+            }
 
             // Calculate the offsets in tiles
             const VkOffset3D offsetInTiles =
@@ -1111,30 +1124,37 @@ VkResult Queue::BindSparse(
         }
     }
 
-    // We always signal the fence separately, after we know which devices appeared in resourceDeviceIndex
-    if (fence != VK_NULL_HANDLE)
-    {
-        VK_ASSERT(remapState.rangeCount == 0);
-        Fence* pFence = Fence::ObjectFromHandle(fence);
-
-        // The fence must be signalled even if there's no actual work (there is a test for this)
-        if (signalFenceDeviceMask == 0)
-        {
-            signalFenceDeviceMask = (1 << DefaultDeviceIndex);
-        }
-
-        utils::IterateMask deviceGroup(signalFenceDeviceMask);
-        while (result == VK_SUCCESS && deviceGroup.Iterate())
-        {
-            const uint32_t deviceIdx = deviceGroup.Index();
-            Pal::IFence*   pPalFence = pFence->PalFence(deviceIdx);
-
-            result = CommitVirtualRemapRanges(deviceIdx, pPalFence, &remapState);
-        }
-    }
-
     // Clean up
     VK_ASSERT((remapState.rangeCount == 0) || (result != VK_SUCCESS));
+
+    if ((result == VK_SUCCESS) && (fence != VK_NULL_HANDLE))
+    {
+        // Signal the fence in the devices that have binding request.
+        // If there is no bindInfo, we just signal the fence in the DeviceDeviceIndex.
+        if (signalFenceDeviceMask == 0)
+        {
+            signalFenceDeviceMask = 1 << DefaultDeviceIndex;
+        }
+
+        Pal::SubmitInfo submitInfo = {};
+
+        Fence* pFence = Fence::ObjectFromHandle(fence);
+
+        utils::IterateMask deviceGroup(signalFenceDeviceMask);
+
+        while (result == VK_SUCCESS && deviceGroup.Iterate())
+        {
+            const uint32_t deviceIndex = deviceGroup.Index();
+            submitInfo.pFence = pFence->PalFence(deviceIndex);
+
+            // set the active device mask for the fence.
+            // the following fence wait would only be applied to the fence one the active device index.
+            // the active device index would be cleared in the reset.
+            pFence->SetActiveDevice(deviceIndex);
+
+            result = PalToVkResult(PalQueue(deviceIndex)->Submit(submitInfo));
+        }
+    }
 
     virtStackFrame.FreeArray(remapState.pRanges);
 

@@ -86,6 +86,11 @@ namespace RGPProtocol
 {
 class RGPServer;
 }
+
+namespace ETWProtocol
+{
+class ETWClient;
+}
 }
 
 // Vulkan forward declarations
@@ -272,9 +277,13 @@ private:
     bool QueueSupportsTiming(uint32_t deviceIdx, const Queue* pQueue);
     static bool GpuSupportsTracing(const Pal::DeviceProperties& props, const RuntimeSettings& settings);
 
+    Pal::Result InitEtwClient();
+    void CleanupEtwClient();
+
     Instance*                           m_pInstance;
     DevDriver::DevDriverServer*         m_pDevDriverServer;
     DevDriver::RGPProtocol::RGPServer*  m_pRGPServer;
+    DevDriver::ETWProtocol::ETWClient*  m_pEtwClient;               // ETW client pointer used to collect gpu events for RGP
     Util::Mutex                         m_traceMutex;
     TraceState                          m_trace;
     bool                                m_hardwareSupportsTracing;  // True if gfxip supports tracing

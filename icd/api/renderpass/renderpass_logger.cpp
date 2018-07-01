@@ -114,22 +114,20 @@ RenderPassLogger::RenderPassLogger(
 
 // =====================================================================================================================
 void RenderPassLogger::Begin(
-    const VkRenderPassCreateInfo& apiInfo,
-    const RenderPassCreateInfo&   info)
+    const RenderPassCreateInfo*   info)
 {
     if (m_logging == false)
     {
         return;
     }
 
-    m_pApiInfo = &apiInfo;
-    m_pInfo    = &info;
+    m_pInfo    = info;
 
-    if (OpenLogFile(info.hash))
+    if (OpenLogFile(info->hash))
     {
         Log("= Render Pass Build Log\n\n");
 
-        LogRenderPassCreateInfo(*m_pApiInfo);
+        LogRenderPassCreateInfo(*m_pInfo);
 
         m_file.Flush();
     }
@@ -210,7 +208,7 @@ static const char* ImageLayoutString(
 void RenderPassLogger::LogInfoAttachmentReference(
     const char*                  pAttachmentArray,
     uint32_t                     element,
-    const VkAttachmentReference& ref)
+    const AttachmentReference&   ref)
 {
     Log("   .%s[%d] = ", pAttachmentArray, element);
     LogAttachmentReference(ref);
@@ -219,9 +217,12 @@ void RenderPassLogger::LogInfoAttachmentReference(
 
 // =====================================================================================================================
 void RenderPassLogger::LogAttachmentReference(
-    const VkAttachmentReference& reference)
+    const AttachmentReference& reference)
 {
-    LogAttachment(reference.attachment); Log(" in %s", ImageLayoutString(reference.layout, false));
+    LogAttachment(reference.attachment);
+    Log(" in %s", ImageLayoutString(reference.layout, false));
+    Log(" aspectMask ");
+    LogImageAspectMask(reference.aspectMask, false);
 }
 
 // =====================================================================================================================
@@ -237,8 +238,8 @@ void RenderPassLogger::LogAttachment(uint32_t attachment)
     if (attachment != VK_ATTACHMENT_UNUSED)
     {
         Log("%d (", attachment);
-        LogFormat(m_pApiInfo->pAttachments[attachment].format);
-        Log("x%us", static_cast<uint32_t>(m_pApiInfo->pAttachments[attachment].samples));
+        LogFormat(m_pInfo->pAttachments[attachment].format);
+        Log("x%us", static_cast<uint32_t>(m_pInfo->pAttachments[attachment].samples));
         Log(")");
     }
     else
@@ -366,6 +367,82 @@ void RenderPassLogger::LogPipelineStageMask(
 }
 
 // =====================================================================================================================
+static const char* ImageAspectFlagString(
+    VkImageAspectFlagBits   flag,
+    bool                    compact)
+{
+    switch (flag)
+    {
+    case VK_IMAGE_ASPECT_COLOR_BIT:
+        return compact ? "COLOR" : "ASPECT_COLOR_BIT";
+    case VK_IMAGE_ASPECT_DEPTH_BIT:
+        return compact ? "DEPTH" : "ASPECT_DEPTH_BIT";
+    case VK_IMAGE_ASPECT_STENCIL_BIT:
+        return compact ? "STENCIL" : "ASPECT_STENCIL_BIT";
+    case VK_IMAGE_ASPECT_METADATA_BIT:
+        return compact ? "META" : "ASPECT_METADATA_BIT";
+    case VK_IMAGE_ASPECT_PLANE_0_BIT:
+        return compact ? "PLANE_0" : "ASPECT_PLANE_0_BIT";
+    case VK_IMAGE_ASPECT_PLANE_1_BIT:
+        return compact ? "PLANE_1" : "ASPECT_PLANE_1_BIT";
+    case VK_IMAGE_ASPECT_PLANE_2_BIT:
+        return compact ? "PLANE_2" : "ASPECT_PLANE_2_BIT";
+    default:
+        VK_NEVER_CALLED();
+        return "<unknown image aspect flag>";
+    }
+}
+
+// =====================================================================================================================
+void RenderPassLogger::LogImageAspectMask(
+    VkImageAspectFlags   flags,
+    bool                 compact)
+{
+    if (flags == 0)
+    {
+        Log("0");
+
+        return;
+    }
+
+    uint32_t count = 0;
+
+#define LogFlag(flag) \
+    if ((flags & flag) == flag) \
+    { \
+        if (count >= 1) \
+        { \
+            Log("|"); \
+        } \
+        Log("%s", ImageAspectFlagString(flag, compact)); \
+        flags &= ~(flag); \
+        count++; \
+    }
+
+    LogFlag(VK_IMAGE_ASPECT_COLOR_BIT);
+    LogFlag(VK_IMAGE_ASPECT_DEPTH_BIT);
+    LogFlag(VK_IMAGE_ASPECT_STENCIL_BIT);
+    LogFlag(VK_IMAGE_ASPECT_METADATA_BIT);
+    LogFlag(VK_IMAGE_ASPECT_PLANE_0_BIT);
+    LogFlag(VK_IMAGE_ASPECT_PLANE_1_BIT);
+    LogFlag(VK_IMAGE_ASPECT_PLANE_2_BIT);
+
+    if (flags != 0)
+    {
+        VK_NEVER_CALLED();
+
+        if (count > 0)
+        {
+            Log("|");
+        }
+        Log("0x%x", flags);
+    }
+
+#undef LogFlag
+
+}
+
+// =====================================================================================================================
 static const char* AccessFlagString(VkAccessFlagBits flag, bool compact)
 {
     switch (flag)
@@ -468,7 +545,7 @@ void RenderPassLogger::LogAccessMask(VkAccessFlags flags, bool compact)
 
 // =====================================================================================================================
 void RenderPassLogger::LogRenderPassCreateInfo(
-    const VkRenderPassCreateInfo& info)
+    const RenderPassCreateInfo& info)
 {
     Log("== Render Pass VkRenderPassCreateInfo:\n");
 
@@ -478,7 +555,7 @@ void RenderPassLogger::LogRenderPassCreateInfo(
 
     for (uint32_t i = 0; i < info.attachmentCount; ++i)
     {
-        const VkAttachmentDescription& desc = info.pAttachments[i];
+        const AttachmentDescription& desc = info.pAttachments[i];
 
         Log("info.pAttachments[%d] = {\n", i);
         Log("   .flags          = 0x%x\n", desc.flags);
@@ -497,11 +574,12 @@ void RenderPassLogger::LogRenderPassCreateInfo(
 
     for (uint32_t i = 0; i < info.subpassCount; ++i)
     {
-        const VkSubpassDescription& desc = info.pSubpasses[i];
+        const SubpassDescription& desc = info.pSubpasses[i];
 
         Log("info.pSubpasses[%d] = {\n", i);
         Log("   .flags                = 0x%x\n", desc.flags);
         Log("   .pipelineBindPoint    = 0x%x\n", desc.pipelineBindPoint);
+        Log("   .viewMask             = 0x%x\n", desc.viewMask);
         Log("   .inputAttachmentCount = %d\n", desc.inputAttachmentCount);
         if (desc.pInputAttachments != nullptr && desc.inputAttachmentCount < info.attachmentCount)
         {
@@ -525,9 +603,9 @@ void RenderPassLogger::LogRenderPassCreateInfo(
                 LogInfoAttachmentReference("pResolveAttachments", j, desc.pResolveAttachments[j]);
             }
         }
-        if (desc.pDepthStencilAttachment != nullptr)
+        if (desc.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED)
         {
-            LogInfoAttachmentReference("pDepthStencilAttachment", 0, *desc.pDepthStencilAttachment);
+            LogInfoAttachmentReference("depthStencilAttachment", 0, desc.depthStencilAttachment);
         }
         Log("   .preserveAttachmentCount = %d\n", desc.preserveAttachmentCount);
         for (uint32_t j = 0; j < desc.preserveAttachmentCount; ++j)
@@ -553,7 +631,7 @@ void RenderPassLogger::LogRenderPassCreateInfo(
 
     for (uint32_t i = 0; i < info.dependencyCount; ++i)
     {
-        const VkSubpassDependency& dep = info.pDependencies[i];
+        const SubpassDependency& dep = info.pDependencies[i];
 
         Log("info.pDependencies[%d] = {\n", i);
 
@@ -562,12 +640,31 @@ void RenderPassLogger::LogRenderPassCreateInfo(
         Log("}\n");
     }
 
+    Log("info.correlatedViewMaskCount = %d\n", info.correlatedViewMaskCount);
+    for (uint32_t j = 0; j < info.correlatedViewMaskCount; ++j)
+    {
+        if (j == 0)
+        {
+            Log("   .pCorrelatedViewMasks = { ");
+        }
+        Log("%d", info.pCorrelatedViewMasks[j]);
+        if (j == info.correlatedViewMaskCount - 1)
+        {
+            Log(" }\n");
+        }
+        else
+        {
+            Log(", ");
+        }
+    }
+    Log("}\n");
+
     LogEndSource();
 }
 
 // =====================================================================================================================
 void RenderPassLogger::LogSubpassDependency(
-    const VkSubpassDependency& dep,
+    const SubpassDependency&   dep,
     bool                       printSubpasses,
     bool                       label)
 {
@@ -625,6 +722,11 @@ void RenderPassLogger::LogSubpassDependency(
     {
         Log("   .dependencyFlags = 0x%x%s", dep.dependencyFlags, pNewLine);
     }
+
+    if (label == false || dep.viewOffset != 0)
+    {
+        Log("   .viewOffset = 0x%x%s", dep.viewOffset, pNewLine);
+    }
 }
 
 // =====================================================================================================================
@@ -659,7 +761,7 @@ void RenderPassLogger::LogExecuteInfo(
         "to set up state and perform any other implicit render pass operations.  Please note that this logging code "
         "exists separate to the true code run by the driver and is an approximation.\n\n");
 
-    for (uint32_t subpass = 0; subpass < m_pApiInfo->subpassCount; ++subpass)
+    for (uint32_t subpass = 0; subpass < m_pInfo->subpassCount; ++subpass)
     {
         if (subpass == 0)
         {
@@ -680,7 +782,7 @@ void RenderPassLogger::LogExecuteInfo(
 
     Log("=== vkCmdEndRenderPass():\n");
 
-    LogExecuteRPEndSubpass(m_pApiInfo->subpassCount - 1);
+    LogExecuteRPEndSubpass(m_pInfo->subpassCount - 1);
 
     const RPExecuteEndRenderPassInfo& end = pExecute->end;
 
@@ -846,7 +948,7 @@ void RenderPassLogger::LogExecuteRPSyncPoint(
         const auto& tr = syncPoint.pTransitions[i];
 
         const uint32_t attachment = tr.attachment;
-        const VkFormat format = m_pApiInfo->pAttachments[attachment].format;
+        const VkFormat format = m_pInfo->pAttachments[attachment].format;
 
         Log(    "%s.pTransitions[%d]:\n", pName, i);
         Log(    "    .attachment = ");  LogAttachment(attachment); Log("\n");

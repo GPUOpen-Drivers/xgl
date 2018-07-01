@@ -1834,6 +1834,8 @@ void SqttOverrideDispatchTable(
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirect);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndirectCountAMD);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirectCountAMD);
+    SQTT_OVERRIDE_ALIAS(vkCmdDrawIndirectCountKHR, vkCmdDrawIndirectCountAMD);
+    SQTT_OVERRIDE_ALIAS(vkCmdDrawIndexedIndirectCountKHR, vkCmdDrawIndexedIndirectCountAMD),
     SQTT_OVERRIDE_ENTRY(vkCmdDispatch);
     SQTT_OVERRIDE_ENTRY(vkCmdDispatchIndirect);
     SQTT_OVERRIDE_ENTRY(vkCmdCopyBuffer);

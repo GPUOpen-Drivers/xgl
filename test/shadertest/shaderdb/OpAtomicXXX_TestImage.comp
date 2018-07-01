@@ -1,0 +1,42 @@
+#version 450 core
+
+layout(set = 0, binding = 0, r32i)  uniform iimage2D iImg;
+layout(set = 0, binding = 1, r32ui) uniform uimage2D uImg;
+layout(set = 0, binding = 2, r32f)  uniform image2D  fImg;
+
+layout(set = 1, binding = 0) buffer BO
+{
+    int   m1;
+    uint  m2;
+    float m3;
+};
+
+void main()
+{
+    int  temp   = 0;
+    uint utemp  = 0;
+    float ftemp = 0.f;
+    temp += imageAtomicAdd(iImg, ivec2(7, 7), 9);
+    temp += imageAtomicMin(iImg, ivec2(7, 7), 9);
+    temp += imageAtomicMax(iImg, ivec2(7, 7), 9);
+    temp += imageAtomicAnd(iImg, ivec2(7, 7), 9);
+    temp += imageAtomicOr(iImg, ivec2(7, 7), 9);
+    temp += imageAtomicXor(iImg, ivec2(7, 7), 9);
+    temp += imageAtomicExchange(iImg, ivec2(7, 7), 9);
+    temp += imageAtomicCompSwap(iImg, ivec2(7, 7), 8, 9);
+
+    utemp += imageAtomicAdd(uImg, ivec2(7, 7), 9u);
+    utemp += imageAtomicMin(uImg, ivec2(7, 7), 9u);
+    utemp += imageAtomicMax(uImg, ivec2(7, 7), 9u);
+    utemp += imageAtomicAnd(uImg, ivec2(7, 7), 9u);
+    utemp += imageAtomicOr(uImg, ivec2(7, 7), 9u);
+    utemp += imageAtomicXor(uImg, ivec2(7, 7), 9u);
+    utemp += imageAtomicExchange(uImg, ivec2(7, 7), 9u);
+    utemp += imageAtomicCompSwap(uImg, ivec2(7, 7), 8u, 9u);
+
+    ftemp += imageAtomicExchange(fImg, ivec2(7, 7), 9.0f);
+
+    m1 = temp;
+    m2 = utemp;
+    m3 = ftemp;
+}

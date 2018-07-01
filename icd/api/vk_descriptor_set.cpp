@@ -44,25 +44,13 @@ namespace vk
 
 // =====================================================================================================================
 DescriptorSet::DescriptorSet(
-    DescriptorPool*    pPool,
-    uint32_t           heapIndex,
-    DescriptorSetFlags flags)
+    uint32_t           heapIndex)
     :
     m_pLayout(nullptr),
     m_pAllocHandle(nullptr),
-    m_pPool(pPool),
-    m_heapIndex(heapIndex),
-    m_flags(flags)
+    m_heapIndex(heapIndex)
 {
     memset(m_addresses, 0, sizeof(m_addresses));
-}
-
-// =====================================================================================================================
-VkResult DescriptorSet::Destroy(Device* pDevice)
-{
-    VkDescriptorSet set = DescriptorSet::HandleFromObject(this);
-
-    return m_pPool->FreeDescriptorSets(1, &set);
 }
 
 // =====================================================================================================================
@@ -312,16 +300,12 @@ void DescriptorSet::WriteBufferInfoDescriptors(
 
 // =====================================================================================================================
 // Write to descriptor sets using the provided descriptors for resources
-//
-// NOTE: descriptorStrideInBytes is used for VK_KHR_descriptor_update_template's sparsely packed imageInfo, bufferInfo,
-//       or bufferView array elements and defaults to 0, i.e. vkUpdateDescriptorSets behavior
-template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize>
+template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, bool fmaskBasedMsaaReadEnabled>
 void DescriptorSet::WriteDescriptorSets(
     const Device*                pDevice,
     uint32_t                     deviceIdx,
     uint32_t                     descriptorWriteCount,
-    const VkWriteDescriptorSet*  pDescriptorWrites,
-    size_t                       descriptorStrideInBytes)
+    const VkWriteDescriptorSet*  pDescriptorWrites)
 {
     for (uint32_t i = 0; i < descriptorWriteCount; ++i)
     {
@@ -354,8 +338,7 @@ void DescriptorSet::WriteDescriptorSets(
                     params.pImageInfo,
                     pDestAddr,
                     params.descriptorCount,
-                    destBinding.sta.dwArrayStride,
-                    descriptorStrideInBytes);
+                    destBinding.sta.dwArrayStride);
             }
             break;
 
@@ -369,8 +352,7 @@ void DescriptorSet::WriteDescriptorSets(
                     deviceIdx,
                     pDestAddr,
                     params.descriptorCount,
-                    destBinding.sta.dwArrayStride,
-                    descriptorStrideInBytes);
+                    destBinding.sta.dwArrayStride);
             }
             else
             {
@@ -379,19 +361,17 @@ void DescriptorSet::WriteDescriptorSets(
                     deviceIdx,
                     pDestAddr,
                     params.descriptorCount,
-                    destBinding.sta.dwArrayStride,
-                    descriptorStrideInBytes);
+                    destBinding.sta.dwArrayStride);
             }
 
-            if (pDestSet->FmaskBasedMsaaReadEnabled() && (destBinding.sta.dwSize > 0))
+            if (fmaskBasedMsaaReadEnabled && (destBinding.sta.dwSize > 0))
             {
                  WriteFmaskDescriptors<imageDescSize>(
                      params.pImageInfo,
                      deviceIdx,
                      pDestFmaskAddr,
                      params.descriptorCount,
-                     destBinding.sta.dwArrayStride,
-                     descriptorStrideInBytes);
+                     destBinding.sta.dwArrayStride);
             }
 
             break;
@@ -402,8 +382,7 @@ void DescriptorSet::WriteDescriptorSets(
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
-                destBinding.sta.dwArrayStride,
-                descriptorStrideInBytes);
+                destBinding.sta.dwArrayStride);
             break;
 
         case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
@@ -413,18 +392,16 @@ void DescriptorSet::WriteDescriptorSets(
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
-                destBinding.sta.dwArrayStride,
-                descriptorStrideInBytes);
+                destBinding.sta.dwArrayStride);
 
-            if (pDestSet->FmaskBasedMsaaReadEnabled() && (destBinding.sta.dwSize > 0))
+            if (fmaskBasedMsaaReadEnabled && (destBinding.sta.dwSize > 0))
             {
                 pDestSet->WriteFmaskDescriptors<imageDescSize>(
                     params.pImageInfo,
                     deviceIdx,
                     pDestFmaskAddr,
                     params.descriptorCount,
-                    destBinding.sta.dwArrayStride,
-                    descriptorStrideInBytes);
+                    destBinding.sta.dwArrayStride);
             }
             break;
 
@@ -434,8 +411,7 @@ void DescriptorSet::WriteDescriptorSets(
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
-                destBinding.sta.dwArrayStride,
-                descriptorStrideInBytes);
+                destBinding.sta.dwArrayStride);
             break;
 
         case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
@@ -444,8 +420,7 @@ void DescriptorSet::WriteDescriptorSets(
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
-                destBinding.sta.dwArrayStride,
-                descriptorStrideInBytes);
+                destBinding.sta.dwArrayStride);
             break;
 
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
@@ -455,8 +430,7 @@ void DescriptorSet::WriteDescriptorSets(
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
-                destBinding.sta.dwArrayStride,
-                descriptorStrideInBytes);
+                destBinding.sta.dwArrayStride);
             break;
 
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
@@ -466,8 +440,7 @@ void DescriptorSet::WriteDescriptorSets(
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
-                destBinding.sta.dwArrayStride,
-                descriptorStrideInBytes);
+                destBinding.sta.dwArrayStride);
             break;
 
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
@@ -483,8 +456,7 @@ void DescriptorSet::WriteDescriptorSets(
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
-                destBinding.dyn.dwArrayStride,
-                descriptorStrideInBytes);
+                destBinding.dyn.dwArrayStride);
             break;
 
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
@@ -500,8 +472,7 @@ void DescriptorSet::WriteDescriptorSets(
                 deviceIdx,
                 pDestAddr,
                 params.descriptorCount,
-                destBinding.dyn.dwArrayStride,
-                descriptorStrideInBytes);
+                destBinding.dyn.dwArrayStride);
             break;
 
         default:
@@ -513,7 +484,7 @@ void DescriptorSet::WriteDescriptorSets(
 
 // =====================================================================================================================
 // Copy from one descriptor set to another
-template <size_t imageDescSize>
+template <size_t imageDescSize, bool fmaskBasedMsaaReadEnabled>
 void DescriptorSet::CopyDescriptorSets(
     const Device*                pDevice,
     uint32_t                     deviceIdx,
@@ -594,7 +565,7 @@ void DescriptorSet::CopyDescriptorSets(
                 memcpy(pDestAddr, pSrcAddr, srcBinding.sta.dwArrayStride * sizeof(uint32_t) * count);
             }
 
-            if (pSrcSet->FmaskBasedMsaaReadEnabled() && srcBinding.sta.dwSize > 0)
+            if (fmaskBasedMsaaReadEnabled && srcBinding.sta.dwSize > 0)
             {
                 uint32_t* pSrcFmaskAddr = pSrcSet->FmaskCpuAddress(deviceIdx)
                                         + srcBinding.sta.dwOffset
@@ -614,7 +585,8 @@ void DescriptorSet::CopyDescriptorSets(
 }
 
 // =====================================================================================================================
-template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, uint32_t numPalDevices>
+template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, uint32_t numPalDevices,
+          bool fmaskBasedMsaaReadEnabled>
 VKAPI_ATTR void VKAPI_CALL DescriptorSet::UpdateDescriptorSets(
     VkDevice                                    device,
     uint32_t                                    descriptorWriteCount,
@@ -626,13 +598,14 @@ VKAPI_ATTR void VKAPI_CALL DescriptorSet::UpdateDescriptorSets(
 
     for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
     {
-        WriteDescriptorSets<imageDescSize, samplerDescSize, bufferDescSize>(
+        WriteDescriptorSets<imageDescSize, samplerDescSize, bufferDescSize, fmaskBasedMsaaReadEnabled>(
                             pDevice,
                             deviceIdx,
                             descriptorWriteCount,
                             pDescriptorWrites);
 
-        CopyDescriptorSets<imageDescSize>(pDevice,
+        CopyDescriptorSets<imageDescSize, fmaskBasedMsaaReadEnabled>(
+                           pDevice,
                            deviceIdx,
                            descriptorCopyCount,
                            pDescriptorCopies);
@@ -671,6 +644,25 @@ template <uint32_t numPalDevices>
 PFN_vkUpdateDescriptorSets DescriptorSet::GetUpdateDescriptorSetsFunc(
     const Device* pDevice)
 {
+    PFN_vkUpdateDescriptorSets pFunc = nullptr;
+
+    if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+    {
+        pFunc = GetUpdateDescriptorSetsFunc<numPalDevices, true>(pDevice);
+    }
+    else
+    {
+        pFunc = GetUpdateDescriptorSetsFunc<numPalDevices, false>(pDevice);
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices, bool fmaskBasedMsaaReadEnabled>
+PFN_vkUpdateDescriptorSets DescriptorSet::GetUpdateDescriptorSetsFunc(
+    const Device* pDevice)
+{
     const size_t imageDescSize      = pDevice->GetProperties().descriptorSizes.imageView;
     const size_t samplerDescSize    = pDevice->GetProperties().descriptorSizes.sampler;
     const size_t bufferDescSize     = pDevice->GetProperties().descriptorSizes.bufferView;
@@ -681,7 +673,7 @@ PFN_vkUpdateDescriptorSets DescriptorSet::GetUpdateDescriptorSetsFunc(
         (samplerDescSize == 16) &&
         (bufferDescSize == 16))
     {
-        pFunc = &UpdateDescriptorSets<32, 16, 16, numPalDevices>;
+        pFunc = &UpdateDescriptorSets<32, 16, 16, numPalDevices, fmaskBasedMsaaReadEnabled>;
     }
     else
     {

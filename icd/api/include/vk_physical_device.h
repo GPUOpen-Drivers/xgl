@@ -230,13 +230,13 @@ public:
         VkImageFormatProperties* pImageFormatProperties) const;
 
     void GetSparseImageFormatProperties(
-        VkFormat                        format,
-        VkImageType                     type,
-        VkSampleCountFlagBits           samples,
-        VkImageUsageFlags               usage,
-        VkImageTiling                   tiling,
-        uint32_t*                       pPropertyCount,
-        VkSparseImageFormatProperties*  pProperties) const;
+        VkFormat                                        format,
+        VkImageType                                     type,
+        VkSampleCountFlagBits                           samples,
+        VkImageUsageFlags                               usage,
+        VkImageTiling                                   tiling,
+        uint32_t*                                       pPropertyCount,
+        utils::ArrayView<VkSparseImageFormatProperties> properties) const;
 
     void GetExternalBufferProperties(
         const VkPhysicalDeviceExternalBufferInfo*   pExternalBufferInfo,
@@ -356,6 +356,13 @@ public:
     VK_INLINE uint32_t GetVrHighPrioritySubEngineIndex() const
     {
         return m_vrHighPrioritySubEngineIndex;
+    }
+
+    VK_INLINE uint32_t GetSubgroupSize() const
+    {
+        uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.wavefrontSize;
+
+        return subgroupSize;
     }
 
     VkResult GetDisplayProperties(

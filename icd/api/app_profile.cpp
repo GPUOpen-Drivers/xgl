@@ -36,6 +36,7 @@
 
 #include <cctype>
 #include <memory>
+#include <string.h>
 
 #include <unistd.h>
 #include <linux/limits.h>
@@ -66,8 +67,24 @@ enum AppProfilePatternType
 // is hashed and compared against the hash value.  If the values are equal, this entry matches.
 struct AppProfilePatternEntry
 {
+    constexpr AppProfilePatternEntry(const AppProfilePatternType type, const Util::MetroHash::Hash hash) :
+        type(type), hashed(true), hash(hash) { }
+
+    constexpr AppProfilePatternEntry(const AppProfilePatternType type, const char* text) :
+        type(type), hashed(false), text(text) { }
+
+    constexpr AppProfilePatternEntry() :
+        type(PatternNone), hashed(false), text("") { }
+
     AppProfilePatternType type;  // Type of pattern to match against
-    Util::MetroHash::Hash hash;  // Hash to compare against.
+    bool hashed; // Tag to determine if hash or text is used
+
+    // Hash or text to compare against.
+    union
+    {
+        Util::MetroHash::Hash hash;
+        const char* text;
+    };
 };
 
 // This is a pattern that maps to a profile.  It is a list of entries to compare against.  If all entries
@@ -78,106 +95,118 @@ struct AppProfilePattern
     AppProfilePatternEntry entries[16];
 };
 
-constexpr AppProfilePatternEntry AppEngineSource2 =
+constexpr AppProfilePatternEntry AppNameDoom =
 {
-    // EngineName = "source2"
+    PatternAppNameLower,
+    "doom"
+};
+
+constexpr AppProfilePatternEntry AppNameDoomVFR =
+{
+    PatternAppNameLower,
+    "doom_vfr"
+};
+
+constexpr AppProfilePatternEntry AppNameWolfensteinII =
+{
+    PatternAppNameLower,
+    "wolfenstein ii the new colossus"
+};
+
+constexpr AppProfilePatternEntry AppEngineIdTech =
+{
     PatternEngineNameLower,
-    {
-        0x7ab30c77,
-        0x3f603512,
-        0xbe34d271,
-        0xfc40cf20
-    }
+    "idtech"
 };
 
 constexpr AppProfilePatternEntry AppNameDota2 =
 {
     PatternAppNameLower,
-    {
-        0x80aaf27a,
-        0xe2d3cd31,
-        0x5fe27752,
-        0x7880fdC3
-    }
+    "dota"
 };
 
-constexpr AppProfilePatternEntry AppExeTalos =
+constexpr AppProfilePatternEntry AppEngineSource2 =
 {
-    PatternExeNameLower,
-    {
-        0x504fef42,
-        0xf0d60534,
-        0x33071fed,
-        0x39a48e4f
-    }
-};
-
-constexpr AppProfilePatternEntry AppEngineFeral3D =
-{
-    // EngineName = "Feral3D"
     PatternEngineNameLower,
-    {
-        0xe9c4f9dc,
-        0xfae7df93,
-        0xb3e6e510,
-        0x676f0316
-    }
+    "source2"
+};
+
+constexpr AppProfilePatternEntry AppNameTalosWin32Bit =
+{
+    PatternAppNameLower,
+    "talos"
+};
+
+constexpr AppProfilePatternEntry AppNameTalosWin64Bit =
+{
+    PatternAppNameLower,
+    "talos - 64bit"
+};
+
+constexpr AppProfilePatternEntry AppNameTalosLinux32Bit =
+{
+    PatternAppNameLower,
+    "talos - linux"
+};
+
+constexpr AppProfilePatternEntry AppNameTalosLinux64Bit =
+{
+    PatternAppNameLower,
+    "talos - linux - 64bit"
+};
+
+constexpr AppProfilePatternEntry AppNameSeriousSamFusionWin =
+{
+    PatternAppNameLower,
+    "serious sam fusion 2017 - 64bit"
+};
+
+constexpr AppProfilePatternEntry AppNameSeriousSamFusionLinux =
+{
+    PatternAppNameLower,
+    "serious sam fusion 2017 - linux - 64bit"
+};
+
+constexpr AppProfilePatternEntry AppEngineSedp =
+{
+    PatternEngineNameLower,
+    "sedp class"
 };
 
 constexpr AppProfilePatternEntry AppNameMadMax =
 {
     PatternAppNameLower,
-    {
-        0xf391f787,
-        0xeae60a98,
-        0xe4dbdcb1,
-        0x50a98283
-    }
+    "madmax"
 };
 
 constexpr AppProfilePatternEntry AppNameF1_2017 =
 {
     PatternAppNameLower,
-    {
-        0xba2f412d,
-        0x3e1ce9ac,
-        0x1cec693d,
-        0x6486d38f
-    }
+    "f12017"
 };
 
 constexpr AppProfilePatternEntry AppNameRiseOfTheTombra =
 {
     PatternAppNameLower,
-    {
-        0xc9910bfa,
-        0xea917b62,
-        0x68e46986,
-        0x46238b8b
-    }
+    "riseofthetombra"
 };
 
-constexpr AppProfilePatternEntry AppNameSeriousSamFusion =
+constexpr AppProfilePatternEntry AppEngineFeral3D =
+{
+    PatternEngineNameLower,
+    "feral3d"
+};
+
+constexpr AppProfilePatternEntry AppNameAshesOfTheSingularity =
 {
     PatternAppNameLower,
-    {
-        0xebeb9757,
-        0x684a5d11,
-        0x4e554320,
-        0x83a10d51
-    }
+    "ashes of the singularity: escalation"
 };
 
-constexpr AppProfilePatternEntry AppEngineSedp =
+constexpr AppProfilePatternEntry AppEngineNitrous =
 {
-    // EngineName = "sedp class"
     PatternEngineNameLower,
-    {
-        0x9cea05df,
-        0xe04c1e34,
-        0xe16c559f,
-        0xe3415737
-    }
+    "nitrous by oxide games"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -186,6 +215,41 @@ constexpr AppProfilePatternEntry PatternEnd = {};
 AppProfilePattern AppPatternTable[] =
 {
     {
+        AppProfile::Doom,
+        {
+            AppNameDoom,
+            AppEngineIdTech,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::DoomVFR,
+        {
+            AppNameDoomVFR,
+            AppEngineIdTech,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::WolfensteinII,
+        {
+            AppNameWolfensteinII,
+            AppEngineIdTech,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::IdTechEngine,
+        {
+            AppEngineIdTech,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::Dota2,
         {
             AppNameDota2,
@@ -193,10 +257,72 @@ AppProfilePattern AppPatternTable[] =
             PatternEnd
         }
     },
+
+    {
+        AppProfile::Source2Engine,
+        {
+            AppEngineSource2,
+            PatternEnd
+        }
+    },
+
     {
         AppProfile::Talos,
         {
-            AppExeTalos,
+            AppNameTalosWin64Bit,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Talos,
+        {
+            AppNameTalosWin32Bit,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Talos,
+        {
+            AppNameTalosLinux64Bit,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Talos,
+        {
+            AppNameTalosLinux32Bit,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::SeriousSamFusion,
+        {
+            AppNameSeriousSamFusionWin,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::SeriousSamFusion,
+        {
+            AppNameSeriousSamFusionLinux,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::SedpEngine,
+        {
             AppEngineSedp,
             PatternEnd
         }
@@ -230,10 +356,26 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
-        AppProfile::SeriousSamFusion,
+        AppProfile::Feral3DEngine,
         {
-            AppNameSeriousSamFusion,
-            AppEngineSedp,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::AshesOfTheSingularity,
+        {
+            AppNameAshesOfTheSingularity,
+            AppEngineNitrous,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::NitrousEngine,
+        {
+            AppEngineNitrous,
             PatternEnd
         }
     },
@@ -241,7 +383,6 @@ AppProfilePattern AppPatternTable[] =
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);
-static bool QueryCdnApplicationId(char* pAppIdString, size_t bufferLength);
 
 // =====================================================================================================================
 // Returns the lower-case version of a string.  The returned string must be freed by the caller using, specifically,
@@ -268,23 +409,6 @@ char* StringToLower(const char* pString, size_t strLength)
 }
 
 // =====================================================================================================================
-// Returns true if the given string's hash matches the given entry's hash.
-static bool StringHashMatches(
-    const char*                   pString,
-    size_t                        strSize,
-    const AppProfilePatternEntry& entry)
-{
-    // Generate hash from app
-    Util::MetroHash::Hash hash = {};
-    Util::MetroHash128::Hash(reinterpret_cast<const uint8_t*>(pString), strSize, hash.bytes);
-
-    return (hash.dwords[0] == entry.hash.dwords[0] &&
-            hash.dwords[1] == entry.hash.dwords[1] &&
-            hash.dwords[2] == entry.hash.dwords[2] &&
-            hash.dwords[3] == entry.hash.dwords[3]);
-}
-
-// =====================================================================================================================
 // Goes through all patterns and returns an application profile that matches the first matched pattern.  Patterns
 // compare things like VkApplicationInfo values or executable names, etc.  This profile may further be overridden
 // by private panel settings.
@@ -301,6 +425,7 @@ AppProfile ScanApplicationProfile(
 
     // Generate hashes for all of the tested pattern entries
     Util::MetroHash::Hash hashes[PatternCount] = {};
+    char* texts[PatternCount] = {};
     bool valid[PatternCount] = {};
 
     if (instanceInfo.pApplicationInfo != nullptr)
@@ -314,15 +439,14 @@ AppProfile ScanApplicationProfile(
                 reinterpret_cast<const uint8_t*>(pAppName), appNameLength, hashes[PatternAppName].bytes);
             valid[PatternAppName] = true;
 
-            char* pAppNameLower = StringToLower(pAppName, appNameLength);
+            char* pAppNameLower = StringToLower(pAppName, appNameLength + 1); // Add 1 for null terminator!
 
             if (pAppNameLower != nullptr)
             {
                 Util::MetroHash128::Hash(
                     reinterpret_cast<const uint8_t*>(pAppNameLower), appNameLength, hashes[PatternAppNameLower].bytes);
-                valid[PatternAppNameLower]  = true;
-
-                free(pAppNameLower);
+                texts[PatternAppNameLower] = pAppNameLower;
+                valid[PatternAppNameLower] = true;
             }
         }
 
@@ -335,15 +459,14 @@ AppProfile ScanApplicationProfile(
                 reinterpret_cast<const uint8_t*>(pEngineName), engineNameLength, hashes[PatternEngineName].bytes);
             valid[PatternEngineName] = true;
 
-            char* pEngineNameLower = StringToLower(pEngineName, engineNameLength);
+            char* pEngineNameLower = StringToLower(pEngineName, engineNameLength + 1);
 
             if (pEngineNameLower != nullptr)
             {
                 Util::MetroHash128::Hash(
                     reinterpret_cast<const uint8_t*>(pEngineNameLower), engineNameLength, hashes[PatternEngineNameLower].bytes);
-                valid[PatternEngineNameLower]  = true;
-
-                free(pEngineNameLower);
+                texts[PatternEngineNameLower] = pEngineNameLower;
+                valid[PatternEngineNameLower] = true;
             }
         }
     }
@@ -357,15 +480,14 @@ AppProfile ScanApplicationProfile(
             reinterpret_cast<const uint8_t*>(pExeName), exeNameLength, hashes[PatternExeName].bytes);
         valid[PatternExeName]  = true;
 
-        char* pExeNameLower = StringToLower(pExeName, exeNameLength);
+        char* pExeNameLower = StringToLower(pExeName, exeNameLength + 1); // Add 1 for null terminator!
 
         if (pExeNameLower != nullptr)
         {
             Util::MetroHash128::Hash(
                 reinterpret_cast<const uint8_t*>(pExeNameLower), exeNameLength, hashes[PatternExeNameLower].bytes);
-            valid[PatternExeNameLower]  = true;
-
-            free(pExeNameLower);
+            texts[PatternExeNameLower] = pExeNameLower;
+            valid[PatternExeNameLower] = true;
         }
 
         free(pExeName);
@@ -392,13 +514,16 @@ AppProfile ScanApplicationProfile(
         {
             const AppProfilePatternEntry& entry = pattern.entries[entryIdx];
 
-            // If there is a hash for this pattern type available and it matches the tested hash, then
+            // If there is a hash/text for this pattern type available and it matches the tested hash/text, then
             // keep going.  Otherwise, this pattern doesn't match.
             if ((valid[entry.type] == false) ||
-                (hashes[entry.type].dwords[0] != entry.hash.dwords[0]) ||
-                (hashes[entry.type].dwords[1] != entry.hash.dwords[1]) ||
-                (hashes[entry.type].dwords[2] != entry.hash.dwords[2]) ||
-                (hashes[entry.type].dwords[3] != entry.hash.dwords[3]))
+                (entry.hashed &&
+                 ((hashes[entry.type].dwords[0] != entry.hash.dwords[0]) ||
+                  (hashes[entry.type].dwords[1] != entry.hash.dwords[1]) ||
+                  (hashes[entry.type].dwords[2] != entry.hash.dwords[2]) ||
+                  (hashes[entry.type].dwords[3] != entry.hash.dwords[3]))) ||
+                ((!entry.hashed) &&
+                 (strcmp(texts[entry.type], entry.text) != 0)))
             {
                 patternMatches = false;
             }
@@ -407,6 +532,15 @@ AppProfile ScanApplicationProfile(
         if (patternMatches)
         {
             profile = pattern.profile;
+        }
+    }
+
+    // Clean up memory used for text strings
+    for (int i = 0; i < PatternCount; i++)
+    {
+        if (valid[i])
+        {
+            free(texts[i]);
         }
     }
 

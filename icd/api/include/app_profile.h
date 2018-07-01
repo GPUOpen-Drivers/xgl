@@ -55,12 +55,21 @@ namespace vk
 enum class AppProfile : uint32_t
 {
     Default = 0,           // Default profile
+    Doom,                  // Doom (2016) by id Software
+    DoomVFR,               // DoomVFR by id Software
+    WolfensteinII,         // Wolfenstein 2: The New Colossus by Machine Games
+    IdTechEngine,          // id Tech Engine (Default)
     Dota2,                 // Dota 2 by Valve Software
+    Source2Engine,         // Source 2 Engine (Default)
     Talos,                 // Talos Principle by Croteam
+    SeriousSamFusion,      // Serious Sam Fusion by Croteam
+    SedpEngine,            // Serious Engine (Default)
     MadMax,                // MadMax by Feral3D
     F1_2017,               // F1 2017 by Feral3D
     RiseOfTheTombra,       // RiseOfTheTombRaider by Feral3D
-    SeriousSamFusion,      // Serious Sam Fusion by Croteam
+    Feral3DEngine,         // Feral3D Engine (Default)
+    AshesOfTheSingularity, // Ashes Of The Singularity
+    NitrousEngine,         // Nitrous Engine by Oxide (Default)
 };
 
 // Struct describing dynamic CHILL settings

@@ -1,0 +1,14 @@
+#version 450 core
+
+layout(set = 0, binding = 0, rg16) uniform imageBuffer img2D;
+
+layout(set = 0, binding = 1) buffer BO
+{
+    vec4 mOut;
+};
+
+void main()
+{
+    vec4 temp1 = imageLoad(img2D, 3);
+    mOut = temp1;
+}

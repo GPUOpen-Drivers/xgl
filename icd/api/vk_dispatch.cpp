@@ -232,6 +232,10 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdDrawIndirect                               );
     INIT_DISPATCH_ENTRY(vkCmdDrawIndexedIndirectCountAMD                );
     INIT_DISPATCH_ENTRY(vkCmdDrawIndirectCountAMD                       );
+    INIT_DISPATCH_ALIAS(vkCmdDrawIndexedIndirectCountKHR                ,
+                        vkCmdDrawIndexedIndirectCountAMD                );
+    INIT_DISPATCH_ALIAS(vkCmdDrawIndirectCountKHR                       ,
+                        vkCmdDrawIndirectCountAMD                       );
     INIT_DISPATCH_ENTRY(vkCmdDispatch                                   );
     INIT_DISPATCH_ENTRY(vkCmdDispatchIndirect                           );
     INIT_DISPATCH_ENTRY(vkCmdEndRenderPass                              );
@@ -552,6 +556,16 @@ PFN_vkVoidFunction DispatchTable::GetEntryPoint(const char* pName) const
                 if (GetType() == Type::INSTANCE)
                 {
                     pFunc = m_table[epIdx];
+                }
+
+                // Allows instance-level functions to be queried with vkGetDeviceProcAddr for special cases.
+                if (m_pDevice != nullptr)
+                {
+                    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+                    if (settings.lenientInstanceFuncQuery)
+                    {
+                        pFunc = m_table[epIdx];
+                    }
                 }
                 break;
 

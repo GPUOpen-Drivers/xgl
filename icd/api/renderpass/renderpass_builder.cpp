@@ -50,6 +50,7 @@ RenderPassBuilder::RenderPassBuilder(
     utils::TempMemArena*     pArena,
     RenderPassLogger*        pLogger)
     :
+    m_pInfo(nullptr),
     m_pDevice(pDevice),
     m_pArena(pArena),
     m_attachmentCount(0),
@@ -125,7 +126,7 @@ Pal::Result RenderPassBuilder::BuildInitialState()
 
             for (uint32_t i = 0; i < m_subpassCount; ++i)
             {
-                VK_PLACEMENT_NEW(&m_pSubpasses[i]) SubpassState(&m_pApiInfo->pSubpasses[i], m_pArena);
+                VK_PLACEMENT_NEW(&m_pSubpasses[i]) SubpassState(&m_pInfo->pSubpasses[i], m_pArena);
             }
         }
         else
@@ -166,9 +167,9 @@ Pal::Result RenderPassBuilder::BuildInitialState()
 
         // Sort which subpasses have incoming/outgoing application-provided VkSubpassDependencies.  Spec rules dictate
         // that missing ones are implicitly added (although we don't currently do anything with these)
-        for (uint32_t depIdx = 0; depIdx < m_pApiInfo->dependencyCount; ++depIdx)
+        for (uint32_t depIdx = 0; depIdx < m_pInfo->dependencyCount; ++depIdx)
         {
-            const VkSubpassDependency& dep = m_pApiInfo->pDependencies[depIdx];
+            const SubpassDependency& dep = m_pInfo->pDependencies[depIdx];
 
             if ((dep.srcSubpass == VK_SUBPASS_EXTERNAL) && (dep.dstSubpass != VK_SUBPASS_EXTERNAL))
             {
@@ -200,7 +201,7 @@ uint32_t RenderPassBuilder::GetSubpassReferenceMask(
         return 0;
     }
 
-    const VkSubpassDescription& desc = *m_pSubpasses[subpass].pDesc;
+    const SubpassDescription& desc = *m_pSubpasses[subpass].pDesc;
 
     if ((desc.colorAttachmentCount > 0) && (desc.pColorAttachments != nullptr))
     {
@@ -219,7 +220,8 @@ uint32_t RenderPassBuilder::GetSubpassReferenceMask(
         }
     }
 
-    if ((desc.pDepthStencilAttachment != nullptr) && (desc.pDepthStencilAttachment->attachment == attachment))
+    if ((desc.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED) &&
+        (desc.depthStencilAttachment.attachment == attachment))
     {
         refMask |= AttachRefDepthStencil;
 
@@ -263,7 +265,7 @@ uint32_t RenderPassBuilder::GetSubpassReferenceMask(
 
 // =====================================================================================================================
 RenderPassBuilder::AttachmentState::AttachmentState(
-    const VkAttachmentDescription* pDesc)
+    const AttachmentDescription* pDesc)
     :
     pDesc(pDesc),
     firstUseSubpass(VK_SUBPASS_EXTERNAL),
@@ -280,13 +282,12 @@ RenderPassBuilder::AttachmentState::AttachmentState(
 // =====================================================================================================================
 // Builds a render pass execute state from its create info.
 VkResult RenderPassBuilder::Build(
-    const VkRenderPassCreateInfo& apiInfo,
-    const RenderPassCreateInfo&   info,
+    const RenderPassCreateInfo*   pRenderPassInfo,
     const VkAllocationCallbacks*  pAllocator,
     RenderPassExecuteInfo**       ppResult)
 {
-    m_pApiInfo = &apiInfo;
-    m_pInfo    = &info;
+    m_pInfo    = pRenderPassInfo;
+
     Pal::Result result = BuildInitialState();
 
     for (uint32_t subpass = 0; (subpass < m_subpassCount) && (result == Pal::Result::Success); ++subpass)
@@ -337,7 +338,7 @@ Pal::Result RenderPassBuilder::BuildSubpass(
 
     // Handle the various kinds of attachment references.  These will call a function to trigger automatic layout
     // transitions also.
-    const VkSubpassDescription& subpassDesc = *pSubpass->pDesc;
+    const SubpassDescription& subpassDesc = *pSubpass->pDesc;
 
     if (result == Pal::Result::Success)
     {
@@ -452,7 +453,7 @@ Pal::Result RenderPassBuilder::BuildLoadOps(
 // This function handles color attachment references within a subpass.  Called from BuildSubpass().
 Pal::Result RenderPassBuilder::BuildColorAttachmentReferences(
     uint32_t                    subpass,
-    const VkSubpassDescription& desc)
+    const SubpassDescription&   desc)
 {
     Pal::Result result     = Pal::Result::Success;
     SubpassState* pSubpass = &m_pSubpasses[subpass];
@@ -474,7 +475,7 @@ Pal::Result RenderPassBuilder::BuildColorAttachmentReferences(
             (target < desc.colorAttachmentCount) && (result == Pal::Result::Success);
             ++target)
         {
-            const VkAttachmentReference& reference = desc.pColorAttachments[target];
+            const AttachmentReference& reference = desc.pColorAttachments[target];
 
             RPImageLayout layout = { reference.layout, 0 };
 
@@ -503,7 +504,7 @@ Pal::Result RenderPassBuilder::BuildColorAttachmentReferences(
 // This function handles depth-stencil attachment references within a subpass.  Called from BuildSubpass().
 Pal::Result RenderPassBuilder::BuildDepthStencilAttachmentReferences(
     uint32_t                    subpass,
-    const VkSubpassDescription& desc)
+    const SubpassDescription&   desc)
 {
     Pal::Result result     = Pal::Result::Success;
     SubpassState* pSubpass = &m_pSubpasses[subpass];
@@ -512,9 +513,9 @@ Pal::Result RenderPassBuilder::BuildDepthStencilAttachmentReferences(
     pSubpass->bindTargets.depthStencil.layout.layout     = VK_IMAGE_LAYOUT_UNDEFINED;
     pSubpass->bindTargets.depthStencil.layout.extraUsage = 0;
 
-    if (desc.pDepthStencilAttachment != nullptr)
+    if (desc.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED)
     {
-        const VkAttachmentReference& reference = *desc.pDepthStencilAttachment;
+        const AttachmentReference& reference = desc.depthStencilAttachment;
 
         if (reference.attachment != VK_ATTACHMENT_UNUSED)
         {
@@ -535,7 +536,7 @@ Pal::Result RenderPassBuilder::BuildDepthStencilAttachmentReferences(
 // This function handles input attachment references within a subpass.  Called from BuildSubpass().
 Pal::Result RenderPassBuilder::BuildInputAttachmentReferences(
     uint32_t                    subpass,
-    const VkSubpassDescription& desc)
+    const SubpassDescription&   desc)
 {
     Pal::Result result = Pal::Result::Success;
     SubpassState* pSubpass = &m_pSubpasses[subpass];
@@ -549,7 +550,7 @@ Pal::Result RenderPassBuilder::BuildInputAttachmentReferences(
             (target < desc.inputAttachmentCount) && (result == Pal::Result::Success);
             ++target)
         {
-            const VkAttachmentReference& reference = desc.pInputAttachments[target];
+            const AttachmentReference& reference = desc.pInputAttachments[target];
 
             if (reference.attachment != VK_ATTACHMENT_UNUSED)
             {
@@ -572,7 +573,7 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
     Pal::Result result = Pal::Result::Success;
 
     SubpassState* pSubpass                  = &m_pSubpasses[subpass];
-    const VkSubpassDescription& subpassDesc = *pSubpass->pDesc;
+    const SubpassDescription& subpassDesc   = *pSubpass->pDesc;
 
     if (subpassDesc.pResolveAttachments != nullptr)
     {
@@ -580,8 +581,8 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
              (target < subpassDesc.colorAttachmentCount) && (result == Pal::Result::Success);
              ++target)
         {
-            const VkAttachmentReference& src = subpassDesc.pColorAttachments[target];
-            const VkAttachmentReference& dst = subpassDesc.pResolveAttachments[target];
+            const AttachmentReference& src = subpassDesc.pColorAttachments[target];
+            const AttachmentReference& dst = subpassDesc.pResolveAttachments[target];
 
             const RPImageLayout srcLayout = { src.layout, Pal::LayoutResolveSrc };
             const RPImageLayout dstLayout = { dst.layout, Pal::LayoutResolveDst };
@@ -818,9 +819,9 @@ Pal::Result RenderPassBuilder::BuildSubpassDependencies(
 {
     Pal::Result result = Pal::Result::Success;
 
-    for (uint32_t d = 0; (d < m_pApiInfo->dependencyCount) && (result == Pal::Result::Success); ++d)
+    for (uint32_t d = 0; (d < m_pInfo->dependencyCount) && (result == Pal::Result::Success); ++d)
     {
-        const VkSubpassDependency& dep = m_pApiInfo->pDependencies[d];
+        const SubpassDependency& dep = m_pInfo->pDependencies[d];
 
 #if PAL_ENABLE_PRINTS_ASSERTS
         // Invalid dependency index
@@ -835,6 +836,13 @@ Pal::Result RenderPassBuilder::BuildSubpassDependencies(
             VK_NEVER_CALLED();
         }
 #endif
+        // If srcSubpass == dstSubpass, Vulkan spec calls this the subpass self-dependency and it has a special meaning.
+        // It means that the app may call vkCmdPipelineBarriers inside the render pass (but they don't have to).
+        // The driver should only do the barrier when vkCmdPipelineBarriers is called, not when starting the render pass.
+        if (dep.srcSubpass == dep.dstSubpass)
+        {
+            continue;
+        }
 
         // Does this dependency terminate at the current subpass?  If so, we need to handle it
         if (dep.dstSubpass == dstSubpass)
@@ -1060,7 +1068,7 @@ size_t RenderPassBuilder::GetTotalExtraSize() const
 
 // =====================================================================================================================
 RenderPassBuilder::SubpassState::SubpassState(
-    const VkSubpassDescription* pDesc,
+    const SubpassDescription*   pDesc,
     utils::TempMemArena*        pArena)
     :
     pDesc(pDesc),

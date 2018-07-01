@@ -93,9 +93,10 @@ VkResult DescriptorPool::Create(
 // =====================================================================================================================
 DescriptorPool::DescriptorPool(
     Device* pDevice)
-:
-m_pDevice(pDevice)
+    :
+    m_pDevice(pDevice)
 {
+    memset(m_addresses, 0, sizeof(m_addresses));
 }
 
 // =====================================================================================================================
@@ -108,7 +109,7 @@ VkResult DescriptorPool::Init(
 {
     VkResult result = VK_SUCCESS;
 
-    result = m_setHeap.Init(pDevice, this, poolUsage, maxSets);
+    result = m_setHeap.Init(pDevice, poolUsage, maxSets);
 
     if (result == VK_SUCCESS)
     {
@@ -169,17 +170,6 @@ VkResult DescriptorPool::Init(
                     m_addresses[deviceIdx].fmaskGpuAddr = m_fmaskInternalMem.GpuVirtAddr(deviceIdx);
                     m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuAddr(deviceIdx));
                 }
-            }
-        }
-        else
-        {
-            for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
-            {
-                m_addresses[deviceIdx].staticGpuAddr = 0;
-                m_addresses[deviceIdx].staticCpuAddr = nullptr;
-
-                m_addresses[deviceIdx].fmaskGpuAddr = 0;
-                m_addresses[deviceIdx].fmaskCpuAddr = nullptr;
             }
         }
     }
@@ -912,7 +902,6 @@ m_pSetMemory(nullptr)
 // =====================================================================================================================
 VkResult DescriptorSetHeap::Init(
     Device*                         pDevice,
-    DescriptorPool*                 pPool,
     VkDescriptorPoolCreateFlags     poolUsage,
     uint32_t                        maxSets)
 {
@@ -955,11 +944,7 @@ VkResult DescriptorSetHeap::Init(
     {
         void* pSetMem = Util::VoidPtrInc(m_pSetMemory, index * setSize);
 
-        DescriptorSetFlags flags = {};
-        flags.fmaskBasedMsaaReadEnabled = pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead;
-        flags.robustBufferAccess        = pDevice->GetEnabledFeatures().robustBufferAccess ? 1 : 0;
-
-        VK_PLACEMENT_NEW (pSetMem) DescriptorSet(pPool, index, flags);
+        VK_PLACEMENT_NEW (pSetMem) DescriptorSet(index);
     }
 
     return VK_SUCCESS;

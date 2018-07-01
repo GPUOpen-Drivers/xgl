@@ -31,7 +31,6 @@
 #include "include/vk_object.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_queue.h"
-#include "include/peer_resource.h"
 
 #include "palGpuMemory.h"
 #include "palDevice.h"
@@ -210,7 +209,10 @@ VkResult Buffer::Create(
 
         // Create barrier policy for the buffer.
         BufferBarrierPolicy barrierPolicy(pDevice,
-                                          pCreateInfo->usage);
+                                          pCreateInfo->usage,
+                                          pCreateInfo->sharingMode,
+                                          pCreateInfo->queueFamilyIndexCount,
+                                          pCreateInfo->pQueueFamilyIndices);
 
         // Construct API buffer object.
         VK_PLACEMENT_NEW (pMemory) Buffer (pDevice,
@@ -287,32 +289,16 @@ VkResult Buffer::BindMemory(
         }
         else
         {
-            const bool multiInstance = m_pMemory->IsMultiInstance();
-
-            PeerMemory* pPeerMemory = m_pMemory->GetPeerMemory();
-
             for (uint32_t localDeviceIdx = 0; localDeviceIdx < m_pDevice->NumPalDevices(); localDeviceIdx++)
             {
-                const uint32_t sourceMemInst = (pDeviceIndices != nullptr) ?
-                                            pDeviceIndices[localDeviceIdx]
-                                            :
-                                            (multiInstance ? localDeviceIdx : DefaultMemoryInstanceIdx);
+                // it is VkMemory to handle the m_multiInstance
+                const uint32_t sourceMemInst = pDeviceIndices ? pDeviceIndices[localDeviceIdx] : localDeviceIdx;
+
+                m_pGpuMemory[localDeviceIdx]  = m_pMemory->PalMemory(localDeviceIdx, sourceMemInst);
 
                 m_multiInstanceIndices[localDeviceIdx] = static_cast<uint8_t>(sourceMemInst);
 
-                Pal::IGpuMemory* pPalMemory = nullptr;
-
-                if ((localDeviceIdx == sourceMemInst) || m_pMemory->IsMirroredAllocation(localDeviceIdx))
-                {
-                    pPalMemory = m_pMemory->PalMemory(localDeviceIdx);
-                }
-                else
-                {
-                    pPalMemory = pPeerMemory->AllocatePeerMemory(
-                        m_pDevice->PalDevice(localDeviceIdx), localDeviceIdx, sourceMemInst);
-                }
-                m_pGpuMemory[localDeviceIdx]  = pPalMemory;
-                m_gpuVirtAddr[localDeviceIdx] = pPalMemory->Desc().gpuVirtAddr + memOffset;
+                m_gpuVirtAddr[localDeviceIdx] = m_pGpuMemory[localDeviceIdx]->Desc().gpuVirtAddr + memOffset;
             }
         }
     }

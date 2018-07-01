@@ -1,0 +1,34 @@
+[TcsGlsl]
+#version 450 core
+
+layout(vertices = 3) out;
+
+void main (void)
+{
+    float tessLevelInner[2] = { 1.25, 1.5 };
+    gl_TessLevelInner = tessLevelInner;
+
+    float tessLevelOuter[4] = { 1.0, 2.0, 4.0, 8.0 };
+    gl_TessLevelOuter = tessLevelOuter;
+}
+
+[TcsInfo]
+entryPoint = main
+
+[TesGlsl]
+#version 450 core
+
+layout(triangles) in;
+
+layout(location = 0) out vec3 outColor;
+
+void main()
+{
+    outColor = vec3(0.0);
+}
+
+[TesInfo]
+entryPoint = main
+
+[GraphicsPipelineState]
+patchControlPoints = 3

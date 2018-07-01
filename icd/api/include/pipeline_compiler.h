@@ -193,6 +193,10 @@ public:
 
     void FreeGraphicsPipelineCreateInfo(GraphicsPipelineCreateInfo* pCreateInfo);
 
+    void ApplyDefaultShaderOptions(
+        Llpc::PipelineShaderOptions* pShaderOptions
+    ) const;
+
 private:
     VkResult CreateLlpcCompiler();
 
@@ -210,7 +214,6 @@ private:
 
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
     Llpc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by LLPC
-    Pal::GfxIpLevel    m_gfxIpLevel;           // Graphics IP Level, used by SCPC
 
     Llpc::ICompiler*    m_pLlpc;               // LLPC compiler object
 

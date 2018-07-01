@@ -1,0 +1,37 @@
+#version 450 core
+#extension GL_AMD_gpu_shader_int16 : enable
+
+layout(set = 0, binding = 0) uniform UBO {
+    int16_t  m1;
+    i16vec4  m2;
+    i16vec4  m3;
+    uint16_t m4;
+    u16vec4  m5;
+    u16vec4  m6;
+
+    i16vec4  m7;
+    u16vec4  m8;
+    int16_t  m9;
+    uint16_t m10;
+};
+
+layout(set = 1, binding = 0) buffer SSBO {
+    i16vec4 mOut1;
+    u16vec4 mOut2;
+    i16vec4 mOut3;
+    u16vec4 mOut4;
+    i16vec4 mOut5;
+    u16vec4 mOut6;
+};
+
+void main()
+{
+    mOut1 = min(m2, m1) + min(m2, m3);
+    mOut2 = min(m5, m3) + min(m5, m6);
+
+    mOut3 = max(m2, m1) + max(m2, m3);
+    mOut4 = max(m5, m3) + max(m5, m6);
+
+    mOut5 = clamp(m2, m3, m7) + clamp(m2, m1, m9);
+    mOut6 = clamp(m5, m6, m8) + clamp(m5, m4, m10);
+}

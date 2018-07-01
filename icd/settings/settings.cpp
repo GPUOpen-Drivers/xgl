@@ -31,6 +31,7 @@
 
 #include "include/vk_utils.h"
 #include "settings/settings.h"
+#include "palFile.h"
 
 using namespace Util;
 
@@ -53,7 +54,72 @@ static void OverrideProfiledSettings(
 {
     Pal::PalPublicSettings* pPalSettings = pPalDevice->GetPublicSettings();
 
+    if (appProfile == AppProfile::Doom)
+    {
+        pSettings->enableSpvPerfOptimal = true;
+
+        Pal::DeviceProperties info;
+        pPalDevice->GetProperties(&info);
+        if (Pal::GfxIpLevel::GfxIp9 == info.gfxLevel)
+        {
+            pPalSettings->tcCompatibleMetaData &= ~Pal::TexFetchMetaDataCapsNoAaColor;
+        }
+
+        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+        // can't do any better than returning a non-null function pointer for them.
+        pSettings->lenientInstanceFuncQuery = true;
+    }
+
+    if (appProfile == AppProfile::DoomVFR)
+    {
+        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+        // can't do any better than returning a non-null function pointer for them.
+        pSettings->lenientInstanceFuncQuery = true;
+    }
+
+    if (appProfile == AppProfile::WolfensteinII)
+    {
+        pSettings->enableSpvPerfOptimal = true;
+
+        Pal::DeviceProperties info;
+
+        pPalDevice->GetProperties(&info);
+
+        if (Pal::GfxIpLevel::GfxIp9 == info.gfxLevel)
+        {
+            // this setting can be set for pre-gfxIp9 too
+            pSettings->optColorTargetUsageDoesNotContainResolveLayout = true;
+        }
+
+        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+        // can't do any better than returning a non-null function pointer for them.
+        pSettings->lenientInstanceFuncQuery = true;
+    }
+
+    if (appProfile == AppProfile::IdTechEngine)
+    {
+        pSettings->enableSpvPerfOptimal = true;
+
+        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+        // can't do any better than returning a non-null function pointer for them.
+        pSettings->lenientInstanceFuncQuery = true;
+    }
+
     if (appProfile == AppProfile::Dota2)
+    {
+        pPalSettings->useGraphicsFastDepthStencilClear = true;
+        pPalSettings->hintDisableSmallSurfColorCompressionSize = 511;
+
+        pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;
+        pSettings->useAnisoThreshold = true;
+        pSettings->anisoThreshold    = 1.0f;
+
+        pSettings->disableDeviceOnlyMemoryTypeWithoutHeap = true;
+
+        pSettings->prefetchShaders = true;
+    }
+
+    if (appProfile == AppProfile::Source2Engine)
     {
         pPalSettings->useGraphicsFastDepthStencilClear = true;
         pPalSettings->hintDisableSmallSurfColorCompressionSize = 511;
@@ -82,6 +148,11 @@ static void OverrideProfiledSettings(
         pSettings->prefetchShaders = true;
     }
 
+    if (appProfile == AppProfile::SedpEngine)
+    {
+        pSettings->preciseAnisoMode = DisablePreciseAnisoAll;
+    }
+
     if (appProfile == AppProfile::MadMax)
     {
         pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;
@@ -94,6 +165,38 @@ static void OverrideProfiledSettings(
         pSettings->prefetchShaders = true;
     }
 
+}
+
+// =====================================================================================================================
+// Writes the enumeration index of the chosen app profile to a file, whose path is determined via the VkPanel. Nothing
+// will be written by default.
+// TODO: Dump changes made due to app profile
+static void DumpAppProfileChanges(
+    AppProfile         appProfile,
+    RuntimeSettings*   pSettings)
+{
+    if (pSettings->appProfileDumpDir[0] == '\0')
+    {
+        // Don't do anything if dump directory has not been set
+        return;
+    }
+
+    wchar_t executableName[PATH_MAX];
+    wchar_t executablePath[PATH_MAX];
+    utils::GetExecutableNameAndPath(executableName, executablePath);
+
+    char fileName[512] = {};
+    Util::Snprintf(&fileName[0], sizeof(fileName), "%s/vkAppProfile.txt", &pSettings->appProfileDumpDir[0]);
+
+    Util::File dumpFile;
+    if (dumpFile.Open(fileName, Util::FileAccessAppend) == Pal::Result::Success)
+    {
+        dumpFile.Printf("Executable: %S%S\nApp Profile Enumeration: %d\n\n",
+                        &executablePath[0],
+                        &executableName[0],
+                        static_cast<uint32_t>(appProfile));
+        dumpFile.Close();
+    }
 }
 
 // =====================================================================================================================
@@ -118,6 +221,8 @@ void ProcessSettings(
 
     // Read settings from the registry
     ReadSettings(pPalDevice, pSettings);
+
+    DumpAppProfileChanges(*pAppProfile, pSettings);
 
     if (pSettings->forceAppProfileEnable)
     {

@@ -1,0 +1,159 @@
+[VsGlsl]
+#version 450
+
+layout(location = 0) out vec2 uv;
+
+void main()
+{
+    switch (gl_VertexIndex)
+    {
+        case 0:
+        {
+            gl_Position = vec4(-1.0, 1.0, 0.0, 1.0);
+            uv = vec2(0.0, 1.0);
+            break;
+        }
+        case 1:
+        {
+            gl_Position = vec4(1.0, 1.0, 0.0, 1.0);
+            uv = vec2(1.0);
+            break;
+        }
+        case 2:
+        {
+            gl_Position = vec4(-1.0, -1.0, 0.0, 1.0);
+            uv = vec2(0.0);
+            break;
+        }
+        case 3:
+        {
+            gl_Position = vec4(1.0, -1.0, 0.0, 1.0);
+            uv = vec2(1.0, 0.0);
+            break;
+        }
+    }
+}
+
+[VsInfo]
+entryPoint = main
+userDataNode[0].type = IndirectUserDataVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].indirectUserDataCount = 0
+
+trapPresent = 0
+debugMode = 0
+enablePerformanceData = 0
+vgprLimit = 0
+sgprLimit = 0
+maxThreadGroupsPerComputeUnit = 0
+
+[FsGlsl]
+#version 450
+
+layout(location = 0) in vec2 uv;
+layout(location = 0, index=0) out vec4 color0;
+layout(location = 0, index=1) out vec4 color1;
+
+float repeat(float f, float count)
+{
+    return mod(count * f, 1.0);
+}
+
+float quantize(float f, float steps)
+{
+    return trunc(steps * f) / (steps - 1.0);
+}
+
+void main()
+{
+    float param = uv.x;
+    float param_1 = 3.0;
+    float param_2 = uv.y;
+    float param_3 = 3.0;
+    vec2 tile_uv = vec2(repeat(param, param_1), repeat(param_2, param_3));
+    float s = uv.x;
+    float param_4 = uv.y;
+    float param_5 = 3.0;
+    float c = quantize(param_4, param_5);
+    float param_6 = tile_uv.x;
+    float param_7 = 3.0;
+    float a = quantize(param_6, param_7);
+    if (s < 0.3333333432674407958984375)
+    {
+        color0 = vec4(c, 0.0, 0.0, a);
+    }
+    else
+    {
+        if (s < 0.666666686534881591796875)
+        {
+            color0 = vec4(0.0, c, 0.0, a);
+        }
+        else
+        {
+            color0 = vec4(0.0, 0.0, c, a);
+        }
+    }
+    s = tile_uv.y;
+    float param_8 = tile_uv.x;
+    float param_9 = 3.0;
+    float param_10 = repeat(param_8, param_9);
+    float param_11 = 3.0;
+    c = quantize(param_10, param_11);
+    float param_12 = tile_uv.y;
+    float param_13 = 3.0;
+    float param_14 = repeat(param_12, param_13);
+    float param_15 = 3.0;
+    a = quantize(param_14, param_15);
+    color1 = vec4(0.0);
+    if (s < 0.3333333432674407958984375)
+    {
+        color1 += vec4(c, 0.0, 0.0, a);
+    }
+    else
+    {
+        if (s < 0.666666686534881591796875)
+        {
+            color1 += vec4(0.0, c, 0.0, a);
+        }
+        else
+        {
+            color1 += vec4(0.0, 0.0, c, a);
+        }
+    }
+    if (gl_SampleID == 0)
+    {
+        color0 = vec4(0.5);
+        color1 = vec4(0.5);
+    }
+}
+
+[FsInfo]
+entryPoint = main
+trapPresent = 0
+debugMode = 0
+enablePerformanceData = 0
+vgprLimit = 0
+sgprLimit = 0
+maxThreadGroupsPerComputeUnit = 0
+
+[GraphicsPipelineState]
+topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
+patchControlPoints = 0
+deviceIndex = 0
+disableVertexReuse = 0
+switchWinding = 0
+enableMultiView = 0
+depthClipEnable = 1
+rasterizerDiscardEnable = 0
+perSampleShading = 1
+numSamples = 8
+samplePatternIdx = 48
+usrClipPlaneMask = 0
+includeDisassembly = 0
+alphaToCoverageEnable = 0
+dualSourceBlendEnable = 1
+colorBuffer[0].format = VK_FORMAT_R32G32B32A32_SFLOAT
+colorBuffer[0].channelWriteMask = 15
+colorBuffer[0].blendEnable = 1
+colorBuffer[0].blendSrcAlphaToColor = 1

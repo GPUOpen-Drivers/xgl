@@ -246,6 +246,8 @@ vkQueuePresentKHR                                   @device     @dext(KHR_swapch
 
 vkCmdDrawIndexedIndirectCountAMD                    @device     @dext(AMD_draw_indirect_count)
 vkCmdDrawIndirectCountAMD                           @device     @dext(AMD_draw_indirect_count)
+vkCmdDrawIndirectCountKHR                           @device     @dext(KHR_draw_indirect_count)
+vkCmdDrawIndexedIndirectCountKHR                    @device     @dext(KHR_draw_indirect_count)
 
 vkGetMultiDevicePropertiesAMDInternal               @device     @win32
 vkOpenWin32BufferAMDInternal                        @device     @win32
