@@ -35,9 +35,17 @@
 #pragma once
 
 #include "include/khronos/vulkan.h"
+#include "palScreen.h"
 
 namespace vk
 {
+// DisplayModeObject should be returned as a VkDisplayModeKHR, since in some cases we need to retrieve Pal::IScreen from
+// VkDisplayModeKHR.
+struct DisplayModeObject
+{
+    Pal::IScreen*   pScreen;
+    Pal::ScreenMode palScreenMode;
+};
 
 // Forward declare Vulkan classes used in this file.
 class DispatchableDisplay;

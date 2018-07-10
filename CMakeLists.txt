@@ -69,6 +69,8 @@ option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})
 
 option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" OFF)
 
+option(BUILD_XLIB_XRANDR_SUPPORT "Build Xlib with xrandr 1.6 support" OFF)
+
 # Option Overrides #################################################################################
 # These are options that override XGL subproject options.  As these overrides are managed and force
 # set by XGL, mark_as_advanced is used to hide them from the CMake GUI.

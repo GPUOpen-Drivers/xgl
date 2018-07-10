@@ -189,6 +189,10 @@ public:
         KHR_EXTERNAL_FENCE_CAPABILITIES,
         EXT_DEBUG_REPORT,
         KHR_DISPLAY,
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+        EXT_ACQUIRE_XLIB_DISPLAY,
+#endif
+        EXT_DIRECT_MODE_DISPLAY,
         Count
     };
 };

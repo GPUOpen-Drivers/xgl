@@ -395,8 +395,7 @@ VkResult Memory::CreateGpuMemory(
         if (pSystemMem != nullptr)
         {
             // Initialize dispatchable memory object and return to application
-            constexpr Pal::IGpuMemory** pDummyPalGpuMemory = nullptr;
-
+            Pal::IGpuMemory* pDummyPalGpuMemory[MaxPalDevices] = {};
             *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(pDevice, pDummyPalGpuMemory, createInfo, false);
         }
         else

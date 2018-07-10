@@ -415,6 +415,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
 
     pRequirementsInfo2 = pInfo;
     pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_BUFFER_MEMORY_REQUIREMENTS_INFO_2);
+    VK_ASSERT(pHeader != nullptr);
     if (pHeader != nullptr)
     {
         Buffer* pBuffer = Buffer::ObjectFromHandle(pRequirementsInfo2->buffer);

@@ -200,6 +200,13 @@ VkResult SwapChain::Create(
     swapChainCreateInfo.imageArraySize      = 1;
     swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
 
+    if (properties.displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
+    {
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
+        swapChainCreateInfo.pScreen = properties.displayableInfo.pScreen;
+#endif
+    }
+
     // Allocate system memory for objects
     const size_t    vkSwapChainSize  = sizeof(SwapChain);
     size_t          palSwapChainSize = pDevice->PalDevice()->GetSwapChainSize(swapChainCreateInfo, &palResult);

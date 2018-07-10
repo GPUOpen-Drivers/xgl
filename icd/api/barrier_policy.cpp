@@ -49,7 +49,8 @@ public:
             Pal::LayoutResolveSrc |
             Pal::LayoutResolveDst |
             Pal::LayoutPresentWindowed |
-            Pal::LayoutPresentFullscreen;
+            Pal::LayoutPresentFullscreen |
+            Pal::LayoutUncompressed;
 
         InitEntry(VK_IMAGE_LAYOUT_UNDEFINED,
                   Pal::LayoutUninitializedTarget);

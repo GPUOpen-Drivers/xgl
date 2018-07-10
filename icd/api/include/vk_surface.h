@@ -47,8 +47,9 @@ public:
         const VkAllocationCallbacks*    pAllocator,
         VkSurfaceKHR*                   pSurface);
 
-        VkIcdSurfaceXcb*   GetXcbSurface() { return &m_xcbSurface; }
-        VkIcdSurfaceXlib*  GetXlibSurface() { return &m_xlibSurface; }
+        VkIcdSurfaceXcb*     GetXcbSurface() { return &m_xcbSurface; }
+        VkIcdSurfaceXlib*    GetXlibSurface() { return &m_xlibSurface; }
+        VkIcdSurfaceDisplay* GetDisplaySurface() { return &m_displaySurface; }
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         VkIcdSurfaceWayland*  GetWaylandSurface() { return &m_waylandSurface; }
 #endif

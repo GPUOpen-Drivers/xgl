@@ -300,6 +300,11 @@ void DispatchTable::Init()
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceWaylandPresentationSupportKHR);
 #endif
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    INIT_DISPATCH_ENTRY(vkAcquireXlibDisplayEXT                         );
+    INIT_DISPATCH_ENTRY(vkGetRandROutputDisplayEXT                      );
+#endif
+    INIT_DISPATCH_ENTRY(vkReleaseDisplayEXT                             );
     INIT_DISPATCH_ENTRY(vkDestroyBuffer                                 );
     INIT_DISPATCH_ENTRY(vkDestroyBufferView                             );
     INIT_DISPATCH_ENTRY(vkFreeCommandBuffers                            );

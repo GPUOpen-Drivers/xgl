@@ -1887,6 +1887,11 @@ VK_INLINE Pal::WsiPlatform VkToPalWsiPlatform(VkIcdWsiPlatform Platform)
     case VK_ICD_WSI_PLATFORM_MIR:
         palPlatform = Pal::WsiPlatform::Mir;
         break;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
+    case VK_ICD_WSI_PLATFORM_DISPLAY:
+        palPlatform = Pal::WsiPlatform::DirectDisplay;
+        break;
+#endif
     case VK_ICD_WSI_PLATFORM_WIN32:
     default:
         palPlatform = Pal::WsiPlatform::Win32;

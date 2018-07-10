@@ -313,3 +313,7 @@ vkGetPhysicalDeviceQueueFamilyProperties2KHR        @instance   @iext(KHR_get_ph
 vkGetPhysicalDeviceMemoryProperties2KHR             @instance   @iext(KHR_get_physical_device_properties2)
 vkGetPhysicalDeviceSparseImageFormatProperties2KHR  @instance   @iext(KHR_get_physical_device_properties2)
 
+vkReleaseDisplayEXT                                 @instance   @iext(EXT_direct_mode_display)
+
+vkAcquireXlibDisplayEXT                             @instance   @iext(EXT_acquire_xlib_display)
+vkGetRandROutputDisplayEXT                          @instance   @iext(EXT_acquire_xlib_display)

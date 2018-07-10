@@ -73,6 +73,8 @@ struct DisplayableSurfaceInfo
     Pal::OsDisplayHandle displayHandle;
     Pal::OsWindowHandle  windowHandle;
     Pal::WsiPlatform     palPlatform;
+    VkExtent2D           surfaceExtent;
+    Pal::IScreen*        pScreen;
 };
 
 // =====================================================================================================================
@@ -272,7 +274,8 @@ public:
         VkMultisamplePropertiesEXT*                 pMultisampleProperties);
 
     bool QueueSupportsPresents(
-        uint32_t queueFamilyIndex) const;
+        uint32_t         queueFamilyIndex,
+        VkIcdWsiPlatform platform) const;
 
     template< typename T >
     VkResult GetSurfaceCapabilities(
@@ -398,6 +401,18 @@ public:
         const char*                 pLayerName,
         uint32_t*                   pPropertyCount,
         VkExtensionProperties*      pProperties) const;
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    VkResult AcquireXlibDisplay(
+        Display*        dpy,
+        VkDisplayKHR    display);
+
+    VkResult GetRandROutputDisplay(
+        Display*        dpy,
+        uint32_t        randrOutput,
+        VkDisplayKHR*   pDisplay);
+#endif
+
+    VkResult ReleaseDisplay(VkDisplayKHR display);
 
     static DeviceExtensions::Supported GetAvailableExtensions(
         const Instance*       pInstance,
@@ -662,6 +677,23 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
     uint32_t                                    queueFamilyIndex,
     struct wl_display*                          display);
 #endif
+
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+VKAPI_ATTR VkResult VKAPI_CALL vkAcquireXlibDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    Display*                                    dpy,
+    VkDisplayKHR                                display);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetRandROutputDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    Display*                                    dpy,
+    RROutput                                    rrOutput,
+    VkDisplayKHR*                               pDisplay);
+#endif
+
+VKAPI_ATTR VkResult VKAPI_CALL vkReleaseDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(
     VkPhysicalDevice                            physicalDevice,
