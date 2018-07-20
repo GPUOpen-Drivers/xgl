@@ -64,7 +64,6 @@ struct VbBindingInfo;
 enum PipelineCacheType : uint32_t
 {
     PipelineCacheTypeLlpc,  // Use shader cache provided by LLPC
-
 };
 
 // Unified shader cache interface

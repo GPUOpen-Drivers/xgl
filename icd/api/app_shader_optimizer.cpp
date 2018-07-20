@@ -112,6 +112,11 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pOptions->trapPresent = true;
                 }
 
+                if (shaderCreate.apply.allowReZ)
+                {
+                    options.pOptions->allowReZ = true;
+                }
+
             }
 
         }
@@ -265,6 +270,13 @@ void ShaderOptimizer::ApplyProfileToComputePipelineCreateInfo(
             ApplyProfileToDynamicComputeShaderInfo(
                 profileEntry.action.shaders[ShaderStageCompute],
                 pDynamicComputeShaderInfo);
+
+#if PAL_ENABLE_PRINTS_ASSERTS
+            if (m_settings.pipelineProfileDbgPrintProfileMatch)
+            {
+                PrintProfileEntryMatch(profile, entry, pipelineKey);
+            }
+#endif
         }
     }
 }
@@ -322,8 +334,9 @@ bool ShaderOptimizer::ProfilePatternMatchesPipeline(
 // =====================================================================================================================
 void ShaderOptimizer::BuildAppProfile()
 {
-    const AppProfile appProfile      = m_pDevice->GetAppProfile();
-    const Pal::GfxIpLevel gfxIpLevel = m_pDevice->VkPhysicalDevice()->PalProperties().gfxLevel;
+    const AppProfile appProfile          = m_pDevice->GetAppProfile();
+    const Pal::GfxIpLevel gfxIpLevel     = m_pDevice->VkPhysicalDevice()->PalProperties().gfxLevel;
+    const Pal::AsicRevision asicRevision = m_pDevice->VkPhysicalDevice()->PalProperties().revision;
 
     // TODO: These need to be auto-generated from source JSON but for now we write profile programmatically
     memset(&m_appProfile, 0, sizeof(m_appProfile));
@@ -333,7 +346,6 @@ void ShaderOptimizer::BuildAppProfile()
     {
         return;
     }
-
     else if (appProfile == AppProfile::Doom)
     {
         if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
@@ -402,6 +414,61 @@ void ShaderOptimizer::BuildAppProfile()
             m_appProfile.entries[2].action.shaders[ShaderStageCompute].shaderCreate.apply.optStrategyFlags = 1;
             m_appProfile.entries[2].action.shaders[ShaderStageCompute].shaderCreate.apply.minVgprOptions = 1;
 
+        }
+    }
+    else if (appProfile == AppProfile::Dota2)
+    {
+        if ((asicRevision >= Pal::AsicRevision::Polaris10) && (asicRevision <= Pal::AsicRevision::Polaris12))
+        {
+            m_appProfile.entryCount = 8;
+
+            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xdd6c573c46e6adf8;
+            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x751207727c904749;
+            m_appProfile.entries[0].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x71093bf7c6e98da8;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xfbc956d87a6d6631;
+            m_appProfile.entries[1].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+
+            m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xedd89880de2091f9;
+            m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x506d0ac3995d2f1b;
+            m_appProfile.entries[2].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+
+            m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xbc583b30527e9f1d;
+            m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x1ef8276d42a14220;
+            m_appProfile.entries[3].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+
+            m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x012ddab000f80610;
+            m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x3a65a6325756203d;
+            m_appProfile.entries[4].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+
+            m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x78095b5acf62f4d5;
+            m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x2c1afc1c6f669e33;
+            m_appProfile.entries[5].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+
+            m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x22803b077988ec36;
+            m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x7ba50586c34e1662;
+            m_appProfile.entries[6].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+
+            m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x313dab8ff9408da0;
+            m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xbb11905194a55485;
+            m_appProfile.entries[7].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
         }
     }
 }

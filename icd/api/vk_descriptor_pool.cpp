@@ -50,10 +50,9 @@ using namespace Pal;
 
 // =====================================================================================================================
 // Creates a descriptor region
+template <uint32_t numPalDevices>
 VkResult DescriptorPool::Create(
     Device*                                  pDevice,
-    VkDescriptorPoolCreateFlags              usage,
-    uint32_t                                 maxSets,
     const VkDescriptorPoolCreateInfo*        pCreateInfo,
     const VkAllocationCallbacks*             pAllocator,
     VkDescriptorPool*                        pDescriptorPool)
@@ -76,7 +75,7 @@ VkResult DescriptorPool::Create(
 
     VkDescriptorPool handle = DescriptorPool::HandleFromVoidPointer(pSysMem);
 
-    VkResult result = DescriptorPool::ObjectFromHandle(handle)->Init(pDevice, usage, maxSets, pCreateInfo);
+    VkResult result = DescriptorPool::ObjectFromHandle(handle)->Init<numPalDevices>(pDevice, pCreateInfo);
 
     if (result == VK_SUCCESS)
     {
@@ -101,15 +100,17 @@ DescriptorPool::DescriptorPool(
 
 // =====================================================================================================================
 // Initializes a DescriptorPool.
+template <uint32_t numPalDevices>
 VkResult DescriptorPool::Init(
     Device*                                pDevice,
-    VkDescriptorPoolCreateFlags            poolUsage,
-    uint32_t                               maxSets,
     const VkDescriptorPoolCreateInfo*      pCreateInfo)
 {
+    VkDescriptorPoolCreateFlags poolUsage   = pCreateInfo->flags;
+    uint32_t                    maxSets     = pCreateInfo->maxSets;
+
     VkResult result = VK_SUCCESS;
 
-    result = m_setHeap.Init(pDevice, poolUsage, maxSets);
+    result = m_setHeap.Init<numPalDevices>(pDevice, poolUsage, maxSets);
 
     if (result == VK_SUCCESS)
     {
@@ -180,9 +181,10 @@ VkResult DescriptorPool::Init(
 // =====================================================================================================================
 // Resets the entire descriptor pool.  All storage becomes free for allocation and all previously allocated descriptor
 // sets become invalid.
+template <uint32_t numPalDevices>
 VkResult DescriptorPool::Reset()
 {
-    m_setHeap.Reset();
+    m_setHeap.Reset<numPalDevices>();
     m_gpuMemHeap.Reset();
 
     return VK_SUCCESS;
@@ -221,6 +223,7 @@ VkResult DescriptorPool::Destroy(
 
 // =====================================================================================================================
 // Allocate descriptor sets from a descriptor set region.
+template <uint32_t numPalDevices>
 VkResult DescriptorPool::AllocDescriptorSets(
     const VkDescriptorSetAllocateInfo* pAllocateInfo,
     VkDescriptorSet*                   pDescriptorSets)
@@ -235,7 +238,7 @@ VkResult DescriptorPool::AllocDescriptorSets(
 
     while ((result == VK_SUCCESS) && (allocCount < count))
     {
-        if (m_setHeap.AllocSetState(&pDescriptorSets[allocCount]))
+        if (m_setHeap.AllocSetState<numPalDevices>(&pDescriptorSets[allocCount]))
         {
             // Try to allocate GPU memory for the descriptor set
             DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pSetLayouts[allocCount]);
@@ -267,12 +270,11 @@ VkResult DescriptorPool::AllocDescriptorSets(
             {
                 // Allocation succeeded: Mark this
                 // Reallocate this descriptor set to use the allocated GPU range and layout
-                DescriptorSet* pSet = DescriptorSet::StateFromHandle(pDescriptorSets[allocCount]);
+                DescriptorSet<numPalDevices>* pSet = DescriptorSet<numPalDevices>::StateFromHandle(pDescriptorSets[allocCount]);
 
                 pSet->Reassign(pLayout,
                                setGpuMemOffset,
                                m_addresses,
-                               m_pDevice->NumPalDevices(),
                                pSetAllocHandle);
             }
             else
@@ -296,11 +298,12 @@ VkResult DescriptorPool::AllocDescriptorSets(
             // For any descriptor set that we have allocated, release its state set and any associated GPU memory
             if (setIdx < allocCount)
             {
-                DescriptorSet* pSet = DescriptorSet::StateFromHandle(pDescriptorSets[setIdx]);
+                DescriptorSet<numPalDevices>* pSet =
+                    DescriptorSet<numPalDevices>::StateFromHandle(pDescriptorSets[setIdx]);
 
                 m_gpuMemHeap.FreeSetGpuMem(pSet->AllocHandle());
 
-                m_setHeap.FreeSetState(pDescriptorSets[setIdx]);
+                m_setHeap.FreeSetState<numPalDevices>(pDescriptorSets[setIdx]);
             }
 
             // No partial failures allowed for creating multiple descriptor sets. Update all to VK_NULL_HANDLE.
@@ -313,6 +316,7 @@ VkResult DescriptorPool::AllocDescriptorSets(
 
 // =====================================================================================================================
 // Frees an individual descriptor set after it has been destroyed.
+template <uint32_t numPalDevices>
 VkResult DescriptorPool::FreeDescriptorSets(
     uint32_t                         count,
     const VkDescriptorSet*           pDescriptorSets)
@@ -325,24 +329,14 @@ VkResult DescriptorPool::FreeDescriptorSets(
         }
 
         // Free this set's GPU memory
-        DescriptorSet* pSet  = DescriptorSet::StateFromHandle(pDescriptorSets[i]);
+        DescriptorSet<numPalDevices>* pSet  = DescriptorSet<numPalDevices>::StateFromHandle(pDescriptorSets[i]);
         m_gpuMemHeap.FreeSetGpuMem(pSet->AllocHandle());
 
         // Free this set's state
-        m_setHeap.FreeSetState(pDescriptorSets[i]);
+        m_setHeap.FreeSetState<numPalDevices>(pDescriptorSets[i]);
     }
 
     return VK_SUCCESS;
-}
-
-// =====================================================================================================================
-// Maps a descriptor set's memory region and returns a pointer to it
-void* DescriptorPool::GetDescriptorSetMappedAddress(
-    uint32_t       deviceIdx,
-    Pal::gpusize   gpuMemOffset,
-    DescriptorSet* pSet)
-{
-    return static_cast<void*>(static_cast<uint8*>(m_gpuMemHeap.CpuAddr(deviceIdx)) + gpuMemOffset);
 }
 
 // =====================================================================================================================
@@ -866,29 +860,6 @@ void DescriptorGpuMemHeap::Reset()
 }
 
 // =====================================================================================================================
-// Maps the subset of memory belonging to this allocation.
-void* DescriptorGpuMemHeap::GetDescriptorSetMappedAddress(
-    uint32_t     deviceIdx,
-    void*        pSetAllocHandle,
-    Pal::gpusize setGpuOffset)
-{
-    void* pCpuAddr = nullptr;
-
-    if (m_pCpuAddr[deviceIdx] != nullptr)
-    {
-        VK_ASSERT((setGpuOffset >= m_gpuMemOffsetRangeStart) && (setGpuOffset < m_gpuMemOffsetRangeEnd));
-
-        pCpuAddr = Util::VoidPtrInc(m_pCpuAddr[deviceIdx], static_cast<intptr_t>(setGpuOffset));
-    }
-    else
-    {
-        VK_ASSERT(m_gpuMemSize == 0);
-    }
-
-    return pCpuAddr;
-}
-
-// =====================================================================================================================
 DescriptorSetHeap::DescriptorSetHeap() :
 m_nextFreeHandle(0),
 m_maxSets(0),
@@ -900,6 +871,7 @@ m_pSetMemory(nullptr)
 }
 
 // =====================================================================================================================
+template <uint32_t numPalDevices>
 VkResult DescriptorSetHeap::Init(
     Device*                         pDevice,
     VkDescriptorPoolCreateFlags     poolUsage,
@@ -911,7 +883,7 @@ VkResult DescriptorSetHeap::Init(
     m_maxSets = maxSets;
 
     // Allocate memory for all sets
-    size_t setSize = SetSize();
+    size_t setSize = SetSize<numPalDevices>();
 
     bool oneShot = (poolUsage & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT) == 0;
 
@@ -944,7 +916,7 @@ VkResult DescriptorSetHeap::Init(
     {
         void* pSetMem = Util::VoidPtrInc(m_pSetMemory, index * setSize);
 
-        VK_PLACEMENT_NEW (pSetMem) DescriptorSet(index);
+        VK_PLACEMENT_NEW (pSetMem) DescriptorSet<numPalDevices>(index);
     }
 
     return VK_SUCCESS;
@@ -961,23 +933,25 @@ void DescriptorSetHeap::Destroy(
 
 // =====================================================================================================================
 // Compute a descriptor set handle from an index in the heap
+template <uint32_t numPalDevices>
 VkDescriptorSet DescriptorSetHeap::DescriptorSetHandleFromIndex(
     uint32_t idx) const
 {
-    void* pMem = Util::VoidPtrInc(m_pSetMemory, (SetSize() * idx));
+    void* pMem = Util::VoidPtrInc(m_pSetMemory, (SetSize<numPalDevices>() * idx));
 
-    return DescriptorSet::HandleFromVoidPointer(pMem);
+    return DescriptorSet<numPalDevices>::HandleFromVoidPointer(pMem);
 }
 
 // =====================================================================================================================
 // Allocates a new VkDescriptorSet instance and returns a handle to it.
+template <uint32_t numPalDevices>
 bool DescriptorSetHeap::AllocSetState(
     VkDescriptorSet* pSet)
 {
     // First try to allocate through free range start index since it is by far fastest
     if (m_nextFreeHandle < m_maxSets)
     {
-        *pSet = DescriptorSetHandleFromIndex(m_nextFreeHandle++);
+        *pSet = DescriptorSetHandleFromIndex<numPalDevices>(m_nextFreeHandle++);
 
         return true;
     }
@@ -987,7 +961,7 @@ bool DescriptorSetHeap::AllocSetState(
     {
         --m_freeIndexStackCount;
 
-        *pSet = DescriptorSetHandleFromIndex(m_pFreeIndexStack[m_freeIndexStackCount]);
+        *pSet = DescriptorSetHandleFromIndex<numPalDevices>(m_pFreeIndexStack[m_freeIndexStackCount]);
 
         return true;
     }
@@ -998,13 +972,14 @@ bool DescriptorSetHeap::AllocSetState(
 
 // =====================================================================================================================
 // Frees a Vulkan descriptor set instance
+template <uint32_t numPalDevices>
 void DescriptorSetHeap::FreeSetState(
     VkDescriptorSet set)
 {
     // Only care if we have created space for a free index stack
     if (m_pFreeIndexStack != nullptr)
     {
-        DescriptorSet* pSet = DescriptorSet::StateFromHandle(set);
+        DescriptorSet<numPalDevices>* pSet = DescriptorSet<numPalDevices>::StateFromHandle(set);
 
         // We can compute this, but a divide might be a bad idea.
         uint32_t heapIndex = pSet->HeapIndex();
@@ -1022,6 +997,7 @@ void DescriptorSetHeap::FreeSetState(
 
 // =====================================================================================================================
 // Frees all descriptor set instances.
+template <uint32_t numPalDevices>
 void DescriptorSetHeap::Reset()
 {
     // Reset the next free index to the start of all handles
@@ -1032,29 +1008,201 @@ void DescriptorSetHeap::Reset()
 
 #if DEBUG
     // Clear the descriptor set states for debugging purposes
-    size_t setSize = SetSize();
+    size_t setSize = SetSize<numPalDevices>();
 
     for (uint32_t index = 0; index < m_maxSets; ++index)
     {
         VkDescriptorSet setHandle =
-            DescriptorSet::HandleFromVoidPointer(Util::VoidPtrInc(m_pSetMemory, index * setSize));
+            DescriptorSet<numPalDevices>::HandleFromVoidPointer(Util::VoidPtrInc(m_pSetMemory, index * setSize));
 
-        DescriptorSet::ObjectFromHandle(setHandle)->Reset();
+        DescriptorSet<numPalDevices>::ObjectFromHandle(setHandle)->Reset();
     }
 #endif
 }
 
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+VKAPI_ATTR VkResult VKAPI_CALL DescriptorPool::CreateDescriptorPool(
+    VkDevice                                    device,
+    const VkDescriptorPoolCreateInfo*           pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDescriptorPool*                           pDescriptorPool)
+{
+    Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
+    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+    return DescriptorPool::Create<numPalDevices>(pDevice, pCreateInfo, pAllocCB, pDescriptorPool);
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+VKAPI_ATTR VkResult VKAPI_CALL DescriptorPool::FreeDescriptorSets(
+    VkDevice                                    device,
+    VkDescriptorPool                            descriptorPool,
+    uint32_t                                    descriptorSetCount,
+    const VkDescriptorSet*                      pDescriptorSets)
+{
+    return DescriptorPool::ObjectFromHandle(descriptorPool)->FreeDescriptorSets<numPalDevices>(
+        descriptorSetCount,
+        pDescriptorSets);
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+VKAPI_ATTR VkResult VKAPI_CALL DescriptorPool::ResetDescriptorPool(
+    VkDevice                                    device,
+    VkDescriptorPool                            descriptorPool,
+    VkDescriptorPoolResetFlags                  flags)
+{
+    return DescriptorPool::ObjectFromHandle(descriptorPool)->Reset<numPalDevices>();
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+VKAPI_ATTR VkResult VKAPI_CALL DescriptorPool::AllocateDescriptorSets(
+    VkDevice                                    device,
+    const VkDescriptorSetAllocateInfo*          pAllocateInfo,
+    VkDescriptorSet*                            pDescriptorSets)
+{
+    return DescriptorPool::ObjectFromHandle(pAllocateInfo->descriptorPool)->AllocDescriptorSets<numPalDevices>(
+        pAllocateInfo,
+        pDescriptorSets);
+}
+
+// =====================================================================================================================
+ PFN_vkCreateDescriptorPool DescriptorPool::GetCreateDescriptorPoolFunc(
+    Device* pDevice)
+{
+    PFN_vkCreateDescriptorPool pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+    case 1:
+        pFunc = CreateDescriptorPool<1>;
+        break;
+    case 2:
+        pFunc = CreateDescriptorPool<2>;
+        break;
+    case 3:
+        pFunc = CreateDescriptorPool<3>;
+        break;
+    case 4:
+        pFunc = CreateDescriptorPool<4>;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+PFN_vkFreeDescriptorSets DescriptorPool::GetFreeDescriptorSetsFunc(
+    Device* pDevice)
+{
+    PFN_vkFreeDescriptorSets pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+    case 1:
+        pFunc = FreeDescriptorSets<1>;
+        break;
+    case 2:
+        pFunc = FreeDescriptorSets<2>;
+        break;
+    case 3:
+        pFunc = FreeDescriptorSets<3>;
+        break;
+    case 4:
+        pFunc = FreeDescriptorSets<4>;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+PFN_vkResetDescriptorPool DescriptorPool::GetResetDescriptorPoolFunc(
+    Device* pDevice)
+{
+    PFN_vkResetDescriptorPool pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+    case 1:
+        pFunc = ResetDescriptorPool<1>;
+        break;
+    case 2:
+        pFunc = ResetDescriptorPool<2>;
+        break;
+    case 3:
+        pFunc = ResetDescriptorPool<3>;
+        break;
+    case 4:
+        pFunc = ResetDescriptorPool<4>;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    return pFunc;
+}
+
+// =====================================================================================================================
+PFN_vkAllocateDescriptorSets DescriptorPool::GetAllocateDescriptorSetsFunc(
+    Device* pDevice)
+{
+    PFN_vkAllocateDescriptorSets pFunc = nullptr;
+
+    switch (pDevice->NumPalDevices())
+    {
+    case 1:
+        pFunc = AllocateDescriptorSets<1>;
+        break;
+    case 2:
+        pFunc = AllocateDescriptorSets<2>;
+        break;
+    case 3:
+        pFunc = AllocateDescriptorSets<3>;
+        break;
+    case 4:
+        pFunc = AllocateDescriptorSets<4>;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    return pFunc;
+}
+
 namespace entry
 {
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(
+    VkDevice                                    device,
+    const VkDescriptorPoolCreateInfo*           pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkDescriptorPool*                           pDescriptorPool)
+{
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->GetEntryPoints().vkCreateDescriptorPool(device, pCreateInfo, pAllocator, pDescriptorPool);
+}
+
 VKAPI_ATTR VkResult VKAPI_CALL vkFreeDescriptorSets(
     VkDevice                                    device,
     VkDescriptorPool                            descriptorPool,
     uint32_t                                    descriptorSetCount,
     const VkDescriptorSet*                      pDescriptorSets)
 {
-    return DescriptorPool::ObjectFromHandle(descriptorPool)->FreeDescriptorSets(
-        descriptorSetCount,
-        pDescriptorSets);
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->GetEntryPoints().vkFreeDescriptorSets(device, descriptorPool, descriptorSetCount, pDescriptorSets);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkResetDescriptorPool(
@@ -1062,7 +1210,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkResetDescriptorPool(
     VkDescriptorPool                            descriptorPool,
     VkDescriptorPoolResetFlags                  flags)
 {
-    return DescriptorPool::ObjectFromHandle(descriptorPool)->Reset();
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->GetEntryPoints().vkResetDescriptorPool(device, descriptorPool, flags);
 }
 
 VKAPI_ATTR void VKAPI_CALL vkDestroyDescriptorPool(
@@ -1084,9 +1234,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateDescriptorSets(
     const VkDescriptorSetAllocateInfo*          pAllocateInfo,
     VkDescriptorSet*                            pDescriptorSets)
 {
-    return DescriptorPool::ObjectFromHandle(pAllocateInfo->descriptorPool)->AllocDescriptorSets(
-        pAllocateInfo,
-        pDescriptorSets);
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    return pDevice->GetEntryPoints().vkAllocateDescriptorSets(device, pAllocateInfo, pDescriptorSets);
 }
 
 } // namespace entry

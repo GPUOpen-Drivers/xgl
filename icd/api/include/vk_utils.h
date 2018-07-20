@@ -208,7 +208,6 @@ class IterateMask
 public:
     VK_INLINE IterateMask(uint32_t mask) :
         m_index(0),
-        m_bitsFound(0),
         m_mask(mask)
     {}
 
@@ -217,7 +216,6 @@ public:
         if (Util::BitMaskScanForward(&m_index, m_mask) == true)
         {
             m_mask ^= (1 << m_index);
-            m_bitsFound++;
             return true;
         }
         return false;
@@ -228,14 +226,8 @@ public:
         return m_index;
     }
 
-    VK_INLINE uint32_t Count() const
-    {
-        return m_bitsFound;
-    }
-
 private:
     uint32_t    m_index;
-    uint32_t    m_bitsFound;
     uint32_t    m_mask;
 };
 

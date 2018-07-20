@@ -66,7 +66,8 @@ struct AttachmentReference
 {
     AttachmentReference();
 
-    void Init(const VkAttachmentReference& attachRef);
+    void Init(const VkAttachmentReference&      attachRef);
+    void Init(const VkAttachmentReference2KHR&  attachRef);
 
     uint32_t              attachment;
     VkImageLayout         layout;
@@ -77,7 +78,8 @@ struct AttachmentDescription
 {
     AttachmentDescription();
 
-    void Init(const VkAttachmentDescription& attachDesc);
+    void Init(const VkAttachmentDescription&     attachDesc);
+    void Init(const VkAttachmentDescription2KHR& attachDesc);
 
     VkAttachmentDescriptionFlags    flags;
     VkFormat                        format;
@@ -116,6 +118,15 @@ struct SubpassDescription
         void*                           pMemoryPtr,
         size_t                          memorySize);
 
+    void Init(
+        uint32_t                        subpassIndex,
+        const VkSubpassDescription2KHR& subpassDesc,
+        const RenderPassExtCreateInfo&  renderPassExt,
+        const AttachmentDescription*    pAttachments,
+        uint32_t                        attachmentCount,
+        void*                           pMemoryPtr,
+        size_t                          memorySize);
+
     VkSubpassDescriptionFlags   flags;
     VkPipelineBindPoint         pipelineBindPoint;
     uint32_t                    viewMask;
@@ -140,6 +151,11 @@ struct SubpassDependency
         const VkSubpassDependency&      subpassDep,
         const RenderPassExtCreateInfo&  renderPassExt);
 
+    void Init(
+        uint32_t                        subpassDepIndex,
+        const VkSubpassDependency2KHR&  subpassDep,
+        const RenderPassExtCreateInfo&  renderPassExt);
+
     uint32_t                srcSubpass;
     uint32_t                dstSubpass;
     VkPipelineStageFlags    srcStageMask;
@@ -156,6 +172,12 @@ struct RenderPassCreateInfo
 
     void Init(
         const VkRenderPassCreateInfo*       pCreateInfo,
+        const RenderPassExtCreateInfo&      renderPassExt,
+        void*                               pMemoryPtr,
+        size_t                              memorySize);
+
+    void Init(
+        const VkRenderPassCreateInfo2KHR*   pCreateInfo,
         const RenderPassExtCreateInfo&      renderPassExt,
         void*                               pMemoryPtr,
         size_t                              memorySize);
@@ -181,6 +203,12 @@ public:
     static VkResult Create(
         Device*                             pDevice,
         const VkRenderPassCreateInfo*       pCreateInfo,
+        const VkAllocationCallbacks*        pAllocator,
+        VkRenderPass*                       pRenderPass);
+
+    static VkResult Create(
+        Device*                             pDevice,
+        const VkRenderPassCreateInfo2KHR*   pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
         VkRenderPass*                       pRenderPass);
 

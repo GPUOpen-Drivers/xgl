@@ -117,6 +117,7 @@ static void OverrideProfiledSettings(
         pSettings->disableDeviceOnlyMemoryTypeWithoutHeap = true;
 
         pSettings->prefetchShaders = true;
+
     }
 
     if (appProfile == AppProfile::Source2Engine)

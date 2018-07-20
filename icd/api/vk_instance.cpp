@@ -641,6 +641,8 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
 #if VK_USE_PLATFORM_XLIB_XRANDR_EXT
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_ACQUIRE_XLIB_DISPLAY));
 #endif
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_DISPLAY_PROPERTIES2));
+
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DIRECT_MODE_DISPLAY));
         supportedExtensionsPopulated = true;
     }
@@ -1298,22 +1300,12 @@ VKAPI_ATTR void VKAPI_CALL IcdSetCallbackProcs(
     uint32_t                                    numProcs,
     void*                                       pProcsTable)
 {
-#ifdef PAL_KMT_BUILD
-    Pal::OglSetCallbackProcs(pPrivateData, numProcs, pProcsTable);
-#endif
 }
 
 VKAPI_ATTR bool VKAPI_CALL IcdPresentBuffers(
-#ifdef PAL_KMT_BUILD
-    Pal::PresentBufferInfo*                     pPresentBufferInfo
-#endif
 )
 {
-#ifdef PAL_KMT_BUILD
-    return Pal::OglPresentBuffers(pPresentBufferInfo);
-#else
     return true;
-#endif
 }
 
 } // extern "C"

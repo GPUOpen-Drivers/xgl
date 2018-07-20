@@ -137,7 +137,9 @@ struct ShaderProfileAction
                 uint32_t scOptionsMask                      : 1;
                 uint32_t trapPresent                        : 1;
                 uint32_t debugMode                          : 1;
-                uint32_t reserved                           : 20;
+                uint32_t allowReZ                           : 1;
+                uint32_t shaderReplaceEnabled               : 1;
+                uint32_t reserved                           : 18;
             };
             uint32_t u32All;
         } apply;

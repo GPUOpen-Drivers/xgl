@@ -74,7 +74,7 @@ uint32_t Formats::GetIndex(VkFormat format)
     }
     else
     {
-        VK_ASSERT(!"Unexpected format");
+        VK_ALERT(!"Unexpected format");
         return 0;
     }
 }

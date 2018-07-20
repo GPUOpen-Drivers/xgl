@@ -16,6 +16,7 @@ VK_KHR_device_group_creation
 VK_KHR_display
 VK_EXT_direct_mode_display
 VK_EXT_acquire_xlib_display
+VK_KHR_get_display_properties2
 
 ###############################################################################
 # DEVICE EXTENSIONS
@@ -79,3 +80,4 @@ VK_EXT_queue_family_foreign
 VK_KHR_variable_pointers
 VK_EXT_vertex_attribute_divisor
 VK_EXT_descriptor_indexing
+VK_KHR_create_renderpass2

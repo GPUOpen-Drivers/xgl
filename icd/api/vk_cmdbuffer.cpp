@@ -1596,12 +1596,13 @@ void CmdBuffer::BindDescriptorSets(
             {
                 // NOTE: We currently have to supply patched SRDs directly in used data registers. If we'll have proper
                 // support for dynamic descriptors in SC then we'll only need to write the dynamic offsets directly.
-                DescriptorSet::PatchedDynamicDataFromHandle<robustBufferAccess>(
+                DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
                     pDescriptorSets[i],
                     &(m_state.perGpuState[DefaultDeviceIndex].
                         setBindingData[static_cast<uint32_t>(bindPoint)][setLayoutInfo.dynDescDataRegOffset]),
                     pDynamicOffsets,
-                    setLayoutInfo.dynDescCount);
+                    setLayoutInfo.dynDescCount,
+                    robustBufferAccess);
 
                 // Skip over the already consumed dynamic offsets.
                 pDynamicOffsets += setLayoutInfo.dynDescCount;
@@ -1613,7 +1614,7 @@ void CmdBuffer::BindDescriptorSets(
                 uint32_t deviceIdx = 0;
                 do
                 {
-                    DescriptorSet::UserDataPtrValueFromHandle(
+                    DescriptorSet<numPalDevices>::UserDataPtrValueFromHandle(
                         pDescriptorSets[i],
                         deviceIdx,
                         &(m_state.perGpuState[deviceIdx].
@@ -3981,8 +3982,6 @@ void CmdBuffer::BeginRenderPass(
             pDstRect->extent.width  = srcRect.extent.width;
             pDstRect->extent.height = srcRect.extent.height;
         }
-
-        VK_ASSERT(deviceGroup.Count() == pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount);
     }
 
     if (replicateRenderArea)
@@ -5892,6 +5891,15 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginRenderPass2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkRenderPassBeginInfo*                pRenderPassBegin,
+    const VkSubpassBeginInfoKHR*                pSubpassBeginInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginRenderPass(pRenderPassBegin, pSubpassBeginInfo->contents);
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(
     VkCommandBuffer                             commandBuffer,
     VkSubpassContents                           contents)
@@ -5900,8 +5908,25 @@ VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdNextSubpass2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkSubpassBeginInfoKHR*                pSubpassBeginInfo,
+    const VkSubpassEndInfoKHR*                  pSubpassEndInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->NextSubPass(pSubpassBeginInfo->contents);
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass(
     VkCommandBuffer                             commandBuffer)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndRenderPass();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdEndRenderPass2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkSubpassEndInfoKHR*                  pSubpassEndInfo)
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndRenderPass();
 }

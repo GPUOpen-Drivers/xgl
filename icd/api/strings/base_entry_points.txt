@@ -317,3 +317,13 @@ vkReleaseDisplayEXT                                 @instance   @iext(EXT_direct
 
 vkAcquireXlibDisplayEXT                             @instance   @iext(EXT_acquire_xlib_display)
 vkGetRandROutputDisplayEXT                          @instance   @iext(EXT_acquire_xlib_display)
+
+vkGetPhysicalDeviceDisplayProperties2KHR            @instance   @iext(KHR_get_display_properties2)
+vkGetPhysicalDeviceDisplayPlaneProperties2KHR       @instance   @iext(KHR_get_display_properties2)
+vkGetDisplayModeProperties2KHR                      @instance   @iext(KHR_get_display_properties2)
+vkGetDisplayPlaneCapabilities2KHR                   @instance   @iext(KHR_get_display_properties2)
+
+vkCreateRenderPass2KHR                              @device     @dext(KHR_create_renderpass2)
+vkCmdBeginRenderPass2KHR                            @device     @dext(KHR_create_renderpass2)
+vkCmdNextSubpass2KHR                                @device     @dext(KHR_create_renderpass2)
+vkCmdEndRenderPass2KHR                              @device     @dext(KHR_create_renderpass2)

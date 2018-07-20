@@ -280,8 +280,8 @@ uint32_t PhysicalDeviceManager::GetDeviceGroupIndices(
     int32_t*   pDeviceGroupIndices
 ) const
 {
-    uint32_t   deviceGroupCount = 0;
-    uint32_t   deviceGroupIds[Pal::MaxDevices];
+    uint32_t      deviceGroupCount = 0;
+    Pal::IDevice* deviceGroupPalDevice[Pal::MaxDevices];
 
     if (pDeviceGroupIndices != nullptr)
     {
@@ -291,16 +291,16 @@ uint32_t PhysicalDeviceManager::GetDeviceGroupIndices(
     uint32_t deviceIndex = 0;
     for (auto it = m_devices.Begin(); it.Get() != nullptr; it.Next(), deviceIndex++)
     {
-        Pal::DeviceProperties info;
-        Pal::Result palStatus = it.Get()->key->GetProperties(&info);
-        VK_ASSERT(palStatus == Pal::Result::Success);
+        Pal::IDevice* pPalDevice = it.Get()->key;
 
         uint32_t groupIdx;
         for (groupIdx = 0; groupIdx < deviceGroupCount; groupIdx++)
         {
-            // Group the devices if they have matching Pal::DeviceProperties::deviceIds.
-            // Note: We could allow non-matching devices to be grouped in future, perhaps via App-detect
-            if (deviceGroupIds[groupIdx] == info.deviceId)
+            Pal::GpuCompatibilityInfo compatInfo = {};
+            Pal::Result result = pPalDevice->GetMultiGpuCompatibility(*deviceGroupPalDevice[groupIdx], &compatInfo);
+            PAL_ALERT(result != Pal::Result::Success);
+
+            if ((compatInfo.flags.gpuFeatures == 1) && (compatInfo.flags.peerTransfer == 1))
             {
                 if (pDeviceGroupIndices != nullptr)
                 {
@@ -310,6 +310,7 @@ uint32_t PhysicalDeviceManager::GetDeviceGroupIndices(
             }
         }
 
+        // If no match, add new device group
         if (groupIdx == deviceGroupCount)
         {
             if (pDeviceGroupIndices != nullptr)
@@ -317,7 +318,8 @@ uint32_t PhysicalDeviceManager::GetDeviceGroupIndices(
                 VK_ASSERT(groupIdx < maxDeviceGroupIndices);
                 pDeviceGroupIndices[deviceIndex] = groupIdx;
             }
-            deviceGroupIds[deviceGroupCount++] = info.deviceId;
+            deviceGroupPalDevice[deviceGroupCount] = pPalDevice;
+            deviceGroupCount++;
         }
     }
 
@@ -436,8 +438,24 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
                 // Add the new physical device object to the newly constructed list
                 deviceList[deviceCount++] = newPhysicalDevice;
             }
+            else
+            {
+                break;
+            }
         }
+    }
 
+    if (result != VK_SUCCESS)
+    {
+        // Destroy created devices
+        while (deviceCount-- > 0)
+        {
+            PhysicalDevice* pDevice = ApiPhysicalDevice::ObjectFromHandle(deviceList[deviceCount]);
+            pDevice->Destroy();
+        }
+    }
+    else
+    {
         // Now we can add back the active physical devices to the hash map
         for (uint32_t i = 0; (i < deviceCount) && (result == VK_SUCCESS); ++i)
         {

@@ -214,6 +214,8 @@ Device::Device(
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
     memset(m_pSharedPalCmdAllocator, 0, sizeof(m_pSharedPalCmdAllocator));
     memset(&m_enabledFeatures, 0, sizeof(VkPhysicalDeviceFeatures));
+    memset(m_allocatedMemorySize, 0, sizeof(m_allocatedMemorySize));
+    memset(m_totalMemorySize, 0, sizeof(m_totalMemorySize));
 
     if (pFeatures != nullptr)
     {
@@ -606,7 +608,8 @@ VkResult Device::Create(
                     for (queueIndex = 0; queueIndex < queueCounts[queueFamilyIndex]; queueIndex++)
                     {
                         // Create the Pal queues per device
-                        for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
+                        uint32_t deviceIdx;
+                        for (deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
                         {
                             Pal::QueueCreateInfo queueCreateInfo = {};
                             ConstructQueueCreateInfo(pPhysicalDevices,
@@ -622,42 +625,63 @@ VkResult Device::Create(
 
                             if (palResult != Pal::Result::Success)
                             {
-                                goto queue_fail;
+                                break;
                             }
 
                             // On the creation of each command queue, the escape
                             // KMD_ESUBFUNC_UPDATE_APP_PROFILE_POWER_SETTING needs to be called, to provide the app's
                             // executable name and path. This lets KMD use the context created per queue for tracking
                             // the app.
-                            pPalQueues[deviceIdx]->UpdateAppPowerProfile(static_cast<const wchar_t*>(executableName),
+                            palResult = pPalQueues[deviceIdx]->UpdateAppPowerProfile(static_cast<const wchar_t*>(executableName),
                                                                          static_cast<const wchar_t*>(executablePath));
 
+                            // SWDEV-100175 KMD currently returns STATUS_INVALID_PARAMETER if a profile for the current
+                            // application does not exist.This maps to Pal ErrorInvalidValue. Silenty ignore this error.
+                            if ((palResult != Pal::Result::Success) &&
+                                (palResult != Pal::Result::Unsupported) &&
+                                (palResult != Pal::Result::ErrorInvalidValue))
+                            {
+                                pPalQueues[deviceIdx]->Destroy();
+                                break;
+                            }
+
+                            palResult = Pal::Result::Success;
+
                             palQueueMemoryOffset += pPalDevices[deviceIdx]->GetQueueSize(queueCreateInfo, &palResult);
-                            VK_ASSERT(palResult == Pal::Result::Success);
                         }
-
-                        VirtualStackAllocator* pQueueStackAllocator = nullptr;
-
-                        palResult = pInstance->StackMgr()->AcquireAllocator(&pQueueStackAllocator);
 
                         if (palResult != Pal::Result::Success)
                         {
-                            goto queue_fail;
+                            while (deviceIdx-- > 0)
+                            {
+                                pPalQueues[deviceIdx]->Destroy();
+                            }
                         }
+                        else
+                        {
+                            VirtualStackAllocator* pQueueStackAllocator = nullptr;
 
-                        // Create the vk::Queue object
-                        VK_INIT_DISPATCHABLE(Queue,
-                                                &pDeviceAndQueues->queue[initializedQueues],
-                                                (pDeviceAndQueues->device,
-                                                queueFamilyIndex,
-                                                queueIndex,
-                                                queueFlags[queueFamilyIndex],
-                                                pPalQueues,
-                                                pQueueStackAllocator));
+                            palResult = pInstance->StackMgr()->AcquireAllocator(&pQueueStackAllocator);
 
-                        pQueues[queueFamilyIndex][queueIndex] = &pDeviceAndQueues->queue[initializedQueues];
+                            if (palResult != Pal::Result::Success)
+                            {
+                                goto queue_fail;
+                            }
 
-                        initializedQueues++;
+                            // Create the vk::Queue object
+                            VK_INIT_DISPATCHABLE(Queue,
+                                                 &pDeviceAndQueues->queue[initializedQueues],
+                                                 (pDeviceAndQueues->device,
+                                                 queueFamilyIndex,
+                                                 queueIndex,
+                                                 queueFlags[queueFamilyIndex],
+                                                 pPalQueues,
+                                                 pQueueStackAllocator));
+
+                            pQueues[queueFamilyIndex][queueIndex] = &pDeviceAndQueues->queue[initializedQueues];
+
+                            initializedQueues++;
+                        }
                     }
                 }
 queue_fail:
@@ -860,6 +884,24 @@ VkResult Device::Initialize(
         result = PalToVkResult(m_timerQueueMutex.Init());
     }
 
+    if (result == VK_SUCCESS)
+    {
+        for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
+        {
+            Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
+            PalDevice(deviceIdx)->GetGpuMemoryHeapProperties(heapProperties);
+
+            for (uint32_t heapIdx = 0; heapIdx < Pal::GpuHeapCount; heapIdx++)
+            {
+                if ((heapIdx == Pal::GpuHeapInvisible) ||
+                    (heapIdx == Pal::GpuHeapLocal))
+                {
+                    m_totalMemorySize[deviceIdx][heapIdx] = heapProperties[heapIdx].heapSize;
+                }
+            }
+        }
+    }
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
     if ((result == VK_SUCCESS) && (VkInstance()->GetDevModeMgr() != nullptr))
     {
@@ -889,8 +931,12 @@ void Device::InitDispatchTable()
     // Override dispatch table entries.
     EntryPoints* ep = m_dispatchTable.OverrideEntryPoints();
 
-    ep->vkUpdateDescriptorSets  = DescriptorSet::GetUpdateDescriptorSetsFunc(this);
-    ep->vkCmdBindDescriptorSets = CmdBuffer::GetCmdBindDescriptorSetsFunc(this);
+    ep->vkUpdateDescriptorSets      = DescriptorUpdate::GetUpdateDescriptorSetsFunc(this);
+    ep->vkCmdBindDescriptorSets     = CmdBuffer::GetCmdBindDescriptorSetsFunc(this);
+    ep->vkCreateDescriptorPool      = DescriptorPool::GetCreateDescriptorPoolFunc(this);
+    ep->vkFreeDescriptorSets        = DescriptorPool::GetFreeDescriptorSetsFunc(this);
+    ep->vkResetDescriptorPool       = DescriptorPool::GetResetDescriptorPoolFunc(this);
+    ep->vkAllocateDescriptorSets    = DescriptorPool::GetAllocateDescriptorSetsFunc(this);
 
     // =================================================================================================================
     // After generic overrides, apply any internal layer specific dispatch table override.
@@ -1511,17 +1557,6 @@ VkResult Device::CreatePipelineLayout(
 }
 
 // =====================================================================================================================
-VkResult Device::CreateDescriptorPool(
-    VkDescriptorPoolCreateFlags              poolUsage,
-    uint32_t                                 maxSets,
-    const VkDescriptorPoolCreateInfo*        pCreateInfo,
-    const VkAllocationCallbacks*             pAllocator,
-    VkDescriptorPool*                        pDescriptorPool)
-{
-    return DescriptorPool::Create(this, poolUsage, maxSets, pCreateInfo, pAllocator, pDescriptorPool);
-}
-
-// =====================================================================================================================
 // Allocate one or more command buffers.
 VkResult Device::AllocateCommandBuffers(
     const VkCommandBufferAllocateInfo* pAllocateInfo,
@@ -1574,6 +1609,15 @@ VkResult Device::CreateRenderPass(
     const VkRenderPassCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*  pAllocator,
     VkRenderPass*                 pRenderPass)
+{
+    return RenderPass::Create(this, pCreateInfo, pAllocator, pRenderPass);
+}
+
+// =====================================================================================================================
+VkResult Device::CreateRenderPass2(
+    const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+    const VkAllocationCallbacks*        pAllocator,
+    VkRenderPass*                       pRenderPass)
 {
     return RenderPass::Create(this, pCreateInfo, pAllocator, pRenderPass);
 }
@@ -2070,6 +2114,65 @@ uint32_t Device::GetExternalHostMemoryTypes(
     return memoryTypes;
 }
 
+// =====================================================================================================================
+// Increases the allocated memory size for device local allocations made by the application (externally) and
+// reports OOM if necessary
+VkResult Device::IncreaseAllocatedMemorySize(
+    const Pal::gpusize allocationSize,
+    uint32_t           deviceMask,
+    const uint32_t     heapIdx)
+{
+    VkResult           vkResult = VK_SUCCESS;
+    utils::IterateMask deviceGroup(deviceMask);
+    Util::MutexAuto    lock(&m_memoryMutex);
+
+    deviceMask = 0u;
+    while (deviceGroup.Iterate())
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        Pal::gpusize memorySizePostAllocation = m_allocatedMemorySize[deviceIdx][heapIdx] + allocationSize;
+        if (memorySizePostAllocation <= m_totalMemorySize[deviceIdx][heapIdx])
+        {
+            m_allocatedMemorySize[deviceIdx][heapIdx] = memorySizePostAllocation;
+            deviceMask |= 1 << deviceIdx;
+        }
+        else
+        {
+            vkResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+
+            // Revert increases in allocation size that have been made
+            utils::IterateMask revDeviceGroup(deviceMask);
+            while (revDeviceGroup.Iterate())
+            {
+                const uint32_t revDeviceIdx = revDeviceGroup.Index();
+                m_allocatedMemorySize[revDeviceIdx][heapIdx] -= allocationSize;
+            }
+
+            break;
+        }
+    }
+
+    return vkResult;
+}
+
+// =====================================================================================================================
+// Decreases the allocated memory size for device local allocations made by the application (externally)
+void Device::DecreaseAllocatedMemorySize(
+    const Pal::gpusize allocationSize,
+    const uint32_t     deviceMask,
+    const uint32_t     heapIdx)
+{
+    utils::IterateMask deviceGroup(deviceMask);
+    Util::MutexAuto lock(&m_memoryMutex);
+
+    while (deviceGroup.Iterate())
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+        m_allocatedMemorySize[deviceIdx][heapIdx] -= allocationSize;
+    }
+}
+
 /**
  ***********************************************************************************************************************
  * C-Callable entry points start here. These entries go in the dispatch table(s).
@@ -2234,23 +2337,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreatePipelineLayout(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkCreateDescriptorPool(
-    VkDevice                                    device,
-    const VkDescriptorPoolCreateInfo*           pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkDescriptorPool*                           pDescriptorPool)
-{
-    Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
-    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
-
-    return pDevice->CreateDescriptorPool(pCreateInfo->flags,
-                                         pCreateInfo->maxSets,
-                                         pCreateInfo,
-                                         pAllocCB,
-                                         pDescriptorPool);
-}
-
-// =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(
     VkDevice                                    device,
     const VkFramebufferCreateInfo*              pCreateInfo,
@@ -2274,6 +2360,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(
     const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
     return pDevice->CreateRenderPass(pCreateInfo, pAllocCB, pRenderPass);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2KHR(
+    VkDevice                                    device,
+    const VkRenderPassCreateInfo2KHR*           pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkRenderPass*                               pRenderPass)
+{
+    Device*                      pDevice = ApiDevice::ObjectFromHandle(device);
+    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+    return pDevice->CreateRenderPass2(pCreateInfo, pAllocCB, pRenderPass);
 }
 
 // =====================================================================================================================

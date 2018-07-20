@@ -154,23 +154,37 @@ private:
     Memory(vk::Device*         pDevice,
            Pal::IGpuMemory**   pPalMemory,
            const Pal::GpuMemoryCreateInfo& info,
-           bool                multiInstance,
+           bool                multiInstance     = false,
+           uint32_t            primaryIndex      = DefaultDeviceIndex,
            Pal::IImage*        pPalExternalImage = nullptr);
 
     // Image needs to be a friend class to be able to create wrapper API memory objects
     friend class Image;
 
     bool         m_allocationCounted;
+    uint32_t     m_sizeAccountedForDeviceMask;
     Pal::IImage* m_pExternalPalImage;
+    uint32_t     m_primaryDeviceIndex;
 
-    // the function is used to mark that the allocation is counted in the logical device.
+    // this function is used to mark that the allocation is counted in the logical device.
     // the destructor of this memory object need to decrease the count.
-    VK_INLINE void SetAllocationCounted() { m_allocationCounted = true; }
+    VK_INLINE void SetAllocationCounted(uint32_t sizeAccountedForDeviceMask)
+    {
+        m_sizeAccountedForDeviceMask = sizeAccountedForDeviceMask;
+        m_allocationCounted = true;
+    }
 
     // Private constructor used by Image objects to create wrapper API memory object for presentable image
     Memory(Device*           pDevice,
            Pal::IGpuMemory** pPalMemory,
-           bool              multiInstance);
+           bool              multiInstance = false,
+           uint32_t          primaryIndex  = DefaultDeviceIndex);
+
+    static void GetPrimaryDeviceIndex(
+        uint32_t  maxDevices,
+        uint32_t  allocationMask,
+        uint32_t* pIndex,
+        bool*     pMultiInstance);
 
     static VkResult CreateGpuMemory(
         Device*                         pDevice,

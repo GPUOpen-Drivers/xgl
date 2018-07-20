@@ -61,7 +61,166 @@ struct DescriptorAddr
 // =====================================================================================================================
 // A descriptor set is a chunk of GPU memory containing one or more descriptors organized in a manner described by a
 // DescriptorSetLayout associated with it.  They are allocated and freed by DescriptorPools.
-class DescriptorSet : public NonDispatchable<VkDescriptorSet, DescriptorSet>
+template <uint32_t numPalDevices>
+class DescriptorSet : public NonDispatchable<VkDescriptorSet, DescriptorSet<numPalDevices>>
+{
+public:
+    const DescriptorSetLayout* Layout() const
+        { return m_pLayout; }
+
+    size_t Size() const
+        { return (m_pLayout->Info().sta.dwSize * sizeof(uint32_t)); }
+
+    Pal::gpusize StaticGpuAddress(int32_t idx) const
+    {
+        return m_addresses[idx].staticGpuAddr;
+    }
+
+    uint32_t* StaticCpuAddress(int32_t idx) const
+    {
+        return m_addresses[idx].staticCpuAddr;
+    }
+
+    Pal::gpusize FmaskGpuAddress(int32_t idx) const
+    {
+        return m_addresses[idx].fmaskGpuAddr;
+    }
+
+    uint32_t* FmaskCpuAddress(int32_t idx) const
+    {
+        return m_addresses[idx].fmaskCpuAddr;
+    }
+
+    uint32_t* DynamicDescriptorData()
+        { return reinterpret_cast<uint32_t*>(m_dynamicDescriptorData); }
+
+    uint64_t* DynamicDescriptorDataQw()
+        { return m_dynamicDescriptorData; }
+
+    VK_INLINE static DescriptorSet* StateFromHandle(VkDescriptorSet set);
+    VK_INLINE static Pal::gpusize GpuAddressFromHandle(uint32_t deviceIdx, VkDescriptorSet set);
+    VK_INLINE static void UserDataPtrValueFromHandle(VkDescriptorSet set, uint32_t deviceIdx, uint32_t* pUserData);
+
+     VK_INLINE static void PatchedDynamicDataFromHandle(
+        VkDescriptorSet set,
+        uint32_t*       pUserData,
+        const uint32_t* pDynamicOffsets,
+        uint32_t        numDynamicDescriptors,
+        bool            robustBufferAccess);
+
+protected:
+    DescriptorSet(uint32_t heapIndex);
+
+    ~DescriptorSet()
+        { PAL_NEVER_CALLED(); }
+
+    void Reassign(
+        const DescriptorSetLayout*  pLayout,
+        Pal::gpusize                gpuMemOffset,
+        DescriptorAddr*             pBaseAddrs,
+        void*                       pAllocHandle);
+
+    void Reset();
+
+    void* AllocHandle() const
+        { return m_pAllocHandle; }
+
+    uint32_t HeapIndex() const
+        { return m_heapIndex; }
+
+    const DescriptorSetLayout*  m_pLayout;
+    void*                       m_pAllocHandle;
+    DescriptorAddr              m_addresses[numPalDevices];
+
+    uint32_t                    m_heapIndex;
+
+    // NOTE: This is hopefully only needed temporarily until SC implements proper support for buffer descriptors
+    // with dynamic offsets. Until then we have to store the static portion of dynamic buffer descriptors in client
+    // memory together with the descriptor set so that we are able to supply the patched version of the descriptors.
+    // This field needs to be qword aligned because it is accessed as qwords in PatchedDynamicDataFromHandle().
+    // Since allocating in qwords, need to divide the number of registers by 2 to get the correct size.
+    uint64_t                    m_dynamicDescriptorData[MaxDynamicDescriptors * PipelineLayout::DynDescRegCount / 2];
+
+    friend class DescriptorPool;
+    friend class DescriptorSetHeap;
+};
+
+// =====================================================================================================================
+// Returns the full driver state pointer of an VkDescriptorSet
+template <uint32_t numPalDevices>
+DescriptorSet<numPalDevices>* DescriptorSet<numPalDevices>::StateFromHandle(
+    VkDescriptorSet set)
+{
+    return DescriptorSet<numPalDevices>::ObjectFromHandle(set);
+}
+
+// =====================================================================================================================
+// Returns the GPU VA of a VkDescriptorSet
+template <uint32_t numPalDevices>
+Pal::gpusize DescriptorSet<numPalDevices>::GpuAddressFromHandle(
+    uint32_t        deviceIdx,
+    VkDescriptorSet set)
+{
+    return StateFromHandle(set)->StaticGpuAddress(deviceIdx);
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+void DescriptorSet<numPalDevices>::UserDataPtrValueFromHandle(
+    VkDescriptorSet set,
+    uint32_t        deviceIdx,
+    uint32_t*       pUserData)
+{
+    static_assert(PipelineLayout::SetPtrRegCount == 1, "Code below assumes one dword per set GPU VA");
+
+    const Pal::gpusize gpuAddress = GpuAddressFromHandle(deviceIdx, set);
+
+    // We have an assumed high 32 bits for the address thus only the lower 32 bits of the address have to be used here
+    *pUserData = static_cast<uint32_t>(gpuAddress & 0xFFFFFFFFull);
+}
+
+// =====================================================================================================================
+// Returns the patched dynamic descriptor data for the specified descriptor set.
+// NOTE: This function assumes that we directly store the whole buffer SRDs in user data and treats the SRD data in a
+// white-box fashion. Probably would be better if we'd have a PAL function to do the patching of the dynamic offset,
+// but this is expected to be temporary anyways until we'll have proper support for dynamic descriptors in SC.
+template <uint32_t numPalDevices>
+void DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
+    VkDescriptorSet set,
+    uint32_t*       pUserData,
+    const uint32_t* pDynamicOffsets,
+    uint32_t        numDynamicDescriptors,
+    bool            robustBufferAccess)
+{
+    // This code expects 4 DW SRDs whose first 48 bits is the base address.
+
+    DescriptorSet<numPalDevices>* pSet  = StateFromHandle(set);
+    uint64_t* pDstQwords = reinterpret_cast<uint64_t*>(pUserData);
+    uint64_t* pSrcQwords = pSet->DynamicDescriptorDataQw();
+    const uint32_t dynDataNumQwords = robustBufferAccess ? 2 : 1;
+    for (uint32_t i = 0; i < numDynamicDescriptors; ++i)
+    {
+        const uint64_t baseAddressMask = 0x0000FFFFFFFFFFFFull;
+
+        // Read default base address
+        uint64_t baseAddress = pSrcQwords[i * dynDataNumQwords] & baseAddressMask;
+        uint64_t hiBits      = pSrcQwords[i * dynDataNumQwords] & ~baseAddressMask;
+
+        // Add dynamic offset
+        baseAddress += pDynamicOffsets[i];
+
+        pDstQwords[i * dynDataNumQwords] = hiBits | baseAddress;
+
+        if (robustBufferAccess)
+        {
+            pDstQwords[i * dynDataNumQwords + 1] = pSrcQwords[i * dynDataNumQwords + 1];
+        }
+    }
+}
+
+// =====================================================================================================================
+
+class DescriptorUpdate
 {
 public:
     template <size_t samplerDescSize>
@@ -118,56 +277,9 @@ public:
         uint32_t                        dwStride,
         size_t                          descriptorStrideInBytes = 0);
 
-    const DescriptorSetLayout* Layout() const
-        { return m_pLayout; }
-
-    size_t Size() const
-        { return (m_pLayout->Info().sta.dwSize * sizeof(uint32_t)); }
-
-    Pal::gpusize StaticGpuAddress(int32_t idx) const
-    {
-        return m_addresses[idx].staticGpuAddr;
-    }
-
-    uint32_t* StaticCpuAddress(int32_t idx) const
-    {
-        return m_addresses[idx].staticCpuAddr;
-    }
-
-    Pal::gpusize FmaskGpuAddress(int32_t idx) const
-    {
-        return m_addresses[idx].fmaskGpuAddr;
-    }
-
-    uint32_t* FmaskCpuAddress(int32_t idx) const
-    {
-        return m_addresses[idx].fmaskCpuAddr;
-    }
-
-    uint32_t* DynamicDescriptorData()
-        { return reinterpret_cast<uint32_t*>(m_dynamicDescriptorData); }
-
-    uint64_t* DynamicDescriptorDataQw()
-        { return m_dynamicDescriptorData; }
-
-    VK_INLINE static DescriptorSet* StateFromHandle(VkDescriptorSet set);
-    VK_INLINE static Pal::gpusize GpuAddressFromHandle(uint32_t deviceIdx, VkDescriptorSet set);
-    VK_INLINE static void UserDataPtrValueFromHandle(VkDescriptorSet set, uint32_t deviceIdx, uint32_t* pUserData);
-
-    template <bool robustBufferAccess>
-    VK_INLINE static void PatchedDynamicDataFromHandle(
-        VkDescriptorSet set,
-        uint32_t*       pUserData,
-        const uint32_t* pDynamicOffsets,
-        uint32_t        numDynamicDescriptors);
-
     static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
 
-protected:
-    DescriptorSet(uint32_t heapIndex);
-
-    ~DescriptorSet()
-        { PAL_NEVER_CALLED(); }
+private:
 
     template <uint32_t numPalDevices>
     static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
@@ -184,120 +296,23 @@ protected:
         uint32_t                                    descriptorCopyCount,
         const VkCopyDescriptorSet*                  pDescriptorCopies);
 
-    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, bool fmaskBasedMsaaReadEnabled>
+    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, bool fmaskBasedMsaaReadEnabled,
+              uint32_t numPalDevices>
     static void WriteDescriptorSets(
         const Device*                pDevice,
         uint32_t                     deviceIdx,
         uint32_t                     descriptorWriteCount,
         const VkWriteDescriptorSet*  pDescriptorWrites);
 
-    template <size_t imageDescSize, bool fmaskBasedMsaaReadEnabled>
+    template <size_t imageDescSize, bool fmaskBasedMsaaReadEnabled, uint32_t numPalDevices>
     static void CopyDescriptorSets(
         const Device*                pDevice,
         uint32_t                     deviceIdx,
         uint32_t                     descriptorCopyCount,
         const VkCopyDescriptorSet*   pDescriptorCopies);
-
-    void Reassign(
-        const DescriptorSetLayout*  pLayout,
-        Pal::gpusize                gpuMemOffset,
-        DescriptorAddr*             pBaseAddrs,
-        uint32_t                    numPalDevices,
-        void*                       pAllocHandle);
-
-    void Reset();
-
-    void* AllocHandle() const
-        { return m_pAllocHandle; }
-
-    uint32_t HeapIndex() const
-        { return m_heapIndex; }
-
-    const DescriptorSetLayout*  m_pLayout;
-    void*                       m_pAllocHandle;
-    DescriptorAddr              m_addresses[MaxPalDevices];
-
-    uint32_t                    m_heapIndex;
-
-    // NOTE: This is hopefully only needed temporarily until SC implements proper support for buffer descriptors
-    // with dynamic offsets. Until then we have to store the static portion of dynamic buffer descriptors in client
-    // memory together with the descriptor set so that we are able to supply the patched version of the descriptors.
-    // This field needs to be qword aligned because it is accessed as qwords in PatchedDynamicDataFromHandle().
-    // Since allocating in qwords, need to divide the number of registers by 2 to get the correct size.
-    uint64_t                    m_dynamicDescriptorData[MaxDynamicDescriptors * PipelineLayout::DynDescRegCount / 2];
-
-    friend class DescriptorPool;
-    friend class DescriptorSetHeap;
 };
 
 // =====================================================================================================================
-// Returns the full driver state pointer of an VkDescriptorSet
-DescriptorSet* DescriptorSet::StateFromHandle(
-    VkDescriptorSet set)
-{
-    return DescriptorSet::ObjectFromHandle(set);
-}
-
-// =====================================================================================================================
-// Returns the GPU VA of a VkDescriptorSet
-Pal::gpusize DescriptorSet::GpuAddressFromHandle(
-    uint32_t        deviceIdx,
-    VkDescriptorSet set)
-{
-    return StateFromHandle(set)->StaticGpuAddress(deviceIdx);
-}
-
-// =====================================================================================================================
-void DescriptorSet::UserDataPtrValueFromHandle(
-    VkDescriptorSet set,
-    uint32_t        deviceIdx,
-    uint32_t*       pUserData)
-{
-    static_assert(PipelineLayout::SetPtrRegCount == 1, "Code below assumes one dword per set GPU VA");
-
-    const Pal::gpusize gpuAddress = GpuAddressFromHandle(deviceIdx, set);
-
-    // We have an assumed high 32 bits for the address thus only the lower 32 bits of the address have to be used here
-    *pUserData = static_cast<uint32_t>(gpuAddress & 0xFFFFFFFFull);
-}
-
-// =====================================================================================================================
-// Returns the patched dynamic descriptor data for the specified descriptor set.
-// NOTE: This function assumes that we directly store the whole buffer SRDs in user data and treats the SRD data in a
-// white-box fashion. Probably would be better if we'd have a PAL function to do the patching of the dynamic offset,
-// but this is expected to be temporary anyways until we'll have proper support for dynamic descriptors in SC.
-template <bool robustBufferAccess>
-void DescriptorSet::PatchedDynamicDataFromHandle(
-    VkDescriptorSet set,
-    uint32_t*       pUserData,
-    const uint32_t* pDynamicOffsets,
-    uint32_t        numDynamicDescriptors)
-{
-    // This code expects 4 DW SRDs whose first 48 bits is the base address.
-
-    DescriptorSet* pSet  = StateFromHandle(set);
-    uint64_t* pDstQwords = reinterpret_cast<uint64_t*>(pUserData);
-    uint64_t* pSrcQwords = pSet->DynamicDescriptorDataQw();
-    const uint32_t dynDataNumQwords = robustBufferAccess ? 2 : 1;
-    for (uint32_t i = 0; i < numDynamicDescriptors; ++i)
-    {
-        const uint64_t baseAddressMask = 0x0000FFFFFFFFFFFFull;
-
-        // Read default base address
-        uint64_t baseAddress = pSrcQwords[i * dynDataNumQwords] & baseAddressMask;
-        uint64_t hiBits      = pSrcQwords[i * dynDataNumQwords] & ~baseAddressMask;
-
-        // Add dynamic offset
-        baseAddress += pDynamicOffsets[i];
-
-        pDstQwords[i * dynDataNumQwords] = hiBits | baseAddress;
-
-        if (robustBufferAccess)
-        {
-            pDstQwords[i * dynDataNumQwords + 1] = pSrcQwords[i * dynDataNumQwords + 1];
-        }
-    }
-}
 
 namespace entry
 {

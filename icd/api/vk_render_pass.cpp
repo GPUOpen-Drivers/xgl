@@ -179,6 +179,14 @@ void AttachmentReference::Init(const VkAttachmentReference& attachRef)
 }
 
 // =====================================================================================================================
+void AttachmentReference::Init(const VkAttachmentReference2KHR& attachRef)
+{
+    attachment  = attachRef.attachment;
+    layout      = attachRef.layout;
+    aspectMask  = attachRef.aspectMask;
+}
+
+// =====================================================================================================================
 AttachmentDescription::AttachmentDescription()
     :
     flags           (0),
@@ -195,6 +203,20 @@ AttachmentDescription::AttachmentDescription()
 
 // =====================================================================================================================
 void AttachmentDescription::Init(const VkAttachmentDescription& attachDesc)
+{
+    flags           = attachDesc.flags;
+    format          = attachDesc.format;
+    samples         = attachDesc.samples;
+    loadOp          = attachDesc.loadOp;
+    storeOp         = attachDesc.storeOp;
+    stencilLoadOp   = attachDesc.stencilLoadOp;
+    stencilStoreOp  = attachDesc.stencilStoreOp;
+    initialLayout   = attachDesc.initialLayout;
+    finalLayout     = attachDesc.finalLayout;
+}
+
+// =====================================================================================================================
+void AttachmentDescription::Init(const VkAttachmentDescription2KHR& attachDesc)
 {
     flags           = attachDesc.flags;
     format          = attachDesc.format;
@@ -244,6 +266,37 @@ void SubpassDependency::Init(
         if (renderPassExt.pMultiviewCreateInfo->dependencyCount > 0)
         {
             viewOffset = renderPassExt.pMultiviewCreateInfo->pViewOffsets[subpassDepIndex];
+        }
+    }
+}
+
+// =====================================================================================================================
+void SubpassDependency::Init(
+    uint32_t                        subpassDepIndex,
+    const VkSubpassDependency2KHR&  subpassDep,
+    const RenderPassExtCreateInfo&  renderPassExt)
+{
+    srcSubpass      = subpassDep.srcSubpass;
+    dstSubpass      = subpassDep.dstSubpass;
+    srcStageMask    = subpassDep.srcStageMask;
+    dstStageMask    = subpassDep.dstStageMask;
+    srcAccessMask   = subpassDep.srcAccessMask;
+    dstAccessMask   = subpassDep.dstAccessMask;
+    dependencyFlags = subpassDep.dependencyFlags;
+    viewOffset      = subpassDep.viewOffset;
+
+    // The multiview implementation broadcasts 3D primities by
+    // issuing multiple draw calls (one per each view),
+    // therefore all view-local dependencies are treated as view-global.
+    if (renderPassExt.pMultiviewCreateInfo != nullptr)
+    {
+        if (renderPassExt.pMultiviewCreateInfo->dependencyCount > 0)
+        {
+            viewOffset = renderPassExt.pMultiviewCreateInfo->pViewOffsets[subpassDepIndex];
+        }
+        else
+        {
+            viewOffset = 0;
         }
     }
 }
@@ -418,6 +471,29 @@ void SubpassDescription::Init(
 }
 
 // =====================================================================================================================
+void SubpassDescription::Init(
+    uint32_t                        subpassIndex,
+    const VkSubpassDescription2KHR& subpassDesc,
+    const RenderPassExtCreateInfo&  renderPassExt,
+    const AttachmentDescription*    pAttachments,
+    uint32_t                        attachmentCount,
+    void*                           pMemoryPtr,
+    size_t                          memorySize)
+{
+    viewMask = subpassDesc.viewMask;
+
+    InitSubpassDescription<VkSubpassDescription2KHR>(
+        subpassIndex,
+        subpassDesc,
+        renderPassExt,
+        pAttachments,
+        attachmentCount,
+        pMemoryPtr,
+        memorySize,
+        this);
+}
+
+// =====================================================================================================================
 RenderPassCreateInfo::RenderPassCreateInfo()
     :
     flags                   (0),
@@ -455,6 +531,12 @@ static size_t GetRenderPassCreateInfoRequiredMemorySize(
     if (renderPassExt.pMultiviewCreateInfo != nullptr)
     {
         createInfoSize += renderPassExt.pMultiviewCreateInfo->correlationMaskCount * sizeof(uint32_t);
+    }
+    else if (std::is_same<RenderPassCreateInfoType, VkRenderPassCreateInfo2KHR>::value)
+    {
+        auto pCreateInfo2 = reinterpret_cast<const VkRenderPassCreateInfo2KHR*>(pCreateInfo);
+
+        createInfoSize += pCreateInfo2->correlatedViewMaskCount * sizeof(uint32_t);
     }
 
     return createInfoSize;
@@ -558,6 +640,33 @@ void RenderPassCreateInfo::Init(
     size_t                              memorySize)
 {
     InitRenderPassCreateInfo<VkRenderPassCreateInfo>(
+        pCreateInfo,
+        renderPassExt,
+        pMemoryPtr,
+        memorySize,
+        this);
+}
+
+// =====================================================================================================================
+void RenderPassCreateInfo::Init(
+    const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+    const RenderPassExtCreateInfo&      renderPassExt,
+    void*                               pMemoryPtr,
+    size_t                              memorySize)
+{
+    // The multiview implementation does not exploit any coherence between views.
+    if (renderPassExt.pMultiviewCreateInfo == nullptr)
+    {
+        correlatedViewMaskCount = pCreateInfo->correlatedViewMaskCount;
+        pCorrelatedViewMasks    = static_cast<uint32_t*>(pMemoryPtr);
+
+        memcpy(
+            pCorrelatedViewMasks,
+            pCreateInfo->pCorrelatedViewMasks,
+            pCreateInfo->correlatedViewMaskCount * sizeof(uint32_t));
+    }
+
+    InitRenderPassCreateInfo<VkRenderPassCreateInfo2KHR>(
         pCreateInfo,
         renderPassExt,
         pMemoryPtr,
@@ -699,6 +808,20 @@ VkResult RenderPass::Create(
     VkRenderPass*                       pRenderPass)
 {
     return CreateRenderPass<VkRenderPassCreateInfo>(
+        pDevice,
+        pCreateInfo,
+        pAllocator,
+        pRenderPass);
+}
+
+// =====================================================================================================================
+VkResult RenderPass::Create(
+    Device*                             pDevice,
+    const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+    const VkAllocationCallbacks*        pAllocator,
+    VkRenderPass*                       pRenderPass)
+{
+    return CreateRenderPass<VkRenderPassCreateInfo2KHR>(
         pDevice,
         pCreateInfo,
         pAllocator,

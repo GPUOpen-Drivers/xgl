@@ -236,6 +236,10 @@ void DispatchTable::Init()
                         vkCmdDrawIndexedIndirectCountAMD                );
     INIT_DISPATCH_ALIAS(vkCmdDrawIndirectCountKHR                       ,
                         vkCmdDrawIndirectCountAMD                       );
+    INIT_DISPATCH_ENTRY(vkCreateRenderPass2KHR                          );
+    INIT_DISPATCH_ENTRY(vkCmdBeginRenderPass2KHR                        );
+    INIT_DISPATCH_ENTRY(vkCmdNextSubpass2KHR                            );
+    INIT_DISPATCH_ENTRY(vkCmdEndRenderPass2KHR                          );
     INIT_DISPATCH_ENTRY(vkCmdDispatch                                   );
     INIT_DISPATCH_ENTRY(vkCmdDispatchIndirect                           );
     INIT_DISPATCH_ENTRY(vkCmdEndRenderPass                              );
@@ -518,6 +522,10 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateDisplayModeKHR                          );
     INIT_DISPATCH_ENTRY(vkGetDisplayPlaneCapabilitiesKHR                );
     INIT_DISPATCH_ENTRY(vkCreateDisplayPlaneSurfaceKHR                  );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayProperties2KHR        );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayPlaneProperties2KHR   );
+    INIT_DISPATCH_ENTRY(vkGetDisplayModeProperties2KHR                  );
+    INIT_DISPATCH_ENTRY(vkGetDisplayPlaneCapabilities2KHR               );
 }
 
 // =====================================================================================================================
