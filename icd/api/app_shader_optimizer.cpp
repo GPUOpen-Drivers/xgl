@@ -62,10 +62,13 @@ ShaderOptimizer::ShaderOptimizer(
 // =====================================================================================================================
 void ShaderOptimizer::Init()
 {
+    BuildTuningProfile();
+
     BuildAppProfile();
 
 #if ICD_RUNTIME_APP_PROFILE
     BuildRuntimeProfile();
+
 #endif
 }
 
@@ -129,6 +132,9 @@ void ShaderOptimizer::OverrideShaderCreateInfo(
     ShaderStage                        shaderStage,
     PipelineShaderOptionsPtr           options)
 {
+
+    ApplyProfileToShaderCreateInfo(m_tuningProfile, pipelineKey, shaderStage, options);
+
     ApplyProfileToShaderCreateInfo(m_appProfile, pipelineKey, shaderStage, options);
 
 #if ICD_RUNTIME_APP_PROFILE
@@ -144,6 +150,9 @@ void ShaderOptimizer::OverrideGraphicsPipelineCreateInfo(
     Pal::DynamicGraphicsShaderInfos*  pGraphicsWaveLimitParams)
 {
     ApplyProfileToGraphicsPipelineCreateInfo(
+        m_tuningProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsWaveLimitParams);
+
+    ApplyProfileToGraphicsPipelineCreateInfo(
         m_appProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsWaveLimitParams);
 
 #if ICD_RUNTIME_APP_PROFILE
@@ -157,6 +166,8 @@ void ShaderOptimizer::OverrideComputePipelineCreateInfo(
     const PipelineOptimizerKey&      pipelineKey,
     Pal::DynamicComputeShaderInfo*   pDynamicCompueShaderInfo)
 {
+    ApplyProfileToComputePipelineCreateInfo(m_tuningProfile, pipelineKey, pDynamicCompueShaderInfo);
+
     ApplyProfileToComputePipelineCreateInfo(m_appProfile, pipelineKey, pDynamicCompueShaderInfo);
 
 #if ICD_RUNTIME_APP_PROFILE
@@ -175,11 +186,6 @@ void ShaderOptimizer::ApplyProfileToDynamicComputeShaderInfo(
     const ShaderProfileAction&     action,
     Pal::DynamicComputeShaderInfo* pComputeShaderInfo)
 {
-
-    if (action.dynamicShaderInfo.apply.maxThreadGroupsPerCu)
-    {
-        pComputeShaderInfo->maxThreadGroupsPerCu = action.dynamicShaderInfo.maxThreadGroupsPerCu;
-    }
 }
 
 // =====================================================================================================================
@@ -245,6 +251,11 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
                 pPalCreateInfo->lateAllocVsLimit    = createInfo.lateAllocVsLimit;
             }
 
+            if (createInfo.apply.binningOverride)
+            {
+                pPalCreateInfo->rsState.binningOverride = createInfo.binningOverride;
+            }
+
 #if PAL_ENABLE_PRINTS_ASSERTS
             if (m_settings.pipelineProfileDbgPrintProfileMatch)
             {
@@ -279,6 +290,33 @@ void ShaderOptimizer::ApplyProfileToComputePipelineCreateInfo(
 #endif
         }
     }
+}
+
+// =====================================================================================================================
+Pal::ShaderHash ShaderOptimizer::GetFirstMatchingShaderHash(
+    const PipelineProfilePattern& pattern,
+    const PipelineOptimizerKey&   pipelineKey)
+{
+    for (uint32_t stage = 0; stage < ShaderStageCount; ++stage)
+    {
+        const ShaderProfilePattern& shaderPattern = pattern.shaders[stage];
+
+        if (shaderPattern.match.u32All != 0)
+        {
+            const ShaderOptimizerKey& shaderKey = pipelineKey.shaders[stage];
+
+            if (shaderPattern.match.codeHash &&
+                (Pal::ShaderHashesEqual(
+                    shaderPattern.codeHash,
+                    shaderKey.codeHash)))
+            {
+                return shaderKey.codeHash;
+            }
+        }
+    }
+
+    Pal::ShaderHash emptyHash = {};
+    return emptyHash;
 }
 
 // =====================================================================================================================
@@ -329,6 +367,97 @@ bool ShaderOptimizer::ProfilePatternMatchesPipeline(
     }
 
     return true;
+}
+
+// =====================================================================================================================
+void ShaderOptimizer::BuildTuningProfile()
+{
+    memset(&m_appProfile, 0, sizeof(m_appProfile));
+
+    if (m_settings.overrideShaderParams == false)
+    {
+        return;
+    }
+
+    // Only a single entry is currently supported
+    m_tuningProfile.entryCount = 1;
+    PipelineProfileEntry& entry = m_tuningProfile.entries[0];
+
+    bool matchHash = false;
+    if ((m_settings.overrideShaderHashLower != 0) &&
+        (m_settings.overrideShaderHashUpper != 0))
+    {
+        matchHash = true;
+    }
+    else
+    {
+        entry.pattern.match.always = 1;
+    }
+
+    const uint32_t shaderStage = m_settings.overrideShaderStage;
+
+    VK_ASSERT(shaderStage < ShaderStage::ShaderStageCount);
+
+    ShaderProfilePattern& pattern = entry.pattern.shaders[shaderStage];
+    ShaderProfileAction& action   = entry.action.shaders[shaderStage];
+
+    pattern.match.codeHash = matchHash;
+    pattern.codeHash.lower = m_settings.overrideShaderHashLower;
+    pattern.codeHash.upper = m_settings.overrideShaderHashUpper;
+
+    if (m_settings.overrideNumVGPRsAvailable != 0)
+    {
+        action.shaderCreate.apply.vgprLimit         = true;
+        action.shaderCreate.tuningOptions.vgprLimit = m_settings.overrideNumVGPRsAvailable;
+    }
+
+    if (m_settings.overrideMaxLdsSpillDwords != 0)
+    {
+        action.shaderCreate.apply.ldsSpillLimitDwords         = true;
+        action.shaderCreate.tuningOptions.ldsSpillLimitDwords = m_settings.overrideMaxLdsSpillDwords;
+    }
+
+    if (m_settings.overrideUserDataSpillThreshold)
+    {
+        action.shaderCreate.apply.userDataSpillThreshold         = true;
+        action.shaderCreate.tuningOptions.userDataSpillThreshold = 0;
+    }
+
+    action.shaderCreate.apply.allowReZ = m_settings.overrideAllowReZ;
+
+    if (m_settings.overrideWavesPerCu != 0)
+    {
+        action.dynamicShaderInfo.apply.maxWavesPerCu = true;
+        action.dynamicShaderInfo.maxWavesPerCu       = m_settings.overrideWavesPerCu;
+    }
+
+    if ((m_settings.overrideCsTgPerCu != 0) &&
+        (shaderStage == ShaderStageCompute))
+    {
+        action.dynamicShaderInfo.apply.maxThreadGroupsPerCu = true;
+        action.dynamicShaderInfo.maxThreadGroupsPerCu       = m_settings.overrideCsTgPerCu;
+    }
+
+    if (m_settings.overrideUsePbbPerCrc != PipelineBinningModeDefault)
+    {
+        entry.action.createInfo.apply.binningOverride = true;
+
+        switch (m_settings.overrideUsePbbPerCrc)
+        {
+        case PipelineBinningModeEnable:
+            entry.action.createInfo.binningOverride = Pal::BinningOverride::Enable;
+            break;
+
+        case PipelineBinningModeDisable:
+            entry.action.createInfo.binningOverride = Pal::BinningOverride::Disable;
+            break;
+
+        case PipelineBinningModeDefault:
+        default:
+            entry.action.createInfo.binningOverride = Pal::BinningOverride::Default;
+            break;
+        }
+    }
 }
 
 // =====================================================================================================================

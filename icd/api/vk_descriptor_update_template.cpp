@@ -261,7 +261,6 @@ VkResult DescriptorUpdateTemplate::Destroy(
 // =====================================================================================================================
 void DescriptorUpdateTemplate::Update(
     const Device*   pDevice,
-    uint32_t        deviceIdx,
     VkDescriptorSet descriptorSet,
     const void*     pData)
 {
@@ -271,7 +270,7 @@ void DescriptorUpdateTemplate::Update(
     {
         const void* pDescriptorInfo = Util::VoidPtrInc(pData, pEntries[i].srcOffset);
 
-        pEntries[i].pFunc(pDevice, descriptorSet, deviceIdx, pDescriptorInfo, pEntries[i]);
+        pEntries[i].pFunc(pDevice, descriptorSet, pDescriptorInfo, pEntries[i]);
     }
 }
 
@@ -280,7 +279,6 @@ template <size_t imageDescSize, size_t samplerDescSize, bool updateFmask, bool i
 void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
     const Device*               pDevice,
     VkDescriptorSet             descriptorSet,
-    uint32_t                    deviceIdx,
     const void*                 pDescriptorInfo,
     const TemplateUpdateInfo&   entry)
 {
@@ -288,43 +286,51 @@ void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
 
     const VkDescriptorImageInfo* pImageInfo = static_cast<const VkDescriptorImageInfo*>(pDescriptorInfo);
 
-    uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
+    uint32_t deviceIdx = 0;
 
-    if (immutable)
+    do
     {
-        // If the sampler part of the combined image sampler is immutable then we should only update the image
-        // descriptors, but have to make sure to still use the appropriate stride.
-        DescriptorUpdate::WriteImageDescriptors<imageDescSize>(
-            pImageInfo,
-            deviceIdx,
-            pDestAddr,
-            entry.descriptorCount,
-            entry.dstBindStaDwArrayStride,
-            entry.srcStride);
-    }
-    else
-    {
-        DescriptorUpdate::WriteImageSamplerDescriptors<imageDescSize, samplerDescSize>(
-            pImageInfo,
-            deviceIdx,
-            pDestAddr,
-            entry.descriptorCount,
-            entry.dstBindStaDwArrayStride,
-            entry.srcStride);
-    }
+        uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
 
-    if (updateFmask)
-    {
-        uint32_t* pDestFmaskAddr = pDstSet->FmaskCpuAddress(deviceIdx) + entry.dstStaOffset;
+        if (immutable)
+        {
+            // If the sampler part of the combined image sampler is immutable then we should only update the image
+            // descriptors, but have to make sure to still use the appropriate stride.
+            DescriptorUpdate::WriteImageDescriptors<imageDescSize>(
+                pImageInfo,
+                deviceIdx,
+                pDestAddr,
+                entry.descriptorCount,
+                entry.dstBindStaDwArrayStride,
+                entry.srcStride);
+        }
+        else
+        {
+            DescriptorUpdate::WriteImageSamplerDescriptors<imageDescSize, samplerDescSize>(
+                pImageInfo,
+                deviceIdx,
+                pDestAddr,
+                entry.descriptorCount,
+                entry.dstBindStaDwArrayStride,
+                entry.srcStride);
+        }
 
-        DescriptorUpdate::WriteFmaskDescriptors<imageDescSize>(
-            pImageInfo,
-            deviceIdx,
-            pDestFmaskAddr,
-            entry.descriptorCount,
-            entry.dstBindStaDwArrayStride,
-            entry.srcStride);
+        if (updateFmask)
+        {
+            uint32_t* pDestFmaskAddr = pDstSet->FmaskCpuAddress(deviceIdx) + entry.dstStaOffset;
+
+            DescriptorUpdate::WriteFmaskDescriptors<imageDescSize>(
+                pImageInfo,
+                deviceIdx,
+                pDestFmaskAddr,
+                entry.descriptorCount,
+                entry.dstBindStaDwArrayStride,
+                entry.srcStride);
+        }
+
+        deviceIdx++;
     }
+    while (deviceIdx < numPalDevices);
 }
 
 // =====================================================================================================================
@@ -332,7 +338,6 @@ template <size_t bufferDescSize, VkDescriptorType descriptorType, uint32_t numPa
 void DescriptorUpdateTemplate::UpdateEntryTexelBuffer(
     const Device*               pDevice,
     VkDescriptorSet             descriptorSet,
-    uint32_t                    deviceIdx,
     const void*                 pDescriptorInfo,
     const TemplateUpdateInfo&   entry)
 {
@@ -340,15 +345,23 @@ void DescriptorUpdateTemplate::UpdateEntryTexelBuffer(
 
     const VkBufferView* pTexelBufferView = static_cast<const VkBufferView*>(pDescriptorInfo);
 
-    uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
+    uint32_t deviceIdx = 0;
 
-    DescriptorUpdate::WriteBufferDescriptors<bufferDescSize, descriptorType>(
-            pTexelBufferView,
-            deviceIdx,
-            pDestAddr,
-            entry.descriptorCount,
-            entry.dstBindStaDwArrayStride,
-            entry.srcStride);
+    do
+    {
+        uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
+
+        DescriptorUpdate::WriteBufferDescriptors<bufferDescSize, descriptorType>(
+                pTexelBufferView,
+                deviceIdx,
+                pDestAddr,
+                entry.descriptorCount,
+                entry.dstBindStaDwArrayStride,
+                entry.srcStride);
+
+        deviceIdx++;
+    }
+    while (deviceIdx < numPalDevices);
 }
 
 // =====================================================================================================================
@@ -356,7 +369,6 @@ template <VkDescriptorType descriptorType, uint32_t numPalDevices>
 void DescriptorUpdateTemplate::UpdateEntryBuffer(
     const Device*               pDevice,
     VkDescriptorSet             descriptorSet,
-    uint32_t                    deviceIdx,
     const void*                 pDescriptorInfo,
     const TemplateUpdateInfo&   entry)
 {
@@ -364,32 +376,40 @@ void DescriptorUpdateTemplate::UpdateEntryBuffer(
 
     const VkDescriptorBufferInfo* pBufferInfo = static_cast<const VkDescriptorBufferInfo*>(pDescriptorInfo);
 
-    uint32_t* pDestAddr;
-    uint32_t stride;
+    uint32_t deviceIdx = 0;
 
-    if ((descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
-        (descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
+    do
     {
-        // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
-        // client memory.
-        // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
-        pDestAddr   = pDstSet->DynamicDescriptorData() + entry.dstDynOffset;
-        stride      = entry.dstBindDynDataDwArrayStride;
-    }
-    else
-    {
-        pDestAddr   = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
-        stride      = entry.dstBindStaDwArrayStride;
-    }
+        uint32_t* pDestAddr;
+        uint32_t stride;
 
-    DescriptorUpdate::WriteBufferInfoDescriptors<descriptorType>(
-            pDevice,
-            pBufferInfo,
-            deviceIdx,
-            pDestAddr,
-            entry.descriptorCount,
-            stride,
-            entry.srcStride);
+        if ((descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
+            (descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
+        {
+            // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
+            // client memory.
+            // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
+            pDestAddr   = pDstSet->DynamicDescriptorData() + entry.dstDynOffset;
+            stride      = entry.dstBindDynDataDwArrayStride;
+        }
+        else
+        {
+            pDestAddr   = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
+            stride      = entry.dstBindStaDwArrayStride;
+        }
+
+        DescriptorUpdate::WriteBufferInfoDescriptors<descriptorType>(
+                pDevice,
+                pBufferInfo,
+                deviceIdx,
+                pDestAddr,
+                entry.descriptorCount,
+                stride,
+                entry.srcStride);
+
+        deviceIdx++;
+    }
+    while (deviceIdx < numPalDevices);
 }
 
 // =====================================================================================================================
@@ -397,7 +417,6 @@ template <size_t samplerDescSize, uint32_t numPalDevices>
 void DescriptorUpdateTemplate::UpdateEntrySampler(
     const Device*               pDevice,
     VkDescriptorSet             descriptorSet,
-    uint32_t                    deviceIdx,
     const void*                 pDescriptorInfo,
     const TemplateUpdateInfo&   entry)
 {
@@ -405,14 +424,22 @@ void DescriptorUpdateTemplate::UpdateEntrySampler(
 
     const VkDescriptorImageInfo* pImageInfo = static_cast<const VkDescriptorImageInfo*>(pDescriptorInfo);
 
-    uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
+    uint32_t deviceIdx = 0;
 
-    DescriptorUpdate::WriteSamplerDescriptors<samplerDescSize>(
-        pImageInfo,
-        pDestAddr,
-        entry.descriptorCount,
-        entry.dstBindStaDwArrayStride,
-        entry.srcStride);
+    do
+    {
+        uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
+
+        DescriptorUpdate::WriteSamplerDescriptors<samplerDescSize>(
+            pImageInfo,
+            pDestAddr,
+            entry.descriptorCount,
+            entry.dstBindStaDwArrayStride,
+            entry.srcStride);
+
+        deviceIdx++;
+    }
+    while (deviceIdx < numPalDevices);
 }
 
 // =====================================================================================================================
@@ -420,7 +447,6 @@ template <size_t imageDescSize, bool updateFmask, uint32_t numPalDevices>
 void DescriptorUpdateTemplate::UpdateEntrySampledImage(
         const Device*               pDevice,
         VkDescriptorSet             descriptorSet,
-        uint32_t                    deviceIdx,
         const void*                 pDescriptorInfo,
         const TemplateUpdateInfo&   entry)
 {
@@ -428,28 +454,36 @@ void DescriptorUpdateTemplate::UpdateEntrySampledImage(
 
     const VkDescriptorImageInfo* pImageInfo = static_cast<const VkDescriptorImageInfo*>(pDescriptorInfo);
 
-    uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
+    uint32_t deviceIdx = 0;
 
-    DescriptorUpdate::WriteImageDescriptors<imageDescSize>(
-            pImageInfo,
-            deviceIdx,
-            pDestAddr,
-            entry.descriptorCount,
-            entry.dstBindStaDwArrayStride,
-            entry.srcStride);
+    do
+    {
+        uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
 
-     if (updateFmask)
-     {
-         uint32_t* pDestFmaskAddr = pDstSet->FmaskCpuAddress(deviceIdx) + entry.dstStaOffset;
+        DescriptorUpdate::WriteImageDescriptors<imageDescSize>(
+                pImageInfo,
+                deviceIdx,
+                pDestAddr,
+                entry.descriptorCount,
+                entry.dstBindStaDwArrayStride,
+                entry.srcStride);
 
-         DescriptorUpdate::WriteFmaskDescriptors<imageDescSize>(
-             pImageInfo,
-             deviceIdx,
-             pDestFmaskAddr,
-             entry.descriptorCount,
-             entry.dstBindStaDwArrayStride,
-             entry.srcStride);
-     }
+         if (updateFmask)
+         {
+             uint32_t* pDestFmaskAddr = pDstSet->FmaskCpuAddress(deviceIdx) + entry.dstStaOffset;
+
+             DescriptorUpdate::WriteFmaskDescriptors<imageDescSize>(
+                 pImageInfo,
+                 deviceIdx,
+                 pDestFmaskAddr,
+                 entry.descriptorCount,
+                 entry.dstBindStaDwArrayStride,
+                 entry.srcStride);
+         }
+
+        deviceIdx++;
+    }
+    while (deviceIdx < numPalDevices);
 }
 
 namespace entry
@@ -480,13 +514,7 @@ VKAPI_ATTR void VKAPI_CALL vkUpdateDescriptorSetWithTemplate(
     Device*                   pDevice   = ApiDevice::ObjectFromHandle(device);
     DescriptorUpdateTemplate* pTemplate = DescriptorUpdateTemplate::ObjectFromHandle(descriptorUpdateTemplate);
 
-    uint32_t deviceIdx = 0;
-    do
-    {
-        pTemplate->Update(pDevice, deviceIdx, descriptorSet, pData);
-        deviceIdx++;
-    }
-    while (deviceIdx < pDevice->NumPalDevices());
+    pTemplate->Update(pDevice, descriptorSet, pData);
 }
 
 } // namespace entry

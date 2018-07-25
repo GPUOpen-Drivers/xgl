@@ -188,12 +188,14 @@ struct PipelineProfileAction
             struct
             {
                 uint32_t lateAllocVsLimit : 1;
+                uint32_t binningOverride  : 1;
 
-                uint32_t reserved         : 31;
+                uint32_t reserved         : 30;
             };
             uint32_t u32All;
         } apply;
 
+        Pal::BinningOverride binningOverride;
         uint32_t             lateAllocVsLimit;
     } createInfo;
 };
@@ -285,6 +287,11 @@ private:
         const PipelineProfilePattern& pattern,
         const PipelineOptimizerKey&   pipelineKey);
 
+    Pal::ShaderHash GetFirstMatchingShaderHash(
+        const PipelineProfilePattern& pattern,
+        const PipelineOptimizerKey&   pipelineKey);
+
+    void BuildTuningProfile();
     void BuildAppProfile();
 
 #if ICD_RUNTIME_APP_PROFILE
@@ -299,6 +306,7 @@ private:
     Device*                m_pDevice;
     const RuntimeSettings& m_settings;
 
+    PipelineProfile        m_tuningProfile;
     PipelineProfile        m_appProfile;
 
 #if ICD_RUNTIME_APP_PROFILE

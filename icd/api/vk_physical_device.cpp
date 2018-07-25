@@ -2961,7 +2961,7 @@ VkResult PhysicalDevice::GetRandROutputDisplay(
     if (pScreen == nullptr)
     {
         Pal::OsDisplayHandle hDisplay = dpy;
-        int32_t connectorId           = -1;
+        uint32_t connectorId          = UINT32_MAX;
 
         result = PalToVkResult(m_pPalDevice->GetConnectorIdFromOutput(hDisplay,
                                                                       randrOutput,

@@ -313,6 +313,9 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
         (appProfile == AppProfile::SedpEngine))
     {
         llpcOptions[numOptions++] = "-enable-si-scheduler";
+        // si-scheduler interacts badly with SIFormMemoryClauses pass, so
+        // disable the effect of that pass by limiting clause length to 1.
+        llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
     }
 
     // Force enable cache to disk to improve user experience

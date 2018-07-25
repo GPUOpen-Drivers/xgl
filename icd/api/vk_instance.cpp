@@ -807,7 +807,7 @@ VkResult Instance::FindScreens(
 // =====================================================================================================================
 Pal::IScreen* Instance::FindScreenFromConnectorId(
     const Pal::IDevice* pDevice,
-    int32_t             connectorId
+    uint32_t            connectorId
 ) const
 {
     Pal::IScreen* pScreen = nullptr;

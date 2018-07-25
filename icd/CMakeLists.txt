@@ -125,6 +125,11 @@ if (BUILD_WAYLAND_SUPPORT)
     target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
 endif()
 
+find_package(XCB)
+if (${XCB_RANDR_LEASE})
+    target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_XRANDR_EXT=1)
+endif()
+
 if(UNIX)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XCB_KHR)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_KHR)

@@ -177,7 +177,7 @@ public:
 
     Pal::IScreen* FindScreenFromConnectorId(
         const Pal::IDevice* pDevice,
-        int32_t             connectorId) const;
+        uint32_t            connectorId) const;
 
     Pal::IScreen* FindScreenFromRandrOutput(
         const Pal::IDevice* pDevice,

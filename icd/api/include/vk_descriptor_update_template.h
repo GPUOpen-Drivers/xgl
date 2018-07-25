@@ -61,7 +61,6 @@ public:
 
     void Update(
         const Device*   pDevice,
-        uint32_t        deviceIdx,
         VkDescriptorSet descriptorSet,
         const void*     pData);
 
@@ -77,7 +76,6 @@ private:
     typedef void(*PfnUpdateEntry)(
         const Device*               pDevice,
         VkDescriptorSet             descriptorSet,
-        uint32_t                    deviceIdx,
         const void*                 pDescriptorInfo,
         const TemplateUpdateInfo&   entry);
 
@@ -119,7 +117,6 @@ private:
     static void UpdateEntrySampledImage(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,
-            uint32_t                    deviceIdx,
             const void*                 pDescriptorInfo,
             const TemplateUpdateInfo&   entry);
 
@@ -127,7 +124,6 @@ private:
     static void UpdateEntrySampler(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,
-            uint32_t                    deviceIdx,
             const void*                 pDescriptorInfo,
             const TemplateUpdateInfo&   entry);
 
@@ -135,7 +131,6 @@ private:
     static void UpdateEntryBuffer(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,
-            uint32_t                    deviceIdx,
             const void*                 pDescriptorInfo,
             const TemplateUpdateInfo&   entry);
 
@@ -143,7 +138,6 @@ private:
     static void UpdateEntryTexelBuffer(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,
-            uint32_t                    deviceIdx,
             const void*                 pDescriptorInfo,
             const TemplateUpdateInfo&   entry);
 
@@ -151,7 +145,6 @@ private:
     static void UpdateEntryCombinedImageSampler(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,
-            uint32_t                    deviceIdx,
             const void*                 pDescriptorInfo,
             const TemplateUpdateInfo&   entry);
 
