@@ -3967,15 +3967,12 @@ void CmdBuffer::BeginRenderPass(
 
         utils::IterateMask deviceGroup(pDeviceGroupRenderPassBeginInfo->deviceMask);
 
-        for (uint32_t areaIdx = 0; areaIdx < pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount; areaIdx++)
+        while (deviceGroup.Iterate())
         {
-            const VkRect2D& srcRect = pDeviceGroupRenderPassBeginInfo->pDeviceRenderAreas[areaIdx];
-
-            deviceGroup.Iterate();
-
             const uint32_t deviceIdx = deviceGroup.Index();
 
-            auto* pDstRect = &m_renderPassInstance.renderArea[deviceIdx];
+            const VkRect2D& srcRect  = pDeviceGroupRenderPassBeginInfo->pDeviceRenderAreas[deviceIdx];
+            auto*           pDstRect = &m_renderPassInstance.renderArea[deviceIdx];
 
             pDstRect->offset.x      = srcRect.offset.x;
             pDstRect->offset.y      = srcRect.offset.y;

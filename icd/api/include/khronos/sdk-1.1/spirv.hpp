@@ -679,11 +679,9 @@ enum Capability {
     CapabilityVariablePointers = 4442,
     CapabilityAtomicStorageOps = 4445,
     CapabilitySampleMaskPostDepthCoverage = 4447,
-#if VKI_UNRATIFIED_KHR_FEATURES
     CapabilityStorageBuffer8BitAccess = 4448,
     CapabilityUniformAndStorageBuffer8BitAccess = 4449,
     CapabilityStoragePushConstant8 = 4450,
-#endif
     CapabilityFloat16ImageAMD = 5008,
     CapabilityImageGatherBiasLodAMD = 5009,
     CapabilityFragmentMaskAMD = 5010,

@@ -2676,6 +2676,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_8BIT_STORAGE));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CREATE_RENDERPASS2));
 
@@ -3154,6 +3155,18 @@ void PhysicalDevice::GetFeatures2(
                 {
                     pStorageFeatures->storageInputOutput16               = VK_FALSE;
                 }
+
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR:
+            {
+                VkPhysicalDevice8BitStorageFeaturesKHR* pStorageFeatures =
+                    reinterpret_cast<VkPhysicalDevice8BitStorageFeaturesKHR*>(pHeader);
+                pStorageFeatures->storageBuffer8BitAccess           = VK_TRUE;
+                pStorageFeatures->uniformAndStorageBuffer8BitAccess = VK_TRUE;
+
+                // We don't plan to support 8-bit push constants
+                pStorageFeatures->storagePushConstant8              = VK_FALSE;
 
                 break;
             }

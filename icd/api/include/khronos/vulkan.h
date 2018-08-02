@@ -63,6 +63,8 @@
 // TODO: SWDEV-145838 Remove the header once VK_KHR_create_renderpass2 is part of the official Vulkan header
 #include "devext/vk_khr_create_renderpass2.h"
 
+#include "devext/vk_khr_8bit_storage.h"
+
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,
     SCISSOR,

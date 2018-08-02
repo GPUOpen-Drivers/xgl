@@ -56,7 +56,10 @@
 #include "msgTransport.h"
 #include "protocols/rgpServer.h"
 #include "protocols/driverControlServer.h"
+
+#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
 #include "protocols/etwClient.h"
+#endif
 
 namespace vk
 {
@@ -127,7 +130,9 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_pInstance(pInstance),
     m_pDevDriverServer(pInstance->PalPlatform()->GetDevDriverServer()),
     m_pRGPServer(nullptr),
+#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
     m_pEtwClient(nullptr),
+#endif
     m_hardwareSupportsTracing(false),
     m_rgpServerSupportsTracing(false),
     m_finalized(false),
@@ -429,6 +434,7 @@ Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
         (pState->pBeginFence->GetStatus() != Pal::Result::NotReady) && // "Trace begin" cmdbuf has retired
         (pState->pEndFence->GetStatus()   != Pal::Result::NotReady))   // "Trace end" cmdbuf has retired
     {
+#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
         // Process ETW events if we have a connected client.
         if (m_pEtwClient != nullptr)
         {
@@ -513,6 +519,7 @@ Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
                 CleanupEtwClient();
             }
         }
+#endif
 
         bool success = false;
 
@@ -701,7 +708,8 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
     // resources against this new one if the device is changing.
     Pal::Result result = CheckTraceDeviceChanged(pState, pQueue->VkDevice());
 
-    Device* pDevice = pState->pDevice;
+    Device* pDevice                 = pState->pDevice;
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
     // Notify the RGP server that we are starting a trace
     if (result == Pal::Result::Success)
@@ -722,8 +730,9 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
     {
         GpuUtil::GpaSessionBeginInfo info = {};
 
-        info.flags.enableQueueTiming   = pState->queueTimingEnabled;
-        info.flags.enableSampleUpdates = m_enableSampleUpdates;
+        info.flags.enableQueueTiming               = pState->queueTimingEnabled;
+        info.flags.enableSampleUpdates             = m_enableSampleUpdates;
+        info.flags.useInternalQueueSemaphoreTiming = settings.devModeSemaphoreQueueTimingEnable;
 
         result = pState->pGpaSession->Begin(info);
     }
@@ -785,9 +794,9 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         sampleConfig.sqtt.flags.supressInstructionTokens = (m_enableInstTracing == false);
 
         // Override trace buffer size from panel
-        if (pDevice->GetRuntimeSettings().devModeSqttGpuMemoryLimit != 0)
+        if (settings.devModeSqttGpuMemoryLimit != 0)
         {
-            sampleConfig.sqtt.gpuMemoryLimit = pDevice->GetRuntimeSettings().devModeSqttGpuMemoryLimit;
+            sampleConfig.sqtt.gpuMemoryLimit = settings.devModeSqttGpuMemoryLimit;
         }
 
         pState->gpaSampleId = pState->pGpaSession->BeginSample(pBeginCmdBuf, sampleConfig);
@@ -799,6 +808,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         result = pBeginCmdBuf->End();
     }
 
+#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
     if (result == Pal::Result::Success)
     {
         // Enable tracing on the ETW client if it's connected.
@@ -814,6 +824,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
             }
         }
     }
+#endif
 
     // Reset the trace-begin fence
     if (result == Pal::Result::Success)
@@ -893,7 +904,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         m_blockingTraceEnd |= (actualPresent == false);
 
         // Override via panel setting
-        m_blockingTraceEnd |= pState->pDevice->GetRuntimeSettings().devModeSqttForceBlockOnTraceEnd;
+        m_blockingTraceEnd |= settings.devModeSqttForceBlockOnTraceEnd;
     }
     else
     {
@@ -1251,12 +1262,14 @@ void DevModeMgr::FinishOrAbortTrace(
         pState->pGpaSession->Reset();
     }
 
+#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
     // Disable tracing on the ETW client if it exists.
     if (aborted && m_pEtwClient != nullptr)
     {
         DevDriver::Result devDriverResult = m_pEtwClient->DisableTracing(nullptr);
         VK_ASSERT(devDriverResult == DevDriver::Result::Success);
     }
+#endif
 
     // Reset tracing state to idle
     pState->preparedFrameCount = 0;
@@ -1871,6 +1884,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
         result = Pal::Result::ErrorInitializationFailed;
     }
 
+#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
     // Attempt to initialize the ETW client for use with RGP traces. This might fail if there's no ETW server
     // available on the message bus. Failure just means that we won't be able to get extra information about
     // queue signal and wait events. Just trigger an assert in the case of failure.
@@ -1880,6 +1894,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
         Pal::Result etwInitResult = InitEtwClient();
         VK_ASSERT(etwInitResult == Pal::Result::Success);
     }
+#endif
 
     if (result != Pal::Result::Success)
     {
@@ -2113,6 +2128,7 @@ void DevModeMgr::PipelineCreated(
     }
 }
 
+#if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
 Pal::Result DevModeMgr::InitEtwClient()
 {
     // We should never have a valid etw client pointer already.
@@ -2174,6 +2190,7 @@ void DevModeMgr::CleanupEtwClient()
         m_pEtwClient = nullptr;
     }
 }
+#endif
 
 }; // namespace vk
 

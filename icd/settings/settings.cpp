@@ -321,6 +321,11 @@ void ValidateSettings(
     {
         pSettings->enableFmaskBasedMsaaRead = false;
     }
+
+#if !VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
+    // Internal semaphore queue timing is always enabled when ETW is not available
+    pSettings->devModeSemaphoreQueueTimingEnable = true;
+#endif
 }
 
 // =====================================================================================================================

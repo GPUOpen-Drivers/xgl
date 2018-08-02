@@ -1925,12 +1925,13 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags)
     Pal::ImageCreateInfo palImageCreateInfo;
     palImageCreateInfo.flags.u32All         = 0;
 
-    palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)  ? 1 : 0;
-    palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
-    palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)            ? 1 : 0;
+    palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)     ? 1 : 0;
+    palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)    ? 1 : 0;
+    palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)               ? 1 : 0;
+    palImageCreateInfo.flags.view3dAs2dArray    = (imageCreateFlags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) ? 1 : 0;
 
     // We must not use any metadata if sparse aliasing is enabled
-    palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)   ? 1 : 0;
+    palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)      ? 1 : 0;
 
     return palImageCreateInfo.flags.u32All;
 }

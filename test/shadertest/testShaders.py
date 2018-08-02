@@ -49,7 +49,7 @@ compile_name = "amdllpc"
 gfxip_str = " -gfxip="
 
 # Compile specified shader in sub process
-def compile(cmdname, gfx, f):
+def compile(cmdname, gfx, f, compiler):
     start = time.time()
     result = subprocess.call(cmdname, shell = True)
     passed = False
@@ -59,7 +59,7 @@ def compile(cmdname, gfx, f):
             while True:
                 line = rf.readline()
                 if line:
-                    if re.search(compile_name.upper()+ " SUCCESS", line):
+                    if re.search(compiler.upper()+ " SUCCESS", line):
                         passed = True
                         break
                 else:
@@ -179,13 +179,13 @@ if __name__=='__main__':
                             cmd = COMPILER + gfxip + cacheMode + " -auto-layout-desc  -enable-outs=0 " + SHADER_SRC + "/" + gfx + "/" + f + " 2>&1 >> " + RESULT + "/" + gfx + "/" + f + ".log"
                     if sub_index == 0 :
                         # Run test in sync-compile mode to setup context cache
-                        result = compile(cmd, gfx, f)
+                        result = compile(cmd, gfx, f, compile_name)
                         print(result)
                         if re.search("(FAIL)", result):
                             fail_count = fail_count + 1
                     else :
                         # Run test in async-compile mode
-                        result_msg.append(process_pool.apply_async(compile, args=(cmd, gfx, f)))
+                        result_msg.append(process_pool.apply_async(compile, args=(cmd, gfx, f, compile_name)))
 
                     # Check result delayed with max process pool
                     if (sub_index > 8) :
@@ -202,7 +202,7 @@ if __name__=='__main__':
             end_time = time.time()
             # Check remaining results
             i = sub_index - 8
-            while i < len(result_msg) :
+            while (i >= 0) and i < len(result_msg) :
                 result = result_msg[i].get()
                 print(result)
                 if re.search("(FAIL)", result):

@@ -679,7 +679,7 @@ RenderPass::RenderPass(
     const RenderPassCreateInfo*     pCreateInfo,
     const RenderPassExecuteInfo*    pExecuteInfo)
     :
-    m_pCreateInfo   (pCreateInfo),
+    m_createInfo    (*pCreateInfo),
     m_pExecuteInfo  (pExecuteInfo)
 {
 }
@@ -727,12 +727,9 @@ static VkResult CreateRenderPass(
     }
 
     const size_t apiSize        = sizeof(RenderPass);
-    const size_t infoStructSize = sizeof(RenderPassCreateInfo);
     const size_t infoMemorySize = GetRenderPassCreateInfoRequiredMemorySize<RenderPassCreateInfoType>(pCreateInfo, renderPassExt);
 
-    const size_t memorySize = apiSize
-        + infoStructSize
-        + infoMemorySize;
+    const size_t memorySize = apiSize + infoMemorySize;
 
     pMemory = pDevice->AllocApiObject(memorySize, pAllocator);
 
@@ -741,18 +738,14 @@ static VkResult CreateRenderPass(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    void* nextPtr = Util::VoidPtrInc(pMemory, apiSize);
+    RenderPassCreateInfo renderPassInfo;
 
-    VK_PLACEMENT_NEW(nextPtr) RenderPassCreateInfo();
+    void* pMemoryInfo = Util::VoidPtrInc(pMemory, apiSize);
 
-    RenderPassCreateInfo* pRenderPassInfo = static_cast<RenderPassCreateInfo*>(nextPtr);
-
-    nextPtr = Util::VoidPtrInc(nextPtr, infoStructSize);
-
-    pRenderPassInfo->Init(
+    renderPassInfo.Init(
         pCreateInfo,
         renderPassExt,
-        nextPtr,
+        pMemoryInfo,
         infoMemorySize);
 
     RenderPassExecuteInfo* pExecuteInfo = nullptr;
@@ -764,12 +757,12 @@ static VkResult CreateRenderPass(
     pLogger = &logger;
 #endif
 
-    RenderPassLogBegin(pLogger, pRenderPassInfo);
+    RenderPassLogBegin(pLogger, &renderPassInfo);
 
     RenderPassBuilder builder(pDevice, &buildArena, pLogger);
 
     result = builder.Build(
-        pRenderPassInfo,
+        &renderPassInfo,
         pAllocator,
         &pExecuteInfo);
 
@@ -793,7 +786,7 @@ static VkResult CreateRenderPass(
 
     RenderPassLogEnd(pLogger);
 
-    VK_PLACEMENT_NEW(pMemory) RenderPass(pRenderPassInfo, pExecuteInfo);
+    VK_PLACEMENT_NEW(pMemory) RenderPass(&renderPassInfo, pExecuteInfo);
 
     *pOutRenderPass = RenderPass::HandleFromVoidPointer(pMemory);
 
@@ -835,14 +828,14 @@ VkFormat RenderPass::GetColorAttachmentFormat(
     uint32_t colorTarget
     ) const
 {
-    const SubpassDescription& subPass = m_pCreateInfo->pSubpasses[subpassIndex];
+    const SubpassDescription& subPass = m_createInfo.pSubpasses[subpassIndex];
     const uint32_t attachIndex        = subPass.pColorAttachments[colorTarget].attachment;
 
     VkFormat format;
 
     if (subPass.colorAttachmentCount > 0 && attachIndex != VK_ATTACHMENT_UNUSED)
     {
-        format = m_pCreateInfo->pAttachments[attachIndex].format;
+        format = m_createInfo.pAttachments[attachIndex].format;
     }
     else
     {
@@ -860,13 +853,13 @@ VkFormat RenderPass::GetDepthStencilAttachmentFormat(
 {
     VkFormat format;
 
-    const SubpassDescription& subpass = m_pCreateInfo->pSubpasses[subpassIndex];
+    const SubpassDescription& subpass = m_createInfo.pSubpasses[subpassIndex];
 
     if (subpass.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED)
     {
         const uint32_t attachIndex = subpass.depthStencilAttachment.attachment;
 
-        format = m_pCreateInfo->pAttachments[attachIndex].format;
+        format = m_createInfo.pAttachments[attachIndex].format;
     }
     else
     {
@@ -883,14 +876,14 @@ uint32_t RenderPass::GetColorAttachmentSamples(
     uint32_t colorTarget
     ) const
 {
-    const SubpassDescription& subPass = m_pCreateInfo->pSubpasses[subpassIndex];
+    const SubpassDescription& subPass = m_createInfo.pSubpasses[subpassIndex];
     const uint32_t attachIndex        = subPass.pColorAttachments[colorTarget].attachment;
 
     uint32_t samples;
 
     if (attachIndex != VK_ATTACHMENT_UNUSED)
     {
-        samples = m_pCreateInfo->pAttachments[attachIndex].samples;
+        samples = m_createInfo.pAttachments[attachIndex].samples;
     }
     else
     {
@@ -908,13 +901,13 @@ uint32_t RenderPass::GetDepthStencilAttachmentSamples(
 {
     uint32_t samples;
 
-    const SubpassDescription& subPass = m_pCreateInfo->pSubpasses[subPassIndex];
+    const SubpassDescription& subPass = m_createInfo.pSubpasses[subPassIndex];
 
     if (subPass.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED)
     {
         const uint32_t attachIndex = subPass.depthStencilAttachment.attachment;
 
-        samples = m_pCreateInfo->pAttachments[attachIndex].samples;
+        samples = m_createInfo.pAttachments[attachIndex].samples;
     }
     else
     {
@@ -930,7 +923,7 @@ uint32_t RenderPass::GetSubpassColorReferenceCount(
     uint32_t subpassIndex
     ) const
 {
-    return m_pCreateInfo->pSubpasses[subpassIndex].colorAttachmentCount;
+    return m_createInfo.pSubpasses[subpassIndex].colorAttachmentCount;
 }
 
 // =====================================================================================================================
@@ -939,7 +932,7 @@ const AttachmentReference& RenderPass::GetSubpassColorReference(
     uint32_t index
     ) const
 {
-    return m_pCreateInfo->pSubpasses[subpass].pColorAttachments[index];
+    return m_createInfo.pSubpasses[subpass].pColorAttachments[index];
 }
 
 // =====================================================================================================================
@@ -947,7 +940,7 @@ const AttachmentReference& RenderPass::GetSubpassDepthStencilReference(
     uint32_t subpass
     ) const
 {
-    return m_pCreateInfo->pSubpasses[subpass].depthStencilAttachment;
+    return m_createInfo.pSubpasses[subpass].depthStencilAttachment;
 }
 
 // =====================================================================================================================
@@ -955,9 +948,9 @@ const AttachmentDescription& RenderPass::GetAttachmentDesc(
     uint32_t attachmentIndex
     ) const
 {
-    VK_ASSERT(attachmentIndex < m_pCreateInfo->attachmentCount);
+    VK_ASSERT(attachmentIndex < m_createInfo.attachmentCount);
 
-    return m_pCreateInfo->pAttachments[attachmentIndex];
+    return m_createInfo.pAttachments[attachmentIndex];
 }
 
 // =====================================================================================================================

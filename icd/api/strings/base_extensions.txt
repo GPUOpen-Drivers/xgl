@@ -81,3 +81,4 @@ VK_KHR_variable_pointers
 VK_EXT_vertex_attribute_divisor
 VK_EXT_descriptor_indexing
 VK_KHR_create_renderpass2
+VK_KHR_8bit_storage

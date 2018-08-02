@@ -115,6 +115,7 @@ endif()
 # Enable relevant GPUOpen preprocessor definitions
 if(ICD_GPUOPEN_DEVMODE_BUILD)
     target_compile_definitions(xgl PRIVATE ICD_GPUOPEN_DEVMODE_BUILD)
+    # The name of the variable below must match the one in the GpuOpen CMakeLists.txt
 endif()
 
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})

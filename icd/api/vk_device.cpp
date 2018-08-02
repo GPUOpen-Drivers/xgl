@@ -371,6 +371,14 @@ VkResult Device::Create(
 
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevice8BitStorageFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDevice8BitStorageFeaturesKHR*>(pHeader));
+
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_FEATURES_AMD:
         {
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceGpaFeaturesAMD>(
@@ -946,6 +954,7 @@ void Device::InitDispatchTable()
     {
         SqttOverrideDispatchTable(&m_dispatchTable, m_pSqttMgr);
     }
+
 }
 
 // =====================================================================================================================
