@@ -372,7 +372,7 @@ bool ShaderOptimizer::ProfilePatternMatchesPipeline(
 // =====================================================================================================================
 void ShaderOptimizer::BuildTuningProfile()
 {
-    memset(&m_appProfile, 0, sizeof(m_appProfile));
+    memset(&m_tuningProfile, 0, sizeof(m_tuningProfile));
 
     if (m_settings.overrideShaderParams == false)
     {
