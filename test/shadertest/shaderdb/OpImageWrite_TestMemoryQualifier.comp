@@ -1,0 +1,14 @@
+#version 450 core
+
+layout(set = 0, binding = 0, rgba8)          uniform image2D img1;
+layout(set = 0, binding = 1, rgba8) restrict uniform image2D img2;
+layout(set = 0, binding = 2, rgba8) coherent uniform image2D img3;
+layout(set = 0, binding = 3, rgba8) volatile uniform image2D img4;
+
+void main()
+{
+    imageStore(img1, ivec2(1, 1), vec4(0));
+    imageStore(img2, ivec2(2, 2), vec4(0));
+    imageStore(img3, ivec2(3, 3), vec4(0));
+    imageStore(img4, ivec2(4, 4), vec4(0));
+}

@@ -250,6 +250,7 @@ PhysicalDevice::PhysicalDevice(
     m_pPalDevice(pPalDevice),
     m_memoryTypeMask(0),
     m_settings(settings),
+    m_sampleLocationSampleCounts(0),
     m_vrHighPrioritySubEngineIndex(UINT32_MAX),
     m_queueFamilyCount(0),
     m_appProfile(appProfile),
@@ -866,6 +867,39 @@ VkResult PhysicalDevice::GetFeatures(
         pFeatures->shaderInt16 = VK_FALSE;
     }
 
+    if ((GetRuntimeSettings().optEnablePrt)
+        )
+    {
+        pFeatures->shaderResourceResidency =
+            GetPrtFeatures() & Pal::PrtFeatureShaderStatus ? VK_TRUE : VK_FALSE;
+
+        pFeatures->shaderResourceMinLod =
+            GetPrtFeatures() & Pal::PrtFeatureShaderLodClamp ? VK_TRUE : VK_FALSE;
+
+        pFeatures->sparseBinding =
+            m_properties.gpuMemoryProperties.flags.virtualRemappingSupport ? VK_TRUE : VK_FALSE;
+
+        pFeatures->sparseResidencyBuffer =
+            GetPrtFeatures() & Pal::PrtFeatureBuffer ? VK_TRUE : VK_FALSE;
+
+        pFeatures->sparseResidencyImage2D =
+            GetPrtFeatures() & Pal::PrtFeatureImage2D ? VK_TRUE : VK_FALSE;
+
+        pFeatures->sparseResidencyImage3D =
+            (GetPrtFeatures() & (Pal::PrtFeatureImage3D | Pal::PrtFeatureNonStandardImage3D)) != 0 ? VK_TRUE : VK_FALSE;
+
+        const VkBool32 sparseMultisampled =
+            GetPrtFeatures() & Pal::PrtFeatureImageMultisampled ? VK_TRUE : VK_FALSE;
+
+        pFeatures->sparseResidency2Samples  = sparseMultisampled;
+        pFeatures->sparseResidency4Samples  = sparseMultisampled;
+        pFeatures->sparseResidency8Samples  = sparseMultisampled;
+        pFeatures->sparseResidency16Samples = VK_FALSE;
+
+        pFeatures->sparseResidencyAliased =
+            GetPrtFeatures() & Pal::PrtFeatureTileAliasing ? VK_TRUE : VK_FALSE;
+    }
+    else
     {
         pFeatures->shaderResourceResidency  = VK_FALSE;
         pFeatures->shaderResourceMinLod     = VK_FALSE;
@@ -923,7 +957,65 @@ VkResult PhysicalDevice::GetImageFormatProperties(
 
     if (flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
     {
-        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        if ((GetRuntimeSettings().optEnablePrt == false)
+        )
+        {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
+
+        const bool sparseBinding = m_properties.gpuMemoryProperties.flags.virtualRemappingSupport;
+        if (!sparseBinding)
+        {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
+
+        if (flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)
+        {
+            if (Formats::IsDepthStencilFormat(format))
+            {
+                const bool sparseDepthStencil = (GetPrtFeatures() & Pal::PrtFeatureImageDepthStencil) != 0;
+                if (!sparseDepthStencil)
+                {
+                    return VK_ERROR_FORMAT_NOT_SUPPORTED;
+                }
+            }
+
+            switch (type)
+            {
+                case VK_IMAGE_TYPE_1D:
+                    return VK_ERROR_FORMAT_NOT_SUPPORTED;
+                case VK_IMAGE_TYPE_2D:
+                {
+                    const bool sparseResidencyImage2D = (GetPrtFeatures() & Pal::PrtFeatureImage2D) != 0;
+                    if (!sparseResidencyImage2D)
+                    {
+                        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+                    }
+                    break;
+                }
+                case VK_IMAGE_TYPE_3D:
+                {
+                    const bool sparseResidencyImage3D = (GetPrtFeatures() & (Pal::PrtFeatureImage3D |
+                                                                             Pal::PrtFeatureNonStandardImage3D)) != 0;
+                    if (!sparseResidencyImage3D)
+                    {
+                        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        if (flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)
+        {
+            const bool sparseResidencyAliased = (GetPrtFeatures() & Pal::PrtFeatureTileAliasing) != 0;
+            if (!sparseResidencyAliased)
+            {
+                return VK_ERROR_FORMAT_NOT_SUPPORTED;
+            }
+        }
     }
 
     VkFormatProperties formatProperties;
@@ -1075,13 +1167,13 @@ VkResult PhysicalDevice::GetImageFormatProperties(
 // =====================================================================================================================
 // Retrieve format properites. Called in response to vkGetPhysicalDeviceImageFormatProperties
 void PhysicalDevice::GetSparseImageFormatProperties(
-    VkFormat                        format,
-    VkImageType                     type,
-    VkSampleCountFlagBits           samples,
-    VkImageUsageFlags               usage,
-    VkImageTiling                   tiling,
-    uint32_t*                       pPropertyCount,
-    VkSparseImageFormatProperties*  pProperties) const
+    VkFormat                                        format,
+    VkImageType                                     type,
+    VkSampleCountFlagBits                           samples,
+    VkImageUsageFlags                               usage,
+    VkImageTiling                                   tiling,
+    uint32_t*                                       pPropertyCount,
+    utils::ArrayView<VkSparseImageFormatProperties> properties) const
 {
     const struct AspectLookup
     {
@@ -1136,7 +1228,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
         VK_ASSERT(pPropertyCount != nullptr);
 
-        if (pProperties == nullptr)
+        if (properties.IsNull())
         {
             *pPropertyCount = requiredPropertyCount;
         }
@@ -1156,9 +1248,11 @@ void PhysicalDevice::GetSparseImageFormatProperties(
                     break;
                 }
 
+                VkSparseImageFormatProperties* const pProperties = &properties[writtenPropertyCount];
+
                 pProperties->aspectMask = pAspect->aspectVk;
 
-                const VkFormat aspectFormat = vk::Formats::GetAspectFormat(format, pAspect->aspectVk);
+                const VkFormat aspectFormat = Formats::GetAspectFormat(format, pAspect->aspectVk);
                 bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(VkToPalFormat(aspectFormat).format));
 
                 // Determine pixel size index (log2 of the pixel byte size, used to index into the tables below)
@@ -1179,7 +1273,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                     VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std2DBlockShapes));
 
-                    pProperties->imageGranularity = Std2DBlockShapes[pixelSizeIndex];
+                    pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
+                                                                              Std2DBlockShapes[pixelSizeIndex]);
                 }
                 else if (type == VK_IMAGE_TYPE_3D)
                 {
@@ -1197,27 +1292,29 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                         VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std3DBlockShapes));
 
-                        pProperties->imageGranularity = Std3DBlockShapes[pixelSizeIndex];
+                        pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
+                                                                                  Std3DBlockShapes[pixelSizeIndex]);
                     }
                     else
                     {
                         VK_ASSERT((GetPrtFeatures() & Pal::PrtFeatureNonStandardImage3D) != 0);
 
                         // When standard shapes aren't supported, report shapes with a depth equal to the tile
-                        // thickness, 4, except for 128-bit, which would cause a tile split. PAL chooses PRT thick mode
-                        // for 3D images, and addrlib uses these unmodified for CI/VI.
+                        // thickness, 4, except for 64-bit and larger, which may cause a tile split on some ASICs.
+                        // PAL chooses PRT thick mode for 3D images, and addrlib uses these unmodified for CI/VI.
                         static const VkExtent3D NonStd3DBlockShapes[] =
                         {
                             {   128,    128,    4  },  // 8-bit
                             {   128,    64,     4  },  // 16-bit
                             {   64,     64,     4  },  // 32-bit
-                            {   64,     32,     4  },  // 64-bit
+                            {   128,    64,     1  },  // 64-bit
                             {   64,     64,     1  },  // 128-bit
                         };
 
                         VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(NonStd3DBlockShapes));
 
-                        pProperties->imageGranularity = NonStd3DBlockShapes[pixelSizeIndex];
+                        pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
+                                                                                  NonStd3DBlockShapes[pixelSizeIndex]);
                     }
                 }
                 else if ((type == VK_IMAGE_TYPE_2D) && (samples != VK_SAMPLE_COUNT_1_BIT))
@@ -1282,7 +1379,6 @@ void PhysicalDevice::GetSparseImageFormatProperties(
                 }
 
                 ++writtenPropertyCount;
-                ++pProperties;
 
             } // for pAspect
 
@@ -1328,7 +1424,7 @@ uint32_t PhysicalDevice::GetSupportedAPIVersion() const
 //            && IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION)
             && IsExtensionSupported(DeviceExtensions::KHR_SHADER_DRAW_PARAMETERS)
             && IsExtensionSupported(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS)
-//            && IsExtensionSupported(DeviceExtensions::KHR_VARIABLE_POINTERS)
+            && IsExtensionSupported(DeviceExtensions::KHR_VARIABLE_POINTERS)
         );
 
     return apiVersion;
@@ -1431,17 +1527,26 @@ VkResult PhysicalDevice::GetDeviceProperties(
 // =====================================================================================================================
 // Returns true if the given queue family (engine type) supports presents.
 bool PhysicalDevice::QueueSupportsPresents(
-    uint32_t queueFamilyIndex
+    uint32_t         queueFamilyIndex,
+    VkIcdWsiPlatform platform
     ) const
 {
     // Do we have any of this engine type and, if so, does it support a queueType that supports presents?
     const Pal::EngineType palEngineType = m_queueFamilies[queueFamilyIndex].palEngineType;
     const auto& engineProps             = m_properties.engineProperties[palEngineType];
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
+    Pal::PresentMode presentMode =
+        (platform == VK_ICD_WSI_PLATFORM_DISPLAY)? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
+
+    bool supported = (engineProps.engineCount > 0) &&
+                     (m_pPalDevice->GetSupportedSwapChainModes(VkToPalWsiPlatform(platform), presentMode) != 0);
+#else
     const uint32_t presentMode = static_cast<uint32_t>(Pal::PresentMode::Windowed);
 
     bool supported = (engineProps.engineCount > 0) &&
                      (m_properties.swapChainProperties.supportedSwapChainModes[presentMode]);
+#endif
 
     return supported;
 }
@@ -1966,6 +2071,15 @@ void PhysicalDevice::PopulateLimits()
                                             VK_SAMPLE_COUNT_4_BIT |
                                             VK_SAMPLE_COUNT_8_BIT;
 
+    m_sampleLocationSampleCounts = m_limits.framebufferColorSampleCounts;
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 417
+    if (m_properties.gfxipProperties.flags.support1xMsaaSampleLocations == false)
+#endif
+    {
+        m_sampleLocationSampleCounts &= ~VK_SAMPLE_COUNT_1_BIT;
+    }
+
     // Maximum number of color attachments that can be be referenced by a subpass in a render pass.
     m_limits.maxColorAttachments = Pal::MaxColorTargets;
 
@@ -2130,14 +2244,21 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
     T               pSurfaceCapabilities
     ) const
 {
+    VkResult result = VK_SUCCESS;
     DisplayableSurfaceInfo displayableInfo = {};
 
-    VkResult result = UnpackDisplayableSurface(Surface::ObjectFromHandle(surface), &displayableInfo);
+    Surface* pSurface = Surface::ObjectFromHandle(surface);
+    result = UnpackDisplayableSurface(pSurface, &displayableInfo);
 
     if (result == VK_SUCCESS)
     {
         Pal::SwapChainProperties swapChainProperties = {};
-
+        if (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
+        {
+            VkIcdSurfaceDisplay* pDisplaySurface     = pSurface->GetDisplaySurface();
+            swapChainProperties.currentExtent.width  = pDisplaySurface->imageExtent.width;
+            swapChainProperties.currentExtent.height = pDisplaySurface->imageExtent.height;
+        }
         result = PalToVkResult(m_pPalDevice->GetSwapChainInfo(
             displayableInfo.displayHandle,
             displayableInfo.windowHandle,
@@ -2241,7 +2362,7 @@ VkBool32 PhysicalDevice::DeterminePresentationSupported(
 
     if (result == VK_SUCCESS)
     {
-        const bool supported = QueueSupportsPresents(queueFamilyIndex);
+        const bool supported = QueueSupportsPresents(queueFamilyIndex, platform);
 
         ret = supported ? VK_TRUE: VK_FALSE;
     }
@@ -2267,7 +2388,11 @@ VkResult PhysicalDevice::GetSurfacePresentModes(
 
     // Query which swap chain modes are supported by the window/display
     Pal::SwapChainProperties swapChainProperties = {};
-
+    if (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
+    {
+        swapChainProperties.currentExtent.width  = displayableInfo.surfaceExtent.width;
+        swapChainProperties.currentExtent.height = displayableInfo.surfaceExtent.height;
+    }
     Pal::Result palResult = m_pPalDevice->GetSwapChainInfo(
         displayableInfo.displayHandle,
         displayableInfo.windowHandle,
@@ -2277,9 +2402,13 @@ VkResult PhysicalDevice::GetSurfacePresentModes(
     if (palResult == Pal::Result::Success)
     {
         // Get which swap chain modes are supported for the given present type (windowed vs fullscreen)
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
+        const uint32_t swapChainModes =
+            m_pPalDevice->GetSupportedSwapChainModes(displayableInfo.palPlatform, presentType);
+#else
         const uint32_t swapChainModes =
             m_properties.swapChainProperties.supportedSwapChainModes[static_cast<size_t>(presentType)];
-
+#endif
         // Translate to Vulkan present modes
         if (swapChainModes & Pal::SwapChainModeSupport::SupportImmediateSwapChain)
         {
@@ -2365,6 +2494,15 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
         pInfo->palPlatform   = VkToPalWsiPlatform(pXlibSurface->base.platform);
         pInfo->displayHandle = pXlibSurface->dpy;
         pInfo->windowHandle.win  = pXlibSurface->window;
+    }
+    else if (pSurface->GetDisplaySurface()->base.platform == VK_ICD_WSI_PLATFORM_DISPLAY)
+    {
+        VkIcdSurfaceDisplay* pDisplaySurface = pSurface->GetDisplaySurface();
+        pInfo->icdPlatform   = pDisplaySurface->base.platform;
+        pInfo->palPlatform   = VkToPalWsiPlatform(pDisplaySurface->base.platform);;
+        pInfo->surfaceExtent = pDisplaySurface->imageExtent;
+        DisplayModeObject* pDisplayMode = reinterpret_cast<DisplayModeObject*>(pDisplaySurface->displayMode);
+        pInfo->pScreen       = pDisplayMode->pScreen;
     }
     else
     {
@@ -2490,6 +2628,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GCN_SHADER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_BALLOT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DRAW_INDIRECT_COUNT));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DRAW_INDIRECT_COUNT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_BALLOT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_SUBGROUP_VOTE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_STENCIL_EXPORT));
@@ -2537,6 +2676,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_8BIT_STORAGE));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CREATE_RENDERPASS2));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_INFO));
 
@@ -2592,6 +2734,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_RANGE_UNRESTRICTED));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_QUEUE_FAMILY_FOREIGN));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DESCRIPTOR_INDEXING));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VARIABLE_POINTERS));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_ATTRIBUTE_DIVISOR));
 
     return availableExtensions;
 }
@@ -2785,6 +2930,80 @@ VkResult PhysicalDevice::EnumerateExtensionProperties(
     return result;
 }
 
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+// =====================================================================================================================
+VkResult PhysicalDevice::AcquireXlibDisplay(
+    Display*        dpy,
+    VkDisplayKHR    display)
+{
+    Pal::OsDisplayHandle hDisplay = dpy;
+    Pal::IScreen* pScreens        = reinterpret_cast<Pal::IScreen*>(display);
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
+    VkResult result = PalToVkResult(pScreens->AcquireScreenAccess(hDisplay,
+                                                                  VkToPalWsiPlatform(VK_ICD_WSI_PLATFORM_XLIB)));
+#else
+    VkResult result = VK_INCOMPLETE;
+#endif
+
+    return result;
+}
+
+// =====================================================================================================================
+VkResult PhysicalDevice::GetRandROutputDisplay(
+    Display*        dpy,
+    uint32_t        randrOutput,
+    VkDisplayKHR*   pDisplay)
+{
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
+    VkResult result       = VK_SUCCESS;
+    Pal::IScreen* pScreen = nullptr;
+    pScreen = VkInstance()->FindScreenFromRandrOutput(PalDevice(), randrOutput);
+
+    if (pScreen == nullptr)
+    {
+        Pal::OsDisplayHandle hDisplay = dpy;
+        uint32_t connectorId          = UINT32_MAX;
+
+        result = PalToVkResult(m_pPalDevice->GetConnectorIdFromOutput(hDisplay,
+                                                                      randrOutput,
+                                                                      VkToPalWsiPlatform(VK_ICD_WSI_PLATFORM_XLIB),
+                                                                      &connectorId));
+        if (result == VK_SUCCESS)
+        {
+            pScreen = VkInstance()->FindScreenFromConnectorId(PalDevice(), connectorId);
+
+            if ((pScreen != nullptr))
+            {
+                pScreen->SetRandrOutput(randrOutput);
+            }
+            else
+            {
+                result = VK_INCOMPLETE;
+            }
+        }
+    }
+
+    *pDisplay = reinterpret_cast<VkDisplayKHR>(pScreen);
+#else
+    VkResult result = VK_INCOMPLETE;
+#endif
+    return result;
+}
+#endif
+
+// =====================================================================================================================
+VkResult PhysicalDevice::ReleaseDisplay(
+    VkDisplayKHR display)
+{
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
+    Pal::IScreen* pScreen = reinterpret_cast<Pal::IScreen*>(display);
+    VkResult result = PalToVkResult(pScreen->ReleaseScreenAccess());
+#else
+    VkResult result = VK_INCOMPLETE;
+#endif
+    return result;
+}
+
 // =====================================================================================================================
 
 // =====================================================================================================================
@@ -2939,6 +3158,18 @@ void PhysicalDevice::GetFeatures2(
 
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR:
+            {
+                VkPhysicalDevice8BitStorageFeaturesKHR* pStorageFeatures =
+                    reinterpret_cast<VkPhysicalDevice8BitStorageFeaturesKHR*>(pHeader);
+                pStorageFeatures->storageBuffer8BitAccess           = VK_TRUE;
+                pStorageFeatures->uniformAndStorageBuffer8BitAccess = VK_TRUE;
+
+                // We don't plan to support 8-bit push constants
+                pStorageFeatures->storagePushConstant8              = VK_FALSE;
+
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_FEATURES_AMD:
             {
                 VkPhysicalDeviceGpaFeaturesAMD* pGpaFeatures =
@@ -2966,9 +3197,8 @@ void PhysicalDevice::GetFeatures2(
             {
                 VkPhysicalDeviceVariablePointerFeatures* pVariablePointerFeatures =
                     reinterpret_cast<VkPhysicalDeviceVariablePointerFeatures*>(pHeader);
-
-                pVariablePointerFeatures->variablePointers              = VK_FALSE;
-                pVariablePointerFeatures->variablePointersStorageBuffer = VK_FALSE;
+                pVariablePointerFeatures->variablePointers = VK_TRUE;
+                pVariablePointerFeatures->variablePointersStorageBuffer = VK_TRUE;
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
@@ -3157,6 +3387,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
         VkPhysicalDeviceDescriptorIndexingPropertiesEXT*         pDescriptorIndexingProperties;
 
+        VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -3181,7 +3412,7 @@ void PhysicalDevice::GetDeviceProperties2(
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT:
         {
-            pSampleLocationsPropertiesEXT->sampleLocationSampleCounts       = m_limits.framebufferColorSampleCounts;
+            pSampleLocationsPropertiesEXT->sampleLocationSampleCounts       = m_sampleLocationSampleCounts;
             pSampleLocationsPropertiesEXT->maxSampleLocationGridSize.width  = Pal::MaxGridSize.width;
             pSampleLocationsPropertiesEXT->maxSampleLocationGridSize.height = Pal::MaxGridSize.height;
             pSampleLocationsPropertiesEXT->sampleLocationCoordinateRange[0] = 0.0f;
@@ -3223,9 +3454,7 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES:
         {
-            const Pal::DeviceProperties& palProps = PalProperties();
-
-            pSubgroupProperties->subgroupSize        = palProps.gfxipProperties.shaderCore.wavefrontSize;
+            pSubgroupProperties->subgroupSize        = GetSubgroupSize();
 
             pSubgroupProperties->supportedStages     = VK_SHADER_STAGE_VERTEX_BIT |
                                                        VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
@@ -3317,6 +3546,11 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
+        {
+            pVertexAttributeDivisorProperties->maxVertexAttribDivisor = UINT32_MAX;
+            break;
+        }
         default:
             break;
         }
@@ -3348,8 +3582,6 @@ void PhysicalDevice::GetSparseImageFormatProperties2(
 {
     VK_ASSERT(pFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SPARSE_IMAGE_FORMAT_INFO_2);
 
-    if (pProperties == nullptr)
-    {
         GetSparseImageFormatProperties(
             pFormatInfo->format,
             pFormatInfo->type,
@@ -3357,29 +3589,7 @@ void PhysicalDevice::GetSparseImageFormatProperties2(
             pFormatInfo->usage,
             pFormatInfo->tiling,
             pPropertyCount,
-            nullptr);
-    }
-    else
-    {
-        // Assume that, at most, we will write two property structures (for depth and stencil)
-        VkSparseImageFormatProperties contiguousProperties[2] = {};
-
-        *pPropertyCount = Util::Min(*pPropertyCount, 2u);
-
-        GetSparseImageFormatProperties(
-            pFormatInfo->format,
-            pFormatInfo->type,
-            pFormatInfo->samples,
-            pFormatInfo->usage,
-            pFormatInfo->tiling,
-            pPropertyCount,
-            contiguousProperties);
-
-        for (uint32_t i = 0; i < *pPropertyCount; ++i)
-        {
-            pProperties[i].properties = contiguousProperties[i];
-        }
-    }
+            utils::ArrayView<VkSparseImageFormatProperties>(pProperties, &pProperties->properties));
 }
 
 // =====================================================================================================================
@@ -3387,7 +3597,7 @@ void PhysicalDevice::GetDeviceMultisampleProperties(
     VkSampleCountFlagBits                       samples,
     VkMultisamplePropertiesEXT*                 pMultisampleProperties)
 {
-    if ((samples & m_limits.framebufferColorSampleCounts) != 0)
+    if ((samples & m_sampleLocationSampleCounts) != 0)
     {
         pMultisampleProperties->maxSampleLocationGridSize.width  = Pal::MaxGridSize.width;
         pMultisampleProperties->maxSampleLocationGridSize.height = Pal::MaxGridSize.height;
@@ -3967,7 +4177,7 @@ static void VerifyProperties(
 // =====================================================================================================================
 VkResult PhysicalDevice::GetDisplayProperties(
     uint32_t*                                   pPropertyCount,
-    VkDisplayPropertiesKHR*                     pProperties)
+    utils::ArrayView<VkDisplayPropertiesKHR>    properties)
 {
     uint32_t  screenCount   = 0;
     uint32_t  count         = 0;
@@ -3975,7 +4185,7 @@ VkResult PhysicalDevice::GetDisplayProperties(
     Pal::IScreen*   pScreens      = nullptr;
     uint32_t        propertyCount = *pPropertyCount;
 
-    if (pProperties == nullptr)
+    if (properties.IsNull())
     {
         VkInstance()->FindScreens(PalDevice(), pPropertyCount, nullptr);
         return VK_SUCCESS;
@@ -3993,15 +4203,15 @@ VkResult PhysicalDevice::GetDisplayProperties(
 
         pAttachedScreens[i]->GetProperties(&props);
 
-        pProperties[count].display = reinterpret_cast<VkDisplayKHR>(pAttachedScreens[i]);
-        pProperties[count].displayName = nullptr;
-        pProperties[count].physicalDimensions.width  = props.physicalDimension.width;
-        pProperties[count].physicalDimensions.height = props.physicalDimension.height;
-        pProperties[count].physicalResolution.width  = props.physicalResolution.width;
-        pProperties[count].physicalResolution.height = props.physicalResolution.height;
-        pProperties[count].supportedTransforms       = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-        pProperties[count].planeReorderPossible      = false;
-        pProperties[count].persistentContent         = false;
+        properties[count].display = reinterpret_cast<VkDisplayKHR>(pAttachedScreens[i]);
+        properties[count].displayName = nullptr;
+        properties[count].physicalDimensions.width  = props.physicalDimension.width;
+        properties[count].physicalDimensions.height = props.physicalDimension.height;
+        properties[count].physicalResolution.width  = props.physicalResolution.width;
+        properties[count].physicalResolution.height = props.physicalResolution.height;
+        properties[count].supportedTransforms       = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        properties[count].planeReorderPossible      = false;
+        properties[count].persistentContent         = false;
     }
 
     *pPropertyCount = loopCount;
@@ -4012,12 +4222,12 @@ VkResult PhysicalDevice::GetDisplayProperties(
 // =====================================================================================================================
 // So far we don't support overlay and underlay. Therefore, it will just return the main plane.
 VkResult PhysicalDevice::GetDisplayPlaneProperties(
-    uint32_t*                                   pPropertyCount,
-    VkDisplayPlanePropertiesKHR*                pProperties)
+    uint32_t*                                       pPropertyCount,
+    utils::ArrayView<VkDisplayPlanePropertiesKHR>   properties)
 {
     uint32_t        propertyCount = *pPropertyCount;
 
-    if (pProperties == nullptr)
+    if (properties.IsNull())
     {
         VkInstance()->FindScreens(PalDevice(), pPropertyCount, nullptr);
         return VK_SUCCESS;
@@ -4031,8 +4241,8 @@ VkResult PhysicalDevice::GetDisplayPlaneProperties(
 
     for (uint32_t i = 0; i < loopCount; i++)
     {
-        pProperties[i].currentDisplay = reinterpret_cast<VkDisplayKHR>(pAttachedScreens[i]);
-        pProperties[i].currentStackIndex = 0;
+        properties[i].currentDisplay = reinterpret_cast<VkDisplayKHR>(pAttachedScreens[i]);
+        properties[i].currentStackIndex = 0;
     }
 
     *pPropertyCount = loopCount;
@@ -4046,8 +4256,6 @@ VkResult PhysicalDevice::GetDisplayPlaneSupportedDisplays(
     uint32_t*                                   pDisplayCount,
     VkDisplayKHR*                               pDisplays)
 {
-    VK_ASSERT(planeIndex == 0);
-
     uint32_t displayCount = *pDisplayCount;
 
     if (pDisplays == nullptr)
@@ -4074,16 +4282,16 @@ VkResult PhysicalDevice::GetDisplayPlaneSupportedDisplays(
 
 // =====================================================================================================================
 VkResult PhysicalDevice::GetDisplayModeProperties(
-    VkDisplayKHR                                display,
-    uint32_t*                                   pPropertyCount,
-    VkDisplayModePropertiesKHR*                 pProperties)
+    VkDisplayKHR                                  display,
+    uint32_t*                                     pPropertyCount,
+    utils::ArrayView<VkDisplayModePropertiesKHR>  properties)
 {
     VkResult result = VK_SUCCESS;
 
     Pal::IScreen* pScreen = reinterpret_cast<Pal::IScreen*>(display);
     VK_ASSERT(pScreen != nullptr);
 
-    if (pProperties == nullptr)
+    if (properties.IsNull())
     {
         return VkInstance()->GetScreenModeList(pScreen, pPropertyCount, nullptr);
     }
@@ -4098,13 +4306,19 @@ VkResult PhysicalDevice::GetDisplayModeProperties(
 
     for (uint32_t i = 0; i < loopCount; i++)
     {
-        pProperties[i].displayMode = reinterpret_cast<VkDisplayModeKHR>(pScreenMode[i]);
-        pProperties[i].parameters.visibleRegion.width  = pScreenMode[i]->extent.width;
-        pProperties[i].parameters.visibleRegion.height = pScreenMode[i]->extent.height;
+        DisplayModeObject* pDisplayMode =
+            reinterpret_cast<DisplayModeObject*>(VkInstance()->AllocMem(sizeof(DisplayModeObject),
+                                                                        VK_DEFAULT_MEM_ALIGN,
+                                                                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+        pDisplayMode->pScreen = pScreen;
+        memcpy(&pDisplayMode->palScreenMode, pScreenMode[i], sizeof(Pal::ScreenMode));
+        properties[i].displayMode = reinterpret_cast<VkDisplayModeKHR>(pDisplayMode);
+        properties[i].parameters.visibleRegion.width  = pScreenMode[i]->extent.width;
+        properties[i].parameters.visibleRegion.height = pScreenMode[i]->extent.height;
         // The refresh rate returned by pal is HZ.
         // Spec requires refresh rate to be "the number of times the display is refreshed each second
         // multiplied by 1000", in other words, HZ * 1000
-        pProperties[i].parameters.refreshRate = pScreenMode[i]->refreshRate * 1000;
+        properties[i].parameters.refreshRate = pScreenMode[i]->refreshRate * 1000;
     }
 
     *pPropertyCount = loopCount;
@@ -4118,8 +4332,7 @@ VkResult PhysicalDevice::GetDisplayPlaneCapabilities(
     uint32_t                                    planeIndex,
     VkDisplayPlaneCapabilitiesKHR*              pCapabilities)
 {
-    Pal::ScreenMode* pMode = reinterpret_cast<Pal::ScreenMode*>(mode);
-    VK_ASSERT(planeIndex == 0);
+    Pal::ScreenMode* pMode = &(reinterpret_cast<DisplayModeObject*>(mode)->palScreenMode);
     VK_ASSERT(pCapabilities != nullptr);
 
     pCapabilities->supportedAlpha = VK_DISPLAY_PLANE_ALPHA_OPAQUE_BIT_KHR;
@@ -4178,30 +4391,31 @@ VkResult PhysicalDevice::CreateDisplayMode(
 
     if (isValidMode)
     {
-        Pal::ScreenMode* pNewMode = nullptr;
+        DisplayModeObject* pNewMode = nullptr;
         if (pAllocator)
         {
-            pNewMode = reinterpret_cast<Pal::ScreenMode*>(
+            pNewMode = reinterpret_cast<DisplayModeObject*>(
                 pAllocator->pfnAllocation(
                 pAllocator->pUserData,
-                sizeof(Pal::ScreenMode),
+                sizeof(DisplayModeObject),
                 VK_DEFAULT_MEM_ALIGN,
                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
         }
         else
         {
-            pNewMode = reinterpret_cast<Pal::ScreenMode*>(VkInstance()->AllocMem(
-                sizeof(Pal::ScreenMode),
+            pNewMode = reinterpret_cast<DisplayModeObject*>(VkInstance()->AllocMem(
+                sizeof(DisplayModeObject),
                 VK_DEFAULT_MEM_ALIGN,
                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
         }
 
         if (pNewMode)
         {
-            pNewMode->extent.width  = pCreateInfo->parameters.visibleRegion.width;
-            pNewMode->extent.height = pCreateInfo->parameters.visibleRegion.height;
-            pNewMode->refreshRate   = pCreateInfo->parameters.refreshRate;
-            pNewMode->flags.u32All  = 0;
+            pNewMode->palScreenMode.extent.width  = pCreateInfo->parameters.visibleRegion.width;
+            pNewMode->palScreenMode.extent.height = pCreateInfo->parameters.visibleRegion.height;
+            pNewMode->palScreenMode.refreshRate   = pCreateInfo->parameters.refreshRate;
+            pNewMode->palScreenMode.flags.u32All  = 0;
+            pNewMode->pScreen                     = pScreen;
             *pMode = reinterpret_cast<VkDisplayModeKHR>(pNewMode);
         }
         else
@@ -4344,7 +4558,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceSparseImageFormatProperties(
     VkSparseImageFormatProperties*              pProperties)
 {
     ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSparseImageFormatProperties(
-        format, type, samples, usage, tiling, pPropertyCount, pProperties);
+        format,
+        type,
+        samples,
+        usage,
+        tiling,
+        pPropertyCount,
+        utils::ArrayView<VkSparseImageFormatProperties>(pProperties));
 }
 
 // =====================================================================================================================
@@ -4354,7 +4574,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceSupportKHR(
     VkSurfaceKHR                                surface,
     VkBool32*                                   pSupported)
 {
-    const bool supported = ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->QueueSupportsPresents(queueFamilyIndex);
+    DisplayableSurfaceInfo displayableInfo = {};
+
+    VkResult result = PhysicalDevice::UnpackDisplayableSurface(Surface::ObjectFromHandle(surface), &displayableInfo);
+
+    const bool supported = ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->QueueSupportsPresents(queueFamilyIndex, displayableInfo.icdPlatform);
 
     *pSupported = supported ? VK_TRUE : VK_FALSE;
 
@@ -4374,9 +4598,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfacePresentModesKHR(
 
     if (result == VK_SUCCESS)
     {
+        Pal::PresentMode presentMode = (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
+                                        ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
         result = ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfacePresentModes(
             displayableInfo,
-            Pal::PresentMode::Windowed,
+            presentMode,
             pPresentModeCount,
             pPresentModes);
     }
@@ -4638,6 +4864,35 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
 }
 #endif
 
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkAcquireXlibDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    Display*                                    dpy,
+    VkDisplayKHR                                display)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->AcquireXlibDisplay(dpy, display);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetRandROutputDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    Display*                                    dpy,
+    RROutput                                    randrOutput,
+    VkDisplayKHR*                               pDisplay)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetRandROutputDisplay(dpy, randrOutput, pDisplay);
+}
+#endif
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkReleaseDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->ReleaseDisplay(display);
+}
+
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(
     VkPhysicalDevice                            physicalDevice,
@@ -4657,7 +4912,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPropertiesKHR(
     uint32_t*                                   pPropertyCount,
     VkDisplayPropertiesKHR*                     pProperties)
 {
-    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayProperties(pPropertyCount, pProperties);
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayProperties(
+                    pPropertyCount,
+                    utils::ArrayView<VkDisplayPropertiesKHR>(pProperties));
 }
 
 // =====================================================================================================================
@@ -4666,7 +4923,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPlanePropertiesKHR(
     uint32_t*                                   pPropertyCount,
     VkDisplayPlanePropertiesKHR*                pProperties)
 {
-    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayPlaneProperties(pPropertyCount, pProperties);
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayPlaneProperties(
+                    pPropertyCount,
+                    utils::ArrayView<VkDisplayPlanePropertiesKHR>(pProperties));
 }
 
 // =====================================================================================================================
@@ -4692,7 +4951,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayModePropertiesKHR(
     return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayModeProperties(
                                                 display,
                                                 pPropertyCount,
-                                                pProperties);
+                                                utils::ArrayView<VkDisplayModePropertiesKHR>(pProperties));
 }
 
 // =====================================================================================================================
@@ -4721,6 +4980,53 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneCapabilitiesKHR(
                                                 mode,
                                                 planeIndex,
                                                 pCapabilities);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayProperties2KHR*                    pProperties)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayProperties(
+                    pPropertyCount,
+                    utils::ArrayView<VkDisplayPropertiesKHR>(pProperties, &pProperties->displayProperties));
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPlaneProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPlaneProperties2KHR*               pProperties)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayPlaneProperties(
+                    pPropertyCount,
+                    utils::ArrayView<VkDisplayPlanePropertiesKHR>(pProperties, &pProperties->displayPlaneProperties));
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayModeProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayModeProperties2KHR*                pProperties)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayModeProperties(
+                    display,
+                    pPropertyCount,
+                    utils::ArrayView<VkDisplayModePropertiesKHR>(pProperties, &pProperties->displayModeProperties));
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneCapabilities2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    const VkDisplayPlaneInfo2KHR*               pDisplayPlaneInfo,
+    VkDisplayPlaneCapabilities2KHR*             pCapabilities)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetDisplayPlaneCapabilities(
+                                                                    pDisplayPlaneInfo->mode,
+                                                                    pDisplayPlaneInfo->planeIndex,
+                                                                    &pCapabilities->capabilities);
 }
 
 }

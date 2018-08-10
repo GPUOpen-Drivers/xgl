@@ -48,7 +48,6 @@ namespace vk
 // Forward declare Vulkan classes used in this file
 class Device;
 class Memory;
-class PeerMemory;
 
 class Buffer : public NonDispatchable<VkBuffer, Buffer>
 {

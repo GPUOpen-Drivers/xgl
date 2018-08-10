@@ -116,7 +116,7 @@ VkResult Fence::Create(
     if (palResult == Pal::Result::Success)
     {
         // On success, wrap it in an API object and return to application
-        VK_PLACEMENT_NEW (pMemory) Fence(numGroupedFences, pPalFences);
+        VK_PLACEMENT_NEW (pMemory) Fence(numGroupedFences, pPalFences, palFenceCreateInfo.flags.eventCanBeInherited);
 
         *pFence = Fence::HandleFromVoidPointer(pMemory);
 

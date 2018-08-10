@@ -182,13 +182,6 @@ public:
         const VkAllocationCallbacks*                pAllocator,
         VkPipelineLayout*                           pPipelineLayout);
 
-    VkResult CreateDescriptorPool(
-        VkDescriptorPoolCreateFlags                 poolUsage,
-        uint32_t                                    maxSets,
-        const VkDescriptorPoolCreateInfo*           pCreateInfo,
-        const VkAllocationCallbacks*                pAllocator,
-        VkDescriptorPool*                           pDescriptorPool);
-
     VkResult AllocateCommandBuffers(
         const VkCommandBufferAllocateInfo*          pAllocateInfo,
         VkCommandBuffer*                            pCommandBuffers);
@@ -200,6 +193,11 @@ public:
 
     VkResult CreateRenderPass(
         const VkRenderPassCreateInfo*               pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator,
+        VkRenderPass*                               pRenderPass);
+
+    VkResult CreateRenderPass2(
+        const VkRenderPassCreateInfo2KHR*           pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
         VkRenderPass*                               pRenderPass);
 
@@ -419,7 +417,6 @@ public:
     VK_INLINE const RuntimeSettings& GetRuntimeSettings() const
         { return m_settings; }
 
-    // caller to ensure the thread safe
     // return too many objects if the allocation count will exceed max limit.
     // There is a potential improvement by using atomic inc/dec.
     // That require us to limit the max allocation to some value less than UINT_MAX
@@ -440,12 +437,21 @@ public:
         return vkResult;
     }
 
-    // caller to ensure the thread safe
     VK_INLINE void DecreaseAllocationCount()
     {
         Util::MutexAuto lock(&m_memoryMutex);
         m_allocatedCount --;
     }
+
+    VkResult IncreaseAllocatedMemorySize(
+        const Pal::gpusize allocationSize,
+        uint32_t           deviceMask,
+        const uint32_t     heapIdx);
+
+    void DecreaseAllocatedMemorySize(
+        const Pal::gpusize allocationSize,
+        const uint32_t     deviceMask,
+        const uint32_t     heapIdx);
 
     VK_INLINE const InternalPipeline& GetTimestampQueryCopyPipeline() const
         { return m_timestampQueryCopyPipeline; }
@@ -556,10 +562,16 @@ protected:
     VkPhysicalDeviceFeatures            m_enabledFeatures;
 
     // The count of allocations that has been created from the logical device.
-    uint32_t                             m_allocatedCount;
+    uint32_t                            m_allocatedCount;
 
     // The maximum allocations that can be created from the logical device
-    uint32_t                             m_maxAllocations;
+    uint32_t                            m_maxAllocations;
+
+    // The number of bytes allocated from the logical device per PAL device per heap.
+    Pal::gpusize                        m_allocatedMemorySize[MaxPalDevices][Pal::GpuHeap::GpuHeapCount];
+
+    // The total memory (in bytes) per PAL device per heap
+    Pal::gpusize                        m_totalMemorySize[MaxPalDevices][Pal::GpuHeap::GpuHeapCount];
 
 };
 
@@ -672,6 +684,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateFramebuffer(
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(
     VkDevice                                    device,
     const VkRenderPassCreateInfo*               pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkRenderPass*                               pRenderPass);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2KHR(
+    VkDevice                                    device,
+    const VkRenderPassCreateInfo2KHR*           pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkRenderPass*                               pRenderPass);
 

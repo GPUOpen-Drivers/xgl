@@ -36,6 +36,8 @@
 #include "include/vk_framebuffer.h"
 
 #include "renderpass/renderpass_types.h"
+#include "renderpass/renderpass_builder.h"
+#include "renderpass/renderpass_logger.h"
 
 #include "palCmdBuffer.h"
 #include "palVector.h"
@@ -49,31 +51,146 @@ class Framebuffer;
 class GpuEvents;
 class RenderPassCmdList;
 
-struct RenderSubPass
+struct RenderPassExtCreateInfo
 {
-    RenderSubPass() { }
-    RenderSubPass(uint32_t subPassIndex, const VkRenderPassCreateInfo& info);
+    RenderPassExtCreateInfo()
+        :
+        pMultiviewCreateInfo            (nullptr)
+    {
+    }
 
-    uint32_t               colorAttachmentCount;
-    VkAttachmentReference* pColorAttachments;
-    VkAttachmentReference  depthStencilAttachment;
-
-    uint32_t               viewMask;
+    const VkRenderPassMultiviewCreateInfo*                          pMultiviewCreateInfo;
 };
 
-struct SubpassSampleCounts
+struct AttachmentReference
 {
+    AttachmentReference();
+
+    void Init(const VkAttachmentReference&      attachRef);
+    void Init(const VkAttachmentReference2KHR&  attachRef);
+
+    uint32_t              attachment;
+    VkImageLayout         layout;
+    VkImageAspectFlags    aspectMask;
+};
+
+struct AttachmentDescription
+{
+    AttachmentDescription();
+
+    void Init(const VkAttachmentDescription&     attachDesc);
+    void Init(const VkAttachmentDescription2KHR& attachDesc);
+
+    VkAttachmentDescriptionFlags    flags;
+    VkFormat                        format;
+    VkSampleCountFlagBits           samples;
+    VkAttachmentLoadOp              loadOp;
+    VkAttachmentStoreOp             storeOp;
+    VkAttachmentLoadOp              stencilLoadOp;
+    VkAttachmentStoreOp             stencilStoreOp;
+    VkImageLayout                   initialLayout;
+    VkImageLayout                   finalLayout;
+};
+
+struct SubpassSampleCount
+{
+    SubpassSampleCount()
+        :
+        colorCount(0),
+        depthCount(0)
+    {
+    }
+
     uint32_t colorCount;
     uint32_t depthCount;
 };
 
+struct SubpassDescription
+{
+    SubpassDescription();
+
+    void Init(
+        uint32_t                        subpassIndex,
+        const VkSubpassDescription&     subpassDesc,
+        const RenderPassExtCreateInfo&  renderPassExt,
+        const AttachmentDescription*    pAttachments,
+        uint32_t                        attachmentCount,
+        void*                           pMemoryPtr,
+        size_t                          memorySize);
+
+    void Init(
+        uint32_t                        subpassIndex,
+        const VkSubpassDescription2KHR& subpassDesc,
+        const RenderPassExtCreateInfo&  renderPassExt,
+        const AttachmentDescription*    pAttachments,
+        uint32_t                        attachmentCount,
+        void*                           pMemoryPtr,
+        size_t                          memorySize);
+
+    VkSubpassDescriptionFlags   flags;
+    VkPipelineBindPoint         pipelineBindPoint;
+    uint32_t                    viewMask;
+    uint32_t                    inputAttachmentCount;
+    AttachmentReference*        pInputAttachments;
+    uint32_t                    colorAttachmentCount;
+    AttachmentReference*        pColorAttachments;
+    AttachmentReference*        pResolveAttachments;
+    AttachmentReference         depthStencilAttachment;
+    uint32_t                    preserveAttachmentCount;
+    uint32_t*                   pPreserveAttachments;
+
+    SubpassSampleCount          subpassSampleCount;
+};
+
+struct SubpassDependency
+{
+    SubpassDependency();
+
+    void Init(
+        uint32_t                        subpassDepIndex,
+        const VkSubpassDependency&      subpassDep,
+        const RenderPassExtCreateInfo&  renderPassExt);
+
+    void Init(
+        uint32_t                        subpassDepIndex,
+        const VkSubpassDependency2KHR&  subpassDep,
+        const RenderPassExtCreateInfo&  renderPassExt);
+
+    uint32_t                srcSubpass;
+    uint32_t                dstSubpass;
+    VkPipelineStageFlags    srcStageMask;
+    VkPipelineStageFlags    dstStageMask;
+    VkAccessFlags           srcAccessMask;
+    VkAccessFlags           dstAccessMask;
+    VkDependencyFlags       dependencyFlags;
+    int32_t                 viewOffset;
+};
+
 struct RenderPassCreateInfo
 {
+    RenderPassCreateInfo();
+
+    void Init(
+        const VkRenderPassCreateInfo*       pCreateInfo,
+        const RenderPassExtCreateInfo&      renderPassExt,
+        void*                               pMemoryPtr,
+        size_t                              memorySize);
+
+    void Init(
+        const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+        const RenderPassExtCreateInfo&      renderPassExt,
+        void*                               pMemoryPtr,
+        size_t                              memorySize);
+
+    VkRenderPassCreateFlags  flags;
     uint32_t                 attachmentCount;
-    VkAttachmentDescription* pAttachments;
+    AttachmentDescription*   pAttachments;
     uint32_t                 subpassCount;
-    RenderSubPass*           pSubpasses;
-    SubpassSampleCounts*     pSubpassSampleCounts;
+    SubpassDescription*      pSubpasses;
+    uint32_t                 dependencyCount;
+    SubpassDependency*       pDependencies;
+    uint32_t                 correlatedViewMaskCount;
+    uint32_t*                pCorrelatedViewMasks;
     uint64_t                 hash;
 };
 
@@ -82,11 +199,22 @@ struct RenderPassCreateInfo
 class RenderPass : public NonDispatchable<VkRenderPass, RenderPass>
 {
 public:
+
     static VkResult Create(
-        Device*                       pDevice,
-        const VkRenderPassCreateInfo* pCreateInfo,
-        const VkAllocationCallbacks*  pAllocator,
-        VkRenderPass*                 pRenderPass);
+        Device*                             pDevice,
+        const VkRenderPassCreateInfo*       pCreateInfo,
+        const VkAllocationCallbacks*        pAllocator,
+        VkRenderPass*                       pRenderPass);
+
+    static VkResult Create(
+        Device*                             pDevice,
+        const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+        const VkAllocationCallbacks*        pAllocator,
+        VkRenderPass*                       pRenderPass);
+
+    RenderPass(
+        const RenderPassCreateInfo*     pCreateInfo,
+        const RenderPassExecuteInfo*    pExecuteInfo);
 
     VkResult Destroy(
         const Device*                 pDevice,
@@ -100,24 +228,24 @@ public:
 
     uint32_t GetSubpassColorReferenceCount(uint32_t subPassIndex) const;
     VK_INLINE uint32_t GetAttachmentCount() const { return m_createInfo.attachmentCount; }
-    const VkAttachmentDescription& GetAttachmentDesc(uint32_t attachmentIndex) const;
-    const VkAttachmentReference& GetSubpassColorReference(uint32_t subpass, uint32_t index) const;
-    const VkAttachmentReference& GetSubpassDepthStencilReference(uint32_t subpass) const;
+    const AttachmentDescription& GetAttachmentDesc(uint32_t attachmentIndex) const;
+    const AttachmentReference& GetSubpassColorReference(uint32_t subpass, uint32_t index) const;
+    const AttachmentReference& GetSubpassDepthStencilReference(uint32_t subpass) const;
 
     VK_INLINE const uint32_t GetSubpassMaxSampleCount(uint32_t subpass) const
     {
-        return Util::Max(m_createInfo.pSubpassSampleCounts[subpass].colorCount,
-            m_createInfo.pSubpassSampleCounts[subpass].depthCount);
+        return Util::Max(m_createInfo.pSubpasses[subpass].subpassSampleCount.colorCount,
+                         m_createInfo.pSubpasses[subpass].subpassSampleCount.depthCount);
     }
 
     VK_INLINE const uint32_t GetSubpassColorSampleCount(uint32_t subpass) const
-        { return m_createInfo.pSubpassSampleCounts[subpass].colorCount; }
+        { return m_createInfo.pSubpasses[subpass].subpassSampleCount.colorCount; }
+
+    VK_INLINE const uint32_t GetSubpassDepthSampleCount(uint32_t subpass) const
+        { return m_createInfo.pSubpasses[subpass].subpassSampleCount.depthCount; }
 
     VK_INLINE const RenderPassExecuteInfo* GetExecuteInfo() const
         { return m_pExecuteInfo; }
-
-    VK_INLINE const uint32_t GetSubpassDepthSampleCount(uint32_t subpass) const
-        { return m_createInfo.pSubpassSampleCounts[subpass].depthCount; }
 
     VK_INLINE uint64_t GetHash() const
         { return m_createInfo.hash; }
@@ -154,12 +282,9 @@ public:
     }
 
 protected:
-    RenderPass(
-        const RenderPassCreateInfo& info,
-        RenderPassExecuteInfo*      pState);
 
-    RenderPassCreateInfo     m_createInfo;
-    RenderPassExecuteInfo*   m_pExecuteInfo;
+    const RenderPassCreateInfo     m_createInfo;
+    const RenderPassExecuteInfo*   m_pExecuteInfo;
 };
 
 namespace entry

@@ -53,7 +53,7 @@ namespace convert
 extern Pal::SwizzledFormat VkToPalSwizzledFormatLookupTableStorage[VK_FORMAT_END_RANGE + 1];
 };
 
-constexpr uint32_t MaxPalAspectsPerMask         = 3;    // YUV images can have up to 3 planes.
+constexpr uint32_t MaxPalAspectsPerMask         = 3;    // Images can have up to 3 planes (YUV image).
 constexpr uint32_t MaxPalColorAspectsPerMask    = 3;    // YUV images can have up to 3 planes.
 constexpr uint32_t MaxPalDepthAspectsPerMask    = 2;    // Depth/stencil images can have up to 2 planes.
 constexpr uint32_t MaxRangePerAttachment        = 2;    // Depth/stencil images can have up to 2 planes.
@@ -1459,7 +1459,7 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format)
 // extension and propose revisions to VK_EXT_swapchain_colorspace.
 namespace convert
 {
-    VK_INLINE Pal::ScreenColorSpace ScreenColorSpace(VkColorSpaceKHR colorSpace)
+    VK_INLINE Pal::ScreenColorSpace ScreenColorSpace(VkSurfaceFormatKHR surfaceFormat)
     {
         union
         {
@@ -1467,7 +1467,7 @@ namespace convert
             uint32_t              palColorSpaceBits;
         };
 
-        switch (colorSpace)
+        switch (static_cast<uint32_t>(surfaceFormat.colorSpace))
         {
         // sRGB
         case VK_COLOR_SPACE_SRGB_NONLINEAR_KHR:
@@ -1504,11 +1504,11 @@ namespace convert
         // HDR 10
         case VK_COLOR_SPACE_HDR10_ST2084_EXT:
             palColorSpaceBits = Pal::ScreenColorSpace::TfPq2084;
-            palColorSpaceBits |= Pal::ScreenColorSpace::CsBt709;
+            palColorSpaceBits |= Pal::ScreenColorSpace::CsBt2020;
             break;
 
         case VK_COLOR_SPACE_BT2020_LINEAR_EXT:
-            palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
+            palColorSpaceBits = Pal::ScreenColorSpace::TfLinear0_125;
             palColorSpaceBits |= Pal::ScreenColorSpace::CsBt2020;
             break;
 
@@ -1525,7 +1525,7 @@ namespace convert
 
         // MS
         case VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT:
-            palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
+            palColorSpaceBits = Pal::ScreenColorSpace::TfLinear0_125;
             palColorSpaceBits |= Pal::ScreenColorSpace::CsScrgb;
             break;
 
@@ -1534,6 +1534,23 @@ namespace convert
             palColorSpaceBits = Pal::ScreenColorSpace::TfSrgb;
             palColorSpaceBits |= Pal::ScreenColorSpace::CsUserDefined;
             break;
+
+#if VK_USE_PLATFORM_WIN32_KHR
+        case VK_COLOR_SPACE_FREESYNC_2_AMD:
+        {
+            if (surfaceFormat.format == VK_FORMAT_R16G16B16A16_SFLOAT)
+            {
+                palColorSpaceBits = Pal::ScreenColorSpace::TfLinear0_125;
+                palColorSpaceBits |= Pal::ScreenColorSpace::CsScrgb;
+            }
+            else
+            {
+                palColorSpaceBits = Pal::ScreenColorSpace::TfGamma22;
+                palColorSpaceBits |= Pal::ScreenColorSpace::CsNative;
+            }
+            break;
+        }
+#endif
 
         // Unknown
         default:
@@ -1547,10 +1564,9 @@ namespace convert
 }
 
 // =====================================================================================================================
-// Converts Vulkan cull mode to PAL equivalent
-VK_INLINE Pal::ScreenColorSpace VkToPalScreenSpace(VkColorSpaceKHR colorSpace)
+VK_INLINE Pal::ScreenColorSpace VkToPalScreenSpace(VkSurfaceFormatKHR colorFormat)
 {
-    return convert::ScreenColorSpace(colorSpace);
+    return convert::ScreenColorSpace(colorFormat);
 }
 
 // =====================================================================================================================
@@ -1871,6 +1887,11 @@ VK_INLINE Pal::WsiPlatform VkToPalWsiPlatform(VkIcdWsiPlatform Platform)
     case VK_ICD_WSI_PLATFORM_MIR:
         palPlatform = Pal::WsiPlatform::Mir;
         break;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
+    case VK_ICD_WSI_PLATFORM_DISPLAY:
+        palPlatform = Pal::WsiPlatform::DirectDisplay;
+        break;
+#endif
     case VK_ICD_WSI_PLATFORM_WIN32:
     default:
         palPlatform = Pal::WsiPlatform::Win32;
@@ -1904,12 +1925,13 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags)
     Pal::ImageCreateInfo palImageCreateInfo;
     palImageCreateInfo.flags.u32All         = 0;
 
-    palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)  ? 1 : 0;
-    palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
-    palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)            ? 1 : 0;
+    palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)     ? 1 : 0;
+    palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)    ? 1 : 0;
+    palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)               ? 1 : 0;
+    palImageCreateInfo.flags.view3dAs2dArray    = (imageCreateFlags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) ? 1 : 0;
 
     // We must not use any metadata if sparse aliasing is enabled
-    palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)   ? 1 : 0;
+    palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)      ? 1 : 0;
 
     return palImageCreateInfo.flags.u32All;
 }

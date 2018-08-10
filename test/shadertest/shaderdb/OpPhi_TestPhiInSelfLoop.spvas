@@ -1,0 +1,63 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos SPIR-V Tools Assembler; 0
+; Bound: 36
+; Schema: 0
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %1 "main"
+               OpExecutionMode %1 LocalSize 1 1 1
+               OpName %1 "main"
+               OpName %2 "gl_GlobalInvocationID"
+               OpDecorate %2 BuiltIn GlobalInvocationId
+               OpDecorate %3 BufferBlock
+               OpDecorate %4 DescriptorSet 0
+               OpDecorate %4 Binding 0
+               OpDecorate %5 BufferBlock
+               OpDecorate %6 DescriptorSet 0
+               OpDecorate %6 Binding 1
+               OpDecorate %7 ArrayStride 4
+               OpMemberDecorate %3 0 Offset 0
+               OpMemberDecorate %5 0 Offset 0
+          %8 = OpTypeBool
+          %9 = OpTypeVoid
+         %10 = OpTypeFunction %9
+         %11 = OpTypeInt 32 0
+         %12 = OpTypeInt 32 1
+         %13 = OpTypeFloat 32
+         %14 = OpTypeVector %11 3
+         %15 = OpTypePointer Private %14
+         %16 = OpTypePointer Uniform %13
+          %7 = OpTypeRuntimeArray %13
+          %3 = OpTypeStruct %7
+         %17 = OpTypePointer Uniform %3
+          %4 = OpVariable %17 Uniform
+          %5 = OpTypeStruct %7
+         %18 = OpTypePointer Uniform %5
+          %6 = OpVariable %18 Uniform
+          %2 = OpVariable %15 Private
+         %19 = OpConstant %12 0
+         %20 = OpConstant %12 1
+         %21 = OpConstant %12 3
+         %22 = OpConstant %13 6.5
+          %1 = OpFunction %9 None %10
+         %23 = OpLabel
+         %24 = OpLoad %14 %2
+         %25 = OpCompositeExtract %11 %24 0
+         %26 = OpAccessChain %16 %4 %19 %25
+         %27 = OpAccessChain %16 %6 %19 %25
+         %28 = OpLoad %13 %26
+               OpBranch %29
+         %29 = OpLabel
+         %30 = OpPhi %12 %19 %23 %31 %29
+         %32 = OpPhi %13 %28 %23 %33 %29
+         %31 = OpIAdd %12 %30 %20
+         %33 = OpFAdd %13 %32 %22
+         %34 = OpSLessThan %8 %30 %21
+               OpLoopMerge %35 %29 None
+               OpBranchConditional %34 %29 %35
+         %35 = OpLabel
+               OpStore %27 %32
+               OpReturn
+               OpFunctionEnd
+

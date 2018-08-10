@@ -49,7 +49,8 @@ public:
             Pal::LayoutResolveSrc |
             Pal::LayoutResolveDst |
             Pal::LayoutPresentWindowed |
-            Pal::LayoutPresentFullscreen;
+            Pal::LayoutPresentFullscreen |
+            Pal::LayoutUncompressed;
 
         InitEntry(VK_IMAGE_LAYOUT_UNDEFINED,
                   Pal::LayoutUninitializedTarget);
@@ -131,7 +132,7 @@ public:
     // Return layout usage corresponding to the specified aspect and usage index.
     VK_FORCEINLINE uint32_t GetLayoutUsage(uint32_t aspectIndex, uint32_t usageIndex) const
     {
-        VK_ASSERT(aspectIndex < MaxPalDepthAspectsPerMask);
+        VK_ASSERT(aspectIndex < MaxPalAspectsPerMask);
         VK_ASSERT(usageIndex < LayoutUsageTableSize);
         return m_layoutUsageTable[aspectIndex][usageIndex];
     }
@@ -143,68 +144,24 @@ protected:
 
         m_layoutUsageTable[0][usageIndex] = layoutUsage;
         m_layoutUsageTable[1][usageIndex] = layoutUsage;
+        m_layoutUsageTable[2][usageIndex] = layoutUsage;
     }
 
-    void InitEntry(VkImageLayout layout, uint32_t layoutUsage0, uint32_t layoutUsage1)
+    void InitEntry(VkImageLayout layout, uint32_t layoutUsage0, uint32_t layoutUsage1, uint32_t layoutUsage2 = 0)
     {
         const uint32_t usageIndex = GetLayoutUsageIndex(layout);
 
         m_layoutUsageTable[0][usageIndex] = layoutUsage0;
         m_layoutUsageTable[1][usageIndex] = layoutUsage1;
+        m_layoutUsageTable[2][usageIndex] = layoutUsage2;
     }
 
     enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 6 };
 
-    uint32_t    m_layoutUsageTable[MaxPalDepthAspectsPerMask][LayoutUsageTableSize];
+    uint32_t    m_layoutUsageTable[MaxPalAspectsPerMask][LayoutUsageTableSize];
 };
 
 static const LayoutUsageHelper g_LayoutUsageHelper;
-
-// =====================================================================================================================
-// Helper class to determine which queue family has to perform the layout changes when an onwership transfer between
-// queue families happens.
-class OwnershipTransferHelper
-{
-public:
-    // Constructor initializes the lookup table.
-    OwnershipTransferHelper()
-    {
-        // By default all engine types have a priority of 1 (to be higher than priority 0 used for external sharing).
-        for (uint32_t i = 0; i < Pal::EngineTypeCount; ++i)
-        {
-            m_ownershipTransferPriority[i] = 1;
-        }
-
-        // The universal and graphics engines are always preferred because they support all forms of compression and
-        // corresponding layout transitions.
-        m_ownershipTransferPriority[Pal::EngineTypeUniversal]               = 3;
-        m_ownershipTransferPriority[Pal::EngineTypeHighPriorityUniversal]   = 3;
-        m_ownershipTransferPriority[Pal::EngineTypeHighPriorityGraphics]    = 3;
-
-        // The compute engines should still be preferred compared to other engines because they support some forms of
-        // compression and corresponding layout transitions.
-        m_ownershipTransferPriority[Pal::EngineTypeCompute]                 = 2;
-        m_ownershipTransferPriority[Pal::EngineTypeExclusiveCompute]        = 2;
-    }
-
-    // Returns the owernship transfer priority corresponding to a queue family index.
-    VK_FORCEINLINE uint32_t GetPriority(const Device* pDevice, uint32_t queueFamilyIndex) const
-    {
-        if ((queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL) || (queueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT))
-        {
-            return 0;
-        }
-        else
-        {
-            return m_ownershipTransferPriority[pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex)];
-        }
-    }
-
-protected:
-    uint32_t    m_ownershipTransferPriority[Pal::EngineTypeCount];
-};
-
-static const OwnershipTransferHelper g_OwnershipTransferHelper;
 
 // =====================================================================================================================
 // Converts source access flags to source cache coherency flags.
@@ -447,6 +404,7 @@ DeviceBarrierPolicy::DeviceBarrierPolicy(
 {
     InitDeviceLayoutEnginePolicy(pPhysicalDevice, pCreateInfo, enabledExtensions);
     InitDeviceCachePolicy(pPhysicalDevice, enabledExtensions);
+    InitQueueFamilyPolicies(pPhysicalDevice, pCreateInfo, enabledExtensions);
 }
 
 // =====================================================================================================================
@@ -521,6 +479,127 @@ void DeviceBarrierPolicy::InitDeviceCachePolicy(
 }
 
 // =====================================================================================================================
+// Initialize the layout engine policy of the device according to the input parameters.
+void DeviceBarrierPolicy::InitQueueFamilyPolicies(
+    PhysicalDevice*                     pPhysicalDevice,
+    const VkDeviceCreateInfo*           pCreateInfo,
+    const DeviceExtensions::Enabled&    enabledExtensions)
+{
+    memset(&m_queueFamilyPolicy[0], 0, sizeof(m_queueFamilyPolicy));
+
+    for (uint32_t i = 0; i < pCreateInfo->queueCreateInfoCount; ++i)
+    {
+        uint32_t queueFamilyIndex = pCreateInfo->pQueueCreateInfos[i].queueFamilyIndex;
+        QueueFamilyBarrierPolicy& policy = m_queueFamilyPolicy[queueFamilyIndex];
+
+        policy.palLayoutEngineMask      = pPhysicalDevice->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex);
+
+        policy.supportedCacheMask       = Pal::CoherCpu
+                                        | Pal::CoherTimestamp
+                                        | Pal::CoherMemory;
+        policy.supportedLayoutUsageMask = Pal::LayoutUninitializedTarget
+                                        | Pal::LayoutPresentWindowed
+                                        | Pal::LayoutPresentFullscreen
+                                        | Pal::LayoutUncompressed;
+
+        switch (pPhysicalDevice->GetQueueFamilyPalQueueType(queueFamilyIndex))
+        {
+        case Pal::QueueTypeUniversal:
+            policy.supportedCacheMask       |= Pal::CoherShader
+                                             | Pal::CoherCopy
+                                             | Pal::CoherColorTarget
+                                             | Pal::CoherDepthStencilTarget
+                                             | Pal::CoherResolve
+                                             | Pal::CoherClear
+                                             | Pal::CoherIndirectArgs
+                                             | Pal::CoherIndexData;
+            policy.supportedLayoutUsageMask |= Pal::LayoutColorTarget
+                                             | Pal::LayoutDepthStencilTarget
+                                             | Pal::LayoutShaderRead
+                                             | Pal::LayoutShaderFmaskBasedRead
+                                             | Pal::LayoutShaderWrite
+                                             | Pal::LayoutCopySrc
+                                             | Pal::LayoutCopyDst
+                                             | Pal::LayoutResolveSrc
+                                             | Pal::LayoutResolveDst;
+
+            // Always prefer executing ownership transfer barriers on the universal queue.
+            policy.ownershipTransferPriority = OwnershipTransferPriority::High;
+            break;
+
+        case Pal::QueueTypeCompute:
+            policy.supportedCacheMask       |= Pal::CoherShader
+                                             | Pal::CoherCopy
+                                             | Pal::CoherResolve
+                                             | Pal::CoherClear
+                                             | Pal::CoherIndirectArgs;
+            policy.supportedLayoutUsageMask |= Pal::LayoutShaderRead
+                                             | Pal::LayoutShaderFmaskBasedRead
+                                             | Pal::LayoutShaderWrite
+                                             | Pal::LayoutCopySrc
+                                             | Pal::LayoutCopyDst;
+
+            // Prefer executing ownership transfer barriers on the compute queue against all but the universal queue.
+            policy.ownershipTransferPriority = OwnershipTransferPriority::Medium;
+            break;
+
+        case Pal::QueueTypeDma:
+            policy.supportedCacheMask       |= Pal::CoherCopy
+                                             | Pal::CoherClear;
+            policy.supportedLayoutUsageMask |= Pal::LayoutCopySrc
+                                             | Pal::LayoutCopyDst;
+            policy.ownershipTransferPriority = OwnershipTransferPriority::Low;
+            break;
+
+        default:
+            VK_ASSERT(!"Unexpected queue type");
+        }
+    }
+
+    // Set defaults for external/foreign queue families.
+    m_externalQueueFamilyPolicy.palLayoutEngineMask         = Pal::LayoutAllEngines;
+    m_externalQueueFamilyPolicy.supportedCacheMask          = Pal::CoherAllUsages;
+    m_externalQueueFamilyPolicy.supportedLayoutUsageMask    = Pal::LayoutAllUsages;
+    m_externalQueueFamilyPolicy.ownershipTransferPriority   = OwnershipTransferPriority::None;
+}
+
+// =====================================================================================================================
+// Constructor for resource barrier policies.
+ResourceBarrierPolicy::ResourceBarrierPolicy(
+    Device*                             pDevice,
+    VkSharingMode                       sharingMode,
+    uint32_t                            queueFamilyIndexCount,
+    const uint32_t*                     pQueueFamilyIndices)
+  : m_pDevicePolicy(&pDevice->GetBarrierPolicy())
+{
+    InitConcurrentCachePolicy(pDevice, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices);
+}
+
+// =====================================================================================================================
+// Initialize the concurrent sharing cache policy of the resource if necessary.
+void ResourceBarrierPolicy::InitConcurrentCachePolicy(
+    Device*                             pDevice,
+    VkSharingMode                       sharingMode,
+    uint32_t                            queueFamilyIndexCount,
+    const uint32_t*                     pQueueFamilyIndices)
+{
+    // By default there's no concurrent sharing scope cache mask needed. Only in case of VK_SHARING_MODE_CONCURRENT is
+    // this needed and is used to extend the scope of the barrier beyond the current queue family's scope.
+    m_concurrentCacheMask = 0;
+
+    if (sharingMode == VK_SHARING_MODE_CONCURRENT)
+    {
+        for (uint32_t i = 0; i < queueFamilyIndexCount; ++i)
+        {
+            // Add each queue family's support cache mask to the concurrent cache mask if it participates in the
+            // concurrent sharing scope.
+            const QueueFamilyBarrierPolicy& policy = GetQueueFamilyPolicy(pQueueFamilyIndices[i]);
+            m_concurrentCacheMask |= policy.supportedCacheMask;
+        }
+    }
+}
+
+// =====================================================================================================================
 // Constructor for image barrier policies.
 ImageBarrierPolicy::ImageBarrierPolicy(
     Device*                             pDevice,
@@ -530,8 +609,10 @@ ImageBarrierPolicy::ImageBarrierPolicy(
     const uint32_t*                     pQueueFamilyIndices,
     bool                                multisampled,
     uint32_t                            extraLayoutUsages)
+  : ResourceBarrierPolicy(pDevice, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices)
 {
     InitImageLayoutUsagePolicy(pDevice, usage, multisampled, extraLayoutUsages);
+    InitConcurrentLayoutUsagePolicy(pDevice, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices);
     InitImageLayoutEnginePolicy(pDevice, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices);
     InitImageCachePolicy(pDevice, usage);
 }
@@ -635,6 +716,31 @@ void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
 
     // We don't do anything special in case of transient attachment images
     VK_IGNORE(VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT);
+}
+
+// =====================================================================================================================
+// Initialize the concurrent layout usage policy of the image if necessary.
+void ImageBarrierPolicy::InitConcurrentLayoutUsagePolicy(
+    Device*                             pDevice,
+    VkSharingMode                       sharingMode,
+    uint32_t                            queueFamilyIndexCount,
+    const uint32_t*                     pQueueFamilyIndices)
+{
+    // By default there's no concurrent sharing scope layout usage mask needed. Only in case of
+    // VK_SHARING_MODE_CONCURRENT is this needed and is used to extend the scope of the barrier beyond the current
+    // queue family's scope.
+    m_concurrentLayoutUsageMask = 0;
+
+    if (sharingMode == VK_SHARING_MODE_CONCURRENT)
+    {
+        for (uint32_t i = 0; i < queueFamilyIndexCount; ++i)
+        {
+            // Add each queue family's support cache mask to the concurrent cache mask if it participates in the
+            // concurrent sharing scope.
+            const QueueFamilyBarrierPolicy& policy = GetQueueFamilyPolicy(pQueueFamilyIndices[i]);
+            m_concurrentLayoutUsageMask |= policy.supportedLayoutUsageMask;
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -749,7 +855,6 @@ void ImageBarrierPolicy::InitImageCachePolicy(
 // =====================================================================================================================
 // Constructs the PAL layout corresponding to a Vulkan layout for transfer use.
 Pal::ImageLayout ImageBarrierPolicy::GetTransferLayout(
-    const Device*                       pDevice,
     VkImageLayout                       layout,
     uint32_t                            queueFamilyIndex) const
 {
@@ -766,15 +871,16 @@ Pal::ImageLayout ImageBarrierPolicy::GetTransferLayout(
     // The usage flags should match for both aspects in this case.
     VK_ASSERT(g_LayoutUsageHelper.GetLayoutUsage(0, usageIndex) == g_LayoutUsageHelper.GetLayoutUsage(1, usageIndex));
 
-    // Mask determined layout usage flags by the supported layout usage mask.
-    result.usages = g_LayoutUsageHelper.GetLayoutUsage(0, usageIndex) & GetSupportedLayoutUsageMask();
+    // Mask determined layout usage flags by the supported layout usage mask on the given queue family index.
+    result.usages = g_LayoutUsageHelper.GetLayoutUsage(0, usageIndex)
+                  & GetSupportedLayoutUsageMask(queueFamilyIndex);
 
     // If the layout usage is 0, it likely means that an application is trying to transition to an image layout that
     // is not supported by that image's usage flags.
     VK_ASSERT(result.usages != 0);
 
     // Calculate engine mask.
-    result.engines = GetQueueFamilyLayoutEngineMask(pDevice, queueFamilyIndex);
+    result.engines = GetQueueFamilyLayoutEngineMask(queueFamilyIndex);
 
     return result;
 }
@@ -782,7 +888,6 @@ Pal::ImageLayout ImageBarrierPolicy::GetTransferLayout(
 // =====================================================================================================================
 // Constructs the PAL layout corresponding to a Vulkan layout for the specified aspect.
 Pal::ImageLayout ImageBarrierPolicy::GetAspectLayout(
-    const Device*                       pDevice,
     VkImageLayout                       layout,
     uint32_t                            aspectIndex,
     uint32_t                            queueFamilyIndex) const
@@ -791,15 +896,16 @@ Pal::ImageLayout ImageBarrierPolicy::GetAspectLayout(
 
     uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout);
 
-    // Mask determined layout usage flags by the supported layout usage mask.
-    result.usages = g_LayoutUsageHelper.GetLayoutUsage(aspectIndex, usageIndex) & GetSupportedLayoutUsageMask();
+    // Mask determined layout usage flags by the supported layout usage mask on the given queue family index.
+    result.usages = g_LayoutUsageHelper.GetLayoutUsage(aspectIndex, usageIndex)
+                  & GetSupportedLayoutUsageMask(queueFamilyIndex);
 
     // If the layout usage is 0, it likely means that an application is trying to transition to an image layout that
     // is not supported by that image's usage flags.
     VK_ASSERT(result.usages != 0);
 
     // Calculate engine mask.
-    result.engines = GetQueueFamilyLayoutEngineMask(pDevice, queueFamilyIndex);
+    result.engines = GetQueueFamilyLayoutEngineMask(queueFamilyIndex);
 
     return result;
 }
@@ -807,38 +913,38 @@ Pal::ImageLayout ImageBarrierPolicy::GetAspectLayout(
 // =====================================================================================================================
 // Constructs the PAL layouts corresponding to a Vulkan layout for each aspect.
 void ImageBarrierPolicy::GetLayouts(
-    const Device*                       pDevice,
     VkImageLayout                       layout,
     uint32_t                            queueFamilyIndex,
-    Pal::ImageLayout                    results[MaxPalDepthAspectsPerMask]) const
+    Pal::ImageLayout                    results[MaxPalAspectsPerMask]) const
 {
     uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout);
 
-    // Mask determined layout usage flags by the supported layout usage mask.
-    results[0].usages = g_LayoutUsageHelper.GetLayoutUsage(0, usageIndex) & GetSupportedLayoutUsageMask();
-    results[1].usages = g_LayoutUsageHelper.GetLayoutUsage(1, usageIndex) & GetSupportedLayoutUsageMask();
+    // Mask determined layout usage flags by the supported layout usage mask on the corresponding queue family index.
+    const uint32_t supportedLayoutUsageMask = GetSupportedLayoutUsageMask(queueFamilyIndex);
+    results[0].usages = g_LayoutUsageHelper.GetLayoutUsage(0, usageIndex) & supportedLayoutUsageMask;
+    results[1].usages = g_LayoutUsageHelper.GetLayoutUsage(1, usageIndex) & supportedLayoutUsageMask;
+    results[2].usages = g_LayoutUsageHelper.GetLayoutUsage(2, usageIndex) & supportedLayoutUsageMask;
 
     // If the layout usage is 0, it likely means that an application is trying to transition to an image layout that
     // is not supported by that image's usage flags.
-    VK_ASSERT((results[0].usages != 0) && (results[1].usages != 0));
+    VK_ASSERT((results[0].usages != 0) && (results[1].usages != 0) && (results[2].usages != 0));
 
     // Calculate engine mask.
-    results[0].engines = results[1].engines = GetQueueFamilyLayoutEngineMask(pDevice, queueFamilyIndex);
+    results[0].engines = results[1].engines = results[2].engines = GetQueueFamilyLayoutEngineMask(queueFamilyIndex);
 }
 
 // =====================================================================================================================
 // Applies the barrier policy to an image memory barrier as follows:
-//   * Converts access masks and writes them to pPalBarrierTransition
+//   * Converts access masks and writes them to pPalBarrier
 //   * Determines whether the barrier is a layout changing one and returns the information in pLayoutChanging
 //   * If it's a layout changing barrier then returns the old and new PAL layouts in oldPalLayouts and newPalLayouts
 void ImageBarrierPolicy::ApplyImageMemoryBarrier(
-    const Device*                       pDevice,
     uint32_t                            currentQueueFamilyIndex,
     const VkImageMemoryBarrier&         barrier,
-    Pal::BarrierTransition*             pPalBarrierTransition,
+    Pal::BarrierTransition*             pPalBarrier,
     bool*                               pLayoutChanging,
-    Pal::ImageLayout                    oldPalLayouts[MaxPalDepthAspectsPerMask],
-    Pal::ImageLayout                    newPalLayouts[MaxPalDepthAspectsPerMask]) const
+    Pal::ImageLayout                    oldPalLayouts[MaxPalAspectsPerMask],
+    Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask]) const
 {
     // Determine effective queue family indices.
     uint32_t srcQueueFamilyIndex = (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
@@ -854,25 +960,30 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
 
     // Flip that decision if it turns out the destination queue family's ownership transfer priority is greater than
     // that of the source queue family.
-    bool isDstQueueFamilyPreferred = (g_OwnershipTransferHelper.GetPriority(pDevice, dstQueueFamilyIndex) >
-                                      g_OwnershipTransferHelper.GetPriority(pDevice, srcQueueFamilyIndex));
+    bool isDstQueueFamilyPreferred = (GetQueueFamilyPolicy(dstQueueFamilyIndex).ownershipTransferPriority >
+                                      GetQueueFamilyPolicy(srcQueueFamilyIndex).ownershipTransferPriority);
     applyLayoutChanges = (applyLayoutChanges != isDstQueueFamilyPreferred);
 
     if (applyLayoutChanges)
     {
         // Determine PAL layouts.
-        GetLayouts(pDevice, barrier.oldLayout, srcQueueFamilyIndex, oldPalLayouts);
-        GetLayouts(pDevice, barrier.newLayout, dstQueueFamilyIndex, newPalLayouts);
+        GetLayouts(barrier.oldLayout, srcQueueFamilyIndex, oldPalLayouts);
+        GetLayouts(barrier.newLayout, dstQueueFamilyIndex, newPalLayouts);
 
         // If old and new PAL layouts match then no need to apply layout changes.
-        if (memcmp(oldPalLayouts, newPalLayouts, sizeof(Pal::ImageLayout) * MaxPalDepthAspectsPerMask) == 0)
+        if (memcmp(oldPalLayouts, newPalLayouts, sizeof(Pal::ImageLayout) * MaxPalAspectsPerMask) == 0)
         {
             applyLayoutChanges = false;
         }
     }
 
     // Apply barrier cache flags to the PAL barrier transition.
-    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, pPalBarrierTransition);
+    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, pPalBarrier);
+
+    // We can further restrict the cache masks to the ones supported by the corresponding queue families or by other
+    // queue families that are allowed to concurrently access the image.
+    pPalBarrier->srcCacheMask &= GetQueueFamilyPolicy(srcQueueFamilyIndex).supportedCacheMask | m_concurrentCacheMask;
+    pPalBarrier->dstCacheMask &= GetQueueFamilyPolicy(dstQueueFamilyIndex).supportedCacheMask | m_concurrentCacheMask;
 
     // If this is a queue family ownership transfer barrier, then we can exclude all cache masks from the barrier that
     // don't have to have an immediately visible effect as ownership transfers can only happen at command buffer
@@ -886,12 +997,12 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
 
         if ((applyLayoutChanges == false) || (currentQueueFamilyIndex == dstQueueFamilyIndex))
         {
-            pPalBarrierTransition->srcCacheMask &= immediatelyVisibleCacheMask;
+            pPalBarrier->srcCacheMask &= immediatelyVisibleCacheMask;
         }
 
         if ((applyLayoutChanges == false) || (currentQueueFamilyIndex == srcQueueFamilyIndex))
         {
-            pPalBarrierTransition->dstCacheMask &= immediatelyVisibleCacheMask;
+            pPalBarrier->dstCacheMask &= immediatelyVisibleCacheMask;
         }
     }
 
@@ -901,31 +1012,20 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
 // =====================================================================================================================
 // Returns the layout engine mask corresponding to a queue family index.
 uint32_t ImageBarrierPolicy::GetQueueFamilyLayoutEngineMask(
-    const Device*                       pDevice,
     uint32_t                            queueFamilyIndex) const
 {
     // VK_QUEUE_FAMILY_IGNORED must be handled at the caller side by replacing it with the current command
     // buffer's queue family index.
     VK_ASSERT(queueFamilyIndex != VK_QUEUE_FAMILY_IGNORED);
 
-    uint32_t layoutEngineMask = 0;
-    if ((queueFamilyIndex == VK_QUEUE_FAMILY_EXTERNAL) | (queueFamilyIndex == VK_QUEUE_FAMILY_FOREIGN_EXT))
-    {
-        // If we share the image externally we can't know what queue/device will use it so we'll assume all
-        // engines could be the destination.
-        layoutEngineMask = Pal::LayoutAllEngines;
-    }
-    else
-    {
-        // Get the layout engine mask of the queue family.
-        layoutEngineMask = pDevice->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex);
+    // Get the layout engine mask of the queue family.
+    uint32_t layoutEngineMask = GetQueueFamilyPolicy(queueFamilyIndex).palLayoutEngineMask;
 
-        // Add the always set layout engine mask to handle the concurrent sharing mode case.
-        layoutEngineMask |= m_alwaysSetLayoutEngineMask;
+    // Add the always set layout engine mask to handle the concurrent sharing mode case.
+    layoutEngineMask |= m_alwaysSetLayoutEngineMask;
 
-        // Mask everything by the supported layout engine mask.
-        layoutEngineMask &= m_supportedLayoutEngineMask;
-    }
+    // Mask everything by the supported layout engine mask.
+    layoutEngineMask &= m_supportedLayoutEngineMask;
 
     return layoutEngineMask;
 }
@@ -934,16 +1034,23 @@ uint32_t ImageBarrierPolicy::GetQueueFamilyLayoutEngineMask(
 // Constructor for buffer barrier policies.
 BufferBarrierPolicy::BufferBarrierPolicy(
     Device*                             pDevice,
-    VkBufferUsageFlags                  usage)
+    VkBufferUsageFlags                  usage,
+    VkSharingMode                       sharingMode,
+    uint32_t                            queueFamilyIndexCount,
+    const uint32_t*                     pQueueFamilyIndices)
+  : ResourceBarrierPolicy(pDevice, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices)
 {
-    InitBufferCachePolicy(pDevice, usage);
+    InitBufferCachePolicy(pDevice, usage, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices);
 }
 
 // =====================================================================================================================
 // Initialize the cache policy of the buffer according to the input parameters.
 void BufferBarrierPolicy::InitBufferCachePolicy(
     Device*                             pDevice,
-    VkBufferUsageFlags                  usage)
+    VkBufferUsageFlags                  usage,
+    VkSharingMode                       sharingMode,
+    uint32_t                            queueFamilyIndexCount,
+    const uint32_t*                     pQueueFamilyIndices)
 {
     // Initialize supported cache masks based on the usage flags provided.
     // Always allow CPU and memory reads/writes.
@@ -1006,14 +1113,12 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
 }
 
 // =====================================================================================================================
-// Applies the barrier policy to an image memory barrier as follows:
-//   * Converts access masks and writes them to pPalBarrierTransition
-//   * Determines whether the barrier is a layout changing one and returns the information in pLayoutChanging
-//   * If it's a layout changing barrier then returns the old and new PAL layouts in oldPalLayouts and newPalLayouts
+// Applies the barrier policy to a buffer memory barrier by converting the access masks and writing them to
+// pPalBarrier.
 void BufferBarrierPolicy::ApplyBufferMemoryBarrier(
     uint32_t                            currentQueueFamilyIndex,
     const VkBufferMemoryBarrier&        barrier,
-    Pal::BarrierTransition*             pPalBarrierTransition) const
+    Pal::BarrierTransition*             pPalBarrier) const
 {
     // Determine effective queue family indices.
     uint32_t srcQueueFamilyIndex = (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
@@ -1025,7 +1130,12 @@ void BufferBarrierPolicy::ApplyBufferMemoryBarrier(
     VK_ASSERT((srcQueueFamilyIndex == currentQueueFamilyIndex) || (dstQueueFamilyIndex == currentQueueFamilyIndex));
 
     // Apply barrier cache flags to the PAL barrier transition.
-    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, pPalBarrierTransition);
+    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, pPalBarrier);
+
+    // We can further restrict the cache masks to the ones supported by the corresponding queue families or by other
+    // queue families that are allowed to concurrently access the image.
+    pPalBarrier->srcCacheMask &= GetQueueFamilyPolicy(srcQueueFamilyIndex).supportedCacheMask | m_concurrentCacheMask;
+    pPalBarrier->dstCacheMask &= GetQueueFamilyPolicy(dstQueueFamilyIndex).supportedCacheMask | m_concurrentCacheMask;
 
     // If this is a queue family ownership transfer barrier, then we can exclude all cache masks from the barrier that
     // don't have to have an immediately visible effect as ownership transfers can only happen at command buffer
@@ -1034,8 +1144,8 @@ void BufferBarrierPolicy::ApplyBufferMemoryBarrier(
     {
         const uint32_t immediatelyVisibleCacheMask = Pal::CoherCpu | Pal::CoherMemory;
 
-        pPalBarrierTransition->srcCacheMask &= immediatelyVisibleCacheMask;
-        pPalBarrierTransition->dstCacheMask &= immediatelyVisibleCacheMask;
+        pPalBarrier->srcCacheMask &= immediatelyVisibleCacheMask;
+        pPalBarrier->dstCacheMask &= immediatelyVisibleCacheMask;
     }
 }
 

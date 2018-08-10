@@ -1,0 +1,98 @@
+[Version]
+version = 5
+
+[VsGlsl]
+#version 450
+#extension GL_EXT_multiview : enable
+layout(location = 0) in highp vec4 in_position;
+layout(location = 1) in vec4 in_color;
+layout(location = 0) out vec4 out_color;
+void main (void)
+{
+    gl_Position = in_position;
+    out_color = in_color;
+}
+
+[VsInfo]
+entryPoint = main
+userDataNode[0].type = DescriptorTableVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].next[0].type = DescriptorResource
+userDataNode[0].next[0].offsetInDwords = 0
+userDataNode[0].next[0].sizeInDwords = 8
+userDataNode[0].next[0].set = 0
+userDataNode[0].next[0].binding = 0
+userDataNode[0].next[1].type = DescriptorFmask
+userDataNode[0].next[1].offsetInDwords = 8
+userDataNode[0].next[1].sizeInDwords = 8
+userDataNode[0].next[1].set = 0
+userDataNode[0].next[1].binding = 0
+userDataNode[1].type = IndirectUserDataVaPtr
+userDataNode[1].offsetInDwords = 1
+userDataNode[1].sizeInDwords = 1
+userDataNode[1].indirectUserDataCount = 4
+
+
+[FsGlsl]
+#version 450
+#extension GL_EXT_multiview : enable
+layout(location = 0) in vec4 in_color;
+layout(location = 0) out vec4 out_color;
+layout(input_attachment_index = 0, set=0, binding=0) uniform highp subpassInput in_color_attachment;
+void main()
+{
+    out_color = vec4(subpassLoad(in_color_attachment));
+}
+
+
+
+[FsInfo]
+entryPoint = main
+userDataNode[0].type = DescriptorTableVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].next[0].type = DescriptorResource
+userDataNode[0].next[0].offsetInDwords = 0
+userDataNode[0].next[0].sizeInDwords = 8
+userDataNode[0].next[0].set = 0
+userDataNode[0].next[0].binding = 0
+userDataNode[0].next[1].type = DescriptorFmask
+userDataNode[0].next[1].offsetInDwords = 8
+userDataNode[0].next[1].sizeInDwords = 8
+userDataNode[0].next[1].set = 0
+userDataNode[0].next[1].binding = 0
+
+
+[GraphicsPipelineState]
+topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
+patchControlPoints = 0
+deviceIndex = 0
+disableVertexReuse = 0
+switchWinding = 0
+enableMultiView = 1
+depthClipEnable = 1
+rasterizerDiscardEnable = 0
+perSampleShading = 0
+numSamples = 0
+samplePatternIdx = 0
+usrClipPlaneMask = 0
+alphaToCoverageEnable = 0
+dualSourceBlendEnable = 0
+colorBuffer[0].format = VK_FORMAT_R8G8B8A8_UNORM
+colorBuffer[0].blendEnable = 0
+colorBuffer[0].blendSrcAlphaToColor = 1
+
+
+[VertexInputState]
+binding[0].binding = 0
+binding[0].stride = 32
+binding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+attribute[0].location = 0
+attribute[0].binding = 0
+attribute[0].format = VK_FORMAT_R32G32B32A32_SFLOAT
+attribute[0].offset = 0
+attribute[1].location = 1
+attribute[1].binding = 0
+attribute[1].format = VK_FORMAT_R32G32B32A32_SFLOAT
+attribute[1].offset = 16

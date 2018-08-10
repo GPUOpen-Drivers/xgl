@@ -246,6 +246,8 @@ vkQueuePresentKHR                                   @device     @dext(KHR_swapch
 
 vkCmdDrawIndexedIndirectCountAMD                    @device     @dext(AMD_draw_indirect_count)
 vkCmdDrawIndirectCountAMD                           @device     @dext(AMD_draw_indirect_count)
+vkCmdDrawIndirectCountKHR                           @device     @dext(KHR_draw_indirect_count)
+vkCmdDrawIndexedIndirectCountKHR                    @device     @dext(KHR_draw_indirect_count)
 
 vkGetMultiDevicePropertiesAMDInternal               @device     @win32
 vkOpenWin32BufferAMDInternal                        @device     @win32
@@ -311,3 +313,17 @@ vkGetPhysicalDeviceQueueFamilyProperties2KHR        @instance   @iext(KHR_get_ph
 vkGetPhysicalDeviceMemoryProperties2KHR             @instance   @iext(KHR_get_physical_device_properties2)
 vkGetPhysicalDeviceSparseImageFormatProperties2KHR  @instance   @iext(KHR_get_physical_device_properties2)
 
+vkReleaseDisplayEXT                                 @instance   @iext(EXT_direct_mode_display)
+
+vkAcquireXlibDisplayEXT                             @instance   @iext(EXT_acquire_xlib_display)
+vkGetRandROutputDisplayEXT                          @instance   @iext(EXT_acquire_xlib_display)
+
+vkGetPhysicalDeviceDisplayProperties2KHR            @instance   @iext(KHR_get_display_properties2)
+vkGetPhysicalDeviceDisplayPlaneProperties2KHR       @instance   @iext(KHR_get_display_properties2)
+vkGetDisplayModeProperties2KHR                      @instance   @iext(KHR_get_display_properties2)
+vkGetDisplayPlaneCapabilities2KHR                   @instance   @iext(KHR_get_display_properties2)
+
+vkCreateRenderPass2KHR                              @device     @dext(KHR_create_renderpass2)
+vkCmdBeginRenderPass2KHR                            @device     @dext(KHR_create_renderpass2)
+vkCmdNextSubpass2KHR                                @device     @dext(KHR_create_renderpass2)
+vkCmdEndRenderPass2KHR                              @device     @dext(KHR_create_renderpass2)

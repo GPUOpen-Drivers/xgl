@@ -84,6 +84,11 @@ public:
 
     void Init();
 
+    VK_FORCEINLINE const Device* GetDevice()
+    {
+        return m_pDevice;
+    }
+
     VK_FORCEINLINE Type GetType() const
     {
         return m_type;

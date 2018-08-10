@@ -1,0 +1,34 @@
+[ComputeShaderGlsl]
+#version 450 core
+
+layout(set = 0, binding = 0) uniform sampler2DMS samp;
+layout(set = 0, binding = 1) buffer BO
+{
+    vec4 mOut;
+};
+
+void main()
+{
+    mOut = texelFetch(samp, ivec2(0, 1), 4);
+}
+
+[CsInfo]
+entryPoint = main
+userDataNode[0].type = DescriptorTableVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].next[0].type = DescriptorResource
+userDataNode[0].next[0].offsetInDwords = 0
+userDataNode[0].next[0].sizeInDwords = 8
+userDataNode[0].next[0].set = 0
+userDataNode[0].next[0].binding = 0
+userDataNode[0].next[1].type = DescriptorFmask
+userDataNode[0].next[1].offsetInDwords = 8
+userDataNode[0].next[1].sizeInDwords = 8
+userDataNode[0].next[1].set = 0
+userDataNode[0].next[1].binding = 0
+userDataNode[0].next[2].type = DescriptorBuffer
+userDataNode[0].next[2].offsetInDwords = 16
+userDataNode[0].next[2].sizeInDwords = 4
+userDataNode[0].next[2].set = 0
+userDataNode[0].next[2].binding = 1

@@ -69,6 +69,8 @@ option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})
 
 option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" OFF)
 
+option(BUILD_XLIB_XRANDR_SUPPORT "Build Xlib with xrandr 1.6 support" OFF)
+
 # Option Overrides #################################################################################
 # These are options that override XGL subproject options.  As these overrides are managed and force
 # set by XGL, mark_as_advanced is used to hide them from the CMake GUI.
@@ -145,7 +147,7 @@ set(PERL_CMD ${PERL_EXECUTABLE})
 
 ### LLPC ###############################################################
 set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is read-only.")
-set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/icd/api/llpc CACHE PATH "Specify the path to the LLPC.")
+set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the LLPC.")
 
 if(ICD_BUILD_LLPC)
     set(LLVM_ENABLE_ASSERTIONS ${CMAKE_BUILD_TYPE_DEBUG} CACHE BOOL Force)

@@ -1,0 +1,19 @@
+#version 450 core
+#extension GL_AMD_gpu_shader_half_float : enable
+
+layout(set = 0, binding = 0, std430) buffer UB
+{
+    f16vec4 um1;
+};
+
+layout(set = 0, binding = 1, std430) buffer BB
+{
+   f16vec4 bm1;
+};
+
+layout (local_size_x = 1) in;
+void main()
+{
+    f16vec4 temp = um1;
+    bm1 = temp;
+}

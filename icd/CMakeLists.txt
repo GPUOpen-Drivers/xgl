@@ -115,6 +115,7 @@ endif()
 # Enable relevant GPUOpen preprocessor definitions
 if(ICD_GPUOPEN_DEVMODE_BUILD)
     target_compile_definitions(xgl PRIVATE ICD_GPUOPEN_DEVMODE_BUILD)
+    # The name of the variable below must match the one in the GpuOpen CMakeLists.txt
 endif()
 
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
@@ -123,6 +124,11 @@ target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION_SUPPOR
 if (BUILD_WAYLAND_SUPPORT)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
     target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
+endif()
+
+find_package(XCB)
+if (${XCB_RANDR_LEASE})
+    target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_XRANDR_EXT=1)
 endif()
 
 if(UNIX)
@@ -186,6 +192,7 @@ target_sources(xgl PRIVATE
     api/vk_display_manager.cpp
     api/vk_event.cpp
     api/vk_fence.cpp
+    api/vk_formats.cpp
     api/vk_framebuffer.cpp
     api/vk_physical_device.cpp
     api/vk_physical_device_manager.cpp
@@ -209,7 +216,6 @@ target_sources(xgl PRIVATE
     api/vk_gpa_session.cpp
     api/vk_descriptor_update_template.cpp
     api/render_state_cache.cpp
-    api/peer_resource.cpp
     api/renderpass/renderpass_builder.cpp
     api/renderpass/renderpass_logger.cpp
     api/utils/temp_mem_arena.cpp

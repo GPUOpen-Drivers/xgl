@@ -232,6 +232,14 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdDrawIndirect                               );
     INIT_DISPATCH_ENTRY(vkCmdDrawIndexedIndirectCountAMD                );
     INIT_DISPATCH_ENTRY(vkCmdDrawIndirectCountAMD                       );
+    INIT_DISPATCH_ALIAS(vkCmdDrawIndexedIndirectCountKHR                ,
+                        vkCmdDrawIndexedIndirectCountAMD                );
+    INIT_DISPATCH_ALIAS(vkCmdDrawIndirectCountKHR                       ,
+                        vkCmdDrawIndirectCountAMD                       );
+    INIT_DISPATCH_ENTRY(vkCreateRenderPass2KHR                          );
+    INIT_DISPATCH_ENTRY(vkCmdBeginRenderPass2KHR                        );
+    INIT_DISPATCH_ENTRY(vkCmdNextSubpass2KHR                            );
+    INIT_DISPATCH_ENTRY(vkCmdEndRenderPass2KHR                          );
     INIT_DISPATCH_ENTRY(vkCmdDispatch                                   );
     INIT_DISPATCH_ENTRY(vkCmdDispatchIndirect                           );
     INIT_DISPATCH_ENTRY(vkCmdEndRenderPass                              );
@@ -296,6 +304,11 @@ void DispatchTable::Init()
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceWaylandPresentationSupportKHR);
 #endif
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    INIT_DISPATCH_ENTRY(vkAcquireXlibDisplayEXT                         );
+    INIT_DISPATCH_ENTRY(vkGetRandROutputDisplayEXT                      );
+#endif
+    INIT_DISPATCH_ENTRY(vkReleaseDisplayEXT                             );
     INIT_DISPATCH_ENTRY(vkDestroyBuffer                                 );
     INIT_DISPATCH_ENTRY(vkDestroyBufferView                             );
     INIT_DISPATCH_ENTRY(vkFreeCommandBuffers                            );
@@ -509,6 +522,10 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateDisplayModeKHR                          );
     INIT_DISPATCH_ENTRY(vkGetDisplayPlaneCapabilitiesKHR                );
     INIT_DISPATCH_ENTRY(vkCreateDisplayPlaneSurfaceKHR                  );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayProperties2KHR        );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayPlaneProperties2KHR   );
+    INIT_DISPATCH_ENTRY(vkGetDisplayModeProperties2KHR                  );
+    INIT_DISPATCH_ENTRY(vkGetDisplayPlaneCapabilities2KHR               );
 }
 
 // =====================================================================================================================
@@ -552,6 +569,16 @@ PFN_vkVoidFunction DispatchTable::GetEntryPoint(const char* pName) const
                 if (GetType() == Type::INSTANCE)
                 {
                     pFunc = m_table[epIdx];
+                }
+
+                // Allows instance-level functions to be queried with vkGetDeviceProcAddr for special cases.
+                if (m_pDevice != nullptr)
+                {
+                    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+                    if (settings.lenientInstanceFuncQuery)
+                    {
+                        pFunc = m_table[epIdx];
+                    }
                 }
                 break;
 

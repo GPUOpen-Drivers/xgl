@@ -129,8 +129,8 @@ public:
         VkSubresourceLayout*                    pLayout) const;
 
     void GetSparseMemoryRequirements(
-        uint32_t*                               pNumRequirements,
-        VkSparseImageMemoryRequirements*        pSparseMemoryRequirements);
+        uint32_t*                                           pNumRequirements,
+        utils::ArrayView<VkSparseImageMemoryRequirements>   sparseMemoryRequirements);
 
     VK_FORCEINLINE Pal::IImage* PalImage(int32_t idx = DefaultDeviceIndex) const
        { return m_pPalImages[idx]; }

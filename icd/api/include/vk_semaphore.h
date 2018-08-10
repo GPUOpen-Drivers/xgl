@@ -55,25 +55,42 @@ public:
         const VkAllocationCallbacks*    pAllocator,
         VkSemaphore*                    pSemaphore);
 
+    static VkResult PopulateInDeviceGroup(
+        Device*                         pDevice,
+        Pal::IQueueSemaphore*           pPalSemaphores[MaxPalDevices],
+        int32_t*                        pSemaphoreCount);
+
     VkResult ImportSemaphore(
         Device*                                    pDevice,
         VkExternalSemaphoreHandleTypeFlags         handleType,
         const Pal::OsExternalHandle                handle,
         VkSemaphoreImportFlags                     importFlags);
 
-    VK_FORCEINLINE Pal::IQueueSemaphore* PalSemaphore() const
+    VK_FORCEINLINE Pal::IQueueSemaphore* PalSemaphore(uint32_t deviceIdx) const
     {
-        return m_pPalSemaphore;
+        return m_pPalSemaphores[deviceIdx];
     }
 
-    VK_FORCEINLINE Pal::IQueueSemaphore* PalTemporarySemaphore() const
+    VK_FORCEINLINE Pal::IQueueSemaphore* PalTemporarySemaphore(uint32_t deviceIdx) const
     {
-        return m_pPalTemporarySemaphore;
+        return m_pPalTemporarySemaphores[deviceIdx];
     }
 
-    VK_FORCEINLINE void SetPalTemporarySemaphore(Pal::IQueueSemaphore* pPalTemporarySemaphore)
+    VK_FORCEINLINE void ClearPalTemporarySemaphore()
     {
-        m_pPalTemporarySemaphore = pPalTemporarySemaphore;
+        memset(m_pPalTemporarySemaphores, 0, sizeof(m_pPalTemporarySemaphores));
+    }
+
+    VK_FORCEINLINE void SetPalTemporarySemaphore(Pal::IQueueSemaphore* pPalTemporarySemaphore[], int32_t semaphoreCount)
+    {
+        for (int32_t i = 0; i < semaphoreCount; i++)
+        {
+            m_pPalTemporarySemaphores[i] = pPalTemporarySemaphore[i];
+        }
+        for (int32_t i = semaphoreCount; i < MaxPalDevices; i++)
+        {
+            m_pPalTemporarySemaphores[i] = nullptr;
+        }
     }
 
     VkResult Destroy(
@@ -86,18 +103,26 @@ public:
         Pal::OsExternalHandle*                      pHandle);
 
 private:
-    Semaphore(Pal::IQueueSemaphore* pPalSemaphore)
-        :
-        m_pPalSemaphore(pPalSemaphore),
-        m_pPalTemporarySemaphore(nullptr)
+    Semaphore(Pal::IQueueSemaphore* pPalSemaphore[], int32_t semaphoreCount)
     {
+        for (int32_t i = 0; i < semaphoreCount; i++)
+        {
+            m_pPalSemaphores[i] = pPalSemaphore[i];
+        }
+        for (int32_t i = semaphoreCount; i < MaxPalDevices; i++)
+        {
+            m_pPalSemaphores[i] = nullptr;
+        }
 
+        ClearPalTemporarySemaphore();
     }
 
-    Pal::IQueueSemaphore*       m_pPalSemaphore;
-    Pal::IQueueSemaphore*       m_pPalTemporarySemaphore;     // Temporary-completion semaphore special for swapchain
-                                                              // which will be associated with a signaled semaphore
-                                                              // in AcquireNextImage.
+    Pal::IQueueSemaphore*       m_pPalSemaphores[MaxPalDevices];
+
+    // Temporary-completion semaphore special for swapchain
+    // which will be associated with a signaled semaphore
+    // in AcquireNextImage.
+    Pal::IQueueSemaphore*       m_pPalTemporarySemaphores[MaxPalDevices];
 };
 
 namespace entry

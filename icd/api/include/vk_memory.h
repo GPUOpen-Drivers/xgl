@@ -48,7 +48,6 @@ class IGpuMemory;
 namespace vk
 {
 class Device;
-class PeerMemory;
 class Image;
 };
 
@@ -109,24 +108,20 @@ public:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
+    void Init(
+        Pal::IGpuMemory**   pPalMemory);
+
     VkResult Map(
         VkFlags         flags,
         VkDeviceSize    offset,
         VkDeviceSize    size,
         void**          ppData);
 
-    VkResult Unmap(void);
-
-    VkResult Init();
+    void Unmap(void);
 
     VK_INLINE bool IsMultiInstance() const
     {
         return m_multiInstance;
-    }
-
-    VK_INLINE bool IsMirroredAllocation(uint32_t allocationInst) const
-    {
-        return (m_mirroredAllocationMask & (1 << allocationInst)) != 0;
     }
 
     VkResult GetCommitment(VkDeviceSize* pCommittedMemoryInBytes);
@@ -137,14 +132,11 @@ public:
 
 public:
 
-    VK_INLINE Pal::IGpuMemory* PalMemory(uint32_t deviceIdx = DefaultDeviceIndex) const
-    {
-        return m_pPalMemory[deviceIdx];
-    }
+    Pal::IGpuMemory* PalMemory(uint32_t resourceIndex, uint32_t memoryIndex);
 
-    VK_INLINE PeerMemory* GetPeerMemory() const
+    VK_INLINE Pal::IGpuMemory* PalMemory(uint32_t resourceIndex = DefaultDeviceIndex) const
     {
-        return m_pPeerMemory;
+        return m_pPalMemory[resourceIndex][resourceIndex];
     }
 
     VK_INLINE Pal::IImage* GetExternalPalImage() const
@@ -154,38 +146,45 @@ public:
 
 protected:
     Device*                      m_pDevice;
-    Pal::IGpuMemory*             m_pPalMemory[MaxPalDevices];
-    PeerMemory*                  m_pPeerMemory;
+    Pal::IGpuMemory*             m_pPalMemory[MaxPalDevices][MaxPalDevices];
     Pal::GpuMemoryCreateInfo     m_info;
     MemoryPriority               m_priority;
-    uint32_t                     m_allocationMask;
-    uint32_t                     m_mirroredAllocationMask;
     bool                         m_multiInstance;
 private:
     Memory(vk::Device*         pDevice,
            Pal::IGpuMemory**   pPalMemory,
-           PeerMemory*         pPeerMemory,
-           uint32_t            allocationMask,
            const Pal::GpuMemoryCreateInfo& info,
+           bool                multiInstance     = false,
+           uint32_t            primaryIndex      = DefaultDeviceIndex,
            Pal::IImage*        pPalExternalImage = nullptr);
 
     // Image needs to be a friend class to be able to create wrapper API memory objects
     friend class Image;
 
     bool         m_allocationCounted;
+    uint32_t     m_sizeAccountedForDeviceMask;
     Pal::IImage* m_pExternalPalImage;
+    uint32_t     m_primaryDeviceIndex;
 
-    // the function is used to mark that the allocation is counted in the logical device.
+    // this function is used to mark that the allocation is counted in the logical device.
     // the destructor of this memory object need to decrease the count.
-    VK_INLINE void SetAllocationCounted() { m_allocationCounted = true; }
-
-    Pal::Result MirrorSharedAllocation();
+    VK_INLINE void SetAllocationCounted(uint32_t sizeAccountedForDeviceMask)
+    {
+        m_sizeAccountedForDeviceMask = sizeAccountedForDeviceMask;
+        m_allocationCounted = true;
+    }
 
     // Private constructor used by Image objects to create wrapper API memory object for presentable image
     Memory(Device*           pDevice,
            Pal::IGpuMemory** pPalMemory,
-           PeerMemory*       pPeerMemory,
-           uint32_t          allocationMask);
+           bool              multiInstance = false,
+           uint32_t          primaryIndex  = DefaultDeviceIndex);
+
+    static void GetPrimaryDeviceIndex(
+        uint32_t  maxDevices,
+        uint32_t  allocationMask,
+        uint32_t* pIndex,
+        bool*     pMultiInstance);
 
     static VkResult CreateGpuMemory(
         Device*                         pDevice,

@@ -1,0 +1,51 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos SPIR-V Tools Assembler; 0
+; Bound: 29
+; Schema: 0
+               OpCapability Shader
+               OpCapability Matrix
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %1 "main" %2
+               OpExecutionMode %1 LocalSize 1 1 1
+               OpSource GLSL 430
+               OpName %1 "main"
+               OpName %2 "gl_GlobalInvocationID"
+               OpDecorate %2 BuiltIn GlobalInvocationId
+               OpDecorate %3 BufferBlock
+               OpDecorate %4 DescriptorSet 0
+               OpDecorate %4 Binding 0
+               OpDecorate %5 DescriptorSet 0
+               OpDecorate %5 Binding 1
+               OpDecorate %6 ArrayStride 4
+               OpMemberDecorate %3 0 Offset 0
+          %7 = OpTypeVoid
+          %8 = OpTypeFunction %7
+          %9 = OpTypeInt 32 0
+         %11 = OpTypeVector %9 3
+         %12 = OpTypePointer Input %11
+         %13 = OpTypeInt 32 1
+         %14 = OpConstant %9 2
+         %15 = OpTypeArray %13 %14
+         %16 = OpConstant %13 -2070878846
+         %17 = OpTypePointer Uniform %13
+          %6 = OpTypeRuntimeArray %13
+          %3 = OpTypeStruct %6
+         %18 = OpTypePointer Uniform %3
+          %4 = OpVariable %18 Uniform
+          %5 = OpVariable %18 Uniform
+          %2 = OpVariable %12 Input
+         %19 = OpConstant %13 0
+          %1 = OpFunction %7 None %8
+         %20 = OpLabel
+         %21 = OpLoad %11 %2
+         %22 = OpCompositeExtract %9 %21 0
+         %23 = OpAccessChain %17 %4 %19 %22
+         %24 = OpAccessChain %17 %5 %19 %22
+         %25 = OpLoad %13 %23
+         %26 = OpCompositeConstruct %15 %16 %16
+         %27 = OpCompositeInsert %15 %25 %26 1
+         %28 = OpCompositeExtract %13 %27 1
+               OpStore %24 %28
+               OpReturn
+               OpFunctionEnd

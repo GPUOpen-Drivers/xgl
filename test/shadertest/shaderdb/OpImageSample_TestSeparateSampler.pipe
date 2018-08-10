@@ -1,0 +1,118 @@
+[Version]
+version = 5
+
+[VsGlsl]
+#version 450
+
+layout(location = 0) in vec4 i_position;
+
+void main()
+{
+    gl_Position = i_position;
+}
+
+
+[VsInfo]
+entryPoint = main
+userDataNode[0].type = DescriptorTableVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].next[0].type = DescriptorCombinedTexture
+userDataNode[0].next[0].offsetInDwords = 0
+userDataNode[0].next[0].sizeInDwords = 12
+userDataNode[0].next[0].set = 0
+userDataNode[0].next[0].binding = 0
+userDataNode[0].next[1].type = DescriptorFmask
+userDataNode[0].next[1].offsetInDwords = 24
+userDataNode[0].next[1].sizeInDwords = 8
+userDataNode[0].next[1].set = 0
+userDataNode[0].next[1].binding = 0
+userDataNode[0].next[2].type = DescriptorCombinedTexture
+userDataNode[0].next[2].offsetInDwords = 12
+userDataNode[0].next[2].sizeInDwords = 12
+userDataNode[0].next[2].set = 0
+userDataNode[0].next[2].binding = 1
+userDataNode[0].next[3].type = DescriptorFmask
+userDataNode[0].next[3].offsetInDwords = 32
+userDataNode[0].next[3].sizeInDwords = 8
+userDataNode[0].next[3].set = 0
+userDataNode[0].next[3].binding = 1
+userDataNode[1].type = IndirectUserDataVaPtr
+userDataNode[1].offsetInDwords = 1
+userDataNode[1].sizeInDwords = 1
+userDataNode[1].indirectUserDataCount = 4
+
+
+[FsGlsl]
+#version 450
+
+layout(binding = 0) uniform sampler s0;
+layout(binding = 0) uniform texture2D t0;
+layout(binding = 1) uniform sampler s1;
+layout(binding = 1) uniform texture2D t1;
+
+layout(location = 0) out vec4 o_color;
+
+void main()
+{
+    o_color = texture(sampler2D(t0, s1), vec2(0.0));
+}
+
+
+
+[FsInfo]
+entryPoint = main
+userDataNode[0].type = DescriptorTableVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].next[0].type = DescriptorCombinedTexture
+userDataNode[0].next[0].offsetInDwords = 0
+userDataNode[0].next[0].sizeInDwords = 12
+userDataNode[0].next[0].set = 0
+userDataNode[0].next[0].binding = 0
+userDataNode[0].next[1].type = DescriptorFmask
+userDataNode[0].next[1].offsetInDwords = 24
+userDataNode[0].next[1].sizeInDwords = 8
+userDataNode[0].next[1].set = 0
+userDataNode[0].next[1].binding = 0
+userDataNode[0].next[2].type = DescriptorCombinedTexture
+userDataNode[0].next[2].offsetInDwords = 12
+userDataNode[0].next[2].sizeInDwords = 12
+userDataNode[0].next[2].set = 0
+userDataNode[0].next[2].binding = 1
+userDataNode[0].next[3].type = DescriptorFmask
+userDataNode[0].next[3].offsetInDwords = 32
+userDataNode[0].next[3].sizeInDwords = 8
+userDataNode[0].next[3].set = 0
+userDataNode[0].next[3].binding = 1
+
+
+[GraphicsPipelineState]
+topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP
+patchControlPoints = 0
+deviceIndex = 0
+disableVertexReuse = 0
+switchWinding = 0
+enableMultiView = 0
+depthClipEnable = 1
+rasterizerDiscardEnable = 0
+perSampleShading = 0
+numSamples = 1
+samplePatternIdx = 0
+usrClipPlaneMask = 0
+alphaToCoverageEnable = 0
+dualSourceBlendEnable = 0
+colorBuffer[0].format = VK_FORMAT_R8G8B8A8_UNORM
+colorBuffer[0].blendEnable = 0
+colorBuffer[0].blendSrcAlphaToColor = 0
+
+
+[VertexInputState]
+binding[0].binding = 0
+binding[0].stride = 16
+binding[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX
+attribute[0].location = 0
+attribute[0].binding = 0
+attribute[0].format = VK_FORMAT_R32G32B32A32_SFLOAT
+attribute[0].offset = 0
+

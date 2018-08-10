@@ -73,6 +73,8 @@ struct DisplayableSurfaceInfo
     Pal::OsDisplayHandle displayHandle;
     Pal::OsWindowHandle  windowHandle;
     Pal::WsiPlatform     palPlatform;
+    VkExtent2D           surfaceExtent;
+    Pal::IScreen*        pScreen;
 };
 
 // =====================================================================================================================
@@ -230,13 +232,13 @@ public:
         VkImageFormatProperties* pImageFormatProperties) const;
 
     void GetSparseImageFormatProperties(
-        VkFormat                        format,
-        VkImageType                     type,
-        VkSampleCountFlagBits           samples,
-        VkImageUsageFlags               usage,
-        VkImageTiling                   tiling,
-        uint32_t*                       pPropertyCount,
-        VkSparseImageFormatProperties*  pProperties) const;
+        VkFormat                                        format,
+        VkImageType                                     type,
+        VkSampleCountFlagBits                           samples,
+        VkImageUsageFlags                               usage,
+        VkImageTiling                                   tiling,
+        uint32_t*                                       pPropertyCount,
+        utils::ArrayView<VkSparseImageFormatProperties> properties) const;
 
     void GetExternalBufferProperties(
         const VkPhysicalDeviceExternalBufferInfo*   pExternalBufferInfo,
@@ -272,7 +274,8 @@ public:
         VkMultisamplePropertiesEXT*                 pMultisampleProperties);
 
     bool QueueSupportsPresents(
-        uint32_t queueFamilyIndex) const;
+        uint32_t         queueFamilyIndex,
+        VkIcdWsiPlatform platform) const;
 
     template< typename T >
     VkResult GetSurfaceCapabilities(
@@ -358,13 +361,20 @@ public:
         return m_vrHighPrioritySubEngineIndex;
     }
 
+    VK_INLINE uint32_t GetSubgroupSize() const
+    {
+        uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.wavefrontSize;
+
+        return subgroupSize;
+    }
+
     VkResult GetDisplayProperties(
         uint32_t*                                   pPropertyCount,
-        VkDisplayPropertiesKHR*                     pProperties);
+        utils::ArrayView<VkDisplayPropertiesKHR>    properties);
 
     VkResult GetDisplayPlaneProperties(
-        uint32_t*                                   pPropertyCount,
-        VkDisplayPlanePropertiesKHR*                pProperties);
+        uint32_t*                                       pPropertyCount,
+        utils::ArrayView<VkDisplayPlanePropertiesKHR>   properties);
 
     VkResult GetDisplayPlaneSupportedDisplays(
         uint32_t                                    planeIndex,
@@ -372,9 +382,9 @@ public:
         VkDisplayKHR*                               pDisplays);
 
     VkResult GetDisplayModeProperties(
-        VkDisplayKHR                                display,
-        uint32_t*                                   pPropertyCount,
-        VkDisplayModePropertiesKHR*                 pProperties);
+        VkDisplayKHR                                    display,
+        uint32_t*                                       pPropertyCount,
+        utils::ArrayView<VkDisplayModePropertiesKHR>    properties);
 
     VkResult CreateDisplayMode(
             VkDisplayKHR                                display,
@@ -391,6 +401,18 @@ public:
         const char*                 pLayerName,
         uint32_t*                   pPropertyCount,
         VkExtensionProperties*      pProperties) const;
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+    VkResult AcquireXlibDisplay(
+        Display*        dpy,
+        VkDisplayKHR    display);
+
+    VkResult GetRandROutputDisplay(
+        Display*        dpy,
+        uint32_t        randrOutput,
+        VkDisplayKHR*   pDisplay);
+#endif
+
+    VkResult ReleaseDisplay(VkDisplayKHR display);
 
     static DeviceExtensions::Supported GetAvailableExtensions(
         const Instance*       pInstance,
@@ -454,6 +476,7 @@ protected:
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
     RuntimeSettings                  m_settings;
     VkPhysicalDeviceLimits           m_limits;
+    VkSampleCountFlags               m_sampleLocationSampleCounts;
     VkFormatProperties               m_formatFeaturesTable[VK_SUPPORTED_FORMAT_COUNT];
     uint32_t                         m_formatFeatureMsaaTarget[Util::RoundUpQuotient(
                                                                     static_cast<uint32_t>(VK_SUPPORTED_FORMAT_COUNT),
@@ -656,6 +679,23 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
     struct wl_display*                          display);
 #endif
 
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
+VKAPI_ATTR VkResult VKAPI_CALL vkAcquireXlibDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    Display*                                    dpy,
+    VkDisplayKHR                                display);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetRandROutputDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    Display*                                    dpy,
+    RROutput                                    rrOutput,
+    VkDisplayKHR*                               pDisplay);
+#endif
+
+VKAPI_ATTR VkResult VKAPI_CALL vkReleaseDisplayEXT(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display);
+
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
@@ -702,6 +742,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayPlaneSurfaceKHR(
     const VkDisplaySurfaceCreateInfoKHR*        pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkSurfaceKHR*                               pSurface);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayProperties2KHR*                    pProperties);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceDisplayPlaneProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayPlaneProperties2KHR*               pProperties);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayModeProperties2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    VkDisplayKHR                                display,
+    uint32_t*                                   pPropertyCount,
+    VkDisplayModeProperties2KHR*                pProperties);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneCapabilities2KHR(
+    VkPhysicalDevice                            physicalDevice,
+    const VkDisplayPlaneInfo2KHR*               pDisplayPlaneInfo,
+    VkDisplayPlaneCapabilities2KHR*             pCapabilities);
 
 } // namespace entry
 

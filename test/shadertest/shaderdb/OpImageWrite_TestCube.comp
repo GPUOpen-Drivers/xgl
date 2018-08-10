@@ -1,0 +1,16 @@
+#version 450 core
+
+layout(set = 0, binding = 0, rgba8) uniform imageCube imgCube;
+layout(set = 0, binding = 1, rgba8) uniform imageCubeArray imgCubeArray;
+
+layout(set = 1, binding = 0) buffer BO
+{
+    vec4 mIn;
+};
+
+void main()
+{
+    imageStore(imgCube, ivec3(0, 0, 6), mIn);
+    imageStore(imgCubeArray, ivec3(0, 0, 6), mIn);
+}
+

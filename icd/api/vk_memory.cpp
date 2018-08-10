@@ -36,7 +36,6 @@
 #include "include/vk_memory.h"
 #include "include/vk_object.h"
 #include "include/vk_utils.h"
-#include "include/peer_resource.h"
 
 #include "palSysMemory.h"
 #include "palGpuMemory.h"
@@ -82,6 +81,9 @@ VkResult Memory::Create(
     bool isHostMappedForeign        = false;
     void* pPinnedHostPtr            = nullptr; // If non-null, this memory is allocated as pinned system memory
 
+    // Determines towards which devices we have accounted memory size
+    uint32_t sizeAccountedForDeviceMask = 0;
+
     // take the allocation count ahead of time.
     // it will set the VK_ERROR_TOO_MANY_OBJECTS
     vkResult = pDevice->IncreaseAllocationCount();
@@ -126,7 +128,10 @@ VkResult Memory::Create(
 
                     if (multiInstanceHeap)
                     {
+                        // In the MGPU scenario, the peerWritable is required to allocate the local video memory
+                        // We should not set the peerWritable for remote heap.
                         createInfo.flags.peerWritable = 1;
+
                         allocationMask = pDevice->GetPalDeviceMask();
                     }
                     else
@@ -218,6 +223,20 @@ VkResult Memory::Create(
         }
     }
 
+    // Check for OOM before actually allocating to avoid overhead
+    if ((vkResult == VK_SUCCESS) &&
+        (pDevice->GetRuntimeSettings().memoryEnableLocalHeapTracking) &&
+        ((createInfo.heaps[0] == Pal::GpuHeap::GpuHeapInvisible) ||
+         (createInfo.heaps[0] == Pal::GpuHeap::GpuHeapLocal)))
+    {
+        vkResult = pDevice->IncreaseAllocatedMemorySize(createInfo.size, allocationMask, createInfo.heaps[0]);
+
+        if (vkResult == VK_SUCCESS)
+        {
+            sizeAccountedForDeviceMask = allocationMask;
+        }
+    }
+
     if (vkResult == VK_SUCCESS)
     {
         if (isExternal)
@@ -251,31 +270,56 @@ VkResult Memory::Create(
         }
     }
 
-    if (vkResult == VK_SUCCESS)
+    if (vkResult != VK_SUCCESS)
     {
-        vkResult = pMemory->Init();
-        if (vkResult != VK_SUCCESS)
+        if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)
         {
-            pMemory->Free(pDevice, pAllocator);
+            // Something failed after the allocation count was incremented
+            pDevice->DecreaseAllocationCount();
+        }
+
+        if (sizeAccountedForDeviceMask != 0)
+        {
+            // Something failed after the local allocated memory size was increased
+            pDevice->DecreaseAllocatedMemorySize(createInfo.size, sizeAccountedForDeviceMask, createInfo.heaps[0]);
         }
     }
-
-    if ((vkResult != VK_SUCCESS) && (vkResult != VK_ERROR_TOO_MANY_OBJECTS))
+    else
     {
-        // decrease back the allocation count if allocation failed.
-        pDevice->DecreaseAllocationCount();
-    }
-    else if (vkResult == VK_SUCCESS)
-    {
-        // notify the memory object that it is counted so that the destructor can decrease the counter accordingly
-        pMemory->SetAllocationCounted();
+        // Notify the memory object that it is counted so that the destructor can decrease the counter accordingly
+        pMemory->SetAllocationCounted(sizeAccountedForDeviceMask);
 
         *pMemoryHandle = Memory::HandleFromObject(pMemory);
     }
 
     return vkResult;
 }
+
 // =====================================================================================================================
+// The function is used to acquire the primary index in case it is not a multi intance allocation.
+// The returned pIndex refers to the index of least significant set bit of the allocationMask.
+void Memory::GetPrimaryDeviceIndex(
+    uint32_t  maxDevices,
+    uint32_t  allocationMask,
+    uint32_t* pIndex,
+    bool*     pMultiInstance)
+{
+    if (Util::CountSetBits(allocationMask) > 1)
+    {
+        *pMultiInstance = true;
+    }
+    else
+    {
+        *pMultiInstance = false;
+    }
+
+    Util::BitMaskScanForward(pIndex, allocationMask);
+}
+
+// =====================================================================================================================
+// Create GPU Memory on each required device.
+// The function only create the PalMemory from device I and can be used on device I.
+// The export/import for resource sharing across device is not covered here.
 VkResult Memory::CreateGpuMemory(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator,
@@ -285,9 +329,15 @@ VkResult Memory::CreateGpuMemory(
     Memory**                        ppMemory)
 {
     Pal::IGpuMemory* pGpuMemory[MaxPalDevices] = {};
+    VK_ASSERT(allocationMask != 0);
 
     size_t   gpuMemorySize = 0;
     uint8_t *pSystemMem = nullptr;
+
+    uint32_t primaryIndex = 0;
+    bool multiInstance    = false;
+
+    GetPrimaryDeviceIndex(pDevice->NumPalDevices(), allocationMask, &primaryIndex, &multiInstance);
 
     Pal::Result palResult;
     VkResult    vkResult = VK_SUCCESS;
@@ -301,14 +351,12 @@ VkResult Memory::CreateGpuMemory(
 
         const size_t apiSize = sizeof(Memory);
         const size_t palSize = gpuMemorySize * pDevice->NumPalDevices();
-        const size_t peerMemorySize = PeerMemory::GetMemoryRequirements(
-            pDevice, multiInstanceHeap, allocationMask, static_cast<uint32_t>(gpuMemorySize));
 
         // Allocate enough for the PAL memory object and our own dispatchable memory
         pSystemMem = static_cast<uint8_t*>(
             pAllocator->pfnAllocation(
                 pAllocator->pUserData,
-                apiSize + palSize + peerMemorySize,
+                apiSize + palSize,
                 VK_DEFAULT_MEM_ALIGN,
                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
 
@@ -345,19 +393,12 @@ VkResult Memory::CreateGpuMemory(
 
             if (palResult == Pal::Result::Success)
             {
-                PeerMemory* pPeerMemory = nullptr;
-                if (peerMemorySize > 0)
-                {
-                    VK_ASSERT(multiInstanceHeap);
-                    pPeerMemory = VK_PLACEMENT_NEW(Util::VoidPtrInc(pSystemMem, apiSize + palSize)) PeerMemory(
-                        pDevice, pGpuMemory, static_cast<uint32_t>(gpuMemorySize));
-                }
-
                 // Initialize dispatchable memory object and return to application
-                *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(
-                    pDevice, pGpuMemory, pPeerMemory, allocationMask, createInfo);
-
-                vkResult = VK_SUCCESS;
+                *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(pDevice,
+                                                                pGpuMemory,
+                                                                createInfo,
+                                                                multiInstance,
+                                                                primaryIndex);
             }
             else
             {
@@ -403,10 +444,12 @@ VkResult Memory::CreateGpuMemory(
         if (pSystemMem != nullptr)
         {
             // Initialize dispatchable memory object and return to application
-            constexpr Pal::IGpuMemory** pDummyPalGpuMemory = nullptr;
-
-            *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(
-                pDevice, pDummyPalGpuMemory, nullptr, allocationMask, createInfo);
+            Pal::IGpuMemory* pDummyPalGpuMemory[MaxPalDevices] = {};
+            *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(pDevice,
+                                                            pDummyPalGpuMemory,
+                                                            createInfo,
+                                                            false,
+                                                            DefaultDeviceIndex);
         }
         else
         {
@@ -418,6 +461,9 @@ VkResult Memory::CreateGpuMemory(
 }
 
 // =====================================================================================================================
+// Create Pinned Memory on each required device.
+// The function only create the PalMemory from device I and can be used on device I.
+// The export/import for resource sharing across device is not covered here.
 VkResult Memory::CreateGpuPinnedMemory(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator,
@@ -435,6 +481,15 @@ VkResult Memory::CreateGpuPinnedMemory(
 
     Pal::Result palResult;
     VkResult    vkResult = VK_SUCCESS;
+
+    uint32_t primaryIndex  = 0;
+    bool     multiInstance = false;
+
+    GetPrimaryDeviceIndex(pDevice->NumPalDevices(), allocationMask, &primaryIndex, &multiInstance);
+
+    // It is really confusing to see multiInstance pinned memory.
+    // Assert has been added to catch the unexpected case.
+    VK_ASSERT(!multiInstance);
 
     VK_ASSERT(ppMemory != nullptr);
 
@@ -457,8 +512,6 @@ VkResult Memory::CreateGpuPinnedMemory(
 
     const size_t apiSize = sizeof(Memory);
     const size_t palSize = gpuMemorySize * pDevice->NumPalDevices();
-    const size_t peerMemorySize = PeerMemory::GetMemoryRequirements(
-        pDevice, multiInstanceHeap, allocationMask, static_cast<uint32_t>(gpuMemorySize));
 
     if (vkResult == VK_SUCCESS)
     {
@@ -466,7 +519,7 @@ VkResult Memory::CreateGpuPinnedMemory(
         pSystemMem = static_cast<uint8_t*>(
             pAllocator->pfnAllocation(
                 pAllocator->pUserData,
-                apiSize + palSize + peerMemorySize,
+                apiSize + palSize,
                 VK_DEFAULT_MEM_ALIGN,
                 VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
 
@@ -505,19 +558,12 @@ VkResult Memory::CreateGpuPinnedMemory(
 
             if (palResult == Pal::Result::Success)
             {
-                vkResult = VK_SUCCESS;
-
-                PeerMemory* pPeerMemory = nullptr;
-                if (peerMemorySize > 0)
-                {
-                    VK_ASSERT(multiInstanceHeap);
-                    pPeerMemory = VK_PLACEMENT_NEW(Util::VoidPtrInc(pSystemMem, apiSize + palSize)) PeerMemory(
-                        pDevice, pGpuMemory, static_cast<uint32_t>(gpuMemorySize));
-                }
-
                 // Initialize dispatchable memory object and return to application
-                *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(
-                    pDevice, pGpuMemory, pPeerMemory, allocationMask, createInfo);
+                *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(pDevice,
+                                                                pGpuMemory,
+                                                                createInfo,
+                                                                multiInstance,
+                                                                primaryIndex);
             }
             else
             {
@@ -617,9 +663,9 @@ VkResult Memory::OpenExternalSharedImage(
                 // Initialize dispatchable memory object and return to application
                 *ppVkMemory = VK_PLACEMENT_NEW(pMemMemory) Memory(pDevice,
                                                                   pPalMemory,
-                                                                  nullptr,
-                                                                  allocationMask,
                                                                   palMemCreateInfo,
+                                                                  false,
+                                                                  DefaultDeviceIndex,
                                                                   pExternalImage);
             }
             else
@@ -637,47 +683,54 @@ VkResult Memory::OpenExternalSharedImage(
 
     return PalToVkResult(palResult);
 }
+
+void Memory::Init(
+    Pal::IGpuMemory**   pPalMemory)
+{
+    memset(m_pPalMemory, 0, sizeof(m_pPalMemory));
+    for (int32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
+    {
+        m_pPalMemory[deviceIdx][deviceIdx] = pPalMemory[deviceIdx];
+    }
+}
 // =====================================================================================================================
 Memory::Memory(
     vk::Device*         pDevice,
     Pal::IGpuMemory**   pPalMemory,
-    PeerMemory*         pPeerMemory,
-    uint32_t            allocationMask,
     const Pal::GpuMemoryCreateInfo& info,
+    bool                multiInstance,
+    uint32_t            primaryIndex,
     Pal::IImage*        pExternalImage)
 :
     m_pDevice(pDevice),
-    m_pPeerMemory(pPeerMemory),
     m_info(info),
     m_priority(info.priority, info.priorityOffset),
-    m_allocationMask(allocationMask),
-    m_mirroredAllocationMask(0),
-    m_multiInstance(pPeerMemory != nullptr),
+    m_multiInstance(multiInstance),
     m_allocationCounted(false),
-    m_pExternalPalImage(pExternalImage)
+    m_sizeAccountedForDeviceMask(0),
+    m_pExternalPalImage(pExternalImage),
+    m_primaryDeviceIndex(primaryIndex)
 {
-    memcpy(m_pPalMemory, pPalMemory, sizeof(m_pPalMemory));
+    Init(pPalMemory);
 }
 
 // =====================================================================================================================
 Memory::Memory(
     Device*           pDevice,
     Pal::IGpuMemory** pPalMemory,
-    PeerMemory*       pPeerMemory,
-    uint32_t          allocationMask)
+    bool              multiInstance,
+    uint32_t          primaryIndex)
 :
     m_pDevice(pDevice),
-    m_pPeerMemory(pPeerMemory),
-    m_allocationMask(allocationMask),
-    m_mirroredAllocationMask(0),
-    m_multiInstance(pPeerMemory != nullptr),
+    m_multiInstance(multiInstance),
     m_allocationCounted(false),
-    m_pExternalPalImage(nullptr)
+    m_sizeAccountedForDeviceMask(0),
+    m_pExternalPalImage(nullptr),
+    m_primaryDeviceIndex(primaryIndex)
 {
     // PAL info is not available for memory objects allocated for presentable images
     memset(&m_info, 0, sizeof(m_info));
-
-    memcpy(m_pPalMemory, pPalMemory, sizeof(m_pPalMemory));
+    Init(pPalMemory);
 }
 
 // =====================================================================================================================
@@ -686,21 +739,39 @@ void Memory::Free(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-    if (m_pPeerMemory != nullptr)
-    {
-        m_pPeerMemory->Destroy(pDevice);
-    }
-
     if (m_pExternalPalImage != nullptr)
     {
         m_pExternalPalImage->Destroy();
         m_pExternalPalImage = nullptr;
     }
 
-    // Iterate memory objects in reverse order, to ensure that any mirrored memory is destroyed before the parent
-    for (int32_t i = m_pDevice->NumPalDevices()-1; i >= 0 ; --i)
+    for (int32_t i = 0; i < m_pDevice->NumPalDevices(); ++i)
     {
-        Pal::IGpuMemory* pGpuMemory = m_pPalMemory[i];
+        for (int32_t j = 0; j < m_pDevice->NumPalDevices(); ++j)
+        {
+            // Free the child memory first
+            if (i != j)
+            {
+                Pal::IGpuMemory* pGpuMemory = m_pPalMemory[i][j];
+                if (pGpuMemory != nullptr)
+                {
+                    Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
+                    pDevice->RemoveMemReference(pPalDevice, pGpuMemory);
+
+                    // Destroy PAL memory object
+                    pGpuMemory->Destroy();
+
+                    // the GpuMemory in [i,j] where i != j need to be freed explicitly.
+                    pDevice->VkPhysicalDevice()->VkInstance()->FreeMem(pGpuMemory);
+                }
+            }
+        }
+    }
+
+    // Free the parent memory
+    for (int32_t i = 0; i < m_pDevice->NumPalDevices(); ++i)
+    {
+        Pal::IGpuMemory* pGpuMemory = m_pPalMemory[i][i];
         if (pGpuMemory != nullptr)
         {
             Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
@@ -711,10 +782,16 @@ void Memory::Free(
         }
     }
 
-    // decrease the allocation count
+    // Decrease the allocation count
     if (m_allocationCounted)
     {
         m_pDevice->DecreaseAllocationCount();
+    }
+
+    // Decrease the allocation size
+    if (m_sizeAccountedForDeviceMask != 0)
+    {
+        m_pDevice->DecreaseAllocatedMemorySize(m_info.size, m_sizeAccountedForDeviceMask, m_info.heaps[0]);
     }
 
     // Call destructor
@@ -725,89 +802,8 @@ void Memory::Free(
 }
 
 // =====================================================================================================================
-VkResult Memory::Init()
-{
-    Pal::Result palResult = Pal::Result::Success;
-    VkResult vkResult;
-
-    if (m_info.flags.shareable != 0)
-    {
-        palResult = MirrorSharedAllocation();
-    }
-
-    if (palResult == Pal::Result::Success)
-    {
-        vkResult = VK_SUCCESS;
-    }
-    else if (palResult == Pal::Result::ErrorOutOfGpuMemory)
-    {
-        vkResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
-    }
-    else
-    {
-        VK_ASSERT(palResult == Pal::Result::ErrorOutOfMemory);
-        vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    return vkResult;
-}
-
-// =====================================================================================================================
-Pal::Result Memory::MirrorSharedAllocation()
-{
-    Pal::Result palResult = Pal::Result::Success;
-
-    // We mirror only the first memory instance.
-    VK_ASSERT((m_allocationMask & (1 << DefaultMemoryInstanceIdx)) != 0);
-    VK_ASSERT(m_mirroredAllocationMask == 0);
-
-    const size_t gpuMemorySize = m_pDevice->PalDevice()->GetGpuMemorySize(m_info, &palResult);
-    VK_ASSERT(palResult == Pal::Result::Success);
-
-    void* pPalMemory = Util::VoidPtrInc(static_cast<void*>(this + 1),
-                                        gpuMemorySize * Util::CountSetBits(m_allocationMask));
-
-    for (uint32_t deviceIdx = 1;
-        (deviceIdx < m_pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
-        deviceIdx++)
-    {
-        const uint32_t deviceMask = 1 << deviceIdx;
-
-        // Only allocate mirrored memory for devices which do not have their own allocations.
-        if ((m_allocationMask & deviceMask) == 0)
-        {
-            VK_ASSERT(m_pPalMemory[deviceIdx] == nullptr);
-
-            Pal::GpuMemoryOpenInfo shareMem = {};
-            shareMem.pSharedMem = m_pPalMemory[DefaultMemoryInstanceIdx];
-
-            Pal::IDevice* pPalDevice = m_pDevice->PalDevice(deviceIdx);
-            palResult = pPalDevice->OpenSharedGpuMemory(shareMem, pPalMemory, &m_pPalMemory[deviceIdx]);
-
-            if (palResult == Pal::Result::Success)
-            {
-                // Add the GPU memory object to the residency list
-                palResult =  m_pDevice->AddMemReference(pPalDevice, m_pPalMemory[deviceIdx]);
-
-                if (palResult == Pal::Result::Success)
-                {
-                    m_mirroredAllocationMask |= deviceMask;
-                    pPalMemory = Util::VoidPtrInc(pPalMemory, gpuMemorySize);
-                }
-                else
-                {
-                    m_pPalMemory[deviceIdx]->Destroy();
-                    m_pPalMemory[deviceIdx] = nullptr;
-                }
-            }
-        }
-    }
-
-    return palResult;
-}
-
-// =====================================================================================================================
 // Opens a POSIX external shared handle and creates a memory object corresponding to it.
+// Open external memory should not be multi-instance allocation.
 VkResult Memory::OpenExternalMemory(
     Device*                         pDevice,
     const Pal::OsExternalHandle     handle,
@@ -861,7 +857,7 @@ VkResult Memory::OpenExternalMemory(
         if (palResult == Pal::Result::Success)
         {
             // Initialize dispatchable memory object and return to application
-            *pMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(pDevice, pGpuMemory, nullptr, allocationMask, createInfo);
+            *pMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(pDevice, pGpuMemory, createInfo, false, DefaultDeviceIndex);
         }
         else
         {
@@ -898,46 +894,50 @@ VkResult Memory::Map(
     VkDeviceSize size,
     void**       ppData)
 {
-    Pal::Result palResult = Pal::Result::Success;
+    VkResult result = VK_SUCCESS;
 
-    const uint32_t count = m_multiInstance ? m_pDevice->NumPalDevices() : 1;
-
-    for (uint32_t deviceIdx = 0; (deviceIdx <count) && (palResult == Pal::Result::Success); deviceIdx++)
+    // according to spec, "memory must not have been allocated with multiple instances"
+    // if it is multi-instance allocation, we should just return VK_ERROR_MEMORY_MAP_FAILED
+    // otherwise, we can just map the PalMemory at [0][0]
+    if (!m_multiInstance)
     {
-        if (PalMemory(deviceIdx) != nullptr)
+        Pal::Result palResult = Pal::Result::Success;
+        if (PalMemory() != nullptr)
         {
             void* pData;
 
-            palResult = PalMemory(deviceIdx)->Map(&pData);
+            palResult = PalMemory()->Map(&pData);
 
             if (palResult == Pal::Result::Success)
             {
-                ppData[deviceIdx] = Util::VoidPtrInc(pData, static_cast<size_t>(offset));
+                ppData[DefaultDeviceIndex] = Util::VoidPtrInc(pData, static_cast<size_t>(offset));
+
             }
+            result = (palResult == Pal::Result::Success) ? VK_SUCCESS : VK_ERROR_MEMORY_MAP_FAILED;
+        }
+        else
+        {
+            result = VK_ERROR_MEMORY_MAP_FAILED;
         }
     }
+    else
+    {
+        result = VK_ERROR_MEMORY_MAP_FAILED;
+    }
 
-    return (palResult == Pal::Result::Success) ? VK_SUCCESS : VK_ERROR_MEMORY_MAP_FAILED;
+    return result;
 }
 
 // =====================================================================================================================
 // Unmap previously mapped memory object. Just calls PAL.
-VkResult Memory::Unmap(void)
+void Memory::Unmap(void)
 {
     Pal::Result palResult = Pal::Result::Success;
 
-    const uint32_t count = m_multiInstance ? m_pDevice->NumPalDevices() : 1;
+    VK_ASSERT(m_multiInstance == false);
 
-    for (uint32_t deviceIdx = 0; (deviceIdx < count) && (palResult == Pal::Result::Success); deviceIdx++)
-    {
-        if (m_pPalMemory[deviceIdx] != nullptr)
-        {
-            palResult = m_pPalMemory[deviceIdx]->Unmap();
-            VK_ASSERT(palResult == Pal::Result::Success);
-        }
-    }
-
-    return PalToVkResult(palResult);
+    palResult = PalMemory()->Unmap();
+    VK_ASSERT(palResult == Pal::Result::Success);
 }
 
 // =====================================================================================================================
@@ -969,7 +969,7 @@ void Memory::ElevatePriority(MemoryPriority priority)
             {
                 if ((PalMemory(deviceIdx) != nullptr) &&
                     (PalMemory(deviceIdx)->SetPriority(priority.PalPriority(), priority.PalOffset()) ==
-                                                                                                Pal::Result::Success))
+                        Pal::Result::Success))
                 {
                     m_priority = priority;
                 }
@@ -1000,6 +1000,94 @@ MemoryPriority MemoryPriority::FromSetting(uint32_t value)
     priority.offset   = (value % 16);
 
     return priority;
+}
+
+// =====================================================================================================================
+// Provide the PalMemory according to the combination of resourceIndex and memoryIndex
+Pal::IGpuMemory* Memory::PalMemory(uint32_t resourceIndex, uint32_t memoryIndex)
+{
+    // if it is not m_multiInstance, each PalMemory in peer device is imported from m_primaryDeviceIndex.
+    // We could always return the PalMemory with memory index m_primaryDeviceIndex.
+    uint32_t index = m_multiInstance ? memoryIndex : m_primaryDeviceIndex;
+
+    if ((m_pPalMemory[resourceIndex][index] == nullptr))
+    {
+        // Instantiate the required PalMemory.
+        Pal::IGpuMemory* pBaseMemory = nullptr;
+        if (m_multiInstance)
+        {
+            // we need to import the memory from [memoryIndex][memoryIndex]
+            VK_ASSERT(m_pPalMemory[index][index] != nullptr);
+            pBaseMemory = m_pPalMemory[index][index];
+        }
+        else
+        {
+            // we need to import the memory from [m_primaryDeviceIndex][m_primaryDeviceIndex]
+            VK_ASSERT(m_pPalMemory[m_primaryDeviceIndex][m_primaryDeviceIndex] != nullptr);
+            pBaseMemory = m_pPalMemory[m_primaryDeviceIndex][m_primaryDeviceIndex];
+        }
+
+        Pal::PeerGpuMemoryOpenInfo peerMem   = {};
+        Pal::GpuMemoryOpenInfo     sharedMem = {};
+
+        Pal::Result palResult = Pal::Result::Success;
+
+        // Call OpenSharedGpuMemory to construct Pal::GpuMemory for memory in remote heap.
+        // Call OpenPeerGpuMemory to construct Pal::GpuMemory for memory in peer device's local heap.
+        const bool openSharedMemory = (pBaseMemory->Desc().preferredHeap == Pal::GpuHeap::GpuHeapGartUswc) ||
+                                      (pBaseMemory->Desc().preferredHeap == Pal::GpuHeap::GpuHeapGartCacheable);
+
+        Pal::GpuMemoryCreateInfo createInfo = {};
+        size_t gpuMemorySize = 0;
+        if (openSharedMemory)
+        {
+            sharedMem.pSharedMem = pBaseMemory;
+            gpuMemorySize        =  m_pDevice->PalDevice(resourceIndex)->GetSharedGpuMemorySize(sharedMem, &palResult);
+        }
+        else
+        {
+            peerMem.pOriginalMem = pBaseMemory;
+            gpuMemorySize        = m_pDevice->PalDevice(resourceIndex)->GetPeerGpuMemorySize(peerMem, &palResult);
+        }
+
+        void* pPalMemory = static_cast<uint8_t*>(m_pDevice->VkPhysicalDevice()->VkInstance()->AllocMem(
+                                        gpuMemorySize,
+                                        VK_DEFAULT_MEM_ALIGN,
+                                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+
+        VK_ASSERT(pPalMemory != nullptr);
+
+        Pal::IDevice* pPalDevice = m_pDevice->PalDevice(resourceIndex);
+
+        if (openSharedMemory)
+        {
+            palResult = pPalDevice->OpenSharedGpuMemory(sharedMem, pPalMemory, &m_pPalMemory[resourceIndex][index]);
+        }
+        else
+        {
+            palResult = pPalDevice->OpenPeerGpuMemory(peerMem, pPalMemory, &m_pPalMemory[resourceIndex][index]);
+        }
+
+        if (palResult == Pal::Result::Success)
+        {
+            // Add the GPU memory object to the residency list
+            palResult =  m_pDevice->AddMemReference(pPalDevice, m_pPalMemory[resourceIndex][index]);
+
+            if (palResult != Pal::Result::Success)
+            {
+                m_pPalMemory[resourceIndex][index]->Destroy();
+                m_pPalMemory[resourceIndex][index] = nullptr;
+            }
+        }
+        else
+        {
+            m_pDevice->VkPhysicalDevice()->VkInstance()->FreeMem(pPalMemory);
+        }
+    }
+
+    VK_ASSERT(m_pPalMemory[resourceIndex][index] != nullptr);
+
+    return m_pPalMemory[resourceIndex][index];
 }
 
 /**

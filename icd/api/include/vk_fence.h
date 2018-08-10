@@ -93,15 +93,18 @@ public:
     }
 
 private:
-    Fence(uint32_t numGroupedFences, Pal::IFence** pPalFences)
+    Fence(uint32_t      numGroupedFences,
+          Pal::IFence** pPalFences,
+          bool          canBeInherited)
     :
     m_activeDeviceMask(0),
     m_groupedFenceCount(numGroupedFences),
     m_pPalTemporaryFences(nullptr)
     {
         memcpy(m_pPalFences, pPalFences, sizeof(pPalFences[0]) * numGroupedFences);
-        m_flags.value        = 0;
-        m_flags.isPermanence = 1;
+        m_flags.value          = 0;
+        m_flags.isPermanence   = 1;
+        m_flags.canBeInherited = canBeInherited;
     }
 
     uint32_t     m_activeDeviceMask;
@@ -113,10 +116,11 @@ private:
     {
         struct
         {
-            uint32_t isPermanence : 1;
-            uint32_t isOpened     : 1;
-            uint32_t isReference  : 1;
-            uint32_t reserved     : 29;
+            uint32_t isPermanence   : 1;
+            uint32_t isOpened       : 1;
+            uint32_t isReference    : 1;
+            uint32_t canBeInherited : 1;
+            uint32_t reserved       : 28;
         };
         uint32_t value;
     } m_flags;

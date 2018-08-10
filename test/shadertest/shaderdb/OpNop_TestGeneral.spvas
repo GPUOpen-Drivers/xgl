@@ -1,0 +1,59 @@
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 1
+; Bound: 27
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %2 "main" %3
+               OpExecutionMode %2 LocalSize 1 1 1
+               OpSource GLSL 430
+               OpName %2 "main"
+               OpName %3 "gl_GlobalInvocationID"
+               OpName %4 "Output"
+               OpMemberName %4 0 "elements"
+               OpName %5 "output_data"
+               OpName %6 "Input"
+               OpMemberName %6 0 "elements"
+               OpName %7 "input_data"
+               OpDecorate %3 BuiltIn GlobalInvocationId
+               OpDecorate %6 BufferBlock
+               OpDecorate %7 DescriptorSet 0
+               OpDecorate %7 Binding 0
+               OpDecorate %4 BufferBlock
+               OpDecorate %5 DescriptorSet 0
+               OpDecorate %5 Binding 1
+               OpDecorate %8 ArrayStride 4
+               OpMemberDecorate %6 0 Offset 0
+               OpMemberDecorate %4 0 Offset 0
+          %9 = OpTypeVoid
+         %10 = OpTypeFunction %9
+         %11 = OpTypeInt 32 0
+         %12 = OpTypeVector %11 3
+         %13 = OpTypePointer Input %12
+         %14 = OpTypeFloat 32
+         %15 = OpTypePointer Uniform %14
+          %8 = OpTypeRuntimeArray %14
+          %4 = OpTypeStruct %8
+         %16 = OpTypePointer Uniform %4
+          %6 = OpTypeStruct %8
+         %17 = OpTypePointer Uniform %6
+         %18 = OpTypeInt 32 1
+          %3 = OpVariable %13 Input
+          %7 = OpVariable %17 Uniform
+          %5 = OpVariable %16 Uniform
+         %19 = OpConstant %18 0
+          %2 = OpFunction %9 None %10
+         %20 = OpLabel
+         %21 = OpLoad %12 %3
+         %22 = OpCompositeExtract %11 %21 0
+               OpNop
+         %23 = OpAccessChain %15 %7 %19 %22
+         %24 = OpLoad %14 %23
+         %25 = OpFNegate %14 %24
+         %26 = OpAccessChain %15 %5 %19 %22
+               OpStore %26 %25
+               OpReturn
+               OpFunctionEnd
+

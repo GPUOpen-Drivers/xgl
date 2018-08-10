@@ -28,19 +28,17 @@
 #pragma once
 
 #include "include/khronos/vulkan.h"
-
-#include "renderpass/renderpass_builder.h"
 #include "renderpass/renderpass_types.h"
 #include "utils/temp_mem_arena.h"
 
 #include "palFile.h"
 
 #if ICD_LOG_RENDER_PASSES
-#define RenderPassLogBegin(logger, apiInfo, createInfo) { logger->Begin(apiInfo, createInfo); }
+#define RenderPassLogBegin(logger, createInfo) { logger->Begin(createInfo); }
 #define RenderPassLogEnd(logger) { logger->End(); }
 #define RenderPassLogExecuteInfo(logger, execute) { logger->LogExecuteInfo(execute); }
 #else
-#define RenderPassLogBegin(logger, apiInfo, createInfo) {}
+#define RenderPassLogBegin(logger, createInfo) {}
 #define RenderPassLogEnd(logger) {}
 #define RenderPassLogExecuteInfo(logger, execute) {}
 #endif
@@ -49,6 +47,10 @@ namespace vk
 {
 
 class RenderPassBuilder;
+struct RenderPassCreateInfo;
+struct RenderPassExecuteInfo;
+struct AttachmentReference;
+struct SubpassDependency;
 
 // =====================================================================================================================
 // This class dumps render passes in .asciidoc format as they are created.
@@ -58,14 +60,14 @@ public:
     RenderPassLogger(utils::TempMemArena* pArena, const Device* pDevice);
     ~RenderPassLogger();
 
-    void Begin(const VkRenderPassCreateInfo& apiInfo, const RenderPassCreateInfo& info);
+    void Begin(const RenderPassCreateInfo* info);
     void LogExecuteInfo(const RenderPassExecuteInfo* pExecute);
     void End();
 
 private:
     bool OpenLogFile(uint64_t hash);
     void Log(const char* pFormat, ...);
-    void LogRenderPassCreateInfo(const VkRenderPassCreateInfo& apiInfo);
+    void LogRenderPassCreateInfo(const RenderPassCreateInfo& apiInfo);
     void LogExecuteRPBeginSubpass(uint32_t subpass);
     void LogExecuteRPEndSubpass(uint32_t subpass);
     void LogExecuteRPSyncPoint(const RPSyncPointInfo& syncPoint, const char* pName);
@@ -73,15 +75,16 @@ private:
     void LogExecuteRPLoadOpClear(uint32_t count, const RPLoadOpClearInfo* pClears, const char* pName, const char* pVar);
     void LogExecuteRPResolveAttachments(uint32_t count, const RPResolveInfo* pResolves);
 
-    void LogInfoAttachmentReference(const char* pAttachmentArray, uint32_t element, const VkAttachmentReference& ref);
-    void LogAttachmentReference(const VkAttachmentReference& reference);
+    void LogInfoAttachmentReference(const char* pAttachmentArray, uint32_t element, const AttachmentReference& ref);
+    void LogAttachmentReference(const AttachmentReference& reference);
     void LogAttachmentReference(const RPAttachmentReference& reference);
     void LogAttachment(uint32_t attachment);
     void LogImageLayout(const RPImageLayout& layout);
     void LogFormat(VkFormat format, bool shortDesc = true);
     void LogPipelineStageMask(VkPipelineStageFlags flags, bool compact);
+    void LogImageAspectMask(VkImageAspectFlags  flags, bool compact);
     void LogAccessMask(VkAccessFlags flags, bool compact);
-    void LogSubpassDependency(const VkSubpassDependency& dep, bool printSubpasses, bool label);
+    void LogSubpassDependency(const SubpassDependency& dep, bool printSubpasses, bool label);
     void LogStatistics();
     void LogBeginSource();
     void LogEndSource();
@@ -94,7 +97,6 @@ private:
 
     utils::TempMemArena*           m_pArena;
     const RuntimeSettings&         m_settings;
-    const VkRenderPassCreateInfo*  m_pApiInfo;
     const RenderPassCreateInfo*    m_pInfo;
     const RenderPassExecuteInfo*   m_pExecute;
     Util::File                     m_file;

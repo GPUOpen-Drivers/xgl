@@ -56,6 +56,7 @@ struct Formats
     VK_INLINE static uint32_t GetIndex(VkFormat format);
     VK_INLINE static VkFormat FromIndex(uint32_t index);
 
+    static VkExtent3D ElementsToTexels(VkFormat format, const VkExtent3D& extent);
     static Pal::Formats::NumericSupportFlags GetNumberFormat(VkFormat format);
 };
 
@@ -73,7 +74,7 @@ uint32_t Formats::GetIndex(VkFormat format)
     }
     else
     {
-        VK_ASSERT(!"Unexpected format");
+        VK_ALERT(!"Unexpected format");
         return 0;
     }
 }

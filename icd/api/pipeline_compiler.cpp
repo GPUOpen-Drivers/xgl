@@ -31,6 +31,7 @@
 
 #include "include/pipeline_compiler.h"
 #include "include/vk_device.h"
+#include "include/vk_physical_device.h"
 #include "include/vk_shader.h"
 #include "include/vk_pipeline_cache.h"
 #include "include/vk_pipeline_layout.h"
@@ -111,7 +112,8 @@ void ShaderCache::Destroy(
 }
 
 // =====================================================================================================================
-PipelineCompiler::PipelineCompiler(PhysicalDevice* pPhysicalDevice)
+PipelineCompiler::PipelineCompiler(
+    PhysicalDevice* pPhysicalDevice)
     :
     m_pPhysicalDevice(pPhysicalDevice)
     , m_pLlpc(nullptr)
@@ -129,12 +131,12 @@ PipelineCompiler::~PipelineCompiler()
 // Initializes pipeline compiler.
 VkResult PipelineCompiler::Initialize()
 {
-    Pal::IDevice* pPalDevice = m_pPhysicalDevice->PalDevice();
+    Pal::IDevice* pPalDevice        = m_pPhysicalDevice->PalDevice();
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
 
-    // Initialzie GfxIp informations per PAL device properties
+    // Initialize GfxIp informations per PAL device properties
     Pal::DeviceProperties info;
     pPalDevice->GetProperties(&info);
-    m_gfxIpLevel = info.gfxLevel;
 
     switch (info.gfxLevel)
     {
@@ -173,7 +175,7 @@ VkResult PipelineCompiler::Initialize()
 }
 
 // =====================================================================================================================
-// Destroies all compiler instance.
+// Destroys all compiler instance.
 void PipelineCompiler::Destroy()
 {
     if (m_pLlpc)
@@ -307,16 +309,21 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
     if ((appProfile == AppProfile::Talos) ||
         (appProfile == AppProfile::MadMax) ||
-        (appProfile == AppProfile::SeriousSamFusion))
+        (appProfile == AppProfile::SeriousSamFusion) ||
+        (appProfile == AppProfile::SedpEngine))
     {
         llpcOptions[numOptions++] = "-enable-si-scheduler";
+        // si-scheduler interacts badly with SIFormMemoryClauses pass, so
+        // disable the effect of that pass by limiting clause length to 1.
+        llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
     }
 
     // Force enable cache to disk to improve user experience
     if ((shaderCacheMode == ShaderCacheEnableRuntimeOnly) &&
          ((appProfile == AppProfile::MadMax) ||
           (appProfile == AppProfile::SeriousSamFusion) ||
-          (appProfile == AppProfile::F1_2017)))
+          (appProfile == AppProfile::F1_2017) ||
+          (appProfile == AppProfile::Feral3DEngine)))
     {
         // Force to use internal disk cache.
         shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
@@ -466,7 +473,8 @@ VkResult PipelineCompiler::CreateShaderCache(
 
 // =====================================================================================================================
 // Gets the size of shader cache object.
-size_t PipelineCompiler::GetShaderCacheSize(PipelineCacheType cacheType)
+size_t PipelineCompiler::GetShaderCacheSize(
+    PipelineCacheType cacheType)
 {
     size_t shaderCacheSize = 0;
     return shaderCacheSize;
@@ -545,15 +553,19 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     size_t*                             pPipelineBinarySize,
     const void**                        ppPipelineBinary)
 {
-    VkResult               result    = VK_SUCCESS;
-    const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
-    auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    VkResult               result        = VK_SUCCESS;
+    bool                   shouldCompile = true;
+    const RuntimeSettings& settings      = m_pPhysicalDevice->GetRuntimeSettings();
+    auto                   pInstance     = m_pPhysicalDevice->Manager()->VkInstance();
 
     // Build the LLPC pipeline
     Llpc::GraphicsPipelineBuildOut  pipelineOut         = {};
     void*                           pLlpcPipelineBuffer = nullptr;
 
+    int64_t compileTime = 0;
+
     {
+        int64_t startTime = Util::GetPerfCpuTime();
         // Fill pipeline create info for LLPC
         auto pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
         pPipelineBuildInfo->pInstance      = pInstance;
@@ -585,6 +597,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
             *ppPipelineBinary   = pipelineOut.pipelineBin.pCode;
             *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
         }
+        compileTime = Util::GetPerfCpuTime() - startTime;
     }
 
     return result;
@@ -600,14 +613,19 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     size_t*                             pPipelineBinarySize,
     const void**                        ppPipelineBinary)
 {
-    VkResult               result    = VK_SUCCESS;
-    const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
-    auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    VkResult               result        = VK_SUCCESS;
+    const RuntimeSettings& settings      = m_pPhysicalDevice->GetRuntimeSettings();
+    auto                   pInstance     = m_pPhysicalDevice->Manager()->VkInstance();
+    bool                   shouldCompile = true;
 
     Llpc::ComputePipelineBuildInfo* pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
-    pPipelineBuildInfo->deviceIndex    = deviceIdx;
+    pPipelineBuildInfo->deviceIndex                    = deviceIdx;
+
+    int64_t compileTime = 0;
 
     {
+        int64_t startTime = Util::GetPerfCpuTime();
+
         // Build the LLPC pipeline
        Llpc::ComputePipelineBuildOut  pipelineOut         = {};
        void*                          pLlpcPipelineBuffer = nullptr;
@@ -643,6 +661,8 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
             *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
         }
         VK_ASSERT(*ppPipelineBinary == pLlpcPipelineBuffer);
+
+        compileTime = Util::GetPerfCpuTime() - startTime;
     }
 
     return result;
@@ -895,6 +915,9 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 vertexShader ? pVbInfo : nullptr);
         }
 
+        ApplyDefaultShaderOptions(&pShaderInfo->options
+                                  );
+
         ApplyProfileOptions(pDevice,
                             static_cast<ShaderStage>(stage),
                             pShaderModule,
@@ -999,6 +1022,9 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             nullptr);
     }
 
+    ApplyDefaultShaderOptions(&pCreateInfo->pipelineInfo.cs.options
+                              );
+
     ApplyProfileOptions(pDevice,
                         ShaderStageCompute,
                         pShaderModule,
@@ -1007,6 +1033,15 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
                         );
 
     return result;
+}
+
+// =====================================================================================================================
+// Set any non-zero shader option defaults
+void PipelineCompiler::ApplyDefaultShaderOptions(
+    Llpc::PipelineShaderOptions* pShaderOptions
+    ) const
+{
+
 }
 
 // =====================================================================================================================
@@ -1103,4 +1138,3 @@ void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
 }
 
 }
-

@@ -342,20 +342,28 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             break;
         }
 
-        bool multisampleEnable = false;
-        uint32_t rasterizationSampleCount = 0;
-
         const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;
 
         if (pMs != nullptr)
         {
-            multisampleEnable = (pMs->rasterizationSamples != 1);
+            // Sample Locations
+            EXTRACT_VK_STRUCTURES_1(
+                SampleLocations,
+                PipelineMultisampleStateCreateInfo,
+                PipelineSampleLocationsStateCreateInfoEXT,
+                pMs,
+                PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
 
-            if (multisampleEnable)
+            bool multisampleEnable     = (pMs->rasterizationSamples != 1);
+            bool customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
+                                          (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
+
+            if (multisampleEnable || customSampleLocations)
             {
                 VK_ASSERT(pRenderPass != nullptr);
 
-                rasterizationSampleCount            = pMs->rasterizationSamples;
+                uint32_t rasterizationSampleCount   = pMs->rasterizationSamples;
                 uint32_t subpassCoverageSampleCount = pRenderPass->GetSubpassMaxSampleCount(pGraphicsPipelineCreateInfo->subpass);
                 uint32_t subpassColorSampleCount    = pRenderPass->GetSubpassColorSampleCount(pGraphicsPipelineCreateInfo->subpass);
                 uint32_t subpassDepthSampleCount    = pRenderPass->GetSubpassDepthSampleCount(pGraphicsPipelineCreateInfo->subpass);
@@ -398,42 +406,31 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 pInfo->msaa.occlusionQuerySamples  = subpassDepthSampleCount;
                 pInfo->sampleCoverage              = subpassCoverageSampleCount;
 
-                /// Sample Locations
-                EXTRACT_VK_STRUCTURES_1(
-                    SampleLocations,
-                    PipelineMultisampleStateCreateInfo,
-                    PipelineSampleLocationsStateCreateInfoEXT,
-                    pMs,
-                    PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                    PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
-
-                    bool customSampleLocations = false;
-
-                if (pPipelineSampleLocationsStateCreateInfoEXT != nullptr)
+                if (customSampleLocations)
                 {
-                    customSampleLocations = pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable == VK_TRUE
-                        ? true
-                        : customSampleLocations;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 417
+                    // Enable single-sampled custom sample locations if necessary
+                    pInfo->msaa.flags.enable1xMsaaSampleLocations = (pInfo->msaa.coverageSamples == 1);
+#endif
+
+                    if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT)] == false)
+                    {
+                        // We store the custom sample locations if custom sample locations are enabled and the
+                        // sample locations state is static.
+                        pInfo->immedInfo.samplePattern.sampleCount =
+                            (uint32_t)pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationsPerPixel;
+
+                        ConvertToPalMsaaQuadSamplePattern(
+                            &pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo,
+                            &pInfo->immedInfo.samplePattern.locations);
+
+                        VK_ASSERT(pInfo->immedInfo.samplePattern.sampleCount == rasterizationSampleCount);
+
+                        pInfo->immedInfo.staticStateMask |=
+                            (1 << static_cast<uint32_t>(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT));
+                    }
                 }
-
-                if (customSampleLocations &&
-                    (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT)] == false))
-                {
-                    // We store the custom sample locations if custom sample locations are enabled and the
-                    // sample locations state is static.
-                    pInfo->immedInfo.samplePattern.sampleCount =
-                        (uint32_t)pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationsPerPixel;
-
-                    ConvertToPalMsaaQuadSamplePattern(
-                        &pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo,
-                        &pInfo->immedInfo.samplePattern.locations);
-
-                    VK_ASSERT(pInfo->immedInfo.samplePattern.sampleCount == rasterizationSampleCount);
-
-                    pInfo->immedInfo.staticStateMask |=
-                        (1 << static_cast<uint32_t>(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT));
-                }
-                else if (customSampleLocations == false)
+                else
                 {
                     // We store the standard sample locations if custom sample locations are not enabled.
                     pInfo->immedInfo.samplePattern.sampleCount = rasterizationSampleCount;

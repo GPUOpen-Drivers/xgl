@@ -1,0 +1,24 @@
+#version 450 core
+#extension GL_AMD_gpu_shader_int16 : enable
+#extension GL_AMD_gpu_shader_half_float : enable
+
+layout(set = 0, binding = 0) uniform UBO {
+    f16vec4 m1;
+};
+
+layout(set = 1, binding = 0) buffer SSBO {
+    f16vec4 mOut1;
+    i16vec4 mOut2;
+    f16vec4 mOut3;
+    i16vec4 mOut4;
+};
+
+void main()
+{
+    i16vec4 tmp;
+    mOut1 = frexp(m1, tmp);   // Need to update glslang
+    mOut2 = tmp;
+
+    mOut3 = ldexp(m1, tmp);
+    mOut4 = tmp;
+}

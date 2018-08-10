@@ -98,7 +98,7 @@ public:
     VK_FORCEINLINE const Image* GetPresentableImage(uint32_t imageIndex) const
         { return Image::ObjectFromHandle(m_properties.images[imageIndex]); }
 
-    VK_FORCEINLINE const Memory* GetPresentableImageMemory(uint32_t imageIndex) const
+    VK_FORCEINLINE Memory* GetPresentableImageMemory(uint32_t imageIndex) const
         { return Memory::ObjectFromHandle(m_properties.imageMemory[imageIndex]); }
 
     VK_FORCEINLINE Pal::ISwapChain* PalSwapChain(uint32_t deviceIdx = DefaultDeviceIndex) const

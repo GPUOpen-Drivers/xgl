@@ -46,7 +46,6 @@ namespace vk
 {
 
 class DescriptorSetLayout;
-class DescriptorSet;
 class DescriptorPool;
 
 // =====================================================================================================================
@@ -84,11 +83,6 @@ public:
 
     VK_INLINE void* CpuAddr(uint32_t deviceIdx) const
         { return m_pCpuAddr[deviceIdx]; }
-
-    void* GetDescriptorSetMappedAddress(
-        uint32_t     deviceIdx,
-        void*        pSetAllocHandle,
-        Pal::gpusize setGpuOffset);
 
 protected:
     struct DynamicAllocBlock
@@ -145,24 +139,29 @@ class DescriptorSetHeap
 public:
     DescriptorSetHeap();
 
+    template <uint32_t numPalDevices>
     VkResult Init(
         Device*                         pDevice,
-        DescriptorPool*                 pPool,
         VkDescriptorPoolCreateFlags     poolUsage,
         uint32_t                        maxSets);
 
     void Destroy(Device* pDevice);
 
+    template <uint32_t numPalDevices>
     bool AllocSetState(VkDescriptorSet* pSet);
 
+    template <uint32_t numPalDevices>
     void FreeSetState(VkDescriptorSet set);
 
+    template <uint32_t numPalDevices>
     void Reset();
 
 private:
 
-    size_t SetSize() const { return Util::Pow2Align(sizeof(DescriptorSet), VK_DEFAULT_MEM_ALIGN); }
+    template <uint32_t numPalDevices>
+    size_t SetSize() const { return Util::Pow2Align(sizeof(DescriptorSet<numPalDevices>), VK_DEFAULT_MEM_ALIGN); }
 
+    template <uint32_t numPalDevices>
     VkDescriptorSet DescriptorSetHandleFromIndex(uint32_t idx) const;
 
     uint32_t             m_nextFreeHandle;
@@ -180,10 +179,9 @@ private:
 class DescriptorPool : public NonDispatchable<VkDescriptorPool, DescriptorPool>
 {
 public:
+    template <uint32_t numPalDevices>
     static VkResult Create(
         Device*                                pDevice,
-        VkDescriptorPoolCreateFlags            poolUsage,
-        uint32_t                               maxSets,
         const VkDescriptorPoolCreateInfo*      pCreateInfo,
         const VkAllocationCallbacks*           pAllocator,
         VkDescriptorPool*                      pDescriptorPool);
@@ -192,31 +190,60 @@ public:
         Device*                                pDevice,
         const VkAllocationCallbacks*           pAllocator);
 
+    template <uint32_t numPalDevices>
     VkResult Reset();
 
+    template <uint32_t numPalDevices>
     VkResult AllocDescriptorSets(
         const VkDescriptorSetAllocateInfo* pAllocateInfo,
         VkDescriptorSet*                   pDescriptorSets);
 
+    template <uint32_t numPalDevices>
     VkResult FreeDescriptorSets(
         uint32_t                         count,
         const VkDescriptorSet*           pDescriptorSets);
 
-    void* GetDescriptorSetMappedAddress(
-        uint32_t       deviceIdx,
-        Pal::gpusize   gpuMemOffset,
-        DescriptorSet* pSet);
+    static PFN_vkCreateDescriptorPool GetCreateDescriptorPoolFunc(Device* pDevice);
 
-    Device* VkDevice() const { return m_pDevice; }
+    static PFN_vkFreeDescriptorSets GetFreeDescriptorSetsFunc(Device* pDevice);
+
+    static PFN_vkResetDescriptorPool GetResetDescriptorPoolFunc(Device* pDevice);
+
+    static PFN_vkAllocateDescriptorSets GetAllocateDescriptorSetsFunc(Device* pDevice);
 
 private:
+    template <uint32_t numPalDevices>
     VkResult Init(
         Device*                               pDevice,
-        VkDescriptorPoolCreateFlags           poolUsage,
-        uint32_t                              maxSets,
         const VkDescriptorPoolCreateInfo*     pCreateInfo);
 
     DescriptorPool(Device* pDevice);
+
+    template <uint32_t numPalDevices>
+    static VKAPI_ATTR VkResult VKAPI_CALL CreateDescriptorPool(
+        VkDevice                                    device,
+        const VkDescriptorPoolCreateInfo*           pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator,
+        VkDescriptorPool*                           pDescriptorPool);
+
+    template <uint32_t numPalDevices>
+    static VKAPI_ATTR VkResult VKAPI_CALL FreeDescriptorSets(
+        VkDevice                                    device,
+        VkDescriptorPool                            descriptorPool,
+        uint32_t                                    descriptorSetCount,
+        const VkDescriptorSet*                      pDescriptorSets);
+
+    template <uint32_t numPalDevices>
+    static VKAPI_ATTR VkResult VKAPI_CALL ResetDescriptorPool(
+        VkDevice                                    device,
+        VkDescriptorPool                            descriptorPool,
+        VkDescriptorPoolResetFlags                  flags);
+
+    template <uint32_t numPalDevices>
+    static VKAPI_ATTR VkResult VKAPI_CALL AllocateDescriptorSets(
+        VkDevice                                    device,
+        const VkDescriptorSetAllocateInfo*          pAllocateInfo,
+        VkDescriptorSet*                            pDescriptorSets);
 
     Device*              m_pDevice;           // Device pointer
     DescriptorSetHeap    m_setHeap;           // Allocates driver state instances of descriptor sets

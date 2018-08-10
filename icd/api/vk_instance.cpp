@@ -637,6 +637,13 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_FENCE_CAPABILITIES));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_REPORT));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_DISPLAY));
+
+#if VK_USE_PLATFORM_XLIB_XRANDR_EXT
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_ACQUIRE_XLIB_DISPLAY));
+#endif
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_DISPLAY_PROPERTIES2));
+
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DIRECT_MODE_DISPLAY));
         supportedExtensionsPopulated = true;
     }
 
@@ -796,6 +803,55 @@ VkResult Instance::FindScreens(
     return result;
 }
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
+// =====================================================================================================================
+Pal::IScreen* Instance::FindScreenFromConnectorId(
+    const Pal::IDevice* pDevice,
+    uint32_t            connectorId
+) const
+{
+    Pal::IScreen* pScreen = nullptr;
+
+    for (uint32_t screenIdx = 0; screenIdx < m_screenCount; ++screenIdx)
+    {
+        Pal::ScreenProperties props = {};
+
+        if (m_screens[screenIdx].pPalScreen->GetProperties(&props) == Pal::Result::Success)
+        {
+            if ((props.pMainDevice == pDevice) && (props.screen == connectorId))
+            {
+                pScreen = m_screens[screenIdx].pPalScreen;
+                break;
+            }
+        }
+    }
+    return pScreen;
+}
+
+// =====================================================================================================================
+Pal::IScreen* Instance::FindScreenFromRandrOutput(
+    const Pal::IDevice* pDevice,
+    uint32_t            randrOutput
+) const
+{
+    Pal::IScreen* pScreen = nullptr;
+
+    for (uint32_t screenIdx = 0; screenIdx < m_screenCount; ++screenIdx)
+    {
+        Pal::ScreenProperties props = {};
+
+        if (m_screens[screenIdx].pPalScreen->GetProperties(&props) == Pal::Result::Success)
+        {
+            if ((props.pMainDevice == pDevice) && (props.wsiScreenProp.randrOutput == randrOutput))
+            {
+                pScreen = m_screens[screenIdx].pPalScreen;
+                break;
+            }
+        }
+    }
+    return pScreen;
+}
+#endif
 // =====================================================================================================================
 // Finds the PAL screen (if any) associated with the given window handle
 Pal::IScreen* Instance::FindScreen(
@@ -1244,22 +1300,12 @@ VKAPI_ATTR void VKAPI_CALL IcdSetCallbackProcs(
     uint32_t                                    numProcs,
     void*                                       pProcsTable)
 {
-#ifdef PAL_KMT_BUILD
-    Pal::OglSetCallbackProcs(pPrivateData, numProcs, pProcsTable);
-#endif
 }
 
 VKAPI_ATTR bool VKAPI_CALL IcdPresentBuffers(
-#ifdef PAL_KMT_BUILD
-    Pal::PresentBufferInfo*                     pPresentBufferInfo
-#endif
 )
 {
-#ifdef PAL_KMT_BUILD
-    return Pal::OglPresentBuffers(pPresentBufferInfo);
-#else
     return true;
-#endif
 }
 
 } // extern "C"

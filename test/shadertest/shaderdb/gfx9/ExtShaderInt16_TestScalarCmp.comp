@@ -1,0 +1,47 @@
+#version 450 core
+#extension GL_AMD_gpu_shader_int16 : enable
+
+layout(set = 0, binding = 0) uniform UBO {
+    int16_t m1;
+    uint16_t m2;
+    int16_t m3;
+};
+
+layout(set = 1, binding = 0) buffer SSBO {
+    uint16_t mOut1;
+};
+
+void main()
+{
+    uint16_t a;
+
+    if (m1 != m2)
+        a = 0us;
+
+    if (m1 == m2)
+        a = 1us;
+
+    if (m1 > m2)
+        a = 2us;
+
+    if (m1 >= m2)
+        a = 3us;
+
+    if (m1 < m2)
+        a = 4us;
+
+    if (m1 <= m2)
+        a = 5us;
+
+    if (m1 > m3)
+        a = 6us;
+
+    if (m1 >= m3)
+        a = 7us;
+
+    if (m1 < m3)
+        a = 8us;
+
+    if (m1 <= m3)
+        a = 9us;
+}

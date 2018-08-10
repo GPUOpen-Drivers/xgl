@@ -1,0 +1,19 @@
+#version 450
+
+layout(binding = 0) uniform Uniforms
+{
+    mat4 u1;
+};
+
+shared mat4 s1;
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+mat4 g_f;
+
+void main()
+{
+    s1 = u1;
+    g_f = s1;
+}
+
