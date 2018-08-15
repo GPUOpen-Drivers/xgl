@@ -145,7 +145,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     uint32_t*                                   pPhysicalDeviceCount,
     VkPhysicalDevice*                           pPhysicalDevices)
 {
-    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
+    VkResult result = VK_SUCCESS;
     const VkAllocationCallbacks* pAllocCb = &allocator::g_DefaultAllocCallback;
     VK_ASSERT(pAllocCb != nullptr);
 
@@ -159,18 +159,92 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
                                                 physicalDeviceCount * sizeof(VkPhysicalDevice),
                                                 sizeof(void*),
                                                 VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-
-        pLayerPhysicalDevices = static_cast<VkPhysicalDevice*>(pMemory);
+        if (pMemory == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            pLayerPhysicalDevices = static_cast<VkPhysicalDevice*>(pMemory);
+        }
     }
 
     // Call loader's terminator function into ICDs to get all the physical devices
-    result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, pLayerPhysicalDevices);
+    if (result == VK_SUCCESS)
+    {
+        result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, pLayerPhysicalDevices);
+    }
+
     if (result == VK_SUCCESS)
     {
         bool isHybridGraphics = false;
-        if (physicalDeviceCount >= 2)
+        bool loaderCallNvLayerFirst = false;
+
+        if (physicalDeviceCount > 1)
         {
             isHybridGraphics = IsHybridGraphicsSupported();
+        }
+
+        // For the case of HG I+A+eN and HG I+N+eA, loader will load both NV layer and AMD layer, the order of the two
+        // layers is important to return correct physical device to loader and apps. If loader call NV layer first, the
+        // call sequence should be like: loader -> NV layer -> AMD layer -> loader terminator function -> ICD function;
+        // if loader call AMD layer first, the call sequence should be like: loader -> AMD layer -> NV layer -> loader
+        // terminator function -> ICD function. The first layer called by loader needs to return the specified physical
+        // device for HG platforms, AMD layer should add the following logic to support the case of loader call NV
+        // first, in this case, AMD layer needs to report all physical devices to NV layer, then NV layer can have them
+        // and then filter out the correct physical device and report it to loader and apps.
+        if (isHybridGraphics && (physicalDeviceCount >= 3))
+        {
+            void* pTmpLayerPhysicalDeviceMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                                    physicalDeviceCount * sizeof(VkPhysicalDevice),
+                                                    sizeof(void*),
+                                                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+            void* pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                                    physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
+                                                    sizeof(void*),
+                                                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+            if ((pTmpLayerPhysicalDeviceMemory == nullptr) || (pPropertiesMemory == nullptr))
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            else
+            {
+                VkPhysicalDevice* pTmpLayerPhysicalDevice =
+                    static_cast<VkPhysicalDevice*>(pTmpLayerPhysicalDeviceMemory);
+                VkPhysicalDeviceProperties* pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
+
+                result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance,
+                                                                     &physicalDeviceCount,
+                                                                     pTmpLayerPhysicalDevice);
+                if (result == VK_SUCCESS)
+                {
+                    for (uint32_t i = 0; i < physicalDeviceCount; i++)
+                    {
+                       g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pTmpLayerPhysicalDevice[i], &pProperties[i]);
+                    }
+
+                    // For HG I+N+A and HG I+A+N, the last physical device is always Intel device, if NVIDIA device
+                    // is next to Intel device, then loader will call NV layer first
+                    if ((pProperties[physicalDeviceCount - 1].vendorID == VENDOR_ID_INTEL) &&
+                        (pProperties[physicalDeviceCount - 2].vendorID == VENDOR_ID_NVIDIA))
+                    {
+                        loaderCallNvLayerFirst = true;
+                    }
+                }
+            }
+
+            if (pTmpLayerPhysicalDeviceMemory != nullptr)
+            {
+                pAllocCb->pfnFree(pAllocCb->pUserData, pTmpLayerPhysicalDeviceMemory);
+            }
+            if (pPropertiesMemory != nullptr)
+            {
+                pAllocCb->pfnFree(pAllocCb->pUserData, pPropertiesMemory);
+            }
+        }
+
+        if ((physicalDeviceCount >= 2) && (!loaderCallNvLayerFirst))
+        {
             if (isHybridGraphics)
             {
                 if (pPhysicalDevices != nullptr)
@@ -193,14 +267,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
                     }
                 }
 
-                // Always report physical device count as 1 for hybrid graphics
+                // Always report physical device count as 1 for hybrid graphics when loader call AMD layer first
                 *pPhysicalDeviceCount = 1;
             }
         }
 
-        if (!isHybridGraphics)
+        if (!isHybridGraphics || loaderCallNvLayerFirst)
         {
-            // If it is not HG platform, report the layer result to loader
+            // If it is not HG platform or loader call NV layer at first, report all the physical devices to
+            // upper layer or loader
             *pPhysicalDeviceCount = physicalDeviceCount;
             if (pPhysicalDevices != nullptr)
             {

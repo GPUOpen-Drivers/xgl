@@ -35,8 +35,10 @@
 namespace vk
 {
 
-#define VENDOR_ID_AMD   0x1022
-#define VENDOR_ID_ATI   0x1002
+#define VENDOR_ID_ATI     0x1002
+#define VENDOR_ID_AMD     0x1022
+#define VENDOR_ID_NVIDIA  0x10DE
+#define VENDOR_ID_INTEL   0x8086
 
 extern bool IsHybridGraphicsSupported();
 

@@ -345,6 +345,12 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     pOptionBuffer += optionLength;
     bufSize -= optionLength;
 
+    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-cache-file-dir=%s", m_pPhysicalDevice->PalDevice()->GetCacheFilePath());
+    ++optionLength;
+    llpcOptions[numOptions++] = pOptionBuffer;
+    pOptionBuffer += optionLength;
+    bufSize -= optionLength;
+
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-cache-mode=%d", shaderCacheMode);
     ++optionLength;
     llpcOptions[numOptions++] = pOptionBuffer;
