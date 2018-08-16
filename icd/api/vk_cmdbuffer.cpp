@@ -4406,14 +4406,13 @@ void CmdBuffer::RPSyncPoint(
                     pLayoutTransition->imageInfo.oldLayout          = oldLayout;
                     pLayoutTransition->imageInfo.newLayout          = newLayout;
                     pLayoutTransition->imageInfo.subresRange        = attachment.subresRange[sr];
-                    pLayoutTransition->imageInfo.pQuadSamplePattern = 0;
+
+                    const Pal::MsaaQuadSamplePattern* pQuadSamplePattern = nullptr;
 
                     const uint32_t sampleCount = attachment.pImage->GetImageSamples();
 
                     if (sampleCount > 1)
                     {
-                        const Pal::MsaaQuadSamplePattern* pQuadSamplePattern = pLayoutTransition->imageInfo.pQuadSamplePattern;
-
                          if (attachment.pImage->IsSampleLocationsCompatibleDepth() &&
                              tr.flags.isInitialLayoutTransition)
                          {
@@ -4431,6 +4430,8 @@ void CmdBuffer::RPSyncPoint(
                              pQuadSamplePattern = &m_renderPassInstance.pSamplePatterns[subpass].locations;
                          }
                     }
+
+                    pLayoutTransition->imageInfo.pQuadSamplePattern = pQuadSamplePattern;
 
                     RPSetAttachmentLayout(tr.attachment, aspect, newLayout);
                 }

@@ -124,12 +124,11 @@ static Pal::Extent3d ComputeLevelDimensions(
 Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
                          Attachment*                    pAttachments)
     : m_attachmentCount (info.attachmentCount)
-    , m_attachments     (pAttachments)
 {
     for (uint32_t i = 0; i < m_attachmentCount; ++i)
     {
         const VkImageView& src  = info.pAttachments[i];
-        Attachment* pAttachment = &m_attachments[i];
+        Attachment* pAttachment = &pAttachments[i];
         pAttachment->pView      = ImageView::ObjectFromHandle(info.pAttachments[i]);
         pAttachment->pImage     = pAttachment->pView->GetImage();
         pAttachment->viewFormat = VkToPalFormat(pAttachment->pView->GetViewFormat());

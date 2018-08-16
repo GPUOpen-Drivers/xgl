@@ -33,6 +33,8 @@
 #include "settings/settings.h"
 #include "palFile.h"
 
+#include <sstream>
+
 using namespace Util;
 
 namespace vk
@@ -43,6 +45,50 @@ extern void SetupDefaults(RuntimeSettings* pSettings);
 extern void ReadSettings(const Pal::IDevice* pPalDevice, RuntimeSettings* pSettings);
 
 static void ReadPublicSettings(Pal::IDevice* pPalDevice, RuntimeSettings* pSettings);
+
+// =====================================================================================================================
+// Append sub path to root path to generate an absolute path.
+static char* MakeAbsolutePath(
+    char*       pDstPath,     ///< [in,out] destination path which is an absolute path.
+    size_t      dstSize,      ///< [in]     Length of the destination path string.
+    const char* pRootPath,    ///< [in]     Root path.
+    const char* pSubPath)     ///< [in]     *Relative* path.
+{
+    VK_ASSERT((pDstPath != nullptr) && (pRootPath != nullptr) && (pSubPath != nullptr));
+
+    // '/' works perfectly fine on Windows as file path separator character:
+    // https://msdn.microsoft.com/en-us/library/77859s1t.aspx
+    std::ostringstream s;
+    s << pRootPath << "/" << pSubPath;
+    Strncpy(pDstPath, s.str().c_str(), dstSize);
+
+    return pDstPath;
+}
+
+// =====================================================================================================================
+// Override defaults based on device info. This *must* occurs after ReadSettings because it is used to add correct root path
+static void OverrideSettingsByDevice(
+    Pal::IDevice*      pPalDevice,
+    RuntimeSettings*   pSettings)
+{
+    // Overrides all paths for debug files to expected values.
+    // Now those directories in setting are all *relative*:
+    // Relative to the path in the AMD_DEBUG_DIR environment variable, and if that env var isn't set, the location is
+    // platform dependent. So we need to query the root path from device and then concatenate two strings (of the root
+    // path and relative path of specific file) to final usable absolute path
+    const char* pRootPath = pPalDevice->GetDebugFilePath();
+
+    if (pRootPath != nullptr)
+    {
+        MakeAbsolutePath(pSettings->renderPassLogDirectory, sizeof(pSettings->renderPassLogDirectory),
+                         pRootPath, pSettings->renderPassLogDirectory);
+        MakeAbsolutePath(pSettings->pipelineDumpDir, sizeof(pSettings->pipelineDumpDir),
+                         pRootPath, pSettings->pipelineDumpDir);
+        MakeAbsolutePath(pSettings->shaderReplaceDir, sizeof(pSettings->shaderReplaceDir),
+                         pRootPath, pSettings->shaderReplaceDir);
+
+    }
+}
 
 // =====================================================================================================================
 // Override defaults based on application profile.  This occurs before any CCC settings or private panel settings are
@@ -222,6 +268,9 @@ void ProcessSettings(
 
     // Read settings from the registry
     ReadSettings(pPalDevice, pSettings);
+
+    // Override defaults based on device info.
+    OverrideSettingsByDevice(pPalDevice, pSettings);
 
     DumpAppProfileChanges(*pAppProfile, pSettings);
 

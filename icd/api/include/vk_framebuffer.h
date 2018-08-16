@@ -82,13 +82,17 @@ public:
     uint32_t GetAttachmentCount() const { return m_attachmentCount; }
 
     const Framebuffer::Attachment& GetAttachment(uint32_t index) const
-        { return m_attachments[index]; }
+    {
+        // Memory for the object and the array of attachments is allocated in Framebuffer::Create() with the
+        // attachments immediately after the object.
+        const Attachment* pAttachments = static_cast<const Attachment*>(Util::VoidPtrInc(this, sizeof(*this)));
+        return pAttachments[index];
+    }
 
 protected:
     Framebuffer(const VkFramebufferCreateInfo& info, Attachment* pAttachments);
 
     const uint32_t  m_attachmentCount;
-    Attachment*     m_attachments;
 };
 
 namespace entry
