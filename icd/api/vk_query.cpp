@@ -108,6 +108,8 @@ VkResult PalQueryPool::Create(
 
                 createInfo.numSlots      = pQueryPoolInfo->queryCount;
                 createInfo.enabledStats  = VkToPalQueryPipelineStatsFlags(pQueryPoolInfo->pipelineStatistics);
+
+                createInfo.flags.enableCpuAccess = true;
             }
             break;
 

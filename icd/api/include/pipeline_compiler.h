@@ -209,6 +209,12 @@ private:
 
     static bool IsDualSourceBlend(VkBlendFactor blend);
 
+    template<class PipelineBuildInfo>
+    bool ReplacePipelineBinary(
+        const PipelineBuildInfo* pPipelineBuildInfo,
+        size_t*                  pPipelineBinarySize,
+        const void**             ppPipelineBinary);
+
     // -----------------------------------------------------------------------------------------------------------------
 
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object

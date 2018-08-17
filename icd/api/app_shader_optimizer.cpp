@@ -372,7 +372,7 @@ bool ShaderOptimizer::ProfilePatternMatchesPipeline(
 // =====================================================================================================================
 void ShaderOptimizer::BuildTuningProfile()
 {
-    memset(&m_appProfile, 0, sizeof(m_appProfile));
+    memset(&m_tuningProfile, 0, sizeof(m_tuningProfile));
 
     if (m_settings.overrideShaderParams == false)
     {
@@ -824,7 +824,11 @@ static bool ParseJsonOptStrategyFlags(
             "ignoreConservativeDepth",
             "disableIdentityFmaskGen",
             "disableExportGrouping",
-            "enableF16OverflowClamping"
+            "enableF16OverflowClamping",
+            "enablePerformanceData",
+            "keepF32Denorms",
+            "usePbqpRegisterAllocator",
+            "useLatency2Scheduler"
         };
 
         success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);
@@ -921,6 +925,26 @@ static bool ParseJsonOptStrategyFlags(
         if ((pItem = utils::JsonGetValue(pJson, "enableF16OverflowClamping")) != nullptr)
         {
             pTuningOptions->flags.enableF16OverflowClamping = pItem->booleanValue;
+        }
+
+        if ((pItem = utils::JsonGetValue(pJson, "enablePerformanceData")) != nullptr)
+        {
+            pTuningOptions->flags.enablePerformanceData = pItem->booleanValue;
+        }
+
+        if ((pItem = utils::JsonGetValue(pJson, "keepF32Denorms")) != nullptr)
+        {
+            pTuningOptions->flags.keepF32Denorms = pItem->booleanValue;
+        }
+
+        if ((pItem = utils::JsonGetValue(pJson, "usePbqpRegisterAllocator")) != nullptr)
+        {
+            pTuningOptions->flags.usePbqpRegisterAllocator = pItem->booleanValue;
+        }
+
+        if ((pItem = utils::JsonGetValue(pJson, "useLatency2Scheduler")) != nullptr)
+        {
+            pTuningOptions->flags.useLatency2Scheduler = pItem->booleanValue;
         }
     }
     else

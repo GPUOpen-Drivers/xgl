@@ -250,7 +250,7 @@ add_custom_command(
 
 add_custom_target(
     RunVKStringsGenerator
-    DEPENDS ${ICD_GEN_STRINGS_FILES} ${ICD_STRING_SOURCE_FILES}
+    DEPENDS ${ICD_GEN_STRINGS_FILES} ${ICD_STRING_SOURCE_FILES} ${ICD_STRING_OUTPUT_FILES} ${ICD_STRING_DIR}/strings.cpp
     COMMENT "Checking if re-generation is required for strings"
 )
 
@@ -360,7 +360,6 @@ if (UNIX)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/gpuopen/libgpuopen.a -Wl,--no-whole-archive)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/vam/libvam.a -Wl,--no-whole-archive)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/addrlib/libaddrlib.a -Wl,--no-whole-archive)
-            target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/jemalloc/libjemalloc.a -Wl,--no-whole-archive)
         endif()
     endif()
 
