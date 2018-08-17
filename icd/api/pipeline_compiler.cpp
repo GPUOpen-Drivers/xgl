@@ -294,11 +294,6 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     pOptionBuffer += optionLength;
     bufSize -= optionLength;
 
-    if (settings.enableLlpc == LlpcModeAutoFallback)
-    {
-        llpcOptions[numOptions++] = "-disable-WIP-features=1";
-    }
-
     // NOTE: For testing consistency, these options should be kept the same as those of
     // "amdllpc" (Init()).
     llpcOptions[numOptions++] = "-unroll-allow-partial";
@@ -550,6 +545,47 @@ void PipelineCompiler::FreeShaderModule(
 }
 
 // =====================================================================================================================
+// Replaces pipeline binary from external replacment file (<pipeline_name>_repalce.elf)
+template<class PipelineBuildInfo>
+bool PipelineCompiler::ReplacePipelineBinary(
+        const PipelineBuildInfo* pPipelineBuildInfo,
+        size_t*                  pPipelineBinarySize,
+        const void**             ppPipelineBinary)
+{
+    const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
+    auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
+    char fileName[128];
+    Llpc::IPipelineDumper::GetPipelineName(pPipelineBuildInfo, fileName, 128);
+
+    char replaceFileName[256];
+    int32_t length = Util::Snprintf(replaceFileName, 256, "%s/%s_replace.elf", settings.shaderReplaceDir, fileName);
+    VK_ASSERT(length > 0 && (length < sizeof(replaceFileName)));
+
+    Util::Result result = Util::File::Exists(replaceFileName) ? Util::Result::Success : Util::Result::ErrorUnavailable;
+    if (result == Util::Result::Success)
+    {
+        Util::File elfFile;
+        result = elfFile.Open(replaceFileName, Util::FileAccessRead | Util::FileAccessBinary);
+        if (result == Util::Result::Success)
+        {
+            size_t binSize = Util::File::GetFileSize(replaceFileName);
+            void *pAllocBuf = pInstance->AllocMem(
+                binSize,
+                VK_DEFAULT_MEM_ALIGN,
+                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+            elfFile.Read(pAllocBuf, binSize, nullptr);
+
+            *pPipelineBinarySize = binSize;
+            *ppPipelineBinary = pAllocBuf;
+            return true;
+        }
+    }
+    return false;
+}
+
+// =====================================================================================================================
 // Creates graphics pipeline binary.
 VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     Device*                             pDevice,
@@ -569,6 +605,14 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     void*                           pLlpcPipelineBuffer = nullptr;
 
     int64_t compileTime = 0;
+
+    if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
+    {
+        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
+        {
+            shouldCompile = false;
+        }
+    }
 
     {
         int64_t startTime = Util::GetPerfCpuTime();
@@ -628,6 +672,14 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     pPipelineBuildInfo->deviceIndex                    = deviceIdx;
 
     int64_t compileTime = 0;
+
+    if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
+    {
+        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
+        {
+            shouldCompile = false;
+        }
+    }
 
     {
         int64_t startTime = Util::GetPerfCpuTime();
@@ -759,20 +811,19 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = (pRs->rasterizerDiscardEnable != VK_FALSE);
         }
 
-        bool multisampleEnable = false;
-        uint32_t rasterizationSampleCount = 0;
         const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;
 
         pCreateInfo->pipelineInfo.rsState.numSamples = 1;
+
         if (pMs != nullptr)
         {
-            multisampleEnable = (pMs->rasterizationSamples != 1);
+            bool multisampleEnable = (pMs->rasterizationSamples != 1);
 
             if (multisampleEnable)
             {
                 VK_ASSERT(pRenderPass != nullptr);
 
-                rasterizationSampleCount            = pMs->rasterizationSamples;
+                uint32_t rasterizationSampleCount   = pMs->rasterizationSamples;
                 uint32_t subpassCoverageSampleCount = pRenderPass->GetSubpassMaxSampleCount(pGraphicsPipelineCreateInfo->subpass);
                 uint32_t subpassColorSampleCount    = pRenderPass->GetSubpassColorSampleCount(pGraphicsPipelineCreateInfo->subpass);
 
@@ -783,7 +834,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
                 if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
                 {
-                    pCreateInfo->pipelineInfo.rsState.perSampleShading =((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
+                    pCreateInfo->pipelineInfo.rsState.perSampleShading = ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
                 }
                 else
                 {
