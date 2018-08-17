@@ -1686,8 +1686,8 @@ void PhysicalDevice::PopulateLimits()
     // Granularity, in bytes, at which buffers and images can be bound to adjacent memory for simultaneous usage.
     m_limits.bufferImageGranularity = 1;
 
-    // Virtual memory address space size for sparse resources
-    m_limits.sparseAddressSpaceSize = palProps.gpuMemoryProperties.vaEnd - palProps.gpuMemoryProperties.vaStart;
+    // Virtual memory address space size for sparse resources, which may be just the default VA range on some platforms
+    m_limits.sparseAddressSpaceSize = palProps.gpuMemoryProperties.maxVirtualMemSize;
 
     // Maximum number of descriptor sets that can be simultaneously used by a pipeline. Set numbers used by all
     // shaders must be less than the value of maxBoundDescriptorSets.
@@ -3241,13 +3241,13 @@ void PhysicalDevice::GetFeatures2(
                 pDescIndexingFeatures->shaderInputAttachmentArrayDynamicIndexing           = VK_FALSE;
                 pDescIndexingFeatures->shaderUniformTexelBufferArrayDynamicIndexing        = VK_TRUE;
                 pDescIndexingFeatures->shaderStorageTexelBufferArrayDynamicIndexing        = VK_TRUE;
-                pDescIndexingFeatures->shaderUniformBufferArrayNonUniformIndexing          = VK_FALSE;
-                pDescIndexingFeatures->shaderSampledImageArrayNonUniformIndexing           = VK_FALSE;
-                pDescIndexingFeatures->shaderStorageBufferArrayNonUniformIndexing          = VK_FALSE;
-                pDescIndexingFeatures->shaderStorageImageArrayNonUniformIndexing           = VK_FALSE;
+                pDescIndexingFeatures->shaderUniformBufferArrayNonUniformIndexing          = VK_TRUE;
+                pDescIndexingFeatures->shaderSampledImageArrayNonUniformIndexing           = VK_TRUE;
+                pDescIndexingFeatures->shaderStorageBufferArrayNonUniformIndexing          = VK_TRUE;
+                pDescIndexingFeatures->shaderStorageImageArrayNonUniformIndexing           = VK_TRUE;
                 pDescIndexingFeatures->shaderInputAttachmentArrayNonUniformIndexing        = VK_FALSE;
-                pDescIndexingFeatures->shaderUniformTexelBufferArrayNonUniformIndexing     = VK_FALSE;
-                pDescIndexingFeatures->shaderStorageTexelBufferArrayNonUniformIndexing     = VK_FALSE;
+                pDescIndexingFeatures->shaderUniformTexelBufferArrayNonUniformIndexing     = VK_TRUE;
+                pDescIndexingFeatures->shaderStorageTexelBufferArrayNonUniformIndexing     = VK_TRUE;
                 pDescIndexingFeatures->descriptorBindingUniformBufferUpdateAfterBind       = VK_TRUE;
                 pDescIndexingFeatures->descriptorBindingSampledImageUpdateAfterBind        = VK_TRUE;
                 pDescIndexingFeatures->descriptorBindingStorageImageUpdateAfterBind        = VK_TRUE;

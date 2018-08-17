@@ -96,11 +96,6 @@ public:
         const uint32_t*                         pQueueFamilyIndices,
         VkDeviceMemory*                         pDeviceMemory);
 
-    VkSharingMode GetSharingMode() const
-    {
-        return m_sharingMode;
-    }
-
     VkResult Destroy(
         const Device*                   pDevice,
         const VkAllocationCallbacks*    pAllocator);
@@ -284,7 +279,6 @@ private:
         VkSampleCountFlagBits       imageSamples,
         VkImageTiling               imageTiling,
         VkImageUsageFlags           usage,
-        VkSharingMode               sharingMode,
         ImageFlags                  internalFlags);
 
     void CalcMemoryPriority();
@@ -335,8 +329,6 @@ private:
 
     Pal::gpusize     m_sampleLocationsMetaDataOffset[MaxPalDevices];  // Offset into image memory for depth/stencil
                                                                       // sample locations meta data
-
-    VkSharingMode            m_sharingMode;                // Image sharing mode.
 
     SwapChain*               m_pSwapChain;                 // If this image is a presentable image this tells
                                                            // which swap chain the image belongs to

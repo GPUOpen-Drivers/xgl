@@ -96,7 +96,8 @@ private:
         return static_cast<const TemplateUpdateInfo*>(Util::VoidPtrInc(this, sizeof(*this)));
     }
 
-    template <size_t imageDescSize, size_t samplerDescSize, size_t bufferDescSize, uint32_t numPalDevices>
+    template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, size_t bufferDescSize,
+        uint32_t numPalDevices>
     static PfnUpdateEntry GetUpdateEntryFunc(
         const Device*                           pDevice,
         VkDescriptorType                        descriptorType,
@@ -113,7 +114,7 @@ private:
         VkDescriptorType                        descriptorType,
         const DescriptorSetLayout::BindingInfo& dstBinding);
 
-    template <size_t imageDescSize, bool updateFmask, uint32_t numPalDevices>
+    template <size_t imageDescSize, size_t fmaskDescSize,  bool updateFmask, uint32_t numPalDevices>
     static void UpdateEntrySampledImage(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,
@@ -141,7 +142,8 @@ private:
             const void*                 pDescriptorInfo,
             const TemplateUpdateInfo&   entry);
 
-    template <size_t imageDescSize, size_t samplerDescSize, bool updateFmask, bool immutable, uint32_t numPalDevices>
+    template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, bool updateFmask, bool immutable,
+        uint32_t numPalDevices>
     static void UpdateEntryCombinedImageSampler(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,

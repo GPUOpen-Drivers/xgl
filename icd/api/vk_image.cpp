@@ -108,7 +108,6 @@ Image::Image(
     VkSampleCountFlagBits       imageSamples,
     VkImageTiling               imageTiling,
     VkImageUsageFlags           usage,
-    VkSharingMode               sharingMode,
     ImageFlags                  internalFlags)
     :
     m_pDevice(pDevice),
@@ -122,7 +121,6 @@ Image::Image(
     m_imageTiling(imageTiling),
     m_imageUsage(usage),
     m_barrierPolicy(barrierPolicy),
-    m_sharingMode(sharingMode),
     m_pSwapChain(nullptr),
     m_baseAddrOffset(0)
 {
@@ -632,7 +630,6 @@ VkResult Image::Create(
             pImageCreateInfo->samples,
             pImageCreateInfo->tiling,
             pImageCreateInfo->usage,
-            pImageCreateInfo->sharingMode,
             imageFlags);
 
         imageHandle = Image::HandleFromVoidPointer(pMemory);
@@ -820,7 +817,6 @@ VkResult Image::CreatePresentableImage(
             VK_SAMPLE_COUNT_1_BIT,
             VK_IMAGE_TILING_OPTIMAL,
             imageUsageFlags,
-            sharingMode,
             imageFlags);
 
         *pImage = Image::HandleFromVoidPointer(pImgObjMemory);
