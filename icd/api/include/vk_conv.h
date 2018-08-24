@@ -1920,7 +1920,8 @@ VK_INLINE Pal::SwapChainMode VkToPalSwapChainMode(VkPresentModeKHR presentMode)
 // =====================================================================================================================
 // Converts Vulkan image creation flags to PAL image creation flags (unfortunately, PAL doesn't define a dedicated type
 // for the image creation flags so we have to return the constructed flag set as a uint32_t)
-VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags)
+VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
+                                           VkFormat           format)
 {
     Pal::ImageCreateInfo palImageCreateInfo;
     palImageCreateInfo.flags.u32All         = 0;
@@ -1932,6 +1933,9 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags)
 
     // We must not use any metadata if sparse aliasing is enabled
     palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)      ? 1 : 0;
+
+    // Always provide pQuadSamplePattern to PalCmdResolveImage for depth formats to allow optimizations
+    palImageCreateInfo.flags.sampleLocsAlwaysKnown = Formats::HasDepth(format) ? 1 : 0;
 
     return palImageCreateInfo.flags.u32All;
 }

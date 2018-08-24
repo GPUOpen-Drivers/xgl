@@ -384,7 +384,7 @@ void ShaderOptimizer::BuildTuningProfile()
     PipelineProfileEntry& entry = m_tuningProfile.entries[0];
 
     bool matchHash = false;
-    if ((m_settings.overrideShaderHashLower != 0) &&
+    if ((m_settings.overrideShaderHashLower != 0) ||
         (m_settings.overrideShaderHashUpper != 0))
     {
         matchHash = true;

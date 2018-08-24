@@ -95,8 +95,8 @@ namespace vk
 
 // 2x MSAA
 #define VK_DEFAULT_SAMPLE_PATTERN_2X \
-    { -4, -4 }, \
-    {  4,  4 }
+    {  4,  4 }, \
+    { -4, -4 }
 
 // 4x MSAA
 #define VK_DEFAULT_SAMPLE_PATTERN_4X \
@@ -125,11 +125,11 @@ namespace vk
     { -5, -2 }, \
     {  2,  5 }, \
     {  5,  3 }, \
-    {  3,  5 }, \
+    {  3, -5 }, \
     { -2,  6 }, \
     {  0, -7 }, \
     { -4, -6 }, \
-    { -6, -6 }, \
+    { -6,  4 }, \
     { -8,  0 }, \
     {  7, -4 }, \
     {  6,  7 }, \

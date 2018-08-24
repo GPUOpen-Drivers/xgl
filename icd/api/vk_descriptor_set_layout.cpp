@@ -300,7 +300,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
                 if (pDescriptorSetLayoutBindingFlagsCreateInfoEXT != nullptr)
                 {
-                    VK_ASSERT(pDescriptorSetLayoutBindingFlagsCreateInfoEXT->bindingCount == pOut->count);
+                    VK_ASSERT(pDescriptorSetLayoutBindingFlagsCreateInfoEXT->bindingCount == pInfo->bindingCount);
 
                     for (uint32_t inIndex = 0; inIndex < pInfo->bindingCount; ++inIndex)
                     {
