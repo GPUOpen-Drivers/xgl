@@ -196,7 +196,7 @@ static VkResult ConvertImageCreateInfo(
     pPalCreateInfo->tiling           = VkToPalImageTiling(pCreateInfo->tiling);
     pPalCreateInfo->tilingOptMode    = settings.imageTilingOptMode;
     pPalCreateInfo->tilingPreference = settings.imageTilingPreference;
-    pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(pCreateInfo->flags);
+    pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(pCreateInfo->flags, pCreateInfo->format);
     pPalCreateInfo->usageFlags       = VkToPalImageUsageFlags(
                                          imageUsage,
                                          pCreateInfo->format,

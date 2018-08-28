@@ -4623,6 +4623,8 @@ void CmdBuffer::RPResolveAttachments(
         Pal::ImageAspect resolveAspects[MaxRangePerAttachment] = {};
         const VkFormat   resolveFormat                         = srcAttachment.pView->GetViewFormat();
 
+        const Pal::MsaaQuadSamplePattern* pSampleLocations = nullptr;
+
         if (Formats::IsDepthStencilFormat(resolveFormat) == false)
         {
             resolveAspects[0] = Pal::ImageAspect::Color;
@@ -4633,6 +4635,9 @@ void CmdBuffer::RPResolveAttachments(
             if (Formats::HasDepth(resolveFormat))
             {
                 resolveAspects[aspectRegionCount++] = Pal::ImageAspect::Depth;
+
+                // Must be specified because the source image was created with sampleLocsAlwaysKnown set
+                pSampleLocations = &m_renderPassInstance.pSamplePatterns[m_renderPassInstance.subpass].locations;
             }
 
             if (Formats::HasStencil(resolveFormat))
@@ -4667,7 +4672,7 @@ void CmdBuffer::RPResolveAttachments(
                 regions[idx][aspectRegionIndex].numSlices      = sliceCount;
                 regions[idx][aspectRegionIndex].swizzledFormat = Pal::UndefinedSwizzledFormat;
 
-                regions[idx][aspectRegionIndex].pQuadSamplePattern = nullptr;
+                regions[idx][aspectRegionIndex].pQuadSamplePattern = pSampleLocations;
             }
         }
 
