@@ -160,6 +160,7 @@ VkResult PipelineCompiler::Initialize()
         m_gfxIp.major = 9;
         m_gfxIp.minor = 0;
         break;
+
     default:
         VK_NEVER_CALLED();
         break;

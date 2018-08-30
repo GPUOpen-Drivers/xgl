@@ -189,7 +189,7 @@ VkResult SwapChain::Create(
     swapChainCreateInfo.hWindow             = properties.displayableInfo.windowHandle;
     swapChainCreateInfo.wsiPlatform         = properties.displayableInfo.palPlatform;
     swapChainCreateInfo.imageCount          = pCreateInfo->minImageCount;
-    swapChainCreateInfo.imageSwizzledFormat = VkToPalFormat(properties.imageFormat);
+    swapChainCreateInfo.imageSwizzledFormat = imageCreateInfo.swizzledFormat;
     swapChainCreateInfo.imageExtent         = VkToPalExtent2d(pCreateInfo->imageExtent);
     swapChainCreateInfo.imageUsageFlags     = VkToPalImageUsageFlags(pCreateInfo->imageUsage,
                                                                      pCreateInfo->imageFormat,
@@ -810,7 +810,9 @@ VkResult FullscreenMgr::SetHdrMetadata(
     palGamut.chromaticityWhitePointX  = ConvertUnits(pMetadata->whitePoint.x);
     palGamut.chromaticityWhitePointY  = ConvertUnits(pMetadata->whitePoint.y);
     palGamut.minLuminance             = ConvertUnits(pMetadata->minLuminance);
-    palGamut.maxLuminance             = ConvertUnits(pMetadata->maxLuminance);
+
+    // max already in nits
+    palGamut.maxLuminance             = static_cast<uint32_t>(pMetadata->maxLuminance);
 
     // TODO: I don't know if average luminance is important, but VK_EXT_hdr_metadata does not currently expose it.
     // ie. palGamut.avgLuminance = ConvertUnits(pMetadata->avgLuminance);
@@ -892,7 +894,8 @@ static bool EnableFullScreen(
     if (enabled)
     {
         // TODO SWDEV-120359 - We need to enumerate the correct Pal device.
-        Pal::IScreen* pScreen = pDevice->VkInstance()->FindScreen(pDevice->PalDevice(),
+        Pal::IScreen* pScreen = pDevice->VkInstance()->FindScreen(
+            pDevice->PalDevice(),
             swapchainProps.displayableInfo.windowHandle,
             (mode == FullscreenMgr::Explicit) ? swapchainProps.pFullscreenSurface->GetOSDisplayHandle() :
                                                 swapchainProps.pSurface->GetOSDisplayHandle());
@@ -926,9 +929,9 @@ void FullscreenMgr::PreImageCreate(
 
         if ((pImageInfo->extent.width > 0) && (pImageInfo->extent.height > 0))
         {
-            *pImagePresentSupport = Pal::PresentMode::Fullscreen;
+            *pImagePresentSupport        = Pal::PresentMode::Fullscreen;
             pImageInfo->flags.fullscreen = 1;
-            pImageInfo->pScreen = m_pScreen;
+            pImageInfo->pScreen          = m_pScreen;
         }
     }
 }

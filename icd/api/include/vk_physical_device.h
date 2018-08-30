@@ -361,6 +361,11 @@ public:
         return m_vrHighPrioritySubEngineIndex;
     }
 
+    VK_INLINE uint32_t GetRtCuHighComputeSubEngineIndex() const
+    {
+        return m_RtCuHighComputeSubEngineIndex;
+    }
+
     VK_INLINE uint32_t GetSubgroupSize() const
     {
         uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.wavefrontSize;
@@ -482,6 +487,7 @@ protected:
                                                                     static_cast<uint32_t>(VK_SUPPORTED_FORMAT_COUNT),
                                                                     static_cast<uint32_t>(sizeof(uint32_t) << 3))];
     uint32_t                         m_vrHighPrioritySubEngineIndex;
+    uint32_t                         m_RtCuHighComputeSubEngineIndex;
     uint32_t                         m_queueFamilyCount;
     struct
     {

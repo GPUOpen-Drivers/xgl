@@ -94,9 +94,12 @@ void GraphicsPipeline::BuildRasterizationState(
 {
     union
     {
-        const VkStructHeader*                                       pHeader;
-        const VkPipelineRasterizationStateCreateInfo*               pRs;
-        const VkPipelineRasterizationStateRasterizationOrderAMD*    pRsOrder;
+        const VkStructHeader*                                           pHeader;
+        const VkPipelineRasterizationStateCreateInfo*                   pRs;
+        const VkPipelineRasterizationStateRasterizationOrderAMD*        pRsOrder;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
+        const VkPipelineRasterizationConservativeStateCreateInfoEXT*    pRsConservative;
+#endif
     };
 
     // By default rasterization is disabled, unless rasterization creation info is present
@@ -157,7 +160,43 @@ void GraphicsPipeline::BuildRasterizationState(
                         VkToPalRasterizationOrder(pRsOrder->rasterizationOrder);
                 }
                 break;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
+            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT:
+                {
+                    // VK_EXT_conservative_rasterization must be enabled
+                    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CONSERVATIVE_RASTERIZATION));
+                    VK_ASSERT(pRsConservative->flags == 0);
+                    VK_ASSERT(pRsConservative->conservativeRasterizationMode >= VK_CONSERVATIVE_RASTERIZATION_MODE_BEGIN_RANGE_EXT);
+                    VK_ASSERT(pRsConservative->conservativeRasterizationMode <= VK_CONSERVATIVE_RASTERIZATION_MODE_END_RANGE_EXT);
+                    VK_IGNORE(pRsConservative->extraPrimitiveOverestimationSize);
 
+                    switch (pRsConservative->conservativeRasterizationMode)
+                    {
+                    case VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT:
+                        {
+                            pInfo->msaa.flags.enableConservativeRasterization = false;
+                        }
+                        break;
+                    case VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT:
+                        {
+                            pInfo->msaa.flags.enableConservativeRasterization = true;
+                            pInfo->msaa.conservativeRasterizationMode         = Pal::ConservativeRasterizationMode::Overestimate;
+                        }
+                        break;
+                    case VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT:
+                        {
+                            pInfo->msaa.flags.enableConservativeRasterization = true;
+                            pInfo->msaa.conservativeRasterizationMode         = Pal::ConservativeRasterizationMode::Underestimate;
+                        }
+                        break;
+
+                    default:
+                        break;
+                    }
+
+                }
+                break;
+#endif
             default:
                 // Skip any unknown extension structures
                 break;
@@ -178,15 +217,15 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
     VkFormat cbFormat[Pal::MaxColorTargets] = {};
 
     // Fill in necessary non-zero defaults in case some information is missing
-    pInfo->msaa.coverageSamples         = 1;
-    pInfo->msaa.pixelShaderSamples      = 1;
-    pInfo->msaa.depthStencilSamples     = 1;
-    pInfo->msaa.shaderExportMaskSamples = 1;
-    pInfo->msaa.sampleClusters          = 1;
-    pInfo->msaa.alphaToCoverageSamples  = 1;
-    pInfo->msaa.occlusionQuerySamples   = 1;
-    pInfo->msaa.sampleMask              = 1;
-    pInfo->sampleCoverage               = 1;
+    pInfo->msaa.coverageSamples                 = 1;
+    pInfo->msaa.pixelShaderSamples              = 1;
+    pInfo->msaa.depthStencilSamples             = 1;
+    pInfo->msaa.shaderExportMaskSamples         = 1;
+    pInfo->msaa.sampleClusters                  = 1;
+    pInfo->msaa.alphaToCoverageSamples          = 1;
+    pInfo->msaa.occlusionQuerySamples           = 1;
+    pInfo->msaa.sampleMask                      = 1;
+    pInfo->sampleCoverage                       = 1;
 
     EXTRACT_VK_STRUCTURES_0(
         gfxPipeline,

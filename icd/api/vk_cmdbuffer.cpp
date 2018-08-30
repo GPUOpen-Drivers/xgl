@@ -3957,27 +3957,30 @@ void CmdBuffer::BeginRenderPass(
 
     if (pDeviceGroupRenderPassBeginInfo != nullptr)
     {
-        replicateRenderArea = (pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount == 0);
-
         SetDeviceMask(pDeviceGroupRenderPassBeginInfo->deviceMask);
 
         m_renderPassInstance.renderAreaCount = pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount;
 
         VK_ASSERT(m_renderPassInstance.renderAreaCount <= MaxPalDevices);
 
-        utils::IterateMask deviceGroup(pDeviceGroupRenderPassBeginInfo->deviceMask);
-
-        while (deviceGroup.Iterate())
+        if (pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount > 0)
         {
-            const uint32_t deviceIdx = deviceGroup.Index();
+            utils::IterateMask deviceGroup(pDeviceGroupRenderPassBeginInfo->deviceMask);
 
-            const VkRect2D& srcRect  = pDeviceGroupRenderPassBeginInfo->pDeviceRenderAreas[deviceIdx];
-            auto*           pDstRect = &m_renderPassInstance.renderArea[deviceIdx];
+            while (deviceGroup.Iterate())
+            {
+                const uint32_t deviceIdx = deviceGroup.Index();
 
-            pDstRect->offset.x      = srcRect.offset.x;
-            pDstRect->offset.y      = srcRect.offset.y;
-            pDstRect->extent.width  = srcRect.extent.width;
-            pDstRect->extent.height = srcRect.extent.height;
+                const VkRect2D& srcRect  = pDeviceGroupRenderPassBeginInfo->pDeviceRenderAreas[deviceIdx];
+                auto*           pDstRect = &m_renderPassInstance.renderArea[deviceIdx];
+
+                pDstRect->offset.x      = srcRect.offset.x;
+                pDstRect->offset.y      = srcRect.offset.y;
+                pDstRect->extent.width  = srcRect.extent.width;
+                pDstRect->extent.height = srcRect.extent.height;
+            }
+
+            replicateRenderArea = false;
         }
     }
 
