@@ -35,9 +35,9 @@
 #include "include/vk_physical_device_manager.h"
 #include "../layers/include/query_dlist.h"
 #include "palDevice.h"
-#include "palHashMapImpl.h"
 #include "palPlatform.h"
 #include "palScreen.h"
+#include "palVectorImpl.h"
 #include <algorithm>
 #include <vector>
 
@@ -51,7 +51,7 @@ PhysicalDeviceManager::PhysicalDeviceManager(
     :
     m_pInstance(pInstance),
     m_pDisplayManager(pDisplayManager),
-    m_devices(MaxPhysicalDevices, pInstance->Allocator())
+    m_devices(pInstance->Allocator())
 {
 
 }
@@ -107,12 +107,7 @@ VkResult PhysicalDeviceManager::Create(
 // =====================================================================================================================
 VkResult PhysicalDeviceManager::Initialize()
 {
-    VkResult result = PalToVkResult(m_devices.Init());
-
-    if (result == VK_SUCCESS)
-    {
-        result = PalToVkResult(m_devicesLock.Init());
-    }
+    VkResult result = PalToVkResult(m_devicesLock.Init());
 
     if (result == VK_SUCCESS)
     {
@@ -151,7 +146,7 @@ VkResult PhysicalDeviceManager::EnumeratePhysicalDevices(
     // Only get the devices if we don't already have them, since doing so causes Pal device cleanup/creation to occur.
     //       Without this we can't update the device list if a device has been added/removed while the application is
     //       running.
-    if (m_devices.GetNumEntries() == 0)
+    if (m_devices.NumElements() == 0)
     {
         status = UpdateLockedPhysicalDeviceList();
     }
@@ -160,7 +155,7 @@ VkResult PhysicalDeviceManager::EnumeratePhysicalDevices(
     {
         const uint32_t numWritablePhysicalDevices = *pPhysicalDeviceCount;
 
-        *pPhysicalDeviceCount = m_devices.GetNumEntries();
+        *pPhysicalDeviceCount = m_devices.NumElements();
 
         // If only the count was requested then we're done
         if (pPhysicalDevices == nullptr)
@@ -168,100 +163,15 @@ VkResult PhysicalDeviceManager::EnumeratePhysicalDevices(
             return VK_SUCCESS;
         }
 
-        struct PerfIndex
-        {
-            bool operator<(const PerfIndex& rhs) const
-            {
-                // Obey the panel setting to return the preferred device always first
-                if (isPreferredDevice != rhs.isPreferredDevice)
-                {
-                    return isPreferredDevice > rhs.isPreferredDevice;
-                }
-
-                if (rhs.perfRating == perfRating)
-                {
-                    // Ensure the master gpu (index==0) is ordered first.
-                    if (gpuIndex == rhs.gpuIndex)
-                    {
-                        // If the GPU indices match, then we are probably in Crossfire mode,
-                        // ensure we prioritize the Gpu which has present capability and attached to the screen.
-                        if (hasAttachedScreens != rhs.hasAttachedScreens)
-                        {
-                            return hasAttachedScreens == true;
-                        }
-                        if (presentMode != rhs.presentMode)
-                        {
-                            return presentMode != 0;
-                        }
-                    }
-
-                    return gpuIndex < rhs.gpuIndex;
-                }
-
-                return rhs.perfRating < perfRating;
-            }
-
-            uint32_t         gpuIndex;
-            uint32_t         perfRating;
-            uint32_t         presentMode;
-            bool             isPreferredDevice;
-            bool             hasAttachedScreens;
-            VkPhysicalDevice device;
-        };
-        std::vector<PerfIndex> sortedList;
-        sortedList.reserve(m_devices.GetNumEntries());
-
-        const RuntimeSettings* pSettings = nullptr;
-
-        // Increment this (arbitrary) index for purposes of supporting panel-driven device reordering for testing
-        // purposes.  Note: this does not necessarily match PAL device enumeration index ordering.
-        uint32_t currentDeviceIndex = 0;
-
-        // Populate the output array with the physical device handles, sorted by gfxipPerfRating and other
-        // criteria.
-        for (auto it = m_devices.Begin(); it.Get() != nullptr; it.Next(), currentDeviceIndex++)
-        {
-            Pal::DeviceProperties info;
-            Pal::Result palStatus = it.Get()->key->GetProperties(&info);
-
-            if (palStatus == Pal::Result::Success)
-            {
-                PerfIndex perf;
-                VkPhysicalDevice physDevice = (VkPhysicalDevice)it.Get()->value;
-
-                if (pSettings == nullptr)
-                {
-                    pSettings = &ApiPhysicalDevice::ObjectFromHandle(physDevice)->GetRuntimeSettings();
-                }
-
-                perf.gpuIndex            = info.gpuIndex;
-                perf.perfRating          = info.gfxipProperties.performance.gfxipPerfRating *
-                                           info.gfxipProperties.shaderCore.numShaderEngines;
-                perf.presentMode         = 0;
-                perf.hasAttachedScreens  = info.attachedScreenCount > 0;
-                perf.device              = physDevice;
-                perf.isPreferredDevice   = (pSettings->enumPreferredDeviceIndex == currentDeviceIndex);
-
-                sortedList.push_back(perf);
-            }
-            else
-            {
-                return VK_ERROR_INITIALIZATION_FAILED;
-            }
-        }
-
-        // Sort the devices by gfxipPerfRating, high to low
-        const uint32_t numItemsToWrite = Util::Min(static_cast<uint32_t>(sortedList.size()), numWritablePhysicalDevices);
+        const uint32_t numItemsToWrite = Util::Min(m_devices.NumElements(), numWritablePhysicalDevices);
         uint32_t       numItemsWritten = 0;
 
-        std::sort(sortedList.begin(), sortedList.end());
-
-        for (auto it = sortedList.begin(); numItemsWritten < numItemsToWrite; ++it, ++numItemsWritten)
+        for (auto it = m_devices.Begin(); numItemsWritten < numItemsToWrite; it.Next(), ++numItemsWritten)
         {
-            *pPhysicalDevices++ = it->device;
+            *pPhysicalDevices++ = it.Get();
         }
 
-        if (numItemsToWrite != sortedList.size() )
+        if (numItemsToWrite != m_devices.NumElements())
         {
             // Update the count to only what was written.
             *pPhysicalDeviceCount = numItemsToWrite;
@@ -289,9 +199,10 @@ uint32_t PhysicalDeviceManager::GetDeviceGroupIndices(
     }
 
     uint32_t deviceIndex = 0;
-    for (auto it = m_devices.Begin(); it.Get() != nullptr; it.Next(), deviceIndex++)
+    for (auto it = m_devices.Begin(); it.IsValid(); it.Next(), deviceIndex++)
     {
-        Pal::IDevice* pPalDevice = it.Get()->key;
+        PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(it.Get());
+        Pal::IDevice*   pPalDevice      = pPhysicalDevice->PalDevice();
 
         uint32_t groupIdx;
         for (groupIdx = 0; groupIdx < deviceGroupCount; groupIdx++)
@@ -324,44 +235,6 @@ uint32_t PhysicalDeviceManager::GetDeviceGroupIndices(
     }
 
     return deviceGroupCount;
-}
-
-// =====================================================================================================================
-// Iterate through the hashmap and return the physical device at the specified index.
-PhysicalDevice* PhysicalDeviceManager::GetDevice(
-    uint32_t index ) const
-{
-    uint32_t deviceIndex = 0;
-    for (auto it = m_devices.Begin(); it.Get() != nullptr; it.Next(), deviceIndex++)
-    {
-        if (index == deviceIndex)
-        {
-            PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(it.Get()->value);
-            return pPhysicalDevice;
-        }
-    }
-
-    // The physical device was not found.
-    return nullptr;
-}
-
-// =====================================================================================================================
-// Find a VkPhysicalDevice object and return the index into the internal hashmap
-uint32_t PhysicalDeviceManager::FindDeviceIndex(
-    VkPhysicalDevice physicalDevice
-) const
-{
-    uint32_t deviceIndex = 0;
-    for (auto it = m_devices.Begin(); it.Get() != nullptr; it.Next(), deviceIndex++)
-    {
-        if (it.Get()->value == physicalDevice)
-        {
-            return deviceIndex;
-        }
-    }
-
-    // The physical device was not found.
-    return 0xffffffff;
 }
 
 // =====================================================================================================================
@@ -456,12 +329,80 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
     }
     else
     {
-        // Now we can add back the active physical devices to the hash map
-        for (uint32_t i = 0; (i < deviceCount) && (result == VK_SUCCESS); ++i)
-        {
-            const PhysicalDevice* pDevice = ApiPhysicalDevice::ObjectFromHandle(deviceList[i]);
+        // Sort the PAL enumerated devices in a consistent order and save it for vkEnumeratePhysicalDevices
 
-            result = PalToVkResult(m_devices.Insert(pDevice->PalDevice(), deviceList[i]));
+        struct PerfIndex
+        {
+            bool operator<(const PerfIndex& rhs) const
+            {
+                // Obey the panel setting to return the preferred device always first
+                if (isPreferredDevice != rhs.isPreferredDevice)
+                {
+                    return isPreferredDevice > rhs.isPreferredDevice;
+                }
+
+                if (rhs.perfRating == perfRating)
+                {
+                    // Ensure the master gpu (index==0) is ordered first.
+                    if (gpuIndex == rhs.gpuIndex)
+                    {
+                        // If the GPU indices match, then we are probably in Crossfire mode,
+                        // ensure we prioritize the Gpu which has present capability and attached to the screen.
+                        if (hasAttachedScreens != rhs.hasAttachedScreens)
+                        {
+                            return hasAttachedScreens == true;
+                        }
+                        if (presentMode != rhs.presentMode)
+                        {
+                            return presentMode != 0;
+                        }
+                    }
+
+                    return gpuIndex < rhs.gpuIndex;
+                }
+
+                return rhs.perfRating < perfRating;
+            }
+
+            uint32_t         gpuIndex;
+            uint32_t         perfRating;
+            uint32_t         presentMode;
+            bool             isPreferredDevice;
+            bool             hasAttachedScreens;
+            VkPhysicalDevice device;
+        };
+        std::vector<PerfIndex> sortedList;
+        sortedList.reserve(deviceCount);
+
+        // Populate the list with the physical device handles, sorted by gfxipPerfRating and other criteria.
+        for (uint32_t currentDeviceIndex = 0; currentDeviceIndex < deviceCount; ++currentDeviceIndex)
+        {
+            PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(deviceList[currentDeviceIndex]);
+
+            Pal::DeviceProperties info;
+
+            pPhysicalDevice->PalDevice()->GetProperties(&info);
+
+            PerfIndex perf;
+
+            perf.gpuIndex            = info.gpuIndex;
+            perf.perfRating          = info.gfxipProperties.performance.gfxipPerfRating *
+                                       info.gfxipProperties.shaderCore.numShaderEngines;
+            perf.presentMode         = 0;
+            perf.hasAttachedScreens  = info.attachedScreenCount > 0;
+            perf.device              = deviceList[currentDeviceIndex];
+            perf.isPreferredDevice   = (pSettings[0].enumPreferredDeviceIndex == currentDeviceIndex);
+
+            sortedList.push_back(perf);
+        }
+
+        // Sort the devices by gfxipPerfRating, high to low
+        std::sort(sortedList.begin(), sortedList.end());
+
+        // Now we can add back the active physical devices to the vector
+        for (auto it = sortedList.begin(); it != sortedList.end(); ++it)
+        {
+            m_devices.PushBack(it->device);
         }
     }
 
@@ -482,19 +423,16 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
 // Destroy currently tracked physical devices (assumes mutex is locked).
 void PhysicalDeviceManager::DestroyLockedPhysicalDeviceList(void)
 {
-    while (m_devices.GetNumEntries() > 0)
+    VkPhysicalDevice physicalDevice;
+
+    while (m_devices.NumElements() > 0)
     {
-        auto it = m_devices.Begin();
+        m_devices.PopBack(&physicalDevice);
 
-        Pal::IDevice* pDevice = it.Get()->key;
-
-        PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(it.Get()->value);
+        PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(physicalDevice);
 
         // Destroy physical device object
         pPhysicalDevice->Destroy();
-
-        // Remove entry from the hash map
-        m_devices.Erase(pDevice);
     }
 }
 

@@ -252,6 +252,7 @@ PhysicalDevice::PhysicalDevice(
     m_settings(settings),
     m_sampleLocationSampleCounts(0),
     m_vrHighPrioritySubEngineIndex(UINT32_MAX),
+    m_RtCuHighComputeSubEngineIndex(UINT32_MAX),
     m_queueFamilyCount(0),
     m_appProfile(appProfile),
     m_supportedExtensions(),
@@ -764,7 +765,7 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 // =====================================================================================================================
 // Retrieve queue family properties. Called in response to vkGetPhysicalDeviceQueueFamilyProperties2KHR
 VkResult PhysicalDevice::GetQueueFamilyProperties(
-    uint32_t*                        pCount,
+    uint32_t*                       pCount,
     VkQueueFamilyProperties2*       pQueueProperties
     ) const
 {
@@ -786,17 +787,17 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 
         for (pQueueProps = &pQueueProperties[i]; pHeader != nullptr; pHeader = pHeader->pNext)
         {
-            switch (pHeader->sType)
+            switch (static_cast<uint32_t>(pHeader->sType))
             {
-            case VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2:
-            {
-                pQueueProps->queueFamilyProperties = m_queueFamilies[i].properties;
-            }
-            break;
+                case VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2:
+                {
+                    pQueueProps->queueFamilyProperties = m_queueFamilies[i].properties;
+                    break;
+                }
 
-            default:
-                // Skip any unknown extension structures
-                break;
+                default:
+                    // Skip any unknown extension structures
+                    break;
             }
         }
     }
@@ -2738,6 +2739,18 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VARIABLE_POINTERS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_ATTRIBUTE_DIVISOR));
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
+    if ((pPhysicalDevice == nullptr) ||
+        (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportConservativeRasterization &&
+        pInstance->IsExtensionSupported(InstanceExtensions::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2)))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONSERVATIVE_RASTERIZATION));
+    }
+#endif
+
+#if VKI_SHADER_COMPILER_CONTROL
+#endif
+
     return availableExtensions;
 }
 
@@ -2811,6 +2824,10 @@ void PhysicalDevice::PopulateQueueFamilies()
         if (exclusiveComputeProps.engineSubType[subEngineIndex] == Pal::EngineSubType::VrHighPriority)
         {
             m_vrHighPrioritySubEngineIndex = subEngineIndex;
+        }
+        else if (exclusiveComputeProps.engineSubType[subEngineIndex] == Pal::EngineSubType::RtCuHighCompute)
+        {
+            m_RtCuHighComputeSubEngineIndex = subEngineIndex;
         }
     }
 
@@ -3386,6 +3403,9 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*        pMinMaxProperties;
         VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
         VkPhysicalDeviceDescriptorIndexingPropertiesEXT*         pDescriptorIndexingProperties;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
+        VkPhysicalDeviceConservativeRasterizationPropertiesEXT*  pConservativeRasterizationProperties;
+#endif
 
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
     };
@@ -3545,6 +3565,22 @@ void PhysicalDevice::GetDeviceProperties2(
 
             break;
         }
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT:
+        {
+            pConservativeRasterizationProperties->primitiveOverestimationSize                   = 0;
+            pConservativeRasterizationProperties->maxExtraPrimitiveOverestimationSize           = 0;
+            pConservativeRasterizationProperties->extraPrimitiveOverestimationSizeGranularity   = 0;
+            pConservativeRasterizationProperties->primitiveUnderestimation                      = VK_FALSE;
+            pConservativeRasterizationProperties->conservativePointAndLineRasterization         = VK_FALSE;
+            pConservativeRasterizationProperties->degenerateTrianglesRasterized                 = VK_FALSE;
+            pConservativeRasterizationProperties->degenerateLinesRasterized                     = VK_FALSE;
+            pConservativeRasterizationProperties->fullyCoveredFragmentShaderInputVariable       = VK_FALSE;
+            pConservativeRasterizationProperties->conservativeRasterizationPostDepthCoverage    = VK_FALSE;
+
+            break;
+        }
+#endif
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
         {

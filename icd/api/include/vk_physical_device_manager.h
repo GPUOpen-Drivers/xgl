@@ -40,10 +40,10 @@
 #include "include/vk_utils.h"
 #include "include/vk_alloccb.h"
 
-#include "palHashMap.h"
-#include "palMutex.h"
 #include "palDevice.h"
+#include "palMutex.h"
 #include "palPlatform.h"
+#include "palVector.h"
 
 namespace vk
 {
@@ -76,12 +76,8 @@ public:
         uint32_t  maxDeviceGroupIndices,
         int32_t*  pDeviceGroupIndices) const;
 
-    uint32_t FindDeviceIndex(VkPhysicalDevice physicalDevice) const;
-
-    PhysicalDevice* GetDevice(uint32_t index) const;
-
     VK_INLINE uint32_t GetDeviceCount() const
-        { return m_devices.GetNumEntries(); }
+        { return m_devices.NumElements(); }
 
     VK_FORCEINLINE Instance* VkInstance() const
         { return m_pInstance; }
@@ -104,10 +100,10 @@ private:
     Instance*                   m_pInstance;
     DisplayManager*             m_pDisplayManager;
 
-    typedef Util::HashMap<Pal::IDevice*, VkPhysicalDevice, PalAllocator> Gpu2DeviceMap;
+    typedef Util::Vector<VkPhysicalDevice, MaxPhysicalDevices, PalAllocator> DeviceVector;
 
-    Gpu2DeviceMap               m_devices;              // Map of physical devices hashed by PAL physical GPU handle
-    Util::Mutex                 m_devicesLock;          // Mutex used to lock access to the map of physical devices
+    DeviceVector                m_devices;     // Physical device handles in the order of EnumeratePhysicalDevices
+    Util::Mutex                 m_devicesLock; // Mutex used to lock access to the vector of physical devices
 };
 
 }

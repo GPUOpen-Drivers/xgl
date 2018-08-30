@@ -243,6 +243,7 @@ static void ConstructQueueCreateInfo(
     uint32_t                    deviceIdx,
     uint32_t                    queueFamilyIndex,
     uint32_t                    queueIndex,
+    uint32_t                    dedicatedComputeUnits,
     VkQueueGlobalPriorityEXT    queuePriority,
     Pal::QueueCreateInfo*       pQueueCreateInfo)
 {
@@ -254,14 +255,24 @@ static void ConstructQueueCreateInfo(
 
     // Get the sub engine index of vr high priority
     // UINT32_MAX is returned if the required vr high priority sub engine is not available
-    uint32_t vrHighPriorityIndex = pPhysicalDevices[deviceIdx]->GetVrHighPrioritySubEngineIndex();
+    uint32_t vrHighPriorityIndex           = pPhysicalDevices[deviceIdx]->GetVrHighPrioritySubEngineIndex();
+    uint32_t rtCuHighComputeSubEngineIndex = pPhysicalDevices[deviceIdx]->GetRtCuHighComputeSubEngineIndex();
 
-    if ((palQueuePriority > Pal::QueuePriority::Low)       &&
-        (palQueueType == Pal::QueueType::QueueTypeCompute) &&
-        (vrHighPriorityIndex != UINT32_MAX))
+    if ((dedicatedComputeUnits > 0) &&
+        (rtCuHighComputeSubEngineIndex != UINT32_MAX))
     {
-        pQueueCreateInfo->engineType  = Pal::EngineType::EngineTypeExclusiveCompute;
-        pQueueCreateInfo->engineIndex = vrHighPriorityIndex;
+        VK_ASSERT(queuePriority == VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT);
+
+        pQueueCreateInfo->engineType    = Pal::EngineType::EngineTypeExclusiveCompute;
+        pQueueCreateInfo->engineIndex   = rtCuHighComputeSubEngineIndex;
+        pQueueCreateInfo->numReservedCu = dedicatedComputeUnits;
+    }
+    else if ((palQueuePriority > Pal::QueuePriority::Low)       &&
+             (palQueueType == Pal::QueueType::QueueTypeCompute) &&
+             (vrHighPriorityIndex != UINT32_MAX))
+    {
+        pQueueCreateInfo->engineType     = Pal::EngineType::EngineTypeExclusiveCompute;
+        pQueueCreateInfo->engineIndex    = vrHighPriorityIndex;
     }
     else
     {
@@ -288,6 +299,10 @@ VkResult Device::Create(
 
     // VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT is the default value.
     VkQueueGlobalPriorityEXT queuePriority[Queue::MaxQueueFamilies] = { VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT };
+
+    // Dedicated Compute Units
+    static constexpr uint32_t MaxEngineCount = 8;
+    uint32_t dedicatedComputeUnits[Queue::MaxQueueFamilies][MaxEngineCount] = { 0 };
 
     VkResult vkResult = VK_SUCCESS;
     void*    pMemory  = nullptr;
@@ -456,6 +471,9 @@ VkResult Device::Create(
 
     uint32_t totalQueues = 0;
 
+    Pal::DeviceProperties properties = {};
+    pPhysicalDevice->PalDevice()->GetProperties(&properties);
+
     for (pDeviceCreateInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (pHeader->sType)
@@ -475,14 +493,18 @@ VkResult Device::Create(
                     // handle global priority
                     union
                     {
-                        const VkStructHeader*                           pSubHeader;
-                        const VkDeviceQueueGlobalPriorityCreateInfoEXT* pPriorityInfo;
+                        const VkStructHeader*                                  pSubHeader;
+                        const VkDeviceQueueGlobalPriorityCreateInfoEXT*        pPriorityInfo;
                     };
+
                     for (pSubHeader = reinterpret_cast<const VkStructHeader*>(pQueueInfo->pNext);
                          pSubHeader != nullptr;
                          pSubHeader = pSubHeader->pNext)
                     {
-                        switch (pSubHeader->sType)
+
+                        uint32_t totalDedicatedComputeUnits = 0;
+
+                        switch (static_cast<uint32_t>(pSubHeader->sType))
                         {
                             case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT:
                                 queuePriority[pQueueInfo->queueFamilyIndex] = pPriorityInfo->globalPriority;
@@ -575,6 +597,7 @@ VkResult Device::Create(
                                                  deviceIdx,
                                                  queueFamilyIndex,
                                                  queueIndex,
+                                                 dedicatedComputeUnits[queueFamilyIndex][queueIndex],
                                                  queuePriority[queueFamilyIndex],
                                                  &queueCreateInfo);
 
@@ -624,6 +647,7 @@ VkResult Device::Create(
                                                      deviceIdx,
                                                      queueFamilyIndex,
                                                      queueIndex,
+                                                     dedicatedComputeUnits[queueFamilyIndex][queueIndex],
                                                      queuePriority[queueFamilyIndex],
                                                      &queueCreateInfo);
 
@@ -647,7 +671,8 @@ VkResult Device::Create(
                             // application does not exist.This maps to Pal ErrorInvalidValue. Silenty ignore this error.
                             if ((palResult != Pal::Result::Success) &&
                                 (palResult != Pal::Result::Unsupported) &&
-                                (palResult != Pal::Result::ErrorInvalidValue))
+                                (palResult != Pal::Result::ErrorInvalidValue) &&
+                                (palResult != Pal::Result::ErrorUnavailable))
                             {
                                 pPalQueues[deviceIdx]->Destroy();
                                 break;

@@ -960,8 +960,7 @@ VkResult Instance::EnumeratePhysicalDeviceGroups(
     // Fill out VkPhysicalDeviceGroupPropertiesKHX structures
     for (uint32_t i = 0; i < physicalDeviceCount; i++)
     {
-        const uint32_t deviceIndex      = m_pPhysicalDeviceManager->FindDeviceIndex(devices[i]);
-        const int32_t  deviceGroupIndex = deviceGroupIndices[deviceIndex];
+        const int32_t deviceGroupIndex = deviceGroupIndices[i];
 
         if ((deviceGroupIndex >= 0) && (deviceGroupIndex < static_cast<int32_t>(numDeviceGroups)))
         {
