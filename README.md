@@ -22,8 +22,3 @@ XGL contains code written by third parties:
 * SPIRV-Tools is distributed under the terms of Apache License version 2.0. See icd/api/llpc/translator/hex_float.h and bitutils.h.
 * Metrohash is distributed under the terms of MIT License. See icd/api/llpc/imported/metrohash/metrohash-license.
 
-
-
-
-
-
