@@ -538,7 +538,7 @@ public:
         { return m_pDevice->VkInstance(); }
 
     VK_INLINE Pal::ICmdBuffer* PalCmdBuffer(
-            int32_t idx = DefaultDeviceIndex) const
+            int32_t idx) const
     {
         if (idx == 0)
         {
@@ -813,9 +813,6 @@ private:
     void PalBindPipeline(
         VkPipelineBindPoint     pipelineBindPoint,
         VkPipeline              pipeline);
-
-    template< typename Type_T >
-    bool DetectCopyOverwrite(const Type_T* pDst) const;
 
     VK_INLINE void RPBeginSubpass();
     VK_INLINE void RPEndSubpass();

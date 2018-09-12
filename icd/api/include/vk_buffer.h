@@ -30,6 +30,7 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/vk_defines.h"
+#include "include/vk_device.h"
 #include "include/vk_dispatch.h"
 #include "include/vk_utils.h"
 
@@ -58,31 +59,27 @@ public:
         const VkAllocationCallbacks*    pAllocator,
         VkBuffer*                       pBuffer);
 
-    VK_FORCEINLINE Pal::gpusize GpuVirtAddr(int32_t idx = DefaultDeviceIndex) const
-       { return m_gpuVirtAddr[idx]; }
+    VK_FORCEINLINE Pal::gpusize GpuVirtAddr(int32_t idx) const
+       { return m_perGpu[idx].gpuVirtAddr; }
 
-    VK_FORCEINLINE Pal::IGpuMemory* PalMemory(uint32_t idx = DefaultDeviceIndex) const
-       { return m_pGpuMemory[idx]; }
-
-    Memory* GetMemoryObj() const
-       { return m_pMemory; }
-
-    VK_FORCEINLINE uint8_t GetMemoryInstanceIdx(uint32_t idx) const
-       { return m_multiInstanceIndices[idx]; }
+    VK_FORCEINLINE Pal::IGpuMemory* PalMemory(uint32_t idx) const
+       { return m_perGpu[idx].pGpuMemory; }
 
     VK_FORCEINLINE VkDeviceSize MemOffset() const
        { return m_memOffset; }
 
     VkResult Destroy(
-        const Device*                   pDevice,
+        Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
     VkResult BindMemory(
+        const Device*      pDevice,
         VkDeviceMemory     mem,
         VkDeviceSize       memOffset,
         const uint32_t*    pDeviceIndices);
 
     VkResult GetMemoryRequirements(
+        const Device*         pDevice,
         VkMemoryRequirements* pMemoryRequirements);
 
     VkDeviceSize GetSize() const
@@ -94,7 +91,7 @@ public:
         VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT;
 
     bool IsSparse() const
-        { return (m_flags & SparseEnablingFlags) != 0; }
+        { return m_internalFlags.createSparseBinding | m_internalFlags.createSparseResidency; }
 
     bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
 
@@ -107,15 +104,25 @@ private:
     {
         struct
         {
-            uint32_t internalMemBound    : 1;   // If this buffer has an internal memory bound, the bound memory
-                                                // should be destroyed when this buffer is destroyed.
-            uint32_t dedicatedRequired   : 1;   // Indicates the allocation of buffer is dedicated.
-            uint32_t externallyShareable : 1;   // True if the backing memory of this buffer may be shared externally.
-            uint32_t externalPinnedHost  : 1;   // True if backing memory for this buffer may be imported from a pinned
-                                                // host allocation.
-            uint32_t reserved            : 28;
+            uint32_t internalMemBound      : 1;   // If this buffer has an internal memory bound, the bound memory
+                                                  // should be destroyed when this buffer is destroyed.
+            uint32_t dedicatedRequired     : 1;   // Indicates the allocation of buffer is dedicated.
+            uint32_t externallyShareable   : 1;   // True if the backing memory of this buffer may be shared externally.
+            uint32_t externalPinnedHost    : 1;   // True if backing memory for this buffer may be imported from a pinned
+                                                  // host allocation.
+            uint32_t usageUniformBuffer    : 1;   // VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+            uint32_t createSparseBinding   : 1;   // VK_BUFFER_CREATE_SPARSE_BINDING_BIT
+            uint32_t createSparseResidency : 1;   // VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT
+
+            uint32_t reserved              : 25;
         };
         uint32_t     u32All;
+    };
+
+    struct PerGpuInfo
+    {
+        Pal::IGpuMemory*    pGpuMemory;
+        Pal::gpusize        gpuVirtAddr;
     };
 
     Buffer(Device*                      pDevice,
@@ -126,18 +133,21 @@ private:
            VkDeviceSize                 size,
            BufferFlags                  internalFlags);
 
-    Pal::IGpuMemory*        m_pGpuMemory[MaxPalDevices];
-    Pal::gpusize            m_gpuVirtAddr[MaxPalDevices];
-    uint8_t                 m_multiInstanceIndices[MaxPalDevices];
-    Memory*                 m_pMemory;
+    // Compute size required for the object.  One copy of PerGpuInfo is included in the object and we need
+    // to add space for any additional GPUs.
+    static size_t ObjectSize(const Device* pDevice)
+    {
+        return sizeof(Buffer) + ((pDevice->NumPalDevices() - 1) * sizeof(PerGpuInfo));
+    }
 
     const VkDeviceSize      m_size;
     VkDeviceSize            m_memOffset;
-    Device* const           m_pDevice;
-    VkBufferCreateFlags     m_flags;
-    VkBufferUsageFlags      m_usage;
     BufferBarrierPolicy     m_barrierPolicy;    // Barrier policy to use for this buffer
     BufferFlags             m_internalFlags;    // Flags describing the properties of this buffer
+
+    // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
+    // use.
+    PerGpuInfo              m_perGpu[1];
 };
 
 namespace entry

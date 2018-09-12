@@ -111,7 +111,7 @@ VkResult Queue::CreateDummyCmdBuffer()
     palCreateInfo.queueType     = m_pDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex);
     palCreateInfo.engineType    = m_pDevice->GetQueueFamilyPalEngineType(m_queueFamilyIndex);
 
-    Pal::IDevice* const pPalDevice = m_pDevice->PalDevice();
+    Pal::IDevice* const pPalDevice = m_pDevice->PalDevice(DefaultDeviceIndex);
     const size_t palSize = pPalDevice->GetCmdBufferSize(palCreateInfo, &palResult);
     if (palResult == Pal::Result::Success)
     {
@@ -243,8 +243,8 @@ VkResult Queue::Submit(
 
         pFence->SetActiveDevice(DefaultDeviceIndex);
 
-        submitInfo.pFence = pFence->PalFence();
-        palResult = PalQueue()->Submit(submitInfo);
+        submitInfo.pFence = pFence->PalFence(DefaultDeviceIndex);
+        palResult = PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
 
         result = PalToVkResult(palResult);
     }
@@ -548,7 +548,7 @@ VkResult Queue::UpdateFlipStatus(
     const SwapChain*                 pSwapChain)
 {
     bool isOwner = false;
-    Pal::IDevice* pPalDevice = m_pDevice->PalDevice();
+    Pal::IDevice* pPalDevice = m_pDevice->PalDevice(DefaultDeviceIndex);
     uint32_t vidPnSourceId = pSwapChain->GetFullscreenMgr()->GetVidPnSourceId();
 
     Pal::Result palResult = pPalDevice->GetFlipStatus(vidPnSourceId, &m_flipStatus.flipFlags, &isOwner);

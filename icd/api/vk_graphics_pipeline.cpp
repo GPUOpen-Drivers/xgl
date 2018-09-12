@@ -104,7 +104,7 @@ void GraphicsPipeline::BuildRasterizationState(
 
     // By default rasterization is disabled, unless rasterization creation info is present
 
-    const VkPhysicalDeviceLimits& limits = pDevice->VkPhysicalDevice()->GetLimits();
+    const VkPhysicalDeviceLimits& limits = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetLimits();
 
     // Enable perpendicular end caps if we report strictLines semantics
     pInfo->pipeline.rsState.perpLineEndCapsEnable = (limits.strictLines == VK_TRUE);
@@ -327,7 +327,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 VK_ASSERT(pVp->pViewports != nullptr);
 
                 const bool khrMaintenance1 =
-                    ((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
+                    ((pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
                      pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1));
 
                 for (uint32_t i = 0; i < pVp->viewportCount; ++i)
@@ -659,7 +659,7 @@ VkResult GraphicsPipeline::Create(
     size_t        pipelineBinarySizes[MaxPalDevices] = {};
     const void*   pPipelineBinaries[MaxPalDevices]   = {};
     Pal::Result   palResult                          = Pal::Result::Success;
-    PipelineCompiler*     pDefaultCompiler = pDevice->GetCompiler();
+    PipelineCompiler*     pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
     VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo);
     const uint32_t numPalDevices = pDevice->NumPalDevices();
@@ -689,7 +689,7 @@ VkResult GraphicsPipeline::Create(
     RenderStateCache* pRSCache = pDevice->GetRenderStateCache();
 
     // Get the pipeline size from PAL and allocate memory.
-    const size_t palSize = pDevice->PalDevice()->GetGraphicsPipelineSize(createInfo.pipeline, &palResult);
+    const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(createInfo.pipeline, &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
 
     void* pSystemMem = nullptr;

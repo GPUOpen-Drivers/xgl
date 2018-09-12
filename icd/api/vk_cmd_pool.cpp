@@ -73,7 +73,7 @@ VkResult CmdPool::Create(
     const VkAllocationCallbacks*   pAllocator,
     VkCommandPool*                 pCmdPool)
 {
-    const RuntimeSettings* pSettings = &pDevice->VkPhysicalDevice()->GetRuntimeSettings();
+    const RuntimeSettings* pSettings = &pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
 
     void* pMemory = pDevice->AllocApiObject(sizeof(CmdPool), pAllocator);
 
@@ -120,7 +120,7 @@ VkResult CmdPool::Create(
         createInfo.allocInfo[Pal::GpuScratchMemAlloc].suballocSize = pSettings->cmdAllocatorScratchSubAllocSize;
 
         Pal::Result  palResult     = Pal::Result::Success;
-        const size_t allocatorSize = pDevice->PalDevice()->GetCmdAllocatorSize(createInfo, &palResult);
+        const size_t allocatorSize = pDevice->PalDevice(DefaultDeviceIndex)->GetCmdAllocatorSize(createInfo, &palResult);
 
         if (palResult == Pal::Result::Success)
         {

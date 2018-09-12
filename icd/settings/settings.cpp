@@ -160,8 +160,6 @@ static void OverrideProfiledSettings(
         pSettings->useAnisoThreshold = true;
         pSettings->anisoThreshold    = 1.0f;
 
-        pSettings->disableDeviceOnlyMemoryTypeWithoutHeap = true;
-
         pSettings->prefetchShaders = true;
 
     }
@@ -174,8 +172,6 @@ static void OverrideProfiledSettings(
         pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;
         pSettings->useAnisoThreshold = true;
         pSettings->anisoThreshold    = 1.0f;
-
-        pSettings->disableDeviceOnlyMemoryTypeWithoutHeap = true;
 
         pSettings->prefetchShaders = true;
     }

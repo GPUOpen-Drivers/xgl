@@ -73,7 +73,7 @@ size_t VertBufBindingMgr::GetMaxVertBufTableDwSize(
 size_t VertBufBindingMgr::GetSize(
     const Device* pDevice)
 {
-    const size_t sysMemTblSize = GetMaxVertBufTableDwSize(pDevice->VkPhysicalDevice()) * sizeof(uint32_t);
+    const size_t sysMemTblSize = GetMaxVertBufTableDwSize(pDevice->VkPhysicalDevice(DefaultDeviceIndex)) * sizeof(uint32_t);
 
     return sysMemTblSize;
 }

@@ -111,7 +111,7 @@ VkResult ComputePipeline::Create(
     CreateInfo  createInfo                         = {};
     size_t      pipelineBinarySizes[MaxPalDevices] = {};
     const void* pPipelineBinaries[MaxPalDevices]   = {};
-    PipelineCompiler*   pDefaultCompiler = pDevice->GetCompiler();
+    PipelineCompiler*   pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
     PipelineCompiler::ComputePipelineCreateInfo binaryCreateInfo = {};
     VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo);
 
@@ -147,7 +147,7 @@ VkResult ComputePipeline::Create(
     if (result == VK_SUCCESS)
     {
         // Get the pipeline and shader size from PAL and allocate memory.
-        pipelineSize = pDevice->PalDevice()->GetComputePipelineSize(createInfo.pipeline, nullptr);
+        pipelineSize = pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(createInfo.pipeline, nullptr);
 
         pSystemMem = pAllocator->pfnAllocation(
             pAllocator->pUserData,

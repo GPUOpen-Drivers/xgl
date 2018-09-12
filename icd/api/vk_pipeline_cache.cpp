@@ -71,11 +71,11 @@ VkResult PipelineCache::Create(
     size_t                  shaderCacheSize  = 0;
     size_t                  pipelineCacheSize[MaxPalDevices];
 
-    PipelineCacheType       cacheType = pDevice->GetCompiler()->GetShaderCacheType();
+    PipelineCacheType       cacheType = pDevice->GetCompiler(DefaultDeviceIndex)->GetShaderCacheType();
 
     for (uint32_t i = 0; i < numPalDevices; i++)
     {
-        pipelineCacheSize[i] = pDevice->GetCompiler()->GetShaderCacheSize(cacheType);
+        pipelineCacheSize[i] = pDevice->GetCompiler(DefaultDeviceIndex)->GetShaderCacheSize(cacheType);
         shaderCacheSize += pipelineCacheSize[i];
     }
 
@@ -85,13 +85,13 @@ VkResult PipelineCache::Create(
 
         if (pHeader->headerVersion == VK_PIPELINE_CACHE_HEADER_VERSION_ONE)
         {
-            const Pal::DeviceProperties& palProps = pDevice->VkPhysicalDevice()->PalProperties();
+            const Pal::DeviceProperties& palProps = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
 
             if ((pHeader->vendorID == palProps.vendorId) &&
                 (pHeader->deviceID == palProps.deviceId))
             {
                 VkPhysicalDeviceProperties physicalDeviceProps;
-                pDevice->VkPhysicalDevice()->GetDeviceProperties(&physicalDeviceProps);
+                pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetDeviceProperties(&physicalDeviceProps);
                 if (memcmp(pHeader->UUID, physicalDeviceProps.pipelineCacheUUID, sizeof(pHeader->UUID)) == 0)
                 {
                     auto pPrivateDataHeader = reinterpret_cast<const PipelineCachePrivateHeaderData*>(
@@ -147,7 +147,7 @@ VkResult PipelineCache::Create(
 
             if (result == VK_SUCCESS)
             {
-                result = pDevice->GetCompiler()->CreateShaderCache(
+                result = pDevice->GetCompiler(DefaultDeviceIndex)->CreateShaderCache(
                     pInitialData,
                     initialDataSize,
                     Util::VoidPtrInc(pMemory, shaderCacheOffset),
@@ -328,7 +328,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(
     Device*        pDevice = ApiDevice::ObjectFromHandle(device);
     PipelineCache* pCache = PipelineCache::ObjectFromHandle(pipelineCache);
 
-    const Pal::DeviceProperties& palProps = pDevice->VkPhysicalDevice()->PalProperties();
+    const Pal::DeviceProperties& palProps = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
 
     size_t privateDataSize = 0;
 
@@ -363,7 +363,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(
 
     if (result == VK_SUCCESS)
     {
-        ApiDevice::ObjectFromHandle(device)->VkPhysicalDevice()->GetDeviceProperties(&physicalDeviceProps);
+        ApiDevice::ObjectFromHandle(device)->VkPhysicalDevice(DefaultDeviceIndex)->GetDeviceProperties(&physicalDeviceProps);
 
         pipelineCacheHeaderData.headerLength = HeaderSize;
         pipelineCacheHeaderData.headerVersion = VK_PIPELINE_CACHE_HEADER_VERSION_ONE;

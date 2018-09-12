@@ -177,7 +177,7 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
         VK_ASSERT(pAttachment->subresRangeCount > 0);
         VK_ASSERT(pAttachment->subresRange[0].numMips > 0);
 
-        const Pal::ImageCreateInfo imageInfo = pAttachment->pImage->PalImage()->GetImageCreateInfo();
+        const Pal::ImageCreateInfo imageInfo = pAttachment->pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
 
         pAttachment->baseSubresExtent = ComputeLevelDimensions(
             imageInfo.extent,

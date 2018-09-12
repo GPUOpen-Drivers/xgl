@@ -61,10 +61,8 @@ public:
         int32_t*                        pSemaphoreCount);
 
     VkResult ImportSemaphore(
-        Device*                                    pDevice,
-        VkExternalSemaphoreHandleTypeFlags         handleType,
-        const Pal::OsExternalHandle                handle,
-        VkSemaphoreImportFlags                     importFlags);
+        Device*                    pDevice,
+        const ImportSemaphoreInfo& importInfo);
 
     VK_FORCEINLINE Pal::IQueueSemaphore* PalSemaphore(uint32_t deviceIdx) const
     {
@@ -79,18 +77,28 @@ public:
     VK_FORCEINLINE void ClearPalTemporarySemaphore()
     {
         memset(m_pPalTemporarySemaphores, 0, sizeof(m_pPalTemporarySemaphores));
+        m_sharedSemaphoreTempHandle = 0;
     }
 
-    VK_FORCEINLINE void SetPalTemporarySemaphore(Pal::IQueueSemaphore* pPalTemporarySemaphore[], int32_t semaphoreCount)
+    VK_FORCEINLINE void SetPalTemporarySemaphore(
+        Pal::IQueueSemaphore* pPalTemporarySemaphore[],
+        int32_t               semaphoreCount,
+        Pal::OsExternalHandle tempHandle)
     {
         for (int32_t i = 0; i < semaphoreCount; i++)
         {
             m_pPalTemporarySemaphores[i] = pPalTemporarySemaphore[i];
         }
-        for (int32_t i = semaphoreCount; i < MaxPalDevices; i++)
+        for (uint32_t i = semaphoreCount; i < MaxPalDevices; i++)
         {
             m_pPalTemporarySemaphores[i] = nullptr;
         }
+        m_sharedSemaphoreTempHandle = tempHandle;
+    }
+
+    VK_FORCEINLINE Pal::OsExternalHandle GetHandle() const
+    {
+        return (m_sharedSemaphoreTempHandle == 0) ? m_sharedSemaphoreHandle : m_sharedSemaphoreTempHandle;
     }
 
     VkResult Destroy(
@@ -103,13 +111,21 @@ public:
         Pal::OsExternalHandle*                      pHandle);
 
 private:
-    Semaphore(Pal::IQueueSemaphore* pPalSemaphore[], int32_t semaphoreCount)
+    Semaphore(
+        Pal::IQueueSemaphore*                pPalSemaphore[],
+        int32_t                              semaphoreCount,
+        const Pal::QueueSemaphoreCreateInfo& palCreateInfo,
+        Pal::OsExternalHandle                sharedSemaphorehandle)
+        :
+        m_sharedSemaphoreHandle(sharedSemaphorehandle),
+        m_sharedSemaphoreTempHandle(0),
+        m_palCreateInfo(palCreateInfo)
     {
         for (int32_t i = 0; i < semaphoreCount; i++)
         {
             m_pPalSemaphores[i] = pPalSemaphore[i];
         }
-        for (int32_t i = semaphoreCount; i < MaxPalDevices; i++)
+        for (uint32_t i = semaphoreCount; i < MaxPalDevices; i++)
         {
             m_pPalSemaphores[i] = nullptr;
         }
@@ -117,12 +133,18 @@ private:
         ClearPalTemporarySemaphore();
     }
 
-    Pal::IQueueSemaphore*       m_pPalSemaphores[MaxPalDevices];
+    Pal::IQueueSemaphore*           m_pPalSemaphores[MaxPalDevices];
 
     // Temporary-completion semaphore special for swapchain
     // which will be associated with a signaled semaphore
     // in AcquireNextImage.
-    Pal::IQueueSemaphore*       m_pPalTemporarySemaphores[MaxPalDevices];
+    Pal::IQueueSemaphore*           m_pPalTemporarySemaphores[MaxPalDevices];
+
+    // For now the m_sharedSemaphoreHandle and m_sharedSemaphoreTempHandle are only used by Windows driver to cache the
+    // semaphore's handle when the semaphore object is creating.
+    Pal::OsExternalHandle           m_sharedSemaphoreHandle;
+    Pal::OsExternalHandle           m_sharedSemaphoreTempHandle;
+    Pal::QueueSemaphoreCreateInfo   m_palCreateInfo;
 };
 
 namespace entry

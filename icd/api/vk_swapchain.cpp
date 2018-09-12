@@ -140,7 +140,7 @@ VkResult SwapChain::Create(
                 imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
 
                 VkFormatProperties formatProperties;
-                pDevice->VkPhysicalDevice()->GetFormatProperties(pVkSwapchainCreateInfoKHR->imageFormat,
+                pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetFormatProperties(pVkSwapchainCreateInfoKHR->imageFormat,
                                                                  &formatProperties);
                 VkImageUsageFlags imageUsage = pVkSwapchainCreateInfoKHR->imageUsage;
                 imageUsage &=
@@ -209,7 +209,7 @@ VkResult SwapChain::Create(
 
     // Allocate system memory for objects
     const size_t    vkSwapChainSize  = sizeof(SwapChain);
-    size_t          palSwapChainSize = pDevice->PalDevice()->GetSwapChainSize(swapChainCreateInfo, &palResult);
+    size_t          palSwapChainSize = pDevice->PalDevice(DefaultDeviceIndex)->GetSwapChainSize(swapChainCreateInfo, &palResult);
     size_t          imageArraySize   = sizeof(VkImage) * swapImageCount;
     size_t          memoryArraySize  = sizeof(VkDeviceMemory) * swapImageCount;
     size_t          objSize          = vkSwapChainSize +
@@ -738,7 +738,7 @@ bool FullscreenMgr::TryEnterExclusive(
             {
                 const SwapChain::Properties&props = pSwapChain->GetProperties();
 
-                result = m_pScreen->TakeFullscreenOwnership(*m_pImage->PalImage());
+                result = m_pScreen->TakeFullscreenOwnership(*m_pImage->PalImage(DefaultDeviceIndex));
 
                 // NOTE: ErrorFullscreenUnavailable means according to PAL, we already have exclusive access.
                 if (result == Pal::Result::Success || result == Pal::Result::ErrorFullscreenUnavailable)
@@ -777,7 +777,7 @@ bool FullscreenMgr::TryExitExclusive(
         pSwapChain->PalSwapChainWaitIdle();
 
         const SwapChain::Properties& props = pSwapChain->GetProperties();
-        PhysicalDeviceManager* pPhyicalDeviceManager = m_pDevice->VkPhysicalDevice()->Manager();
+        PhysicalDeviceManager* pPhyicalDeviceManager = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->Manager();
     }
 
     // if we acquired full screen ownership before with this fullscreenmanager.
@@ -863,7 +863,7 @@ static bool EnableFullScreen(
         VkPresentModeKHR presentModes[SwapChainCount] = {};
         uint32_t modeCount = VK_ARRAY_SIZE(presentModes);
 
-        VkResult result = pDevice->VkPhysicalDevice()->GetSurfacePresentModes(
+        VkResult result = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetSurfacePresentModes(
             swapchainProps.displayableInfo, Pal::PresentMode::Fullscreen, &modeCount, presentModes);
 
         VK_ASSERT(result != VK_INCOMPLETE);
@@ -895,7 +895,7 @@ static bool EnableFullScreen(
     {
         // TODO SWDEV-120359 - We need to enumerate the correct Pal device.
         Pal::IScreen* pScreen = pDevice->VkInstance()->FindScreen(
-            pDevice->PalDevice(),
+            pDevice->PalDevice(DefaultDeviceIndex),
             swapchainProps.displayableInfo.windowHandle,
             (mode == FullscreenMgr::Explicit) ? swapchainProps.pFullscreenSurface->GetOSDisplayHandle() :
                                                 swapchainProps.pSurface->GetOSDisplayHandle());
@@ -955,7 +955,7 @@ void FullscreenMgr::PostImageCreate(
 // flickering.
 void FullscreenMgr::FullscreenPresentEvent(bool success)
 {
-    const auto& settings = m_pDevice->VkPhysicalDevice()->GetRuntimeSettings();
+    const auto& settings = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
 
     if (success)
     {
@@ -1092,7 +1092,7 @@ void FullscreenMgr::PostPresent(
     }
 
     // Hide any present error if we have disabled them via panel
-    if (m_pDevice->VkPhysicalDevice()->GetRuntimeSettings().backgroundFullscreenIgnorePresentErrors)
+    if (m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings().backgroundFullscreenIgnorePresentErrors)
     {
         *pPresentResult = Pal::Result::Success;
     }
@@ -1122,7 +1122,7 @@ FullscreenMgr::CompatibilityFlags FullscreenMgr::EvaluateExclusiveModeCompat(
     constexpr Pal::OsDisplayHandle unknownHandle = 0;
 
     Pal::IScreen* pScreen = m_pDevice->VkInstance()->FindScreen(
-                m_pDevice->PalDevice(), windowHandle, displayHandle);
+                m_pDevice->PalDevice(DefaultDeviceIndex), windowHandle, displayHandle);
 
     if (pScreen != m_pScreen)
     {
@@ -1131,7 +1131,7 @@ FullscreenMgr::CompatibilityFlags FullscreenMgr::EvaluateExclusiveModeCompat(
 
     VK_ASSERT(m_pImage != nullptr);
 
-    const auto& imageInfo = m_pImage->PalImage()->GetImageCreateInfo();
+    const auto& imageInfo = m_pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
 
     Pal::Extent2d lastResolution = {};
 

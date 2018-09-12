@@ -88,7 +88,7 @@ GpaSession::GpaSession(
     m_pDevice(pDevice),
     m_session(
         pDevice->VkInstance()->PalPlatform(),
-        pDevice->PalDevice(), 0, 0, 0)
+        pDevice->PalDevice(DefaultDeviceIndex), 0, 0, 0)
 {
 
 }
@@ -167,7 +167,7 @@ VkResult GpaSession::CmdBegin(CmdBuffer* pCmdBuf)
 // =====================================================================================================================
 VkResult GpaSession::CmdEnd(CmdBuffer* pCmdBuf)
 {
-    Pal::Result palResult = m_session.End(pCmdBuf->PalCmdBuffer());
+    Pal::Result palResult = m_session.End(pCmdBuf->PalCmdBuffer(DefaultDeviceIndex));
 
     VkResult result = PalToVkResult(palResult);
 
@@ -201,7 +201,7 @@ VkResult GpaSession::CmdBeginSample(
 {
     VkResult result = VK_SUCCESS;
 
-    const PhysicalDeviceGpaProperties& gpaProps = m_pDevice->VkPhysicalDevice()->GetGpaProperties();
+    const PhysicalDeviceGpaProperties& gpaProps = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetGpaProperties();
 
     GpuUtil::GpaSampleConfig sampleConfig = {};
 
@@ -260,6 +260,8 @@ VkResult GpaSession::CmdBeginSample(
 
     sampleConfig.sqtt.flags.enable                   = pGpaSampleBeginInfo->sqThreadTraceEnable;
     sampleConfig.sqtt.flags.supressInstructionTokens = pGpaSampleBeginInfo->sqThreadTraceSuppressInstructionTokens;
+    sampleConfig.sqtt.flags.stallMode                = Pal::GpuProfilerStallMode::GpuProfilerStallAlways;
+    sampleConfig.sqtt.seMask                         = UINT32_MAX;
     sampleConfig.sqtt.gpuMemoryLimit                 = pGpaSampleBeginInfo->sqThreadTraceDeviceMemoryLimit;
 
     sampleConfig.timing.preSample  = VkToPalSrcPipePointForTimestampWrite(pGpaSampleBeginInfo->timingPreSample);
@@ -267,7 +269,7 @@ VkResult GpaSession::CmdBeginSample(
 
     if (result == VK_SUCCESS)
     {
-        uint32_t sampleID = m_session.BeginSample(pCmdbuf->PalCmdBuffer(), sampleConfig);
+        uint32_t sampleID = m_session.BeginSample(pCmdbuf->PalCmdBuffer(DefaultDeviceIndex), sampleConfig);
 
         *pSampleID = sampleID;
     }
@@ -285,14 +287,14 @@ void GpaSession::CmdEndSample(
     CmdBuffer* pCmdbuf,
     uint32_t   sampleID)
 {
-    m_session.EndSample(pCmdbuf->PalCmdBuffer(), sampleID);
+    m_session.EndSample(pCmdbuf->PalCmdBuffer(DefaultDeviceIndex), sampleID);
 }
 
 // =====================================================================================================================
 void GpaSession::CmdCopyResults(
     CmdBuffer* pCmdBuf)
 {
-    m_session.CopyResults(pCmdBuf->PalCmdBuffer());
+    m_session.CopyResults(pCmdBuf->PalCmdBuffer(DefaultDeviceIndex));
 }
 
 /**

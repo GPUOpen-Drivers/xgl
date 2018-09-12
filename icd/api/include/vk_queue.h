@@ -112,7 +112,7 @@ public:
         MaxQueuesPerFamily  = 8,                     // Maximum number of queues per family
     };
 
-    VK_FORCEINLINE Pal::IQueue* PalQueue(int32_t idx = DefaultDeviceIndex) const
+    VK_FORCEINLINE Pal::IQueue* PalQueue(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pPalQueues[idx];

@@ -464,8 +464,8 @@ void ShaderOptimizer::BuildTuningProfile()
 void ShaderOptimizer::BuildAppProfile()
 {
     const AppProfile appProfile          = m_pDevice->GetAppProfile();
-    const Pal::GfxIpLevel gfxIpLevel     = m_pDevice->VkPhysicalDevice()->PalProperties().gfxLevel;
-    const Pal::AsicRevision asicRevision = m_pDevice->VkPhysicalDevice()->PalProperties().revision;
+    const Pal::GfxIpLevel gfxIpLevel     = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
+    const Pal::AsicRevision asicRevision = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().revision;
 
     // TODO: These need to be auto-generated from source JSON but for now we write profile programmatically
     memset(&m_appProfile, 0, sizeof(m_appProfile));

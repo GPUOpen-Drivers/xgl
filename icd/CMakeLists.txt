@@ -360,6 +360,7 @@ if (UNIX)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/gpuopen/libgpuopen.a -Wl,--no-whole-archive)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/vam/libvam.a -Wl,--no-whole-archive)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/addrlib/libaddrlib.a -Wl,--no-whole-archive)
+            target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/cwpack/libcwpack.a -Wl,--no-whole-archive)
         endif()
     endif()
 

@@ -130,7 +130,7 @@ VkResult Sampler::Create(
     }
 
     // Create one sampler srd which can be used by any device in the group
-    pDevice->PalDevice()->CreateSamplerSrds(
+    pDevice->PalDevice(DefaultDeviceIndex)->CreateSamplerSrds(
             1,
             &samplerInfo,
             Util::VoidPtrInc(pMemory, apiSize));

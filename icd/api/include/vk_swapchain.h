@@ -101,7 +101,7 @@ public:
     VK_FORCEINLINE Memory* GetPresentableImageMemory(uint32_t imageIndex) const
         { return Memory::ObjectFromHandle(m_properties.imageMemory[imageIndex]); }
 
-    VK_FORCEINLINE Pal::ISwapChain* PalSwapChain(uint32_t deviceIdx = DefaultDeviceIndex) const
+    VK_FORCEINLINE Pal::ISwapChain* PalSwapChain(uint32_t deviceIdx) const
         { return m_pPalSwapChain[deviceIdx]; }
 
     VK_INLINE const FullscreenMgr* GetFullscreenMgr() const

@@ -501,8 +501,7 @@ VkResult PhysicalDevice::Initialize()
 
                 }
                 else if ((palGpuHeap == Pal::GpuHeapLocal) &&
-                         (heapIndices[Pal::GpuHeapInvisible] == Pal::GpuHeapCount) &&
-                         (m_settings.disableDeviceOnlyMemoryTypeWithoutHeap == false))
+                         (heapIndices[Pal::GpuHeapInvisible] == Pal::GpuHeapCount))
                 {
                     // GPU invisible heap isn't present, but its memory properties are a subset of the GPU local heap.
                     heapIndices[Pal::GpuHeapInvisible] = heapIndex;

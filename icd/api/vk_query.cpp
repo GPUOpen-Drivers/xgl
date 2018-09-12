@@ -124,7 +124,7 @@ VkResult PalQueryPool::Create(
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
-    const size_t palSize = pDevice->PalDevice()->GetQueryPoolSize(createInfo, &palResult);
+    const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->GetQueryPoolSize(createInfo, &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
 
     const size_t apiSize    = sizeof(PalQueryPool);

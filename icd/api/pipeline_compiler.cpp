@@ -561,7 +561,7 @@ bool PipelineCompiler::ReplacePipelineBinary(
 
     char replaceFileName[256];
     int32_t length = Util::Snprintf(replaceFileName, 256, "%s/%s_replace.elf", settings.shaderReplaceDir, fileName);
-    VK_ASSERT(length > 0 && (length < sizeof(replaceFileName)));
+    VK_ASSERT(length > 0 && (static_cast<uint32_t>(length) < sizeof(replaceFileName)));
 
     Util::Result result = Util::File::Exists(replaceFileName) ? Util::Result::Success : Util::Result::ErrorUnavailable;
     if (result == Util::Result::Success)
@@ -612,6 +612,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
         {
             shouldCompile = false;
+
         }
     }
 
@@ -624,7 +625,8 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
         pPipelineBuildInfo->iaState.deviceIndex = deviceIdx;
 
-        if (pPipelineCache != nullptr)
+        if ((pPipelineCache != nullptr) &&
+            (settings.shaderCacheMode != ShaderCacheDisable))
         {
             if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCacheTypeLlpc)
             {
@@ -679,6 +681,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
         {
             shouldCompile = false;
+
         }
     }
 
@@ -694,7 +697,8 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
         pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
 
-        if (pPipelineCache != nullptr)
+        if ((pPipelineCache != nullptr) &&
+            (settings.shaderCacheMode != ShaderCacheDisable))
         {
             if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCacheTypeLlpc)
             {

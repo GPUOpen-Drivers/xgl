@@ -99,7 +99,7 @@ VkResult InternalMemMgr::Init()
     if (palResult == Pal::Result::Success)
     {
         // Get heap specific information
-        palResult = m_pDevice->PalDevice()->GetGpuMemoryHeapProperties(m_heapProps);
+        palResult = m_pDevice->PalDevice(DefaultDeviceIndex)->GetGpuMemoryHeapProperties(m_heapProps);
     }
 
     result = PalToVkResult(palResult);
@@ -726,7 +726,7 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
 
     // Adjust alignment and size to allocation granularity
     Pal::GpuMemoryCreateInfo     localCreateInfo = createInfo;
-    const Pal::DeviceProperties& palProperties   = m_pDevice->VkPhysicalDevice()->PalProperties();
+    const Pal::DeviceProperties& palProperties   = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
 
     const Pal::gpusize alignment = palProperties.gpuMemoryProperties.realMemAllocGranularity;
 

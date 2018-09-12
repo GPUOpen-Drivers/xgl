@@ -404,6 +404,12 @@ void RenderPassLogger::LogImageAspectMask(
 
         return;
     }
+    else if (flags == VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM)
+    {
+        Log(compact ? "MAX" : "ASPECT_FLAG_BITS_MAX_ENUM");
+
+        return;
+    }
 
     uint32_t count = 0;
 

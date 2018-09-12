@@ -92,7 +92,7 @@ SqttCmdBufferState::SqttCmdBufferState(
     uint32_t queueCount = Queue::MaxQueueFamilies;
     VkQueueFamilyProperties queueProps[Queue::MaxQueueFamilies] = {};
 
-    VkResult result = m_pCmdBuf->VkDevice()->VkPhysicalDevice()->GetQueueFamilyProperties(&queueCount, queueProps);
+    VkResult result = m_pCmdBuf->VkDevice()->VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyProperties(&queueCount, queueProps);
 
     VK_ASSERT(result == VK_SUCCESS);
     VK_ASSERT(m_queueFamilyIndex < queueCount);
@@ -103,7 +103,7 @@ SqttCmdBufferState::SqttCmdBufferState(
 
     m_enabledMarkers = m_pCmdBuf->VkDevice()->GetRuntimeSettings().devModeSqttMarkerEnable;
 
-    if (SqttMgr::IsTracingSupported(m_pCmdBuf->VkDevice()->VkPhysicalDevice(), m_queueFamilyIndex) == false)
+    if (SqttMgr::IsTracingSupported(m_pCmdBuf->VkDevice()->VkPhysicalDevice(DefaultDeviceIndex), m_queueFamilyIndex) == false)
     {
         m_enabledMarkers = 0;
     }
@@ -163,7 +163,7 @@ void SqttCmdBufferState::WriteMarker(
     VK_ASSERT((dataSize % sizeof(uint32_t)) == 0);
     VK_ASSERT((dataSize / sizeof(uint32_t)) > 0);
 
-    m_pCmdBuf->PalCmdBuffer()->CmdInsertRgpTraceMarker(static_cast<uint32_t>(dataSize / sizeof(uint32_t)), pData);
+    m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdInsertRgpTraceMarker(static_cast<uint32_t>(dataSize / sizeof(uint32_t)), pData);
 }
 
 // =====================================================================================================================

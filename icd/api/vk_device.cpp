@@ -1225,7 +1225,7 @@ VkResult Device::CreateInternalComputePipeline(
     VK_ASSERT(numUserDataNodes <= VK_ARRAY_SIZE(pInternalPipeline->userDataNodeOffsets));
 
     VkResult             result              = VK_SUCCESS;
-    PipelineCompiler*    pCompiler           = GetCompiler();
+    PipelineCompiler*    pCompiler           = GetCompiler(DefaultDeviceIndex);
     void*                pLlpcShaderModule   = nullptr;
     const void*          pPipelineBinary     = nullptr;
     size_t               pipelineBinarySize  = 0;
@@ -1490,10 +1490,10 @@ VkResult Device::WaitForFences(
     {
         for (uint32_t i = 0; i < fenceCount; ++i)
         {
-            ppPalFences[i] = Fence::ObjectFromHandle(pFences[i])->PalFence();
+            ppPalFences[i] = Fence::ObjectFromHandle(pFences[i])->PalFence(DefaultDeviceIndex);
         }
 
-        palResult = PalDevice()->WaitForFences(fenceCount, ppPalFences, waitAll != VK_FALSE, timeout);
+        palResult = PalDevice(DefaultDeviceIndex)->WaitForFences(fenceCount, ppPalFences, waitAll != VK_FALSE, timeout);
     }
     else
     {
@@ -1896,7 +1896,7 @@ VkResult Device::BindBufferMemory(
 
         VK_ASSERT((deviceIndexCount == 0) || (deviceIndexCount == NumPalDevices()));
 
-        Buffer::ObjectFromHandle(info.buffer)->BindMemory(info.memory, info.memoryOffset, pDeviceIndices);
+        Buffer::ObjectFromHandle(info.buffer)->BindMemory(this, info.memory, info.memoryOffset, pDeviceIndices);
     }
 
     return VK_SUCCESS;
@@ -1971,6 +1971,7 @@ VkResult Device::BindImageMemory(
         if (pSwapchain != nullptr)
         {
             Image::ObjectFromHandle(info.image)->BindSwapchainMemory(
+                this,
                 swapChainImageIndex,
                 pSwapchain,
                 deviceIndexCount,
@@ -1981,6 +1982,7 @@ VkResult Device::BindImageMemory(
         else
         {
             Image::ObjectFromHandle(info.image)->BindMemory(
+                this,
                 info.memory,
                 info.memoryOffset,
                 deviceIndexCount,
@@ -2023,12 +2025,10 @@ VkResult Device::CreateQueryPool(
 }
 
 VkResult Device::ImportSemaphore(
-    VkExternalSemaphoreHandleTypeFlags          handleType,
-    const Pal::OsExternalHandle                 handle,
-    VkSemaphore                                 semaphore,
-    VkSemaphoreImportFlags                      importFlags)
+    VkSemaphore                 semaphore,
+    const ImportSemaphoreInfo&  importInfo)
 {
-    return Semaphore::ObjectFromHandle(semaphore)->ImportSemaphore(this, handleType, handle, importFlags);
+    return Semaphore::ObjectFromHandle(semaphore)->ImportSemaphore(this, importInfo);
 }
 
 // =====================================================================================================================
@@ -2272,16 +2272,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue2(
     // queue creation flags then this code needs to be updated.
     VK_ASSERT(pQueueInfo->sType == VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2);
     VK_ASSERT(pQueueInfo->pNext == nullptr);
-    VK_ASSERT(pQueueInfo->flags == 0);
+    VK_ASSERT(pQueueInfo->flags != 0);  // by specs, the flags must not NOT be 0 when calling this function.
+    VK_NOT_IMPLEMENTED;
 
-    ApiDevice::ObjectFromHandle(device)->GetQueue(pQueueInfo->queueFamilyIndex, pQueueInfo->queueIndex, pQueue);
-
-    const Queue* queue = DispatchableQueue::ObjectFromHandle(*pQueue);
-
-    if(queue->GetFlags() != pQueueInfo->flags)
-    {
-        *pQueue = VK_NULL_HANDLE;
-    }
+    // Our driver currently doesn't support VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT, and this function should be
+    // called with a non-zero queue creation flag, so the application has no valid way of calling it and we should
+    // always return VK_NULL_HANDLE in pQueue.
+    *pQueue = VK_NULL_HANDLE;
 }
 
 // =====================================================================================================================
@@ -2624,10 +2621,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
     VkDevice device,
     const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo)
 {
-    return ApiDevice::ObjectFromHandle(device)->ImportSemaphore(pImportSemaphoreFdInfo->handleType,
-                                                                pImportSemaphoreFdInfo->fd,
-                                                                pImportSemaphoreFdInfo->semaphore,
-                                                                pImportSemaphoreFdInfo->flags);
+    ImportSemaphoreInfo importInfo = {};
+    importInfo.handleType  = pImportSemaphoreFdInfo->handleType;
+    importInfo.handle      = pImportSemaphoreFdInfo->fd;
+    importInfo.importFlags = pImportSemaphoreFdInfo->flags;
+
+    return ApiDevice::ObjectFromHandle(device)->ImportSemaphore(pImportSemaphoreFdInfo->semaphore, importInfo);
 }
 
 // =====================================================================================================================
@@ -2777,7 +2776,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
     }
     else
     {
-        palResult = pDevice->PalDevice()->SetClockMode(input, &output);
+        palResult = pDevice->PalDevice(DefaultDeviceIndex)->SetClockMode(input, &output);
 
         if (palResult == Pal::Result::Success)
         {

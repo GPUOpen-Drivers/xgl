@@ -534,7 +534,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     if ((result == VK_SUCCESS) && (pVertexInput != nullptr))
     {
         if ((m_info.userDataRegCount + VbTablePtrRegCount) <=
-            m_pDevice->VkPhysicalDevice()->PalProperties().gfxipProperties.maxUserDataEntries)
+            m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.maxUserDataEntries)
         {
             VK_ASSERT(pVbInfo != nullptr);
 
