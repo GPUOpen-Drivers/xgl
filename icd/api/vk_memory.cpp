@@ -943,21 +943,20 @@ VkResult Memory::Map(
 {
     VkResult result = VK_SUCCESS;
 
-    // according to spec, "memory must not have been allocated with multiple instances"
+    // According to spec, "memory must not have been allocated with multiple instances"
     // if it is multi-instance allocation, we should just return VK_ERROR_MEMORY_MAP_FAILED
-    // otherwise, we can just map the PalMemory at [0][0]
     if (!m_multiInstance)
     {
         Pal::Result palResult = Pal::Result::Success;
-        if (PalMemory(DefaultDeviceIndex) != nullptr)
+        if (PalMemory(m_primaryDeviceIndex) != nullptr)
         {
             void* pData;
 
-            palResult = PalMemory(DefaultDeviceIndex)->Map(&pData);
+            palResult = PalMemory(m_primaryDeviceIndex)->Map(&pData);
 
             if (palResult == Pal::Result::Success)
             {
-                ppData[DefaultDeviceIndex] = Util::VoidPtrInc(pData, static_cast<size_t>(offset));
+                *ppData = Util::VoidPtrInc(pData, static_cast<size_t>(offset));
 
             }
             result = (palResult == Pal::Result::Success) ? VK_SUCCESS : VK_ERROR_MEMORY_MAP_FAILED;
@@ -983,7 +982,7 @@ void Memory::Unmap(void)
 
     VK_ASSERT(m_multiInstance == false);
 
-    palResult = PalMemory(DefaultDeviceIndex)->Unmap();
+    palResult = PalMemory(m_primaryDeviceIndex)->Unmap();
     VK_ASSERT(palResult == Pal::Result::Success);
 }
 
@@ -1057,7 +1056,7 @@ Pal::IGpuMemory* Memory::PalMemory(uint32_t resourceIndex, uint32_t memoryIndex)
     // We could always return the PalMemory with memory index m_primaryDeviceIndex.
     uint32_t index = m_multiInstance ? memoryIndex : m_primaryDeviceIndex;
 
-    if ((m_pPalMemory[resourceIndex][index] == nullptr))
+    if (m_pPalMemory[resourceIndex][index] == nullptr)
     {
         // Instantiate the required PalMemory.
         Pal::IGpuMemory* pBaseMemory = nullptr;

@@ -83,9 +83,19 @@ struct ChillSettings
                                               // between loading screens and gameplay.
 };
 
+// Struct describing dynamic TurboSync settings
+struct TurboSyncSettings
+{
+    bool      turboSyncEnable;  // If per-app TurboSync profile settings is enabled
+};
+
 extern AppProfile ScanApplicationProfile(const VkInstanceCreateInfo& instanceInfo);
 
-bool ReloadAppProfileSettings(Instance* pInstance, RuntimeSettings* pRuntimeSettings, ChillSettings* pChillSettings);
+bool ReloadAppProfileSettings(
+    Instance*          pInstance,
+    RuntimeSettings*   pRuntimeSettings,
+    ChillSettings*     pChillSettings,
+    TurboSyncSettings* pTurboSyncSettings);
 
 };
 

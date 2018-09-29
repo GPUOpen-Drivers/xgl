@@ -86,7 +86,6 @@ class Queue;
 class SqttMgr;
 class SwapChain;
 class ChillMgr;
-class TurboSync;
 
 // =====================================================================================================================
 // Specifies properties for importing a semaphore, it's an encapsulation of VkImportSemaphoreFdInfoKHR and

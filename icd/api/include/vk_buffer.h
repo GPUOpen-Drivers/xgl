@@ -91,7 +91,7 @@ public:
         VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT;
 
     bool IsSparse() const
-        { return m_internalFlags.createSparseBinding | m_internalFlags.createSparseResidency; }
+        { return (m_internalFlags.createSparseBinding | m_internalFlags.createSparseResidency) != 0; }
 
     bool DedicatedMemoryRequired() const { return m_internalFlags.dedicatedRequired; }
 

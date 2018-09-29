@@ -215,6 +215,11 @@ private:
         size_t*                  pPipelineBinarySize,
         const void**             ppPipelineBinary);
 
+    void DropPipelineBinaryInst(
+        const RuntimeSettings& settings,
+        size_t                 pipelineBinarySize,
+        const void*            pPipelineBinary);
+
     // -----------------------------------------------------------------------------------------------------------------
 
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object

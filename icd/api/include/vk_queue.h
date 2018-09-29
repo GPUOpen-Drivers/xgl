@@ -215,7 +215,6 @@ protected:
     DevModeMgr*                        m_pDevModeMgr;
     VirtualStackAllocator*             m_pStackAllocator;
     VidPnSourceFlipStatus              m_flipStatus;
-    FrtcFramePacer*                    m_pFrtcFramePacer;
     Pal::PerSourceFrameMetadataControl m_palFrameMetadataControl;
     Pal::ICmdBuffer*                   m_pDummyCmdBuffer;
 

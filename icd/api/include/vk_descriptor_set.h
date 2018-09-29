@@ -91,11 +91,15 @@ public:
         return m_addresses[idx].fmaskCpuAddr;
     }
 
-    uint32_t* DynamicDescriptorData()
-        { return reinterpret_cast<uint32_t*>(m_dynamicDescriptorData); }
+    uint32_t* DynamicDescriptorData(uint32_t idx)
+    {
+        return reinterpret_cast<uint32_t*>(m_dynamicDescriptorData[idx]);
+    }
 
-    uint64_t* DynamicDescriptorDataQw()
-        { return m_dynamicDescriptorData; }
+    uint64_t* DynamicDescriptorDataQw(uint32_t idx)
+    {
+        return m_dynamicDescriptorData[idx];
+    }
 
     VK_INLINE static DescriptorSet* StateFromHandle(VkDescriptorSet set);
     VK_INLINE static Pal::gpusize GpuAddressFromHandle(uint32_t deviceIdx, VkDescriptorSet set);
@@ -103,6 +107,7 @@ public:
 
      VK_INLINE static void PatchedDynamicDataFromHandle(
         VkDescriptorSet set,
+        uint32_t        deviceIdx,
         uint32_t*       pUserData,
         const uint32_t* pDynamicOffsets,
         uint32_t        numDynamicDescriptors,
@@ -139,7 +144,7 @@ protected:
     // memory together with the descriptor set so that we are able to supply the patched version of the descriptors.
     // This field needs to be qword aligned because it is accessed as qwords in PatchedDynamicDataFromHandle().
     // Since allocating in qwords, need to divide the number of registers by 2 to get the correct size.
-    uint64_t                    m_dynamicDescriptorData[MaxDynamicDescriptors * PipelineLayout::DynDescRegCount / 2];
+    uint64_t                    m_dynamicDescriptorData[numPalDevices][MaxDynamicDescriptors * PipelineLayout::DynDescRegCount / 2];
 
     friend class DescriptorPool;
     friend class DescriptorSetHeap;
@@ -187,6 +192,7 @@ void DescriptorSet<numPalDevices>::UserDataPtrValueFromHandle(
 template <uint32_t numPalDevices>
 void DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
     VkDescriptorSet set,
+    uint32_t        deviceIdx,
     uint32_t*       pUserData,
     const uint32_t* pDynamicOffsets,
     uint32_t        numDynamicDescriptors,
@@ -196,7 +202,7 @@ void DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
 
     DescriptorSet<numPalDevices>* pSet  = StateFromHandle(set);
     uint64_t* pDstQwords = reinterpret_cast<uint64_t*>(pUserData);
-    uint64_t* pSrcQwords = pSet->DynamicDescriptorDataQw();
+    uint64_t* pSrcQwords = pSet->DynamicDescriptorDataQw(deviceIdx);
     const uint32_t dynDataNumQwords = robustBufferAccess ? 2 : 1;
     for (uint32_t i = 0; i < numDynamicDescriptors; ++i)
     {

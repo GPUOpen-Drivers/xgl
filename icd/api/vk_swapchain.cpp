@@ -209,11 +209,18 @@ VkResult SwapChain::Create(
 
     // Allocate system memory for objects
     const size_t    vkSwapChainSize  = sizeof(SwapChain);
-    size_t          palSwapChainSize = pDevice->PalDevice(DefaultDeviceIndex)->GetSwapChainSize(swapChainCreateInfo, &palResult);
+    size_t          palSwapChainSize = 0;
+
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+    {
+        palSwapChainSize += pDevice->PalDevice(deviceIdx)->GetSwapChainSize(swapChainCreateInfo, &palResult);
+        VK_ASSERT(palResult == Pal::Result::Success);
+    }
+
     size_t          imageArraySize   = sizeof(VkImage) * swapImageCount;
     size_t          memoryArraySize  = sizeof(VkDeviceMemory) * swapImageCount;
     size_t          objSize          = vkSwapChainSize +
-                                       (palSwapChainSize * pDevice->NumPalDevices()) +
+                                       palSwapChainSize +
                                        imageArraySize + memoryArraySize;
     void*           pMemory          = pDevice->AllocApiObject(objSize, pAllocator);
 
@@ -233,12 +240,9 @@ VkResult SwapChain::Create(
             Util::VoidPtrInc(pMemory, offset),
             &pPalSwapChain[deviceIdx]);
 
-        size_t deviceSwapChainSize = pPalDevice->GetSwapChainSize(swapChainCreateInfo, &palResult);
-
-        VK_ASSERT(palSwapChainSize >= deviceSwapChainSize);
-
-        offset += palSwapChainSize;
+        offset += pPalDevice->GetSwapChainSize(swapChainCreateInfo, &palResult);
     }
+    VK_ASSERT((palSwapChainSize + vkSwapChainSize) == offset);
     result = PalToVkResult(palResult);
 
     if (result == VK_SUCCESS)
@@ -531,6 +535,11 @@ VkResult SwapChain::AcquireNextImage(
             acquireInfo.timeout    = timeout;
             acquireInfo.pSemaphore = (pSemaphore != nullptr) ? pSemaphore->PalSemaphore(DefaultDeviceIndex) : nullptr;
             acquireInfo.pFence     = (pFence != nullptr) ? pFence->PalFence(presentationDeviceIdx) : nullptr;
+
+            if (pFence != nullptr)
+            {
+                pFence->SetActiveDevice(presentationDeviceIdx);
+            }
 
             result = PalToVkResult(m_pPalSwapChain[presentationDeviceIdx]->AcquireNextImage(acquireInfo, pImageIndex));
         }

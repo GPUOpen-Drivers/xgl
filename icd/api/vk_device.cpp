@@ -450,6 +450,16 @@ VkResult Device::Create(
 
             break;
         }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderAtomicInt64FeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceShaderAtomicInt64FeaturesKHR*>(pHeader));
+
+            break;
+        }
+
         default:
             break;
         }

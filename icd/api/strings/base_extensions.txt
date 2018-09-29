@@ -85,3 +85,5 @@ VK_KHR_8bit_storage
 VK_EXT_conservative_rasterization
 VK_EXT_swapchain_colorspace
 VK_EXT_hdr_metadata
+VK_KHR_shader_atomic_int64
+VK_KHR_driver_properties

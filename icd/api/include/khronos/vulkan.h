@@ -64,6 +64,9 @@
 #include "devext/vk_amd_shader_compiler_control.h"
 #endif
 
+#include "devext/vk_khr_shader_atomic_int64.h"
+#include "devext/vk_khr_driver_properties.h"
+
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,
     SCISSOR,

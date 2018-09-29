@@ -451,7 +451,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
             // client memory.
             // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
-            pDestAddr = pDestSet->DynamicDescriptorData() +
+            pDestAddr = pDestSet->DynamicDescriptorData(deviceIdx) +
                         pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
 
             WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC>(
@@ -467,7 +467,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
             // client memory.
             // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
-            pDestAddr = pDestSet->DynamicDescriptorData() +
+            pDestAddr = pDestSet->DynamicDescriptorData(deviceIdx) +
                         pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
 
             WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC>(
@@ -525,10 +525,10 @@ void DescriptorUpdate::CopyDescriptorSets(
             // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
             // client memory.
             // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
-            uint32_t* pSrcAddr  = pSrcSet->DynamicDescriptorData() + srcBinding.dyn.dwOffset
+            uint32_t* pSrcAddr  = pSrcSet->DynamicDescriptorData(deviceIdx) + srcBinding.dyn.dwOffset
                                 + params.srcArrayElement * srcBinding.dyn.dwArrayStride;
 
-            uint32_t* pDestAddr = pDestSet->DynamicDescriptorData() + destBinding.dyn.dwOffset
+            uint32_t* pDestAddr = pDestSet->DynamicDescriptorData(deviceIdx) + destBinding.dyn.dwOffset
                                 + params.dstArrayElement * destBinding.dyn.dwArrayStride;
 
             // Source and destination strides are expected to match as only copies between the same type of descriptors

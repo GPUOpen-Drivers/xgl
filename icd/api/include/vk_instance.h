@@ -181,6 +181,7 @@ public:
 
     Pal::IScreen* FindScreenFromRandrOutput(
         const Pal::IDevice* pDevice,
+        Display*            pDpy,
         uint32_t            randrOutput) const;
 
     VkResult GetScreenModeList(
@@ -298,8 +299,9 @@ private:
     ScreenObject    m_screens[Pal::MaxScreens];
     void*           m_pScreenStorage;
 
-    DevModeMgr*   m_pDevModeMgr; // GPUOpen Developer Mode manager.
-    ChillSettings m_chillSettings; // Dynamic chill settings structure
+    DevModeMgr*       m_pDevModeMgr;       // GPUOpen Developer Mode manager.
+    ChillSettings     m_chillSettings;     // Dynamic chill settings structure
+    TurboSyncSettings m_turboSyncSettings; // Dynamic TurboSync settings structure
 
     Util::List<DebugReportCallback*, PalAllocator>  m_debugReportCallbacks;             // List of registered Debug
                                                                                         // Report Callbacks

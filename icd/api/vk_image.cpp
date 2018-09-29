@@ -222,6 +222,14 @@ static VkResult ConvertImageCreateInfo(
     // regarding DCC.
     pPalCreateInfo->flags.perSubresInit = 1;
 
+    // Disable Stencil read according to the application profile during the creation of an MSAA depth stencil target.
+    if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT) &&
+        ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
+        (settings.disableMsaaStencilShaderRead))
+    {
+        pPalCreateInfo->usageFlags.noStencilShaderRead = 1;
+    }
+
     return result;
 }
 
@@ -761,6 +769,9 @@ VkResult Image::CreatePresentableImage(
 
         palImgOffset += palImgSize;
         palMemOffset += palMemSize;
+
+        // We assert that preferredHeap crossing device group shall be same, actually, shall be LocalInvisible.
+        VK_ASSERT(pPalMemory[deviceIdx]->Desc().preferredHeap == pPalMemory[DefaultDeviceIndex]->Desc().preferredHeap);
     }
 
     // from PAL, toomanyflippableAllocation is a warning, instead of a failure. the allocate should be success.
@@ -826,8 +837,11 @@ VkResult Image::CreatePresentableImage(
 
         *pImage = Image::HandleFromVoidPointer(pImgObjMemory);
 
-        // Create API memory object with multiInstance set to false
-        pMemory = VK_PLACEMENT_NEW(pMemObjMemory) Memory(pDevice, pPalMemory, false);
+        // Presentable image shall be positioned on local invisible heap by default.
+        VK_ASSERT(pPalMemory[DefaultDeviceIndex]->Desc().preferredHeap == Pal::GpuHeapInvisible);
+        // Presentable image memory shall be multiInstance on multi-device configuration.
+        const bool multiInstance = (pDevice->NumPalDevices() > 1);
+        pMemory = VK_PLACEMENT_NEW(pMemObjMemory) Memory(pDevice, pPalMemory, multiInstance);
 
         *pDeviceMemory = Memory::HandleFromObject(pMemory);
 

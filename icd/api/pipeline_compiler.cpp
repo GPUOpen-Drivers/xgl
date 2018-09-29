@@ -587,6 +587,34 @@ bool PipelineCompiler::ReplacePipelineBinary(
 }
 
 // =====================================================================================================================
+// Drop pipeline binary instruction.
+void PipelineCompiler::DropPipelineBinaryInst(
+    const RuntimeSettings& settings,
+    size_t                 pipelineBinarySize,
+    const void*            pPipelineBinary)
+{
+    if (settings.enableDropPipelineBinaryInst == true)
+    {
+        static constexpr uint32_t NopInstruction = 0xBF800000;
+
+        for (uint32_t i = 0; i < pipelineBinarySize/sizeof(uint32_t); i++)
+        {
+            if (((uint32_t*)pPipelineBinary)[i] == settings.dropPipelineBinaryInstToken)
+            {
+                VK_ASSERT(settings.dropPipelineBinaryInstSize > 0);
+
+                for (uint32_t j = 0; j < settings.dropPipelineBinaryInstSize; j++)
+                {
+                    ((uint32_t*)pPipelineBinary)[i+j] = NopInstruction;
+                }
+
+                i += (settings.dropPipelineBinaryInstSize - 1);
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
 // Creates graphics pipeline binary.
 VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     Device*                             pDevice,
@@ -652,6 +680,8 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         }
         compileTime = Util::GetPerfCpuTime() - startTime;
     }
+
+    DropPipelineBinaryInst(settings, *pPipelineBinarySize, *ppPipelineBinary);
 
     return result;
 }
@@ -727,6 +757,8 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
         compileTime = Util::GetPerfCpuTime() - startTime;
     }
+
+    DropPipelineBinaryInst(settings, *pPipelineBinarySize, *ppPipelineBinary);
 
     return result;
 }
@@ -814,6 +846,10 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         {
             pCreateInfo->pipelineInfo.vpState.depthClipEnable         = (pRs->depthClampEnable == VK_FALSE);
             pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = (pRs->rasterizerDiscardEnable != VK_FALSE);
+            pCreateInfo->pipelineInfo.rsState.polygonMode             = pRs->polygonMode;
+            pCreateInfo->pipelineInfo.rsState.cullMode                = pRs->cullMode;
+            pCreateInfo->pipelineInfo.rsState.frontFace               = pRs->frontFace;
+            pCreateInfo->pipelineInfo.rsState.depthBiasEnable         = pRs->depthBiasEnable;
         }
 
         const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;

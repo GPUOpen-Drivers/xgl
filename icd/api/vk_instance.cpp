@@ -831,6 +831,7 @@ Pal::IScreen* Instance::FindScreenFromConnectorId(
 // =====================================================================================================================
 Pal::IScreen* Instance::FindScreenFromRandrOutput(
     const Pal::IDevice* pDevice,
+    Display*            pDpy,
     uint32_t            randrOutput
 ) const
 {
@@ -842,11 +843,28 @@ Pal::IScreen* Instance::FindScreenFromRandrOutput(
 
         if (m_screens[screenIdx].pPalScreen->GetProperties(&props) == Pal::Result::Success)
         {
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 435
+            if (props.pMainDevice == pDevice)
+            {
+                uint32_t             screenRandrOutput = 0;
+                Pal::OsDisplayHandle displayHandle     = reinterpret_cast<Pal::OsDisplayHandle>(pDpy);
+
+                Pal::Result result = m_screens[screenIdx].pPalScreen->GetRandrOutput(displayHandle, &screenRandrOutput);
+
+                if ((result == Pal::Result::Success) && (screenRandrOutput == randrOutput))
+                {
+                    pScreen = m_screens[screenIdx].pPalScreen;
+                    break;
+                }
+            }
+#else
             if ((props.pMainDevice == pDevice) && (props.wsiScreenProp.randrOutput == randrOutput))
             {
                 pScreen = m_screens[screenIdx].pPalScreen;
                 break;
             }
+
+#endif
         }
     }
     return pScreen;
@@ -994,7 +1012,7 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
 VkResult Instance::QueryApplicationProfile(RuntimeSettings* pRuntimeSettings)
 {
     VkResult result = VK_ERROR_FEATURE_NOT_PRESENT;
-    if (ReloadAppProfileSettings(this, pRuntimeSettings, &m_chillSettings))
+    if (ReloadAppProfileSettings(this, pRuntimeSettings, &m_chillSettings, &m_turboSyncSettings))
     {
         result = VK_SUCCESS;
     }

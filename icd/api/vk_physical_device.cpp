@@ -390,12 +390,14 @@ VkResult PhysicalDevice::Initialize()
         {
             for (uint32_t idx = 0; idx < Pal::EngineTypeCount; ++idx)
             {
-                // We do not currently create any high priority graphic queue
-                // so we don't need those engines.
+                // We do not currently create a high priority universal queue, so we don't need that engine.
                 // In order to support global priority, we still need exclusive compute engine to be initialized
                 // but this engine can only be selected according to the global priority set by application
-                if (idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityUniversal) &&
-                    idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityGraphics))
+                if (idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityUniversal)
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
+                    && idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityGraphics)
+#endif
+                   )
                 {
                     const auto& engineProps = m_properties.engineProperties[idx];
                     finalizeInfo.requestedEngineCounts[idx].engines = ((1 << engineProps.engineCount) - 1);
@@ -2386,73 +2388,58 @@ VkResult PhysicalDevice::GetSurfacePresentModes(
     VkPresentModeKHR presentModes[4] = {};
     uint32_t modeCount = 0;
 
-    // Query which swap chain modes are supported by the window/display
-    Pal::SwapChainProperties swapChainProperties = {};
-    if (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
+    // Get which swap chain modes are supported for the given present type (windowed vs fullscreen)
+    uint32_t swapChainModes = 0;
+    if (presentType == Pal::PresentMode::Count)
     {
-        swapChainProperties.currentExtent.width  = displayableInfo.surfaceExtent.width;
-        swapChainProperties.currentExtent.height = displayableInfo.surfaceExtent.height;
+        swapChainModes  = m_pPalDevice->GetSupportedSwapChainModes(displayableInfo.palPlatform, Pal::PresentMode::Windowed);
+        swapChainModes |= m_pPalDevice->GetSupportedSwapChainModes(displayableInfo.palPlatform, Pal::PresentMode::Fullscreen);
     }
-    Pal::Result palResult = m_pPalDevice->GetSwapChainInfo(
-        displayableInfo.displayHandle,
-        displayableInfo.windowHandle,
-        displayableInfo.palPlatform,
-        &swapChainProperties);
-
-    if (palResult == Pal::Result::Success)
+    else
     {
-        // Get which swap chain modes are supported for the given present type (windowed vs fullscreen)
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
-        const uint32_t swapChainModes =
-            m_pPalDevice->GetSupportedSwapChainModes(displayableInfo.palPlatform, presentType);
-#else
-        const uint32_t swapChainModes =
-            m_properties.swapChainProperties.supportedSwapChainModes[static_cast<size_t>(presentType)];
-#endif
-        // Translate to Vulkan present modes
-        if (swapChainModes & Pal::SwapChainModeSupport::SupportImmediateSwapChain)
-        {
-            presentModes[modeCount++] = VK_PRESENT_MODE_IMMEDIATE_KHR;
-        }
+        swapChainModes = m_pPalDevice->GetSupportedSwapChainModes(displayableInfo.palPlatform, presentType);
+    }
 
-        if (swapChainModes & Pal::SwapChainModeSupport::SupportMailboxSwapChain)
-        {
-            presentModes[modeCount++] = VK_PRESENT_MODE_MAILBOX_KHR;
-        }
+    // Translate to Vulkan present modes
+    if (swapChainModes & Pal::SwapChainModeSupport::SupportImmediateSwapChain)
+    {
+        presentModes[modeCount++] = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    }
 
-        if (swapChainModes & Pal::SwapChainModeSupport::SupportFifoSwapChain)
-        {
-            presentModes[modeCount++] = VK_PRESENT_MODE_FIFO_KHR;
-        }
+    if (swapChainModes & Pal::SwapChainModeSupport::SupportMailboxSwapChain)
+    {
+        presentModes[modeCount++] = VK_PRESENT_MODE_MAILBOX_KHR;
+    }
 
-        if (swapChainModes & Pal::SwapChainModeSupport::SupportFifoRelaxedSwapChain)
-        {
-            presentModes[modeCount++] = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-        }
+    if (swapChainModes & Pal::SwapChainModeSupport::SupportFifoSwapChain)
+    {
+        presentModes[modeCount++] = VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    if (swapChainModes & Pal::SwapChainModeSupport::SupportFifoRelaxedSwapChain)
+    {
+        presentModes[modeCount++] = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
     }
 
     // Write out information
     VkResult result = VK_SUCCESS;
 
-    if (result == VK_SUCCESS)
+    if (pPresentModes == NULL)
     {
-        if (pPresentModes == NULL)
+        *pPresentModeCount = modeCount;
+    }
+    else
+    {
+        uint32_t writeCount = Util::Min(modeCount, *pPresentModeCount);
+
+        for (uint32_t i = 0; i < writeCount; ++i)
         {
-            *pPresentModeCount = modeCount;
+            pPresentModes[i] = presentModes[i];
         }
-        else
-        {
-            uint32_t writeCount = Util::Min(modeCount, *pPresentModeCount);
 
-            for (uint32_t i = 0; i < writeCount; ++i)
-            {
-                pPresentModes[i] = presentModes[i];
-            }
+        *pPresentModeCount = writeCount;
 
-            *pPresentModeCount = writeCount;
-
-            result = (writeCount >= modeCount) ? result : VK_INCOMPLETE;
-        }
+        result = (writeCount >= modeCount) ? result : VK_INCOMPLETE;
     }
 
     return result;
@@ -2677,6 +2664,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_8BIT_STORAGE));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DRIVER_PROPERTIES));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CREATE_RENDERPASS2));
 
@@ -2781,8 +2769,10 @@ void PhysicalDevice::PopulateQueueFamilies()
         0,
         // Pal::EngineTypeHighPriorityUniversal
         0,
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
         // Pal::EngineTypeHighPriorityGraphics
         0,
+#endif
     };
 
     // While it's possible for an engineType to support multiple queueTypes,
@@ -2795,7 +2785,9 @@ void PhysicalDevice::PopulateQueueFamilies()
         Pal::QueueTypeDma,
         Pal::QueueTypeTimer,
         Pal::QueueTypeUniversal,
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
         Pal::QueueTypeUniversal,
+#endif
     };
 
     static_assert((VK_ARRAY_SIZE(vkQueueFlags) == Pal::EngineTypeCount) &&
@@ -2805,8 +2797,12 @@ void PhysicalDevice::PopulateQueueFamilies()
                   (Pal::EngineTypeExclusiveCompute == 2) &&
                   (Pal::EngineTypeDma              == 3) &&
                   (Pal::EngineTypeTimer            == 4) &&
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
                   (Pal::EngineTypeHighPriorityUniversal == 0x5) &&
                   (Pal::EngineTypeHighPriorityGraphics  == 0x6),
+#else
+                  (Pal::EngineTypeHighPriorityUniversal == 0x5),
+#endif
         "PAL engine types have changed, need to update the tables above");
 
     // Always enable core queue flags.  Final determination of support will be done on a per-engine basis.
@@ -2970,11 +2966,12 @@ VkResult PhysicalDevice::GetRandROutputDisplay(
     uint32_t        randrOutput,
     VkDisplayKHR*   pDisplay)
 {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
     VkResult result       = VK_SUCCESS;
     Pal::IScreen* pScreen = nullptr;
-    pScreen = VkInstance()->FindScreenFromRandrOutput(PalDevice(), randrOutput);
 
+    pScreen = VkInstance()->FindScreenFromRandrOutput(PalDevice(), dpy, randrOutput);
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 435
     if (pScreen == nullptr)
     {
         Pal::OsDisplayHandle hDisplay = dpy;
@@ -2998,11 +2995,15 @@ VkResult PhysicalDevice::GetRandROutputDisplay(
             }
         }
     }
+#endif
 
     *pDisplay = reinterpret_cast<VkDisplayKHR>(pScreen);
-#else
-    VkResult result = VK_INCOMPLETE;
-#endif
+
+    if (pScreen == nullptr)
+    {
+        VkResult result = VK_INCOMPLETE;
+    }
+
     return result;
 }
 #endif
@@ -3097,7 +3098,7 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
     if (isSparse == false)
     {
         const Pal::DeviceProperties& props = PalProperties();
-        if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT))
+        if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)
         {
             pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT |
                                                                 VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT     |
@@ -3186,6 +3187,18 @@ void PhysicalDevice::GetFeatures2(
 
                 break;
             }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR:
+            {
+                VkPhysicalDeviceShaderAtomicInt64FeaturesKHR* pShaderAtomicInt64Features =
+                    reinterpret_cast<VkPhysicalDeviceShaderAtomicInt64FeaturesKHR*>(pHeader);
+
+                pShaderAtomicInt64Features->shaderBufferInt64Atomics = VK_TRUE;
+                pShaderAtomicInt64Features->shaderSharedInt64Atomics = VK_TRUE;
+
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_FEATURES_AMD:
             {
                 VkPhysicalDeviceGpaFeaturesAMD* pGpaFeatures =
@@ -3406,6 +3419,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceConservativeRasterizationPropertiesEXT*  pConservativeRasterizationProperties;
 #endif
 
+        VkPhysicalDeviceDriverPropertiesKHR*                     pDriverProperties;
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
     };
 
@@ -3581,6 +3595,20 @@ void PhysicalDevice::GetDeviceProperties2(
         }
 #endif
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR:
+        {
+            pDriverProperties->driverID = VULKAN_DRIVER_ID;
+
+            Util::Strncpy(pDriverProperties->driverName, VULKAN_DRIVER_NAME_STR, VK_MAX_DRIVER_NAME_SIZE_KHR);
+            Util::Strncpy(pDriverProperties->driverInfo, VULKAN_DRIVER_INFO_STR, VK_MAX_DRIVER_INFO_SIZE_KHR);
+
+            pDriverProperties->conformanceVersion.major     = CTS_VERSION_MAJOR;
+            pDriverProperties->conformanceVersion.minor     = CTS_VERSION_MINOR;
+            pDriverProperties->conformanceVersion.subminor  = CTS_VERSION_SUBMINOR;
+            pDriverProperties->conformanceVersion.patch     = CTS_VERSION_PATCH;
+
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
         {
             pVertexAttributeDivisorProperties->maxVertexAttribDivisor = UINT32_MAX;
@@ -4633,11 +4661,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfacePresentModesKHR(
 
     if (result == VK_SUCCESS)
     {
-        Pal::PresentMode presentMode = (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
-                                        ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
+        // Note:
+        // DirectDisplay platform has only fullscreen mode.
+        // Win32 fullscreen provides additional fifo relaxed mode,
+        // it will fallback to fifo for windowed mode.
+
         result = ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfacePresentModes(
             displayableInfo,
-            presentMode,
+            Pal::PresentMode::Count,
             pPresentModeCount,
             pPresentModes);
     }

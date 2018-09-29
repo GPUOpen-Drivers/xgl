@@ -1568,13 +1568,20 @@ void CmdBuffer::BindDescriptorSets(
             {
                 // NOTE: We currently have to supply patched SRDs directly in used data registers. If we'll have proper
                 // support for dynamic descriptors in SC then we'll only need to write the dynamic offsets directly.
-                DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
-                    pDescriptorSets[i],
-                    &(m_state.perGpuState[DefaultDeviceIndex].
-                        setBindingData[static_cast<uint32_t>(bindPoint)][setLayoutInfo.dynDescDataRegOffset]),
-                    pDynamicOffsets,
-                    setLayoutInfo.dynDescCount,
-                    robustBufferAccess);
+                uint32_t deviceIdx = 0;
+                do
+                {
+                    DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
+                        pDescriptorSets[i],
+                        deviceIdx,
+                        &(m_state.perGpuState[deviceIdx].
+                            setBindingData[static_cast<uint32_t>(bindPoint)][setLayoutInfo.dynDescDataRegOffset]),
+                        pDynamicOffsets,
+                        setLayoutInfo.dynDescCount,
+                        robustBufferAccess);
+
+                    deviceIdx++;
+                } while (deviceIdx < numPalDevices);
 
                 // Skip over the already consumed dynamic offsets.
                 pDynamicOffsets += setLayoutInfo.dynDescCount;
@@ -2197,11 +2204,7 @@ void CmdBuffer::FillBuffer(
         fillSize = Util::RoundDownToMultiple(pDestBuffer->GetSize() - destOffset, static_cast<VkDeviceSize>(sizeof(data) ) );
     }
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
-    while (deviceGroup.Iterate())
-    {
-        PalCmdFillBuffer(pDestBuffer, pDestBuffer->MemOffset() + destOffset, fillSize, data);
-    }
+    PalCmdFillBuffer(pDestBuffer, pDestBuffer->MemOffset() + destOffset, fillSize, data);
 
     DbgBarrierPostCmd(DbgBarrierCopyBuffer);
 }
@@ -3938,6 +3941,8 @@ void CmdBuffer::BeginRenderPass(
         if (pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount > 0)
         {
             utils::IterateMask deviceGroup(pDeviceGroupRenderPassBeginInfo->deviceMask);
+
+            VK_ASSERT(m_pDevice->NumPalDevices() == pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount);
 
             while (deviceGroup.Iterate())
             {

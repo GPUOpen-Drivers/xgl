@@ -161,6 +161,7 @@ static void OverrideProfiledSettings(
         pSettings->anisoThreshold    = 1.0f;
 
         pSettings->prefetchShaders = true;
+        pSettings->disableMsaaStencilShaderRead = true;
 
     }
 
@@ -174,6 +175,7 @@ static void OverrideProfiledSettings(
         pSettings->anisoThreshold    = 1.0f;
 
         pSettings->prefetchShaders = true;
+        pSettings->disableMsaaStencilShaderRead = true;
     }
 
     if (appProfile == AppProfile::Talos)
