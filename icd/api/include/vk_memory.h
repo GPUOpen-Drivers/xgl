@@ -202,9 +202,7 @@ private:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator,
         const Pal::GpuMemoryCreateInfo& createInfo,
-#if PAL_INTERFACE_MAJOR_VERSION >= 433
         const Pal::GpuMemoryExportInfo& exportInfo,
-#endif
         uint32_t                        allocationMask,
         bool                            multiInstanceHeap,
         Memory**                        ppMemory);

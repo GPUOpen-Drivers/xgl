@@ -764,7 +764,7 @@ void CmdBuffer::PalCmdCopyBuffer(
     uint32_t               regionCount,
     Pal::MemoryCopyRegion* pRegions)
 {
-    if (m_pDevice->IsMultiGpu() == false) // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
         Pal::IGpuMemory* const pSrcMemory = pSrcBuffer->PalMemory(DefaultDeviceIndex);
         Pal::IGpuMemory* const pDstMemory = pDstBuffer->PalMemory(DefaultDeviceIndex);
@@ -834,7 +834,7 @@ void CmdBuffer::PalCmdCopyImage(
     uint32_t              regionCount,
     Pal::ImageCopyRegion* pRegions)
 {
-    if (m_pDevice->IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
         PalCmdBuffer(DefaultDeviceIndex)->CmdCopyImage(
             *pSrcImage->PalImage(DefaultDeviceIndex),
@@ -870,7 +870,7 @@ void CmdBuffer::PalCmdScaledCopyImage(
     const Image* const   pDstImage,
     Pal::ScaledCopyInfo& copyInfo)
 {
-    if (m_pDevice->IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
         copyInfo.pSrcImage = pSrcImage->PalImage(DefaultDeviceIndex);
         copyInfo.pDstImage = pDstImage->PalImage(DefaultDeviceIndex);
@@ -902,7 +902,7 @@ void CmdBuffer::PalCmdCopyMemoryToImage(
     uint32_t                    regionCount,
     Pal::MemoryImageCopyRegion* pRegions)
 {
-    if (m_pDevice->IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
         PalCmdBuffer(DefaultDeviceIndex)->CmdCopyMemoryToImage(
             *pSrcBuffer->PalMemory(DefaultDeviceIndex),
@@ -936,7 +936,7 @@ void CmdBuffer::PalCmdCopyImageToMemory(
     uint32_t                    regionCount,
     Pal::MemoryImageCopyRegion* pRegions)
 {
-    if (m_pDevice->IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
         PalCmdBuffer(DefaultDeviceIndex)->CmdCopyImageToMemory(
             *pSrcImage->PalImage(DefaultDeviceIndex),
@@ -5937,28 +5937,6 @@ VKAPI_ATTR void VKAPI_CALL vkFreeCommandBuffers(
             ApiCmdBuffer::ObjectFromHandle(pCommandBuffers[i])->Destroy();
         }
     }
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHX(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    baseGroupX,
-    uint32_t                                    baseGroupY,
-    uint32_t                                    baseGroupZ,
-    uint32_t                                    groupCountX,
-    uint32_t                                    groupCountY,
-    uint32_t                                    groupCountZ)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->DispatchOffset(baseGroupX, baseGroupY, baseGroupZ,
-                                                                  groupCountX, groupCountY, groupCountZ);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHX(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    deviceMask)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDeviceMask(deviceMask);
 }
 
 // =====================================================================================================================

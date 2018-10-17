@@ -66,7 +66,6 @@
 #undef max
 #undef min
 
-#include <new>
 #include <cstring>
 #include <algorithm>
 #include <climits>
@@ -500,7 +499,6 @@ VkResult PhysicalDevice::Initialize()
                     VK_ASSERT(memoryHeap.size == heapProperties[Pal::GpuHeapGartCacheable].heapSize);
 
                     heapIndices[Pal::GpuHeapGartCacheable] = heapIndex;
-
                 }
                 else if ((palGpuHeap == Pal::GpuHeapLocal) &&
                          (heapIndices[Pal::GpuHeapInvisible] == Pal::GpuHeapCount))
@@ -939,6 +937,12 @@ VkResult PhysicalDevice::GetImageFormatProperties(
 
     Pal::SwizzledFormat palFormat = VkToPalFormat(format);
 
+    // NOTE: BytesPerPixel obtained from PAL is per block not per pixel for compressed formats.  Therefore,
+    //       maxResourceSize/maxExtent are also in terms of blocks for compressed formats.  I.e. we don't
+    //       increase our exposed limits for compressed formats even though PAL/HW operating in terms of
+    //       blocks makes that possible.
+    const uint64_t bytesPerPixel = Pal::Formats::BytesPerPixel(palFormat.format);
+
     // Block-compressed formats are not supported for 1D textures (PAL image creation will fail).
     if (Pal::Formats::IsBlockCompressed(palFormat.format) && (type == VK_IMAGE_TYPE_1D))
     {
@@ -985,7 +989,9 @@ VkResult PhysicalDevice::GetImageFormatProperties(
             switch (type)
             {
                 case VK_IMAGE_TYPE_1D:
+                {
                     return VK_ERROR_FORMAT_NOT_SUPPORTED;
+                }
                 case VK_IMAGE_TYPE_2D:
                 {
                     const bool sparseResidencyImage2D = (GetPrtFeatures() & Pal::PrtFeatureImage2D) != 0;
@@ -1001,6 +1007,11 @@ VkResult PhysicalDevice::GetImageFormatProperties(
                                                                              Pal::PrtFeatureNonStandardImage3D)) != 0;
                     if (!sparseResidencyImage3D)
                     {
+                        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+                    }
+                    else if (Formats::IsBcCompressedFormat(format) && (bytesPerPixel == 16))
+                    {
+                        // A combination of 3D PRT image and 128-bit BC format is not supported.
                         return VK_ERROR_FORMAT_NOT_SUPPORTED;
                     }
                     break;
@@ -1071,11 +1082,6 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     // NOTE: The spec requires the reported value to be at least 2**31, even though it does not make
     //       much sense for some cases ..
     //
-    // NOTE: BytesPerPixel obtained from PAL is per block not per pixel for compressed formats.  Therefore,
-    //       maxResourceSize/maxExtent are also in terms of blocks for compressed formats.  I.e. we don't
-    //       increase our exposed limits for compressed formats even though PAL/HW operating in terms of
-    //       blocks makes that possible.
-    uint64_t bytesPerPixel = Pal::Formats::BytesPerPixel(palFormat.format);
     uint32_t currMipSize[3] =
     {
         imageProps.maxDimensions.width,
@@ -1220,6 +1226,11 @@ void PhysicalDevice::GetSparseImageFormatProperties(
         {
             supported = false;
         }
+    }
+    else if ((type == VK_IMAGE_TYPE_3D) && (bytesPerPixel == 16) && Formats::IsBcCompressedFormat(format))
+    {
+        // A combination of 3D image and 128-bit BC format is not supported.
+        supported = false;
     }
 
     if (supported)
@@ -2629,11 +2640,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_IMAGE_LOAD_STORE_LOD));
 
-    if (pInstance->IsExtensionSupported(InstanceExtensions::KHX_DEVICE_GROUP_CREATION))
-    {
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHX_DEVICE_GROUP));
-    }
-
     if (pInstance->IsExtensionSupported(InstanceExtensions::KHR_DEVICE_GROUP_CREATION))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEVICE_GROUP));
@@ -2664,6 +2670,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_8BIT_STORAGE));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_ATOMIC_INT64));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DRIVER_PROPERTIES));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CREATE_RENDERPASS2));
@@ -2737,6 +2744,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
 #if VKI_SHADER_COMPILER_CONTROL
 #endif
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
 
     return availableExtensions;
 }
@@ -2970,32 +2980,6 @@ VkResult PhysicalDevice::GetRandROutputDisplay(
     Pal::IScreen* pScreen = nullptr;
 
     pScreen = VkInstance()->FindScreenFromRandrOutput(PalDevice(), dpy, randrOutput);
-
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 435
-    if (pScreen == nullptr)
-    {
-        Pal::OsDisplayHandle hDisplay = dpy;
-        uint32_t connectorId          = UINT32_MAX;
-
-        result = PalToVkResult(m_pPalDevice->GetConnectorIdFromOutput(hDisplay,
-                                                                      randrOutput,
-                                                                      VkToPalWsiPlatform(VK_ICD_WSI_PLATFORM_XLIB),
-                                                                      &connectorId));
-        if (result == VK_SUCCESS)
-        {
-            pScreen = VkInstance()->FindScreenFromConnectorId(PalDevice(), connectorId);
-
-            if ((pScreen != nullptr))
-            {
-                pScreen->SetRandrOutput(randrOutput);
-            }
-            else
-            {
-                result = VK_INCOMPLETE;
-            }
-        }
-    }
-#endif
 
     *pDisplay = reinterpret_cast<VkDisplayKHR>(pScreen);
 
@@ -3465,7 +3449,6 @@ void PhysicalDevice::GetDeviceProperties2(
             // We don't have limits on number of desc sets
             pMaintenance3Properties->maxPerSetDescriptors    = UINT32_MAX;
 
-            // TODO: SWDEV-79454 - Get these limits from PAL
             // Return 2GB in bytes as max allocation size
             pMaintenance3Properties->maxMemoryAllocationSize = 2u * 1024u * 1024u * 1024u;
             break;
@@ -3609,11 +3592,13 @@ void PhysicalDevice::GetDeviceProperties2(
 
             break;
         }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
         {
             pVertexAttributeDivisorProperties->maxVertexAttribDivisor = UINT32_MAX;
             break;
         }
+
         default:
             break;
         }
@@ -4741,17 +4726,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceFormats2KHR(
     }
 
     return result;
-}
-
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHX(
-    VkPhysicalDevice                            physicalDevice,
-    VkSurfaceKHR                                surface,
-    uint32_t*                                   pRectCount,
-    VkRect2D*                                   pRects)
-{
-    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->
-        GetPhysicalDevicePresentRectangles(surface, pRectCount, pRects);
 }
 
 // =====================================================================================================================

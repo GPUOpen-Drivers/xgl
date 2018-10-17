@@ -22,33 +22,29 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+ /**
+ ***********************************************************************************************************************
+ * @file  vk_layer_all_null_devices.h
+ * @brief When the AMDVLK_NULL_GPU=ALL environment variable is set, this layer will provide a list of all possible
+ *        NULL devices to the application. No physical device objects will be exposed to the application because there
+ *        is a limit on the number of physical device objects that can be created. VkPhysicalDeviceProperties pointers
+ *        are exposed through the VkPhysicalDevice handles in vkEnumeratePhysicalDevices_ND so that
+ *        vkGetPhysicalDeviceProperties_ND can expose the properties for the appropriate NULL device.
+ ***********************************************************************************************************************
+ */
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#ifndef __VK_LAYER_ALL_NULL_DEVICES_H__
+#define __VK_LAYER_ALL_NULL_DEVICES_H__
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#pragma once
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+namespace vk
+{
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
+class DispatchTable;
 
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   59
+void OverrideDispatchTable_ND(DispatchTable* pDispatchTable);
 
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
+} // namespace vk
 
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            0x00000002  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      ""
-
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           1
-#define CTS_VERSION_SUBMINOR        1
-#define CTS_VERSION_PATCH           2
+#endif /* __VK_LAYER_ALL_NULL_DEVICES_H__ */

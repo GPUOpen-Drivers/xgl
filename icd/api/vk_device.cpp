@@ -200,7 +200,6 @@ Device::Device(
     m_pInstance(pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_settings(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings()),
     m_palDeviceCount(palDeviceCount),
-    m_pPalQueueMemory(nullptr),
     m_internalMemMgr(this, pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_shaderOptimizer(this, pPhysicalDevices[DefaultDeviceIndex]),
     m_renderStateCache(this),
@@ -209,17 +208,33 @@ Device::Device(
     m_dispatchTable(DispatchTable::Type::DEVICE, m_pInstance, this),
     m_pSqttMgr(nullptr)
 {
-    memcpy(m_pPhysicalDevices, pPhysicalDevices, sizeof(pPhysicalDevices[DefaultDeviceIndex]) * palDeviceCount);
-    memcpy(m_pPalDevices, pPalDevices, sizeof(pPalDevices[0]) * palDeviceCount);
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
-    memset(m_pSharedPalCmdAllocator, 0, sizeof(m_pSharedPalCmdAllocator));
-    memset(&m_enabledFeatures, 0, sizeof(VkPhysicalDeviceFeatures));
-    memset(m_allocatedMemorySize, 0, sizeof(m_allocatedMemorySize));
-    memset(m_totalMemorySize, 0, sizeof(m_totalMemorySize));
+
+    for (uint32_t deviceIdx = 0; deviceIdx < palDeviceCount; ++deviceIdx)
+    {
+        m_perGpu[deviceIdx].pPhysicalDevice = pPhysicalDevices[deviceIdx];
+        m_perGpu[deviceIdx].pPalDevice      = pPalDevices[deviceIdx];
+
+        m_perGpu[deviceIdx].pSharedPalCmdAllocator = nullptr;
+
+        for (uint32_t i = 0; i < Pal::GpuHeap::GpuHeapCount; ++i)
+        {
+            m_perGpu[deviceIdx].allocatedMemorySize[i] = 0;
+            m_perGpu[deviceIdx].totalMemorySize[i]     = 0;
+        }
+
+        m_perGpu[deviceIdx].pSwCompositingMemory    = nullptr;
+        m_perGpu[deviceIdx].pSwCompositingQueue     = nullptr;
+        m_perGpu[deviceIdx].pSwCompositingSemaphore = nullptr;
+    }
 
     if (pFeatures != nullptr)
     {
         memcpy(&m_enabledFeatures, pFeatures, sizeof(VkPhysicalDeviceFeatures));
+    }
+    else
+    {
+        memset(&m_enabledFeatures, 0, sizeof(VkPhysicalDeviceFeatures));
     }
 
     if (m_settings.robustBufferAccess == FeatureForceEnable)
@@ -547,18 +562,39 @@ VkResult Device::Create(
         }
     }
 
-    // Create the queues for the device up-front and hand them to the new
-    // device object.
-    struct DeviceAndQueues
-    {
-        DispatchableDevice device;
-        DispatchableQueue  queue[1];
-    } * pDeviceAndQueues;
+    // Create the queues for the device up-front and hand them to the new device object.
+    size_t apiDeviceSize = ObjectSize(sizeof(DispatchableDevice), numDevices);
+    size_t apiQueueSize  = sizeof(DispatchableQueue);
 
-    DispatchableQueue* pQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
+    // Compute the amount of memory required for each queue type.
+    size_t   palQueueMemorySize = 0;
+    uint32_t queueFamilyIndex;
+    uint32_t queueIndex;
+
+    for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
+    {
+        for (queueIndex = 0; queueIndex < queueCounts[queueFamilyIndex]; queueIndex++)
+        {
+            for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
+            {
+                Pal::QueueCreateInfo queueCreateInfo = {};
+                ConstructQueueCreateInfo(pPhysicalDevices,
+                    deviceIdx,
+                    queueFamilyIndex,
+                    queueIndex,
+                    dedicatedComputeUnits[queueFamilyIndex][queueIndex],
+                    queuePriority[queueFamilyIndex],
+                    &queueCreateInfo);
+
+                palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSize(queueCreateInfo, &palResult);
+
+                VK_ASSERT(palResult == Pal::Result::Success);
+            }
+        }
+    }
 
     pMemory = pInstance->AllocMem(
-        sizeof(DispatchableDevice) + (totalQueues * sizeof(DispatchableQueue)),
+        apiDeviceSize + (totalQueues * apiQueueSize) + palQueueMemorySize,
         VK_DEFAULT_MEM_ALIGN,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -566,209 +602,149 @@ VkResult Device::Create(
 
     if ((pCreateInfo != nullptr) && (pMemory != nullptr))
     {
-        vkResult = PalToVkResult(palResult);
+        vkResult = VK_SUCCESS;
 
-        // Ensure success - we have a PAL result here.
-        if (palResult == Pal::Result::Success)
+        // Create barrier policy for the device.
+        DeviceBarrierPolicy barrierPolicy(pPhysicalDevice,
+                                          pCreateInfo,
+                                          enabledDeviceExtensions);
+
+        // Construct API device object.
+        VK_INIT_DISPATCHABLE(Device, pMemory, (
+            numDevices,
+            pPhysicalDevices,
+            pPalDevices,
+            barrierPolicy,
+            enabledDeviceExtensions,
+            pCreateInfo->pEnabledFeatures));
+
+        DispatchableDevice* pDispatchableDevice = static_cast<DispatchableDevice*>(pMemory);
+        DispatchableQueue*  pDispatchableQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
+
+        void* pApiQueueMemory = Util::VoidPtrInc(pMemory, apiDeviceSize);
+        void* pPalQueueMemory = Util::VoidPtrInc(pApiQueueMemory, (apiQueueSize * totalQueues));
+
+        Pal::IQueue* pPalQueues[MaxPalDevices] = {};
+        size_t       palQueueMemoryOffset      = 0;
+
+        wchar_t executableName[PATH_MAX];
+        wchar_t executablePath[PATH_MAX];
+        utils::GetExecutableNameAndPath(executableName, executablePath);
+
+        for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
         {
-            // Create barrier policy for the device.
-            DeviceBarrierPolicy barrierPolicy(pPhysicalDevice,
-                                              pCreateInfo,
-                                              enabledDeviceExtensions);
-
-            // Construct API device object.
-            VK_INIT_DISPATCHABLE(Device, pMemory, (
-                numDevices,
-                pPhysicalDevices,
-                pPalDevices,
-                barrierPolicy,
-                enabledDeviceExtensions,
-                pCreateInfo->pEnabledFeatures));
-
-            Pal::IQueue* pPalQueues[MaxPalDevices];
-
-            pDeviceAndQueues = reinterpret_cast<DeviceAndQueues*>(pMemory);
-
-            uint32_t initializedQueues = 0;
-            uint32_t queueFamilyIndex;
-            uint32_t queueIndex;
-
-            // Compute the amount of memory required for each queue type.
-            size_t palQueueMemorySize = 0;
-
-            for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
+            for (queueIndex = 0; queueIndex < queueCounts[queueFamilyIndex]; queueIndex++)
             {
-                for (queueIndex = 0; queueIndex < queueCounts[queueFamilyIndex]; queueIndex++)
+                // Create the Pal queues per device
+                uint32_t deviceIdx;
+                for (deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
                 {
-                    for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
+                    Pal::QueueCreateInfo queueCreateInfo = {};
+                    ConstructQueueCreateInfo(pPhysicalDevices,
+                                             deviceIdx,
+                                             queueFamilyIndex,
+                                             queueIndex,
+                                             dedicatedComputeUnits[queueFamilyIndex][queueIndex],
+                                             queuePriority[queueFamilyIndex],
+                                             &queueCreateInfo);
+
+                    palResult = pPalDevices[deviceIdx]->CreateQueue(queueCreateInfo,
+                                                            Util::VoidPtrInc(pPalQueueMemory, palQueueMemoryOffset),
+                                                            &pPalQueues[deviceIdx]);
+
+                    if (palResult != Pal::Result::Success)
                     {
-                        Pal::QueueCreateInfo queueCreateInfo = {};
-                        ConstructQueueCreateInfo(pPhysicalDevices,
-                                                 deviceIdx,
-                                                 queueFamilyIndex,
-                                                 queueIndex,
-                                                 dedicatedComputeUnits[queueFamilyIndex][queueIndex],
-                                                 queuePriority[queueFamilyIndex],
-                                                 &queueCreateInfo);
-
-                        palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSize(queueCreateInfo, &palResult);
-
-                        VK_ASSERT(palResult == Pal::Result::Success);
-                    }
-                }
-            }
-
-            wchar_t executableName[PATH_MAX];
-            wchar_t executablePath[PATH_MAX];
-            utils::GetExecutableNameAndPath(executableName, executablePath);
-
-            // allocate memory for all Pal queues
-            uint8_t* pPalQueueMemory = nullptr;
-
-            if (palQueueMemorySize > 0)
-            {
-                pPalQueueMemory = static_cast<uint8_t*>(
-                    pAllocator->pfnAllocation(
-                        pAllocator->pUserData,
-                        palQueueMemorySize,
-                        VK_DEFAULT_MEM_ALIGN,
-                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-
-                if (pPalQueueMemory == nullptr)
-                {
-                    vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
-                }
-            }
-
-            if (vkResult == VK_SUCCESS)
-            {
-                size_t palQueueMemoryOffset = 0;
-
-                for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
-                {
-                    for (queueIndex = 0; queueIndex < queueCounts[queueFamilyIndex]; queueIndex++)
-                    {
-                        // Create the Pal queues per device
-                        uint32_t deviceIdx;
-                        for (deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
-                        {
-                            Pal::QueueCreateInfo queueCreateInfo = {};
-                            ConstructQueueCreateInfo(pPhysicalDevices,
-                                                     deviceIdx,
-                                                     queueFamilyIndex,
-                                                     queueIndex,
-                                                     dedicatedComputeUnits[queueFamilyIndex][queueIndex],
-                                                     queuePriority[queueFamilyIndex],
-                                                     &queueCreateInfo);
-
-                            palResult = pPalDevices[deviceIdx]->CreateQueue(queueCreateInfo,
-                                                                pPalQueueMemory + palQueueMemoryOffset,
-                                                                &pPalQueues[deviceIdx]);
-
-                            if (palResult != Pal::Result::Success)
-                            {
-                                break;
-                            }
-
-                            // On the creation of each command queue, the escape
-                            // KMD_ESUBFUNC_UPDATE_APP_PROFILE_POWER_SETTING needs to be called, to provide the app's
-                            // executable name and path. This lets KMD use the context created per queue for tracking
-                            // the app.
-                            palResult = pPalQueues[deviceIdx]->UpdateAppPowerProfile(static_cast<const wchar_t*>(executableName),
-                                                                         static_cast<const wchar_t*>(executablePath));
-
-                            // SWDEV-100175 KMD currently returns STATUS_INVALID_PARAMETER if a profile for the current
-                            // application does not exist.This maps to Pal ErrorInvalidValue. Silenty ignore this error.
-                            if ((palResult != Pal::Result::Success) &&
-                                (palResult != Pal::Result::Unsupported) &&
-                                (palResult != Pal::Result::ErrorInvalidValue) &&
-                                (palResult != Pal::Result::ErrorUnavailable))
-                            {
-                                pPalQueues[deviceIdx]->Destroy();
-                                break;
-                            }
-
-                            palResult = Pal::Result::Success;
-
-                            palQueueMemoryOffset += pPalDevices[deviceIdx]->GetQueueSize(queueCreateInfo, &palResult);
-                        }
-
-                        if (palResult != Pal::Result::Success)
-                        {
-                            while (deviceIdx-- > 0)
-                            {
-                                pPalQueues[deviceIdx]->Destroy();
-                            }
-                        }
-                        else
-                        {
-                            VirtualStackAllocator* pQueueStackAllocator = nullptr;
-
-                            palResult = pInstance->StackMgr()->AcquireAllocator(&pQueueStackAllocator);
-
-                            if (palResult != Pal::Result::Success)
-                            {
-                                goto queue_fail;
-                            }
-
-                            // Create the vk::Queue object
-                            VK_INIT_DISPATCHABLE(Queue,
-                                                 &pDeviceAndQueues->queue[initializedQueues],
-                                                 (pDeviceAndQueues->device,
-                                                 queueFamilyIndex,
-                                                 queueIndex,
-                                                 queueFlags[queueFamilyIndex],
-                                                 pPalQueues,
-                                                 pQueueStackAllocator));
-
-                            pQueues[queueFamilyIndex][queueIndex] = &pDeviceAndQueues->queue[initializedQueues];
-
-                            initializedQueues++;
-                        }
-                    }
-                }
-queue_fail:
-                // No matter how we exited the loops above, convert the PAL result and decide if we should continue
-                // processing.
-                vkResult = PalToVkResult(palResult);
-
-                if (vkResult != VK_SUCCESS)
-                {
-                    // Cleanup any successfully created queues before failure
-                    for (uint32_t i = 0; i < initializedQueues; ++i)
-                    {
-                        Util::Destructor(static_cast<Queue*>(pDeviceAndQueues->queue[i]));
+                        break;
                     }
 
-                    pAllocator->pfnFree(pAllocator->pUserData, pPalQueueMemory);
+                    // On the creation of each command queue, the escape
+                    // KMD_ESUBFUNC_UPDATE_APP_PROFILE_POWER_SETTING needs to be called, to provide the app's
+                    // executable name and path. This lets KMD use the context created per queue for tracking
+                    // the app.
+                    palResult = pPalQueues[deviceIdx]->UpdateAppPowerProfile(static_cast<const wchar_t*>(executableName),
+                                                                             static_cast<const wchar_t*>(executablePath));
+
+                    if ((palResult != Pal::Result::Success) &&
+                        (palResult != Pal::Result::Unsupported) &&
+                        (palResult != Pal::Result::ErrorInvalidValue) &&
+                        (palResult != Pal::Result::ErrorUnavailable))
+                    {
+                        pPalQueues[deviceIdx]->Destroy();
+                        break;
+                    }
+
+                    palResult = Pal::Result::Success;
+
+                    palQueueMemoryOffset += pPalDevices[deviceIdx]->GetQueueSize(queueCreateInfo, &palResult);
+                }
+
+                VirtualStackAllocator* pQueueStackAllocator = nullptr;
+
+                if (palResult == Pal::Result::Success)
+                {
+                    palResult = pInstance->StackMgr()->AcquireAllocator(&pQueueStackAllocator);
+                }
+
+                if (palResult == Pal::Result::Success)
+                {
+                    // Create the vk::Queue object
+                    VK_INIT_DISPATCHABLE(Queue, pApiQueueMemory, (
+                        *pDispatchableDevice,
+                        queueFamilyIndex,
+                        queueIndex,
+                        queueFlags[queueFamilyIndex],
+                        pPalQueues,
+                        pQueueStackAllocator));
+
+                    pDispatchableQueues[queueFamilyIndex][queueIndex] = static_cast<DispatchableQueue*>(pApiQueueMemory);
+
+                    pApiQueueMemory = Util::VoidPtrInc(pApiQueueMemory, apiQueueSize);
                 }
                 else
                 {
-                    vkResult = pDeviceAndQueues->device->Initialize(
-                        &pQueues[0][0], pPalQueueMemory, enabledDeviceExtensions);
-
-                    // If we've failed to Initialize, make sure we destroy anything we might have allocated.
-                    if (vkResult != VK_SUCCESS)
+                    while (deviceIdx-- > 0)
                     {
-                        pDeviceAndQueues->device->Destroy(pAllocator);
-
-                        // And don't continue further, so we don't try to double-free the pMemory, which was handled
-                        // by Destroy.
-                        return vkResult;
+                        pPalQueues[deviceIdx]->Destroy();
                     }
-                }
-
-                if (vkResult == VK_SUCCESS)
-                {
-                    *ppDevice = &pDeviceAndQueues->device;
-
-                    return VK_SUCCESS;
                 }
             }
         }
 
-        // Free memory
-        pInstance->FreeMem(pMemory);
+        // No matter how we exited the loops above, convert the PAL result and decide if we should continue
+        // processing.
+        vkResult = PalToVkResult(palResult);
+
+        if (vkResult != VK_SUCCESS)
+        {
+            // Cleanup any successfully created queues before failure
+            for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
+            {
+                for (queueIndex = 0; queueIndex < queueCounts[queueFamilyIndex]; queueIndex++)
+                {
+                    if (pDispatchableQueues[queueFamilyIndex][queueIndex] != nullptr)
+                    {
+                        Util::Destructor(static_cast<Queue*>(*(pDispatchableQueues[queueFamilyIndex][queueIndex])));
+                    }
+                }
+            }
+
+            // Free memory
+            pInstance->FreeMem(pMemory);
+        }
+        else
+        {
+            vkResult = (*pDispatchableDevice)->Initialize(&pDispatchableQueues[0][0], enabledDeviceExtensions);
+
+            // If we've failed to Initialize, make sure we destroy anything we might have allocated.
+            if (vkResult != VK_SUCCESS)
+            {
+                (*pDispatchableDevice)->Destroy(pAllocator);
+            }
+            else
+            {
+                *ppDevice = pDispatchableDevice;
+            }
+        }
     }
 
     return vkResult;
@@ -778,7 +754,6 @@ queue_fail:
 // Bring up the Vulkan device.
 VkResult Device::Initialize(
     DispatchableQueue**                 pQueues,
-    uint8_t*                            pPalQueueMemory,
     const DeviceExtensions::Enabled&    enabled)
 {
     // Initialize the internal memory manager
@@ -837,7 +812,7 @@ VkResult Device::Initialize(
 
                         palResult = PalDevice(deviceIdx)->CreateCmdAllocator(createInfo,
                             Util::VoidPtrInc(pAllocatorMem, allocatorSize * deviceIdx),
-                            &m_pSharedPalCmdAllocator[deviceIdx]);
+                            &m_perGpu[deviceIdx].pSharedPalCmdAllocator);
                     }
                     result = PalToVkResult(palResult);
 
@@ -857,8 +832,6 @@ VkResult Device::Initialize(
             }
         }
     }
-
-    m_pPalQueueMemory = pPalQueueMemory;
 
     memcpy(&m_pQueues, pQueues, sizeof(m_pQueues));
 
@@ -939,7 +912,7 @@ VkResult Device::Initialize(
                 if ((heapIdx == Pal::GpuHeapInvisible) ||
                     (heapIdx == Pal::GpuHeapLocal))
                 {
-                    m_totalMemorySize[deviceIdx][heapIdx] = heapProperties[heapIdx].heapSize;
+                    m_perGpu[deviceIdx].totalMemorySize[heapIdx] = heapProperties[heapIdx].heapSize;
                 }
             }
         }
@@ -1194,8 +1167,6 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
         }
     }
 
-    pAllocator->pfnFree(pAllocator->pUserData, m_pPalQueueMemory);
-
     for (uint32_t i = 0; i < BltMsaaStateCount; ++i)
     {
         m_renderStateCache.DestroyMsaaState(&m_pBltMsaaState[i][0], nullptr);
@@ -1207,12 +1178,30 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
     {
         for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
         {
-            if (m_pSharedPalCmdAllocator[deviceIdx] != nullptr)
+            if (m_perGpu[deviceIdx].pSharedPalCmdAllocator != nullptr)
             {
-                m_pSharedPalCmdAllocator[deviceIdx]->Destroy();
+                m_perGpu[deviceIdx].pSharedPalCmdAllocator->Destroy();
             }
         }
-        VkInstance()->FreeMem(m_pSharedPalCmdAllocator[DefaultDeviceIndex]);
+        VkInstance()->FreeMem(m_perGpu[DefaultDeviceIndex].pSharedPalCmdAllocator);
+    }
+
+    for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
+    {
+        if (m_perGpu[deviceIdx].pSwCompositingMemory != nullptr)
+        {
+            if (m_perGpu[deviceIdx].pSwCompositingSemaphore != nullptr)
+            {
+                m_perGpu[deviceIdx].pSwCompositingSemaphore->Destroy();
+            }
+
+            if (m_perGpu[deviceIdx].pSwCompositingQueue != nullptr)
+            {
+                m_perGpu[deviceIdx].pSwCompositingQueue->Destroy();
+            }
+
+            VkInstance()->FreeMem(m_perGpu[deviceIdx].pSwCompositingMemory);
+        }
     }
 
     m_renderStateCache.Destroy();
@@ -1475,12 +1464,12 @@ Pal::PrtFeatureFlags Device::GetPrtFeatures() const
 Pal::gpusize Device::GetVirtualAllocAlignment() const
 {
     const Pal::gpusize virtualAllocAlignment =
-                m_pPhysicalDevices[0]->PalProperties().gpuMemoryProperties.virtualMemAllocGranularity;
+                m_perGpu[0].pPhysicalDevice->PalProperties().gpuMemoryProperties.virtualMemAllocGranularity;
 
     for (uint32_t deviceIdx = 1; deviceIdx < NumPalDevices(); deviceIdx++)
     {
         VK_ASSERT(virtualAllocAlignment ==
-            (m_pPhysicalDevices[deviceIdx]->PalProperties().gpuMemoryProperties.virtualMemAllocGranularity));
+            (m_perGpu[deviceIdx].pPhysicalDevice->PalProperties().gpuMemoryProperties.virtualMemAllocGranularity));
     }
     return virtualAllocAlignment;
 }
@@ -1496,7 +1485,7 @@ VkResult Device::WaitForFences(
 
     Pal::IFence** ppPalFences = static_cast<Pal::IFence**>(VK_ALLOC_A(sizeof(Pal::IFence*) * fenceCount));
 
-    if (IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (IsMultiGpu() == false)
     {
         for (uint32_t i = 0; i < fenceCount; ++i)
         {
@@ -1765,7 +1754,7 @@ VkResult Device::CreateComputePipelines(
 }
 
 // =====================================================================================================================
-// Called in response to vkGetDeviceGroupPeerMemoryFeaturesKHX
+// Called in response to vkGetDeviceGroupPeerMemoryFeatures
 template<typename T>
 void Device::GetDeviceGroupPeerMemoryFeatures(
     uint32_t          heapIndex,
@@ -1813,10 +1802,6 @@ VkResult Device::GetDeviceGroupPresentCapabilities(
         VkDeviceGroupPresentCapabilitiesKHR* pVkDeviceGroupPresentCapabilitiesKHR;
     };
 
-    // KHX structure has the same definition as KHR or Vulkan 1.1 core structures
-    static_assert(VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHR == VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHX,
-                  "Mismatched KHR and KHX structure defines");
-
     for (pTemplatedCaps = pDeviceGroupPresentCapabilities; pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32_t>(pHeader->sType))
@@ -1830,7 +1815,7 @@ VkResult Device::GetDeviceGroupPresentCapabilities(
             memset(pCurrentType->presentMask, 0, sizeof(pCurrentType->presentMask));
             for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
             {
-                pCurrentType->presentMask[deviceIdx] = GetPalDeviceMask();
+                pCurrentType->presentMask[deviceIdx] = (1 << deviceIdx);
             }
             break;
         }
@@ -1849,11 +1834,9 @@ VkResult Device::GetDeviceGroupSurfacePresentModes(
     VkSurfaceKHR          surface,
     T*                    pModes) const
 {
-    *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR |
-              VK_DEVICE_GROUP_PRESENT_MODE_REMOTE_BIT_KHR;
+    *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
 
-        //TODO: SWDEV-120359 - Implement summed Presents
-        //      VK_DEVICE_GROUP_PRESENT_MODE_SUM_BIT_KHX;
+        //      VK_DEVICE_GROUP_PRESENT_MODE_SUM_BIT_KHR;
 
     return VK_SUCCESS;
 }
@@ -1863,10 +1846,6 @@ VkResult Device::BindBufferMemory(
     uint32_t                        bindInfoCount,
     const VkBindBufferMemoryInfo*   pBindInfos) const
 {
-    // KHX structure has the same definition as KHR or Vulkan 1.1 core structures
-    static_assert(VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO == VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO_KHX,
-                  "Mismatched 1.1 and KHX structure defines");
-
     union
     {
         const VkStructHeader*                    pHeader;
@@ -1924,12 +1903,6 @@ VkResult Device::BindImageMemory(
         const VkBindImageMemorySwapchainInfoKHR*     pVkBindImageMemorySwapchainInfo;
         const VkBindImageMemoryDeviceGroupInfo*      pVkBindImageMemoryDeviceGroupInfo;
     };
-
-    // KHX structures have the same definition as KHR or Vulkan 1.1 core structures
-    static_assert(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO_KHX,
-                  "Mismatched 1.1 and KHX structure defines");
-    static_assert(VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHX,
-                  "Mismatched KHR and KHX structure defines");
 
     for (uint32_t bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
@@ -2175,10 +2148,10 @@ VkResult Device::IncreaseAllocatedMemorySize(
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        Pal::gpusize memorySizePostAllocation = m_allocatedMemorySize[deviceIdx][heapIdx] + allocationSize;
-        if (memorySizePostAllocation <= m_totalMemorySize[deviceIdx][heapIdx])
+        Pal::gpusize memorySizePostAllocation = m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] + allocationSize;
+        if (memorySizePostAllocation <= m_perGpu[deviceIdx].totalMemorySize[heapIdx])
         {
-            m_allocatedMemorySize[deviceIdx][heapIdx] = memorySizePostAllocation;
+            m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] = memorySizePostAllocation;
             deviceMask |= 1 << deviceIdx;
         }
         else
@@ -2190,7 +2163,7 @@ VkResult Device::IncreaseAllocatedMemorySize(
             while (revDeviceGroup.Iterate())
             {
                 const uint32_t revDeviceIdx = revDeviceGroup.Index();
-                m_allocatedMemorySize[revDeviceIdx][heapIdx] -= allocationSize;
+                m_perGpu[revDeviceIdx].allocatedMemorySize[heapIdx] -= allocationSize;
             }
 
             break;
@@ -2213,8 +2186,134 @@ void Device::DecreaseAllocatedMemorySize(
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
-        m_allocatedMemorySize[deviceIdx][heapIdx] -= allocationSize;
+        m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] -= allocationSize;
     }
+}
+
+// =====================================================================================================================
+// One time setup for software compositing for this physical device
+VkResult Device::InitSwCompositing(
+    uint32_t deviceIdx)
+{
+    VkResult result = VK_SUCCESS;
+
+    if (m_perGpu[deviceIdx].pSwCompositingMemory == nullptr)
+    {
+        Pal::QueueSemaphoreCreateInfo semaphoreCreateInfo = {};
+        semaphoreCreateInfo.maxCount = 1;
+
+        Pal::Result palResult;
+
+        size_t palSemaphoreSize = PalDevice(deviceIdx)->GetQueueSemaphoreSize(semaphoreCreateInfo, &palResult);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
+        Pal::QueueCreateInfo queueCreateInfo = {};
+
+        queueCreateInfo.engineIndex = 0;
+        queueCreateInfo.engineType  = Pal::EngineType::EngineTypeDma;
+        queueCreateInfo.queueType   = Pal::QueueType::QueueTypeDma;
+
+        size_t palQueueSize = PalDevice(deviceIdx)->GetQueueSize(queueCreateInfo, &palResult);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
+        m_perGpu[deviceIdx].pSwCompositingMemory = VkInstance()->AllocMem(
+            (palQueueSize + palSemaphoreSize),
+            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        if (m_perGpu[deviceIdx].pSwCompositingMemory == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            palResult = PalDevice(deviceIdx)->CreateQueueSemaphore(
+                semaphoreCreateInfo,
+                m_perGpu[deviceIdx].pSwCompositingMemory,
+                &m_perGpu[deviceIdx].pSwCompositingSemaphore);
+
+            if (palResult == Pal::Result::Success)
+            {
+                palResult = PalDevice(deviceIdx)->CreateQueue(
+                    queueCreateInfo,
+                    Util::VoidPtrInc(m_perGpu[deviceIdx].pSwCompositingMemory, palSemaphoreSize),
+                    &m_perGpu[deviceIdx].pSwCompositingQueue);
+            }
+
+            // Clean up if any error is encountered
+            if (palResult != Pal::Result::Success)
+            {
+                if (m_perGpu[deviceIdx].pSwCompositingSemaphore != nullptr)
+                {
+                    m_perGpu[deviceIdx].pSwCompositingSemaphore->Destroy();
+                    m_perGpu[deviceIdx].pSwCompositingSemaphore = nullptr;
+                }
+
+                VkInstance()->FreeMem(m_perGpu[deviceIdx].pSwCompositingMemory);
+                m_perGpu[deviceIdx].pSwCompositingMemory = nullptr;
+
+                result = PalToVkError(palResult);
+            }
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Issue the software compositing and/or synchronization with the updated presenting queue
+Pal::IQueue* Device::PerformSwCompositing(
+    uint32_t         deviceIdx,
+    uint32_t         presentationDeviceIdx,
+    Pal::ICmdBuffer* pCommandBuffer,
+    Pal::QueueType   cmdBufferQueueType,
+    const Queue*     pQueue)
+{
+    Pal::IQueue* pPresentQueue = nullptr;
+    VkResult     result        = VK_SUCCESS;
+
+    // Initialization will be performed on the first use for both the slave and master devices
+    result = InitSwCompositing(deviceIdx);
+
+    if (result == VK_SUCCESS)
+    {
+        result = InitSwCompositing(presentationDeviceIdx);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        Pal::IQueue* pRenderQueue      = pQueue->PalQueue(deviceIdx);
+        Pal::IQueue* pCompositingQueue = pRenderQueue;
+
+        // For SW composition, we must use a different present queue for slave devices. Otherwise, frame pacing
+        // will block any rendering submitted to the master present queue. Using an internal master SDMA queue
+        // for the presents of all devices is the simplest solution to this.
+        pPresentQueue = m_perGpu[presentationDeviceIdx].pSwCompositingQueue;
+
+        if (deviceIdx != presentationDeviceIdx)
+        {
+            Pal::SubmitInfo submitInfo = {};
+
+            submitInfo.cmdBufferCount  = 1;
+            submitInfo.ppCmdBuffers    = &pCommandBuffer;
+
+            // Use the separate SDMA queue and synchronize the slave device's queue with the peer transfer
+            if (cmdBufferQueueType == Pal::QueueType::QueueTypeDma)
+            {
+                pCompositingQueue = m_perGpu[deviceIdx].pSwCompositingQueue;
+
+                pRenderQueue->SignalQueueSemaphore(m_perGpu[deviceIdx].pSwCompositingSemaphore);
+                pCompositingQueue->WaitQueueSemaphore(m_perGpu[deviceIdx].pSwCompositingSemaphore);
+            }
+
+            VK_ASSERT(cmdBufferQueueType == pCompositingQueue->Type());
+            pCompositingQueue->Submit(submitInfo);
+        }
+
+        pCompositingQueue->SignalQueueSemaphore(m_perGpu[deviceIdx].pSwCompositingSemaphore);
+        pPresentQueue->WaitQueueSemaphore(m_perGpu[deviceIdx].pSwCompositingSemaphore);
+    }
+
+    return pPresentQueue;
 }
 
 /**
@@ -2698,38 +2797,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupSurfacePresentModesKHR(
     VkDevice                                    device,
     VkSurfaceKHR                                surface,
     VkDeviceGroupPresentModeFlagsKHR*           pModes)
-{
-    return ApiDevice::ObjectFromHandle(device)->GetDeviceGroupSurfacePresentModes(surface, pModes);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHX(
-    VkDevice                                    device,
-    uint32_t                                    heapIndex,
-    uint32_t                                    localDeviceIndex,
-    uint32_t                                    remoteDeviceIndex,
-    VkPeerMemoryFeatureFlagsKHX*                pPeerMemoryFeatures)
-{
-    ApiDevice::ObjectFromHandle(device)->GetDeviceGroupPeerMemoryFeatures(
-        heapIndex,
-        localDeviceIndex,
-        remoteDeviceIndex,
-        pPeerMemoryFeatures);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupPresentCapabilitiesKHX(
-    VkDevice                                    device,
-    VkDeviceGroupPresentCapabilitiesKHX*        pDeviceGroupPresentCapabilities)
-{
-    return ApiDevice::ObjectFromHandle(device)->GetDeviceGroupPresentCapabilities(pDeviceGroupPresentCapabilities);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupSurfacePresentModesKHX(
-    VkDevice                                    device,
-    VkSurfaceKHR                                surface,
-    VkDeviceGroupPresentModeFlagsKHX*           pModes)
 {
     return ApiDevice::ObjectFromHandle(device)->GetDeviceGroupSurfacePresentModes(surface, pModes);
 }

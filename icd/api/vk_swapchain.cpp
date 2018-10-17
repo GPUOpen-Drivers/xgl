@@ -29,7 +29,7 @@
  ***********************************************************************************************************************
  */
 
-// These WSI header files should be included before vk_wsi_swapchina.h
+// These WSI header files should be included before vk_wsi_swapchain.h
 #include <xcb/xcb.h>
 #include "include/vk_conv.h"
 #include "include/vk_display.h"
@@ -63,6 +63,31 @@ static bool EnableFullScreen(
     Pal::IScreen**                  ppScreen);
 
 // =====================================================================================================================
+SwapChain::SwapChain(
+    Device*             pDevice,
+    const Properties&   properties,
+    VkPresentModeKHR    presentMode,
+    FullscreenMgr*      pFullscreenMgr,
+    SwCompositor*       pSwCompositor,
+    Pal::ISwapChain*    pPalSwapChain[])
+    :
+    m_pDevice(pDevice),
+    m_properties(properties),
+    m_nextImage(0),
+    m_pFullscreenMgr(pFullscreenMgr),
+    m_pSwCompositor(pSwCompositor),
+    m_appOwnedImageCount(0),
+    m_presentCount(0),
+    m_presentMode(presentMode),
+    m_deprecated(false)
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    {
+        m_pPalSwapChain[deviceIdx] = pPalSwapChain[deviceIdx];
+    }
+}
+
+// =====================================================================================================================
 // Creates a new Vulkan API swap chain object
 VkResult SwapChain::Create(
     Device*                                 pDevice,
@@ -72,16 +97,15 @@ VkResult SwapChain::Create(
 {
     VkResult result = VK_SUCCESS;
 
-    const VkDeviceGroupSwapchainCreateInfoKHX*  pDeviceGroupExt = nullptr;
+    const VkDeviceGroupSwapchainCreateInfoKHR*  pDeviceGroupExt = nullptr;
 
-    Pal::PresentableImageCreateInfo imageCreateInfo = {};
     Properties properties = {};
 
     union
     {
         const VkStructHeader*                      pHeader;
         const VkSwapchainCreateInfoKHR*            pVkSwapchainCreateInfoKHR;
-        const VkDeviceGroupSwapchainCreateInfoKHX* pVkDeviceGroupSwapchainCreateInfoKHX;
+        const VkDeviceGroupSwapchainCreateInfoKHR* pVkDeviceGroupSwapchainCreateInfoKHR;
     };
 
     for (pVkSwapchainCreateInfoKHR = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -132,12 +156,9 @@ VkResult SwapChain::Create(
                 // The swap chain is stereo if imageArraySize is 2
                 properties.stereo = (pVkSwapchainCreateInfoKHR->imageArrayLayers == 2) ? 1 : 0;
 
-                // Store the image format
-                properties.imageFormat  = pVkSwapchainCreateInfoKHR->imageFormat;
-
-                imageCreateInfo.swizzledFormat     = VkToPalFormat(pVkSwapchainCreateInfoKHR->imageFormat);
-                imageCreateInfo.flags.stereo       = properties.stereo;
-                imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
+                properties.imageCreateInfo.swizzledFormat     = VkToPalFormat(pVkSwapchainCreateInfoKHR->imageFormat);
+                properties.imageCreateInfo.flags.stereo       = properties.stereo;
+                properties.imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
 
                 VkFormatProperties formatProperties;
                 pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetFormatProperties(pVkSwapchainCreateInfoKHR->imageFormat,
@@ -146,21 +167,21 @@ VkResult SwapChain::Create(
                 imageUsage &=
                     VkFormatFeatureFlagsToImageUsageFlags(formatProperties.optimalTilingFeatures);
 
-                imageCreateInfo.usage              = VkToPalImageUsageFlags(imageUsage,
-                                                                        pVkSwapchainCreateInfoKHR->imageFormat,
-                                                                        1,
-                                                                        (VkImageUsageFlags)(0),
-                                                                        (VkImageUsageFlags)(0));
-                imageCreateInfo.extent         = VkToPalExtent2d(pVkSwapchainCreateInfoKHR->imageExtent);
-                imageCreateInfo.hDisplay       = properties.displayableInfo.displayHandle;
-                imageCreateInfo.hWindow        = properties.displayableInfo.windowHandle;
+                properties.imageCreateInfo.usage    = VkToPalImageUsageFlags(imageUsage,
+                                                                             pVkSwapchainCreateInfoKHR->imageFormat,
+                                                                             1,
+                                                                             (VkImageUsageFlags)(0),
+                                                                             (VkImageUsageFlags)(0));
+                properties.imageCreateInfo.extent   = VkToPalExtent2d(pVkSwapchainCreateInfoKHR->imageExtent);
+                properties.imageCreateInfo.hDisplay = properties.displayableInfo.displayHandle;
+                properties.imageCreateInfo.hWindow  = properties.displayableInfo.windowHandle;
 
             }
             break;
 
-        case VK_STRUCTURE_TYPE_DEVICE_GROUP_SWAPCHAIN_CREATE_INFO_KHX:
-            pDeviceGroupExt = pVkDeviceGroupSwapchainCreateInfoKHX;
-            properties.summedImage = (pDeviceGroupExt->modes & VK_DEVICE_GROUP_PRESENT_MODE_SUM_BIT_KHX) != 0;
+        case VK_STRUCTURE_TYPE_DEVICE_GROUP_SWAPCHAIN_CREATE_INFO_KHR:
+            pDeviceGroupExt = pVkDeviceGroupSwapchainCreateInfoKHR;
+            properties.summedImage = (pDeviceGroupExt->modes & VK_DEVICE_GROUP_PRESENT_MODE_SUM_BIT_KHR) != 0;
             break;
         default:
             // Skip any unknown extension structures
@@ -189,7 +210,7 @@ VkResult SwapChain::Create(
     swapChainCreateInfo.hWindow             = properties.displayableInfo.windowHandle;
     swapChainCreateInfo.wsiPlatform         = properties.displayableInfo.palPlatform;
     swapChainCreateInfo.imageCount          = pCreateInfo->minImageCount;
-    swapChainCreateInfo.imageSwizzledFormat = imageCreateInfo.swizzledFormat;
+    swapChainCreateInfo.imageSwizzledFormat = properties.imageCreateInfo.swizzledFormat;
     swapChainCreateInfo.imageExtent         = VkToPalExtent2d(pCreateInfo->imageExtent);
     swapChainCreateInfo.imageUsageFlags     = VkToPalImageUsageFlags(pCreateInfo->imageUsage,
                                                                      pCreateInfo->imageFormat,
@@ -247,13 +268,14 @@ VkResult SwapChain::Create(
 
     if (result == VK_SUCCESS)
     {
-        imageCreateInfo.pSwapChain = pPalSwapChain[DefaultDeviceIndex];
+        properties.imageCreateInfo.pSwapChain = pPalSwapChain[DefaultDeviceIndex];
     }
 
     // Allocate memory for the fullscreen manager if it's enabled.  We need to create it first before the
     // swap chain because it needs to have a say in how presentable images are created.
     Pal::IScreen*  pScreen        = nullptr;
     FullscreenMgr* pFullscreenMgr = nullptr;
+    SwCompositor*  pSwCompositor  = nullptr;
 
     // Figure out the mode the FullscreenMgr should be working in
     const FullscreenMgr::Mode mode =
@@ -280,8 +302,9 @@ VkResult SwapChain::Create(
             pFullscreenMgr = VK_PLACEMENT_NEW(pFullscreenStorage) FullscreenMgr(
                 pDevice,
                 mode,
-                swapChainCreateInfo,
                 pScreen,
+                props.hDisplay,
+                swapChainCreateInfo.hWindow,
                 props.vidPnSourceId);
         }
     }
@@ -291,7 +314,7 @@ VkResult SwapChain::Create(
         // Update the image create info to make them compatible with optional fullscreen presents.
         pFullscreenMgr->PreImageCreate(
             &properties.imagePresentSupport,
-            &imageCreateInfo);
+            &properties.imageCreateInfo);
     }
 
     properties.images      = static_cast<VkImage*>(Util::VoidPtrInc(pMemory, offset));
@@ -314,12 +337,12 @@ VkResult SwapChain::Create(
             // Create presentable image
             result = Image::CreatePresentableImage(
                 pDevice,
-                &imageCreateInfo,
+                &properties.imageCreateInfo,
                 pAllocator,
                 pCreateInfo->imageUsage,
                 properties.imagePresentSupport,
                 &properties.images[properties.imageCount],
-                properties.imageFormat,
+                pCreateInfo->imageFormat,
                 sharingMode,
                 pCreateInfo->queueFamilyIndexCount,
                 pCreateInfo->pQueueFamilyIndices,
@@ -352,21 +375,49 @@ VkResult SwapChain::Create(
 
     if (pFullscreenMgr != nullptr)
     {
+        // Initialize the fullscreen manager after presentable image creation
         VkImage anyImage = (properties.imageCount > 0) ? properties.images[0] : VK_NULL_HANDLE;
 
         pFullscreenMgr->PostImageCreate(Image::ObjectFromHandle(anyImage));
+
+        // Only create a SW compositor for MGPU if fullscreen doesn't support HW compositing
+        if (pDevice->NumPalDevices() > 1)
+        {
+            Pal::GetPrimaryInfoInput primaryInfoInput = {};
+
+            primaryInfoInput.vidPnSrcId     = pFullscreenMgr->GetVidPnSourceId();
+            primaryInfoInput.width          = properties.imageCreateInfo.extent.width;
+            primaryInfoInput.height         = properties.imageCreateInfo.extent.height;
+            primaryInfoInput.swizzledFormat = properties.imageCreateInfo.swizzledFormat;
+
+            Pal::GetPrimaryInfoOutput primaryInfoOutput = {};
+
+            pDevice->PalDevice(DefaultDeviceIndex)->GetPrimaryInfo(primaryInfoInput, &primaryInfoOutput);
+
+            if ((primaryInfoOutput.flags.dvoHwMode | primaryInfoOutput.flags.xdmaHwMode) == 0)
+            {
+                VK_ASSERT(primaryInfoOutput.flags.swMode);
+
+                pSwCompositor = SwCompositor::Create(pDevice,
+                                                     pAllocator,
+                                                     properties,
+                                                     pDevice->GetRuntimeSettings().useSdmaCompositingBlt);
+            }
+        }
     }
 
     if (result == VK_SUCCESS)
     {
-        VK_PLACEMENT_NEW(pMemory) SwapChain(pDevice, properties, pFullscreenMgr);
+        VK_PLACEMENT_NEW(pMemory) SwapChain(pDevice,
+                                            properties,
+                                            pCreateInfo->presentMode,
+                                            pFullscreenMgr,
+                                            pSwCompositor,
+                                            pPalSwapChain);
 
         *pSwapChain = SwapChain::HandleFromVoidPointer(pMemory);
 
         SwapChain* pObject = SwapChain::ObjectFromHandle(*pSwapChain);
-
-        memcpy(pObject->m_pPalSwapChain, pPalSwapChain, sizeof(pPalSwapChain));
-        pObject->m_presentMode = pCreateInfo->presentMode;
 
         for (uint32_t i = 0; i < properties.imageCount; ++i)
         {
@@ -421,6 +472,11 @@ VkResult SwapChain::Destroy(const VkAllocationCallbacks* pAllocator)
         m_pFullscreenMgr->Destroy(pAllocator);
     }
 
+    if (m_pSwCompositor != nullptr)
+    {
+        m_pSwCompositor->Destroy(m_pDevice, pAllocator);
+    }
+
     for (uint32_t i = 0; i < m_properties.imageCount; ++i)
     {
         // Remove memory references to presentable image memory and destroy the images and image memory.
@@ -458,7 +514,7 @@ Pal::Result SwapChain::PalSwapChainWaitIdle() const
 }
 
 // =====================================================================================================================
-// Wait for all devices to be idle
+// Destroy all of the PAL swap chains
 // =====================================================================================================================
 void SwapChain::PalSwapChainDestroy()
 {
@@ -487,12 +543,8 @@ VkResult SwapChain::AcquireNextImage(
     union
     {
         const VkStructHeader*             pHeader;
-        const VkAcquireNextImageInfoKHX*  pVkAcquireNextImageInfoKHX;
+        const VkAcquireNextImageInfoKHR*  pVkAcquireNextImageInfoKHR;
     };
-
-    // KHX structure has the same definition as KHR or Vulkan 1.1 core structures
-    static_assert(VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR == VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHX,
-                  "Mismatched KHR and KHX structure defines");
 
     uint32_t presentationDeviceIdx = DefaultDeviceIndex;
 
@@ -500,13 +552,13 @@ VkResult SwapChain::AcquireNextImage(
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHX:
+        case VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR:
         {
-            semaphore = pVkAcquireNextImageInfoKHX->semaphore;
-            fence     = pVkAcquireNextImageInfoKHX->fence;
-            timeout   = pVkAcquireNextImageInfoKHX->timeout;
+            semaphore = pVkAcquireNextImageInfoKHR->semaphore;
+            fence     = pVkAcquireNextImageInfoKHR->fence;
+            timeout   = pVkAcquireNextImageInfoKHR->timeout;
 
-            Util::BitMaskScanForward(&presentationDeviceIdx, pVkAcquireNextImageInfoKHX->deviceMask);
+            Util::BitMaskScanForward(&presentationDeviceIdx, pVkAcquireNextImageInfoKHR->deviceMask);
 
             break;
         }
@@ -611,11 +663,14 @@ VkResult SwapChain::GetSwapchainImagesKHR(
 }
 
 // =====================================================================================================================
-// Fills present information for a present being enqueued on a particular queue using a particular image.
-VkResult SwapChain::GetPresentInfo(
+// Performs fullscreen ownership transitions as well as MGPU software composition when necessary prior to a present
+// being enqueued on a particular queue using a particular image.
+// Returns the presentation device index in case the swapchain/device properties can't perform HW composition.
+Pal::IQueue* SwapChain::PrePresent(
     uint32_t                   deviceIdx,
     uint32_t                   imageIndex,
-    Pal::PresentSwapChainInfo* pPresentInfo)
+    Pal::PresentSwapChainInfo* pPresentInfo,
+    const Queue*               pPresentQueue)
 {
     // Get swap chain properties
     pPresentInfo->pSwapChain  = PalSwapChain(deviceIdx);
@@ -623,16 +678,40 @@ VkResult SwapChain::GetPresentInfo(
     pPresentInfo->presentMode = m_properties.imagePresentSupport;
     pPresentInfo->imageIndex  = imageIndex;
 
-    VkResult result = VK_SUCCESS;
-
     // Let the fullscreen manager override some of this present information in case it has enabled
     // fullscreen presents.
-    if ((m_pFullscreenMgr != nullptr))
+    if (m_pFullscreenMgr != nullptr)
     {
-        result = m_pFullscreenMgr->UpdatePresentInfo(this, pPresentInfo);
+        m_pFullscreenMgr->UpdatePresentInfo(this, pPresentInfo);
     }
 
-    return result;
+    // The presentation queue will be unchanged unless SW composition is needed.
+    Pal::IQueue* pPalQueue = pPresentQueue->PalQueue(deviceIdx);
+
+    if (m_pSwCompositor != nullptr)
+    {
+        // If the original software compositor doesn't support this presentation queue, the internal queue SDMA
+        // approach must be used instead.
+        if ((m_pDevice->GetRuntimeSettings().useSdmaCompositingBlt == false) &&
+            (m_pSwCompositor->GetQueueType() != m_pDevice->GetQueueFamilyPalQueueType(pPresentQueue->GetFamilyIndex())))
+        {
+            const VkAllocationCallbacks* pAllocCallbacks = m_pDevice->VkInstance()->GetAllocCallbacks();
+
+            m_pSwCompositor->Destroy(m_pDevice, pAllocCallbacks);
+            m_pSwCompositor = SwCompositor::Create(m_pDevice, pAllocCallbacks, m_properties, true);
+        }
+
+        if (m_pSwCompositor != nullptr)
+        {
+            pPalQueue = m_pSwCompositor->DoSwCompositing(m_pDevice,
+                                                         deviceIdx,
+                                                         imageIndex,
+                                                         pPresentInfo,
+                                                         pPresentQueue);
+        }
+    }
+
+    return pPalQueue;
 }
 
 // =====================================================================================================================
@@ -663,117 +742,103 @@ VkResult SwapChain::ReleaseWin32FullscreenOwnership(
 FullscreenMgr::FullscreenMgr(
     Device*                         pDevice,
     FullscreenMgr::Mode             mode,
-    const Pal::SwapChainCreateInfo& createInfo,
     Pal::IScreen*                   pScreen,
+    Pal::OsDisplayHandle            hDisplay,
+    Pal::OsWindowHandle             hWindow,
     uint32_t                        vidPnSourceId)
     :
     m_pDevice(pDevice),
+    m_exclusiveModeFlags(),
     m_pScreen(pScreen),
+    m_exclusiveAccessFailCount(0),
+    m_fullscreenPresentSuccessCount(0),
+    m_hDisplay(hDisplay),
+    m_hWindow(hWindow),
     m_vidPnSourceId(vidPnSourceId),
-    m_mode(mode),
-    m_exclusiveModeAcquired(false)
+    m_mode(mode)
 {
     VK_ASSERT(m_pScreen != nullptr);
-
-    m_compatFlags.u32All            = 0;
-    m_exclusiveAccessFailCount      = 0;
-    m_fullscreenPresentSuccessCount = 0;
-    m_lastResolution.width          = 0;
-    m_lastResolution.height         = 0;
 
     pScreen->GetColorCapabilities(&m_colorCaps);
 }
 
 // =====================================================================================================================
-// Returns the current display resolution of the given screen.
-static Pal::Result GetScreenResolution(
-    Pal::IScreen*  pScreen,
-    Pal::Extent2d* pResolution)
-{
-    // This code needs to live inside PAL.
-    Pal::Result result = Pal::Result::ErrorUnknown;
-
-    pResolution->width  = 0;
-    pResolution->height = 0;
-
-    VK_NOT_IMPLEMENTED;
-
-    return result;
-}
-
-// =====================================================================================================================
-// Returns the current window rectangle in desktop coordinates
-static Pal::Result GetWindowRectangle(
-    Pal::OsWindowHandle windowHandle,
-    Pal::Rect*          pRect)
-{
-    // This code probably needs to live inside PAL.
-    Pal::Result result = Pal::Result::ErrorUnknown;
-
-    pRect->offset.x      = 0;
-    pRect->offset.y      = 0;
-    pRect->extent.width  = 0;
-    pRect->extent.height = 0;
-
-    VK_NOT_IMPLEMENTED;
-
-    return result;
-}
-
-// =====================================================================================================================
-// Attempt to enter exclusive access mode for the screen associated with this swap chain.
+// Attempt to enter exclusive access mode for the screen associated with this swap chain.  If in exclusive mode already
+// do nothing or exit exclusive mode if fullscreen compatibility is lost.
 bool FullscreenMgr::TryEnterExclusive(
     SwapChain* pSwapChain)
 {
-    CompatibilityFlags compatFlags = EvaluateExclusiveModeCompat(pSwapChain);
-
-    if (compatFlags.u32All != 0)
+    // If we are not perma-disabled
+    if (m_exclusiveModeFlags.disabled == 0)
     {
-        if (m_exclusiveModeAcquired)
+        Pal::Result result = Pal::Result::Success;
+
+        // In explicit mode, we allow the fullscreen manager to acquire fullscreen ownership, regardless of
+        // size changes or lost window focus.
+        if (m_mode != Explicit)
+        {
+            VK_ASSERT(m_pImage != nullptr);
+
+            const auto& imageInfo = m_pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
+
+            Pal::Extent2d imageExtent;
+
+            imageExtent.width  = imageInfo.extent.width;
+            imageExtent.height = imageInfo.extent.height;
+
+            // Update current exclusive access compatibility
+            result = m_pScreen->IsImplicitFullscreenOwnershipSafe(m_hDisplay, m_hWindow, imageExtent);
+
+        }
+
+        // Exit exclusive access mode if no longer compatible or try to enter (or simply remain in) if we are currently
+        // compatible
+        if (m_exclusiveModeFlags.acquired && (result != Pal::Result::Success))
         {
             TryExitExclusive(pSwapChain);
         }
-
-        return false;
-    }
-
-    if (m_pScreen != nullptr && m_pImage != nullptr)
-    {
-        if (m_exclusiveModeAcquired == false)
+        else if ((m_exclusiveModeFlags.acquired == 0) && (result == Pal::Result::Success))
         {
-            Pal::Result result = pSwapChain->PalSwapChainWaitIdle();
-
-            if (result == Pal::Result::Success)
+            if (m_pScreen != nullptr && m_pImage != nullptr)
             {
-                const SwapChain::Properties&props = pSwapChain->GetProperties();
+                result = pSwapChain->PalSwapChainWaitIdle();
 
-                result = m_pScreen->TakeFullscreenOwnership(*m_pImage->PalImage(DefaultDeviceIndex));
-
-                // NOTE: ErrorFullscreenUnavailable means according to PAL, we already have exclusive access.
-                if (result == Pal::Result::Success || result == Pal::Result::ErrorFullscreenUnavailable)
+                if (result == Pal::Result::Success)
                 {
-                    m_exclusiveModeAcquired = true;
+                    const SwapChain::Properties&props = pSwapChain->GetProperties();
 
-                    if (m_mode != Implicit)
+                    result = m_pScreen->TakeFullscreenOwnership(*m_pImage->PalImage(DefaultDeviceIndex));
+
+                    // NOTE: ErrorFullscreenUnavailable means according to PAL, we already have exclusive access.
+                    if (result == Pal::Result::Success || result == Pal::Result::ErrorFullscreenUnavailable)
                     {
-                        m_colorParams.format     = VkToPalFormat(props.fullscreenSurfaceFormat.format).format;
-                        m_colorParams.colorSpace = VkToPalScreenSpace(props.fullscreenSurfaceFormat);
-                        m_colorParams.u32All     = 0;
+                        m_exclusiveModeFlags.acquired = 1;
 
-                        m_pScreen->SetColorConfiguration(&m_colorParams);
+                        if (m_mode != Implicit)
+                        {
+                            m_colorParams.format     = VkToPalFormat(props.fullscreenSurfaceFormat.format).format;
+                            m_colorParams.colorSpace = VkToPalScreenSpace(props.fullscreenSurfaceFormat);
+                            m_colorParams.u32All     = 0;
+
+                            m_pScreen->SetColorConfiguration(&m_colorParams);
+                        }
                     }
                 }
-            }
 
-            // If we fail to get exclusive access, increment a counter.
-            if (m_exclusiveModeAcquired == false)
-            {
-                FullscreenPresentEvent(false);
+                // If we fail to get exclusive access, increment a counter.
+                if (m_exclusiveModeFlags.acquired == 0)
+                {
+                    FullscreenPresentEvent(false);
+                }
             }
         }
     }
+    else
+    {
+        VK_ASSERT(m_exclusiveModeFlags.acquired == 0);
+    }
 
-    return m_exclusiveModeAcquired;
+    return m_exclusiveModeFlags.acquired;
 }
 
 // =====================================================================================================================
@@ -784,19 +849,16 @@ bool FullscreenMgr::TryExitExclusive(
     if (pSwapChain != nullptr)
     {
         pSwapChain->PalSwapChainWaitIdle();
-
-        const SwapChain::Properties& props = pSwapChain->GetProperties();
-        PhysicalDeviceManager* pPhyicalDeviceManager = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->Manager();
     }
 
     // if we acquired full screen ownership before with this fullscreenmanager.
-    if ((m_pScreen != nullptr) && m_exclusiveModeAcquired)
+    if ((m_pScreen != nullptr) && m_exclusiveModeFlags.acquired)
     {
         Pal::Result palResult = m_pScreen->ReleaseFullscreenOwnership();
         VK_ASSERT(palResult == Pal::Result::Success);
     }
 
-    m_exclusiveModeAcquired = false;
+    m_exclusiveModeFlags.acquired = 0;
 
     return true;
 }
@@ -902,7 +964,6 @@ static bool EnableFullScreen(
     // fullscreen
     if (enabled)
     {
-        // TODO SWDEV-120359 - We need to enumerate the correct Pal device.
         Pal::IScreen* pScreen = pDevice->VkInstance()->FindScreen(
             pDevice->PalDevice(DefaultDeviceIndex),
             swapchainProps.displayableInfo.windowHandle,
@@ -929,7 +990,7 @@ void FullscreenMgr::PreImageCreate(
     Pal::PresentMode*                pImagePresentSupport,
     Pal::PresentableImageCreateInfo* pImageInfo)
 {
-    if (m_compatFlags.disabled == 0)
+    if (m_exclusiveModeFlags.disabled == 0)
     {
         // If we found that screen, then make the images compatible with fullscreen presents to that monitor.  Note that
         // this does not make them incompatible with windowed blit presents -- it just chooses a displayable tiling
@@ -1008,41 +1069,9 @@ void FullscreenMgr::Destroy(const VkAllocationCallbacks* pAllocator)
 // Permanently disables any attempt to do fullscreen presents using this swapchain.
 void FullscreenMgr::DisableFullscreenPresents()
 {
-    // Clear all failure flags and disable fullscreen presents.
-    m_compatFlags.u32All   = 0;
-    m_compatFlags.disabled = 1;
+    m_exclusiveModeFlags.disabled = 1;
 
     TryExitExclusive(nullptr);
-}
-
-// =====================================================================================================================
-// This function enters/exits exclusive access mode on this swap chain's screen when possible.
-void FullscreenMgr::UpdateExclusiveMode(
-    SwapChain* pSwapChain)
-{
-    // If we are not perma-disabled
-    if (m_compatFlags.disabled == 0)
-    {
-        // Update current exclusive access compatibility
-        m_compatFlags = EvaluateExclusiveModeCompat(pSwapChain);
-
-        // Try to enter exclusive access mode if we are currently compatible with it and vice versa.
-        if (IsExclusiveModePossible() != m_exclusiveModeAcquired)
-        {
-            if (m_exclusiveModeAcquired == false)
-            {
-                TryEnterExclusive(pSwapChain);
-            }
-            else
-            {
-                TryExitExclusive(pSwapChain);
-            }
-        }
-    }
-    else
-    {
-        VK_ASSERT(m_exclusiveModeAcquired == false);
-    }
 }
 
 // =====================================================================================================================
@@ -1057,12 +1086,12 @@ void FullscreenMgr::PostPresent(
         // If we succeeded on a fullscreen present, we should reset the consecutive fullscreen failure count
         if (presentInfo.presentMode == Pal::PresentMode::Fullscreen)
         {
-            VK_ASSERT(IsExclusiveModePossible());
+            VK_ASSERT(m_exclusiveModeFlags.disabled == 0);
 
             FullscreenPresentEvent(true);
         }
     }
-    else if (m_compatFlags.disabled == 0)
+    else if (m_exclusiveModeFlags.disabled == 0)
     {
         // If we failed a fullscreen present for whatever reason, increment the failure counter
         if (presentInfo.presentMode == Pal::PresentMode::Fullscreen)
@@ -1078,7 +1107,7 @@ void FullscreenMgr::PostPresent(
             // with the monitor's actual state, in case it's out of sync as well.
             TryExitExclusive(pSwapChain);
 
-            VK_ASSERT(m_exclusiveModeAcquired == false);
+            VK_ASSERT(m_exclusiveModeFlags.acquired == 0);
 
             *pPresentResult = Pal::Result::Success;
         }
@@ -1108,126 +1137,26 @@ void FullscreenMgr::PostPresent(
 }
 
 // =====================================================================================================================
-// This function evaluates compatibility flags for whether it's safe to take exclusive access of the screen without
-// the user being (more or less) able to tell the difference.  This is only possible if multiple conditions are all
-// true.
-FullscreenMgr::CompatibilityFlags FullscreenMgr::EvaluateExclusiveModeCompat(
-    const SwapChain* pSwapChain) const
-{
-    CompatibilityFlags compatFlags = {};
-
-    if (m_mode == Explicit)
-    {
-        // In explicit mode, we allow the fullscreen manager to acquire fullscreen ownership, regardless of
-        // size changes or lost window focus.
-        return compatFlags;
-    }
-
-    Pal::OsWindowHandle  windowHandle  = pSwapChain->GetProperties().displayableInfo.windowHandle;
-    Pal::OsDisplayHandle displayHandle = pSwapChain->GetProperties().displayableInfo.displayHandle;
-
-    VK_ASSERT(m_pScreen != nullptr);
-
-    constexpr Pal::OsDisplayHandle unknownHandle = 0;
-
-    Pal::IScreen* pScreen = m_pDevice->VkInstance()->FindScreen(
-                m_pDevice->PalDevice(DefaultDeviceIndex), windowHandle, displayHandle);
-
-    if (pScreen != m_pScreen)
-    {
-        compatFlags.screenChanged = 1;
-    }
-
-    VK_ASSERT(m_pImage != nullptr);
-
-    const auto& imageInfo = m_pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
-
-    Pal::Extent2d lastResolution = {};
-
-    if (compatFlags.screenChanged == 0)
-    {
-        compatFlags.resolutionBad = 1;
-        compatFlags.windowRectBad = 1;
-
-        // Get the current resolution of the screen
-        Pal::Result resolutionResult = GetScreenResolution(m_pScreen, &lastResolution);
-
-        if (resolutionResult == Pal::Result::Success)
-        {
-            // Test that the current screen resolution matches current swap chain extents
-            if ((lastResolution.width == imageInfo.extent.width) &&
-                (lastResolution.height == imageInfo.extent.height))
-            {
-                compatFlags.resolutionBad = 0;
-            }
-
-            // Test that the current window rectangle (in desktop coordinates) covers the whole monitor resolution
-            Pal::Rect windowRect = {};
-
-            if (GetWindowRectangle(windowHandle, &windowRect) == Pal::Result::Success)
-            {
-                if ((windowRect.offset.x == 0) &&
-                    (windowRect.offset.y == 0) &&
-                    (windowRect.extent.width  == lastResolution.width) &&
-                    (windowRect.extent.height == lastResolution.height))
-                {
-                    compatFlags.windowRectBad = 0;
-                }
-            }
-        }
-    }
-
-    if (compatFlags.u32All == 0)
-    {
-        compatFlags.windowNotForeground = 1;
-    }
-
-    return compatFlags;
-}
-
-// =====================================================================================================================
-// This function evaluates compatibility flags for whether it's safe to take exclusive access of the screen without
-// the user being (more or less) able to tell the difference.  This is only possible if multiple conditions are all
-// true.
-bool FullscreenMgr::UpdateExclusiveModeCompat(
-    SwapChain* pSwapChain)
-{
-    if (m_compatFlags.disabled == 0)
-    {
-        m_compatFlags = EvaluateExclusiveModeCompat(pSwapChain);
-    }
-
-    return m_compatFlags.u32All == 0;
-}
-
-// =====================================================================================================================
 // This function potentially overrides normal swap chain present info by replacing a windowed present with a page-
 // flipped fullscreen present.
 //
 // This can only happen if the screen is currently compatible with fullscreen presents and we have successfully
 // acquired exclusive access to the screen.
-VkResult FullscreenMgr::UpdatePresentInfo(
+void FullscreenMgr::UpdatePresentInfo(
     SwapChain*                 pSwapChain,
     Pal::PresentSwapChainInfo* pPresentInfo)
 {
-    VkResult result = VK_SUCCESS;
-
-    if (m_compatFlags.disabled == 0)
-    {
-        // Try to get exclusive access if things are compatible
-        UpdateExclusiveMode(pSwapChain);
-    }
+    // Try to enter (or remain in) exclusive access mode on this swap chain's screen for this present
+    TryEnterExclusive(pSwapChain);
 
     switch(m_mode)
     {
     case Implicit:
-        if (m_compatFlags.disabled == 0)
+        if (m_exclusiveModeFlags.disabled == 0)
         {
             // If we've successfully entered exclusive mode, switch to fullscreen presents
-            if (m_exclusiveModeAcquired)
+            if (m_exclusiveModeFlags.acquired)
             {
-                VK_ASSERT(IsExclusiveModePossible());
-
                 pPresentInfo->presentMode = Pal::PresentMode::Fullscreen;
             }
             else
@@ -1249,7 +1178,7 @@ VkResult FullscreenMgr::UpdatePresentInfo(
     case Explicit_Mixed:
         {
             pPresentInfo->presentMode =
-                m_exclusiveModeAcquired ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
+                m_exclusiveModeFlags.acquired ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
         }
         break;
 
@@ -1257,14 +1186,354 @@ VkResult FullscreenMgr::UpdatePresentInfo(
         VK_NOT_IMPLEMENTED;
         break;
     };
-
-    return result;
 }
 
 // =====================================================================================================================
 FullscreenMgr::~FullscreenMgr()
 {
 
+}
+
+// =====================================================================================================================
+// Construct the software compositor object
+SwCompositor::SwCompositor(
+    const Device*     pDevice,
+    uint32_t          presentationDeviceIdx,
+    uint32_t          imageCount,
+    Pal::QueueType    queueType,
+    Pal::IImage**     ppBltImages[],
+    Pal::IGpuMemory** ppBltMemory[],
+    Pal::ICmdBuffer** ppBltCmdBuffers[])
+    :
+    m_presentationDeviceIdx(presentationDeviceIdx),
+    m_imageCount(imageCount),
+    m_queueType(queueType)
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+    {
+        m_ppBltImages[deviceIdx]     = ppBltImages[deviceIdx];
+        m_ppBltMemory[deviceIdx]     = ppBltMemory[deviceIdx];
+        m_ppBltCmdBuffers[deviceIdx] = ppBltCmdBuffers[deviceIdx];
+
+        for (uint32_t i = 0; i < m_imageCount; ++i)
+        {
+            m_ppBltImages[deviceIdx][i]     = nullptr;
+            m_ppBltMemory[deviceIdx][i]     = nullptr;
+            m_ppBltCmdBuffers[deviceIdx][i] = nullptr;
+        }
+    }
+}
+
+// =====================================================================================================================
+// One time setup for this swapchain/device combination.  Creates intermediate images and command buffers to perform the
+// composition BLTs to the presentation device.
+SwCompositor* SwCompositor::Create(
+    const Device*                pDevice,
+    const VkAllocationCallbacks* pAllocator,
+    const SwapChain::Properties& properties,
+    bool                         useSdmaCompositingBlt)
+{
+    VkResult      result  = VK_SUCCESS;
+    SwCompositor* pObject = nullptr;
+
+    // Find the device that can perform the actual present
+    uint32_t presentationDeviceIdx = DefaultDeviceIndex;
+
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+    {
+        if (pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().attachedScreenCount > 0)
+        {
+            presentationDeviceIdx = deviceIdx;
+            break;
+        }
+    }
+
+    Pal::IDevice* pPalDevice        = pDevice->PalDevice(presentationDeviceIdx);
+    size_t        palImageSize      = 0;
+    size_t        palMemorySize     = 0;
+    size_t        palPeerImageSize  = 0;
+    size_t        palPeerMemorySize = 0;
+    size_t        palCmdBufferSize  = 0;
+    Pal::Result   palResult;
+
+    pPalDevice->GetPresentableImageSizes(properties.imageCreateInfo, &palImageSize, &palMemorySize, &palResult);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    Pal::PeerImageOpenInfo peerInfo = {};
+    peerInfo.pOriginalImage = Image::ObjectFromHandle(properties.images[0])->PalImage(DefaultDeviceIndex);
+
+    pPalDevice->GetPeerImageSizes(peerInfo, &palPeerImageSize, &palPeerMemorySize, &palResult);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    Pal::CmdBufferCreateInfo cmdBufCreateInfo = {};
+
+    if (useSdmaCompositingBlt)
+    {
+        cmdBufCreateInfo.queueType  = Pal::QueueType::QueueTypeDma;
+        cmdBufCreateInfo.engineType = Pal::EngineType::EngineTypeDma;
+    }
+    else
+    {
+        cmdBufCreateInfo.queueType  = Pal::QueueType::QueueTypeUniversal;
+        cmdBufCreateInfo.engineType = Pal::EngineType::EngineTypeUniversal;
+    }
+
+    palCmdBufferSize = pPalDevice->GetCmdBufferSize(cmdBufCreateInfo, &palResult);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    // Total size for: 1. this object
+    //                 2. pBltImages, pBltMemory, pBltCmdBuffers for all images and devices
+    //                 3. the intermediate images for the presentation device
+    //                 4. the peer images for all of the other devices
+    size_t imageArraysOffset       = sizeof(SwCompositor);
+    size_t presentableDeviceOffset = imageArraysOffset +
+                                     ((sizeof(Pal::IImage*) + sizeof(Pal::IGpuMemory*) + sizeof(Pal::ICmdBuffer*)) *
+                                      properties.imageCount * pDevice->NumPalDevices());
+    size_t otherDevicesOffset      = presentableDeviceOffset + ((palImageSize + palMemorySize) * properties.imageCount);
+    size_t totalSize               = otherDevicesOffset +
+                                     ((palPeerImageSize + palPeerMemorySize + palCmdBufferSize) *
+                                         properties.imageCount * (pDevice->NumPalDevices() - 1));
+
+    void* pMemory = pDevice->VkInstance()->AllocMem(totalSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if (pMemory == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+    else
+    {
+        // Setup the image count array pointers for all devices
+        Pal::IImage**     ppBltImages[MaxPalDevices];
+        Pal::IGpuMemory** ppBltMemory[MaxPalDevices];
+        Pal::ICmdBuffer** ppBltCmdBuffers[MaxPalDevices];
+
+        void* pNextImageArrays = Util::VoidPtrInc(pMemory, imageArraysOffset);
+
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+        {
+            ppBltImages[deviceIdx]     = static_cast<Pal::IImage**>(pNextImageArrays);
+            ppBltMemory[deviceIdx]     = static_cast<Pal::IGpuMemory**>(Util::VoidPtrInc(ppBltImages[deviceIdx],
+                                            (sizeof(Pal::IImage*) * properties.imageCount)));
+            ppBltCmdBuffers[deviceIdx] = static_cast<Pal::ICmdBuffer**>(Util::VoidPtrInc(ppBltMemory[deviceIdx],
+                                            (sizeof(Pal::IGpuMemory*) * properties.imageCount)));
+            pNextImageArrays           = Util::VoidPtrInc(ppBltCmdBuffers[deviceIdx],
+                                            (sizeof(Pal::ICmdBuffer*) * properties.imageCount));
+        }
+
+        // Construct the object after setting up the member array bases
+        pObject = VK_PLACEMENT_NEW(pMemory) SwCompositor(
+            pDevice,
+            presentationDeviceIdx,
+            properties.imageCount,
+            cmdBufCreateInfo.queueType,
+            ppBltImages,
+            ppBltMemory,
+            ppBltCmdBuffers);
+
+        // Setup for the intermediate destination images for the presentation device
+        void* pImageMemory  = Util::VoidPtrInc(pMemory, presentableDeviceOffset);
+        void* pMemoryMemory = Util::VoidPtrInc(pImageMemory, (palImageSize * properties.imageCount));
+
+        for (uint32_t i = 0; i < properties.imageCount; ++i)
+        {
+            palResult = pPalDevice->CreatePresentableImage(
+                properties.imageCreateInfo,
+                pImageMemory,
+                pMemoryMemory,
+                &ppBltImages[presentationDeviceIdx][i],
+                &ppBltMemory[presentationDeviceIdx][i]);
+
+            pImageMemory  = Util::VoidPtrInc(pImageMemory, palImageSize);
+            pMemoryMemory = Util::VoidPtrInc(pMemoryMemory, palMemorySize);
+
+            // Clean up and break if any error is encountered
+            if (palResult != Pal::Result::Success)
+            {
+                result = PalToVkError(palResult);
+
+                pObject->Destroy(pDevice, pAllocator);
+                pObject = nullptr;
+
+                break;
+            }
+        }
+
+        // Next, setup the peer copies to the intermediate destinations
+        void* pPeerImageMemory  = Util::VoidPtrInc(pMemory, otherDevicesOffset);
+        void* pPeerMemoryMemory = Util::VoidPtrInc(pPeerImageMemory, (palPeerImageSize * properties.imageCount));
+        void* pCmdBufferMemory  = Util::VoidPtrInc(pPeerMemoryMemory, (palPeerMemorySize * properties.imageCount));
+
+        // Composition BLT common setup.  Only the destination image varies.
+        Pal::ImageLayout     srcLayout = { Pal::LayoutCopySrc, cmdBufCreateInfo.engineType };
+        Pal::ImageLayout     dstLayout = { Pal::LayoutCopyDst, cmdBufCreateInfo.engineType };
+        Pal::ImageCopyRegion region    = {};
+
+        region.extent    = peerInfo.pOriginalImage->GetImageCreateInfo().extent;
+        region.numSlices = 1;
+
+        region.srcSubres.aspect     = Pal::ImageAspect::Color;
+        region.srcSubres.arraySlice = 0;
+        region.srcSubres.mipLevel   = 0;
+
+        region.dstSubres.aspect     = Pal::ImageAspect::Color;
+        region.dstSubres.arraySlice = 0;
+        region.dstSubres.mipLevel   = 0;
+
+        Pal::CmdBufferBuildInfo buildInfo = {};
+
+        for (uint32_t deviceIdx = 0; (deviceIdx < pDevice->NumPalDevices()) && (result == VK_SUCCESS); ++deviceIdx)
+        {
+            // The presentation device image setup was performed above
+            if (deviceIdx == presentationDeviceIdx)
+            {
+                continue;
+            }
+
+            pPalDevice = pDevice->PalDevice(deviceIdx);
+
+            cmdBufCreateInfo.pCmdAllocator = pDevice->GetSharedCmdAllocator(deviceIdx);
+
+            VK_ASSERT(palCmdBufferSize == pPalDevice->GetCmdBufferSize(cmdBufCreateInfo, nullptr));
+
+            // Create/open all of the peer images/memory together and generate the BLT commands on first use
+            for (uint32_t i = 0; i < properties.imageCount; ++i)
+            {
+                peerInfo.pOriginalImage = ppBltImages[presentationDeviceIdx][i];
+
+                size_t assertPalImageSize;
+                size_t assertPalMemorySize;
+                pPalDevice->GetPeerImageSizes(peerInfo, &assertPalImageSize, &assertPalMemorySize, nullptr);
+                VK_ASSERT((assertPalImageSize == palPeerImageSize) && (assertPalMemorySize == assertPalMemorySize));
+
+                palResult = pPalDevice->OpenPeerImage(peerInfo,
+                    pPeerImageMemory,
+                    pPeerMemoryMemory,
+                    &ppBltImages[deviceIdx][i],
+                    &ppBltMemory[deviceIdx][i]);
+
+                pPeerImageMemory  = Util::VoidPtrInc(pPeerImageMemory, palPeerImageSize);
+                pPeerMemoryMemory = Util::VoidPtrInc(pPeerMemoryMemory, palPeerMemorySize);
+
+                if (palResult == Pal::Result::Success)
+                {
+                    palResult = pPalDevice->CreateCmdBuffer(
+                        cmdBufCreateInfo,
+                        pCmdBufferMemory,
+                        &ppBltCmdBuffers[deviceIdx][i]);
+
+                    pCmdBufferMemory = Util::VoidPtrInc(pCmdBufferMemory, palCmdBufferSize);
+
+                    // Generate the BLT to the appropriate peer destination image
+                    if (palResult == Pal::Result::Success)
+                    {
+                        ppBltCmdBuffers[deviceIdx][i]->Begin(buildInfo);
+
+                        ppBltCmdBuffers[deviceIdx][i]->CmdCopyImage(
+                            *Image::ObjectFromHandle(properties.images[i])->PalImage(deviceIdx),
+                            srcLayout,
+                            *ppBltImages[deviceIdx][i],
+                            dstLayout,
+                            1,
+                            &region,
+                            0);
+
+                        ppBltCmdBuffers[deviceIdx][i]->End();
+                    }
+                }
+
+                // Clean up and break if any error is encountered
+                if (palResult != Pal::Result::Success)
+                {
+                    result = PalToVkError(palResult);
+
+                    pObject->Destroy(pDevice, pAllocator);
+                    pObject = nullptr;
+
+                    break;
+                }
+            }
+        }
+    }
+
+    return pObject;
+}
+
+// =====================================================================================================================
+// Destroy the software compositor object
+void SwCompositor::Destroy(
+    const Device*                pDevice,
+    const VkAllocationCallbacks* pAllocator)
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+    {
+        for (uint32_t i = 0; i < m_imageCount; ++i)
+        {
+            if (m_ppBltMemory[deviceIdx][i] != nullptr)
+            {
+                m_ppBltMemory[deviceIdx][i]->Destroy();
+                m_ppBltMemory[deviceIdx][i] = nullptr;
+            }
+
+            if (m_ppBltImages[deviceIdx][i] != nullptr)
+            {
+                m_ppBltImages[deviceIdx][i]->Destroy();
+                m_ppBltImages[deviceIdx][i] = nullptr;
+            }
+
+            if (m_ppBltCmdBuffers[deviceIdx][i] != nullptr)
+            {
+                m_ppBltCmdBuffers[deviceIdx][i]->Destroy();
+                m_ppBltCmdBuffers[deviceIdx][i] = nullptr;
+            }
+        }
+    }
+
+    this->~SwCompositor();
+
+    pAllocator->pfnFree(pAllocator->pUserData, this);
+}
+
+// =====================================================================================================================
+// Perform the software compositing BLT if this is the non presentable device and returns the queue for the present.
+Pal::IQueue* SwCompositor::DoSwCompositing(
+    Device*                    pDevice,
+    uint32_t                   deviceIdx,
+    uint32_t                   imageIndex,
+    Pal::PresentSwapChainInfo* pPresentInfo,
+    const Queue*               pPresentQueue)
+{
+    Pal::IQueue* pPalQueue = pPresentQueue->PalQueue(deviceIdx);
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 441
+    // SW compositing uses separate queues for present, so notify the original PAL queue first to prevent developer mode
+    // tracking information and the overlay from being dropped.
+    pPresentInfo->flags.notifyOnly = 1;
+    pPalQueue->PresentSwapChain(*pPresentInfo);
+    pPresentInfo->flags.notifyOnly = 0;
+#endif
+
+    pPalQueue = pDevice->PerformSwCompositing(deviceIdx,
+                                              m_presentationDeviceIdx,
+                                              m_ppBltCmdBuffers[deviceIdx][imageIndex],
+                                              m_queueType,
+                                              pPresentQueue);
+
+    if (pPalQueue != nullptr)
+    {
+        if (deviceIdx != m_presentationDeviceIdx)
+        {
+            // Update the present info to use the intermediate image as the source on a presentable device.
+            pPresentInfo->pSrcImage = m_ppBltImages[m_presentationDeviceIdx][imageIndex];
+        }
+    }
+    else
+    {
+        // Give up if any errors were encountered, and reset to the original presentation queue.
+        pPalQueue = pPresentQueue->PalQueue(deviceIdx);
+        VK_ASSERT(false);
+    }
+
+    return pPalQueue;
 }
 
 /**
@@ -1312,9 +1581,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImageKHR(
 {
     constexpr uint32_t deviceMask = 1;
 
-    const VkAcquireNextImageInfoKHX acquireInfo =
+    const VkAcquireNextImageInfoKHR acquireInfo =
     {
-        VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHX,
+        VK_STRUCTURE_TYPE_ACQUIRE_NEXT_IMAGE_INFO_KHR,
         nullptr,
         swapchain,
         timeout,
@@ -1326,29 +1595,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImageKHR(
     union
     {
         const VkStructHeader*             pHeader;
-        const VkAcquireNextImageInfoKHX*  pAcquireInfoKHX;
+        const VkAcquireNextImageInfoKHR*  pAcquireInfoKHR;
     };
 
-    pAcquireInfoKHX = &acquireInfo;
+    pAcquireInfoKHR = &acquireInfo;
 
     return SwapChain::ObjectFromHandle(swapchain)->AcquireNextImage(pHeader, pImageIndex);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHX(
-    VkDevice                                    device,
-    const VkAcquireNextImageInfoKHX*            pAcquireInfo,
-    uint32_t*                                   pImageIndex)
-{
-    union
-    {
-        const VkStructHeader*             pHeader;
-        const VkAcquireNextImageInfoKHX*  pAcquireInfoKHX;
-    };
-
-    pAcquireInfoKHX = pAcquireInfo;
-
-    return SwapChain::ObjectFromHandle(pAcquireInfo->swapchain)->AcquireNextImage(pHeader, pImageIndex);
 }
 
 // =====================================================================================================================

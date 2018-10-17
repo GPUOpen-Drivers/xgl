@@ -26,7 +26,7 @@
                OpDecorate %10 Binding 1
                OpDecorate %11 DescriptorSet 0
                OpDecorate %11 Binding 2
-               OpDecorate %12 ArrayStride 4
+               OpDecorate %12 ArrayStride 8
                OpDecorate %13 BufferBlock
                OpMemberDecorate %13 0 Offset 0
                OpDecorate %14 ArrayStride 4

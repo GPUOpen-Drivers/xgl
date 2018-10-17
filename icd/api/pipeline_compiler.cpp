@@ -943,7 +943,6 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
     }
 
-    // Allocate space to create the LLPC/SCPC pipeline resource mappings
     if (pLayout != nullptr)
     {
         pCreateInfo->tempBufferStageSize = pLayout->GetPipelineInfo()->tempStageSize;
@@ -1073,7 +1072,6 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
     }
 
-    // Allocate space to create the LLPC/SCPC pipeline resource mappings
     if (pLayout != nullptr)
     {
         pCreateInfo->tempBufferStageSize = pLayout->GetPipelineInfo()->tempStageSize;
@@ -1162,7 +1160,6 @@ void PipelineCompiler::ApplyProfileOptions(
         const void* pModuleData = pShaderInfo->pModuleData;
         if (pModuleData == nullptr)
         {
-            // Shader hash are same between LLPC and SCPC path, we only need a valid module data
             pModuleData = pShaderModule->GetShaderData(false);
         }
 

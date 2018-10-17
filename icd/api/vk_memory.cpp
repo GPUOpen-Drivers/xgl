@@ -81,9 +81,7 @@ VkResult Memory::Create(
     bool isHostMappedForeign        = false;
     void* pPinnedHostPtr            = nullptr; // If non-null, this memory is allocated as pinned system memory
 
-#if PAL_INTERFACE_MAJOR_VERSION >= 433
     Pal::GpuMemoryExportInfo exportInfo = {};
-#endif
 
     // Determines towards which devices we have accounted memory size
     uint32_t sizeAccountedForDeviceMask = 0;
@@ -258,9 +256,7 @@ VkResult Memory::Create(
                     pDevice,
                     pAllocator,
                     createInfo,
-#if PAL_INTERFACE_MAJOR_VERSION >= 433
                     exportInfo,
-#endif
                     allocationMask,
                     multiInstanceHeap,
                     &pMemory);
@@ -334,9 +330,7 @@ VkResult Memory::CreateGpuMemory(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator,
     const Pal::GpuMemoryCreateInfo& createInfo,
-#if PAL_INTERFACE_MAJOR_VERSION >= 433
     const Pal::GpuMemoryExportInfo& exportInfo,
-#endif
     uint32_t                        allocationMask,
     bool                            multiInstanceHeap,
     Memory**                        ppMemory)
@@ -407,8 +401,6 @@ VkResult Memory::CreateGpuMemory(
             if (palResult == Pal::Result::Success)
             {
                 Pal::OsExternalHandle handle = 0;
-#if PAL_INTERFACE_MAJOR_VERSION >= 433
-#endif // PAL_INTERFACE_MAJOR_VERSION >= 433
 
                 // Initialize dispatchable memory object and return to application
                 *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(pDevice,
@@ -768,8 +760,6 @@ void Memory::Free(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-#if PAL_INTERFACE_MAJOR_VERSION >= 433
-#endif
     if (m_pExternalPalImage != nullptr)
     {
         m_pExternalPalImage->Destroy();
@@ -923,12 +913,8 @@ Pal::OsExternalHandle Memory::GetShareHandle(
               m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_EXTERNAL_MEMORY_WIN32));
     Pal::OsExternalHandle handle = 0;
 
-#if PAL_INTERFACE_MAJOR_VERSION >= 433
     Pal::GpuMemoryExportInfo exportInfo = {};
     handle = PalMemory(DefaultDeviceIndex)->ExportExternalHandle(exportInfo);
-#else  // PAL_INTERFACE_MAJOR_VERSION < 433
-    handle = PalMemory(DefaultDeviceIndex)->GetSharedExternalHandle();
-#endif
 
     return handle;
 }

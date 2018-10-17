@@ -95,12 +95,9 @@ private:
 };
 
 // =====================================================================================================================
-// Represents Vulkan pipeline compiler, it wraps LLPC and SCPC, and hides the differences.
 class PipelineCompiler
 {
 public:
-    // Creation info parameters for all the necessary LLPC/SCPC state objects encapsulated
-    // by the Vulkan graphics pipeline.
     struct GraphicsPipelineCreateInfo
     {
         Llpc::GraphicsPipelineBuildInfo        pipelineInfo;
@@ -112,8 +109,6 @@ public:
         PipelineOptimizerKey                   pipelineProfileKey;
     };
 
-    // Creation info parameters for all the necessary LLPC/SCPC state objects encapsulated
-    // by the Vulkan compute pipeline.
     struct ComputePipelineCreateInfo
     {
         Llpc::ComputePipelineBuildInfo         pipelineInfo;

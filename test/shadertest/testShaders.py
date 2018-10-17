@@ -168,15 +168,10 @@ if __name__=='__main__':
                        gfxip = gfxip_str + gfx[3]
 
                     if compile_name == "amdllpc":
-                        if sub_index == 0 :
-                            cacheMode = " -enable-cache-emu-lib-context=1 "
-                        else :
-                            cacheMode = " -enable-cache-emu-lib-context=2 "
-
                         if f.endswith(".pipe"):
-                            cmd = COMPILER + gfxip + cacheMode + " -enable-outs=0 " + SHADER_SRC + "/" + gfx + "/" + f + " 2>&1 >> " + RESULT + "/" + gfx + "/" + f + ".log"
+                            cmd = COMPILER + gfxip + " -enable-outs=0 " + SHADER_SRC + "/" + gfx + "/" + f + " 2>&1 >> " + RESULT + "/" + gfx + "/" + f + ".log"
                         else:
-                            cmd = COMPILER + gfxip + cacheMode + " -auto-layout-desc  -enable-outs=0 " + SHADER_SRC + "/" + gfx + "/" + f + " 2>&1 >> " + RESULT + "/" + gfx + "/" + f + ".log"
+                            cmd = COMPILER + gfxip + " -auto-layout-desc  -enable-outs=0 " + SHADER_SRC + "/" + gfx + "/" + f + " 2>&1 >> " + RESULT + "/" + gfx + "/" + f + ".log"
                     if sub_index == 0 :
                         # Run test in sync-compile mode to setup context cache
                         result = compile(cmd, gfx, f, compile_name)

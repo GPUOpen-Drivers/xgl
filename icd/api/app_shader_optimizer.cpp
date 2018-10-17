@@ -62,9 +62,9 @@ ShaderOptimizer::ShaderOptimizer(
 // =====================================================================================================================
 void ShaderOptimizer::Init()
 {
-    BuildTuningProfile();
-
     BuildAppProfile();
+
+    BuildTuningProfile();
 
 #if ICD_RUNTIME_APP_PROFILE
     BuildRuntimeProfile();
@@ -133,9 +133,9 @@ void ShaderOptimizer::OverrideShaderCreateInfo(
     PipelineShaderOptionsPtr           options)
 {
 
-    ApplyProfileToShaderCreateInfo(m_tuningProfile, pipelineKey, shaderStage, options);
-
     ApplyProfileToShaderCreateInfo(m_appProfile, pipelineKey, shaderStage, options);
+
+    ApplyProfileToShaderCreateInfo(m_tuningProfile, pipelineKey, shaderStage, options);
 
 #if ICD_RUNTIME_APP_PROFILE
     ApplyProfileToShaderCreateInfo(m_runtimeProfile, pipelineKey, shaderStage, options);
@@ -150,10 +150,10 @@ void ShaderOptimizer::OverrideGraphicsPipelineCreateInfo(
     Pal::DynamicGraphicsShaderInfos*  pGraphicsWaveLimitParams)
 {
     ApplyProfileToGraphicsPipelineCreateInfo(
-        m_tuningProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsWaveLimitParams);
+        m_appProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsWaveLimitParams);
 
     ApplyProfileToGraphicsPipelineCreateInfo(
-        m_appProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsWaveLimitParams);
+        m_tuningProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsWaveLimitParams);
 
 #if ICD_RUNTIME_APP_PROFILE
     ApplyProfileToGraphicsPipelineCreateInfo(
@@ -166,9 +166,9 @@ void ShaderOptimizer::OverrideComputePipelineCreateInfo(
     const PipelineOptimizerKey&      pipelineKey,
     Pal::DynamicComputeShaderInfo*   pDynamicCompueShaderInfo)
 {
-    ApplyProfileToComputePipelineCreateInfo(m_tuningProfile, pipelineKey, pDynamicCompueShaderInfo);
-
     ApplyProfileToComputePipelineCreateInfo(m_appProfile, pipelineKey, pDynamicCompueShaderInfo);
+
+    ApplyProfileToComputePipelineCreateInfo(m_tuningProfile, pipelineKey, pDynamicCompueShaderInfo);
 
 #if ICD_RUNTIME_APP_PROFILE
     ApplyProfileToComputePipelineCreateInfo(m_runtimeProfile, pipelineKey, pDynamicCompueShaderInfo);
@@ -547,58 +547,69 @@ void ShaderOptimizer::BuildAppProfile()
     }
     else if (appProfile == AppProfile::Dota2)
     {
+        m_appProfile.entryCount = 1;
+
+        m_appProfile.entries[0].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+        m_appProfile.entries[0].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+
+        m_appProfile.entries[0].pattern.shaders[ShaderStageCompute].codeHash.lower = 0x82f54594aec52a8f;
+        m_appProfile.entries[0].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xf5ae1fb001ca53df;
+
+        m_appProfile.entries[0].action.shaders[ShaderStageCompute].shaderCreate.apply.shaderReplaceEnabled = true;
+
         if ((asicRevision >= Pal::AsicRevision::Polaris10) && (asicRevision <= Pal::AsicRevision::Polaris12))
         {
-            m_appProfile.entryCount = 8;
-
-            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xdd6c573c46e6adf8;
-            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x751207727c904749;
-            m_appProfile.entries[0].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+            m_appProfile.entryCount += 8;
 
             m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].match.stageActive = true;
             m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x71093bf7c6e98da8;
-            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xfbc956d87a6d6631;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xdd6c573c46e6adf8;
+            m_appProfile.entries[1].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x751207727c904749;
             m_appProfile.entries[1].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].match.stageActive = true;
             m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xedd89880de2091f9;
-            m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x506d0ac3995d2f1b;
+            m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x71093bf7c6e98da8;
+            m_appProfile.entries[2].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xfbc956d87a6d6631;
             m_appProfile.entries[2].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].match.stageActive = true;
             m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xbc583b30527e9f1d;
-            m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x1ef8276d42a14220;
+            m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xedd89880de2091f9;
+            m_appProfile.entries[3].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x506d0ac3995d2f1b;
             m_appProfile.entries[3].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].match.stageActive = true;
             m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x012ddab000f80610;
-            m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x3a65a6325756203d;
+            m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xbc583b30527e9f1d;
+            m_appProfile.entries[4].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x1ef8276d42a14220;
             m_appProfile.entries[4].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].match.stageActive = true;
             m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x78095b5acf62f4d5;
-            m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x2c1afc1c6f669e33;
+            m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x012ddab000f80610;
+            m_appProfile.entries[5].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x3a65a6325756203d;
             m_appProfile.entries[5].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].match.stageActive = true;
             m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x22803b077988ec36;
-            m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x7ba50586c34e1662;
+            m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x78095b5acf62f4d5;
+            m_appProfile.entries[6].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x2c1afc1c6f669e33;
             m_appProfile.entries[6].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].match.stageActive = true;
             m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x313dab8ff9408da0;
-            m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xbb11905194a55485;
+            m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x22803b077988ec36;
+            m_appProfile.entries[7].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x7ba50586c34e1662;
             m_appProfile.entries[7].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+
+            m_appProfile.entries[8].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[8].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[8].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x313dab8ff9408da0;
+            m_appProfile.entries[8].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xbb11905194a55485;
+            m_appProfile.entries[8].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
         }
+
     }
 }
 
@@ -705,276 +716,6 @@ static bool CheckValidKeys(
     }
 
     return success;
-}
-
-// =====================================================================================================================
-static bool ParseJsonMinVgprOptions(
-    utils::Json*               pJson,
-    Scpc::ShaderTuningOptions* pTuningOptions)
-{
-    bool success = true;
-
-    if (pJson->type == utils::JsonValueType::Number)
-    {
-        pTuningOptions->minVgprOptions.u32All = static_cast<uint32_t>(pJson->integerValue);
-    }
-    else if (pJson->type == utils::JsonValueType::Object)
-    {
-        static const char* ValidKeys[] =
-        {
-            "globalCodeMotionXform",
-            "schedulerFavorsMinVpgrs",
-            "regAllocFavorsMinVgprs",
-            "enableMergeChaining",
-            "peepholeOptimizations",
-            "cubeCoordinates",
-            "factorMadToCommonMul",
-            "valueNumberOptimizations",
-            "bulkCodeMotion"
-        };
-
-        success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);
-
-        utils::Json* pItem = nullptr;
-
-        pTuningOptions->minVgprOptions.u32All = 0;
-
-        if ((pItem = utils::JsonGetValue(pJson, "globalCodeMotionXform")) != nullptr)
-        {
-            pTuningOptions->minVgprOptions.globalCodeMotionXform = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "schedulerFavorsMinVpgrs")) != nullptr)
-        {
-            pTuningOptions->minVgprOptions.schedulerFavorsMinVpgrs = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "regAllocFavorsMinVgprs")) != nullptr)
-        {
-            pTuningOptions->minVgprOptions.regAllocFavorsMinVgprs = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "enableMergeChaining")) != nullptr)
-        {
-            pTuningOptions->minVgprOptions.enableMergeChaining = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "peepholeOptimizations")) != nullptr)
-        {
-            pTuningOptions->minVgprOptions.peepholeOptimizations = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "cubeCoordinates")) != nullptr)
-        {
-            pTuningOptions->minVgprOptions.cubeCoordinates = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "factorMadToCommonMul")) != nullptr)
-        {
-            pTuningOptions->minVgprOptions.factorMadToCommonMul = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "valueNumberOptimizations")) != nullptr)
-        {
-            pTuningOptions->minVgprOptions.valueNumberOptimizations = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "bulkCodeMotion")) != nullptr)
-        {
-            pTuningOptions->minVgprOptions.bulkCodeMotion = pItem->booleanValue;
-        }
-    }
-    else
-    {
-        success = false;
-    }
-
-    return success;
-}
-
-// =====================================================================================================================
-static bool ParseJsonOptStrategyFlags(
-    utils::Json*               pJson,
-    Scpc::ShaderTuningOptions* pTuningOptions)
-{
-    bool success = true;
-
-    if (pJson->type == utils::JsonValueType::Number)
-    {
-        pTuningOptions->flags.u32All = static_cast<uint32_t>(pJson->integerValue);
-    }
-    else if (pJson->type == utils::JsonValueType::Object)
-    {
-        static const char* ValidKeys[] =
-        {
-            "minimizeMemoryFootprint",
-            "minimizeVGprs",
-            "groupScoring",
-            "livenessScheduling",
-            "rematerializeInstructions",
-            "useMoreD16",
-            "unsafeMadMix",
-            "unsafeConvertToF16",
-            "removeNullParameterExports",
-            "aggressiveHoist",
-            "enableXnackSupport",
-            "useNonIeeeFpInstructions",
-            "anisoControlFiltering",
-            "appendBufPerWaveAtomics",
-            "ignoreConservativeDepth",
-            "disableIdentityFmaskGen",
-            "disableExportGrouping",
-            "enableF16OverflowClamping",
-            "enablePerformanceData",
-            "keepF32Denorms",
-            "usePbqpRegisterAllocator",
-            "useLatency2Scheduler"
-        };
-
-        success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);
-
-        utils::Json* pItem = nullptr;
-
-        pTuningOptions->flags.u32All = 0;
-
-        if ((pItem = utils::JsonGetValue(pJson, "minimizeMemoryFootprint")) != nullptr)
-        {
-            pTuningOptions->flags.minimizeMemoryFootprint = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "minimizeVGprs")) != nullptr)
-        {
-            pTuningOptions->flags.minimizeVGprs = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "groupScoring")) != nullptr)
-        {
-            pTuningOptions->flags.groupScoring = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "livenessScheduling")) != nullptr)
-        {
-            pTuningOptions->flags.livenessScheduling = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "rematerializeInstructions")) != nullptr)
-        {
-            pTuningOptions->flags.rematerializeInstructions = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "useMoreD16")) != nullptr)
-        {
-            pTuningOptions->flags.useMoreD16 = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "unsafeMadMix")) != nullptr)
-        {
-            pTuningOptions->flags.unsafeMadMix = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "unsafeConvertToF16")) != nullptr)
-        {
-            pTuningOptions->flags.unsafeConvertToF16 = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "removeNullParameterExports")) != nullptr)
-        {
-            pTuningOptions->flags.removeNullParameterExports = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "aggressiveHoist")) != nullptr)
-        {
-            pTuningOptions->flags.aggressiveHoist = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "enableXnackSupport")) != nullptr)
-        {
-            pTuningOptions->flags.enableXnackSupport = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "useNonIeeeFpInstructions")) != nullptr)
-        {
-            pTuningOptions->flags.useNonIeeeFpInstructions = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "anisoControlFiltering")) != nullptr)
-        {
-            pTuningOptions->flags.anisoControlFiltering = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "appendBufPerWaveAtomics")) != nullptr)
-        {
-            pTuningOptions->flags.appendBufPerWaveAtomics = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "ignoreConservativeDepth")) != nullptr)
-        {
-            pTuningOptions->flags.ignoreConservativeDepth = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "disableIdentityFmaskGen")) != nullptr)
-        {
-            pTuningOptions->flags.disableIdentityFmaskGen = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "disableExportGrouping")) != nullptr)
-        {
-            pTuningOptions->flags.disableExportGrouping = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "enableF16OverflowClamping")) != nullptr)
-        {
-            pTuningOptions->flags.enableF16OverflowClamping = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "enablePerformanceData")) != nullptr)
-        {
-            pTuningOptions->flags.enablePerformanceData = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "keepF32Denorms")) != nullptr)
-        {
-            pTuningOptions->flags.keepF32Denorms = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "usePbqpRegisterAllocator")) != nullptr)
-        {
-            pTuningOptions->flags.usePbqpRegisterAllocator = pItem->booleanValue;
-        }
-
-        if ((pItem = utils::JsonGetValue(pJson, "useLatency2Scheduler")) != nullptr)
-        {
-            pTuningOptions->flags.useLatency2Scheduler = pItem->booleanValue;
-        }
-    }
-    else
-    {
-        success = false;
-    }
-
-    return success;
-}
-
-// =====================================================================================================================
-static void ParseDwordArray(
-    utils::Json* pItem,
-    uint32_t     maxCount,
-    uint32_t     defaultValue,
-    uint32_t*    pArray)
-{
-    for (uint32_t i = 0; i < maxCount; ++i)
-    {
-        utils::Json* pElement = utils::JsonArrayElement(pItem, i);
-
-        if (pElement != nullptr)
-        {
-            pArray[i] = static_cast<uint32_t>(pElement->integerValue);
-        }
-        else
-        {
-            pArray[i] = defaultValue;
-        }
-    }
 }
 
 // =====================================================================================================================

@@ -139,8 +139,6 @@ VkResult PipelineLayout::ConvertCreateInfo(
             pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;
 
             // Add count for FMASK nodes
-            // In SCPC path,  subpass are translated to UAV, but related load_ptr need a node with type Resource,
-            // so we need declare two nodes in this case.
             if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
             {
                 pPipelineInfo->numRsrcMapNodes += setLayoutInfo.sta.numRsrcMapNodes;

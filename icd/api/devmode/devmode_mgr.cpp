@@ -2117,7 +2117,7 @@ Pal::Result DevModeMgr::TimedQueueSubmit(
 }
 
 // =====================================================================================================================
-// Registers this pipeline as being included in the RGP trace.  Stores shader code binary etc.
+// Registers this pipeline, storing the code object binary and recording a load event in the RGP trace.
 void DevModeMgr::PipelineCreated(
     Device*   pDevice,
     Pipeline* pPipeline)
@@ -2127,6 +2127,20 @@ void DevModeMgr::PipelineCreated(
         (m_trace.pGpaSession != nullptr))
     {
         m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
+    }
+}
+
+// =====================================================================================================================
+// Unregisters this pipeline, recording an unload event in the RGP trace.
+void DevModeMgr::PipelineDestroyed(
+    Device*   pDevice,
+    Pipeline* pPipeline)
+{
+    if ((m_trace.pDevice == pDevice) &&
+        m_trace.pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
+        (m_trace.pGpaSession != nullptr))
+    {
+        m_trace.pGpaSession->UnregisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
     }
 }
 

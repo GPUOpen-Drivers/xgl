@@ -595,7 +595,7 @@ VkResult Queue::Present(
         {
             const VkStructHeader*              pHeader;
             const VkPresentInfoKHR*            pVkPresentInfoKHR;
-            const VkDeviceGroupPresentInfoKHX* pVkDeviceGroupPresentInfoKHX;
+            const VkDeviceGroupPresentInfoKHR* pVkDeviceGroupPresentInfoKHR;
         };
 
         for (pVkPresentInfoKHR = pPresentInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -606,11 +606,10 @@ VkResult Queue::Present(
                 pVkInfo = pVkPresentInfoKHR;
                 break;
 
-            case VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHX:
+            case VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR:
             {
-                // TODO: SWDEV-120359 - We need to handle multiple swapchains
-                VK_ASSERT(pVkDeviceGroupPresentInfoKHX->swapchainCount == 1);
-                const uint32_t deviceMask = *pVkDeviceGroupPresentInfoKHX->pDeviceMasks;
+                VK_ASSERT(pVkDeviceGroupPresentInfoKHR->swapchainCount == 1);
+                const uint32_t deviceMask = *pVkDeviceGroupPresentInfoKHR->pDeviceMasks;
                 VK_ASSERT(Util::CountSetBits(deviceMask) == 1);
                 Util::BitMaskScanForward(&presentationDeviceIdx, deviceMask);
                 break;
@@ -650,7 +649,9 @@ VkResult Queue::Present(
         // Fill in present information
         Pal::PresentSwapChainInfo presentInfo = {};
 
-        result = pSwapChain->GetPresentInfo(presentationDeviceIdx, imageIndex, &presentInfo);
+        // For MGPU, the swapchain and device properties might perform software composition and return
+        // a different presentation device for the present of the intermediate surface.
+        Pal::IQueue* pPresentQueue = pSwapChain->PrePresent(presentationDeviceIdx, imageIndex, &presentInfo, this);
 
         // Notify gpuopen developer mode that we're about to present (frame-end boundary)
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -673,7 +674,7 @@ VkResult Queue::Present(
         }
 
         // Perform the actual present
-        Pal::Result palResult = PalQueue(presentationDeviceIdx)->PresentSwapChain(presentInfo);
+        Pal::Result palResult = pPresentQueue->PresentSwapChain(presentInfo);
 
         result = NotifyFlipMetadataAfterPresent(&presentInfo);
 

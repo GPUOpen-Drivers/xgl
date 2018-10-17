@@ -1632,6 +1632,27 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
+    VkDevice                                    device,
+    VkPipeline                                  pipeline,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    Device* pDevice     = ApiDevice::ObjectFromHandle(device);
+    SqttMgr* pSqtt      = pDevice->GetSqttMgr();
+    DevModeMgr* pDevMgr = pDevice->VkInstance()->GetDevModeMgr();
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    if (pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable && (pDevMgr != nullptr))
+    {
+        Pipeline* pPipeline = Pipeline::ObjectFromHandle(pipeline);
+        pDevMgr->PipelineDestroyed(pDevice, pPipeline);
+    }
+#endif
+
+    return SQTT_CALL_NEXT_LAYER(vkDestroyPipeline)(device, pipeline, pAllocator);
+}
+
+// =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectNameEXT(
     VkDevice                                    device,
     const VkDebugMarkerObjectNameInfoEXT*       pNameInfo)
@@ -1875,6 +1896,7 @@ void SqttOverrideDispatchTable(
     SQTT_OVERRIDE_ENTRY(vkCmdDebugMarkerInsertEXT);
     SQTT_OVERRIDE_ENTRY(vkCreateGraphicsPipelines);
     SQTT_OVERRIDE_ENTRY(vkCreateComputePipelines);
+    SQTT_OVERRIDE_ENTRY(vkDestroyPipeline);
     SQTT_OVERRIDE_ENTRY(vkDebugMarkerSetObjectNameEXT);
     SQTT_OVERRIDE_ENTRY(vkDebugMarkerSetObjectTagEXT);
     SQTT_OVERRIDE_ENTRY(vkQueueSubmit);

@@ -33,11 +33,6 @@
 
 #include "llpc.h"
 
-namespace Scpc
-{
-struct ShaderTuningOptions;
-}
-
 namespace Pal { enum class ResourceMappingNodeType : Pal::uint32; }
 
 namespace vk
@@ -73,8 +68,6 @@ public:
 
     const void* GetShaderData(bool isLlpc) const
     {
-        // If both SCPC and LLPC build are defined, select module by input flag
-        // Otherwise, the input flag is ignored.
         return m_pLlpcShaderModule;
     }
 

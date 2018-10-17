@@ -193,8 +193,6 @@ VkResult Semaphore::Create(
         if (result == VK_SUCCESS)
         {
             Pal::OsExternalHandle handle = 0;
-#if PAL_INTERFACE_MAJOR_VERSION >= 433
-#endif
             // On success, construct the API object and return to the caller
             VK_PLACEMENT_NEW(pMemory) Semaphore(pPalSemaphores, semaphoreCount, palCreateInfo, handle);
 

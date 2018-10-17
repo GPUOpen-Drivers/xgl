@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -22,28 +22,17 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
-/**
- **********************************************************************************************************************
- * @file  vk_khr_shader_atomic_int64.h
- * @brief
- **********************************************************************************************************************
- */
-#ifndef VK_KHR_SHADER_ATOMIC_INT64_H_
-#define VK_KHR_SHADER_ATOMIC_INT64_H_
+ /**
+  **********************************************************************************************************************
+  * @file  vk_google_decorate_string.h
+  * @brief
+  **********************************************************************************************************************
+  */
+#ifndef VK_GOOGLE_DECORATE_STRING_H_
+#define VK_GOOGLE_DECORATE_STRING_H_
 
-#define VK_KHR_shader_atomic_int64                   1
-#define VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NUMBER  181
-#define VK_KHR_SHADER_ATOMIC_INT64_SPEC_VERSION      1
-#define VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NAME    "VK_KHR_shader_atomic_int64"
+#define VK_GOOGLE_decorate_string                       1
+#define VK_GOOGLE_DECORATE_STRING_SPEC_VERSION          1
+#define VK_GOOGLE_DECORATE_STRING_EXTENSION_NAME        "VK_GOOGLE_decorate_string"
 
-#define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR \
-    VK_EXTENSION_ENUM(VK_KHR_SHADER_ATOMIC_INT64_EXTENSION_NUMBER, VkStructureType, 0)
-
-typedef struct VkPhysicalDeviceShaderAtomicInt64FeaturesKHR {
-    VkStructureType    sType;
-    void*              pNext;
-    VkBool32           shaderBufferInt64Atomics;
-    VkBool32           shaderSharedInt64Atomics;
-} VkPhysicalDeviceShaderAtomicInt64FeaturesKHR;
-
-#endif /* VK_KHR_SHADER_ATOMIC_INT64_H_ */
+#endif

@@ -87,6 +87,10 @@ public:
         return m_pDisplayManager;
     }
 
+    VkResult EnumerateAllNullPhysicalDeviceProperties(
+        uint32_t*                       pPhysicalDeviceCount,
+        VkPhysicalDeviceProperties**    ppPhysicalDeviceProperties);
+
 protected:
     PhysicalDeviceManager(
         Instance*       pInstance,
@@ -104,6 +108,8 @@ private:
 
     DeviceVector                m_devices;     // Physical device handles in the order of EnumeratePhysicalDevices
     Util::Mutex                 m_devicesLock; // Mutex used to lock access to the vector of physical devices
+
+    VkPhysicalDeviceProperties* m_pAllNullProperties; // Physical device properties exposed when NULL_GPU=ALL
 };
 
 }

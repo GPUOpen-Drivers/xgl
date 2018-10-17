@@ -477,7 +477,6 @@ VkResult Image::Create(
         }
         case VK_STRUCTURE_TYPE_IMAGE_SWAPCHAIN_CREATE_INFO_KHR:
         {
-            // TODO: SWDEV-120361 - peer memory swapchain binding not implemented yet.
             VK_NOT_IMPLEMENTED;
             break;
         }
@@ -504,6 +503,7 @@ VkResult Image::Create(
     {
         palCreateInfo.viewFormatCount = 0;
         palCreateInfo.pViewFormats    = &palFormatList[0];
+        bool noStencilRead = true;
 
         for (uint32_t i = 0; i < viewFormatCount; ++i)
         {
@@ -513,7 +513,14 @@ VkResult Image::Create(
             {
                 palFormatList[palCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i]);
             }
+
+            if (Formats::HasStencil(pViewFormats[i]))
+            {
+               noStencilRead = false;
+            }
         }
+
+        palCreateInfo.usageFlags.noStencilShaderRead = noStencilRead;
     }
 
     // If flags contains VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT, imageType must be VK_IMAGE_TYPE_3D
@@ -936,7 +943,7 @@ void GenerateBindIndices(
 {
     memset(pBindIndices, InvalidPalDeviceMask, sizeof(pBindIndices[0]) * numDevices);
 
-    VK_ASSERT(rectCount == 0);  // TODO: SWDEV-110556
+    VK_ASSERT(rectCount == 0);
                                 // We have not exposed VK_IMAGE_CREATE_BIND_SFR_BIT so rectCount must be zero.
     if (deviceIndexCount != 0)
     {

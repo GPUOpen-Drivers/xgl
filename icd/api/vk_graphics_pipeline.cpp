@@ -678,7 +678,6 @@ VkResult GraphicsPipeline::Create(
     {
         ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &createInfo);
 
-        // Override the Scpc::GraphicsPipelineCreateInfo parameters based on any active app profile
         pDevice->GetShaderOptimizer()->OverrideGraphicsPipelineCreateInfo(
             binaryCreateInfo.pipelineProfileKey,
             createInfo.activeStages,

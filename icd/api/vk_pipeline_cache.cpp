@@ -199,20 +199,6 @@ VkResult PipelineCache::Destroy(
 }
 
 // =====================================================================================================================
-// This function stores AMD specific pipeline cache data as follows:
-// First, AMD private pipeline cache header data, then the contents of
-// each SCPC shader cache of each PAL device.
-// ------------------------------------------------------------------------<-- offset 0 (after the header)
-// | PipelineCachePrivateHeaderData                                       |
-// ------------------------------------------------------------------------<-- offset H (PipelineCachePrivateHeaderData)
-// | shader cache content of device 0 ...                                 |
-// ------------------------------------------------------------------------<-- offset H + A
-// | shader cache content of device 1 ...                                 |
-// ------------------------------------------------------------------------<-- offset H + A + B
-// | shader cache content of device 2 ...                                 |
-// ------------------------------------------------------------------------<-- offset H + A + B + C
-// | shader cache content of device 3 ...                                 |
-// ------------------------------------------------------------------------
 VkResult PipelineCache::GetData(
     void*   pData,
     size_t* pSize)
@@ -222,7 +208,6 @@ VkResult PipelineCache::GetData(
     VkResult        result = VK_SUCCESS;
     uint32_t numPalDevices = m_pDevice->NumPalDevices();
 
-    // The starting is an array of blob sizes of each SCPC shader cache.
     size_t allBlobSize = sizeof(PipelineCachePrivateHeaderData);
     PipelineCachePrivateHeaderData headerData = {};
 
