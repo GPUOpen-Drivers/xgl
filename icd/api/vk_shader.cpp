@@ -159,7 +159,7 @@ VkResult ShaderModule::Create(
 // Initialize shader module object, performing SPIR-V to AMD IL shader binary conversion.
 VkResult ShaderModule::Init(const Device* pDevice)
 {
-    PipelineCompiler* pCompiler = pDevice->GetCompiler();
+    PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
     return pCompiler->BuildShaderModule(m_codeSize,
                                         m_pCode
                                         , &m_pLlpcShaderModule
@@ -171,7 +171,7 @@ VkResult ShaderModule::Destroy(
     const Device*                   pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-    PipelineCompiler* pCompiler = pDevice->GetCompiler();
+    PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
     pCompiler->FreeShaderModule(m_pLlpcShaderModule);
 

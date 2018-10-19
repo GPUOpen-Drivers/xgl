@@ -53,7 +53,7 @@ public:
         const Device*                     pDevice,
         const VkAllocationCallbacks*      pAllocator);
 
-    const void* Descriptor(VkDescriptorType descType, int32_t deviceIdx = DefaultDeviceIndex) const
+    const void* Descriptor(VkDescriptorType descType, int32_t deviceIdx) const
     {
         return Util::VoidPtrInc(m_pSrds, m_SrdSize * deviceIdx);
     }

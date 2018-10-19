@@ -85,7 +85,7 @@ public:
     VK_INLINE void SetActiveDevice(uint32_t deviceIdx)
         { m_activeDeviceMask |= (1 << deviceIdx); }
 
-    VK_FORCEINLINE Pal::IFence* PalFence(int32_t idx = DefaultDeviceIndex) const
+    VK_FORCEINLINE Pal::IFence* PalFence(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
 

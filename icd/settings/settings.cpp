@@ -160,9 +160,8 @@ static void OverrideProfiledSettings(
         pSettings->useAnisoThreshold = true;
         pSettings->anisoThreshold    = 1.0f;
 
-        pSettings->disableDeviceOnlyMemoryTypeWithoutHeap = true;
-
         pSettings->prefetchShaders = true;
+        pSettings->disableMsaaStencilShaderRead = true;
 
     }
 
@@ -175,9 +174,8 @@ static void OverrideProfiledSettings(
         pSettings->useAnisoThreshold = true;
         pSettings->anisoThreshold    = 1.0f;
 
-        pSettings->disableDeviceOnlyMemoryTypeWithoutHeap = true;
-
         pSettings->prefetchShaders = true;
+        pSettings->disableMsaaStencilShaderRead = true;
     }
 
     if (appProfile == AppProfile::Talos)

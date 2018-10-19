@@ -538,7 +538,7 @@ public:
         { return m_pDevice->VkInstance(); }
 
     VK_INLINE Pal::ICmdBuffer* PalCmdBuffer(
-            int32_t idx = DefaultDeviceIndex) const
+            int32_t idx) const
     {
         if (idx == 0)
         {
@@ -813,9 +813,6 @@ private:
     void PalBindPipeline(
         VkPipelineBindPoint     pipelineBindPoint,
         VkPipeline              pipeline);
-
-    template< typename Type_T >
-    bool DetectCopyOverwrite(const Type_T* pDst) const;
 
     VK_INLINE void RPBeginSubpass();
     VK_INLINE void RPEndSubpass();
@@ -1173,19 +1170,6 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDispatchIndirect(
     VkCommandBuffer                             commandBuffer,
     VkBuffer                                    buffer,
     VkDeviceSize                                offset);
-
-VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHX(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    baseGroupX,
-    uint32_t                                    baseGroupY,
-    uint32_t                                    baseGroupZ,
-    uint32_t                                    groupCountX,
-    uint32_t                                    groupCountY,
-    uint32_t                                    groupCountZ);
-
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHX(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    deviceMask);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBase(
     VkCommandBuffer                             commandBuffer,

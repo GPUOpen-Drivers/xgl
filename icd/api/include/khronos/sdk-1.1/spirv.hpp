@@ -130,6 +130,13 @@ enum ExecutionMode {
     ExecutionModeLocalSizeId = 38,
     ExecutionModeLocalSizeHintId = 39,
     ExecutionModePostDepthCoverage = 4446,
+#if VKI_KHR_SHADER_FLOAT_CONTROLS
+    ExecutionModeDenormPreserve = 4459,
+    ExecutionModeDenormFlushToZero = 4460,
+    ExecutionModeSignedZeroInfNanPreserve = 4461,
+    ExecutionModeRoundingModeRTE = 4462,
+    ExecutionModeRoundingModeRTZ = 4463,
+#endif
     ExecutionModeStencilRefReplacingEXT = 5027,
     ExecutionModeMax = 0x7fffffff,
 };
@@ -682,11 +689,21 @@ enum Capability {
     CapabilityStorageBuffer8BitAccess = 4448,
     CapabilityUniformAndStorageBuffer8BitAccess = 4449,
     CapabilityStoragePushConstant8 = 4450,
+#if VKI_KHR_SHADER_FLOAT_CONTROLS
+    CapabilityDenormPreserve = 4464,
+    CapabilityDenormFlushToZero = 4465,
+    CapabilitySignedZeroInfNanPreserve = 4466,
+    CapabilityRoundingModeRTE = 4467,
+    CapabilityRoundingModeRTZ = 4468,
+#endif
     CapabilityFloat16ImageAMD = 5008,
     CapabilityImageGatherBiasLodAMD = 5009,
     CapabilityFragmentMaskAMD = 5010,
     CapabilityStencilExportEXT = 5013,
     CapabilityImageReadWriteLodAMD = 5015,
+#if VKI_KHR_SHADER_CLOCK
+    CapabilityShaderClockKHR = 5054,
+#endif
     CapabilitySampleMaskOverrideCoverageNV = 5249,
     CapabilityGeometryShaderPassthroughNV = 5251,
     CapabilityShaderViewportIndexLayerEXT = 5254,
@@ -1071,6 +1088,10 @@ enum Op {
     OpGroupSMaxNonUniformAMD = 5007,
     OpFragmentMaskFetchAMD = 5011,
     OpFragmentFetchAMD = 5012,
+#if VKI_KHR_SHADER_CLOCK
+    OpTimeKHR = 5055,
+    OpRealTimeKHR = 5056,
+#endif
     OpGroupNonUniformPartitionNV = 5296,
     OpSubgroupShuffleINTEL = 5571,
     OpSubgroupShuffleDownINTEL = 5572,

@@ -102,9 +102,6 @@ struct PipelineProfilePattern
     ShaderProfilePattern shaders[ShaderStageCount];
 };
 
-/// Defines optimization tuning options for this shader.  These generally affect either how SCPC chooses to control
-/// certain features (such as user-data spilling), or they directly control compiler options passed to SC when
-/// compiling the shaders.
 struct ShaderTuningOptions
 {
     uint32_t vgprLimit;
@@ -117,7 +114,6 @@ struct ShaderTuningOptions
 
 struct ShaderProfileAction
 {
-    // Applied to Scpc::ShaderCreateInfo:
     struct
     {
         // Defines which values are applied
@@ -147,7 +143,6 @@ struct ShaderProfileAction
         ShaderTuningOptions tuningOptions;
     } shaderCreate;
 
-    // Applied to Scpc::PipelineShaderInfo:
     struct
     {
         // Empty for now (potentially interesting tuning parameters exist though)

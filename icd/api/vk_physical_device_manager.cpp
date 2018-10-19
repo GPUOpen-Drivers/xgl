@@ -51,7 +51,8 @@ PhysicalDeviceManager::PhysicalDeviceManager(
     :
     m_pInstance(pInstance),
     m_pDisplayManager(pDisplayManager),
-    m_devices(pInstance->Allocator())
+    m_devices(pInstance->Allocator()),
+    m_pAllNullProperties(nullptr)
 {
 
 }
@@ -120,6 +121,11 @@ VkResult PhysicalDeviceManager::Initialize()
 // =====================================================================================================================
 PhysicalDeviceManager::~PhysicalDeviceManager()
 {
+    if (m_pAllNullProperties != nullptr)
+    {
+        m_pInstance->FreeMem(m_pAllNullProperties);
+    }
+
     DestroyLockedPhysicalDeviceList();
 }
 
@@ -434,6 +440,76 @@ void PhysicalDeviceManager::DestroyLockedPhysicalDeviceList(void)
         // Destroy physical device object
         pPhysicalDevice->Destroy();
     }
+}
+
+// =====================================================================================================================
+// Enumerates all NULL physical device properties
+VkResult PhysicalDeviceManager::EnumerateAllNullPhysicalDeviceProperties(
+    uint32_t*                    pPhysicalDeviceCount,
+    VkPhysicalDeviceProperties** ppPhysicalDeviceProperties)
+{
+    Util::MutexAuto lock(&m_devicesLock);
+
+    VkResult status = VK_SUCCESS;
+
+    if (ppPhysicalDeviceProperties == nullptr)
+    {
+        // Only the count was requested
+        status = PalToVkResult(Pal::EnumerateNullDevices(pPhysicalDeviceCount, nullptr));
+    }
+    else
+    {
+        Pal::NullGpuInfo nullGpus[static_cast<uint32_t>(Pal::NullGpuId::Max)] = {};
+        uint32_t nullGpuCount = VK_ARRAY_SIZE(nullGpus);
+
+        status = PalToVkResult(Pal::EnumerateNullDevices(&nullGpuCount, nullGpus));
+
+        if (status == VK_SUCCESS)
+        {
+            size_t memSize = sizeof(VkPhysicalDeviceProperties) * static_cast<size_t>(Pal::NullGpuId::Max);
+
+            if (m_pAllNullProperties == nullptr)
+            {
+                m_pAllNullProperties = reinterpret_cast<VkPhysicalDeviceProperties*>(
+                    m_pInstance->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE));
+
+                if (m_pAllNullProperties == nullptr)
+                {
+                    status = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+            }
+
+            if (status == VK_SUCCESS)
+            {
+                // Clear any previous contents
+                memset(m_pAllNullProperties, 0, memSize);
+
+                const uint32_t numItemsToWrite = Util::Min(nullGpuCount, *pPhysicalDeviceCount);
+
+                for (uint32_t numItemsWritten = 0; numItemsWritten < numItemsToWrite; ++numItemsWritten)
+                {
+                    VkPhysicalDeviceProperties &props = m_pAllNullProperties[numItemsWritten];
+
+                    // Copy null gpu id and name
+                    props.deviceID = static_cast<uint32_t>(nullGpus[numItemsWritten].nullGpuId);
+                    strcpy(props.deviceName, nullGpus[numItemsWritten].pGpuName);
+
+                    *ppPhysicalDeviceProperties++ = &props;
+                }
+
+                if (numItemsToWrite != nullGpuCount)
+                {
+                    // Update the count to only what was written.
+                    *pPhysicalDeviceCount = numItemsToWrite;
+
+                    status = VK_INCOMPLETE;
+                }
+            }
+        }
+
+    }
+
+    return status;
 }
 
 } // namespace vk

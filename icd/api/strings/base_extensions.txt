@@ -10,7 +10,6 @@ VK_KHR_get_surface_capabilities2
 VK_KHR_external_memory_capabilities
 VK_KHR_external_semaphore_capabilities
 VK_KHR_external_fence_capabilities
-VK_KHX_device_group_creation
 VK_EXT_debug_report
 VK_KHR_device_group_creation
 VK_KHR_display
@@ -23,7 +22,6 @@ VK_KHR_get_display_properties2
 VK_KHR_bind_memory2
 VK_KHR_dedicated_allocation
 VK_KHR_descriptor_update_template
-VK_KHX_device_group
 VK_KHR_external_memory
 VK_KHR_external_memory_fd
 VK_KHR_external_memory_win32
@@ -85,3 +83,7 @@ VK_KHR_8bit_storage
 VK_EXT_conservative_rasterization
 VK_EXT_swapchain_colorspace
 VK_EXT_hdr_metadata
+VK_KHR_shader_atomic_int64
+VK_KHR_driver_properties
+VK_GOOGLE_hlsl_functionality1
+VK_GOOGLE_decorate_string

@@ -248,6 +248,7 @@ public:
         uint32_t                            queueFamilyIndexCount,
         const uint32_t*                     pQueueFamilyIndices,
         bool                                multisampled,
+        VkFormat                            format,
         uint32_t                            extraLayoutUsages = 0);
 
     VK_FORCEINLINE uint32_t GetSupportedLayoutUsageMask() const
@@ -286,6 +287,7 @@ protected:
         Device*                             pDevice,
         VkImageUsageFlags                   usage,
         bool                                multisampled,
+        VkFormat                            format,
         uint32_t                            extraLayoutUsages);
 
     void InitConcurrentLayoutUsagePolicy(

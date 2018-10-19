@@ -135,6 +135,7 @@ public:
     void NotifyFrameEnd(const Queue* pQueue, bool viaPresent);
     void WaitForDriverResume();
     void PipelineCreated(Device* pDevice, Pipeline* pPipeline);
+    void PipelineDestroyed(Device* pDevice, Pipeline* pPipeline);
     void PostDeviceCreate(Device* pDevice);
     void PreDeviceDestroy(Device* pDevice);
     void NotifyPreSubmit();

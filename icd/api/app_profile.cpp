@@ -639,12 +639,13 @@ static uint32_t ParseProfileDataToUint32(
 // =====================================================================================================================
 // Process profile token
 void ProcessProfileEntry(
-    const char*       entryName,
-    uint32_t          dataSize,
-    const void*       data,
-    RuntimeSettings*  pRuntimeSettings,
-    ChillSettings*    pChillSettings,
-    bool              isUser3DAreaFormat)
+    const char*        entryName,
+    uint32_t           dataSize,
+    const void*        data,
+    RuntimeSettings*   pRuntimeSettings,
+    ChillSettings*     pChillSettings,
+    TurboSyncSettings* pTurboSyncSettings,
+    bool               isUser3DAreaFormat)
 {
     // Skip if the data is empty
     if (dataSize != 0)
@@ -664,7 +665,6 @@ void ProcessProfileEntry(
             {
                 pUint32Setting = reinterpret_cast<uint32_t*>(&(pRuntimeSettings->vulkanTexFilterQuality));
             }
-
         }
 
         if (pBoolSetting != nullptr)
@@ -699,6 +699,7 @@ static bool QueryPalProfile(
     Instance*                     pInstance,
     RuntimeSettings*              pRuntimeSettings,
     ChillSettings*                pChillSettings,
+    TurboSyncSettings*            pTurboSyncSettings,
     Pal::ApplicationProfileClient client,
     char*                         exeOrCdnName) // This is the game EXE name or Content Distribution Network name.
 {
@@ -720,6 +721,7 @@ static bool QueryPalProfile(
                                 iterator.GetData(),
                                 pRuntimeSettings,
                                 pChillSettings,
+                                pTurboSyncSettings,
                                 isUser3DAreaFormat);
             iterator.Next();
         }
@@ -731,9 +733,10 @@ static bool QueryPalProfile(
 // =====================================================================================================================
 // Queries PAL for app profile settings
 bool ReloadAppProfileSettings(
-    Instance*        pInstance,
-    RuntimeSettings* pRuntimeSettings,
-    ChillSettings*   pChillSettings)
+    Instance*          pInstance,
+    RuntimeSettings*   pRuntimeSettings,
+    ChillSettings*     pChillSettings,
+    TurboSyncSettings* pTurboSyncSettings)
 {
     size_t exeNameLength = 0;
     char* pExeName = GetExecutableName(&exeNameLength, true);
@@ -754,6 +757,7 @@ bool ReloadAppProfileSettings(
         foundProfile = QueryPalProfile(pInstance,
                                        pRuntimeSettings,
                                        pChillSettings,
+                                       pTurboSyncSettings,
                                        Pal::ApplicationProfileClient::User3D,
                                        pExeNameLower);
 
@@ -771,6 +775,7 @@ bool ReloadAppProfileSettings(
                 foundProfile = QueryPalProfile(pInstance,
                                                pRuntimeSettings,
                                                pChillSettings,
+                                               pTurboSyncSettings,
                                                Pal::ApplicationProfileClient::User3D,
                                                cdnApplicationId);
             }
@@ -781,6 +786,7 @@ bool ReloadAppProfileSettings(
             foundProfile = QueryPalProfile(pInstance,
                                            pRuntimeSettings,
                                            pChillSettings,
+                                           pTurboSyncSettings,
                                            Pal::ApplicationProfileClient::Chill, //CHILL area
                                            pExeNameLower);
         }

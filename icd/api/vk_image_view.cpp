@@ -44,7 +44,8 @@ ImageView::ImageView(
     VkFormat                 viewFormat,
     const Pal::SubresRange&  subresRange,
     const Pal::Range&        zRange,
-    const bool               needsFmaskViewSrds)
+    const bool               needsFmaskViewSrds,
+    uint32_t                 numDevices)
     :
     m_pImage(pImage),
     m_viewFormat(viewFormat),
@@ -55,7 +56,6 @@ ImageView::ImageView(
     memset(m_pColorTargetViews, 0, sizeof(m_pColorTargetViews));
     memset(m_pDepthStencilViews, 0, sizeof(m_pDepthStencilViews));
 
-    const uint32_t numDevices = pImage->VkDevice()->NumPalDevices();
     if (pColorTargetView != nullptr)
     {
         memcpy(m_pColorTargetViews, pColorTargetView, sizeof(pColorTargetView[0]) * numDevices);
@@ -239,10 +239,12 @@ VkResult ImageView::Create(
     // usage flags.
     const Image* const pImage = Image::ObjectFromHandle(pCreateInfo->image);
 
-    const size_t numDevices    = pDevice->NumPalDevices();
-    const size_t srdSize       = pDevice->VkPhysicalDevice()->PalProperties().gfxipProperties.srdSizes.imageView;
-    const size_t fmaskDescSize = pDevice->VkPhysicalDevice()->PalProperties().gfxipProperties.srdSizes.fmaskView;
-    const size_t apiSize       = sizeof(ImageView);
+    const auto & gfxipProperties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties;
+
+    const uint32_t numDevices    = pDevice->NumPalDevices();
+    const size_t   srdSize       = gfxipProperties.srdSizes.imageView;
+    const size_t   fmaskDescSize = gfxipProperties.srdSizes.fmaskView;
+    const size_t   apiSize       = sizeof(ImageView);
 
     size_t totalSize              = apiSize; // Starting point
     size_t srdSegmentOffset       = 0;
@@ -285,7 +287,7 @@ VkResult ImageView::Create(
         }
     }
 
-    const Pal::IImage* pPalImage          = pImage->PalImage();
+    const Pal::IImage* pPalImage          = pImage->PalImage(DefaultDeviceIndex);
     const Pal::ImageCreateInfo& imageInfo = pPalImage->GetImageCreateInfo();
     bool needsFmaskViewSrds               = false;
 
@@ -488,7 +490,8 @@ VkResult ImageView::Create(
             pCreateInfo->format,
             palRanges[0],
             zRange,
-            needsFmaskViewSrds);
+            needsFmaskViewSrds,
+            numDevices);
 
         *pImageView = ImageView::HandleFromVoidPointer(pMemory);
 

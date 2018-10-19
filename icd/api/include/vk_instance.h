@@ -106,10 +106,9 @@ public:
         uint32_t*         pPhysicalDeviceCount,
         VkPhysicalDevice* pPhysicalDevices);
 
-    template<typename T>
     VkResult EnumeratePhysicalDeviceGroups(
-        uint32_t*       pPhysicalDeviceGroupCount,
-        T*              pPhysicalDeviceGroupProperties);
+        uint32_t*                           pPhysicalDeviceGroupCount,
+        VkPhysicalDeviceGroupProperties*    pPhysicalDeviceGroupProperties);
 
     void PhysicalDevicesChanged();
 
@@ -175,12 +174,9 @@ public:
         Pal::OsWindowHandle     windowHandle,
         Pal::OsDisplayHandle    monitorHandle) const;
 
-    Pal::IScreen* FindScreenFromConnectorId(
-        const Pal::IDevice* pDevice,
-        uint32_t            connectorId) const;
-
     Pal::IScreen* FindScreenFromRandrOutput(
         const Pal::IDevice* pDevice,
+        Display*            pDpy,
         uint32_t            randrOutput) const;
 
     VkResult GetScreenModeList(
@@ -198,6 +194,9 @@ public:
 
     VK_INLINE bool IsNullGpuModeEnabled() const
         { return m_flags.nullGpuMode; }
+
+    VK_INLINE Pal::NullGpuId GetNullGpuId() const
+        { return m_nullGpuId; }
 
     DevModeMgr* GetDevModeMgr()
         { return m_pDevModeMgr; }
@@ -230,6 +229,10 @@ public:
         int32_t                     messageCode,
         const char*                 pLayerPrefix,
         const char*                 pMessage);
+
+    VkResult EnumerateAllNullPhysicalDeviceProperties(
+        uint32_t*                       pPhysicalDeviceCount,
+        VkPhysicalDeviceProperties**    ppPhysicalDeviceProperties);
 
 private:
     Instance(
@@ -282,6 +285,9 @@ private:
         uint32_t u32All;
     } m_flags;
 
+    // Denotes which null gpu mode is enabled
+    Pal::NullGpuId                      m_nullGpuId;
+
     // The application profile that's been detected from the application name or other pattern
     // detection.  Nobody should use this value for anything because it may be overridden by
     // panel setting.  Instead, use the value tracked by the PhysicalDevice.
@@ -298,8 +304,9 @@ private:
     ScreenObject    m_screens[Pal::MaxScreens];
     void*           m_pScreenStorage;
 
-    DevModeMgr*   m_pDevModeMgr; // GPUOpen Developer Mode manager.
-    ChillSettings m_chillSettings; // Dynamic chill settings structure
+    DevModeMgr*       m_pDevModeMgr;       // GPUOpen Developer Mode manager.
+    ChillSettings     m_chillSettings;     // Dynamic chill settings structure
+    TurboSyncSettings m_turboSyncSettings; // Dynamic TurboSync settings structure
 
     Util::List<DebugReportCallback*, PalAllocator>  m_debugReportCallbacks;             // List of registered Debug
                                                                                         // Report Callbacks
@@ -381,12 +388,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceExtensionProperties(
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumerateInstanceLayerProperties(
     uint32_t*                                   pPropertyCount,
     VkLayerProperties*                          pProperties);
-
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHX(
-    VkInstance                                  instance,
-    uint32_t*                                   pPhysicalDeviceGroupCount,
-    VkPhysicalDeviceGroupPropertiesKHX*         pPhysicalDeviceGroupProperties);
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups(

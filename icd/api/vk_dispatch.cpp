@@ -366,7 +366,6 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceFormatsKHR            );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceFormats2KHR           );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfacePresentModesKHR       );
-    INIT_DISPATCH_ENTRY(vkGetPhysicalDevicePresentRectanglesKHX         );
 
     INIT_DISPATCH_ENTRY(vkGetSwapchainImagesKHR                         );
 
@@ -410,14 +409,6 @@ void DispatchTable::Init()
                         vkDestroyDescriptorUpdateTemplate               );
     INIT_DISPATCH_ALIAS(vkUpdateDescriptorSetWithTemplateKHR            ,
                         vkUpdateDescriptorSetWithTemplate               );
-
-    INIT_DISPATCH_ENTRY(vkAcquireNextImage2KHX                          );
-    INIT_DISPATCH_ENTRY(vkCmdDispatchBaseKHX                            );
-    INIT_DISPATCH_ENTRY(vkCmdSetDeviceMaskKHX                           );
-    INIT_DISPATCH_ENTRY(vkEnumeratePhysicalDeviceGroupsKHX              );
-    INIT_DISPATCH_ENTRY(vkGetDeviceGroupPeerMemoryFeaturesKHX           );
-    INIT_DISPATCH_ENTRY(vkGetDeviceGroupPresentCapabilitiesKHX          );
-    INIT_DISPATCH_ENTRY(vkGetDeviceGroupSurfacePresentModesKHX          );
 
     INIT_DISPATCH_ENTRY(vkAcquireNextImage2KHR                          );
     INIT_DISPATCH_ALIAS(vkCmdDispatchBaseKHR                            ,

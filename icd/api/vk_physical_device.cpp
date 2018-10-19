@@ -66,7 +66,6 @@
 #undef max
 #undef min
 
-#include <new>
 #include <cstring>
 #include <algorithm>
 #include <climits>
@@ -390,12 +389,14 @@ VkResult PhysicalDevice::Initialize()
         {
             for (uint32_t idx = 0; idx < Pal::EngineTypeCount; ++idx)
             {
-                // We do not currently create any high priority graphic queue
-                // so we don't need those engines.
+                // We do not currently create a high priority universal queue, so we don't need that engine.
                 // In order to support global priority, we still need exclusive compute engine to be initialized
                 // but this engine can only be selected according to the global priority set by application
-                if (idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityUniversal) &&
-                    idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityGraphics))
+                if (idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityUniversal)
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
+                    && idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityGraphics)
+#endif
+                   )
                 {
                     const auto& engineProps = m_properties.engineProperties[idx];
                     finalizeInfo.requestedEngineCounts[idx].engines = ((1 << engineProps.engineCount) - 1);
@@ -498,11 +499,9 @@ VkResult PhysicalDevice::Initialize()
                     VK_ASSERT(memoryHeap.size == heapProperties[Pal::GpuHeapGartCacheable].heapSize);
 
                     heapIndices[Pal::GpuHeapGartCacheable] = heapIndex;
-
                 }
                 else if ((palGpuHeap == Pal::GpuHeapLocal) &&
-                         (heapIndices[Pal::GpuHeapInvisible] == Pal::GpuHeapCount) &&
-                         (m_settings.disableDeviceOnlyMemoryTypeWithoutHeap == false))
+                         (heapIndices[Pal::GpuHeapInvisible] == Pal::GpuHeapCount))
                 {
                     // GPU invisible heap isn't present, but its memory properties are a subset of the GPU local heap.
                     heapIndices[Pal::GpuHeapInvisible] = heapIndex;
@@ -938,6 +937,12 @@ VkResult PhysicalDevice::GetImageFormatProperties(
 
     Pal::SwizzledFormat palFormat = VkToPalFormat(format);
 
+    // NOTE: BytesPerPixel obtained from PAL is per block not per pixel for compressed formats.  Therefore,
+    //       maxResourceSize/maxExtent are also in terms of blocks for compressed formats.  I.e. we don't
+    //       increase our exposed limits for compressed formats even though PAL/HW operating in terms of
+    //       blocks makes that possible.
+    const uint64_t bytesPerPixel = Pal::Formats::BytesPerPixel(palFormat.format);
+
     // Block-compressed formats are not supported for 1D textures (PAL image creation will fail).
     if (Pal::Formats::IsBlockCompressed(palFormat.format) && (type == VK_IMAGE_TYPE_1D))
     {
@@ -984,7 +989,9 @@ VkResult PhysicalDevice::GetImageFormatProperties(
             switch (type)
             {
                 case VK_IMAGE_TYPE_1D:
+                {
                     return VK_ERROR_FORMAT_NOT_SUPPORTED;
+                }
                 case VK_IMAGE_TYPE_2D:
                 {
                     const bool sparseResidencyImage2D = (GetPrtFeatures() & Pal::PrtFeatureImage2D) != 0;
@@ -1000,6 +1007,11 @@ VkResult PhysicalDevice::GetImageFormatProperties(
                                                                              Pal::PrtFeatureNonStandardImage3D)) != 0;
                     if (!sparseResidencyImage3D)
                     {
+                        return VK_ERROR_FORMAT_NOT_SUPPORTED;
+                    }
+                    else if (Formats::IsBcCompressedFormat(format) && (bytesPerPixel == 16))
+                    {
+                        // A combination of 3D PRT image and 128-bit BC format is not supported.
                         return VK_ERROR_FORMAT_NOT_SUPPORTED;
                     }
                     break;
@@ -1070,11 +1082,6 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     // NOTE: The spec requires the reported value to be at least 2**31, even though it does not make
     //       much sense for some cases ..
     //
-    // NOTE: BytesPerPixel obtained from PAL is per block not per pixel for compressed formats.  Therefore,
-    //       maxResourceSize/maxExtent are also in terms of blocks for compressed formats.  I.e. we don't
-    //       increase our exposed limits for compressed formats even though PAL/HW operating in terms of
-    //       blocks makes that possible.
-    uint64_t bytesPerPixel = Pal::Formats::BytesPerPixel(palFormat.format);
     uint32_t currMipSize[3] =
     {
         imageProps.maxDimensions.width,
@@ -1219,6 +1226,11 @@ void PhysicalDevice::GetSparseImageFormatProperties(
         {
             supported = false;
         }
+    }
+    else if ((type == VK_IMAGE_TYPE_3D) && (bytesPerPixel == 16) && Formats::IsBcCompressedFormat(format))
+    {
+        // A combination of 3D image and 128-bit BC format is not supported.
+        supported = false;
     }
 
     if (supported)
@@ -2387,73 +2399,58 @@ VkResult PhysicalDevice::GetSurfacePresentModes(
     VkPresentModeKHR presentModes[4] = {};
     uint32_t modeCount = 0;
 
-    // Query which swap chain modes are supported by the window/display
-    Pal::SwapChainProperties swapChainProperties = {};
-    if (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
+    // Get which swap chain modes are supported for the given present type (windowed vs fullscreen)
+    uint32_t swapChainModes = 0;
+    if (presentType == Pal::PresentMode::Count)
     {
-        swapChainProperties.currentExtent.width  = displayableInfo.surfaceExtent.width;
-        swapChainProperties.currentExtent.height = displayableInfo.surfaceExtent.height;
+        swapChainModes  = m_pPalDevice->GetSupportedSwapChainModes(displayableInfo.palPlatform, Pal::PresentMode::Windowed);
+        swapChainModes |= m_pPalDevice->GetSupportedSwapChainModes(displayableInfo.palPlatform, Pal::PresentMode::Fullscreen);
     }
-    Pal::Result palResult = m_pPalDevice->GetSwapChainInfo(
-        displayableInfo.displayHandle,
-        displayableInfo.windowHandle,
-        displayableInfo.palPlatform,
-        &swapChainProperties);
-
-    if (palResult == Pal::Result::Success)
+    else
     {
-        // Get which swap chain modes are supported for the given present type (windowed vs fullscreen)
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
-        const uint32_t swapChainModes =
-            m_pPalDevice->GetSupportedSwapChainModes(displayableInfo.palPlatform, presentType);
-#else
-        const uint32_t swapChainModes =
-            m_properties.swapChainProperties.supportedSwapChainModes[static_cast<size_t>(presentType)];
-#endif
-        // Translate to Vulkan present modes
-        if (swapChainModes & Pal::SwapChainModeSupport::SupportImmediateSwapChain)
-        {
-            presentModes[modeCount++] = VK_PRESENT_MODE_IMMEDIATE_KHR;
-        }
+        swapChainModes = m_pPalDevice->GetSupportedSwapChainModes(displayableInfo.palPlatform, presentType);
+    }
 
-        if (swapChainModes & Pal::SwapChainModeSupport::SupportMailboxSwapChain)
-        {
-            presentModes[modeCount++] = VK_PRESENT_MODE_MAILBOX_KHR;
-        }
+    // Translate to Vulkan present modes
+    if (swapChainModes & Pal::SwapChainModeSupport::SupportImmediateSwapChain)
+    {
+        presentModes[modeCount++] = VK_PRESENT_MODE_IMMEDIATE_KHR;
+    }
 
-        if (swapChainModes & Pal::SwapChainModeSupport::SupportFifoSwapChain)
-        {
-            presentModes[modeCount++] = VK_PRESENT_MODE_FIFO_KHR;
-        }
+    if (swapChainModes & Pal::SwapChainModeSupport::SupportMailboxSwapChain)
+    {
+        presentModes[modeCount++] = VK_PRESENT_MODE_MAILBOX_KHR;
+    }
 
-        if (swapChainModes & Pal::SwapChainModeSupport::SupportFifoRelaxedSwapChain)
-        {
-            presentModes[modeCount++] = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
-        }
+    if (swapChainModes & Pal::SwapChainModeSupport::SupportFifoSwapChain)
+    {
+        presentModes[modeCount++] = VK_PRESENT_MODE_FIFO_KHR;
+    }
+
+    if (swapChainModes & Pal::SwapChainModeSupport::SupportFifoRelaxedSwapChain)
+    {
+        presentModes[modeCount++] = VK_PRESENT_MODE_FIFO_RELAXED_KHR;
     }
 
     // Write out information
     VkResult result = VK_SUCCESS;
 
-    if (result == VK_SUCCESS)
+    if (pPresentModes == NULL)
     {
-        if (pPresentModes == NULL)
+        *pPresentModeCount = modeCount;
+    }
+    else
+    {
+        uint32_t writeCount = Util::Min(modeCount, *pPresentModeCount);
+
+        for (uint32_t i = 0; i < writeCount; ++i)
         {
-            *pPresentModeCount = modeCount;
+            pPresentModes[i] = presentModes[i];
         }
-        else
-        {
-            uint32_t writeCount = Util::Min(modeCount, *pPresentModeCount);
 
-            for (uint32_t i = 0; i < writeCount; ++i)
-            {
-                pPresentModes[i] = presentModes[i];
-            }
+        *pPresentModeCount = writeCount;
 
-            *pPresentModeCount = writeCount;
-
-            result = (writeCount >= modeCount) ? result : VK_INCOMPLETE;
-        }
+        result = (writeCount >= modeCount) ? result : VK_INCOMPLETE;
     }
 
     return result;
@@ -2643,11 +2640,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_IMAGE_LOAD_STORE_LOD));
 
-    if (pInstance->IsExtensionSupported(InstanceExtensions::KHX_DEVICE_GROUP_CREATION))
-    {
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHX_DEVICE_GROUP));
-    }
-
     if (pInstance->IsExtensionSupported(InstanceExtensions::KHR_DEVICE_GROUP_CREATION))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEVICE_GROUP));
@@ -2678,6 +2670,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_8BIT_STORAGE));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_ATOMIC_INT64));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DRIVER_PROPERTIES));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CREATE_RENDERPASS2));
 
@@ -2751,6 +2745,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 #if VKI_SHADER_COMPILER_CONTROL
 #endif
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
+
     return availableExtensions;
 }
 
@@ -2782,8 +2779,10 @@ void PhysicalDevice::PopulateQueueFamilies()
         0,
         // Pal::EngineTypeHighPriorityUniversal
         0,
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
         // Pal::EngineTypeHighPriorityGraphics
         0,
+#endif
     };
 
     // While it's possible for an engineType to support multiple queueTypes,
@@ -2796,7 +2795,9 @@ void PhysicalDevice::PopulateQueueFamilies()
         Pal::QueueTypeDma,
         Pal::QueueTypeTimer,
         Pal::QueueTypeUniversal,
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
         Pal::QueueTypeUniversal,
+#endif
     };
 
     static_assert((VK_ARRAY_SIZE(vkQueueFlags) == Pal::EngineTypeCount) &&
@@ -2806,8 +2807,12 @@ void PhysicalDevice::PopulateQueueFamilies()
                   (Pal::EngineTypeExclusiveCompute == 2) &&
                   (Pal::EngineTypeDma              == 3) &&
                   (Pal::EngineTypeTimer            == 4) &&
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
                   (Pal::EngineTypeHighPriorityUniversal == 0x5) &&
                   (Pal::EngineTypeHighPriorityGraphics  == 0x6),
+#else
+                  (Pal::EngineTypeHighPriorityUniversal == 0x5),
+#endif
         "PAL engine types have changed, need to update the tables above");
 
     // Always enable core queue flags.  Final determination of support will be done on a per-engine basis.
@@ -2971,39 +2976,18 @@ VkResult PhysicalDevice::GetRandROutputDisplay(
     uint32_t        randrOutput,
     VkDisplayKHR*   pDisplay)
 {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
     VkResult result       = VK_SUCCESS;
     Pal::IScreen* pScreen = nullptr;
-    pScreen = VkInstance()->FindScreenFromRandrOutput(PalDevice(), randrOutput);
+
+    pScreen = VkInstance()->FindScreenFromRandrOutput(PalDevice(), dpy, randrOutput);
+
+    *pDisplay = reinterpret_cast<VkDisplayKHR>(pScreen);
 
     if (pScreen == nullptr)
     {
-        Pal::OsDisplayHandle hDisplay = dpy;
-        uint32_t connectorId          = UINT32_MAX;
-
-        result = PalToVkResult(m_pPalDevice->GetConnectorIdFromOutput(hDisplay,
-                                                                      randrOutput,
-                                                                      VkToPalWsiPlatform(VK_ICD_WSI_PLATFORM_XLIB),
-                                                                      &connectorId));
-        if (result == VK_SUCCESS)
-        {
-            pScreen = VkInstance()->FindScreenFromConnectorId(PalDevice(), connectorId);
-
-            if ((pScreen != nullptr))
-            {
-                pScreen->SetRandrOutput(randrOutput);
-            }
-            else
-            {
-                result = VK_INCOMPLETE;
-            }
-        }
+        VkResult result = VK_INCOMPLETE;
     }
 
-    *pDisplay = reinterpret_cast<VkDisplayKHR>(pScreen);
-#else
-    VkResult result = VK_INCOMPLETE;
-#endif
     return result;
 }
 #endif
@@ -3098,7 +3082,7 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
     if (isSparse == false)
     {
         const Pal::DeviceProperties& props = PalProperties();
-        if ((handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT))
+        if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)
         {
             pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT |
                                                                 VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT     |
@@ -3187,6 +3171,18 @@ void PhysicalDevice::GetFeatures2(
 
                 break;
             }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR:
+            {
+                VkPhysicalDeviceShaderAtomicInt64FeaturesKHR* pShaderAtomicInt64Features =
+                    reinterpret_cast<VkPhysicalDeviceShaderAtomicInt64FeaturesKHR*>(pHeader);
+
+                pShaderAtomicInt64Features->shaderBufferInt64Atomics = VK_TRUE;
+                pShaderAtomicInt64Features->shaderSharedInt64Atomics = VK_TRUE;
+
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_FEATURES_AMD:
             {
                 VkPhysicalDeviceGpaFeaturesAMD* pGpaFeatures =
@@ -3407,6 +3403,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceConservativeRasterizationPropertiesEXT*  pConservativeRasterizationProperties;
 #endif
 
+        VkPhysicalDeviceDriverPropertiesKHR*                     pDriverProperties;
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
     };
 
@@ -3452,7 +3449,6 @@ void PhysicalDevice::GetDeviceProperties2(
             // We don't have limits on number of desc sets
             pMaintenance3Properties->maxPerSetDescriptors    = UINT32_MAX;
 
-            // TODO: SWDEV-79454 - Get these limits from PAL
             // Return 2GB in bytes as max allocation size
             pMaintenance3Properties->maxMemoryAllocationSize = 2u * 1024u * 1024u * 1024u;
             break;
@@ -3582,11 +3578,27 @@ void PhysicalDevice::GetDeviceProperties2(
         }
 #endif
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR:
+        {
+            pDriverProperties->driverID = VULKAN_DRIVER_ID;
+
+            Util::Strncpy(pDriverProperties->driverName, VULKAN_DRIVER_NAME_STR, VK_MAX_DRIVER_NAME_SIZE_KHR);
+            Util::Strncpy(pDriverProperties->driverInfo, VULKAN_DRIVER_INFO_STR, VK_MAX_DRIVER_INFO_SIZE_KHR);
+
+            pDriverProperties->conformanceVersion.major     = CTS_VERSION_MAJOR;
+            pDriverProperties->conformanceVersion.minor     = CTS_VERSION_MINOR;
+            pDriverProperties->conformanceVersion.subminor  = CTS_VERSION_SUBMINOR;
+            pDriverProperties->conformanceVersion.patch     = CTS_VERSION_PATCH;
+
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
         {
             pVertexAttributeDivisorProperties->maxVertexAttribDivisor = UINT32_MAX;
             break;
         }
+
         default:
             break;
         }
@@ -4634,11 +4646,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfacePresentModesKHR(
 
     if (result == VK_SUCCESS)
     {
-        Pal::PresentMode presentMode = (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
-                                        ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
+        // Note:
+        // DirectDisplay platform has only fullscreen mode.
+        // Win32 fullscreen provides additional fifo relaxed mode,
+        // it will fallback to fifo for windowed mode.
+
         result = ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfacePresentModes(
             displayableInfo,
-            presentMode,
+            Pal::PresentMode::Count,
             pPresentModeCount,
             pPresentModes);
     }
@@ -4711,17 +4726,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceFormats2KHR(
     }
 
     return result;
-}
-
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHX(
-    VkPhysicalDevice                            physicalDevice,
-    VkSurfaceKHR                                surface,
-    uint32_t*                                   pRectCount,
-    VkRect2D*                                   pRects)
-{
-    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->
-        GetPhysicalDevicePresentRectangles(surface, pRectCount, pRects);
 }
 
 // =====================================================================================================================

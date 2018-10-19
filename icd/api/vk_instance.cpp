@@ -43,6 +43,8 @@
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
 
+#include "include/vk_layer_all_null_devices.h"
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
 #endif
@@ -80,6 +82,7 @@ Instance::Instance(
     m_apiVersion(apiVersion),
     m_enabledExtensions(enabledExtensions),
     m_dispatchTable(DispatchTable::Type::INSTANCE, this),
+    m_nullGpuId(Pal::NullGpuId::Max),
     m_preInitAppProfile(preInitProfile),
     m_screenCount(0),
     m_pScreenStorage(nullptr),
@@ -310,6 +313,7 @@ VkResult Instance::Init(
     {
         createInfo.flags.createNullDevice = 1;
         m_flags.nullGpuMode               = 1;
+        m_nullGpuId                       = createInfo.nullGpuId;
     }
 
     Pal::Result palResult = Pal::CreatePlatform(createInfo, pPalMemory, &m_pPalPlatform);
@@ -484,6 +488,13 @@ void Instance::InitDispatchTable()
     // =================================================================================================================
     // After generic overrides, apply any internal layer specific dispatch table override.
 
+    // Install ALL NULL Devices layer if AMDVLK_NULL_GPU=ALL environment variable is set
+    if ((IsNullGpuModeEnabled()) &&
+        (GetNullGpuId() == Pal::NullGpuId::All))
+    {
+        OverrideDispatchTable_ND(&m_dispatchTable);
+    }
+
     // Install SQTT marker annotation layer if needed
     if (IsTracingSupportEnabled())
     {
@@ -628,7 +639,6 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_PHYSICAL_DEVICE_PROPERTIES2));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_MEMORY_CAPABILITIES));
 
-        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHX_DEVICE_GROUP_CREATION));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_SURFACE_CAPABILITIES2));
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_DEVICE_GROUP_CREATION));
@@ -803,34 +813,10 @@ VkResult Instance::FindScreens(
     return result;
 }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
-// =====================================================================================================================
-Pal::IScreen* Instance::FindScreenFromConnectorId(
-    const Pal::IDevice* pDevice,
-    uint32_t            connectorId
-) const
-{
-    Pal::IScreen* pScreen = nullptr;
-
-    for (uint32_t screenIdx = 0; screenIdx < m_screenCount; ++screenIdx)
-    {
-        Pal::ScreenProperties props = {};
-
-        if (m_screens[screenIdx].pPalScreen->GetProperties(&props) == Pal::Result::Success)
-        {
-            if ((props.pMainDevice == pDevice) && (props.screen == connectorId))
-            {
-                pScreen = m_screens[screenIdx].pPalScreen;
-                break;
-            }
-        }
-    }
-    return pScreen;
-}
-
 // =====================================================================================================================
 Pal::IScreen* Instance::FindScreenFromRandrOutput(
     const Pal::IDevice* pDevice,
+    Display*            pDpy,
     uint32_t            randrOutput
 ) const
 {
@@ -842,16 +828,23 @@ Pal::IScreen* Instance::FindScreenFromRandrOutput(
 
         if (m_screens[screenIdx].pPalScreen->GetProperties(&props) == Pal::Result::Success)
         {
-            if ((props.pMainDevice == pDevice) && (props.wsiScreenProp.randrOutput == randrOutput))
+            if (props.pMainDevice == pDevice)
             {
-                pScreen = m_screens[screenIdx].pPalScreen;
-                break;
+                uint32_t             screenRandrOutput = 0;
+                Pal::OsDisplayHandle displayHandle     = reinterpret_cast<Pal::OsDisplayHandle>(pDpy);
+
+                Pal::Result result = m_screens[screenIdx].pPalScreen->GetRandrOutput(displayHandle, &screenRandrOutput);
+
+                if ((result == Pal::Result::Success) && (screenRandrOutput == randrOutput))
+                {
+                    pScreen = m_screens[screenIdx].pPalScreen;
+                    break;
+                }
             }
         }
     }
     return pScreen;
 }
-#endif
 // =====================================================================================================================
 // Finds the PAL screen (if any) associated with the given window handle
 Pal::IScreen* Instance::FindScreen(
@@ -919,11 +912,9 @@ void Instance::DevModeLateInitialize()
 
 // =====================================================================================================================
 // Enumerate DeviceGroups.
-// Called in response to vkEnumeratePhysicalDeviceGroupsXXX (both KHR and KHX versions)
-template <typename T>
 VkResult Instance::EnumeratePhysicalDeviceGroups(
-    uint32_t*   pPhysicalDeviceGroupCount,
-    T*          pPhysicalDeviceGroupProperties)
+    uint32_t*                           pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties*    pPhysicalDeviceGroupProperties)
 {
     if (pPhysicalDeviceGroupProperties == nullptr)
     {
@@ -957,7 +948,7 @@ VkResult Instance::EnumeratePhysicalDeviceGroups(
         pPhysicalDeviceGroupProperties[i].subsetAllocation    = VK_FALSE;
     }
 
-    // Fill out VkPhysicalDeviceGroupPropertiesKHX structures
+    // Fill out VkPhysicalDeviceGroupProperties structures
     for (uint32_t i = 0; i < physicalDeviceCount; i++)
     {
         const int32_t deviceGroupIndex = deviceGroupIndices[i];
@@ -971,6 +962,18 @@ VkResult Instance::EnumeratePhysicalDeviceGroups(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Enumerates all NULL physical device properties
+VkResult Instance::EnumerateAllNullPhysicalDeviceProperties(
+    uint32_t*                    pPhysicalDeviceCount,
+    VkPhysicalDeviceProperties** ppPhysicalDeviceProperties)
+{
+    // Query physical devices from the manager
+    return m_pPhysicalDeviceManager->EnumerateAllNullPhysicalDeviceProperties(
+        pPhysicalDeviceCount,
+        ppPhysicalDeviceProperties);
 }
 
 // =====================================================================================================================
@@ -994,7 +997,7 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
 VkResult Instance::QueryApplicationProfile(RuntimeSettings* pRuntimeSettings)
 {
     VkResult result = VK_ERROR_FEATURE_NOT_PRESENT;
-    if (ReloadAppProfileSettings(this, pRuntimeSettings, &m_chillSettings))
+    if (ReloadAppProfileSettings(this, pRuntimeSettings, &m_chillSettings, &m_turboSyncSettings))
     {
         result = VK_SUCCESS;
     }
@@ -1195,15 +1198,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices(
 {
     return Instance::ObjectFromHandle(instance)->EnumeratePhysicalDevices(
         pPhysicalDeviceCount, pPhysicalDevices);
-}
-
-VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHX(
-    VkInstance                                  instance,
-    uint32_t*                                   pPhysicalDeviceGroupCount,
-    VkPhysicalDeviceGroupPropertiesKHX*         pPhysicalDeviceGroupProperties)
-{
-    return Instance::ObjectFromHandle(instance)->EnumeratePhysicalDeviceGroups(
-        pPhysicalDeviceGroupCount, pPhysicalDeviceGroupProperties);
 }
 
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups(

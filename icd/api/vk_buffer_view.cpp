@@ -45,7 +45,7 @@ VkResult BufferView::Create(
 {
     // Allocate memory for the buffer view
     const size_t apiSize = sizeof(BufferView);
-    const size_t srdSize = pDevice->VkPhysicalDevice()->PalProperties().gfxipProperties.srdSizes.bufferView;
+    const size_t srdSize = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.srdSizes.bufferView;
     const size_t objSize = apiSize + (srdSize * pDevice->NumPalDevices());
 
     void* pMemory = pAllocator->pfnAllocation(

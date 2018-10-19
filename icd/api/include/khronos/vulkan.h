@@ -54,15 +54,13 @@
 
 // Internal (under development) extension definitions
 
-// Experimental extensions (should be eventually replaced by KHR or removed)
-#include "devext/vk_khx_device_group.h"
-#include "devext/vk_khx_device_group_creation.h"
-
 #include "devext/vk_amd_gpu_shader_half_float_fetch.h"
 #include "devext/vk_amd_gpa_interface.h"
 #if VKI_SHADER_COMPILER_CONTROL
 #include "devext/vk_amd_shader_compiler_control.h"
 #endif
+#include "devext/vk_google_decorate_string.h"
+#include "devext/vk_google_hlsl_functionality1.h"
 
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,

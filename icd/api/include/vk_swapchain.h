@@ -51,6 +51,7 @@ class FullscreenMgr;
 class Fence;
 class Image;
 class Semaphore;
+class SwCompositor;
 
 // =====================================================================================================================
 // Implementation of the Vulkan swap chain object (VkSwapChainKHR).
@@ -59,21 +60,21 @@ class SwapChain : public NonDispatchable<VkSwapchainKHR, SwapChain>
 public:
     struct Properties
     {
-        DisplayableSurfaceInfo displayableInfo;
-        Pal::PresentMode       imagePresentSupport; // Describes whether present images support fullscreen or
-                                                    // just windowed (default).
-        bool                   summedImage;         // The image needs a final copy.
-        bool                   stereo;              // The swap chain is a stereo one
-        uint32_t               imageCount;          // Number of images in the swap chain
-        VkFormat               imageFormat;         // Image format
-        VkImage*               images;
-        VkDeviceMemory*        imageMemory;
+        DisplayableSurfaceInfo          displayableInfo;
+        Pal::PresentableImageCreateInfo imageCreateInfo;
+        Pal::PresentMode                imagePresentSupport; // Describes whether present images support fullscreen or
+                                                             // just windowed (default).
+        bool                            summedImage;         // The image needs a final copy.
+        bool                            stereo;              // The swap chain is a stereo one
+        uint32_t                        imageCount;          // Number of images in the swap chain
+        VkImage*                        images;
+        VkDeviceMemory*                 imageMemory;
 
-        Surface*               pSurface;
-        VkSurfaceFormatKHR     surfaceFormat;
+        Surface*                        pSurface;
+        VkSurfaceFormatKHR              surfaceFormat;
 
-        Surface*               pFullscreenSurface;
-        VkSurfaceFormatKHR     fullscreenSurfaceFormat;
+        Surface*                        pFullscreenSurface;
+        VkSurfaceFormatKHR              fullscreenSurfaceFormat;
     };
 
     static VkResult Create(
@@ -101,7 +102,7 @@ public:
     VK_FORCEINLINE Memory* GetPresentableImageMemory(uint32_t imageIndex) const
         { return Memory::ObjectFromHandle(m_properties.imageMemory[imageIndex]); }
 
-    VK_FORCEINLINE Pal::ISwapChain* PalSwapChain(uint32_t deviceIdx = DefaultDeviceIndex) const
+    VK_FORCEINLINE Pal::ISwapChain* PalSwapChain(uint32_t deviceIdx) const
         { return m_pPalSwapChain[deviceIdx]; }
 
     VK_INLINE const FullscreenMgr* GetFullscreenMgr() const
@@ -119,10 +120,11 @@ public:
     VK_INLINE uint32_t GetAppOwnedImageCount() const
         { return m_appOwnedImageCount; }
 
-    VkResult GetPresentInfo(
+    Pal::IQueue* PrePresent(
         uint32_t                   deviceIdx,
         uint32_t                   imageIndex,
-        Pal::PresentSwapChainInfo* pPresentInfo);
+        Pal::PresentSwapChainInfo* pPresentInfo,
+        const Queue*               pQueue);
 
     void PostPresent(
         const Pal::PresentSwapChainInfo& presentInfo,
@@ -144,17 +146,10 @@ protected:
     SwapChain(
         Device*             pDevice,
         const Properties&   properties,
-        FullscreenMgr*      pFullscreenMgr)
-        :
-        m_pDevice(pDevice),
-        m_properties(properties),
-        m_nextImage(0),
-        m_pFullscreenMgr(pFullscreenMgr),
-        m_appOwnedImageCount(0),
-        m_presentCount(0),
-        m_deprecated(false)
-    {
-    }
+        VkPresentModeKHR    presentMode,
+        FullscreenMgr*      pFullscreenMgr,
+        SwCompositor*       pSwCompositor,
+        Pal::ISwapChain*    pPalSwapChain[]);
 
     Device*                 m_pDevice;
     const Properties        m_properties;
@@ -162,6 +157,7 @@ protected:
     Pal::ISwapChain*        m_pPalSwapChain[MaxPalDevices];
 
     FullscreenMgr*          m_pFullscreenMgr;
+    SwCompositor*           m_pSwCompositor;
     int32_t                 m_appOwnedImageCount;
     uint32_t                m_presentCount;
     VkPresentModeKHR        m_presentMode;
@@ -177,19 +173,16 @@ public:
     // These flags describe whether the current state of the screen tied to the swap chain is compatible with
     // exclusive mode.  If all of the flags are 0, the screen is compatible and we can attempt to enter exclusive
     // access mode and enable page flipping.  Otherwise, we should exit immediately or at our earliest convenience.
-    union CompatibilityFlags
+    union ExclusiveModeFlags
     {
+        uint32_t u32All;
         struct
         {
+            uint32_t acquired             : 1;  // True if currently in exclusive access (fullscreen) mode
             uint32_t disabled             : 1;  // Disabled by panel or for other reasons (e.g. too many unexpected
                                                 // failures)
-            uint32_t screenChanged        : 1;  // Current screen that owns the window has changed
-            uint32_t windowRectBad        : 1;  // Window rect doesn't cover the whole desktop
-            uint32_t resolutionBad        : 1;  // Current screen resolution does not match swap chain extents
-            uint32_t windowNotForeground  : 1;  // Swap chain window is not currently the foreground window
-            uint32_t reserved             : 27; // Padding, should be set to zero
+            uint32_t reserved             : 30; // Reserved for future use
         };
-        uint32_t u32All;
     };
 
     enum Mode
@@ -202,8 +195,9 @@ public:
     FullscreenMgr(
         Device*                         pDevice,
         FullscreenMgr::Mode             mode,
-        const Pal::SwapChainCreateInfo& createInfo,
         Pal::IScreen*                   pScreen,
+        Pal::OsDisplayHandle            hDisplay,
+        Pal::OsWindowHandle             hWindow,
         uint32_t                        vidPnSourceId);
 
     ~FullscreenMgr();
@@ -225,18 +219,12 @@ public:
 
     void Destroy(const VkAllocationCallbacks* pAllocator);
 
-    VkResult UpdatePresentInfo(
+    void UpdatePresentInfo(
         SwapChain*                 pSwapChain,
         Pal::PresentSwapChainInfo* pPresentInfo);
 
-    VK_INLINE CompatibilityFlags GetCompatibility() const
-        { return m_compatFlags; }
-
-    VK_INLINE bool HasExclusiveAccess() const
-        { return m_exclusiveModeAcquired; }
-
-    VK_INLINE const Pal::Extent2d& GetLastResolution() const
-        { return m_lastResolution; }
+    VK_INLINE ExclusiveModeFlags GetExclusiveModeFlags() const
+        { return m_exclusiveModeFlags; }
 
     VK_INLINE uint32_t GetVidPnSourceId() const
         { return m_vidPnSourceId; }
@@ -250,18 +238,13 @@ public:
 
     bool TryEnterExclusive(SwapChain* pSwapChain);
     bool TryExitExclusive(SwapChain* pSwapChain);
-    bool UpdateExclusiveModeCompat(SwapChain* pSwapChain);
 
 private:
-    CompatibilityFlags EvaluateExclusiveModeCompat(const SwapChain* pSwapChain) const;
-
-    void UpdateExclusiveMode(SwapChain* pSwapChain);
     void DisableFullscreenPresents();
     void FullscreenPresentEvent(bool success);
-    VK_INLINE bool IsExclusiveModePossible() const { return (m_compatFlags.u32All == 0); }
 
     Device*             m_pDevice;                  // Device pointer
-    CompatibilityFlags  m_compatFlags;              // Current exclusive access compatibility flags
+    ExclusiveModeFlags  m_exclusiveModeFlags;       // Flags describing the current exclusive mode state
     Pal::IScreen*       m_pScreen;                  // Screen that owns the window this swap chain was created with.
     const Image*        m_pImage;                   // Pointer to one of the presentable images
     uint32_t            m_exclusiveAccessFailCount; // Number of consecutive times we've failed acquiring exclusive
@@ -272,11 +255,53 @@ private:
     Pal::ScreenColorCapabilities m_colorCaps;
     Pal::ScreenColorConfig       m_colorParams;
     Pal::ScreenColorConfig       m_windowedColorParams;
+    Pal::OsDisplayHandle         m_hDisplay;        // The monitor of the IScreen from swap chain creation
+    Pal::OsWindowHandle          m_hWindow;         // The window of the swap chain
 
-    Pal::Extent2d       m_lastResolution;
     uint32_t            m_vidPnSourceId;            // Video present source identifier
     Mode                m_mode;                     // Indicates the Presentation mode we are using
-    bool                m_exclusiveModeAcquired;    // True if currently in exclusive access (fullscreen) mode
+};
+
+// =====================================================================================================================
+// This is a helper class that handles software compositing
+class SwCompositor
+{
+public:
+    static SwCompositor* Create(
+        const Device*                pDevice,
+        const VkAllocationCallbacks* pAllocator,
+        const SwapChain::Properties& properties,
+        bool                         useSdmaCompositingBlt);
+
+    void Destroy(const Device* pDevice, const VkAllocationCallbacks* pAllocator);
+
+    Pal::QueueType GetQueueType() const { return m_queueType; }
+
+    Pal::IQueue* DoSwCompositing(
+        Device*                    pDevice,
+        uint32_t                   deviceIdx,
+        uint32_t                   imageIndex,
+        Pal::PresentSwapChainInfo* pPresentInfo,
+        const Queue*               pPresentQueue);
+
+protected:
+    SwCompositor(
+        const Device*     pDevice,
+        uint32_t          presentationDeviceIdx,
+        uint32_t          imageCount,
+        Pal::QueueType    queueType,
+        Pal::IImage**     ppBltImages[],
+        Pal::IGpuMemory** ppBltMemory[],
+        Pal::ICmdBuffer** ppBltCmdBuffers[]);
+
+    ~SwCompositor() {}
+
+    uint32_t          m_presentationDeviceIdx;          // The physical device that performs the actual present
+    uint32_t          m_imageCount;                     // The number of images in the swapchain
+    Pal::QueueType    m_queueType;                      // The queue type that the command buffers are compatible with
+    Pal::IImage**     m_ppBltImages[MaxPalDevices];     // Array of intermediate images (master) or peer images (slave)
+    Pal::IGpuMemory** m_ppBltMemory[MaxPalDevices];     // Array of intermediate memory (master) or peer memory (slave)
+    Pal::ICmdBuffer** m_ppBltCmdBuffers[MaxPalDevices]; // Array of copy to peer image command buffers (slave-only)
 };
 
 namespace entry
@@ -299,11 +324,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImageKHR(
     VkSemaphore                                  semaphore,
     VkFence                                      fence,
     uint32_t*                                    pImageIndex);
-
-VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHX(
-    VkDevice                                    device,
-    const VkAcquireNextImageInfoKHX*            pAcquireInfo,
-    uint32_t*                                   pImageIndex);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkAcquireNextImage2KHR(
     VkDevice                                    device,

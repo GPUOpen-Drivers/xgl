@@ -112,7 +112,7 @@ public:
         MaxQueuesPerFamily  = 8,                     // Maximum number of queues per family
     };
 
-    VK_FORCEINLINE Pal::IQueue* PalQueue(int32_t idx = DefaultDeviceIndex) const
+    VK_FORCEINLINE Pal::IQueue* PalQueue(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pPalQueues[idx];
@@ -215,7 +215,6 @@ protected:
     DevModeMgr*                        m_pDevModeMgr;
     VirtualStackAllocator*             m_pStackAllocator;
     VidPnSourceFlipStatus              m_flipStatus;
-    FrtcFramePacer*                    m_pFrtcFramePacer;
     Pal::PerSourceFrameMetadataControl m_palFrameMetadataControl;
     Pal::ICmdBuffer*                   m_pDummyCmdBuffer;
 

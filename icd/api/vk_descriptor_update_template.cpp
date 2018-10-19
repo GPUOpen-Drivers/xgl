@@ -392,7 +392,7 @@ void DescriptorUpdateTemplate::UpdateEntryBuffer(
             // We need to treat dynamic buffer descriptors specially as we store the base buffer SRDs in
             // client memory.
             // NOTE: Nuke this once we have proper support for dynamic descriptors in SC.
-            pDestAddr   = pDstSet->DynamicDescriptorData() + entry.dstDynOffset;
+            pDestAddr   = pDstSet->DynamicDescriptorData(deviceIdx) + entry.dstDynOffset;
             stride      = entry.dstBindDynDataDwArrayStride;
         }
         else

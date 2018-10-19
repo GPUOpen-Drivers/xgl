@@ -163,7 +163,7 @@ VkResult GpuEventMgr::RequestEvents(
     }
 
 #if PAL_ENABLE_PRINTS_ASSERTS
-    const Pal::DeviceProperties& deviceProps = m_pDevice->VkPhysicalDevice()->PalProperties();
+    const Pal::DeviceProperties& deviceProps = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
     const Pal::EngineType engineType = pCmdBuf->GetPalEngineType();
 
     // See above comment
@@ -246,7 +246,7 @@ VkResult GpuEventMgr::CreateNewChunk(
     uint32_t     eventCount,
     EventChunk** ppChunk)
 {
-    const auto& settings = m_pDevice->VkPhysicalDevice()->GetRuntimeSettings();
+    const auto& settings = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
 
     if (eventCount < settings.cmdBufGpuEventMinAllocCount)
     {

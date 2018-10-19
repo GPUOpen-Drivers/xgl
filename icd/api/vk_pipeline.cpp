@@ -220,7 +220,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
 
     const Device*   pDevice   = ApiDevice::ObjectFromHandle(device);
     const Pipeline* pPipeline = Pipeline::ObjectFromHandle(pipeline);
-    const Pal::IPipeline* pPalPipeline = pPipeline->PalPipeline();
+    const Pal::IPipeline* pPalPipeline = pPipeline->PalPipeline(DefaultDeviceIndex);
 
     if (pPipeline != nullptr)
     {
@@ -247,7 +247,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
 
                     Pal::DeviceProperties info;
 
-                    pDevice->VkPhysicalDevice()->PalDevice()->GetProperties(&info);
+                    pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalDevice()->GetProperties(&info);
 
                     pStats->numPhysicalVgprs = info.gfxipProperties.shaderCore.vgprsPerSimd;
                     pStats->numPhysicalSgprs = info.gfxipProperties.shaderCore.sgprsPerSimd;

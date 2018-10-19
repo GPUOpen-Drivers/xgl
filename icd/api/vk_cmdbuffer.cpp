@@ -758,44 +758,20 @@ void CmdBuffer::PalCmdDispatchIndirect(
 }
 
 // =====================================================================================================================
-// Helper function used to assert when applications p2p-write to a memory address more than once.
-template< typename Type_T >
-bool CmdBuffer::DetectCopyOverwrite(
-    const Type_T*   pDst) const
-{
-    uint32_t multipleWrites = 0;
-
-    utils::IterateMask deviceGroup(m_palDeviceMask);
-    while (deviceGroup.Iterate())
-    {
-        const uint32_t bitMask = 1 << pDst->GetMemoryInstanceIdx(deviceGroup.Index());
-
-        if ((multipleWrites & bitMask) != 0)
-        {
-            return true;
-        }
-
-        multipleWrites |= bitMask;
-    }
-
-    return false;
-}
-
-// =====================================================================================================================
 void CmdBuffer::PalCmdCopyBuffer(
     Buffer*                pSrcBuffer,
     Buffer*                pDstBuffer,
     uint32_t               regionCount,
     Pal::MemoryCopyRegion* pRegions)
 {
-    if (m_pDevice->IsMultiGpu() == false) // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
-        Pal::IGpuMemory* const pSrcMemory = pSrcBuffer->PalMemory();
-        Pal::IGpuMemory* const pDstMemory = pDstBuffer->PalMemory();
+        Pal::IGpuMemory* const pSrcMemory = pSrcBuffer->PalMemory(DefaultDeviceIndex);
+        Pal::IGpuMemory* const pDstMemory = pDstBuffer->PalMemory(DefaultDeviceIndex);
         VK_ASSERT(pSrcMemory != nullptr);
         VK_ASSERT(pDstMemory != nullptr);
 
-        PalCmdBuffer()->CmdCopyMemory(
+        PalCmdBuffer(DefaultDeviceIndex)->CmdCopyMemory(
             *pSrcMemory,
             *pDstMemory,
             regionCount,
@@ -858,12 +834,12 @@ void CmdBuffer::PalCmdCopyImage(
     uint32_t              regionCount,
     Pal::ImageCopyRegion* pRegions)
 {
-    if (m_pDevice->IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
-        PalCmdBuffer()->CmdCopyImage(
-            *pSrcImage->PalImage(),
+        PalCmdBuffer(DefaultDeviceIndex)->CmdCopyImage(
+            *pSrcImage->PalImage(DefaultDeviceIndex),
             srcImageLayout,
-            *pDstImage->PalImage(),
+            *pDstImage->PalImage(DefaultDeviceIndex),
             destImageLayout,
             regionCount,
             pRegions,
@@ -871,8 +847,6 @@ void CmdBuffer::PalCmdCopyImage(
     }
     else
     {
-        VK_ASSERT(DetectCopyOverwrite(pDstImage) == false);
-
         utils::IterateMask deviceGroup(m_palDeviceMask);
         while (deviceGroup.Iterate())
         {
@@ -896,18 +870,16 @@ void CmdBuffer::PalCmdScaledCopyImage(
     const Image* const   pDstImage,
     Pal::ScaledCopyInfo& copyInfo)
 {
-    if (m_pDevice->IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
-        copyInfo.pSrcImage = pSrcImage->PalImage();
-        copyInfo.pDstImage = pDstImage->PalImage();
+        copyInfo.pSrcImage = pSrcImage->PalImage(DefaultDeviceIndex);
+        copyInfo.pDstImage = pDstImage->PalImage(DefaultDeviceIndex);
 
         // This will do a scaled blit
-        PalCmdBuffer()->CmdScaledCopyImage(copyInfo);
+        PalCmdBuffer(DefaultDeviceIndex)->CmdScaledCopyImage(copyInfo);
     }
     else
     {
-        VK_ASSERT(DetectCopyOverwrite(pDstImage) == false);
-
         utils::IterateMask deviceGroup(m_palDeviceMask);
         while (deviceGroup.Iterate())
         {
@@ -930,11 +902,11 @@ void CmdBuffer::PalCmdCopyMemoryToImage(
     uint32_t                    regionCount,
     Pal::MemoryImageCopyRegion* pRegions)
 {
-    if (m_pDevice->IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
-        PalCmdBuffer()->CmdCopyMemoryToImage(
-            *pSrcBuffer->PalMemory(),
-            *pDstImage->PalImage(),
+        PalCmdBuffer(DefaultDeviceIndex)->CmdCopyMemoryToImage(
+            *pSrcBuffer->PalMemory(DefaultDeviceIndex),
+            *pDstImage->PalImage(DefaultDeviceIndex),
             layout,
             regionCount,
             pRegions);
@@ -964,12 +936,12 @@ void CmdBuffer::PalCmdCopyImageToMemory(
     uint32_t                    regionCount,
     Pal::MemoryImageCopyRegion* pRegions)
 {
-    if (m_pDevice->IsMultiGpu() == false)  // TODO: SWDEV-120909 - Remove looping and branching where necessary
+    if (m_pDevice->IsMultiGpu() == false)
     {
-        PalCmdBuffer()->CmdCopyImageToMemory(
-            *pSrcImage->PalImage(),
+        PalCmdBuffer(DefaultDeviceIndex)->CmdCopyImageToMemory(
+            *pSrcImage->PalImage(DefaultDeviceIndex),
             layout,
-            *pDstBuffer->PalMemory(),
+            *pDstBuffer->PalMemory(DefaultDeviceIndex),
             regionCount,
             pRegions);
     }
@@ -1596,13 +1568,20 @@ void CmdBuffer::BindDescriptorSets(
             {
                 // NOTE: We currently have to supply patched SRDs directly in used data registers. If we'll have proper
                 // support for dynamic descriptors in SC then we'll only need to write the dynamic offsets directly.
-                DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
-                    pDescriptorSets[i],
-                    &(m_state.perGpuState[DefaultDeviceIndex].
-                        setBindingData[static_cast<uint32_t>(bindPoint)][setLayoutInfo.dynDescDataRegOffset]),
-                    pDynamicOffsets,
-                    setLayoutInfo.dynDescCount,
-                    robustBufferAccess);
+                uint32_t deviceIdx = 0;
+                do
+                {
+                    DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
+                        pDescriptorSets[i],
+                        deviceIdx,
+                        &(m_state.perGpuState[deviceIdx].
+                            setBindingData[static_cast<uint32_t>(bindPoint)][setLayoutInfo.dynDescDataRegOffset]),
+                        pDynamicOffsets,
+                        setLayoutInfo.dynDescCount,
+                        robustBufferAccess);
+
+                    deviceIdx++;
+                } while (deviceIdx < numPalDevices);
 
                 // Skip over the already consumed dynamic offsets.
                 pDynamicOffsets += setLayoutInfo.dynDescCount;
@@ -2225,11 +2204,7 @@ void CmdBuffer::FillBuffer(
         fillSize = Util::RoundDownToMultiple(pDestBuffer->GetSize() - destOffset, static_cast<VkDeviceSize>(sizeof(data) ) );
     }
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
-    while (deviceGroup.Iterate())
-    {
-        PalCmdFillBuffer(pDestBuffer, pDestBuffer->MemOffset() + destOffset, fillSize, data);
-    }
+    PalCmdFillBuffer(pDestBuffer, pDestBuffer->MemOffset() + destOffset, fillSize, data);
 
     DbgBarrierPostCmd(DbgBarrierCopyBuffer);
 }
@@ -3967,6 +3942,8 @@ void CmdBuffer::BeginRenderPass(
         {
             utils::IterateMask deviceGroup(pDeviceGroupRenderPassBeginInfo->deviceMask);
 
+            VK_ASSERT(m_pDevice->NumPalDevices() == pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount);
+
             while (deviceGroup.Iterate())
             {
                 const uint32_t deviceIdx = deviceGroup.Index();
@@ -4405,7 +4382,7 @@ void CmdBuffer::RPSyncPoint(
 
                     pLayoutTransition->srcCacheMask                 = 0;
                     pLayoutTransition->dstCacheMask                 = 0;
-                    pLayoutTransition->imageInfo.pImage             = attachment.pImage->PalImage();
+                    pLayoutTransition->imageInfo.pImage             = attachment.pImage->PalImage(DefaultDeviceIndex);
                     pLayoutTransition->imageInfo.oldLayout          = oldLayout;
                     pLayoutTransition->imageInfo.newLayout          = newLayout;
                     pLayoutTransition->imageInfo.subresRange        = attachment.subresRange[sr];
@@ -4970,7 +4947,7 @@ void CmdBuffer::SetViewport(
 
     DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
-    const bool khrMaintenance1 = ((m_pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
+    const bool khrMaintenance1 = ((m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
                                   m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1));
 
     for (uint32_t i = 0; i < viewportCount; ++i)
@@ -5960,28 +5937,6 @@ VKAPI_ATTR void VKAPI_CALL vkFreeCommandBuffers(
             ApiCmdBuffer::ObjectFromHandle(pCommandBuffers[i])->Destroy();
         }
     }
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdDispatchBaseKHX(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    baseGroupX,
-    uint32_t                                    baseGroupY,
-    uint32_t                                    baseGroupZ,
-    uint32_t                                    groupCountX,
-    uint32_t                                    groupCountY,
-    uint32_t                                    groupCountZ)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->DispatchOffset(baseGroupX, baseGroupY, baseGroupZ,
-                                                                  groupCountX, groupCountY, groupCountZ);
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkCmdSetDeviceMaskKHX(
-    VkCommandBuffer                             commandBuffer,
-    uint32_t                                    deviceMask)
-{
-    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDeviceMask(deviceMask);
 }
 
 // =====================================================================================================================

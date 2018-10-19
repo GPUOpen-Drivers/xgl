@@ -49,6 +49,7 @@ struct Formats
 {
     VK_INLINE static bool IsColorFormat(VkFormat format);
     VK_INLINE static bool IsDepthStencilFormat(VkFormat format);
+    VK_INLINE static bool IsBcCompressedFormat(VkFormat format);
     VK_INLINE static bool HasDepth(VkFormat format);
     VK_INLINE static bool HasStencil(VkFormat format);
     VK_INLINE static VkFormat GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask);
@@ -160,6 +161,15 @@ bool Formats::IsDepthStencilFormat(VkFormat format)
     static_assert(VK_FORMAT_RANGE_SIZE == 185,
         "Number of formats changed.  Double check whether any of them are depth-stencil");
     return (format >= VK_FORMAT_D16_UNORM && format <= VK_FORMAT_D32_SFLOAT_S8_UINT);
+}
+
+// =====================================================================================================================
+// Returns true if the given format is a BC block-compressed format.
+bool Formats::IsBcCompressedFormat(VkFormat format)
+{
+    static_assert(VK_FORMAT_RANGE_SIZE == 185,
+        "Number of formats changed.  Double check whether any of them are BC block-compressed");
+    return (format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK && format <= VK_FORMAT_BC7_SRGB_BLOCK);
 }
 
 // =====================================================================================================================

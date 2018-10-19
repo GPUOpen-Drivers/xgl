@@ -190,16 +190,6 @@ vkCreateDescriptorUpdateTemplateKHR                 @device     @dext(KHR_descri
 vkDestroyDescriptorUpdateTemplateKHR                @device     @dext(KHR_descriptor_update_template)
 vkUpdateDescriptorSetWithTemplateKHR                @device     @dext(KHR_descriptor_update_template)
 
-vkEnumeratePhysicalDeviceGroupsKHX                  @instance   @iext(KHX_device_group_creation)
-
-vkGetPhysicalDevicePresentRectanglesKHX             @device     @dext(KHX_device_group)
-vkGetDeviceGroupPeerMemoryFeaturesKHX               @device     @dext(KHX_device_group)
-vkCmdSetDeviceMaskKHX                               @device     @dext(KHX_device_group)
-vkGetDeviceGroupPresentCapabilitiesKHX              @device     @dext(KHX_device_group)
-vkGetDeviceGroupSurfacePresentModesKHX              @device     @dext(KHX_device_group)
-vkAcquireNextImage2KHX                              @device     @dext(KHX_device_group)
-vkCmdDispatchBaseKHX                                @device     @dext(KHX_device_group)
-
 vkGetPhysicalDeviceExternalBufferPropertiesKHR      @instance   @iext(KHR_external_memory_capabilities)
 
 vkGetMemoryFdPropertiesKHR                          @device     @dext(KHR_external_memory_fd)

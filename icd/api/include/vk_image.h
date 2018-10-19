@@ -97,13 +97,15 @@ public:
         VkDeviceMemory*                         pDeviceMemory);
 
     VkResult Destroy(
-        const Device*                   pDevice,
+        Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
     VkResult GetMemoryRequirements(
+        const Device*         pDevice,
         VkMemoryRequirements* pMemoryRequirements);
 
     VkResult BindMemory(
+        const Device*      pDevice,
         VkDeviceMemory     mem,
         VkDeviceSize       memOffset,
         uint32_t           deviceIndexCount,
@@ -112,6 +114,7 @@ public:
         const VkRect2D*    pRects);
 
     VkResult BindSwapchainMemory(
+        const Device*      pDevice,
         uint32_t           swapChainImageIndex,
         SwapChain*         pSwapchain,
         uint32_t           deviceIndexCount,
@@ -124,14 +127,12 @@ public:
         VkSubresourceLayout*                    pLayout) const;
 
     void GetSparseMemoryRequirements(
+        const Device*                                       pDevice,
         uint32_t*                                           pNumRequirements,
         utils::ArrayView<VkSparseImageMemoryRequirements>   sparseMemoryRequirements);
 
-    VK_FORCEINLINE Pal::IImage* PalImage(int32_t idx = DefaultDeviceIndex) const
-       { return m_pPalImages[idx]; }
-
-    VK_FORCEINLINE uint8_t GetMemoryInstanceIdx(uint32_t idx) const
-       { return m_multiInstanceIndices[idx]; }
+    VK_FORCEINLINE Pal::IImage* PalImage(int32_t idx) const
+       { return m_perGpu[idx].pPalImage; }
 
     VK_FORCEINLINE VkFormat GetFormat() const
         { return m_format; }
@@ -144,30 +145,6 @@ public:
 
     uint32_t GetArraySize() const
         { return m_arraySize; }
-
-    Pal::IGpuMemory* GetSampleLocationsMetaDataMemory(int32_t idx = DefaultDeviceIndex) const
-    {
-        VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        return m_pSampleLocationsMetaDataMemory[idx];
-    }
-
-    Pal::gpusize GetSampleLocationsMetaDataOffset(int32_t idx = DefaultDeviceIndex) const
-    {
-        VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        return m_sampleLocationsMetaDataOffset[idx];
-    }
-
-    void SetSampleLocationsMetaDataMemory(Pal::IGpuMemory* pSampleLocationsMetaDataMemory, int32_t idx = DefaultDeviceIndex)
-    {
-        VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        m_pSampleLocationsMetaDataMemory[idx] = pSampleLocationsMetaDataMemory;
-    }
-
-    void SetSampleLocationsMetaDataOffset(Pal::gpusize sampleLocationsMetaDataOffset, int32_t idx = DefaultDeviceIndex)
-    {
-        VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        m_sampleLocationsMetaDataOffset[idx] = sampleLocationsMetaDataOffset;
-    }
 
     bool IsPresentable() const
         { return m_pSwapChain != nullptr; }
@@ -184,22 +161,24 @@ public:
         VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
 
     bool IsSparse() const
-        { return (m_flags & SparseEnablingFlags) != 0; }
+    {
+        return (m_internalFlags.sparseBinding | m_internalFlags.sparseResidency) != 0;
+    }
 
     bool Is2dArrayCompatible() const
-        { return (m_flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) != 0; }
+    {
+        return m_internalFlags.is2DArrayCompat != 0;
+    }
 
     bool IsSampleLocationsCompatibleDepth() const
     {
-        return (m_flags & VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT) != 0;
+        return m_internalFlags.sampleLocsCompatDepth != 0;
     }
 
-    Device* VkDevice() const { return m_pDevice; }
-
-    VK_FORCEINLINE Pal::IGpuMemory* PalMemory(int32_t idx = DefaultDeviceIndex) const
+    VK_FORCEINLINE Pal::IGpuMemory* PalMemory(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        return m_pPalMemory[idx];
+        return m_perGpu[idx].pPalMemory;
     }
 
     const VkExtent3D& GetTileSize() const
@@ -261,9 +240,19 @@ private:
             uint32_t isColorFormat          : 1;  // True if the image has a color format
             uint32_t hasDepth               : 1;  // True if the image has depth components
             uint32_t hasStencil             : 1;  // True if the image has stencil components
-            uint32_t reserved               : 21;
+            uint32_t sparseBinding          : 1;  // VK_IMAGE_CREATE_SPARSE_BINDING_BIT
+            uint32_t sparseResidency        : 1;  // VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT
+            uint32_t is2DArrayCompat        : 1;  // VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT
+            uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
+            uint32_t reserved               : 17;
         };
         uint32_t     u32All;
+    };
+
+    struct PerGpuInfo
+    {
+        Pal::IImage*     pPalImage;  // Each device in the group can own an instance of the image
+        Pal::IGpuMemory* pPalMemory; // Virtual-only memory object used for sparse images
     };
 
     Image(
@@ -277,11 +266,17 @@ private:
         uint32_t                    arraySize,
         VkFormat                    imageFormat,
         VkSampleCountFlagBits       imageSamples,
-        VkImageTiling               imageTiling,
         VkImageUsageFlags           usage,
         ImageFlags                  internalFlags);
 
-    void CalcMemoryPriority();
+    // Compute size required for the object.  One copy of PerGpuInfo is included in the object and we need
+    // to add space for any additional GPUs.
+    static size_t ObjectSize(const Device* pDevice)
+    {
+        return sizeof(Image) + ((pDevice->NumPalDevices() - 1) * sizeof(PerGpuInfo));
+    }
+
+    void CalcMemoryPriority(const Device* pDevice);
 
     // This function is used to register presentable images with swap chains
     VK_FORCEINLINE void RegisterPresentableImageWithSwapChain(SwapChain* pSwapChain)
@@ -291,57 +286,43 @@ private:
         m_pSwapChain = pSwapChain;
     }
 
-    Device* const           m_pDevice;
-    VkImageCreateFlags      m_flags;
+    uint32_t                m_mipLevels;        // This is the amount of mip levels contained in the image.
+                                                // We need this to support VK_WHOLE_SIZE during
+                                                // memory barrier creation
 
-    Memory*                 m_pMemory;
+    uint32_t                m_arraySize;        // This is the amount of array slices contained
+                                                // in the image
+                                                // we need this to support VK_WHOLE_SIZE during
+                                                // memory barrier creation
 
-    Pal::IImage*            m_pPalImages[MaxPalDevices];    // Each device in the group can own an instance of the image
+    VkFormat                m_format;           // The image format is needed for handling copy
+                                                // operations for compressed formats appropriately
 
-    Pal::IGpuMemory*        m_pPalMemory[MaxPalDevices];    // Virtual-only memory object used for sparse images
+    MemoryPriority          m_priority;         // Minimum priority assigned to any VkMemory object that this image is
+                                                // bound to.
 
-    uint8_t                 m_multiInstanceIndices[MaxPalDevices]; // The memory instance each image is bound to
+    VkSampleCountFlagBits   m_imageSamples;     // Number of samples in the image
 
-    VkExtent3D              m_tileSize;                     // Cached sparse image block dimensions (tile size)
-                                                            // for sparse images
+    VkImageUsageFlags       m_imageUsage;       // Bitmask describing the intended image usage
 
-    uint32_t                m_mipLevels;                    // This is the amount of mip levels contained in the image.
-                                                            // We need this to support VK_WHOLE_SIZE during
-                                                            // memory barrier creation
+    ImageFlags              m_internalFlags;    // Flags describing the properties of this image
 
-    uint32_t                m_arraySize;                    // This is the amount of array slices contained
-                                                            // in the image
-                                                            // we need this to support VK_WHOLE_SIZE during
-                                                            // memory barrier creation
+    VkExtent3D              m_tileSize;         // Cached sparse image block dimensions (tile size)
+                                                // for sparse images
 
-    VkFormat                m_format;                       // The image format is needed for handling copy
-                                                            // operations for compressed formats appropriately
+    ImageBarrierPolicy      m_barrierPolicy;    // Barrier policy to use for this image
 
-    VkSampleCountFlagBits   m_imageSamples;                 // Number of samples in the image
+    SwapChain*              m_pSwapChain;       // If this image is a presentable image this tells
+                                                // which swap chain the image belongs to
 
-    VkImageTiling           m_imageTiling;                  // Image tiling mode
-
-    VkImageUsageFlags       m_imageUsage;                   // Bitmask describing the intended image usage
-
-    ImageBarrierPolicy      m_barrierPolicy;                // Barrier policy to use for this image
-
-    Pal::IGpuMemory* m_pSampleLocationsMetaDataMemory[MaxPalDevices]; // Bound image memory
-
-    Pal::gpusize     m_sampleLocationsMetaDataOffset[MaxPalDevices];  // Offset into image memory for depth/stencil
-                                                                      // sample locations meta data
-
-    SwapChain*               m_pSwapChain;                 // If this image is a presentable image this tells
-                                                           // which swap chain the image belongs to
-
-    ImageFlags               m_internalFlags;              // Flags describing the properties of this image
-
-    VkDeviceSize        m_baseAddrOffset;       // Offset from the beginning of the bound memory range (i.e. after
+    VkDeviceSize            m_baseAddrOffset;   // Offset from the beginning of the bound memory range (i.e. after
                                                 // the app offset) to the start of image data.  This is generally zero,
                                                 // but sometimes may reflect padding required to align the image's
                                                 // base address to harsher alignment requirements.
 
-    // Minimum priority assigned to any VkMemory object that this image is bound to.
-    MemoryPriority m_priority;
+    // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
+    // use.
+    PerGpuInfo              m_perGpu[1];
 };
 
 namespace entry

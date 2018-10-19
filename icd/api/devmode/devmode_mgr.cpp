@@ -305,7 +305,7 @@ void DevModeMgr::NotifyFrameEnd(
                 if (IsQueueTimingActive(pQueue->VkDevice()))
                 {
                     // Call TimedQueuePresent() to insert commands that collect GPU timestamp.
-                    Pal::IQueue* pPalQueue = pQueue->PalQueue();
+                    Pal::IQueue* pPalQueue = pQueue->PalQueue(DefaultDeviceIndex);
 
                     // Currently nothing in the PresentInfo struct is used for inserting a timed present marker.
                     GpuUtil::TimedQueuePresentInfo timedPresentInfo = {};
@@ -416,7 +416,7 @@ Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
 
     if (m_blockingTraceEnd)
     {
-        result = pState->pDevice->PalDevice()->WaitForFences(1, &pState->pEndFence, true, InfiniteTimeout);
+        result = pState->pDevice->PalDevice(DefaultDeviceIndex)->WaitForFences(1, &pState->pEndFence, true, InfiniteTimeout);
 
         if (result != Pal::Result::Success)
         {
@@ -702,7 +702,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
     // allow us to capture a smaller set of trace data as the preparation frames run, then change the sqtt
     // token mask before the last frame to capture the full token set.  RGP requires the additional data
     // from this technique in order to handle edge cases surrounding compute queue presentation.
-    m_enableSampleUpdates = m_allowComputePresents && (pQueue->PalQueue()->Type() == Pal::QueueTypeCompute);
+    m_enableSampleUpdates = m_allowComputePresents && (pQueue->PalQueue(DefaultDeviceIndex)->Type() == Pal::QueueTypeCompute);
 
     // We can only trace using a single device at a time currently, so recreate RGP trace
     // resources against this new one if the device is changing.
@@ -789,9 +789,11 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         GpuUtil::GpaSampleConfig sampleConfig = {};
 
         sampleConfig.type                                = GpuUtil::GpaSampleType::Trace;
+        sampleConfig.sqtt.seMask                         = UINT32_MAX;
         sampleConfig.sqtt.gpuMemoryLimit                 = m_traceGpuMemLimit;
         sampleConfig.sqtt.flags.enable                   = true;
         sampleConfig.sqtt.flags.supressInstructionTokens = (m_enableInstTracing == false);
+        sampleConfig.sqtt.flags.stallMode                = Pal::GpuProfilerStallMode::GpuProfilerStallAlways;
 
         // Override trace buffer size from panel
         if (settings.devModeSqttGpuMemoryLimit != 0)
@@ -834,7 +836,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
 
         pState->pActiveCmdBufs[pState->activeCmdBufCount++] = pBeginCmdBuf;
 
-        result = pDevice->PalDevice()->ResetFences(1, &pState->pBeginFence);
+        result = pDevice->PalDevice(DefaultDeviceIndex)->ResetFences(1, &pState->pBeginFence);
     }
 
     // If we're enabling sample updates, we need to prepare the begin sqtt command buffer now and also submit the
@@ -885,7 +887,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
             submitInfo.ppCmdBuffers = &pTracePrepareQueue->pFamily->pTraceBeginCmdBuf;
             submitInfo.pFence = nullptr;
 
-            result = pQueue->PalQueue()->Submit(submitInfo);
+            result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
         }
     }
 
@@ -979,7 +981,7 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
                                                                   : &pTraceQueue->pFamily->pTraceBeginCmdBuf;
                 submitInfo.pFence         = pState->pBeginFence;
 
-                result = pQueue->PalQueue()->Submit(submitInfo);
+                result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
             }
 
             // Make the trace active and remember which queue started it
@@ -1018,7 +1020,7 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
                             submitInfo.ppCmdBuffers   = &pFamilyState->pTraceFlushCmdBuf;
                             submitInfo.pFence         = nullptr;
 
-                            result = pQueueState->pQueue->PalQueue()->Submit(submitInfo);
+                            result = pQueueState->pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
 
                             break;
                         }
@@ -1071,7 +1073,7 @@ Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
     if (result == Pal::Result::Success)
     {
         // Start building the trace-end command buffer
-        pPalDevice     = pState->pDevice->PalDevice();
+        pPalDevice     = pState->pDevice->PalDevice(DefaultDeviceIndex);
         pEndSqttCmdBuf = pTraceQueue->pFamily->pTraceEndSqttCmdBuf;
 
         Pal::CmdBufferBuildInfo buildInfo = {};
@@ -1115,7 +1117,7 @@ Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
         submitInfo.ppCmdBuffers   = &pEndSqttCmdBuf;
         submitInfo.pFence         = pState->pEndSqttFence;
 
-        result = pQueue->PalQueue()->Submit(submitInfo);
+        result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
     }
 
     // Optionally execute a device wait idle if panel says so
@@ -1148,7 +1150,7 @@ Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
 
     if (fenceResult == Pal::Result::NotReady && m_blockingTraceEnd)
     {
-        fenceResult = pState->pDevice->PalDevice()->WaitForFences(1, &pState->pEndSqttFence, true, InfiniteTimeout);
+        fenceResult = pState->pDevice->PalDevice(DefaultDeviceIndex)->WaitForFences(1, &pState->pEndSqttFence, true, InfiniteTimeout);
     }
 
     // Return without advancing if not ready yet or submit failed
@@ -1176,7 +1178,7 @@ Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
 
     if (result == Pal::Result::Success)
     {
-        pPalDevice = pState->pDevice->PalDevice();
+        pPalDevice = pState->pDevice->PalDevice(DefaultDeviceIndex);
         pEndCmdBuf = pTraceQueue->pFamily->pTraceEndCmdBuf;
     }
 
@@ -1224,7 +1226,7 @@ Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
         submitInfo.ppCmdBuffers   = &pEndCmdBuf;
         submitInfo.pFence         = pState->pEndFence;
 
-        result = pQueue->PalQueue()->Submit(submitInfo);
+        result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
     }
 
     if (result == Pal::Result::Success)
@@ -1454,7 +1456,7 @@ Pal::Result DevModeMgr::InitTraceQueueResources(
 
                         pFamilyState->queueFamilyIndex = familyIdx;
                         pFamilyState->supportsTracing  = SqttMgr::IsTracingSupported(
-                                                            pState->pDevice->VkPhysicalDevice(), familyIdx);
+                                                            pState->pDevice->VkPhysicalDevice(DefaultDeviceIndex), familyIdx);
                         pFamilyState->queueType        = pState->pDevice->GetQueueFamilyPalQueueType(familyIdx);
                         pFamilyState->engineType       = pState->pDevice->GetQueueFamilyPalEngineType(familyIdx);
 
@@ -1479,7 +1481,7 @@ Pal::Result DevModeMgr::InitTraceQueueResources(
                         Pal::KernelContextInfo kernelContextInfo = {};
 
                         Pal::Result palResult = Pal::Result::Success;
-                        Pal::Result queryKernelSuccess = pQueue->PalQueue()->QueryKernelContextInfo(&kernelContextInfo);
+                        Pal::Result queryKernelSuccess = pQueue->PalQueue(DefaultDeviceIndex)->QueryKernelContextInfo(&kernelContextInfo);
 
                         // Ensure we've acquired the debug VMID (note that some platforms do not
                         // implement this function, so don't fail the whole trace if so)
@@ -1530,7 +1532,7 @@ Pal::Result DevModeMgr::InitTraceQueueFamilyResources(
     // Test if this queue type supports SQ thread tracing
     if (pFamilyState->supportsTracing)
     {
-        Pal::IDevice* pPalDevice = pTraceState->pDevice->PalDevice();
+        Pal::IDevice* pPalDevice = pTraceState->pDevice->PalDevice(DefaultDeviceIndex);
 
         Pal::CmdBufferCreateInfo createInfo = {};
 
@@ -1720,7 +1722,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
     //
     // It's necessary to check this during RGP tracing init in addition to devmode init because during the earlier
     // devmode init we may be in a situation where some enumerated physical devices support tracing and others do not.
-    if (GpuSupportsTracing(pDevice->VkPhysicalDevice()->PalProperties(), pDevice->GetRuntimeSettings()) == false)
+    if (GpuSupportsTracing(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(), pDevice->GetRuntimeSettings()) == false)
     {
         result = Pal::Result::ErrorInitializationFailed;
     }
@@ -1734,7 +1736,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
         pState->pDevice            = pDevice;
     }
 
-    Pal::IDevice* pPalDevice = pDevice->PalDevice();
+    Pal::IDevice* pPalDevice = pDevice->PalDevice(DefaultDeviceIndex);
 
     // Create a command buffer allocator for the RGP tracing command buffers
     if (result == Pal::Result::Success)
@@ -2086,7 +2088,7 @@ Pal::Result DevModeMgr::TimedQueueSubmit(
                 pSqttCmdBufIds[cbIdx] = pCmdBuf->GetSqttState()->GetId().u32All;
             }
 
-            VK_ASSERT(pCmdBuf->PalCmdBuffer() == submitInfo.ppCmdBuffers[cbIdx]);
+            VK_ASSERT(pCmdBuf->PalCmdBuffer(DefaultDeviceIndex) == submitInfo.ppCmdBuffers[cbIdx]);
         }
 
         // Do a timed submit of all the command buffers
@@ -2115,7 +2117,7 @@ Pal::Result DevModeMgr::TimedQueueSubmit(
 }
 
 // =====================================================================================================================
-// Registers this pipeline as being included in the RGP trace.  Stores shader code binary etc.
+// Registers this pipeline, storing the code object binary and recording a load event in the RGP trace.
 void DevModeMgr::PipelineCreated(
     Device*   pDevice,
     Pipeline* pPipeline)
@@ -2124,7 +2126,21 @@ void DevModeMgr::PipelineCreated(
         m_trace.pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
         (m_trace.pGpaSession != nullptr))
     {
-        m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline());
+        m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
+    }
+}
+
+// =====================================================================================================================
+// Unregisters this pipeline, recording an unload event in the RGP trace.
+void DevModeMgr::PipelineDestroyed(
+    Device*   pDevice,
+    Pipeline* pPipeline)
+{
+    if ((m_trace.pDevice == pDevice) &&
+        m_trace.pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
+        (m_trace.pGpaSession != nullptr))
+    {
+        m_trace.pGpaSession->UnregisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
     }
 }
 

@@ -86,8 +86,18 @@ class Queue;
 class SqttMgr;
 class SwapChain;
 class ChillMgr;
-class TurboSync;
 
+// =====================================================================================================================
+// Specifies properties for importing a semaphore, it's an encapsulation of VkImportSemaphoreFdInfoKHR and
+// VkImportSemaphoreWin32HandleInfoKHR. Please refer to the vkspec for the defination of members.
+struct ImportSemaphoreInfo
+{
+    VkExternalSemaphoreHandleTypeFlags  handleType;
+    Pal::OsExternalHandle               handle;
+    VkSemaphoreImportFlags              importFlags;
+};
+
+// =====================================================================================================================
 class Device
 {
 public:
@@ -271,14 +281,11 @@ public:
         VkSwapchainKHR*                             pSwapChain);
 
     VkResult ImportSemaphore(
-        VkExternalSemaphoreHandleTypeFlags          handleType,
-        const Pal::OsExternalHandle                 handle,
-        VkSemaphore                                 semaphore,
-        VkSemaphoreImportFlags                      importFlags);
+        VkSemaphore                semaphore,
+        const ImportSemaphoreInfo& importInfo);
 
     VkResult Initialize(
         DispatchableQueue**                         pQueues,
-        uint8_t*                                    pPalQueueMemory,
         const DeviceExtensions::Enabled&            enabled);
 
     void InitDispatchTable();
@@ -303,22 +310,22 @@ public:
         return (1 << m_palDeviceCount) - 1;
     }
 
-    VK_FORCEINLINE Pal::IDevice* PalDevice(int32_t idx = DefaultDeviceIndex) const
+    VK_FORCEINLINE Pal::IDevice* PalDevice(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(m_palDeviceCount)));
-        return m_pPalDevices[idx];
+        return m_perGpu[idx].pPalDevice;
     }
 
-    VK_FORCEINLINE PhysicalDevice* VkPhysicalDevice(int32_t idx = DefaultDeviceIndex) const
+    VK_FORCEINLINE PhysicalDevice* VkPhysicalDevice(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(m_palDeviceCount)));
-        return m_pPhysicalDevices[idx];
+        return m_perGpu[idx].pPhysicalDevice;
     }
 
     VK_FORCEINLINE Pal::ICmdAllocator* GetSharedCmdAllocator(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(m_palDeviceCount)));
-        return m_pSharedPalCmdAllocator[idx];
+        return m_perGpu[idx].pSharedPalCmdAllocator;
     }
 
     VK_FORCEINLINE const Properties& GetProperties() const
@@ -327,39 +334,39 @@ public:
     VK_INLINE Pal::QueueType GetQueueFamilyPalQueueType(
         uint32_t queueFamilyIndex) const
     {
-        return VkPhysicalDevice()->GetQueueFamilyPalQueueType(queueFamilyIndex);
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalQueueType(queueFamilyIndex);
     }
 
     VK_INLINE Pal::EngineType GetQueueFamilyPalEngineType(
         uint32_t queueFamilyIndex) const
     {
-        return VkPhysicalDevice()->GetQueueFamilyPalEngineType(queueFamilyIndex);
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalEngineType(queueFamilyIndex);
     }
 
     VK_INLINE uint32_t GetQueueFamilyPalImageLayoutFlag(
         uint32_t queueFamilyIndex) const
     {
-        return VkPhysicalDevice()->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex);
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalImageLayoutFlag(queueFamilyIndex);
     }
 
     VK_INLINE uint32_t GetMemoryTypeMask() const
     {
-        return VkPhysicalDevice()->GetMemoryTypeMask();
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMask();
     }
 
     VK_INLINE bool GetVkTypeIndexFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndex) const
     {
-        return VkPhysicalDevice()->GetVkTypeIndexFromPalHeap(heapIndex, pVkIndex);
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetVkTypeIndexFromPalHeap(heapIndex, pVkIndex);
     }
 
     VK_INLINE Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const
     {
-        return VkPhysicalDevice()->GetPalHeapFromVkTypeIndex(vkIndex);
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetPalHeapFromVkTypeIndex(vkIndex);
     }
 
     VK_INLINE uint32_t GetUmdFpsCapFrameRate() const
     {
-        return VkPhysicalDevice()->PalProperties().osProperties.umdFpsCapFrameRate;
+        return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().osProperties.umdFpsCapFrameRate;
     }
 
     template<typename T>
@@ -462,7 +469,7 @@ public:
         { return m_enabledExtensions.IsExtensionEnabled(id); }
 
     VK_INLINE AppProfile GetAppProfile() const
-        { return VkPhysicalDevice()->GetAppProfile(); }
+        { return VkPhysicalDevice(DefaultDeviceIndex)->GetAppProfile(); }
 
     VK_INLINE SqttMgr* GetSqttMgr()
         { return m_pSqttMgr; }
@@ -473,8 +480,8 @@ public:
     VK_INLINE Util::Mutex* GetTimerQueueMutex()
         { return &m_timerQueueMutex; }
 
-    VK_INLINE PipelineCompiler* GetCompiler(uint32_t idx = DefaultDeviceIndex) const
-        { return m_pPhysicalDevices[idx]->GetCompiler(); }
+    VK_INLINE PipelineCompiler* GetCompiler(uint32_t idx) const
+        { return m_perGpu[idx].pPhysicalDevice->GetCompiler(); }
 
     static const Pal::MsaaQuadSamplePattern* GetDefaultQuadSamplePattern(uint32_t sampleCount);
     static uint32_t GetDefaultSamplePatternIndex(uint32_t sampleCount);
@@ -498,6 +505,13 @@ public:
 
     VK_FORCEINLINE const DeviceBarrierPolicy& GetBarrierPolicy() const
         { return m_barrierPolicy; }
+
+    Pal::IQueue* PerformSwCompositing(
+        uint32_t         deviceIdx,
+        uint32_t         presentationDeviceIdx,
+        Pal::ICmdBuffer* pCommandBuffer,
+        Pal::QueueType   cmdBufferQueueType,
+        const Queue*     pQueue);
 
 protected:
     Device(
@@ -524,17 +538,14 @@ protected:
 
     void InitSamplePatternPalette(Pal::SamplePatternPalette* pPalette) const;
 
+    VkResult InitSwCompositing(uint32_t deviceIdx);
+
     Instance* const                     m_pInstance;
     const RuntimeSettings&              m_settings;
 
     uint32_t                            m_palDeviceCount;
-    PhysicalDevice*                     m_pPhysicalDevices[MaxPalDevices];
-    Pal::IDevice*                       m_pPalDevices[MaxPalDevices];
 
-    Pal::ICmdAllocator*                 m_pSharedPalCmdAllocator[MaxPalDevices];
     Properties                          m_properties;
-
-    uint8_t*                            m_pPalQueueMemory;
 
     InternalMemMgr                      m_internalMemMgr;
 
@@ -567,12 +578,30 @@ protected:
     // The maximum allocations that can be created from the logical device
     uint32_t                            m_maxAllocations;
 
-    // The number of bytes allocated from the logical device per PAL device per heap.
-    Pal::gpusize                        m_allocatedMemorySize[MaxPalDevices][Pal::GpuHeap::GpuHeapCount];
+    struct PerGpuInfo
+    {
+        PhysicalDevice*        pPhysicalDevice;
+        Pal::IDevice*          pPalDevice;
+        Pal::ICmdAllocator*    pSharedPalCmdAllocator;
 
-    // The total memory (in bytes) per PAL device per heap
-    Pal::gpusize                        m_totalMemorySize[MaxPalDevices][Pal::GpuHeap::GpuHeapCount];
+        Pal::gpusize           allocatedMemorySize[Pal::GpuHeap::GpuHeapCount]; // Number of bytes allocated per heap
+        Pal::gpusize           totalMemorySize[Pal::GpuHeap::GpuHeapCount];     // The total memory (in bytes) per heap
 
+        void*                  pSwCompositingMemory;    // Internal memory for the below PAL objects (master and slave)
+        Pal::IQueue*           pSwCompositingQueue;     // Internal present queue (master) or transfer queue (slave)
+        Pal::IQueueSemaphore*  pSwCompositingSemaphore; // Internal semaphore (master and slave)
+    };
+
+    // Compute size required for the object.  One copy of PerGpuInfo is included in the object and we need
+    // to add space for any additional GPUs.
+    static size_t ObjectSize(size_t baseClassSize, uint32_t numDevices)
+    {
+        return baseClassSize + ((numDevices - 1) * sizeof(PerGpuInfo));
+    }
+
+    // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
+    // use.
+    PerGpuInfo              m_perGpu[1];
 };
 
 // =====================================================================================================================
@@ -815,22 +844,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupSurfacePresentModesKHR(
     VkDevice                                    device,
     VkSurfaceKHR                                surface,
     VkDeviceGroupPresentModeFlagsKHR*           pModes);
-
-VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeaturesKHX(
-    VkDevice                                    device,
-    uint32_t                                    heapIndex,
-    uint32_t                                    localDeviceIndex,
-    uint32_t                                    remoteDeviceIndex,
-    VkPeerMemoryFeatureFlagsKHX*                pPeerMemoryFeatures);
-
-VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupPresentCapabilitiesKHX(
-    VkDevice                                    device,
-    VkDeviceGroupPresentCapabilitiesKHX*        pDeviceGroupPresentCapabilities);
-
-VKAPI_ATTR VkResult VKAPI_CALL vkGetDeviceGroupSurfacePresentModesKHX(
-    VkDevice                                    device,
-    VkSurfaceKHR                                surface,
-    VkDeviceGroupPresentModeFlagsKHX*           pModes);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectTagEXT(
     VkDevice                                    device,

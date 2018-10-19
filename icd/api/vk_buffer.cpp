@@ -50,26 +50,26 @@ Buffer::Buffer(
     VkDeviceSize                size,
     BufferFlags                 internalFlags)
     :
-    m_pMemory(nullptr),
     m_size(size),
     m_memOffset(0),
-    m_pDevice(pDevice),
-    m_flags(flags),
-    m_usage(usage),
     m_barrierPolicy(barrierPolicy)
 {
-    m_internalFlags.u32All = internalFlags.u32All;
-
-    memset(m_gpuVirtAddr, 0, sizeof(m_gpuVirtAddr));
-    memset(m_pGpuMemory, 0, sizeof(m_pGpuMemory));
-    memset(m_multiInstanceIndices, 0, sizeof(m_multiInstanceIndices));
+    m_internalFlags.u32All                = internalFlags.u32All;
+    m_internalFlags.usageUniformBuffer    = (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
+    m_internalFlags.createSparseBinding   = (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
+    m_internalFlags.createSparseResidency = (flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
 
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
         if (pGpuMemory[deviceIdx] != nullptr)
         {
-            m_pGpuMemory[deviceIdx]  = pGpuMemory[deviceIdx];
-            m_gpuVirtAddr[deviceIdx] = pGpuMemory[deviceIdx]->Desc().gpuVirtAddr;
+            m_perGpu[deviceIdx].pGpuMemory  = pGpuMemory[deviceIdx];
+            m_perGpu[deviceIdx].gpuVirtAddr = pGpuMemory[deviceIdx]->Desc().gpuVirtAddr;
+        }
+        else
+        {
+            m_perGpu[deviceIdx].pGpuMemory  = nullptr;
+            m_perGpu[deviceIdx].gpuVirtAddr = 0;
         }
     }
 }
@@ -92,37 +92,38 @@ VkResult Buffer::Create(
     // We ignore sharing information for buffers, it has no relevance for us currently.
     VK_IGNORE(pCreateInfo->sharingMode);
 
+    size_t apiSize = ObjectSize(pDevice);
+
     size = pCreateInfo->size;
     bool isSparse = (pCreateInfo->flags & SparseEnablingFlags) != 0;
 
     if (isSparse && (size != 0))
     {
         // We need virtual remapping support for all sparse resources
-        VK_ASSERT(pDevice->VkPhysicalDevice()->IsVirtualRemappingSupported());
+        VK_ASSERT(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsVirtualRemappingSupported());
 
         // We need support for sparse buffers for sparse buffer residency
         if ((pCreateInfo->flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) != 0)
         {
-            VK_ASSERT(pDevice->VkPhysicalDevice()->GetPrtFeatures() & Pal::PrtFeatureBuffer);
+            VK_ASSERT(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureBuffer);
         }
 
-        size_t                   apiSize = sizeof(Buffer);
         size_t                   palMemSize;
         Pal::GpuMemoryCreateInfo info = { };
 
-        info.alignment          = pDevice->VkPhysicalDevice()->PalProperties().
+        info.alignment          = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().
                                                                 gpuMemoryProperties.virtualMemAllocGranularity;
         info.size               = Util::Pow2Align(size, info.alignment);
         info.flags.u32All       = 0;
         info.flags.virtualAlloc = 1;
 
         // Virtual resource should return 0 on unmapped read if residencyNonResidentStrict is set.
-        if (pDevice->VkPhysicalDevice()->GetPrtFeatures() & Pal::PrtFeatureStrictNull)
+        if (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureStrictNull)
         {
             info.virtualAccessMode = Pal::VirtualGpuMemAccessMode::ReadZero;
         }
 
-        palMemSize = pDevice->PalDevice()->GetGpuMemorySize(info, &palResult);
+        palMemSize = pDevice->PalDevice(DefaultDeviceIndex)->GetGpuMemorySize(info, &palResult);
         VK_ASSERT(palResult == Pal::Result::Success);
 
         // Allocate enough system memory to also store the VA-only memory object
@@ -157,7 +158,7 @@ VkResult Buffer::Create(
         // Allocate memory only for the dispatchable object
         pMemory = pAllocator->pfnAllocation(
             pAllocator->pUserData,
-            sizeof(Buffer),
+            apiSize,
             VK_DEFAULT_MEM_ALIGN,
             VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -180,7 +181,7 @@ VkResult Buffer::Create(
         {
             VkExternalMemoryProperties externalMemoryProperties = {};
 
-            pDevice->VkPhysicalDevice()->GetExternalMemoryProperties(
+            pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetExternalMemoryProperties(
                 isSparse,
                 static_cast<VkExternalMemoryHandleTypeFlagBits>(pExternalInfo->handleTypes),
                 &externalMemoryProperties);
@@ -232,18 +233,18 @@ VkResult Buffer::Create(
 // =====================================================================================================================
 // Destroy a buffer object
 VkResult Buffer::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
-        Pal::IGpuMemory* pMemoryObj = m_pGpuMemory[deviceIdx];
+        Pal::IGpuMemory* pMemoryObj = m_perGpu[deviceIdx].pGpuMemory;
 
         if (m_internalFlags.internalMemBound == true)
         {
             if (IsSparse() == false)
             {
-                m_pDevice->RemoveMemReference(pDevice->PalDevice(deviceIdx), pMemoryObj);
+                pDevice->RemoveMemReference(pDevice->PalDevice(deviceIdx), pMemoryObj);
             }
 
             // Destroy the memory object of the buffer only if it's a sparse buffer as that's when we created a private
@@ -263,6 +264,7 @@ VkResult Buffer::Destroy(
 // =====================================================================================================================
 // Bind GPU memory to buffer objects
 VkResult Buffer::BindMemory(
+    const Device*      pDevice,
     VkDeviceMemory     mem,
     VkDeviceSize       memOffset,
     const uint32_t*    pDeviceIndices)
@@ -275,30 +277,26 @@ VkResult Buffer::BindMemory(
 
     if (mem != VK_NULL_HANDLE)
     {
-        VK_ASSERT(m_pMemory == nullptr);
+        Memory*pMemory = Memory::ObjectFromHandle(mem);
 
-        m_pMemory = Memory::ObjectFromHandle(mem);
-
-        if (m_pDevice->IsMultiGpu() == false)
+        if (pDevice->IsMultiGpu() == false)
         {
             const uint32_t singleIdx = DefaultDeviceIndex;
 
-            Pal::IGpuMemory* pPalMemory = m_pMemory->PalMemory(singleIdx);
-            m_pGpuMemory[singleIdx]     = pPalMemory;
-            m_gpuVirtAddr[singleIdx]    = pPalMemory->Desc().gpuVirtAddr + memOffset;
+            Pal::IGpuMemory* pPalMemory = pMemory->PalMemory(singleIdx);
+            m_perGpu[singleIdx].pGpuMemory  = pPalMemory;
+            m_perGpu[singleIdx].gpuVirtAddr = pPalMemory->Desc().gpuVirtAddr + memOffset;
         }
         else
         {
-            for (uint32_t localDeviceIdx = 0; localDeviceIdx < m_pDevice->NumPalDevices(); localDeviceIdx++)
+            for (uint32_t localDeviceIdx = 0; localDeviceIdx < pDevice->NumPalDevices(); localDeviceIdx++)
             {
                 // it is VkMemory to handle the m_multiInstance
                 const uint32_t sourceMemInst = pDeviceIndices ? pDeviceIndices[localDeviceIdx] : localDeviceIdx;
 
-                m_pGpuMemory[localDeviceIdx]  = m_pMemory->PalMemory(localDeviceIdx, sourceMemInst);
-
-                m_multiInstanceIndices[localDeviceIdx] = static_cast<uint8_t>(sourceMemInst);
-
-                m_gpuVirtAddr[localDeviceIdx] = m_pGpuMemory[localDeviceIdx]->Desc().gpuVirtAddr + memOffset;
+                m_perGpu[localDeviceIdx].pGpuMemory  = pMemory->PalMemory(localDeviceIdx, sourceMemInst);
+                m_perGpu[localDeviceIdx].gpuVirtAddr =
+                    m_perGpu[localDeviceIdx].pGpuMemory->Desc().gpuVirtAddr + memOffset;
             }
         }
     }
@@ -309,16 +307,17 @@ VkResult Buffer::BindMemory(
 // =====================================================================================================================
 // Get the buffer's memory requirements
 VkResult Buffer::GetMemoryRequirements(
+    const Device*         pDevice,
     VkMemoryRequirements* pMemoryRequirements)
 {
     const VkDeviceSize ubRequiredAlignment = static_cast<VkDeviceSize>(sizeof(float) * 4);
-    const bool         sparseUsageEnabled  = ((m_flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT) != 0);
-    const bool         ubUsageEnabled      = ((m_usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT) != 0);
+    const bool         sparseUsageEnabled  =  m_internalFlags.createSparseBinding;
+    const bool         ubUsageEnabled      =  m_internalFlags.usageUniformBuffer;
 
     if (sparseUsageEnabled)
     {
         // In case of sparse buffers the alignment and granularity is the page size
-        pMemoryRequirements->alignment = m_pDevice->GetProperties().virtualMemPageSize;
+        pMemoryRequirements->alignment = pDevice->GetProperties().virtualMemPageSize;
         pMemoryRequirements->size      = Util::RoundUpToMultiple(m_size, pMemoryRequirements->alignment);
     }
     else
@@ -331,16 +330,16 @@ VkResult Buffer::GetMemoryRequirements(
     }
 
     // Allow all available memory types for buffers
-    pMemoryRequirements->memoryTypeBits = m_pDevice->GetMemoryTypeMask();
+    pMemoryRequirements->memoryTypeBits = pDevice->GetMemoryTypeMask();
 
     // cpu read/write visible heap through thunderbolt has very limited performance.
     // for buffer object application my use cpu to upload or download from gpu visible, so
     // it is better off to not expose visible heap for buffer to application.
-    if(m_pDevice->GetProperties().connectThroughThunderBolt)
+    if(pDevice->GetProperties().connectThroughThunderBolt)
     {
         uint32_t visibleMemIndex;
 
-        if (m_pDevice->GetVkTypeIndexFromPalHeap(Pal::GpuHeap::GpuHeapLocal, &visibleMemIndex))
+        if (pDevice->GetVkTypeIndexFromPalHeap(Pal::GpuHeap::GpuHeapLocal, &visibleMemIndex))
         {
             uint32_t visibleMemBit = 1 << visibleMemIndex;
             pMemoryRequirements->memoryTypeBits &= ~visibleMemBit;
@@ -350,7 +349,7 @@ VkResult Buffer::GetMemoryRequirements(
     // Limit heaps to those compatible with pinned system memory
     if (m_internalFlags.externalPinnedHost)
     {
-        pMemoryRequirements->memoryTypeBits &= m_pDevice->GetPinnedSystemMemoryTypes();
+        pMemoryRequirements->memoryTypeBits &= pDevice->GetPinnedSystemMemoryTypes();
 
         VK_ASSERT(pMemoryRequirements->memoryTypeBits != 0);
     }
@@ -368,7 +367,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyBuffer(
 {
     if (buffer != VK_NULL_HANDLE)
     {
-        const Device*                pDevice  = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         Buffer::ObjectFromHandle(buffer)->Destroy(pDevice, pAllocCB);
@@ -384,7 +383,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory(
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
 
-    return Buffer::ObjectFromHandle(buffer)->BindMemory(memory, memoryOffset, nullptr);
+    return Buffer::ObjectFromHandle(buffer)->BindMemory(pDevice, memory, memoryOffset, nullptr);
 }
 
 // =====================================================================================================================
@@ -393,8 +392,9 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements(
     VkBuffer                                    buffer,
     VkMemoryRequirements*                       pMemoryRequirements)
 {
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
 
-    Buffer::ObjectFromHandle(buffer)->GetMemoryRequirements(pMemoryRequirements);
+    Buffer::ObjectFromHandle(buffer)->GetMemoryRequirements(pDevice, pMemoryRequirements);
 }
 
 // =====================================================================================================================
@@ -404,7 +404,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
     VkMemoryRequirements2*                      pMemoryRequirements)
 {
     const Device* pDevice = ApiDevice::ObjectFromHandle(device);
-    VK_ASSERT((pDevice->VkPhysicalDevice()->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
+    VK_ASSERT((pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
               pDevice->IsExtensionEnabled(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2));
 
     union
@@ -420,7 +420,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
     {
         Buffer* pBuffer = Buffer::ObjectFromHandle(pRequirementsInfo2->buffer);
         VkMemoryRequirements* pRequirements = &pMemoryRequirements->memoryRequirements;
-        pBuffer->GetMemoryRequirements(pRequirements);
+        pBuffer->GetMemoryRequirements(pDevice, pRequirements);
 
         if (pMemoryRequirements->sType == VK_STRUCTURE_TYPE_MEMORY_REQUIREMENTS_2)
         {

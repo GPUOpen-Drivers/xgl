@@ -86,6 +86,14 @@ union MemoryPriority
 };
 
 // =====================================================================================================================
+// Specifies properties for opening an external shared memory.
+struct ImportMemoryInfo
+{
+    Pal::OsExternalHandle   handle;         // A handle on Windows, or a fd on Linux.
+    bool                    isNtHandle;     // It's a Windows-specific flag indicates the handle is shared via NT.
+};
+
+// =====================================================================================================================
 // Implementation of a VkMemory object.
 class Memory : public NonDispatchable<VkDeviceMemory, Memory>
 {
@@ -97,10 +105,9 @@ public:
         VkDeviceMemory*                  pMemory);
 
     static VkResult OpenExternalMemory(
-        Device*                          pDevice,
-        const Pal::OsExternalHandle      handle,
-        bool                             isNtHandle,
-        Memory**                         pMemory);
+        Device*                     pDevice,
+        const ImportMemoryInfo&     importInfo,
+        Memory**                    ppMemory);
 
     Pal::OsExternalHandle GetShareHandle(VkExternalMemoryHandleTypeFlagBits handleType);
 
@@ -134,7 +141,7 @@ public:
 
     Pal::IGpuMemory* PalMemory(uint32_t resourceIndex, uint32_t memoryIndex);
 
-    VK_INLINE Pal::IGpuMemory* PalMemory(uint32_t resourceIndex = DefaultDeviceIndex) const
+    VK_INLINE Pal::IGpuMemory* PalMemory(uint32_t resourceIndex) const
     {
         return m_pPalMemory[resourceIndex][resourceIndex];
     }
@@ -150,13 +157,15 @@ protected:
     Pal::GpuMemoryCreateInfo     m_info;
     MemoryPriority               m_priority;
     bool                         m_multiInstance;
+
 private:
-    Memory(vk::Device*         pDevice,
-           Pal::IGpuMemory**   pPalMemory,
-           const Pal::GpuMemoryCreateInfo& info,
-           bool                multiInstance     = false,
-           uint32_t            primaryIndex      = DefaultDeviceIndex,
-           Pal::IImage*        pPalExternalImage = nullptr);
+    Memory(vk::Device*                      pDevice,
+           Pal::IGpuMemory**                pPalMemory,
+           Pal::OsExternalHandle            externalHandle,
+           const Pal::GpuMemoryCreateInfo&  createInfo,
+           bool                             multiInstance     = false,
+           uint32_t                         primaryIndex      = DefaultDeviceIndex,
+           Pal::IImage*                     pPalExternalImage = nullptr);
 
     // Image needs to be a friend class to be able to create wrapper API memory objects
     friend class Image;
@@ -165,6 +174,9 @@ private:
     uint32_t     m_sizeAccountedForDeviceMask;
     Pal::IImage* m_pExternalPalImage;
     uint32_t     m_primaryDeviceIndex;
+
+    // Cache the handle of GPU memory which is on the first device, if the Gpumemory can be inter-process sharing.
+    Pal::OsExternalHandle m_sharedGpuMemoryHandle;
 
     // this function is used to mark that the allocation is counted in the logical device.
     // the destructor of this memory object need to decrease the count.
@@ -190,6 +202,7 @@ private:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator,
         const Pal::GpuMemoryCreateInfo& createInfo,
+        const Pal::GpuMemoryExportInfo& exportInfo,
         uint32_t                        allocationMask,
         bool                            multiInstanceHeap,
         Memory**                        ppMemory);
@@ -205,11 +218,10 @@ private:
         Memory**                        ppMemory);
 
     static VkResult OpenExternalSharedImage(
-        Device*                      pDevice,
-        Image*                       pBoundImage,
-        const Pal::OsExternalHandle  handle,
-        bool                         isNtHandle,
-        Memory**                     ppVkMemory);
+        Device*                 pDevice,
+        Image*                  pBoundImage,
+        const ImportMemoryInfo& importInfo,
+        Memory**                ppVkMemory);
 };
 
 namespace entry

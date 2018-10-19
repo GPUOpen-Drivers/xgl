@@ -58,13 +58,13 @@ public:
 
     VK_INLINE const void* Descriptor(VkImageLayout layout, uint32_t deviceIdx, size_t srdSize) const;
 
-    VK_INLINE const Pal::IColorTargetView* PalColorTargetView(int32_t idx = DefaultDeviceIndex) const
+    VK_INLINE const Pal::IColorTargetView* PalColorTargetView(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pColorTargetViews[idx];
     }
 
-    VK_INLINE const Pal::IDepthStencilView* PalDepthStencilView(int32_t idx = DefaultDeviceIndex) const
+    VK_INLINE const Pal::IDepthStencilView* PalDepthStencilView(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pDepthStencilViews[idx];
@@ -140,7 +140,8 @@ protected:
         VkFormat                 viewFormat,
         const Pal::SubresRange&  subresRange,
         const Pal::Range&        zRange,
-        const bool               needsFmaskViewSrds);
+        const bool               needsFmaskViewSrds,
+        uint32_t                 numDevices);
 
     const Image*        m_pImage;
     const VkFormat      m_viewFormat;

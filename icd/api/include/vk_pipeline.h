@@ -79,19 +79,19 @@ public:
         return reinterpret_cast<Pipeline*>(pipeline);
     }
 
-    const Pal::IPipeline* PalPipeline(int32_t idx = DefaultDeviceIndex) const
+    const Pal::IPipeline* PalPipeline(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pPalPipeline[idx];
     }
 
-    Pal::IPipeline* PalPipeline(int32_t idx = DefaultDeviceIndex)
+    Pal::IPipeline* PalPipeline(int32_t idx)
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pPalPipeline[idx];
     }
 
-    uint64_t PalPipelineHash(int32_t idx = DefaultDeviceIndex) const
+    uint64_t PalPipelineHash(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_palPipelineHash[idx];

@@ -25,6 +25,7 @@
 
 #include "include/barrier_policy.h"
 #include "include/vk_device.h"
+#include "include/vk_formats.h"
 
 namespace vk
 {
@@ -608,10 +609,11 @@ ImageBarrierPolicy::ImageBarrierPolicy(
     uint32_t                            queueFamilyIndexCount,
     const uint32_t*                     pQueueFamilyIndices,
     bool                                multisampled,
+    VkFormat                            format,
     uint32_t                            extraLayoutUsages)
   : ResourceBarrierPolicy(pDevice, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices)
 {
-    InitImageLayoutUsagePolicy(pDevice, usage, multisampled, extraLayoutUsages);
+    InitImageLayoutUsagePolicy(pDevice, usage, multisampled, format, extraLayoutUsages);
     InitConcurrentLayoutUsagePolicy(pDevice, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices);
     InitImageLayoutEnginePolicy(pDevice, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices);
     InitImageCachePolicy(pDevice, usage);
@@ -623,6 +625,7 @@ void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
     Device*                             pDevice,
     VkImageUsageFlags                   usage,
     bool                                multisampled,
+    VkFormat                            format,
     uint32_t                            extraLayoutUsages)
 {
     // Initialize layout usage mask to always allow uninitialized.
@@ -655,9 +658,10 @@ void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
 
     if ((usage & (VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_INPUT_ATTACHMENT_BIT)) != 0)
     {
-        if (multisampled && pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+        if ((Formats::IsDepthStencilFormat(format) == false) &&
+            multisampled && pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
         {
-            // If this is a multisampled image and fmask based reads are enabled then use it.
+            // If this is a multisampled color image and fmask based reads are enabled then use it.
             m_supportedLayoutUsageMask |= Pal::LayoutShaderFmaskBasedRead;
         }
         else
@@ -847,7 +851,7 @@ void ImageBarrierPolicy::InitImageCachePolicy(
     supportedInputCacheMask  &= pDevice->GetBarrierPolicy().GetSupportedInputCacheMask();
 
     // Initialize cache policy.
-    InitCachePolicy(pDevice->VkPhysicalDevice(),
+    InitCachePolicy(pDevice->VkPhysicalDevice(DefaultDeviceIndex),
                     supportedOutputCacheMask,
                     supportedInputCacheMask);
 }
@@ -1107,7 +1111,7 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
     supportedInputCacheMask  &= pDevice->GetBarrierPolicy().GetSupportedInputCacheMask();
 
     // Initialize cache policy.
-    InitCachePolicy(pDevice->VkPhysicalDevice(),
+    InitCachePolicy(pDevice->VkPhysicalDevice(DefaultDeviceIndex),
                     supportedOutputCacheMask,
                     supportedInputCacheMask);
 }
