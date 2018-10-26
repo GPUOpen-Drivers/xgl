@@ -1917,6 +1917,40 @@ VK_INLINE Pal::SwapChainMode VkToPalSwapChainMode(VkPresentModeKHR presentMode)
     return convert::SwapChainMode(presentMode);
 }
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 445
+namespace convert
+{
+    VK_INLINE Pal::CompositeAlphaMode CompositeAlpha(VkCompositeAlphaFlagBitsKHR compositeAlpha)
+    {
+        switch (compositeAlpha)
+        {
+            case VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR:
+                return Pal::CompositeAlphaMode::Opaque;
+
+            case VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR:
+                return Pal::CompositeAlphaMode::PreMultiplied;
+
+            case VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR:
+                return Pal::CompositeAlphaMode::PostMultiplied;
+
+            case VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR:
+                return Pal::CompositeAlphaMode::Inherit;
+
+            default:
+                VK_ASSERT(!"Unknown CompositeAlphaFlag!");
+                return Pal::CompositeAlphaMode::Opaque;
+        }
+    }
+}
+
+// =====================================================================================================================
+// Converts Vulkan composite alpha flag to PAL equivalent.
+VK_INLINE Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlagBitsKHR compositeAlpha)
+{
+    return convert::CompositeAlpha(compositeAlpha);
+}
+#endif
+
 // =====================================================================================================================
 // Converts Vulkan image creation flags to PAL image creation flags (unfortunately, PAL doesn't define a dedicated type
 // for the image creation flags so we have to return the constructed flag set as a uint32_t)
@@ -1926,16 +1960,18 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
     Pal::ImageCreateInfo palImageCreateInfo;
     palImageCreateInfo.flags.u32All         = 0;
 
-    palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)     ? 1 : 0;
-    palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)    ? 1 : 0;
-    palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)               ? 1 : 0;
-    palImageCreateInfo.flags.view3dAs2dArray    = (imageCreateFlags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) ? 1 : 0;
+    palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)   ? 1 : 0;
+    palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)  ? 1 : 0;
+    palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)             ? 1 : 0;
 
     // We must not use any metadata if sparse aliasing is enabled
-    palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)      ? 1 : 0;
+    palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)    ? 1 : 0;
 
     // Always provide pQuadSamplePattern to PalCmdResolveImage for depth formats to allow optimizations
     palImageCreateInfo.flags.sampleLocsAlwaysKnown = Formats::HasDepth(format) ? 1 : 0;
+
+    // Flag VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT is supported by default for all 3D images
+    VK_IGNORE(VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT);
 
     return palImageCreateInfo.flags.u32All;
 }

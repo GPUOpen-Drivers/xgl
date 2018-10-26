@@ -218,6 +218,9 @@ VkResult SwapChain::Create(
                                                                      (VkImageUsageFlags)(0),
                                                                      (VkImageUsageFlags)(0));
     swapChainCreateInfo.preTransform        = Pal::SurfaceTransformNone;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 445
+    swapChainCreateInfo.compositeAlpha      = VkToPalCompositeAlphaMode(pCreateInfo->compositeAlpha);
+#endif
     swapChainCreateInfo.imageArraySize      = 1;
     swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
 

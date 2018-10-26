@@ -54,17 +54,20 @@ def compile(cmdname, gfx, f, compiler):
     result = subprocess.call(cmdname, shell = True)
     passed = False
     if (result == 0):
-        if os.path.exists(RESULT + "/" + gfx + "/" + f + ".log"):
-            rf = open(RESULT + "/" + gfx + "/" + f + ".log", "r")
-            while True:
-                line = rf.readline()
-                if line:
-                    if re.search(compiler.upper()+ " SUCCESS", line):
-                        passed = True
+        if compiler == "amdllpc":
+            passed = True
+        else:
+            if os.path.exists(RESULT + "/" + gfx + "/" + f + ".log"):
+                rf = open(RESULT + "/" + gfx + "/" + f + ".log", "r")
+                while True:
+                    line = rf.readline()
+                    if line:
+                        if re.search(compiler.upper()+ " SUCCESS", line):
+                            passed = True
+                            break
+                    else:
                         break
-                else:
-                    break
-            rf.close()
+                rf.close()
     end = time.time()
     escape_time = end -start;
     if (passed):
