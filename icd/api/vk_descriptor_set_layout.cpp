@@ -45,10 +45,9 @@ DescriptorSetLayout::DescriptorSetLayout(
 {
 
 }
-
 // =====================================================================================================================
-// Returns the dword size required in the static section for a particular type of descriptor.
-uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(const Device* pDevice, VkDescriptorType type)
+// Returns the byte size for a particular type of descriptor.
+uint32_t DescriptorSetLayout::GetSingleDescStaticSize(const Device* pDevice, VkDescriptorType type)
 {
     const Device::Properties& props = pDevice->GetProperties();
 
@@ -83,10 +82,30 @@ uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(const Device* pDevice, 
         // as we pack the whole buffer SRD in the dynamic section (i.e. user data registers).
         size = 0;
         break;
+    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+        size = 1;
+        break;
     default:
         VK_NEVER_CALLED();
         size = 0;
         break;
+    }
+
+    VK_ASSERT((type == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT) || (Util::IsPow2Aligned(size, sizeof(uint32_t))));
+
+    return size;
+}
+
+// =====================================================================================================================
+// Returns the dword size required in the static section for a particular type of descriptor.
+uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(const Device* pDevice, const  VkDescriptorSetLayoutBinding *descriptorInfo)
+{
+    uint32_t size = GetSingleDescStaticSize(pDevice, descriptorInfo->descriptorType);
+
+    if (descriptorInfo->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+    {
+        // A single binding corresponds to a whole uniform block, so handle it as one descriptor not array.
+        size *= descriptorInfo->descriptorCount;
     }
 
     VK_ASSERT(Util::IsPow2Aligned(size, sizeof(uint32_t)));
@@ -173,16 +192,27 @@ void DescriptorSetLayout::ConvertBindingInfo(
     SectionInfo*                        pSectionInfo,
     BindingSectionInfo*                 pBindingSectionInfo)
 {
-    uint32_t descCount = pBindingInfo->descriptorCount;
 
     // Dword offset to this binding
     pBindingSectionInfo->dwOffset = Util::Pow2Align(pSectionInfo->dwSize, descAlignmentInDw);
 
-    // Array stride in dwords.
-    pBindingSectionInfo->dwArrayStride = descSizeInDw;
+    if (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+    {
+        // This allows access to inline uniform blocks using dwords offsets.
+        // Vk(Write/Copy/Update)DescriptorSet use byte values, convert them to dword.
+        pBindingSectionInfo->dwArrayStride = 1;
 
-    // Size of the whole array in dwords.
-    pBindingSectionInfo->dwSize = descCount * pBindingSectionInfo->dwArrayStride;
+        // Size of the whole block in dwords.
+        pBindingSectionInfo->dwSize        = descSizeInDw;
+    }
+    else
+    {
+        // Array stride in dwords.
+        pBindingSectionInfo->dwArrayStride = descSizeInDw;
+
+        // Size of the whole array in dwords.
+        pBindingSectionInfo->dwSize        = pBindingInfo->descriptorCount * descSizeInDw;
+    }
 
     // If this descriptor actually requires storage in the section then also update the global section information.
     if (pBindingSectionInfo->dwSize > 0)
@@ -275,7 +305,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                                                  // currently this flag is only tested for non zero, so
                                                  // setting all flags active makes no difference...
 
-    pOut->varDescDwStride           = 0;
+    pOut->varDescStride             = 0;
 
     pOut->sta.dwSize                = 0;
     pOut->sta.numRsrcMapNodes       = 0;
@@ -338,13 +368,13 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                     if ((bindingNumber == (pOut->count - 1)) &&
                         (pBinding->bindingFlags & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT))
                     {
-                        pOut->varDescDwStride = GetDescStaticSectionDwSize(pDevice, pBinding->info.descriptorType);
+                        pOut->varDescStride = GetSingleDescStaticSize(pDevice, pBinding->info.descriptorType);
                     }
 
                     // Construct the information specific to the static section of the descriptor set layout.
                     ConvertBindingInfo(
                         &pBinding->info,
-                        GetDescStaticSectionDwSize(pDevice, pBinding->info.descriptorType),
+                        GetDescStaticSectionDwSize(pDevice, &pBinding->info),
                         descAlignmentInDw,
                         &pOut->sta,
                         &pBinding->sta);

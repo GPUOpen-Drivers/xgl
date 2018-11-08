@@ -150,6 +150,13 @@ private:
             const void*                 pDescriptorInfo,
             const TemplateUpdateInfo&   entry);
 
+    template <uint32_t numPalDevices>
+    static void UpdateEntryInlineUniformBlock(
+            const Device*               pDevice,
+            VkDescriptorSet             descriptorSet,
+            const void*                 pDescriptorInfo,
+            const TemplateUpdateInfo&   entry);
+
     uint32_t                    m_numEntries;
 };
 

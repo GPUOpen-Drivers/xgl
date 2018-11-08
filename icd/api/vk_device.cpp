@@ -1356,6 +1356,7 @@ VkResult Device::CreateInternalPipelines()
     userDataNodes[2].type = Llpc::ResourceMappingNodeType::PushConst;
     userDataNodes[2].offsetInDwords = 2 * uavViewSize;
     userDataNodes[2].sizeInDwords = 4;
+    userDataNodes[2].srdRange.set = Llpc::InternalDescriptorSetId;
 
     result = CreateInternalComputePipeline(
         sizeof(CopyTimestampQueryPoolIl),

@@ -294,6 +294,9 @@ Llpc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         nodeType = Llpc::ResourceMappingNodeType::DescriptorResource;
         break;
+    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+        nodeType = Llpc::ResourceMappingNodeType::PushConst;
+        break;
     default:
         VK_NEVER_CALLED();
         break;
@@ -467,6 +470,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
             pPushConstNode->type             = Llpc::ResourceMappingNodeType::PushConst;
             pPushConstNode->offsetInDwords   = m_info.userDataLayout.pushConstRegBase;
             pPushConstNode->sizeInDwords     = m_info.userDataLayout.pushConstRegCount;
+            pPushConstNode->srdRange.set     = Llpc::InternalDescriptorSetId;
 
             userDataNodeCount += 1;
         }

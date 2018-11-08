@@ -73,6 +73,18 @@ VkResult DescriptorUpdateTemplate::Create(
         {
             const VkDescriptorUpdateTemplateEntry&  srcEntry   = pCreateInfo->pDescriptorUpdateEntries[ii];
             const DescriptorSetLayout::BindingInfo& dstBinding = pLayout->Binding(srcEntry.dstBinding);
+            uint32_t                                dstArrayElement;
+
+            if (dstBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+            {
+                // Convert dstArrayElement to dword
+                VK_ASSERT(Util::IsPow2Aligned(srcEntry.dstArrayElement, 4));
+                dstArrayElement = srcEntry.dstArrayElement / 4;
+            }
+            else
+            {
+                dstArrayElement = srcEntry.dstArrayElement;
+            }
 
             pEntries[ii].descriptorCount                = srcEntry.descriptorCount;
             pEntries[ii].srcOffset                      = srcEntry.offset;
@@ -81,10 +93,10 @@ VkResult DescriptorUpdateTemplate::Create(
             pEntries[ii].dstBindDynDataDwArrayStride    = dstBinding.dyn.dwArrayStride;
 
             pEntries[ii].dstStaOffset                   =
-                pLayout->GetDstStaOffset(dstBinding, srcEntry.dstArrayElement);
+                pLayout->GetDstStaOffset(dstBinding, dstArrayElement);
 
             pEntries[ii].dstDynOffset                   =
-                pLayout->GetDstDynOffset(dstBinding, srcEntry.dstArrayElement);
+                pLayout->GetDstDynOffset(dstBinding, dstArrayElement);
 
             pEntries[ii].pFunc                          =
                 GetUpdateEntryFunc(pDevice, srcEntry.descriptorType, dstBinding);
@@ -165,6 +177,9 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
         break;
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
         pFunc = &UpdateEntryBuffer<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, numPalDevices>;
+        break;
+    case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+        pFunc = &UpdateEntryInlineUniformBlock<numPalDevices>;
         break;
     default:
         VK_ASSERT(!"Unexpected descriptor type");
@@ -487,6 +502,35 @@ void DescriptorUpdateTemplate::UpdateEntrySampledImage(
         deviceIdx++;
     }
     while (deviceIdx < numPalDevices);
+}
+
+// =====================================================================================================================
+template <uint32_t numPalDevices>
+void DescriptorUpdateTemplate::UpdateEntryInlineUniformBlock(
+    const Device*               pDevice,
+    VkDescriptorSet             descriptorSet,
+    const void*                 pDescriptorInfo,
+    const TemplateUpdateInfo&   entry)
+{
+    DescriptorSet<numPalDevices>* pDstSet = DescriptorSet<numPalDevices>::ObjectFromHandle(descriptorSet);
+
+    const uint8_t* pData = static_cast<const uint8_t*>(pDescriptorInfo);
+
+    uint32_t deviceIdx = 0;
+
+    do
+    {
+        uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
+
+        DescriptorUpdate::WriteInlineUniformBlock(
+            pData,
+            pDestAddr,
+            entry.descriptorCount,
+            0
+            );
+
+        deviceIdx++;
+    } while (deviceIdx < numPalDevices);
 }
 
 namespace entry

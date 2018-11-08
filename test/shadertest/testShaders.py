@@ -104,7 +104,7 @@ def prepareTesting():
 
     # Check compiler
     global COMPILER
-    if platform.system() == "Linux":
+    if platform.system() != "Windows":
        COMPILER = compiler_path + "/" + compile_name
     else:
        COMPILER = compiler_path + "\\" + compile_name + ".exe"
@@ -114,16 +114,17 @@ def prepareTesting():
         sys.exit(1)
 
     # Check spvgen
-    if platform.system() == "Linux":
+    if platform.system() != "Windows":
         if os.path.isfile(SPVGEN + "/spvgen.so") == False or os.path.getsize(SPVGEN + "/spvgen.so") == 0:
-            print("NOT FIND SPVGEN")
-            sys.exit(1)
+            if os.path.isfile(SPVGEN + "/spvgen.dylib") == False or os.path.getsize(SPVGEN + "/spvgen.dylib") == 0:
+                print("NOT FIND SPVGEN")
+                sys.exit(1)
     elif os.path.isfile(SPVGEN + "\\spvgen.dll") == False or os.path.getsize(SPVGEN + "\\spvgen.dll") == 0:
             print("NOT FIND SPVGEN")
             sys.exit(1)
 
     # Update path for test
-    if platform.system() == "Linux":
+    if platform.system() != "Windows":
         os.putenv("LD_LIBRARY_PATH", SPVGEN)
     else:
         os.putenv("PATH", "%PATH%;"+SPVGEN)
@@ -171,10 +172,7 @@ if __name__=='__main__':
                        gfxip = gfxip_str + gfx[3]
 
                     if compile_name == "amdllpc":
-                        if f.endswith(".pipe"):
-                            cmd = COMPILER + gfxip + " -enable-outs=0 " + SHADER_SRC + "/" + gfx + "/" + f + " 2>&1 >> " + RESULT + "/" + gfx + "/" + f + ".log"
-                        else:
-                            cmd = COMPILER + gfxip + " -auto-layout-desc  -enable-outs=0 " + SHADER_SRC + "/" + gfx + "/" + f + " 2>&1 >> " + RESULT + "/" + gfx + "/" + f + ".log"
+                        cmd = COMPILER + gfxip + " -enable-outs=0 " + SHADER_SRC + "/" + gfx + "/" + f + " 2>&1 >> " + RESULT + "/" + gfx + "/" + f + ".log"
                     if sub_index == 0 :
                         # Run test in sync-compile mode to setup context cache
                         result = compile(cmd, gfx, f, compile_name)

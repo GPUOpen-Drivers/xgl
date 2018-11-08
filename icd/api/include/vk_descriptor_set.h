@@ -283,6 +283,12 @@ public:
         uint32_t                        dwStride,
         size_t                          descriptorStrideInBytes = 0);
 
+    static void WriteInlineUniformBlock(
+        const void*                     pData,
+        uint32_t*                       pDestAddr,
+        uint32_t                        count,
+        uint32_t                        dwStride);
+
     static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
 
 private:
