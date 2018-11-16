@@ -373,11 +373,10 @@ VkResult DescriptorGpuMemHeap::Init(
 
     for (uint32_t i = 0; i < count; ++i)
     {
-        m_gpuMemSize += DescriptorSetLayout::GetDescStaticSectionDwSize(pDevice, pTypeCount[i].type) *
+        m_gpuMemSize += DescriptorSetLayout::GetSingleDescStaticSize(pDevice, pTypeCount[i].type) *
             pTypeCount[i].descriptorCount;
     }
 
-    m_gpuMemSize *= sizeof(uint32_t);
     m_gpuMemAddrAlignment = pDevice->GetProperties().descriptorSizes.alignment;
 
     if (oneShot == false) //DYNAMIC USAGE
@@ -541,10 +540,8 @@ bool DescriptorGpuMemHeap::AllocSetGpuMem(
         uint32_t varBindingStaDWSize = pLayout->Binding(lastBindingIdx).sta.dwSize;
 
         // Total size = STA section size - last binding STA size + last binding variable descriptor count size
-        byteSize = (pLayout->Info().sta.dwSize -
-                    varBindingStaDWSize +
-                    (pLayout->Info().varDescDwStride * variableDescriptorCounts)) *
-                    sizeof(uint32_t);
+        byteSize = (pLayout->Info().sta.dwSize - varBindingStaDWSize) * sizeof(uint32_t) +
+                   (pLayout->Info().varDescStride * variableDescriptorCounts);
     }
     else
     {

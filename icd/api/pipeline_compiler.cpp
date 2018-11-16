@@ -37,6 +37,8 @@
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
 
+#include "palPipelineAbiProcessorImpl.h"
+
 #include <inttypes.h>
 
 namespace vk
@@ -589,23 +591,53 @@ bool PipelineCompiler::ReplacePipelineBinary(
 // =====================================================================================================================
 // Drop pipeline binary instruction.
 void PipelineCompiler::DropPipelineBinaryInst(
+    Device*                pDevice,
     const RuntimeSettings& settings,
-    size_t                 pipelineBinarySize,
-    const void*            pPipelineBinary)
+    const void*            pPipelineBinary,
+    size_t                 pipelineBinarySize)
 {
     if (settings.enableDropPipelineBinaryInst == true)
     {
-        static constexpr uint32_t NopInstruction = 0xBF800000;
+        const void* pPipelineCode = nullptr;
+        size_t pipelineCodeSize = 0;
 
-        for (uint32_t i = 0; i < pipelineBinarySize/sizeof(uint32_t); i++)
+        Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pDevice->VkInstance()->Allocator());
+        Pal::Result palResult = abiProcessor.LoadFromBuffer(pPipelineBinary, pipelineBinarySize);
+        if (palResult == Pal::Result::Success)
         {
-            if (((uint32_t*)pPipelineBinary)[i] == settings.dropPipelineBinaryInstToken)
-            {
-                VK_ASSERT(settings.dropPipelineBinaryInstSize > 0);
+            abiProcessor.GetPipelineCode(&pPipelineCode, &pipelineCodeSize);
+        }
 
+        VK_ASSERT(pPipelineCode != nullptr);
+        VK_ASSERT(pipelineCodeSize > 0);
+
+        uint32_t firstInstruction = *(uint32_t*)pPipelineCode;
+        uint32_t* pFirstInstruction = nullptr;
+
+        for (uint32_t i = 0; i <= pipelineBinarySize - sizeof(uint32_t); i++)
+        {
+            uint32_t* p = reinterpret_cast<uint32_t*>(((uint8_t*)pPipelineBinary) + i);
+
+            if (*p == firstInstruction)
+            {
+                pFirstInstruction = p;
+                break;
+            }
+        }
+
+        VK_ASSERT(pFirstInstruction != nullptr);
+        VK_ASSERT(settings.dropPipelineBinaryInstSize > 0);
+
+        uint32_t refValue = settings.dropPipelineBinaryInstToken & settings.dropPipelineBinaryInstMask;
+        static constexpr uint32_t Nop = 0xBF800000;   // ISA code for NOP instruction
+
+        for (uint32_t i = 0; i <= pipelineCodeSize/sizeof(uint32_t) - settings.dropPipelineBinaryInstSize; i++)
+        {
+            if ((pFirstInstruction[i] & settings.dropPipelineBinaryInstMask) == refValue)
+            {
                 for (uint32_t j = 0; j < settings.dropPipelineBinaryInstSize; j++)
                 {
-                    ((uint32_t*)pPipelineBinary)[i+j] = NopInstruction;
+                    pFirstInstruction[i+j] = Nop;
                 }
 
                 i += (settings.dropPipelineBinaryInstSize - 1);
@@ -681,7 +713,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         compileTime = Util::GetPerfCpuTime() - startTime;
     }
 
-    DropPipelineBinaryInst(settings, *pPipelineBinarySize, *ppPipelineBinary);
+    DropPipelineBinaryInst(pDevice, settings, *ppPipelineBinary, *pPipelineBinarySize);
 
     return result;
 }
@@ -758,7 +790,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         compileTime = Util::GetPerfCpuTime() - startTime;
     }
 
-    DropPipelineBinaryInst(settings, *pPipelineBinarySize, *ppPipelineBinary);
+    DropPipelineBinaryInst(pDevice, settings, *ppPipelineBinary, *pPipelineBinarySize);
 
     return result;
 }

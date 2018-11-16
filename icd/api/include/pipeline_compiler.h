@@ -211,9 +211,10 @@ private:
         const void**             ppPipelineBinary);
 
     void DropPipelineBinaryInst(
+        Device*                pDevice,
         const RuntimeSettings& settings,
-        size_t                 pipelineBinarySize,
-        const void*            pPipelineBinary);
+        const void*            pPipelineBinary,
+        size_t                 pipelineBinarySize);
 
     // -----------------------------------------------------------------------------------------------------------------
 

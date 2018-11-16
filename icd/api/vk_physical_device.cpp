@@ -2497,7 +2497,7 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
     {
         VkIcdSurfaceDisplay* pDisplaySurface = pSurface->GetDisplaySurface();
         pInfo->icdPlatform   = pDisplaySurface->base.platform;
-        pInfo->palPlatform   = VkToPalWsiPlatform(pDisplaySurface->base.platform);;
+        pInfo->palPlatform   = VkToPalWsiPlatform(pDisplaySurface->base.platform);
         pInfo->surfaceExtent = pDisplaySurface->imageExtent;
         DisplayModeObject* pDisplayMode = reinterpret_cast<DisplayModeObject*>(pDisplaySurface->displayMode);
         pInfo->pScreen       = pDisplayMode->pScreen;

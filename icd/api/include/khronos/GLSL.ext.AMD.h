@@ -84,4 +84,12 @@ enum GcnShaderAMD {
     GcnShaderCountAMD
 };
 
+#if VKI_NORMALIZED_TRIG_FUNCTIONS
+// SPV_AMD_normalized_trig - Internal Use Only
+static const Capability CapabilityTrigNormalizedAMD = static_cast<Capability>(5058);
+
+static const Op OpSinNormalizedAMD = static_cast<Op>(5059);
+static const Op OpCosNormalizedAMD = static_cast<Op>(5060);
+#endif
+
 #endif  // #ifndef GLSLextAMD_H

@@ -513,6 +513,10 @@ VkResult Memory::CreateGpuPinnedMemory(
     pinnedInfo.size = static_cast<size_t>(createInfo.size);
     pinnedInfo.pSysMem = pPinnedHostPtr;
     pinnedInfo.vaRange = Pal::VaRange::Default;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 450
+    pinnedInfo.alignment = createInfo.alignment;
+#endif
+
     gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetPinnedGpuMemorySize(
         pinnedInfo, &palResult);
 

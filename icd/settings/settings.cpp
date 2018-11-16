@@ -140,6 +140,8 @@ static void OverrideProfiledSettings(
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.
         pSettings->lenientInstanceFuncQuery = true;
+
+        pSettings->useIlBranch = false;
     }
 
     if (appProfile == AppProfile::IdTechEngine)

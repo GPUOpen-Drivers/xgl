@@ -302,6 +302,18 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
 }
 
 // =====================================================================================================================
+// Write data to the inline uniform block
+void DescriptorUpdate::WriteInlineUniformBlock(
+    const void*                     pData,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride
+)
+{
+    memcpy(pDestAddr + dwStride, pData, count);
+}
+
+// =====================================================================================================================
 // Write to descriptor sets using the provided descriptors for resources
 template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, size_t bufferDescSize,
           bool fmaskBasedMsaaReadEnabled, uint32_t numPalDevices>
@@ -316,7 +328,6 @@ void DescriptorUpdate::WriteDescriptorSets(
         const VkWriteDescriptorSet& params = pDescriptorWrites[i];
 
         VK_ASSERT(params.sType == VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET);
-        VK_ASSERT(params.pNext == nullptr);
 
         DescriptorSet<numPalDevices>* pDestSet  = DescriptorSet<numPalDevices>::ObjectFromHandle(params.dstSet);
         const DescriptorSetLayout::BindingInfo& destBinding = pDestSet->Layout()->Binding(params.dstBinding);
@@ -479,6 +490,27 @@ void DescriptorUpdate::WriteDescriptorSets(
                 destBinding.dyn.dwArrayStride);
             break;
 
+        case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+        {
+            VK_ASSERT(params.pNext != nullptr);
+            VK_ASSERT(Util::IsPow2Aligned(params.dstArrayElement, 4));
+            VK_ASSERT(Util::IsPow2Aligned(params.descriptorCount, 4));
+
+            const VkWriteDescriptorSetInlineUniformBlockEXT *inlineUniformBlockParams =
+                reinterpret_cast<const VkWriteDescriptorSetInlineUniformBlockEXT*>(params.pNext);
+            VK_ASSERT(inlineUniformBlockParams->sType == VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET_INLINE_UNIFORM_BLOCK_EXT);
+            VK_ASSERT(inlineUniformBlockParams->dataSize == params.descriptorCount);
+
+            pDestAddr = pDestSet->StaticCpuAddress(deviceIdx) + destBinding.sta.dwOffset;
+
+            WriteInlineUniformBlock(
+                inlineUniformBlockParams->pData,
+                pDestAddr,
+                params.descriptorCount,
+                params.dstArrayElement / 4);
+        }
+            break;
+
         default:
             VK_ASSERT(!"Unexpected descriptor type");
             break;
@@ -537,6 +569,21 @@ void DescriptorUpdate::CopyDescriptorSets(
 
             // Just to a straight memcpy covering the entire range.
             memcpy(pDestAddr, pSrcAddr, srcBinding.dyn.dwArrayStride * sizeof(uint32_t) * count);
+        }
+        else if (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
+        {
+            VK_ASSERT(Util::IsPow2Aligned(params.srcArrayElement, 4));
+            VK_ASSERT(Util::IsPow2Aligned(params.dstArrayElement, 4));
+
+            // Values srcArrayElement, dstArrayElement and count are in bytes
+            uint32_t* pSrcAddr  = pSrcSet->StaticCpuAddress(deviceIdx) + srcBinding.sta.dwOffset
+                                + (params.srcArrayElement / 4);
+
+            uint32_t* pDestAddr = pDestSet->StaticCpuAddress(deviceIdx) + destBinding.sta.dwOffset
+                                + (params.dstArrayElement / 4);
+
+            // Just do a straight memcpy covering the entire range.
+            memcpy(pDestAddr, pSrcAddr, count);
         }
         else
         {

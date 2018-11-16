@@ -95,7 +95,7 @@ public:
         SectionInfo     dyn;                // Information specific to the dynamic section of the descriptor set layout
         ImmSectionInfo  imm;                // Information specific to the immutable section of the descriptor set
                                             // layout
-        uint32_t        varDescDwStride;    // DWord Size of a descriptor of the type specified for
+        uint32_t        varDescStride;      // Byte size of a descriptor of the type specified for
                                             // the VARIABLE_DESCRIPTOR_COUNT_BIT binding
     };
 
@@ -139,7 +139,9 @@ public:
 
     const Device* VkDevice() const { return m_pDevice; }
 
-    static uint32_t GetDescStaticSectionDwSize(const Device* pDevice, VkDescriptorType type);
+    static uint32_t GetSingleDescStaticSize(const Device* pDevice, VkDescriptorType type);
+
+    static uint32_t GetDescStaticSectionDwSize(const Device* pDevice, const VkDescriptorSetLayoutBinding* type);
     static uint32_t GetDescDynamicSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDescImmutableSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDynamicBufferDescDwSize(const Device* pDevice);
