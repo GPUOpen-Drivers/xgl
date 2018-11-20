@@ -87,3 +87,4 @@ VK_KHR_shader_atomic_int64
 VK_KHR_driver_properties
 VK_GOOGLE_hlsl_functionality1
 VK_GOOGLE_decorate_string
+VK_AMD_memory_overallocation_behavior

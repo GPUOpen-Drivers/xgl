@@ -61,6 +61,7 @@
 #endif
 #include "devext/vk_google_decorate_string.h"
 #include "devext/vk_google_hlsl_functionality1.h"
+#include "devext/vk_amd_memory_overallocation_behavior.h"
 
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,

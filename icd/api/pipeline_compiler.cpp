@@ -36,6 +36,7 @@
 #include "include/vk_pipeline_cache.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
+#include "include/vk_graphics_pipeline.h"
 
 #include "palPipelineAbiProcessorImpl.h"
 
@@ -496,9 +497,10 @@ PipelineCacheType PipelineCompiler::GetShaderCacheType()
 // =====================================================================================================================
 // Builds shader module from SPIR-V binary code.
 VkResult PipelineCompiler::BuildShaderModule(
-    size_t          codeSize,            ///< Size of shader binary data
-    const void*     pCode                ///< Shader binary data
-    , void**          ppLlpcShaderModule ///< [out] LLPC shader module
+    const Device*   pDevice,
+    size_t          codeSize,
+    const void*     pCode
+    , void**          ppLlpcShaderModule
     )
 {
     const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
@@ -954,10 +956,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                     }
                 }
 
-                dualSourceBlend |= IsDualSourceBlend(src.srcAlphaBlendFactor);
-                dualSourceBlend |= IsDualSourceBlend(src.dstAlphaBlendFactor);
-                dualSourceBlend |= IsDualSourceBlend(src.srcColorBlendFactor);
-                dualSourceBlend |= IsDualSourceBlend(src.dstColorBlendFactor);
+                dualSourceBlend = GetDualSourceBlendEnableState(src);
             }
         }
         pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = dualSourceBlend;
@@ -1055,27 +1054,6 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                             );
     }
 
-    return result;
-}
-
-// =====================================================================================================================
-// Checks whether dual source blend is needed.
-bool PipelineCompiler::IsDualSourceBlend(
-    VkBlendFactor blend)
-{
-    bool result = false;
-    switch(blend)
-    {
-    case VK_BLEND_FACTOR_SRC1_COLOR:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
-    case VK_BLEND_FACTOR_SRC1_ALPHA:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
-        result = true;
-        break;
-    default:
-        result = false;
-        break;
-    }
     return result;
 }
 

@@ -91,6 +91,10 @@ Instance::Instance(
 {
     m_flags.u32All = 0;
 
+    // Disable TurboSync and Chill by default
+    m_turboSyncSettings.turboSyncEnable = false;
+    m_chillSettings.chillProfileEnable  = false;
+
     memset(m_screens, 0, sizeof(m_screens));
 }
 
@@ -219,8 +223,7 @@ VkResult Instance::Create(
 // else.  This feature is tied directly to shader analyzer tool support and indirectly to the VK_AMD_shader_info
 // extension.
 bool Instance::DetermineNullGpuSupport(
-    Pal::NullGpuId* pNullGpuId
-    ) const
+    Pal::NullGpuId* pNullGpuId)
 {
     Pal::NullGpuId nullGpuId = Pal::NullGpuId::Max;
     bool nullGpuSupport      = false;
@@ -237,17 +240,29 @@ bool Instance::DetermineNullGpuSupport(
         }
         else
         {
-            Pal::NullGpuInfo nullGpus[Pal::MaxDevices] = {};
-            uint32_t nullGpuCount = VK_ARRAY_SIZE(nullGpus);
+            uint32_t nullGpuCount = 0u;
 
-            if (Pal::EnumerateNullDevices(&nullGpuCount, nullGpus) == Pal::Result::Success)
+            // Populate nullGpuCount
+            if (Pal::EnumerateNullDevices(&nullGpuCount, nullptr) == Pal::Result::Success)
             {
-                for (uint32_t nullGpuIdx = 0; nullGpuIdx < nullGpuCount; ++nullGpuIdx)
+                Pal::NullGpuInfo* nullGpus = reinterpret_cast<Pal::NullGpuInfo*>(
+                    AllocMem(nullGpuCount * sizeof(Pal::NullGpuInfo), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE));
+
+                if (nullGpus != nullptr)
                 {
-                    if (utils::StrCmpCaseInsensitive(pNullGpuEnv, nullGpus[nullGpuIdx].pGpuName) == 0)
+                    // Populate nullGpus
+                    if (Pal::EnumerateNullDevices(&nullGpuCount, nullGpus) == Pal::Result::Success)
                     {
-                        nullGpuId = nullGpus[nullGpuIdx].nullGpuId;
+                        for (uint32_t nullGpuIdx = 0; nullGpuIdx < nullGpuCount; ++nullGpuIdx)
+                        {
+                            if (utils::StrCmpCaseInsensitive(pNullGpuEnv, nullGpus[nullGpuIdx].pGpuName) == 0)
+                            {
+                                nullGpuId = nullGpus[nullGpuIdx].nullGpuId;
+                            }
+                        }
                     }
+
+                    FreeMem(nullGpus);
                 }
             }
         }

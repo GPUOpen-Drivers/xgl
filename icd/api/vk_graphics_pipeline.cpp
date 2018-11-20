@@ -51,15 +51,15 @@ namespace vk
 {
 
 // =====================================================================================================================
-// Returns true if the given blend factor is a dual source blend factor
-bool IsDualSourceBlend(Pal::Blend blend)
+// Returns true if the given VkBlendFactor factor is a dual source blend factor
+bool IsDualSourceBlend(VkBlendFactor blend)
 {
     switch (blend)
     {
-    case Pal::Blend::Src1Color:
-    case Pal::Blend::OneMinusSrc1Color:
-    case Pal::Blend::Src1Alpha:
-    case Pal::Blend::OneMinusSrc1Alpha:
+    case VK_BLEND_FACTOR_SRC1_COLOR:
+    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
+    case VK_BLEND_FACTOR_SRC1_ALPHA:
+    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
         return true;
     default:
         return false;
@@ -82,6 +82,21 @@ bool IsSrcAlphaUsedInBlend(
     default:
         return false;
     }
+}
+
+// =====================================================================================================================
+// Returns true if Dual Source Blending is to be enabled based on the given ColorBlendAttachmentState
+bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pColorBlendAttachmentState)
+{
+    bool dualSourceBlend = false;
+
+    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.srcAlphaBlendFactor);
+    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.dstAlphaBlendFactor);
+    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.srcColorBlendFactor);
+    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.dstColorBlendFactor);
+    dualSourceBlend &= (pColorBlendAttachmentState.blendEnable == VK_TRUE);
+
+    return dualSourceBlend;
 }
 
 // =====================================================================================================================
@@ -530,10 +545,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 pBlendDst->dstBlendAlpha  = VkToPalBlend(src.dstAlphaBlendFactor);
                 pBlendDst->blendFuncAlpha = VkToPalBlendFunc(src.alphaBlendOp);
 
-                dualSourceBlend |= IsDualSourceBlend(pBlendDst->srcBlendColor);
-                dualSourceBlend |= IsDualSourceBlend(pBlendDst->dstBlendColor);
-                dualSourceBlend |= IsDualSourceBlend(pBlendDst->srcBlendAlpha);
-                dualSourceBlend |= IsDualSourceBlend(pBlendDst->dstBlendAlpha);
+                dualSourceBlend = GetDualSourceBlendEnableState(src);
             }
         }
 
@@ -665,13 +677,32 @@ VkResult GraphicsPipeline::Create(
     const uint32_t numPalDevices = pDevice->NumPalDevices();
     for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices); ++i)
     {
-        result = pDevice->GetCompiler(i)->CreateGraphicsPipelineBinary(
-        pDevice,
-        i,
-        pPipelineCache,
-        &binaryCreateInfo,
-        &pipelineBinarySizes[i],
-        &pPipelineBinaries[i]);
+        if (i == DefaultDeviceIndex)
+        {
+            result = pDevice->GetCompiler(i)->CreateGraphicsPipelineBinary(
+                pDevice,
+                i,
+                pPipelineCache,
+                &binaryCreateInfo,
+                &pipelineBinarySizes[i],
+                &pPipelineBinaries[i]);
+        }
+        else
+        {
+            PipelineCompiler::GraphicsPipelineCreateInfo binaryCreateInfoMGPU = {};
+            VbBindingInfo vbInfoMGPU = {};
+            pDefaultCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &binaryCreateInfoMGPU, &vbInfoMGPU);
+
+            result = pDevice->GetCompiler(i)->CreateGraphicsPipelineBinary(
+                pDevice,
+                i,
+                pPipelineCache,
+                &binaryCreateInfoMGPU,
+                &pipelineBinarySizes[i],
+                &pPipelineBinaries[i]);
+
+            pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfoMGPU);
+        }
     }
 
     if (result == VK_SUCCESS)

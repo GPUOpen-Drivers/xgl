@@ -867,8 +867,7 @@ VkResult PhysicalDevice::GetFeatures(
         pFeatures->shaderInt16 = VK_FALSE;
     }
 
-    if ((GetRuntimeSettings().optEnablePrt)
-        )
+    if (GetRuntimeSettings().optEnablePrt)
     {
         pFeatures->shaderResourceResidency =
             GetPrtFeatures() & Pal::PrtFeatureShaderStatus ? VK_TRUE : VK_FALSE;
@@ -963,8 +962,7 @@ VkResult PhysicalDevice::GetImageFormatProperties(
 
     if (flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
     {
-        if ((GetRuntimeSettings().optEnablePrt == false)
-        )
+        if (GetRuntimeSettings().optEnablePrt == false)
         {
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
         }
@@ -2748,6 +2746,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MEMORY_OVERALLOCATION_BEHAVIOR));
+
     return availableExtensions;
 }
 
@@ -3210,7 +3210,9 @@ void PhysicalDevice::GetFeatures2(
             {
                 VkPhysicalDeviceVariablePointerFeatures* pVariablePointerFeatures =
                     reinterpret_cast<VkPhysicalDeviceVariablePointerFeatures*>(pHeader);
-                pVariablePointerFeatures->variablePointers = VK_TRUE;
+                {
+                    pVariablePointerFeatures->variablePointers = VK_TRUE;
+                }
                 pVariablePointerFeatures->variablePointersStorageBuffer = VK_TRUE;
                 break;
             }
@@ -3569,7 +3571,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pConservativeRasterizationProperties->extraPrimitiveOverestimationSizeGranularity   = 0;
             pConservativeRasterizationProperties->primitiveUnderestimation                      = VK_FALSE;
             pConservativeRasterizationProperties->conservativePointAndLineRasterization         = VK_FALSE;
-            pConservativeRasterizationProperties->degenerateTrianglesRasterized                 = VK_FALSE;
+            pConservativeRasterizationProperties->degenerateTrianglesRasterized                 = VK_TRUE;
             pConservativeRasterizationProperties->degenerateLinesRasterized                     = VK_FALSE;
             pConservativeRasterizationProperties->fullyCoveredFragmentShaderInputVariable       = VK_FALSE;
             pConservativeRasterizationProperties->conservativeRasterizationPostDepthCoverage    = VK_FALSE;

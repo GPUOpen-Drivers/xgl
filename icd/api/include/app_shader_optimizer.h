@@ -135,6 +135,7 @@ struct ShaderProfileAction
                 uint32_t debugMode                          : 1;
                 uint32_t allowReZ                           : 1;
                 uint32_t shaderReplaceEnabled               : 1;
+                uint32_t fpControlFlags                     : 1;
                 uint32_t reserved                           : 18;
             };
             uint32_t u32All;

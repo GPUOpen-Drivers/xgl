@@ -143,6 +143,12 @@ constexpr AppProfilePatternEntry AppNameTalosWin64Bit =
     "talos - 64bit"
 };
 
+constexpr AppProfilePatternEntry AppNameTalosVRWin64Bit =
+{
+    PatternAppNameLower,
+    "talos - 64bit- vr"
+};
+
 constexpr AppProfilePatternEntry AppNameTalosLinux32Bit =
 {
     PatternAppNameLower,
@@ -153,6 +159,12 @@ constexpr AppProfilePatternEntry AppNameTalosLinux64Bit =
 {
     PatternAppNameLower,
     "talos - linux - 64bit"
+};
+
+constexpr AppProfilePatternEntry AppNameTalosVRLinux64Bit =
+{
+    PatternAppNameLower,
+    "talos - linux - 64bit- vr"
 };
 
 constexpr AppProfilePatternEntry AppNameSeriousSamFusionWin =
@@ -189,6 +201,18 @@ constexpr AppProfilePatternEntry AppNameRiseOfTheTombra =
 {
     PatternAppNameLower,
     "riseofthetombra"
+};
+
+constexpr AppProfilePatternEntry AppNameThronesOfBritannia =
+{
+    PatternAppNameLower,
+    "thronesofbritan"
+};
+
+constexpr AppProfilePatternEntry AppNameDawnOfWarIII =
+{
+    PatternAppNameLower,
+    "dawnofwar3"
 };
 
 constexpr AppProfilePatternEntry AppEngineFeral3D =
@@ -303,6 +327,24 @@ AppProfilePattern AppPatternTable[] =
     },
 
     {
+        AppProfile::TalosVR,
+        {
+            AppNameTalosVRWin64Bit,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::TalosVR,
+        {
+            AppNameTalosVRLinux64Bit,
+            AppEngineSedp,
+            PatternEnd
+        }
+    },
+
+    {
         AppProfile::SeriousSamFusion,
         {
             AppNameSeriousSamFusionWin,
@@ -350,6 +392,24 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::RiseOfTheTombra,
         {
             AppNameRiseOfTheTombra,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::ThronesOfBritannia,
+        {
+            AppNameThronesOfBritannia,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::DawnOfWarIII,
+        {
+            AppNameDawnOfWarIII,
             AppEngineFeral3D,
             PatternEnd
         }

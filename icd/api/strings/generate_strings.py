@@ -280,6 +280,9 @@ def generate_temp_file(string_file):
         f = open(src0_file, 'r')
         lines = f.readlines()
         f.close()
+        if len(lines) != 0 and not lines[len(lines) - 1].endswith('\n'):
+            # Cope with input file with no final NL.
+            lines[len(lines) - 1] += '\n'
         fdst.writelines(lines)
 
     if os.access(src1_file, os.R_OK):

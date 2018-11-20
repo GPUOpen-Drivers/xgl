@@ -84,7 +84,7 @@ VkResult Memory::Create(
     Pal::GpuMemoryExportInfo exportInfo = {};
 
     // Determines towards which devices we have accounted memory size
-    uint32_t sizeAccountedForDeviceMask = 0;
+    uint32_t sizeAccountedForDeviceMask = 0u;
 
     // take the allocation count ahead of time.
     // it will set the VK_ERROR_TOO_MANY_OBJECTS
@@ -225,13 +225,14 @@ VkResult Memory::Create(
         }
     }
 
-    // Check for OOM before actually allocating to avoid overhead
+    // Check for OOM before actually allocating to avoid overhead. Do not account for the memory allocation yet
+    // since the commitment size can still increase
     if ((vkResult == VK_SUCCESS) &&
-        (pDevice->GetRuntimeSettings().memoryEnableLocalHeapTracking) &&
+        (pDevice->IsAllocationSizeTrackingEnabled()) &&
         ((createInfo.heaps[0] == Pal::GpuHeap::GpuHeapInvisible) ||
          (createInfo.heaps[0] == Pal::GpuHeap::GpuHeapLocal)))
     {
-        vkResult = pDevice->IncreaseAllocatedMemorySize(createInfo.size, allocationMask, createInfo.heaps[0]);
+        vkResult = pDevice->TryIncreaseAllocatedMemorySize(createInfo.size, allocationMask, createInfo.heaps[0]);
 
         if (vkResult == VK_SUCCESS)
         {
@@ -276,18 +277,24 @@ VkResult Memory::Create(
         }
     }
 
+    if ((vkResult == VK_SUCCESS) &&
+        (sizeAccountedForDeviceMask != 0u))
+    {
+        // Account for committed size in logical device. The destructor will decrease the counter accordingly.
+        vkResult = pDevice->IncreaseAllocatedMemorySize(pMemory->m_info.size, sizeAccountedForDeviceMask, pMemory->m_info.heaps[0]);
+
+        if (vkResult != VK_SUCCESS)
+        {
+            pMemory->Free(pDevice, pAllocator);
+        }
+    }
+
     if (vkResult != VK_SUCCESS)
     {
         if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)
         {
             // Something failed after the allocation count was incremented
             pDevice->DecreaseAllocationCount();
-        }
-
-        if (sizeAccountedForDeviceMask != 0)
-        {
-            // Something failed after the local allocated memory size was increased
-            pDevice->DecreaseAllocatedMemorySize(createInfo.size, sizeAccountedForDeviceMask, createInfo.heaps[0]);
         }
     }
     else

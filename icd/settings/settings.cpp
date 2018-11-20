@@ -34,6 +34,8 @@
 #include "palFile.h"
 
 #include <sstream>
+#include <climits>
+#include <cmath>
 
 using namespace Util;
 
@@ -100,12 +102,13 @@ static void OverrideProfiledSettings(
 {
     Pal::PalPublicSettings* pPalSettings = pPalDevice->GetPublicSettings();
 
+    Pal::DeviceProperties info;
+    pPalDevice->GetProperties(&info);
+
     if (appProfile == AppProfile::Doom)
     {
         pSettings->enableSpvPerfOptimal = true;
 
-        Pal::DeviceProperties info;
-        pPalDevice->GetProperties(&info);
         if (Pal::GfxIpLevel::GfxIp9 == info.gfxLevel)
         {
             pPalSettings->tcCompatibleMetaData &= ~Pal::TexFetchMetaDataCapsNoAaColor;
@@ -126,10 +129,6 @@ static void OverrideProfiledSettings(
     if (appProfile == AppProfile::WolfensteinII)
     {
         pSettings->enableSpvPerfOptimal = true;
-
-        Pal::DeviceProperties info;
-
-        pPalDevice->GetProperties(&info);
 
         if (Pal::GfxIpLevel::GfxIp9 == info.gfxLevel)
         {
@@ -156,6 +155,7 @@ static void OverrideProfiledSettings(
     if (appProfile == AppProfile::Dota2)
     {
         pPalSettings->useGraphicsFastDepthStencilClear = true;
+
         pPalSettings->hintDisableSmallSurfColorCompressionSize = 511;
 
         pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;

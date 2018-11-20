@@ -67,6 +67,7 @@ class GpaSession;
 namespace DevDriver
 {
 class DevDriverServer;
+class PipelineUriService;
 class IMsgChannel;
 struct MessageBuffer;
 
@@ -288,8 +289,11 @@ private:
     Instance*                           m_pInstance;
     DevDriver::DevDriverServer*         m_pDevDriverServer;
     DevDriver::RGPProtocol::RGPServer*  m_pRGPServer;
+    DevDriver::PipelineUriService*      m_pPipelineUriService;
+    bool                                m_pipelineServiceRegistered;
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
-    DevDriver::ETWProtocol::ETWClient*  m_pEtwClient;               // ETW client pointer used to collect gpu events for RGP
+    DevDriver::ETWProtocol::ETWClient*  m_pEtwClient;               // ETW client pointer used to collect gpu
+                                                                    // events for RGP
 #endif
     Util::Mutex                         m_traceMutex;
     TraceState                          m_trace;

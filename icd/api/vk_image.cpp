@@ -117,8 +117,7 @@ Image::Image(
     m_imageUsage(usage),
     m_tileSize(tileSize),
     m_barrierPolicy(barrierPolicy),
-    m_pSwapChain(nullptr),
-    m_baseAddrOffset(0)
+    m_pSwapChain(nullptr)
 {
     m_internalFlags.u32All = internalFlags.u32All;
 
@@ -154,8 +153,9 @@ Image::Image(
 
     for (uint32_t devIdx = 0; devIdx < pDevice->NumPalDevices(); devIdx++)
     {
-        m_perGpu[devIdx].pPalImage  = pPalImages[devIdx];
-        m_perGpu[devIdx].pPalMemory = (pPalMemory != nullptr) ? pPalMemory[devIdx] : nullptr;
+        m_perGpu[devIdx].pPalImage      = pPalImages[devIdx];
+        m_perGpu[devIdx].pPalMemory     = (pPalMemory != nullptr) ? pPalMemory[devIdx] : nullptr;
+        m_perGpu[devIdx].baseAddrOffset = 0;
     }
 
     CalcMemoryPriority(pDevice);
@@ -980,8 +980,6 @@ VkResult Image::BindMemory(
 
     if (GetMemoryRequirements(pDevice, &reqs) == VK_SUCCESS)
     {
-        Pal::gpusize baseAddrOffset = 0;
-
         Memory* pMemory = (mem != VK_NULL_HANDLE) ? Memory::ObjectFromHandle(mem) : nullptr;
 
         if (m_internalFlags.externallyShareable && (pMemory->GetExternalPalImage() != nullptr))
@@ -1009,8 +1007,9 @@ VkResult Image::BindMemory(
         {
             const uint32_t sourceMemInst = bindIndices[localDeviceIdx];
 
-            Pal::IImage*     pPalImage = m_perGpu[localDeviceIdx].pPalImage;
-            Pal::IGpuMemory* pGpuMem   = nullptr;
+            Pal::IImage*     pPalImage      = m_perGpu[localDeviceIdx].pPalImage;
+            Pal::IGpuMemory* pGpuMem        = nullptr;
+            Pal::gpusize     baseAddrOffset = 0;
 
             if (pMemory != nullptr)
             {
@@ -1043,13 +1042,13 @@ VkResult Image::BindMemory(
             }
 
             result = pPalImage->BindGpuMemory(pGpuMem, baseAddrOffset + memOffset);
-        }
 
-        if (result == Pal::Result::Success)
-        {
-            // Record the private base address offset.  This is necessary for things like subresource layout
-            // calculation for linear images.
-            m_baseAddrOffset = baseAddrOffset;
+            if (result == Pal::Result::Success)
+            {
+                // Record the private base address offset.  This is necessary for things like subresource layout
+                // calculation for linear images.
+                m_perGpu[localDeviceIdx].baseAddrOffset = baseAddrOffset;
+            }
         }
 
         return PalToVkResult(result);
@@ -1137,6 +1136,7 @@ VkResult Image::BindSwapchainMemory(
 // =====================================================================================================================
 // Implementation of vkGetImageSubresourceLayout
 VkResult Image::GetSubresourceLayout(
+    const Device*             pDevice,
     const VkImageSubresource* pSubresource,
     VkSubresourceLayout*      pLayout
     ) const
@@ -1158,7 +1158,13 @@ VkResult Image::GetSubresourceLayout(
 
     const Pal::ImageCreateInfo& createInfo = PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
 
-    pLayout->offset     = m_baseAddrOffset + palLayout.offset;
+    for (uint32_t deviceIdx = 1; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    {
+        // If this is triggered, memoryBaseAddrAlignment should be raised to the alignment of this image for MGPU.
+        VK_ASSERT(m_perGpu[DefaultDeviceIndex].baseAddrOffset == m_perGpu[deviceIdx].baseAddrOffset);
+    }
+
+    pLayout->offset     = m_perGpu[DefaultDeviceIndex].baseAddrOffset + palLayout.offset;
     pLayout->size       = palLayout.size;
     pLayout->rowPitch   = palLayout.rowPitch;
     pLayout->arrayPitch = (createInfo.arraySize > 1)    ? palLayout.depthPitch : 0;
@@ -1501,7 +1507,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetImageSubresourceLayout(
     const VkImageSubresource*                   pSubresource,
     VkSubresourceLayout*                        pLayout)
 {
+    const Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
     Image::ObjectFromHandle(image)->GetSubresourceLayout(
+        pDevice,
         pSubresource,
         pLayout);
 }

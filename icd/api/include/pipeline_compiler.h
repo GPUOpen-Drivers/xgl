@@ -139,6 +139,7 @@ public:
     PipelineCacheType GetShaderCacheType();
 
     VkResult BuildShaderModule(
+        const Device*   pDevice,
         size_t          codeSize,
         const void*     pCode
         , void**          ppLlpcShaderModule
@@ -201,8 +202,6 @@ private:
         Llpc::PipelineShaderInfo* pShaderInfo,
         PipelineOptimizerKey*     pProfileKey
     );
-
-    static bool IsDualSourceBlend(VkBlendFactor blend);
 
     template<class PipelineBuildInfo>
     bool ReplacePipelineBinary(

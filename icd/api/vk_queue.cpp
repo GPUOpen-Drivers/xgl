@@ -67,21 +67,24 @@ Queue::Queue(
     m_queueIndex(queueIndex),
     m_queueFlags(queueFlags),
     m_pDevModeMgr(pDevice->VkInstance()->GetDevModeMgr()),
-    m_pStackAllocator(pStackAllocator),
-    m_pDummyCmdBuffer(nullptr)
+    m_pStackAllocator(pStackAllocator)
 {
     memcpy(m_pPalQueues, pPalQueues, sizeof(pPalQueues[0]) * pDevice->NumPalDevices());
     memset(&m_palFrameMetadataControl, 0, sizeof(Pal::PerSourceFrameMetadataControl));
+    memset(&m_pDummyCmdBuffer, 0, sizeof(m_pDummyCmdBuffer[0]) * pDevice->NumPalDevices());
 
 }
 
 // =====================================================================================================================
 Queue::~Queue()
 {
-    if (m_pDummyCmdBuffer != nullptr)
+    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
     {
-        m_pDummyCmdBuffer->Destroy();
-        m_pDevice->VkInstance()->FreeMem(m_pDummyCmdBuffer);
+        if (m_pDummyCmdBuffer[deviceIdx] != nullptr)
+        {
+            m_pDummyCmdBuffer[deviceIdx]->Destroy();
+            m_pDevice->VkInstance()->FreeMem(m_pDummyCmdBuffer[deviceIdx]);
+        }
     }
 
     if (m_pStackAllocator != nullptr)
@@ -106,33 +109,38 @@ VkResult Queue::CreateDummyCmdBuffer()
 {
     Pal::Result palResult = Pal::Result::ErrorUnknown;
 
-    Pal::CmdBufferCreateInfo palCreateInfo = {};
-    palCreateInfo.pCmdAllocator = m_pDevice->GetSharedCmdAllocator(DefaultDeviceIndex);
-    palCreateInfo.queueType     = m_pDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex);
-    palCreateInfo.engineType    = m_pDevice->GetQueueFamilyPalEngineType(m_queueFamilyIndex);
-
-    Pal::IDevice* const pPalDevice = m_pDevice->PalDevice(DefaultDeviceIndex);
-    const size_t palSize = pPalDevice->GetCmdBufferSize(palCreateInfo, &palResult);
-    if (palResult == Pal::Result::Success)
+    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); ++deviceIdx)
     {
-        void* pMemory = m_pDevice->VkInstance()->AllocMem(palSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-        if (pMemory != nullptr)
+        Pal::CmdBufferCreateInfo palCreateInfo = {};
+        palCreateInfo.pCmdAllocator = m_pDevice->GetSharedCmdAllocator(deviceIdx);
+        palCreateInfo.queueType     = m_pDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex);
+        palCreateInfo.engineType    = m_pDevice->GetQueueFamilyPalEngineType(m_queueFamilyIndex);
+
+        Pal::IDevice* const pPalDevice = m_pDevice->PalDevice(deviceIdx);
+        const size_t palSize = pPalDevice->GetCmdBufferSize(palCreateInfo, &palResult);
+
+        if (palResult == Pal::Result::Success)
         {
-            palResult = pPalDevice->CreateCmdBuffer(palCreateInfo, pMemory, &m_pDummyCmdBuffer);
-            if (palResult == Pal::Result::Success)
+            void* pMemory = m_pDevice->VkInstance()->AllocMem(palSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+            if (pMemory != nullptr)
             {
-                Pal::CmdBufferBuildInfo buildInfo = {};
-                buildInfo.flags.optimizeExclusiveSubmit = 1;
-                palResult = m_pDummyCmdBuffer->Begin(buildInfo);
+                palResult = pPalDevice->CreateCmdBuffer(palCreateInfo, pMemory, &(m_pDummyCmdBuffer[deviceIdx]));
+
                 if (palResult == Pal::Result::Success)
                 {
-                    palResult = m_pDummyCmdBuffer->End();
+                    Pal::CmdBufferBuildInfo buildInfo = {};
+                    buildInfo.flags.optimizeExclusiveSubmit = 1;
+                    palResult = m_pDummyCmdBuffer[deviceIdx]->Begin(buildInfo);
+                    if (palResult == Pal::Result::Success)
+                    {
+                        palResult = m_pDummyCmdBuffer[deviceIdx]->End();
+                    }
                 }
             }
-        }
-        else
-        {
-            palResult = Pal::Result::ErrorOutOfMemory;
+            else
+            {
+                palResult = Pal::Result::ErrorOutOfMemory;
+            }
         }
     }
 
@@ -142,17 +150,19 @@ VkResult Queue::CreateDummyCmdBuffer()
 // =====================================================================================================================
 // Submit a dummy command buffer with associated command buffer info to KMD for FRTC/TurboSync/DVR features
 VkResult Queue::NotifyFlipMetadata(
+    uint32_t                     deviceIdx,
+    Pal::IQueue*                 pQueue,
     const Pal::IGpuMemory*       pGpuMemory,
     FullscreenFrameMetadataFlags flags)
 {
     VkResult result = VK_SUCCESS;
-    if (m_pDummyCmdBuffer == nullptr)
+    if (m_pDummyCmdBuffer[deviceIdx] == nullptr)
     {
         result = CreateDummyCmdBuffer();
         VK_ASSERT(result == VK_SUCCESS);
     }
 
-    if (m_pDummyCmdBuffer != nullptr)
+    if (m_pDummyCmdBuffer[deviceIdx] != nullptr)
     {
         if ((flags.frameBeginFlag == 1) || (flags.frameEndFlag == 1) || (flags.primaryHandle == 1))
         {
@@ -175,10 +185,10 @@ VkResult Queue::NotifyFlipMetadata(
             Pal::SubmitInfo submitInfo = {};
 
             submitInfo.cmdBufferCount  = 1;
-            submitInfo.ppCmdBuffers    = &m_pDummyCmdBuffer;
+            submitInfo.ppCmdBuffers    = &(m_pDummyCmdBuffer[deviceIdx]);
             submitInfo.pCmdBufInfoList = &cmdBufInfo;
 
-            result = PalToVkResult(m_pPalQueues[DefaultDeviceIndex]->Submit(submitInfo));
+            result = PalToVkResult(m_pPalQueues[deviceIdx]->Submit(submitInfo));
             VK_ASSERT(result == VK_SUCCESS);
         }
     }
@@ -189,6 +199,8 @@ VkResult Queue::NotifyFlipMetadata(
 // =====================================================================================================================
 // Submit command buffer info with frameEndFlag and primaryHandle before frame present
 VkResult Queue::NotifyFlipMetadataBeforePresent(
+    uint32_t                         deviceIdx,
+    Pal::IQueue*                     pQueue,
     const Pal::PresentSwapChainInfo* pPresentInfo,
     const Pal::IGpuMemory*           pGpuMemory)
 {
@@ -199,6 +211,8 @@ VkResult Queue::NotifyFlipMetadataBeforePresent(
 // =====================================================================================================================
 // Submit command buffer info with frameBeginFlag after frame present
 VkResult Queue::NotifyFlipMetadataAfterPresent(
+    uint32_t                         deviceIdx,
+    Pal::IQueue*                     pQueue,
     const Pal::PresentSwapChainInfo* pPresentInfo)
 {
     VkResult result = VK_SUCCESS;
@@ -667,7 +681,7 @@ VkResult Queue::Present(
         const Pal::IGpuMemory* pGpuMemory =
             pSwapChain->GetPresentableImageMemory(imageIndex)->PalMemory(DefaultDeviceIndex);
 
-        result = NotifyFlipMetadataBeforePresent(&presentInfo, pGpuMemory);
+        result = NotifyFlipMetadataBeforePresent(presentationDeviceIdx, pPresentQueue, &presentInfo, pGpuMemory);
         if (result != VK_SUCCESS)
         {
             break;
@@ -676,7 +690,7 @@ VkResult Queue::Present(
         // Perform the actual present
         Pal::Result palResult = pPresentQueue->PresentSwapChain(presentInfo);
 
-        result = NotifyFlipMetadataAfterPresent(&presentInfo);
+        result = NotifyFlipMetadataAfterPresent(presentationDeviceIdx, pPresentQueue, &presentInfo);
 
         if (result != VK_SUCCESS)
         {

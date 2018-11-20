@@ -197,14 +197,20 @@ protected:
     VkResult CreateDummyCmdBuffer();
 
     VkResult NotifyFlipMetadata(
+        uint32_t                     deviceIdx,
+        Pal::IQueue*                 pQueue,
         const Pal::IGpuMemory*       pGpuMemory,
         FullscreenFrameMetadataFlags flags);
 
     VkResult NotifyFlipMetadataBeforePresent(
+        uint32_t                         deviceIdx,
+        Pal::IQueue*                     pQueue,
         const Pal::PresentSwapChainInfo* pPresentInfo,
         const Pal::IGpuMemory*           pGpuMemory);
 
     VkResult NotifyFlipMetadataAfterPresent(
+        uint32_t                         deviceIdx,
+        Pal::IQueue*                     pQueue,
         const Pal::PresentSwapChainInfo* pPresentInfo);
 
     Pal::IQueue*                       m_pPalQueues[MaxPalDevices];
@@ -216,8 +222,7 @@ protected:
     VirtualStackAllocator*             m_pStackAllocator;
     VidPnSourceFlipStatus              m_flipStatus;
     Pal::PerSourceFrameMetadataControl m_palFrameMetadataControl;
-    Pal::ICmdBuffer*                   m_pDummyCmdBuffer;
-
+    Pal::ICmdBuffer*                   m_pDummyCmdBuffer[MaxPalDevices];
 };
 
 VK_DEFINE_DISPATCHABLE(Queue);
