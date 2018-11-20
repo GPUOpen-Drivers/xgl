@@ -206,7 +206,8 @@ Device::Device(
     m_barrierPolicy(barrierPolicy),
     m_enabledExtensions(enabledExtensions),
     m_dispatchTable(DispatchTable::Type::DEVICE, m_pInstance, this),
-    m_pSqttMgr(nullptr)
+    m_pSqttMgr(nullptr),
+    m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true)
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
 
@@ -350,11 +351,12 @@ VkResult Device::Create(
                   enabledDeviceExtensions.IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1)             == false);
     }
 
-    uint32_t        numDevices       = 1;
-    PhysicalDevice* pPhysicalDevices[MaxPalDevices] = { pPhysicalDevice              };
-    Pal::IDevice*   pPalDevices[MaxPalDevices]      = { pPhysicalDevice->PalDevice() };
-    Instance*       pInstance                       = pPhysicalDevice->VkInstance();
-    bool            physicalDeviceFeaturesVerified  = false;
+    uint32_t                          numDevices                      = 1;
+    PhysicalDevice*                   pPhysicalDevices[MaxPalDevices] = { pPhysicalDevice              };
+    Pal::IDevice*                     pPalDevices[MaxPalDevices]      = { pPhysicalDevice->PalDevice() };
+    Instance*                         pInstance                       = pPhysicalDevice->VkInstance();
+    bool                              physicalDeviceFeaturesVerified  = false;
+    VkMemoryOverallocationBehaviorAMD overallocationBehavior          = VK_MEMORY_OVERALLOCATION_BEHAVIOR_DEFAULT_AMD;
 
     for (pDeviceCreateInfo = pCreateInfo; ((pHeader != nullptr) && (vkResult == VK_SUCCESS)); pHeader = pHeader->pNext)
     {
@@ -473,6 +475,14 @@ VkResult Device::Create(
                 reinterpret_cast<const VkPhysicalDeviceShaderAtomicInt64FeaturesKHR*>(pHeader));
 
             break;
+        }
+
+        case VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD:
+        {
+            const VkDeviceMemoryOverallocationCreateInfoAMD* pMemoryOverallocationCreateInfo =
+                reinterpret_cast<const VkDeviceMemoryOverallocationCreateInfoAMD*>(pHeader);
+
+            overallocationBehavior = pMemoryOverallocationCreateInfo->overallocationBehavior;
         }
 
         default:
@@ -733,7 +743,10 @@ VkResult Device::Create(
         }
         else
         {
-            vkResult = (*pDispatchableDevice)->Initialize(&pDispatchableQueues[0][0], enabledDeviceExtensions);
+            vkResult = (*pDispatchableDevice)->Initialize(
+                &pDispatchableQueues[0][0],
+                enabledDeviceExtensions,
+                overallocationBehavior);
 
             // If we've failed to Initialize, make sure we destroy anything we might have allocated.
             if (vkResult != VK_SUCCESS)
@@ -753,8 +766,9 @@ VkResult Device::Create(
 // =====================================================================================================================
 // Bring up the Vulkan device.
 VkResult Device::Initialize(
-    DispatchableQueue**                 pQueues,
-    const DeviceExtensions::Enabled&    enabled)
+    DispatchableQueue**                     pQueues,
+    const DeviceExtensions::Enabled&        enabled,
+    const VkMemoryOverallocationBehaviorAMD overallocationBehavior)
 {
     // Initialize the internal memory manager
     VkResult result = m_internalMemMgr.Init();
@@ -902,6 +916,47 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
+        if (m_settings.memoryDeviceOverallocationNonOverridable == false)
+        {
+            AppProfile profile = GetAppProfile();
+
+            switch (profile)
+            {
+            case AppProfile::Doom:
+            case AppProfile::DoomVFR:
+            case AppProfile::WolfensteinII:
+            case AppProfile::Dota2:
+            case AppProfile::Talos:
+            case AppProfile::TalosVR:
+            case AppProfile::SeriousSamFusion:
+            case AppProfile::MadMax:
+            case AppProfile::F1_2017:
+            case AppProfile::RiseOfTheTombra:
+            case AppProfile::ThronesOfBritannia:
+            case AppProfile::DawnOfWarIII:
+            case AppProfile::AshesOfTheSingularity:
+                m_allocationSizeTracking = false;
+                break;
+            default:
+                break;
+            }
+
+            if (enabled.IsExtensionEnabled(DeviceExtensions::ExtensionId::AMD_MEMORY_OVERALLOCATION_BEHAVIOR))
+            {
+                switch (overallocationBehavior)
+                {
+                case VK_MEMORY_OVERALLOCATION_BEHAVIOR_ALLOWED_AMD:
+                    m_allocationSizeTracking = false;
+                    break;
+                case VK_MEMORY_OVERALLOCATION_BEHAVIOR_DISALLOWED_AMD:
+                    m_allocationSizeTracking = true;
+                    break;
+                default:
+                    break;
+                }
+            }
+        }
+
         for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
         {
             Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
@@ -1236,6 +1291,7 @@ VkResult Device::CreateInternalComputePipeline(
     // Build shader module
     auto settings = GetRuntimeSettings();
     result = pCompiler->BuildShaderModule(
+        this,
         codeByteSize,
         pCode
         , &pLlpcShaderModule
@@ -1259,6 +1315,7 @@ VkResult Device::CreateInternalComputePipeline(
                                                         &pipelineBuildInfo,
                                                         &pipelineBinarySize,
                                                         &pPipelineBinary);
+
         pipelineBuildInfo.pMappingBuffer = nullptr;
     }
 
@@ -1291,7 +1348,7 @@ VkResult Device::CreateInternalComputePipeline(
     // Cleanup
     pCompiler->FreeShaderModule(pLlpcShaderModule);
 
-    if (pPipelineBinary)
+    if ((pPipelineBinary) || (result != VK_SUCCESS))
     {
         pCompiler->FreeComputePipelineBinary(&pipelineBuildInfo, pPipelineBinary, pipelineBinarySize);
         pCompiler->FreeComputePipelineCreateInfo(&pipelineBuildInfo);
@@ -2133,12 +2190,39 @@ uint32_t Device::GetExternalHostMemoryTypes(
 }
 
 // =====================================================================================================================
+// Checks to see if memory is available for device local allocations made by the application (externally) and
+// reports OOM if necessary
+VkResult Device::TryIncreaseAllocatedMemorySize(
+    Pal::gpusize allocationSize,
+    uint32_t     deviceMask,
+    uint32_t     heapIdx)
+{
+    VkResult           vkResult = VK_SUCCESS;
+    utils::IterateMask deviceGroup(deviceMask);
+    Util::MutexAuto    lock(&m_memoryMutex);
+
+    while (deviceGroup.Iterate())
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        Pal::gpusize memorySizePostAllocation = m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] + allocationSize;
+        if (memorySizePostAllocation > m_perGpu[deviceIdx].totalMemorySize[heapIdx])
+        {
+            vkResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
+            break;
+        }
+    }
+
+    return vkResult;
+}
+
+// =====================================================================================================================
 // Increases the allocated memory size for device local allocations made by the application (externally) and
 // reports OOM if necessary
 VkResult Device::IncreaseAllocatedMemorySize(
-    const Pal::gpusize allocationSize,
-    uint32_t           deviceMask,
-    const uint32_t     heapIdx)
+    Pal::gpusize allocationSize,
+    uint32_t     deviceMask,
+    uint32_t     heapIdx)
 {
     VkResult           vkResult = VK_SUCCESS;
     utils::IterateMask deviceGroup(deviceMask);
@@ -2177,9 +2261,9 @@ VkResult Device::IncreaseAllocatedMemorySize(
 // =====================================================================================================================
 // Decreases the allocated memory size for device local allocations made by the application (externally)
 void Device::DecreaseAllocatedMemorySize(
-    const Pal::gpusize allocationSize,
-    const uint32_t     deviceMask,
-    const uint32_t     heapIdx)
+    Pal::gpusize allocationSize,
+    uint32_t     deviceMask,
+    uint32_t     heapIdx)
 {
     utils::IterateMask deviceGroup(deviceMask);
     Util::MutexAuto lock(&m_memoryMutex);
@@ -2187,7 +2271,20 @@ void Device::DecreaseAllocatedMemorySize(
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
-        m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] -= allocationSize;
+
+        Pal::gpusize memorySizePostDeallocation = m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] - allocationSize;
+
+        if (memorySizePostDeallocation <= m_perGpu[deviceIdx].allocatedMemorySize[heapIdx])
+        {
+            m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] = memorySizePostDeallocation;
+        }
+        else
+        {
+            VK_NEVER_CALLED();
+
+            // Set to 0 instead of underflowing, otherwise OOM will be reported.
+            m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] = 0u;
+        }
     }
 }
 
@@ -2292,9 +2389,13 @@ Pal::IQueue* Device::PerformSwCompositing(
 
         if (deviceIdx != presentationDeviceIdx)
         {
-            Pal::SubmitInfo submitInfo = {};
+            Pal::CmdBufInfo cmdBufInfo = {};
+            cmdBufInfo.isValid = true;
+            cmdBufInfo.p2pCmd  = true;
 
+            Pal::SubmitInfo submitInfo = {};
             submitInfo.cmdBufferCount  = 1;
+            submitInfo.pCmdBufInfoList = &cmdBufInfo;
             submitInfo.ppCmdBuffers    = &pCommandBuffer;
 
             // Use the separate SDMA queue and synchronize the slave device's queue with the peer transfer

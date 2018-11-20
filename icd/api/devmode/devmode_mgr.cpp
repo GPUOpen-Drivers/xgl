@@ -130,6 +130,8 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_pInstance(pInstance),
     m_pDevDriverServer(pInstance->PalPlatform()->GetDevDriverServer()),
     m_pRGPServer(nullptr),
+    m_pPipelineUriService(nullptr),
+    m_pipelineServiceRegistered(false),
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
     m_pEtwClient(nullptr),
 #endif

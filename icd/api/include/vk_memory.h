@@ -178,12 +178,12 @@ private:
     // Cache the handle of GPU memory which is on the first device, if the Gpumemory can be inter-process sharing.
     Pal::OsExternalHandle m_sharedGpuMemoryHandle;
 
-    // this function is used to mark that the allocation is counted in the logical device.
-    // the destructor of this memory object need to decrease the count.
+    // Marks that the logical device's allocation count is incremented and needs to be decremented during the
+    // destruction of this memory object.
     VK_INLINE void SetAllocationCounted(uint32_t sizeAccountedForDeviceMask)
     {
-        m_sizeAccountedForDeviceMask = sizeAccountedForDeviceMask;
         m_allocationCounted = true;
+        m_sizeAccountedForDeviceMask = sizeAccountedForDeviceMask;
     }
 
     // Private constructor used by Image objects to create wrapper API memory object for presentable image

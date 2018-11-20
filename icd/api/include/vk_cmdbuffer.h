@@ -786,6 +786,8 @@ private:
         void*                           pVbMem,
         const Pal::CmdBufferCreateInfo& createInfo);
 
+    void ResetPipelineState();
+
     void ResetState();
 
     void FlushBarriers(

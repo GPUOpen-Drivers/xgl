@@ -242,7 +242,7 @@ private:
         AppProfile                          preInitProfile
         );
 
-    bool DetermineNullGpuSupport(Pal::NullGpuId* pNullGpuId) const;
+    bool DetermineNullGpuSupport(Pal::NullGpuId* pNullGpuId);
 
     void DevModeEarlyInitialize();
     void DevModeLateInitialize();

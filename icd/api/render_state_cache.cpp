@@ -330,14 +330,17 @@ void RenderStateCache::DestroyPalObjects(
     Pal::IMsaaState**            ppStates,
     const VkAllocationCallbacks* pAllocator)
 {
-    void* pStorage = ppStates[0];
-
-    for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); ++i)
+    if (ppStates[0] != nullptr)
     {
-        ppStates[i]->Destroy();
-    }
+        void* pStorage = ppStates[0];
 
-    FreeMem(pStorage, pAllocator);
+        for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); ++i)
+        {
+            ppStates[i]->Destroy();
+        }
+
+        FreeMem(pStorage, pAllocator);
+    }
 }
 
 // =====================================================================================================================
@@ -412,14 +415,17 @@ void RenderStateCache::DestroyPalObjects(
     Pal::IColorBlendState**      ppStates,
     const VkAllocationCallbacks* pAllocator)
 {
-    void* pStorage = ppStates[0];
-
-    for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); ++i)
+    if (ppStates[0] != nullptr)
     {
-        ppStates[i]->Destroy();
-    }
+        void* pStorage = ppStates[0];
 
-    FreeMem(pStorage, pAllocator);
+        for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); ++i)
+        {
+            ppStates[i]->Destroy();
+        }
+
+        FreeMem(pStorage, pAllocator);
+    }
 }
 
 // =====================================================================================================================
@@ -494,14 +500,17 @@ void RenderStateCache::DestroyPalObjects(
     Pal::IDepthStencilState**    ppStates,
     const VkAllocationCallbacks* pAllocator)
 {
-    void* pStorage = ppStates[0];
-
-    for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); ++i)
+    if (ppStates[0] != nullptr)
     {
-        ppStates[i]->Destroy();
-    }
+        void* pStorage = ppStates[0];
 
-    FreeMem(pStorage, pAllocator);
+        for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); ++i)
+        {
+            ppStates[i]->Destroy();
+        }
+
+        FreeMem(pStorage, pAllocator);
+    }
 }
 
 // =====================================================================================================================
@@ -569,7 +578,7 @@ Pal::Result RenderStateCache::CreateStaticPalObjectState(
             }
 
             // On failure, remove any partial entries from all the maps
-            if (result != Pal::Result::Success)
+            if ((result != Pal::Result::Success) && (pNewState != nullptr))
             {
                 EraseFromMaps(pNewState, pStateMap, pRefMap);
                 DestroyPalObjects(pNewState->pObjects, nullptr);

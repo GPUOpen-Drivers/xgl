@@ -610,6 +610,57 @@ void ShaderOptimizer::BuildAppProfile()
             m_appProfile.entries[8].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
         }
 
+        if (Pal::GfxIpLevel::GfxIp8 == gfxIpLevel)
+        {
+            uint32_t i = 0u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // fd59b52b7db5ef6bf9b17451c9c6cf06,PS,ALLOWREZ,1
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xf9b17451c9c6cf06;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xfd59b52b7db5ef6b;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 12ad0ca97c9cf7a611d94d21037b280c,PS,VGPRSMAXLDSSPILL,16777268
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x11d94d21037b280c;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x12ad0ca97c9cf7a6;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.vgprLimit = 51u;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.ldsSpillLimitDwords = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.ldsSpillLimitDwords = 4096u;
+        }
+        else if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
+        {
+            uint32_t i = 0u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 12ad0ca97c9cf7a611d94d21037b280c,PS,VGPRSMAXLDSSPILL,16777268
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x11d94d21037b280c;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x12ad0ca97c9cf7a6;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.vgprLimit = 51u;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.ldsSpillLimitDwords = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.ldsSpillLimitDwords = 4096u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // fd59b52b7db5ef6bf9b17451c9c6cf06,PS,WAVES,24
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xf9b17451c9c6cf06;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xfd59b52b7db5ef6b;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.apply.maxWavesPerCu = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.maxWavesPerCu = 24u;
+        }
     }
 }
 

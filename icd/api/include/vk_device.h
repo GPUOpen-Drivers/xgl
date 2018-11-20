@@ -286,7 +286,8 @@ public:
 
     VkResult Initialize(
         DispatchableQueue**                         pQueues,
-        const DeviceExtensions::Enabled&            enabled);
+        const DeviceExtensions::Enabled&            enabled,
+        const VkMemoryOverallocationBehaviorAMD     overallocationBehavior);
 
     void InitDispatchTable();
 
@@ -450,15 +451,20 @@ public:
         m_allocatedCount --;
     }
 
-    VkResult IncreaseAllocatedMemorySize(
-        const Pal::gpusize allocationSize,
+    VkResult TryIncreaseAllocatedMemorySize(
+        Pal::gpusize allocationSize,
         uint32_t           deviceMask,
-        const uint32_t     heapIdx);
+        uint32_t     heapIdx);
+
+    VkResult IncreaseAllocatedMemorySize(
+        Pal::gpusize allocationSize,
+        uint32_t           deviceMask,
+        uint32_t     heapIdx);
 
     void DecreaseAllocatedMemorySize(
-        const Pal::gpusize allocationSize,
-        const uint32_t     deviceMask,
-        const uint32_t     heapIdx);
+        Pal::gpusize allocationSize,
+        uint32_t     deviceMask,
+        uint32_t     heapIdx);
 
     VK_INLINE const InternalPipeline& GetTimestampQueryCopyPipeline() const
         { return m_timestampQueryCopyPipeline; }
@@ -505,6 +511,9 @@ public:
 
     VK_FORCEINLINE const DeviceBarrierPolicy& GetBarrierPolicy() const
         { return m_barrierPolicy; }
+
+    VK_INLINE const bool IsAllocationSizeTrackingEnabled() const
+        { return m_allocationSizeTracking; }
 
     Pal::IQueue* PerformSwCompositing(
         uint32_t         deviceIdx,
@@ -577,6 +586,10 @@ protected:
 
     // The maximum allocations that can be created from the logical device
     uint32_t                            m_maxAllocations;
+
+    // Determines if the allocated memory size will be tracked (error will be thrown when
+    // allocation exceeds threshold size)
+    bool                                m_allocationSizeTracking;
 
     struct PerGpuInfo
     {

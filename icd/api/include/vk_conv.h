@@ -2118,12 +2118,12 @@ VK_INLINE float VkToPalClearDepth(float depth)
 // =====================================================================================================================
 // Converts Vulkan clear color value to PAL equivalent
 VK_INLINE Pal::ClearColor VkToPalClearColor(
-    const VkClearColorValue* pClearColor,
-    Pal::ChNumFormat         format)
+    const VkClearColorValue*   pClearColor,
+    const Pal::SwizzledFormat& swizzledFormat)
 {
     Pal::ClearColor clearColor;
 
-    const auto& formatInfo = Pal::Formats::FormatInfoTable[static_cast<size_t>(format)];
+    const auto& formatInfo = Pal::Formats::FormatInfoTable[static_cast<size_t>(swizzledFormat.format)];
 
     switch (formatInfo.numericSupport)
     {
@@ -2133,11 +2133,10 @@ VK_INLINE Pal::ClearColor VkToPalClearColor(
     case Pal::Formats::NumericSupportFlags::Uscaled:
     case Pal::Formats::NumericSupportFlags::Sscaled:
     case Pal::Formats::NumericSupportFlags::Srgb:
-        clearColor.type        = Pal::ClearColorType::Float;
-        clearColor.f32Color[0] = pClearColor->float32[0];
-        clearColor.f32Color[1] = pClearColor->float32[1];
-        clearColor.f32Color[2] = pClearColor->float32[2];
-        clearColor.f32Color[3] = pClearColor->float32[3];
+        // Perform the conversion to UINT ourselves because PAL always implicitly performs float conversions to UINT
+        // based on the image format. For mutable images, this may not match the view format used here.
+        clearColor.type = Pal::ClearColorType::Uint;
+        Pal::Formats::ConvertColor(swizzledFormat, &pClearColor->float32[0], &clearColor.u32Color[0]);
         break;
     case Pal::Formats::NumericSupportFlags::Sint:
         clearColor.type        = Pal::ClearColorType::Sint;

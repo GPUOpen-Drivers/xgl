@@ -160,7 +160,8 @@ VkResult ShaderModule::Create(
 VkResult ShaderModule::Init(const Device* pDevice)
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
-    return pCompiler->BuildShaderModule(m_codeSize,
+    return pCompiler->BuildShaderModule(pDevice,
+                                        m_codeSize,
                                         m_pCode
                                         , &m_pLlpcShaderModule
                                         );

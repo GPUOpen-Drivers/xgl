@@ -123,6 +123,7 @@ public:
         const VkRect2D*    pRects);
 
     VkResult GetSubresourceLayout(
+        const Device*                           pDevice,
         const VkImageSubresource*               pSubresource,
         VkSubresourceLayout*                    pLayout) const;
 
@@ -251,8 +252,12 @@ private:
 
     struct PerGpuInfo
     {
-        Pal::IImage*     pPalImage;  // Each device in the group can own an instance of the image
-        Pal::IGpuMemory* pPalMemory; // Virtual-only memory object used for sparse images
+        Pal::IImage*     pPalImage;      // Each device in the group can own an instance of the image
+        Pal::IGpuMemory* pPalMemory;     // Virtual-only memory object used for sparse images
+        VkDeviceSize     baseAddrOffset; // Offset from the beginning of the bound memory range (i.e. after
+                                         // the app offset) to the start of image data.  This is generally zero,
+                                         // but sometimes may reflect padding required to align the image's
+                                         // base address to harsher alignment requirements.
     };
 
     Image(
@@ -314,11 +319,6 @@ private:
 
     SwapChain*              m_pSwapChain;       // If this image is a presentable image this tells
                                                 // which swap chain the image belongs to
-
-    VkDeviceSize            m_baseAddrOffset;   // Offset from the beginning of the bound memory range (i.e. after
-                                                // the app offset) to the start of image data.  This is generally zero,
-                                                // but sometimes may reflect padding required to align the image's
-                                                // base address to harsher alignment requirements.
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

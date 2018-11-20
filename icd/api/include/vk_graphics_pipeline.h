@@ -152,6 +152,8 @@ static void ConvertToPalMsaaQuadSamplePattern(
     }
 }
 
+bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pColorBlendAttachmentState);
+
 // =====================================================================================================================
 // Vulkan implementation of graphics pipelines created by vkCreateGraphicsPipeline
 class GraphicsPipeline : public Pipeline, public NonDispatchable<VkPipeline, GraphicsPipeline>

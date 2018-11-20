@@ -280,6 +280,7 @@ public:
 #endif
         GOOGLE_HLSL_FUNCTIONALITY1,
         GOOGLE_DECORATE_STRING,
+        AMD_MEMORY_OVERALLOCATION_BEHAVIOR,
         Count
     };
 };

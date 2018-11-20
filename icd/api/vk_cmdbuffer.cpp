@@ -1194,13 +1194,55 @@ VkResult CmdBuffer::End(void)
 }
 
 // =====================================================================================================================
-// Resets all state except for the PAL command buffer state.  This function is called both during vkBeginCommandBuffer
-// and during vkResetCommandBuffer
-void CmdBuffer::ResetState()
+// Resets all state PipelineState.  This function is called both during vkBeginCommandBuffer (inside CmdBuffer::ResetState())
+// and during vkResetCommandBuffer  (inside CmdBuffer::ResetState()) and during vkExecuteCommands
+void CmdBuffer::ResetPipelineState()
 {
     m_stencilCombiner.Reset();
     m_vbMgr.Reset();
 
+    memset(&m_state.allGpuState.staticTokens, 0u, sizeof(m_state.allGpuState.staticTokens));
+
+    uint32_t bindIdx = 0;
+    do
+    {
+        memset(&(m_state.allGpuState.pipelineState[bindIdx].userDataLayout),
+            0,
+            sizeof(m_state.allGpuState.pipelineState[bindIdx].userDataLayout));
+
+        m_state.allGpuState.pipelineState[bindIdx].pLayout          = nullptr;
+        m_state.allGpuState.pipelineState[bindIdx].boundSetCount    = 0;
+        m_state.allGpuState.pipelineState[bindIdx].pushedConstCount = 0;
+
+        bindIdx++;
+    }
+    while (bindIdx < static_cast<uint32_t>(Pal::PipelineBindPoint::Count));
+
+    m_state.allGpuState.scissor.count             = 0;
+    m_state.allGpuState.viewport.count            = 0;
+    m_state.allGpuState.viewport.horzClipRatio    = FLT_MAX;
+    m_state.allGpuState.viewport.vertClipRatio    = FLT_MAX;
+    m_state.allGpuState.viewport.horzDiscardRatio = 1.0f;
+    m_state.allGpuState.viewport.vertDiscardRatio = 1.0f;
+
+    const uint32_t numPalDevices = m_pDevice->NumPalDevices();
+    uint32_t deviceIdx           = 0;
+    do
+    {
+        m_state.perGpuState[deviceIdx].pMsaaState         = nullptr;
+        m_state.perGpuState[deviceIdx].pColorBlendState   = nullptr;
+        m_state.perGpuState[deviceIdx].pDepthStencilState = nullptr;
+
+        deviceIdx++;
+    }
+    while (deviceIdx < numPalDevices);
+}
+
+// =====================================================================================================================
+// Resets all state except for the PAL command buffer state.  This function is called both during vkBeginCommandBuffer
+// and during vkResetCommandBuffer
+void CmdBuffer::ResetState()
+{
     // Memset the first section of m_state.allGpuState.  The second section begins with pipelineState.
     const size_t memsetBytes = offsetof(AllGpuRenderState, pipelineState);
     memset(&m_state.allGpuState, 0, memsetBytes);
@@ -1209,40 +1251,7 @@ void CmdBuffer::ResetState()
     // prior values are unknown.  Since DynamicRenderStateToken is 0, this is covered by the memset above.
     static_assert(DynamicRenderStateToken == 0, "Unexpected value!");
 
-    uint32_t bindIdx = 0;
-    do
-    {
-        memset(&(m_state.allGpuState.pipelineState[bindIdx].userDataLayout),
-               0,
-               sizeof(m_state.allGpuState.pipelineState[bindIdx].userDataLayout));
-
-        m_state.allGpuState.pipelineState[bindIdx].pLayout = nullptr;
-        m_state.allGpuState.pipelineState[bindIdx].boundSetCount = 0;
-        m_state.allGpuState.pipelineState[bindIdx].pushedConstCount = 0;
-
-        bindIdx++;
-    }
-    while (bindIdx < static_cast<uint32_t>(Pal::PipelineBindPoint::Count));
-
-    m_state.allGpuState.scissor.count = 0;
-
-    m_state.allGpuState.viewport.count            = 0;
-    m_state.allGpuState.viewport.horzClipRatio    = FLT_MAX;
-    m_state.allGpuState.viewport.vertClipRatio    = FLT_MAX;
-    m_state.allGpuState.viewport.horzDiscardRatio = 1.0f;
-    m_state.allGpuState.viewport.vertDiscardRatio = 1.0f;
-
-    const uint32_t numPalDevices = m_pDevice->NumPalDevices();
-    uint32_t deviceIdx = 0;
-    do
-    {
-        m_state.perGpuState[deviceIdx].pMsaaState           = nullptr;
-        m_state.perGpuState[deviceIdx].pColorBlendState     = nullptr;
-        m_state.perGpuState[deviceIdx].pDepthStencilState   = nullptr;
-
-        deviceIdx++;
-    }
-    while (deviceIdx < numPalDevices);
+    ResetPipelineState();
 
     m_palDeviceMask = InvalidPalDeviceMask;
 
@@ -1457,6 +1466,10 @@ void CmdBuffer::ExecuteCommands(
             PalCmdBuffer(deviceIdx)->CmdExecuteNestedCmdBuffers(1, &pPalNestedCmdBuffer);
         }
     }
+
+    // Executing secondary command buffer will clear the states of Graphic Pipeline
+    // in that case they cannot be used after ends of execution secondary command buffer
+    ResetPipelineState();
 
     DbgBarrierPostCmd(DbgBarrierExecuteCommands);
 }
@@ -2263,7 +2276,7 @@ void CmdBuffer::ClearColorImage(
             PalCmdClearColorImage(
                 *pImage,
                 layout,
-                VkToPalClearColor(pColor, palFormat.format),
+                VkToPalClearColor(pColor, palFormat),
                 palRangeCount,
                 pPalRanges,
                 0,
@@ -2453,7 +2466,7 @@ void CmdBuffer::ClearBoundAttachments(
                 target.swizzledFormat = VkToPalFormat(pRenderPass->GetColorAttachmentFormat(subpass, tgtIdx));
                 target.samples        = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
                 target.fragments      = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
-                target.clearValue     = VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat.format);
+                target.clearValue     = VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat);
 
                 colorTargets.PushBack(target);
             }
@@ -2755,7 +2768,7 @@ void CmdBuffer::ClearImageAttachments(
                         PalCmdClearColorImage(
                             *attachment.pImage,
                             targetLayout,
-                            VkToPalClearColor(&clearInfo.clearValue.color, attachment.viewFormat.format),
+                            VkToPalClearColor(&clearInfo.clearValue.color, attachment.viewFormat),
                             clearSubresRanges.NumElements(),
                             clearSubresRanges.Data(),
                             clearBoxes.NumElements(),
@@ -4470,7 +4483,7 @@ void CmdBuffer::RPLoadOpClearColor(
         // Convert the clear color to the format of the attachment view
         Pal::ClearColor clearColor = VkToPalClearColor(
             &m_renderPassInstance.pAttachments[clear.attachment].clearValue.color,
-            attachment.viewFormat.format);
+            attachment.viewFormat);
 
         const auto clearSubresRanges = LoadOpClearSubresRanges(
             attachment, clear,
