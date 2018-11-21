@@ -21,3 +21,4 @@ XGL contains code written by third parties:
 * LLVM opt is distributed under the terms of University of Illinois/NCSA Open Source License. See icd/api/llpc/imported/llvm/opt/LICENSE.TXT.
 * SPIRV-Tools is distributed under the terms of Apache License version 2.0. See icd/api/llpc/translator/hex_float.h and bitutils.h.
 * Metrohash is distributed under the terms of MIT License. See icd/api/llpc/imported/metrohash/metrohash-license.
+
