@@ -22,33 +22,30 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+ **********************************************************************************************************************
+ * @file  vk_ext_scalar_block_layout.h
+ * @brief
+ **********************************************************************************************************************
+ */
+#ifndef VK_EXT_SCALAR_BLOCK_LAYOUT_H_
+#define VK_EXT_SCALAR_BLOCK_LAYOUT_H_
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#define VK_EXT_scalar_block_layout 1
+#define VK_EXT_SCALAR_BLOCK_LAYOUT_SPEC_VERSION        1
+#define VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NAME      "VK_EXT_scalar_block_layout"
+#define VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NUMBER    222
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#define VK_EXT_SCALAR_BLOCK_LAYOUT_ENUM(type, offset) \
+    VK_EXTENSION_ENUM(VK_EXT_SCALAR_BLOCK_LAYOUT_EXTENSION_NUMBER, type, offset)
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+#define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT \
+    VK_EXT_SCALAR_BLOCK_LAYOUT_ENUM(VkStructureType, 0)
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
+typedef struct VkPhysicalDeviceScalarBlockLayoutFeaturesEXT {
+    VkStructureType    sType;
+    void*              pNext;
+    VkBool32           scalarBlockLayout;
+} VkPhysicalDeviceScalarBlockLayoutFeaturesEXT;
 
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   65
-
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
-
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            0x00000002  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      ""
-
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           1
-#define CTS_VERSION_SUBMINOR        1
-#define CTS_VERSION_PATCH           2
+#endif /* VK_EXT_SCALAR_BLOCK_LAYOUT_H_ */

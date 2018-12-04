@@ -33,6 +33,7 @@
 #include "include/vk_physical_device.h"
 #include "include/vk_pipeline.h"
 #include "include/vk_shader.h"
+#include "include/vk_pipeline_layout.h"
 
 #include "palAutoBuffer.h"
 #include "palInlineFuncs.h"
@@ -51,7 +52,7 @@ Pipeline::Pipeline(
     PipelineBinaryInfo*     pBinary)
     :
     m_pDevice(pDevice),
-    m_pLayout(pLayout),
+    m_UserDataLayout(pLayout->GetInfo().userDataLayout),
     m_pBinary(pBinary)
 {
     memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));

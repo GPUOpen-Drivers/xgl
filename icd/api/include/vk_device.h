@@ -370,21 +370,18 @@ public:
         return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().osProperties.umdFpsCapFrameRate;
     }
 
-    template<typename T>
     void GetDeviceGroupPeerMemoryFeatures(
-        uint32_t        heapIndex,
-        uint32_t        localDeviceIndex,
-        uint32_t        remoteDeviceIndex,
-        T*              pPeerMemoryFeatures) const;
+        uint32_t                  heapIndex,
+        uint32_t                  localDeviceIndex,
+        uint32_t                  remoteDeviceIndex,
+        VkPeerMemoryFeatureFlags* pPeerMemoryFeatures) const;
 
-    template<typename T>
     VkResult GetDeviceGroupPresentCapabilities(
-        T*              pDeviceGroupPresentCapabilities) const;
+        VkDeviceGroupPresentCapabilitiesKHR* pDeviceGroupPresentCapabilities) const;
 
-    template<typename T>
     VkResult GetDeviceGroupSurfacePresentModes(
-        VkSurfaceKHR    surface,
-        T*              pModes) const;
+        VkSurfaceKHR                      surface,
+        VkDeviceGroupPresentModeFlagsKHR* pModes) const;
 
     VkResult BindBufferMemory(
         uint32_t                      bindInfoCount,

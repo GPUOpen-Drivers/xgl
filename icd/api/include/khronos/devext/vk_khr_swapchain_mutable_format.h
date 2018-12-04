@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -22,33 +22,19 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+ **********************************************************************************************************************
+ * @file  vk_khr_swapchain_mutable_format.h
+ * @brief
+ **********************************************************************************************************************
+ */
+#ifndef VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_H_
+#define VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_H_
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#define VK_KHR_swapchain_mutable_format                 1
+#define VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_SPEC_VERSION    1
+#define VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_EXTENSION_NAME  "VK_KHR_swapchain_mutable_format"
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#define VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR      (1 << 2)
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
-
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
-
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   65
-
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
-
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            0x00000002  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      ""
-
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           1
-#define CTS_VERSION_SUBMINOR        1
-#define CTS_VERSION_PATCH           2
+#endif /* VK_KHR_SWAPCHAIN_MUTABLE_FORMAT_H_ */

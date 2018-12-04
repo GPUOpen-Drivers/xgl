@@ -59,6 +59,8 @@
 #if VKI_SHADER_COMPILER_CONTROL
 #include "devext/vk_amd_shader_compiler_control.h"
 #endif
+#include "devext/vk_ext_scalar_block_layout.h"
+#include "devext/vk_khr_swapchain_mutable_format.h"
 #include "devext/vk_google_decorate_string.h"
 #include "devext/vk_google_hlsl_functionality1.h"
 #include "devext/vk_amd_memory_overallocation_behavior.h"

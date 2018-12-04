@@ -62,11 +62,21 @@ public:
     {
         DisplayableSurfaceInfo          displayableInfo;
         Pal::PresentableImageCreateInfo imageCreateInfo;
-        Pal::PresentMode                imagePresentSupport; // Describes whether present images support fullscreen or
-                                                             // just windowed (default).
-        bool                            summedImage;         // The image needs a final copy.
-        bool                            stereo;              // The swap chain is a stereo one
-        uint32_t                        imageCount;          // Number of images in the swap chain
+        Pal::PresentMode                imagePresentSupport;   // Describes whether present images support fullscreen or
+                                                               // just windowed (default).
+        union
+        {
+            uint32_t                    u32All;
+            struct
+            {
+                uint32_t                summedImage   : 1;     // The image needs a final copy.
+                uint32_t                stereo        : 1;     // The swap chain is a stereo one
+                uint32_t                hwCompositing : 1;     // If true, only uses SW compositing for windowed mode AFR
+                uint32_t                reserved      : 29;
+            };
+        } flags;
+        uint32_t                        presentationDeviceIdx; // The physical device that created the PAL swap chain
+        uint32_t                        imageCount;            // Number of images in the swap chain
         VkImage*                        images;
         VkDeviceMemory*                 imageMemory;
 
@@ -102,8 +112,8 @@ public:
     VK_FORCEINLINE Memory* GetPresentableImageMemory(uint32_t imageIndex) const
         { return Memory::ObjectFromHandle(m_properties.imageMemory[imageIndex]); }
 
-    VK_FORCEINLINE Pal::ISwapChain* PalSwapChain(uint32_t deviceIdx) const
-        { return m_pPalSwapChain[deviceIdx]; }
+    VK_FORCEINLINE Pal::ISwapChain* PalSwapChain() const
+        { return m_pPalSwapChain; }
 
     VK_INLINE const FullscreenMgr* GetFullscreenMgr() const
         { return m_pFullscreenMgr; }
@@ -138,9 +148,6 @@ public:
 
     void MarkAsDeprecated();
 
-    Pal::Result PalSwapChainWaitIdle() const;
-    void        PalSwapChainDestroy();
-
 protected:
 
     SwapChain(
@@ -148,13 +155,14 @@ protected:
         const Properties&   properties,
         VkPresentModeKHR    presentMode,
         FullscreenMgr*      pFullscreenMgr,
-        SwCompositor*       pSwCompositor,
-        Pal::ISwapChain*    pPalSwapChain[]);
+        Pal::ISwapChain*    pPalSwapChain);
+
+    void InitSwCompositor(Pal::QueueType presentQueueType);
 
     Device*                 m_pDevice;
     const Properties        m_properties;
     uint32_t                m_nextImage;
-    Pal::ISwapChain*        m_pPalSwapChain[MaxPalDevices];
+    Pal::ISwapChain*        m_pPalSwapChain;
 
     FullscreenMgr*          m_pFullscreenMgr;
     SwCompositor*           m_pSwCompositor;
@@ -212,8 +220,6 @@ public:
     void PreImageCreate(
         Pal::PresentMode*                pImagePresentSupport,
         Pal::PresentableImageCreateInfo* pImageInfo);
-
-    void PreSwapChainCreate(Pal::SwapChainCreateInfo* pCreateInfo);
 
     void PostImageCreate(const Image* pImage);
 

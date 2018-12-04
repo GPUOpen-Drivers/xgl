@@ -222,12 +222,10 @@ static VkResult ConvertImageCreateInfo(
     // regarding DCC.
     pPalCreateInfo->flags.perSubresInit = 1;
 
-    // Disable Stencil read according to the application profile during the creation of an MSAA depth stencil target.
-    if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT) &&
-        ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
-        (settings.disableMsaaStencilShaderRead))
+    if (Formats::IsColorFormat(pCreateInfo->format) &&
+        (Pal::Formats::BitsPerPixel(pPalCreateInfo->swizzledFormat.format) < settings.dccBitsPerPixelThreshold))
     {
-        pPalCreateInfo->usageFlags.noStencilShaderRead = 1;
+        pPalCreateInfo->flags.noMetadata = 1;
     }
 
     return result;
@@ -411,6 +409,10 @@ VkResult Image::Create(
     const bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
     VkResult       result     = VkResult::VK_SUCCESS;
 
+    // It indicates the stencil aspect will be read by shader, so it is only meaningful if the image contains the
+    // stencil aspect.
+    bool stencilShaderRead    = false;
+
     union
     {
         const VkStructHeader*                       pHeader;
@@ -433,6 +435,10 @@ VkResult Image::Create(
             VK_ASSERT(pCreateInfo == pVkImageCreateInfo);
             pImageCreateInfo = pVkImageCreateInfo;
             result = ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo);
+
+            // The setting of stencilShaderRead will be overrode, if
+            // VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT exists.
+            stencilShaderRead = palCreateInfo.usageFlags.shaderRead;
 
             break;
         }
@@ -503,7 +509,6 @@ VkResult Image::Create(
     {
         palCreateInfo.viewFormatCount = 0;
         palCreateInfo.pViewFormats    = &palFormatList[0];
-        bool noStencilRead = true;
 
         for (uint32_t i = 0; i < viewFormatCount; ++i)
         {
@@ -513,14 +518,22 @@ VkResult Image::Create(
             {
                 palFormatList[palCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i]);
             }
-
-            if (Formats::HasStencil(pViewFormats[i]))
-            {
-               noStencilRead = false;
-            }
         }
+    }
 
-        palCreateInfo.usageFlags.noStencilShaderRead = noStencilRead;
+    // Configure the noStencilShaderRead:
+    // 1. Set noStencilShaderRead = false by defalut, this indicates the stencil can be read by shader.
+    // 2. Overwrite noStencilShaderRead according to the stencilUsage.
+    // 3. Set noStencilShaderRead = true according to application profile.
+
+    palCreateInfo.usageFlags.noStencilShaderRead = false;
+    // Disable Stencil read according to the application profile during the creation of an MSAA depth stencil target.
+    if ((pCreateInfo != nullptr)                                                  &&
+        (pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
+        ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
+        (pDevice->GetRuntimeSettings().disableMsaaStencilShaderRead))
+    {
+        palCreateInfo.usageFlags.noStencilShaderRead = true;
     }
 
     // If flags contains VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT, imageType must be VK_IMAGE_TYPE_3D

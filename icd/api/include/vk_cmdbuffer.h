@@ -105,9 +105,7 @@ constexpr uint32_t MaxPushConstRegCount = MaxPushConstants / 4;
 struct PipelineBindState
 {
     // Cached copy of the user data layout from the current pipeline's layout
-    PipelineLayout::UserDataLayout userDataLayout;
-    // Current pipeline's layout
-    const PipelineLayout* pLayout;
+    UserDataLayout userDataLayout;
     // High-water mark of the largest number of bound sets
     uint32_t boundSetCount;
     // High-water mark of the largest number of pushed constants
@@ -210,6 +208,21 @@ struct RenderPassInstanceState
     AttachmentState*                            pAttachments;
     size_t                                      maxSubpassCount;
     SamplePattern*                              pSamplePatterns;
+};
+
+struct TransformFeedbackState
+{
+    Pal::BindStreamOutTargetParams  params;
+
+    struct
+    {
+        VkBuffer        buffer;
+        VkDeviceSize    size;
+        VkDeviceSize    offset;
+    } bufferInfo[Pal::MaxStreamOutTargets];
+
+    uint32_t            bindMask;
+    bool                enabled;
 };
 
 // =====================================================================================================================
@@ -455,14 +468,16 @@ public:
         uint32_t                                    imageMemoryBarrierCount,
         const VkImageMemoryBarrier*                 pImageMemoryBarriers);
 
-    void BeginQuery(
+    void BeginQueryIndexed(
         VkQueryPool                                 queryPool,
         uint32_t                                    query,
-        VkQueryControlFlags                         flags);
+        VkQueryControlFlags                         flags,
+        uint32_t                                    index);
 
-    void EndQuery(
+    void EndQueryIndexed(
         VkQueryPool                                 queryPool,
-        uint32_t                                    query);
+        uint32_t                                    query,
+        uint32_t                                    index);
 
     void ResetQueryPool(
         VkQueryPool                                 queryPool,
@@ -507,6 +522,33 @@ public:
         VkBuffer                dstBuffer,
         VkDeviceSize            dstOffset,
         uint32_t                marker);
+
+    void BindTransformFeedbackBuffers(
+        uint32_t            firstBinding,
+        uint32_t            bindingCount,
+        const VkBuffer*     pBuffers,
+        const VkDeviceSize* pOffsets,
+        const VkDeviceSize* pSizes);
+
+    void BeginTransformFeedback(
+        uint32_t                firstCounterBuffer,
+        uint32_t                counterBufferCount,
+        const VkBuffer*         pCounterBuffers,
+        const VkDeviceSize*     pCounterBufferOffsets);
+
+    void EndTransformFeedback(
+        uint32_t            firstCounterBuffer,
+        uint32_t            counterBufferCount,
+        const VkBuffer*     pCounterBuffers,
+        const VkDeviceSize* pCounterBufferOffsets);
+
+    void DrawIndirectByteCount(
+        uint32_t        instanceCount,
+        uint32_t        firstInstance,
+        VkBuffer        counterBuffer,
+        VkDeviceSize    counterBufferOffset,
+        uint32_t        counterOffset,
+        uint32_t        vertexStride);
 
     VK_INLINE void SetDeviceMask(uint32_t deviceMask)
     {
@@ -810,7 +852,7 @@ private:
 
     void RebindCompatibleUserData(
         uint32_t               bindPoint,
-        const PipelineLayout*  pNewLayout);
+        const UserDataLayout*  pNewLayout);
 
     void PalBindPipeline(
         VkPipelineBindPoint     pipelineBindPoint,
@@ -893,6 +935,7 @@ private:
     SqttCmdBufferState*           m_pSqttState; // Per-cmdbuf state for handling SQ thread-tracing annotations
 
     RenderPassInstanceState       m_renderPassInstance;
+    TransformFeedbackState*       m_pTransformFeedbackState;
 
 #if VK_ENABLE_DEBUG_BARRIERS
     uint32_t                      m_dbgBarrierPreCmdMask;

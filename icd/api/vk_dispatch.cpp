@@ -517,6 +517,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayPlaneProperties2KHR   );
     INIT_DISPATCH_ENTRY(vkGetDisplayModeProperties2KHR                  );
     INIT_DISPATCH_ENTRY(vkGetDisplayPlaneCapabilities2KHR               );
+
 }
 
 // =====================================================================================================================

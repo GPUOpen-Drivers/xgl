@@ -970,6 +970,12 @@ VkResult Device::Initialize(
                     m_perGpu[deviceIdx].totalMemorySize[heapIdx] = heapProperties[heapIdx].heapSize;
                 }
             }
+
+            if (m_perGpu[deviceIdx].totalMemorySize[Pal::GpuHeapInvisible] == 0)
+            {
+                // Disable tracking for the local invisible heap and allow it to overallocate when it has size 0
+                m_perGpu[deviceIdx].totalMemorySize[Pal::GpuHeapInvisible] = UINT64_MAX;
+            }
         }
     }
 
@@ -1813,12 +1819,11 @@ VkResult Device::CreateComputePipelines(
 
 // =====================================================================================================================
 // Called in response to vkGetDeviceGroupPeerMemoryFeatures
-template<typename T>
 void Device::GetDeviceGroupPeerMemoryFeatures(
-    uint32_t          heapIndex,
-    uint32_t          localDeviceIndex,
-    uint32_t          remoteDeviceIndex,
-    T*                pPeerMemoryFeatures) const
+    uint32_t                  heapIndex,
+    uint32_t                  localDeviceIndex,
+    uint32_t                  remoteDeviceIndex,
+    VkPeerMemoryFeatureFlags* pPeerMemoryFeatures) const
 {
     uint32_t enabledFeatures = 0;
 
@@ -1831,11 +1836,8 @@ void Device::GetDeviceGroupPeerMemoryFeatures(
         switch(palHeap)
         {
             case Pal::GpuHeapLocal:
-#if ENABLE_P2P_GENERIC_ACCESS
-                enabledFeatures |= VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT;
-#endif
-                break;
             case Pal::GpuHeapInvisible:
+                break;
             case Pal::GpuHeapGartUswc:
             case Pal::GpuHeapGartCacheable:
                 break;
@@ -1849,48 +1851,26 @@ void Device::GetDeviceGroupPeerMemoryFeatures(
 }
 
 // =====================================================================================================================
-template<typename T>
 VkResult Device::GetDeviceGroupPresentCapabilities(
-    T*        pDeviceGroupPresentCapabilities) const
+    VkDeviceGroupPresentCapabilitiesKHR* pDeviceGroupPresentCapabilities) const
 {
-    union
+    VK_ASSERT(pDeviceGroupPresentCapabilities->sType == VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHR);
+
+    GetDeviceGroupSurfacePresentModes(VK_NULL_HANDLE, &pDeviceGroupPresentCapabilities->modes);
+
+    memset(pDeviceGroupPresentCapabilities->presentMask, 0, sizeof(pDeviceGroupPresentCapabilities->presentMask));
+    for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
     {
-        const VkStructHeader*                pHeader;
-        T*                                   pTemplatedCaps;
-        VkDeviceGroupPresentCapabilitiesKHR* pVkDeviceGroupPresentCapabilitiesKHR;
-    };
-
-    for (pTemplatedCaps = pDeviceGroupPresentCapabilities; pHeader != nullptr; pHeader = pHeader->pNext)
-    {
-        switch (static_cast<uint32_t>(pHeader->sType))
-        {
-        case VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_CAPABILITIES_KHR:
-        {
-            auto pCurrentType = pVkDeviceGroupPresentCapabilitiesKHR;
-
-            GetDeviceGroupSurfacePresentModes(VK_NULL_HANDLE, &pCurrentType->modes);
-
-            memset(pCurrentType->presentMask, 0, sizeof(pCurrentType->presentMask));
-            for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
-            {
-                pCurrentType->presentMask[deviceIdx] = (1 << deviceIdx);
-            }
-            break;
-        }
-        default:
-            // Skip any unknown extension structures
-            break;
-        }
+         pDeviceGroupPresentCapabilities->presentMask[deviceIdx] = (1 << deviceIdx);
     }
 
     return VK_SUCCESS;
 }
 
 // =====================================================================================================================
-template<typename T>
 VkResult Device::GetDeviceGroupSurfacePresentModes(
-    VkSurfaceKHR          surface,
-    T*                    pModes) const
+    VkSurfaceKHR                      surface,
+    VkDeviceGroupPresentModeFlagsKHR* pModes) const
 {
     *pModes = VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_BIT_KHR;
 
@@ -2877,7 +2857,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceGroupPeerMemoryFeatures(
     uint32_t                                    heapIndex,
     uint32_t                                    localDeviceIndex,
     uint32_t                                    remoteDeviceIndex,
-    VkPeerMemoryFeatureFlagsKHR*                pPeerMemoryFeatures)
+    VkPeerMemoryFeatureFlags*                   pPeerMemoryFeatures)
 {
     ApiDevice::ObjectFromHandle(device)->GetDeviceGroupPeerMemoryFeatures(
         heapIndex,

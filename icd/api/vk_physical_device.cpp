@@ -2667,6 +2667,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_RELAXED_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGE_FORMAT_LIST));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SWAPCHAIN_MUTABLE_FORMAT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_8BIT_STORAGE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_ATOMIC_INT64));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DRIVER_PROPERTIES));
@@ -2745,6 +2746,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SCALAR_BLOCK_LAYOUT));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MEMORY_OVERALLOCATION_BEHAVIOR));
 
@@ -3277,6 +3280,15 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT:
+            {
+                VkPhysicalDeviceScalarBlockLayoutFeaturesEXT* pScalarBlockLayoutFeatures =
+                    reinterpret_cast<VkPhysicalDeviceScalarBlockLayoutFeaturesEXT*>(pHeader);
+
+                pScalarBlockLayoutFeatures->scalarBlockLayout = VK_TRUE;
+
+                break;
+            }
             default:
             {
                 // skip any unsupported extension structures
@@ -4229,8 +4241,7 @@ VkResult PhysicalDevice::GetDisplayProperties(
     uint32_t*                                   pPropertyCount,
     utils::ArrayView<VkDisplayPropertiesKHR>    properties)
 {
-    uint32_t  screenCount   = 0;
-    uint32_t  count         = 0;
+    uint32_t screenCount = 0;
 
     Pal::IScreen*   pScreens      = nullptr;
     uint32_t        propertyCount = *pPropertyCount;
@@ -4253,15 +4264,15 @@ VkResult PhysicalDevice::GetDisplayProperties(
 
         pAttachedScreens[i]->GetProperties(&props);
 
-        properties[count].display = reinterpret_cast<VkDisplayKHR>(pAttachedScreens[i]);
-        properties[count].displayName = nullptr;
-        properties[count].physicalDimensions.width  = props.physicalDimension.width;
-        properties[count].physicalDimensions.height = props.physicalDimension.height;
-        properties[count].physicalResolution.width  = props.physicalResolution.width;
-        properties[count].physicalResolution.height = props.physicalResolution.height;
-        properties[count].supportedTransforms       = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
-        properties[count].planeReorderPossible      = false;
-        properties[count].persistentContent         = false;
+        properties[i].display                   = reinterpret_cast<VkDisplayKHR>(pAttachedScreens[i]);
+        properties[i].displayName               = nullptr;
+        properties[i].physicalDimensions.width  = props.physicalDimension.width;
+        properties[i].physicalDimensions.height = props.physicalDimension.height;
+        properties[i].physicalResolution.width  = props.physicalResolution.width;
+        properties[i].physicalResolution.height = props.physicalResolution.height;
+        properties[i].supportedTransforms       = VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR;
+        properties[i].planeReorderPossible      = false;
+        properties[i].persistentContent         = false;
     }
 
     *pPropertyCount = loopCount;

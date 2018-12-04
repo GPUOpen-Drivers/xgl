@@ -195,16 +195,10 @@ vkGetPhysicalDeviceExternalBufferPropertiesKHR      @instance   @iext(KHR_extern
 vkGetMemoryFdPropertiesKHR                          @device     @dext(KHR_external_memory_fd)
 vkGetMemoryFdKHR                                    @device     @dext(KHR_external_memory_fd)
 
-vkGetMemoryWin32HandleKHR                           @device     @dext(KHR_external_memory_win32)
-vkGetMemoryWin32HandlePropertiesKHR                 @device     @dext(KHR_external_memory_win32)
-
 vkGetPhysicalDeviceExternalSemaphorePropertiesKHR   @instance   @iext(KHR_external_semaphore_capabilities)
 
 vkImportSemaphoreFdKHR                              @device     @dext(KHR_external_semaphore_fd)
 vkGetSemaphoreFdKHR                                 @device     @dext(KHR_external_semaphore_fd)
-
-vkImportSemaphoreWin32HandleKHR                     @device     @dext(KHR_external_semaphore_win32)
-vkGetSemaphoreWin32HandleKHR                        @device     @dext(KHR_external_semaphore_win32)
 
 vkTrimCommandPoolKHR                                @device     @dext(KHR_maintenance1)
 
@@ -239,11 +233,6 @@ vkCmdDrawIndirectCountAMD                           @device     @dext(AMD_draw_i
 vkCmdDrawIndirectCountKHR                           @device     @dext(KHR_draw_indirect_count)
 vkCmdDrawIndexedIndirectCountKHR                    @device     @dext(KHR_draw_indirect_count)
 
-vkGetMultiDevicePropertiesAMDInternal               @device     @win32
-vkOpenWin32BufferAMDInternal                        @device     @win32
-vkOpenWin32ImageAMDInternal                         @device     @win32
-vkOpenWin32SemaphoreAMDInternal                     @device     @win32
-
 vkGetShaderInfoAMD                                  @device     @dext(AMD_shader_info)
 
 vkCmdDebugMarkerBeginEXT                            @device     @dext(EXT_debug_marker)
@@ -275,9 +264,6 @@ vkGetPhysicalDeviceExternalFencePropertiesKHR       @instance   @iext(KHR_extern
 
 vkImportFenceFdKHR                                  @device     @dext(KHR_external_fence_fd)
 vkGetFenceFdKHR                                     @device     @dext(KHR_external_fence_fd)
-
-vkImportFenceWin32HandleKHR                         @device     @dext(KHR_external_fence_win32)
-vkGetFenceWin32HandleKHR                            @device     @dext(KHR_external_fence_win32)
 
 vkCmdWriteBufferMarkerAMD                           @device     @dext(AMD_buffer_marker)
 

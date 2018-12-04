@@ -86,10 +86,12 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
     pInfo->userDataRegCount      = 0;
 
-    pInfo->userDataLayout.setBindingRegCount = 0;
-    pInfo->userDataLayout.setBindingRegBase  = 0;
-    pInfo->userDataLayout.pushConstRegBase   = 0;
-    pInfo->userDataLayout.pushConstRegCount  = 0;
+    pInfo->userDataLayout.transformFeedbackRegBase  = 0;
+    pInfo->userDataLayout.transformFeedbackRegCount = 0;
+    pInfo->userDataLayout.pushConstRegBase          = 0;
+    pInfo->userDataLayout.pushConstRegCount         = 0;
+    pInfo->userDataLayout.setBindingRegCount        = 0;
+    pInfo->userDataLayout.setBindingRegBase         = 0;
 
     // Calculate the number of bytes needed for push constants
     uint32_t pushConstantsSizeInBytes = 0;
@@ -107,6 +109,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
     uint32_t pushConstRegCount = pushConstantsSizeInBytes / sizeof(uint32_t);
 
+    pInfo->userDataLayout.pushConstRegBase  = pInfo->userDataLayout.transformFeedbackRegCount;
     pInfo->userDataLayout.pushConstRegCount = pushConstRegCount;
     pInfo->userDataRegCount                += pushConstRegCount;
 
@@ -439,7 +442,8 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     void*                                       pBuffer,
     const VkPipelineVertexInputStateCreateInfo* pVertexInput,
     Llpc::PipelineShaderInfo*                   pShaderInfo,
-    VbBindingInfo*                              pVbInfo
+    VbBindingInfo*                              pVbInfo,
+    bool                                        isLastVertexStage
     ) const
 {
     VkResult result = VK_SUCCESS;
@@ -460,6 +464,19 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
 
     uint32_t mappingNodeCount  = 0; // Number of consumed ResourceMappingNodes
     uint32_t userDataNodeCount = 0; // Number of consumed user data ResourceMappingNodes entries
+
+    if (result == VK_SUCCESS)
+    {
+        if ((m_info.userDataLayout.transformFeedbackRegCount > 0) && isLastVertexStage)
+        {
+            Llpc::ResourceMappingNode* pTransformFeedbackNode = &pUserDataNodes[userDataNodeCount];
+            pTransformFeedbackNode->type           = Llpc::ResourceMappingNodeType::StreamOutTableVaPtr;
+            pTransformFeedbackNode->offsetInDwords = m_info.userDataLayout.transformFeedbackRegBase;
+            pTransformFeedbackNode->sizeInDwords   = m_info.userDataLayout.transformFeedbackRegCount;
+
+            userDataNodeCount += 1;
+        }
+    }
 
     // TODO: Build the internal push constant resource mapping
     if (result == VK_SUCCESS)

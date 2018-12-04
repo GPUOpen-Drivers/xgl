@@ -88,8 +88,10 @@ VkResult PalQueryPool::Create(
         const VkQueryPoolCreateInfo*        pQueryPoolInfo;
     };
 
-    Pal::QueryType           queryType = Pal::QueryType::Occlusion;
     Pal::QueryPoolCreateInfo createInfo = {};
+
+    Pal::QueryType           queryType = Pal::QueryType::Occlusion;
+
     const VkQueryPoolCreateInfo* pVkInfo = nullptr;
 
     for (pQueryPoolInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)

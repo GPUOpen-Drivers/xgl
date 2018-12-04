@@ -24,13 +24,10 @@ VK_KHR_dedicated_allocation
 VK_KHR_descriptor_update_template
 VK_KHR_external_memory
 VK_KHR_external_memory_fd
-VK_KHR_external_memory_win32
 VK_KHR_external_semaphore
 VK_KHR_external_semaphore_fd
-VK_KHR_external_semaphore_win32
 VK_KHR_external_fence
 VK_KHR_external_fence_fd
-VK_KHR_external_fence_win32
 VK_KHR_maintenance1
 VK_KHR_maintenance2
 VK_KHR_relaxed_block_layout
@@ -38,6 +35,7 @@ VK_KHR_sampler_mirror_clamp_to_edge
 VK_KHR_shader_draw_parameters
 VK_KHR_swapchain
 VK_KHR_image_format_list
+VK_KHR_swapchain_mutable_format
 VK_AMD_rasterization_order
 VK_AMD_shader_ballot
 VK_AMD_shader_trinary_minmax
@@ -64,7 +62,6 @@ VK_EXT_shader_viewport_index_layer
 VK_KHR_get_memory_requirements2
 VK_AMD_shader_fragment_mask
 VK_EXT_sample_locations
-VK_KHR_win32_keyed_mutex
 VK_EXT_sampler_filter_minmax
 VK_EXT_global_priority
 VK_AMD_buffer_marker
@@ -88,3 +85,4 @@ VK_KHR_driver_properties
 VK_GOOGLE_hlsl_functionality1
 VK_GOOGLE_decorate_string
 VK_AMD_memory_overallocation_behavior
+VK_EXT_scalar_block_layout

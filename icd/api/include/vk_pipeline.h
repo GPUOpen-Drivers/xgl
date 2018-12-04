@@ -45,11 +45,32 @@ class IPipeline;
 namespace vk
 {
 
-class Device;
-class ComputePipeline;
-class GraphicsPipeline;
-class PipelineLayout;
+class  Device;
+class  ComputePipeline;
+class  GraphicsPipeline;
+class  PipelineLayout;
 struct RuntimeSettings;
+
+// The top-level user data layout is portioned into different sections based on the value type (push constant,
+// descriptor set addresses, etc.).  This structure describes the offsets and sizes of those regions.
+struct UserDataLayout
+{
+    // Base user data register index to use for the descriptor set binding data (including registers for
+    // dynamic descriptor offsets)
+    uint32_t setBindingRegBase;
+    // Number of user data registers used for the set binding points
+    uint32_t setBindingRegCount;
+
+    // Base user data register index to use for push constants
+    uint32_t pushConstRegBase;
+    // Number of user data registers used for push constants
+    uint32_t pushConstRegCount;
+
+    // Base user data register index to use for transform feedback.
+    uint32_t transformFeedbackRegBase;
+    // Number of user data registers used for transform feedback
+    uint32_t transformFeedbackRegCount;
+};
 
 // Structure containing information about a retrievable pipeline binary.  These are only retained by Pipeline objects
 // when specific device extensions (VK_AMD_shader_info) that can query them are enabled.
@@ -72,7 +93,7 @@ public:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
-    const PipelineLayout* GetLayout(void) const { return m_pLayout; }
+    const UserDataLayout* GetUserDataLayout(void) const { return &m_UserDataLayout; }
 
     static VK_FORCEINLINE Pipeline* ObjectFromHandle(VkPipeline pipeline)
     {
@@ -109,10 +130,10 @@ protected:
 
     virtual ~Pipeline();
 
-    Device* const                   m_pDevice;
-    const PipelineLayout* const     m_pLayout;
-    Pal::IPipeline*                 m_pPalPipeline[MaxPalDevices];
-    uint64_t                        m_palPipelineHash[MaxPalDevices];
+    Device* const                      m_pDevice;
+    UserDataLayout                     m_UserDataLayout;
+    Pal::IPipeline*                    m_pPalPipeline[MaxPalDevices];
+    uint64_t                           m_palPipelineHash[MaxPalDevices];
 
 private:
     PipelineBinaryInfo* const       m_pBinary;

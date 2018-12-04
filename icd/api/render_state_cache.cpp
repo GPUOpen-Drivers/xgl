@@ -190,10 +190,11 @@ RenderStateCache::EraseFromMaps(
 
 // =====================================================================================================================
 // Destroys the render state cache.  Should be called during device destroy.
+// Not necessary to take the mutex in this function because, an application should ensure that no work is active on
+// the device, and an application is responsible for destroying / freeing any Vulkan objects that were created using
+// that device.
 void RenderStateCache::Destroy()
 {
-    Util::MutexAuto lock(&m_mutex);
-
     for (auto it = m_msaaRefs.Begin(); it.Get() != nullptr; it.Next())
     {
         DestroyPalObjects(it.Get()->value->pObjects, nullptr);

@@ -109,10 +109,7 @@ static void OverrideProfiledSettings(
     {
         pSettings->enableSpvPerfOptimal = true;
 
-        if (Pal::GfxIpLevel::GfxIp9 == info.gfxLevel)
-        {
-            pPalSettings->tcCompatibleMetaData &= ~Pal::TexFetchMetaDataCapsNoAaColor;
-        }
+        pSettings->optColorTargetUsageDoesNotContainResolveLayout = true;
 
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.

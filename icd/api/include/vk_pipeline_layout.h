@@ -93,22 +93,6 @@ public:
         uint32_t    totalRegCount;          // Total number of user data registers used by this set layout
     };
 
-    // The top-level user data layout is portioned into different sections based on the value type (push constant,
-    // descriptor set addresses, etc.).  This structure describes the offsets and sizes of those regions.
-    struct UserDataLayout
-    {
-        // Base user data register index to use for the descriptor set binding data (including registers for
-        // dynamic descriptor offsets)
-        uint32_t setBindingRegBase;
-        // Number of user data registers used for the set binding points
-        uint32_t setBindingRegCount;
-
-        // Base user data register index to use for push constants
-        uint32_t pushConstRegBase;
-        // Number of user data registers used for push constants
-        uint32_t pushConstRegCount;
-    };
-
     // This structure holds information about the user data register allocation scheme of this pipeline layout
     struct Info
     {
@@ -147,7 +131,8 @@ public:
         void*                                       pBuffer,
         const VkPipelineVertexInputStateCreateInfo* pVertexInput,
         Llpc::PipelineShaderInfo*                   pShaderInfo,
-        VbBindingInfo*                              pVbInfo) const;
+        VbBindingInfo*                              pVbInfo,
+        bool                                        isLastVertexStage) const;
 
     static VkResult Create(
         const Device*                       pDevice,

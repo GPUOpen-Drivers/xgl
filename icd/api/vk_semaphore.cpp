@@ -151,8 +151,6 @@ VkResult Semaphore::Create(
             {
                 // mark this semaphore as shareable.
                 palCreateInfo.flags.shareable         = 1;
-                palCreateInfo.flags.sharedViaNtHandle = (pExportSemaphoreCreateInfo->handleTypes ==
-                                                         VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_WIN32_BIT);
                 break;
             }
         default:

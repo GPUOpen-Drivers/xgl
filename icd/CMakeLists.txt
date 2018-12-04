@@ -284,6 +284,13 @@ if(ICD_GPUOPEN_DEVMODE_BUILD)
     # target_link_libraries(xgl devmode)
 endif()
 
+### ICD layer ##################################################################
+target_sources(xgl PRIVATE
+    layers/query_dlist.cpp
+    layers/vk_layer_all_null_devices.cpp
+    layers/vk_layer_switchable_graphics.cpp
+)
+
 ### ICD Auto-generated Files ###########################################################################################
 # ICD_GENDIR Path to the code generation tools
 set(ICD_GENDIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate)
@@ -346,6 +353,7 @@ if (UNIX)
 
     target_link_libraries(xgl PRIVATE
         -Wl,-Bdynamic
+        -Wl,--no-undefined
         -Wl,-z,noexecstack
         -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/make/amdicd.so.${VULKAN_SDK_VERSION}.def
         -Wl,-Map=${ICD_TARGET}.map

@@ -870,8 +870,6 @@ Pal::IScreen* Instance::FindScreen(
 {
     Pal::IScreen* pScreen = nullptr;
 
-    VK_NOT_IMPLEMENTED;
-
     return pScreen;
 }
 

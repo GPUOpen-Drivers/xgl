@@ -151,7 +151,8 @@ public:
         PipelineCache*                      pPipelineCache,
         GraphicsPipelineCreateInfo*         pCreateInfo,
         size_t*                             pPipelineBinarySize,
-        const void**                        ppPipelineBinary);
+        const void**                        ppPipelineBinary,
+        uint32_t                            rasterizationStream);
 
     VkResult CreateComputePipelineBinary(
         Device*                             pDevice,

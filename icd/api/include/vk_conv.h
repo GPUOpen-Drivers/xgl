@@ -790,11 +790,13 @@ VK_INLINE Pal::QueryPoolType VkToPalQueryPoolType(VkQueryType queryType)
 
 // =====================================================================================================================
 // Converts Vulkan query control flags to PAL equivalent
-VK_INLINE Pal::QueryControlFlags VkToPalQueryControlFlags(VkQueryControlFlags flags)
+VK_INLINE Pal::QueryControlFlags VkToPalQueryControlFlags(
+    VkQueryType         queryType,
+    VkQueryControlFlags flags)
 {
     Pal::QueryControlFlags palFlags;
     palFlags.u32All = 0;
-    if ((flags & VK_QUERY_CONTROL_PRECISE_BIT) == 0)
+    if (((flags & VK_QUERY_CONTROL_PRECISE_BIT) == 0) && (queryType == VK_QUERY_TYPE_OCCLUSION))
     {
         palFlags.impreciseData = 1;
     }

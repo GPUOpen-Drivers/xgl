@@ -390,7 +390,8 @@ CmdBuffer::CmdBuffer(
     m_recordingResult(VK_SUCCESS),
     m_barrierPolicy(barrierPolicy),
     m_pSqttState(nullptr),
-    m_renderPassInstance(pDevice->VkInstance()->Allocator())
+    m_renderPassInstance(pDevice->VkInstance()->Allocator()),
+    m_pTransformFeedbackState(nullptr)
 {
 
 #if VK_ENABLE_DEBUG_BARRIERS
@@ -1210,7 +1211,6 @@ void CmdBuffer::ResetPipelineState()
             0,
             sizeof(m_state.allGpuState.pipelineState[bindIdx].userDataLayout));
 
-        m_state.allGpuState.pipelineState[bindIdx].pLayout          = nullptr;
         m_state.allGpuState.pipelineState[bindIdx].boundSetCount    = 0;
         m_state.allGpuState.pipelineState[bindIdx].pushedConstCount = 0;
 
@@ -1308,7 +1308,7 @@ void CmdBuffer::BindPipeline(
     static_assert(VK_PIPELINE_BIND_POINT_RANGE_SIZE == 2, "New pipeline bind point added");
 
     uint32_t bindPoint = 0;
-    const PipelineLayout* pNewLayout = nullptr;
+    const UserDataLayout* pNewUserDataLayout = nullptr;
 
     switch (static_cast<int32_t>(pipelineBindPoint))
     {
@@ -1323,7 +1323,7 @@ void CmdBuffer::BindPipeline(
                 pPipeline->BindToCmdBuffer(this);
 
                 m_state.allGpuState.pComputePipeline = pPipeline;
-                pNewLayout = pPipeline->GetLayout();
+                pNewUserDataLayout = pPipeline->GetUserDataLayout();
             }
             else
             {
@@ -1348,7 +1348,7 @@ void CmdBuffer::BindPipeline(
                     m_vbMgr.GraphicsPipelineChanged(this, pPipeline);
 
                     m_state.allGpuState.pGraphicsPipeline = pPipeline;
-                    pNewLayout = pPipeline->GetLayout();
+                    pNewUserDataLayout = pPipeline->GetUserDataLayout();
                 }
             }
             else
@@ -1366,9 +1366,10 @@ void CmdBuffer::BindPipeline(
         break;
     }
 
-    if (pNewLayout != nullptr)
+    if (pNewUserDataLayout != nullptr)
     {
-        RebindCompatibleUserData(bindPoint, pNewLayout);
+        RebindCompatibleUserData(bindPoint, pNewUserDataLayout);
+
     }
 
     DbgBarrierPostCmd(DbgBarrierBindPipeline);
@@ -1381,21 +1382,16 @@ void CmdBuffer::BindPipeline(
 // compatible with the new layout remain correctly bound.
 void CmdBuffer::RebindCompatibleUserData(
     uint32_t               bindPoint,
-    const PipelineLayout*  pLayout)
+    const UserDataLayout*  pUserDataLayout)
 {
-    VK_ASSERT(pLayout != nullptr);
+    VK_ASSERT(pUserDataLayout != nullptr);
 
     Pal::PipelineBindPoint palBindPoint = static_cast<Pal::PipelineBindPoint>(bindPoint);
     PipelineBindState* pBindState = &m_state.allGpuState.pipelineState[bindPoint];
 
-    if (pLayout == pBindState->pLayout)
+    if (memcmp(pUserDataLayout, &pBindState->userDataLayout, sizeof(pBindState->userDataLayout)) != 0)
     {
-        VK_ASSERT(memcmp(&pLayout->GetInfo().userDataLayout, &pBindState->userDataLayout,
-            sizeof(pBindState->userDataLayout)) == 0);
-    }
-    else
-    {
-        const auto& userDataLayout = pLayout->GetInfo().userDataLayout;
+        const UserDataLayout& userDataLayout = *pUserDataLayout;
 
         // Rebind descriptor set bindings if necessary
         if (userDataLayout.setBindingRegBase  != pBindState->userDataLayout.setBindingRegBase ||
@@ -1441,7 +1437,6 @@ void CmdBuffer::RebindCompatibleUserData(
 
         // Cache the new user data layout information
         pBindState->userDataLayout = userDataLayout;
-        pBindState->pLayout        = pLayout;
     }
 }
 
@@ -2681,7 +2676,7 @@ void CmdBuffer::PalCmdResolveImage(
                     dstImageLayout,
                     Pal::ResolveMode::Average,
                     regionCount,
-                    pRegions + (regionPerDevice ? (regionCount * deviceIdx) : 0) );
+                    pRegions + (regionPerDevice ? (MaxRangePerAttachment * deviceIdx) : 0) );
     }
 
     PostBltRestoreMsaaState();
@@ -3341,17 +3336,24 @@ void CmdBuffer::PipelineBarrier(
 }
 
 // =====================================================================================================================
-void CmdBuffer::BeginQuery(
+void CmdBuffer::BeginQueryIndexed(
     VkQueryPool         queryPool,
     uint32_t            query,
-    VkQueryControlFlags flags)
+    VkQueryControlFlags flags,
+    uint32_t            index)
 {
     DbgBarrierPreCmd(DbgBarrierQueryBeginEnd);
 
-    const auto palQueryControlFlags = VkToPalQueryControlFlags(flags);
+    const QueryPool* pBasePool = QueryPool::ObjectFromHandle(queryPool);
+    const auto palQueryControlFlags = VkToPalQueryControlFlags(pBasePool->GetQueryType(), flags);
 
     // NOTE: This function is illegal to call for TimestampQueryPools
-    const PalQueryPool* pQueryPool = QueryPool::ObjectFromHandle(queryPool)->AsPalQueryPool();
+    const PalQueryPool* pQueryPool = pBasePool->AsPalQueryPool();
+    Pal::QueryType queryType = pQueryPool->PalQueryType();
+    if (queryType == Pal::QueryType::StreamoutStats)
+    {
+        queryType = static_cast<Pal::QueryType>(static_cast<uint32_t>(queryType) + index);
+    }
 
     utils::IterateMask deviceGroup(m_palDeviceMask);
     while (deviceGroup.Iterate())
@@ -3359,7 +3361,7 @@ void CmdBuffer::BeginQuery(
         const uint32_t deviceIdx = deviceGroup.Index();
 
         PalCmdBuffer(deviceIdx)->CmdBeginQuery(*pQueryPool->PalPool(deviceIdx),
-            pQueryPool->PalQueryType(),
+            queryType,
             query,
             palQueryControlFlags);
     }
@@ -3405,14 +3407,20 @@ void CmdBuffer::BeginQuery(
 }
 
 // =====================================================================================================================
-void CmdBuffer::EndQuery(
+void CmdBuffer::EndQueryIndexed(
     VkQueryPool queryPool,
-    uint32_t    query)
+    uint32_t    query,
+    uint32_t    index)
 {
     DbgBarrierPreCmd(DbgBarrierQueryBeginEnd);
 
     // NOTE: This function is illegal to call for TimestampQueryPools
     const PalQueryPool* pQueryPool = QueryPool::ObjectFromHandle(queryPool)->AsPalQueryPool();
+    Pal::QueryType queryType = pQueryPool->PalQueryType();
+    if (queryType == Pal::QueryType::StreamoutStats)
+    {
+        queryType = static_cast<Pal::QueryType>(static_cast<uint32_t>(queryType) + index);
+    }
 
     utils::IterateMask deviceGroup(m_palDeviceMask);
     while (deviceGroup.Iterate())
@@ -3420,7 +3428,7 @@ void CmdBuffer::EndQuery(
         const uint32_t deviceIdx = deviceGroup.Index();
 
         PalCmdBuffer(deviceIdx)->CmdEndQuery(*pQueryPool->PalPool(deviceIdx),
-            pQueryPool->PalQueryType(),
+            queryType,
             query);
     }
 
@@ -4859,8 +4867,12 @@ void CmdBuffer::PushConstants(
         pBindState->pushedConstCount = Util::Max(pBindState->pushedConstCount, startInDwords + lengthInDwords);
 
         // We need access to the user data layout, but avoid dereferencing the pipeline layout if we can help it.
-        const PipelineLayout::UserDataLayout& userDataLayout =
-            (pLayout == pBindState->pLayout) ? pBindState->userDataLayout : pLayout->GetInfo().userDataLayout;
+
+        // In response to the above comment, We used to store the pipeline layout in the PiplineBindPoint and check
+        // if we had the same layouts and then just grab the userDataLayout from PipelineBindPoint if they were the same.
+        // Since we no longer store the PipelineLayout in PipelineBindPoint, we have no way of knowing whether the
+        // UserDataLayout in PipelineBindPoint is upto date so we must always deference the pipeline layout.
+        const UserDataLayout& userDataLayout = pLayout->GetInfo().userDataLayout;
 
         // Program the user data register only if the current user data layout base matches that of the given
         // layout.  Otherwise, what's happening is that the application is pushing constants for a future
@@ -4900,8 +4912,12 @@ void CmdBuffer::PushConstants(
         pBindState->pushedConstCount = Util::Max(pBindState->pushedConstCount, startInDwords + lengthInDwords);
 
         // We need access to the user data layout, but avoid dereferencing the pipeline layout if we can help it.
-        const PipelineLayout::UserDataLayout& userDataLayout =
-            (pLayout == pBindState->pLayout) ? pBindState->userDataLayout : pLayout->GetInfo().userDataLayout;
+
+        // In response to the above comment, We used to store the pipeline layout in the PiplineBindPoint and check
+        // if we had the same layouts and then just grab the userDataLayout from PipelineBindPoint if they were the same.
+        // Since we no longer store the PipelineLayout in PipelineBindPoint, we have no way of knowing whether the
+        // UserDataLayout in PipelineBindPoint is upto date so we must always deference the pipeline layout.
+        const UserDataLayout& userDataLayout = pLayout->GetInfo().userDataLayout;
 
         // Program the user data register only if the current user data layout base matches that of the given
         // layout.  Otherwise, what's happening is that the application is pushing constants for a future
@@ -5301,6 +5317,164 @@ void CmdBuffer::WriteBufferMarker(
             marker,
             Pal::ImmediateDataWidth::ImmediateData32Bit,
             pDestBuffer->GpuVirtAddr(deviceIdx) + dstOffset);
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::BindTransformFeedbackBuffers(
+    uint32_t            firstBinding,
+    uint32_t            bindingCount,
+    const VkBuffer*     pBuffers,
+    const VkDeviceSize* pOffsets,
+    const VkDeviceSize* pSizes)
+{
+    VK_ASSERT(firstBinding + bindingCount <= Pal::MaxStreamOutTargets);
+    if (m_pTransformFeedbackState == nullptr)
+    {
+        void* pMemory = m_pDevice->VkInstance()->AllocMem(sizeof(TransformFeedbackState),
+                                                          VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        if (pMemory != nullptr)
+        {
+            m_pTransformFeedbackState = VK_PLACEMENT_NEW(pMemory) TransformFeedbackState();
+        }
+        memset(m_pTransformFeedbackState, 0, sizeof(TransformFeedbackState));
+        VK_ASSERT(m_pTransformFeedbackState != nullptr);
+    }
+
+    VK_ASSERT(m_pTransformFeedbackState->enabled == false);
+
+    utils::IterateMask deviceGroup(m_palDeviceMask);
+    while (deviceGroup.Iterate())
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+        for (uint32_t i = firstBinding; i < bindingCount; i++)
+        {
+            if (pBuffers[i] != VK_NULL_HANDLE)
+            {
+                Buffer* pFeedbackBuffer = Buffer::ObjectFromHandle(pBuffers[i]);
+
+                m_pTransformFeedbackState->params.target[i].gpuVirtAddr =
+                    pFeedbackBuffer->GpuVirtAddr(deviceIdx) + pOffsets[i];
+
+                m_pTransformFeedbackState->params.target[i].size = pSizes[i];
+
+                m_pTransformFeedbackState->bindMask |= 1 << i;
+            }
+            else
+            {
+                m_pTransformFeedbackState->params.target[i].gpuVirtAddr = 0;
+                m_pTransformFeedbackState->params.target[i].size        = 0;
+                m_pTransformFeedbackState->bindMask                     &= ~(1 << i);
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::BeginTransformFeedback(
+    uint32_t            firstCounterBuffer,
+    uint32_t            counterBufferCount,
+    const VkBuffer*     pCounterBuffers,
+    const VkDeviceSize* pCounterBufferOffsets)
+{
+    utils::IterateMask deviceGroup(m_palDeviceMask);
+    while (deviceGroup.Iterate())
+    {
+        uint64_t counterBufferAddr[Pal::MaxStreamOutTargets] = {};
+
+        const uint32_t deviceIdx = deviceGroup.Index();
+        for (uint32_t i = firstCounterBuffer; i < counterBufferCount; i++)
+        {
+            if ((pCounterBuffers    != nullptr)        &&
+                (pCounterBuffers[i] != VK_NULL_HANDLE) &&
+                (m_pTransformFeedbackState->bindMask & (1 << i)))
+            {
+                Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
+                counterBufferAddr[i]   = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
+            }
+        }
+
+        if (m_pTransformFeedbackState->bindMask != 0)
+        {
+            PalCmdBuffer(deviceIdx)->CmdBindStreamOutTargets(m_pTransformFeedbackState->params);
+            PalCmdBuffer(deviceIdx)->CmdLoadBufferFilledSizes(counterBufferAddr);
+
+            // If counter buffer is null, then stransform feedback will start capturing vertex data to byte offset zero.
+            for (uint32_t i = 0; i < Pal::MaxStreamOutTargets; i++)
+            {
+                if ((m_pTransformFeedbackState->bindMask & (1 << i)) && (counterBufferAddr[i] == 0))
+                {
+                    PalCmdBuffer(deviceIdx)->CmdSetBufferFilledSize(i, 0);
+                }
+            }
+
+            m_pTransformFeedbackState->enabled = true;
+        }
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::EndTransformFeedback(
+    uint32_t            firstCounterBuffer,
+    uint32_t            counterBufferCount,
+    const VkBuffer*     pCounterBuffers,
+    const VkDeviceSize* pCounterBufferOffsets)
+{
+    if (m_pTransformFeedbackState->enabled)
+    {
+        utils::IterateMask deviceGroup(m_palDeviceMask);
+        while (deviceGroup.Iterate())
+        {
+            uint64_t counterBufferAddr[Pal::MaxStreamOutTargets] = {};
+
+            const uint32_t deviceIdx = deviceGroup.Index();
+            for (uint32_t i = firstCounterBuffer; i < counterBufferCount; i++)
+            {
+                if ((pCounterBuffers    != nullptr)        &&
+                    (pCounterBuffers[i] != VK_NULL_HANDLE) &&
+                    (m_pTransformFeedbackState->bindMask & (1 << i)))
+                {
+                    Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
+                    counterBufferAddr[i]   = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
+                }
+            }
+
+            if (m_pTransformFeedbackState->bindMask != 0)
+            {
+                PalCmdBuffer(deviceIdx)->CmdSaveBufferFilledSizes(counterBufferAddr);
+
+                // Disable transform feedback by set bound buffer's size and stride to 0.
+                Pal::BindStreamOutTargetParams  params = {};
+                PalCmdBuffer(deviceIdx)->CmdBindStreamOutTargets(params);
+                m_pTransformFeedbackState->enabled = false;
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::DrawIndirectByteCount(
+    uint32_t        instanceCount,
+    uint32_t        firstInstance,
+    VkBuffer        counterBuffer,
+    VkDeviceSize    counterBufferOffset,
+    uint32_t        counterOffset,
+    uint32_t        vertexStride)
+{
+    Buffer* pCounterBuffer = Buffer::ObjectFromHandle(counterBuffer);
+    utils::IterateMask deviceGroup(m_palDeviceMask);
+    while (deviceGroup.Iterate())
+    {
+        const uint32_t deviceIdx   = deviceGroup.Index();
+        uint64_t counterBufferAddr = pCounterBuffer->GpuVirtAddr(deviceIdx) + counterBufferOffset;
+
+        PalCmdBuffer(deviceIdx)->CmdDrawOpaque(
+            counterBufferAddr,
+            counterOffset,
+            vertexStride,
+            firstInstance,
+            instanceCount);
     }
 }
 
@@ -5804,7 +5978,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginQuery(
     uint32_t                                    query,
     VkQueryControlFlags                         flags)
 {
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BeginQuery(queryPool, query, flags);
+    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BeginQueryIndexed(queryPool, query, flags, 0);
 }
 
 // =====================================================================================================================
@@ -5813,7 +5987,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndQuery(
     VkQueryPool                                 queryPool,
     uint32_t                                    query)
 {
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->EndQuery(queryPool, query);
+    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->EndQueryIndexed(queryPool, query, 0);
 }
 
 // =====================================================================================================================

@@ -241,6 +241,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
     pInfo->msaa.occlusionQuerySamples           = 1;
     pInfo->msaa.sampleMask                      = 1;
     pInfo->sampleCoverage                       = 1;
+    pInfo->rasterizationStream                  = 0;
 
     EXTRACT_VK_STRUCTURES_0(
         gfxPipeline,
@@ -674,6 +675,8 @@ VkResult GraphicsPipeline::Create(
     PipelineCompiler*     pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
     VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo);
+    ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &createInfo);
+
     const uint32_t numPalDevices = pDevice->NumPalDevices();
     for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices); ++i)
     {
@@ -685,7 +688,8 @@ VkResult GraphicsPipeline::Create(
                 pPipelineCache,
                 &binaryCreateInfo,
                 &pipelineBinarySizes[i],
-                &pPipelineBinaries[i]);
+                &pPipelineBinaries[i],
+                createInfo.rasterizationStream);
         }
         else
         {
@@ -699,7 +703,8 @@ VkResult GraphicsPipeline::Create(
                 pPipelineCache,
                 &binaryCreateInfoMGPU,
                 &pipelineBinarySizes[i],
-                &pPipelineBinaries[i]);
+                &pPipelineBinaries[i],
+                createInfo.rasterizationStream);
 
             pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfoMGPU);
         }
@@ -707,8 +712,6 @@ VkResult GraphicsPipeline::Create(
 
     if (result == VK_SUCCESS)
     {
-        ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &createInfo);
-
         pDevice->GetShaderOptimizer()->OverrideGraphicsPipelineCreateInfo(
             binaryCreateInfo.pipelineProfileKey,
             createInfo.activeStages,

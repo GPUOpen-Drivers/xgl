@@ -656,7 +656,8 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     PipelineCache*                      pPipelineCache,
     GraphicsPipelineCreateInfo*         pCreateInfo,
     size_t*                             pPipelineBinarySize,
-    const void**                        ppPipelineBinary)
+    const void**                        ppPipelineBinary,
+    uint32_t                            rasterizationStream)
 {
     VkResult               result        = VK_SUCCESS;
     bool                   shouldCompile = true;
@@ -974,6 +975,11 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
     }
 
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))
+    {
+        pCreateInfo->pipelineInfo.options.scalarBlockLayout = true;
+    }
+
     if (pLayout != nullptr)
     {
         pCreateInfo->tempBufferStageSize = pLayout->GetPipelineInfo()->tempStageSize;
@@ -1015,6 +1021,19 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     pCreateInfo->pipelineInfo.pInstance      = pInstance;
     pCreateInfo->pipelineInfo.pfnOutputAlloc = AllocateShaderOutput;
 
+    ShaderStage lastVertexStage = ShaderStageVertex;
+    for (int32_t i = ShaderGfxStageCount-1; i >= 0; --i)
+    {
+        ShaderStage stage = static_cast<ShaderStage>(i);
+        if (pStageInfos[stage] == nullptr) continue;
+
+        if (stage != ShaderStageFragment)
+        {
+            lastVertexStage = stage;
+            break;
+        }
+    }
+
     for (uint32_t stage = 0; stage < ShaderGfxStageCount; ++stage)
     {
         auto pStage = pStageInfos[stage];
@@ -1040,7 +1059,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 pCreateInfo->pMappingBuffer,
                 vertexShader ? pCreateInfo->pipelineInfo.pVertexInput : nullptr,
                 pShaderInfo,
-                vertexShader ? pVbInfo : nullptr);
+                vertexShader ? pVbInfo : nullptr,
+                lastVertexStage == static_cast<ShaderStage>(stage));
         }
 
         ApplyDefaultShaderOptions(&pShaderInfo->options
@@ -1080,6 +1100,11 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
     {
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
+    }
+
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))
+    {
+        pCreateInfo->pipelineInfo.options.scalarBlockLayout = true;
     }
 
     if (pLayout != nullptr)
@@ -1125,7 +1150,8 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             pCreateInfo->pMappingBuffer,
             nullptr,
             &pCreateInfo->pipelineInfo.cs,
-            nullptr);
+            nullptr,
+            false);
     }
 
     ApplyDefaultShaderOptions(&pCreateInfo->pipelineInfo.cs.options

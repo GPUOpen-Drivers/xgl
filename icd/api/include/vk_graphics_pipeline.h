@@ -277,6 +277,7 @@ protected:
         const PipelineLayout*                       pLayout;
         uint32_t                                    sampleCoverage;
         VkShaderStageFlagBits                       activeStages;
+        uint32_t                                    rasterizationStream;
     };
 
     static void ConvertGraphicsPipelineInfo(
