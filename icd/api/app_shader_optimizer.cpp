@@ -479,11 +479,58 @@ void ShaderOptimizer::BuildAppProfile()
     {
         if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
         {
+            uint32_t i = 0;
+
             // Apply late VS alloc to all (graphics) pipelines
-            m_appProfile.entryCount = 1;
-            m_appProfile.entries[0].pattern.match.always = 1;
-            m_appProfile.entries[0].action.createInfo.apply.lateAllocVsLimit = true;
-            m_appProfile.entries[0].action.createInfo.lateAllocVsLimit       = 0;
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.always = 1;
+            m_appProfile.entries[i].action.createInfo.apply.lateAllocVsLimit = true;
+            m_appProfile.entries[i].action.createInfo.lateAllocVsLimit       = 0;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // b907df8c79a55c5cbaf23d36aab14a93,PS,False,VGPRSMAXLDSSPILL,16777280
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xbaf23d36aab14a93;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xb907df8c79a55c5c;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.vgprLimit = 64u;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.ldsSpillLimitDwords = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.ldsSpillLimitDwords = 4096u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 9ca3346855a52a28378987da9ec691aa,CS,False,VGPRS,64
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0x378987da9ec691aa;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0x9ca3346855a52a28;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.vgprLimit = 64u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 8870793de8be7ba9b61429d9c34c9ac6,CS,False,VGPRSMAXLDSSPILL,8388644
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xb61429d9c34c9ac6;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0x8870793de8be7ba9;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.vgprLimit = 36u;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.ldsSpillLimitDwords = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.ldsSpillLimitDwords = 2048u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // fa535f5e84c8b76eef8212debb55d37f,PS,False,PBB,1
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xef8212debb55d37f;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xfa535f5e84c8b76e;
+            m_appProfile.entries[i].action.createInfo.apply.binningOverride = true;
+            m_appProfile.entries[i].action.createInfo.binningOverride = Pal::BinningOverride::Disable;
+
         }
     }
     else if (appProfile == AppProfile::DoomVFR)
@@ -511,38 +558,130 @@ void ShaderOptimizer::BuildAppProfile()
     }
     else if (appProfile == AppProfile::WolfensteinII)
     {
+        uint32_t i = 0u;
+
         if (Pal::GfxIpLevel::GfxIp8 <= gfxIpLevel)
         {
-            m_appProfile.entryCount = 3;
-
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Enable shader compiler optimization for PS to reduce VGPR count
             // For PS shader that likely has large VGPR count.
-            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].match.codeSizeLessThan = true;
-            m_appProfile.entries[0].pattern.shaders[ShaderStageFragment].codeSizeLessThanValue = 0x10000;
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeSizeLessThan = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeSizeLessThanValue = 0x10000;
 
-            m_appProfile.entries[0].action.shaders[ShaderStageFragment].shaderCreate.apply.optStrategyFlags = true;
-            m_appProfile.entries[0].action.shaders[ShaderStageFragment].shaderCreate.apply.minVgprOptions = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.optStrategyFlags = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.minVgprOptions = true;
 
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
             // Enable shader compiler optimization for in game motion blur CS to reduce VGPR.
             // 2 hashes to cover both high motion blur quality and medium quality. Low quality motion
             // blur shader does not have occupancy issue.
-            m_appProfile.entries[1].pattern.shaders[ShaderStageCompute].match.stageActive = true;
-            m_appProfile.entries[1].pattern.shaders[ShaderStageCompute].match.codeHash = true;
-            m_appProfile.entries[1].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xe255e1ba355d3de2;
-            m_appProfile.entries[1].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xb93c2f32daf532ef;
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xe255e1ba355d3de2;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xb93c2f32daf532ef;
 
-            m_appProfile.entries[1].action.shaders[ShaderStageCompute].shaderCreate.apply.optStrategyFlags = 1;
-            m_appProfile.entries[1].action.shaders[ShaderStageCompute].shaderCreate.apply.minVgprOptions = 1;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.optStrategyFlags = 1;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.minVgprOptions = 1;
 
-            m_appProfile.entries[2].pattern.shaders[ShaderStageCompute].match.stageActive = true;
-            m_appProfile.entries[2].pattern.shaders[ShaderStageCompute].match.codeHash    = true;
-            m_appProfile.entries[2].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xbf9550fc8441df60;
-            m_appProfile.entries[2].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xe4618043b8ad99c3;
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash    = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xbf9550fc8441df60;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xe4618043b8ad99c3;
 
-            m_appProfile.entries[2].action.shaders[ShaderStageCompute].shaderCreate.apply.optStrategyFlags = 1;
-            m_appProfile.entries[2].action.shaders[ShaderStageCompute].shaderCreate.apply.minVgprOptions = 1;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.optStrategyFlags = 1;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.minVgprOptions = 1;
 
+        }
+
+        if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
+        {
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0226b384a0a386391dc495ca6c48428d,CS,False,VGPRS,64
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0x1dc495ca6c48428d;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0x0226b384a0a38639;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.vgprLimit = 64u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 98a1064ec65eb41264eca5e83285c2fa,PS,False,VGPRSMAXLDSSPILL,16777280
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x64eca5e83285c2fa;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x98a1064ec65eb412;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.vgprLimit = 64u;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.ldsSpillLimitDwords = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.ldsSpillLimitDwords = 4096u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 4ab27aa97efb9988d3d8a4f61d7cbf0c,CS,False,VGPRSMAXLDSSPILL,8388640
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xd3d8a4f61d7cbf0c;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0x4ab27aa97efb9988;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.vgprLimit = 32u;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.ldsSpillLimitDwords = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.ldsSpillLimitDwords = 2048u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // c0acb1fe652ac845f1580e2714f99883,CS,False,VGPRSMAXLDSSPILL,8388640
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xf1580e2714f99883;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xc0acb1fe652ac845;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.vgprLimit = 32u;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.ldsSpillLimitDwords = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.ldsSpillLimitDwords = 2048u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // b1ec60a6a5782ae773ac1c2a8d73c7e2,PS,False,VGPRS,85
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x73ac1c2a8d73c7e2;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xb1ec60a6a5782ae7;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.vgprLimit = 85u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // f9fabbfeff4406d72692e7490ddeced2,PS,False,VGPRSMAXLDSSPILL,20971605
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x2692e7490ddeced2;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xf9fabbfeff4406d7;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.vgprLimit = 85u;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.ldsSpillLimitDwords = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.ldsSpillLimitDwords = 5120u;
+        }
+        else if (Pal::GfxIpLevel::GfxIp8 == gfxIpLevel)
+        {
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 2bbaa35349a4957db8a891e39b97ffc0, PS, False, VGPRSMAXLDSSPILL, 16777280
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xb8a891e39b97ffc0;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x2bbaa35349a4957d;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.vgprLimit = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.vgprLimit = 64u;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.ldsSpillLimitDwords = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.ldsSpillLimitDwords = 4096u;
         }
     }
     else if (appProfile == AppProfile::Dota2)
@@ -660,6 +799,66 @@ void ShaderOptimizer::BuildAppProfile()
             m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xfd59b52b7db5ef6b;
             m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.apply.maxWavesPerCu = true;
             m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.maxWavesPerCu = 24u;
+        }
+    }
+    else if (appProfile == AppProfile::Talos)
+    {
+        uint32_t i = 0u;
+
+        if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
+        {
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // f6c8c56787c45cd28e61611c4549de8e,PS,False,PBB,2
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x8e61611c4549de8e;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xf6c8c56787c45cd2;
+            m_appProfile.entries[i].action.createInfo.apply.binningOverride = true;
+            m_appProfile.entries[i].action.createInfo.binningOverride = Pal::BinningOverride::Enable;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 9694cac603ea1b4591072c717850730b,PS,False,WAVES,8
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x91072c717850730b;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x9694cac603ea1b45;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.apply.maxWavesPerCu = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.maxWavesPerCu = 8u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 305ea8779d8214f684c7ec88fcb6cf1b,PS,False,PBB,1
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x84c7ec88fcb6cf1b;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x305ea8779d8214f6;
+            m_appProfile.entries[i].action.createInfo.apply.binningOverride = true;
+            m_appProfile.entries[i].action.createInfo.binningOverride = Pal::BinningOverride::Disable;
+        }
+        else if (Pal::GfxIpLevel::GfxIp8 == gfxIpLevel)
+        {
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 744da8f639e20a25aab87c78fa3a7673,PS,False,WAVES,8
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xaab87c78fa3a7673;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x744da8f639e20a25;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.apply.maxWavesPerCu = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.maxWavesPerCu = 8u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 9694cac603ea1b4591072c717850730b,PS,False,WAVES,8
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x91072c717850730b;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x9694cac603ea1b45;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.apply.maxWavesPerCu = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.maxWavesPerCu = 8u;
         }
     }
 }

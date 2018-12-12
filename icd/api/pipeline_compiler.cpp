@@ -305,6 +305,10 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
 
+    {
+        llpcOptions[numOptions++] = "-amdgpu-atomic-optimizations";
+    }
+
     ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
     if ((appProfile == AppProfile::Talos) ||
         (appProfile == AppProfile::MadMax) ||

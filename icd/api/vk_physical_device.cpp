@@ -3581,7 +3581,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pConservativeRasterizationProperties->primitiveOverestimationSize                   = 0;
             pConservativeRasterizationProperties->maxExtraPrimitiveOverestimationSize           = 0;
             pConservativeRasterizationProperties->extraPrimitiveOverestimationSizeGranularity   = 0;
-            pConservativeRasterizationProperties->primitiveUnderestimation                      = VK_FALSE;
+            pConservativeRasterizationProperties->primitiveUnderestimation                      = VK_TRUE;
             pConservativeRasterizationProperties->conservativePointAndLineRasterization         = VK_FALSE;
             pConservativeRasterizationProperties->degenerateTrianglesRasterized                 = VK_TRUE;
             pConservativeRasterizationProperties->degenerateLinesRasterized                     = VK_FALSE;

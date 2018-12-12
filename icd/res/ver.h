@@ -36,14 +36,14 @@
 #define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
 
 // Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   65
+#define VULKAN_ICD_BUILD_VERSION   66
 
 // String version is needed with leading zeros and extra termination (unicode)
 #define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
 #define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
 
 // These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            0x00000002  // "AMDOPEN"
+#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
 #define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
 #define VULKAN_DRIVER_INFO_STR      ""
 
