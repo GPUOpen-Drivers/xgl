@@ -94,9 +94,6 @@ VkResult Sampler::Create(
             samplerInfo.anisoThreshold                 = pDevice->GetRuntimeSettings().anisoThreshold;
             samplerInfo.flags.unnormalizedCoords       = (pSamplerInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
             samplerInfo.flags.prtBlendZeroMode         = 0;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 444
-            samplerInfo.flags.dx9Mipclamping           = 1;
-#endif
             samplerInfo.flags.seamlessCubeMapFiltering = 1;
             break;
 

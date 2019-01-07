@@ -39,16 +39,11 @@
 #include "llpc.h"
 #include "include/app_shader_optimizer.h"
 
-namespace Bil
-{
+#define ICD_BUILD_MULIT_COMPILER 0
 
-struct BilConvertOptions;
-struct BilShaderPatchOutput;
-struct BilDescriptorMetadata;
-struct BilPatchMetadata;
-enum BilDescriptorType : uint32_t;
-
-}
+#if ICD_BUILD_MULIT_COMPILER
+#include "palHashSet.h"
+#endif
 
 namespace vk
 {
@@ -59,11 +54,18 @@ class PipelineCache;
 class ShaderModule;
 class PipelineCompiler;
 struct VbBindingInfo;
+struct ShaderModuleHandle;
 
-// Enumerates the cache type in the pipeline cache
-enum PipelineCacheType : uint32_t
+// Enumerates the compiler types
+enum PipelineCompilerType : uint32_t
 {
-    PipelineCacheTypeLlpc,  // Use shader cache provided by LLPC
+    PipelineCompilerTypeLlpc,  // Use shader compiler provided by LLPC
+};
+
+// Represents the result of PipelineCompiler::BuildShaderModule
+struct ShaderModuleHandle
+{
+    void*   pLlpcShaderModule;   // Shader module handle from LLPC
 };
 
 // Unified shader cache interface
@@ -77,7 +79,7 @@ public:
 
     ShaderCache();
 
-    void Init(PipelineCacheType  cacheType, ShaderCachePtr cachePtr);
+    void Init(PipelineCompilerType cacheType, ShaderCachePtr cachePtr);
 
     VkResult Serialize(void* pBlob, size_t* pSize);
 
@@ -85,13 +87,13 @@ public:
 
     void Destroy(PipelineCompiler* pCompiler);
 
-    PipelineCacheType GetCacheType() const { return m_cacheType; }
+    PipelineCompilerType GetCacheType() const { return m_cacheType; }
 
     ShaderCachePtr GetCachePtr() { return m_cache; }
 
 private:
-    PipelineCacheType  m_cacheType;
-    ShaderCachePtr     m_cache;
+    PipelineCompilerType  m_cacheType;
+    ShaderCachePtr        m_cache;
 };
 
 // =====================================================================================================================
@@ -101,22 +103,22 @@ public:
     struct GraphicsPipelineCreateInfo
     {
         Llpc::GraphicsPipelineBuildInfo        pipelineInfo;
-        ShaderModule*                          pShaderModules[ShaderGfxStageCount];
         VkPipelineCreateFlags                  flags;
         void*                                  pMappingBuffer;
         size_t                                 tempBufferStageSize;
         VkFormat                               dbFormat;
         PipelineOptimizerKey                   pipelineProfileKey;
+        PipelineCompilerType                   compilerType;
     };
 
     struct ComputePipelineCreateInfo
     {
         Llpc::ComputePipelineBuildInfo         pipelineInfo;
-        ShaderModule*                          pShaderModule;
         VkPipelineCreateFlags                  flags;
         void*                                  pMappingBuffer;
         size_t                                 tempBufferStageSize;
         PipelineOptimizerKey                   pipelineProfileKey;
+        PipelineCompilerType                   compilerType;
     };
 
     PipelineCompiler(PhysicalDevice* pPhysicalDevice);
@@ -134,16 +136,15 @@ public:
         bool                         isScpcInternalCache,
         ShaderCache*                 pShaderCache);
 
-    size_t GetShaderCacheSize(PipelineCacheType cacheType);
+    size_t GetShaderCacheSize(PipelineCompilerType cacheType);
 
-    PipelineCacheType GetShaderCacheType();
+    PipelineCompilerType GetShaderCacheType();
 
     VkResult BuildShaderModule(
-        const Device*   pDevice,
-        size_t          codeSize,
-        const void*     pCode
-        , void**          ppLlpcShaderModule
-        );
+        const Device*       pDevice,
+        size_t              codeSize,
+        const void*         pCode,
+        ShaderModuleHandle* pModule);
 
     VkResult CreateGraphicsPipelineBinary(
         Device*                             pDevice,
@@ -173,7 +174,7 @@ public:
         const VkComputePipelineCreateInfo*  pIn,
         ComputePipelineCreateInfo*          pInfo);
 
-    void FreeShaderModule(void* pShaderModule);
+    void FreeShaderModule(ShaderModuleHandle* pShaderModule);
 
     void FreeComputePipelineBinary(
         ComputePipelineCreateInfo* pCreateInfo,
@@ -188,6 +189,13 @@ public:
     void FreeComputePipelineCreateInfo(ComputePipelineCreateInfo* pCreateInfo);
 
     void FreeGraphicsPipelineCreateInfo(GraphicsPipelineCreateInfo* pCreateInfo);
+
+    template<class PipelineBuildInfo>
+    PipelineCompilerType CheckCompilerType(const PipelineBuildInfo* pPipelineBuildInfo);
+
+    uint32_t GetCompilerCollectionMask();
+
+    static const char* GetShaderStageName(ShaderStage shaderStage);
 
     void ApplyDefaultShaderOptions(
         Llpc::PipelineShaderOptions* pShaderOptions
@@ -222,6 +230,12 @@ private:
     Llpc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by LLPC
 
     Llpc::ICompiler*    m_pLlpc;               // LLPC compiler object
+
+#if ICD_BUILD_MULIT_COMPILER
+    // Store the hash list read from file when enable
+    // LlpcModeMixScpcHashList or LlpcModeMixLlpcHashList or LlpcModeMixRcpcHashList
+    Util::HashSet<uint64_t, PalAllocator>            m_llpcModeMixHashList;
+#endif
 
 }; // class PipelineCompiler
 

@@ -517,12 +517,10 @@ VkResult Memory::CreateGpuPinnedMemory(
     VK_ASSERT(Util::IsPow2Aligned(reinterpret_cast<uint64_t>(pPinnedHostPtr),
         pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gpuMemoryProperties.realMemAllocGranularity));
 
-    pinnedInfo.size = static_cast<size_t>(createInfo.size);
-    pinnedInfo.pSysMem = pPinnedHostPtr;
-    pinnedInfo.vaRange = Pal::VaRange::Default;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 450
+    pinnedInfo.size      = static_cast<size_t>(createInfo.size);
+    pinnedInfo.pSysMem   = pPinnedHostPtr;
+    pinnedInfo.vaRange   = Pal::VaRange::Default;
     pinnedInfo.alignment = createInfo.alignment;
-#endif
 
     gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetPinnedGpuMemorySize(
         pinnedInfo, &palResult);

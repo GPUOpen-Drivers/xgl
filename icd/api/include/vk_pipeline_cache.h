@@ -48,7 +48,7 @@ struct PipelineCacheHeaderData
 // Layout for pipeline cache private header, all fields are written with LSB first.
 struct PipelineCachePrivateHeaderData
 {
-    PipelineCacheType cacheType;        // Cache data type
+    PipelineCompilerType cacheType;        // Cache data type
     uint64_t blobSize[MaxPalDevices];   // Blob data size for each device
 };
 

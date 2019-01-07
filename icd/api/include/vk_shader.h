@@ -30,6 +30,7 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/vk_dispatch.h"
+#include "include/pipeline_compiler.h"
 
 #include "llpc.h"
 
@@ -66,10 +67,9 @@ public:
 
     Pal::ShaderHash GetCodeHash(const char* pEntryPoint) const;
 
-    const void* GetShaderData(bool isLlpc) const
-    {
-        return m_pLlpcShaderModule;
-    }
+    void* GetShaderData(PipelineCompilerType compilerType) const;
+
+    void* GetFirstValidShaderData() const;
 
 protected:
     ShaderModule(size_t codeSize, const void* pCode);
@@ -77,9 +77,7 @@ protected:
 
     size_t                     m_codeSize;
     const void*                m_pCode;
-
-    void*                      m_pLlpcShaderModule;
-
+    ShaderModuleHandle         m_handle;
     Pal::ShaderHash            m_codeHash;
 };
 

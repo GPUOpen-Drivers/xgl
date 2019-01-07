@@ -208,7 +208,9 @@ public:
         AppProfile*      pAppProfiles
         );
 
-    VkResult QueryApplicationProfile(RuntimeSettings* pRuntimeSettings = nullptr);
+    void QueryApplicationProfile(
+        Pal::IDevice*    pPalDevice,
+        RuntimeSettings* pRuntimeSettings = nullptr);
 
     VkResult RegisterDebugCallback(
         DebugReportCallback* pCallback);

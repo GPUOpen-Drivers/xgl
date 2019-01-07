@@ -254,13 +254,9 @@ VkResult Fence::GetFenceFd(
     VK_ASSERT((pGetFdInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR) ||
               (pGetFdInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR));
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 398
     Pal::FenceExportInfo exportInfo = {};
     exportInfo.flags.isReference = (pGetFdInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
     *pFd  = PalFence(DefaultDeviceIndex)->ExportExternalHandle(exportInfo);
-#else
-    *pFd  = PalFence(DefaultDeviceIndex)->GetHandle();
-#endif
 
     return VkResult::VK_SUCCESS;
 }

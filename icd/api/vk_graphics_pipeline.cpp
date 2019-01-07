@@ -112,9 +112,7 @@ void GraphicsPipeline::BuildRasterizationState(
         const VkStructHeader*                                           pHeader;
         const VkPipelineRasterizationStateCreateInfo*                   pRs;
         const VkPipelineRasterizationStateRasterizationOrderAMD*        pRsOrder;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
         const VkPipelineRasterizationConservativeStateCreateInfoEXT*    pRsConservative;
-#endif
     };
 
     // By default rasterization is disabled, unless rasterization creation info is present
@@ -175,7 +173,6 @@ void GraphicsPipeline::BuildRasterizationState(
                         VkToPalRasterizationOrder(pRsOrder->rasterizationOrder);
                 }
                 break;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
             case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT:
                 {
                     // VK_EXT_conservative_rasterization must be enabled
@@ -211,7 +208,6 @@ void GraphicsPipeline::BuildRasterizationState(
 
                 }
                 break;
-#endif
             default:
                 // Skip any unknown extension structures
                 break;
@@ -463,10 +459,8 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
                 if (customSampleLocations)
                 {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 417
                     // Enable single-sampled custom sample locations if necessary
                     pInfo->msaa.flags.enable1xMsaaSampleLocations = (pInfo->msaa.coverageSamples == 1);
-#endif
 
                     if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT)] == false)
                     {

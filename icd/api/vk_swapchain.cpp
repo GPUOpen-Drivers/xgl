@@ -248,17 +248,13 @@ VkResult SwapChain::Create(
                                                                      (VkImageUsageFlags)(0),
                                                                      (VkImageUsageFlags)(0));
     swapChainCreateInfo.preTransform        = Pal::SurfaceTransformNone;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 445
     swapChainCreateInfo.compositeAlpha      = VkToPalCompositeAlphaMode(pCreateInfo->compositeAlpha);
-#endif
     swapChainCreateInfo.imageArraySize      = 1;
     swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
 
     if (properties.displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
     {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
         swapChainCreateInfo.pScreen = properties.displayableInfo.pScreen;
-#endif
     }
 
     // Find the index of the device associated with the PAL screen and therefore, the PAL swap chain to be created
@@ -1253,7 +1249,6 @@ SwCompositor* SwCompositor::Create(
     const SwapChain::Properties& properties,
     bool                         useSdmaCompositingBlt)
 {
-    VkResult      result            = VK_SUCCESS;
     SwCompositor* pObject           = nullptr;
     Pal::IDevice* pPalDevice        = pDevice->PalDevice(properties.presentationDeviceIdx);
     size_t        palImageSize      = 0;
@@ -1303,11 +1298,7 @@ SwCompositor* SwCompositor::Create(
 
     void* pMemory = pDevice->VkInstance()->AllocMem(totalSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
-    if (pMemory == nullptr)
-    {
-        result = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-    else
+    if (pMemory != nullptr)
     {
         // Setup the image count array pointers for all devices
         Pal::IImage**     ppBltImages[MaxPalDevices];
@@ -1356,8 +1347,6 @@ SwCompositor* SwCompositor::Create(
             // Clean up and break if any error is encountered
             if (palResult != Pal::Result::Success)
             {
-                result = PalToVkError(palResult);
-
                 pObject->Destroy(pDevice, pAllocator);
                 pObject = nullptr;
 
@@ -1386,16 +1375,14 @@ SwCompositor* SwCompositor::Create(
         region.dstSubres.arraySlice = 0;
         region.dstSubres.mipLevel   = 0;
 
-        Pal::CmdBufferBuildInfo buildInfo = {};
+        Pal::CmdBufferBuildInfo buildInfo      = {};
+        Pal::GpuMemoryRef       gpuMemoryRef   = {};
+        Pal::GpuMemoryRefFlags  memoryRefFlags = static_cast<Pal::GpuMemoryRefFlags>(0);
 
-        for (uint32_t deviceIdx = 0; (deviceIdx < pDevice->NumPalDevices()) && (result == VK_SUCCESS); ++deviceIdx)
+        for (uint32_t deviceIdx = 0;
+             (deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
+             ++deviceIdx)
         {
-            // The presentation device image setup was performed above
-            if (deviceIdx == properties.presentationDeviceIdx)
-            {
-                continue;
-            }
-
             pPalDevice = pDevice->PalDevice(deviceIdx);
 
             cmdBufCreateInfo.pCmdAllocator = pDevice->GetSharedCmdAllocator(deviceIdx);
@@ -1405,54 +1392,65 @@ SwCompositor* SwCompositor::Create(
             // Create/open all of the peer images/memory together and generate the BLT commands on first use
             for (uint32_t i = 0; i < properties.imageCount; ++i)
             {
-                peerInfo.pOriginalImage = ppBltImages[properties.presentationDeviceIdx][i];
-
-                size_t assertPalImageSize;
-                size_t assertPalMemorySize;
-                pPalDevice->GetPeerImageSizes(peerInfo, &assertPalImageSize, &assertPalMemorySize, nullptr);
-                VK_ASSERT((assertPalImageSize == palPeerImageSize) && (assertPalMemorySize == assertPalMemorySize));
-
-                palResult = pPalDevice->OpenPeerImage(peerInfo,
-                    pPeerImageMemory,
-                    pPeerMemoryMemory,
-                    &ppBltImages[deviceIdx][i],
-                    &ppBltMemory[deviceIdx][i]);
-
-                pPeerImageMemory  = Util::VoidPtrInc(pPeerImageMemory, palPeerImageSize);
-                pPeerMemoryMemory = Util::VoidPtrInc(pPeerMemoryMemory, palPeerMemorySize);
-
-                if (palResult == Pal::Result::Success)
+                // The presentation device image setup was performed above
+                if (deviceIdx != properties.presentationDeviceIdx)
                 {
-                    palResult = pPalDevice->CreateCmdBuffer(
-                        cmdBufCreateInfo,
-                        pCmdBufferMemory,
-                        &ppBltCmdBuffers[deviceIdx][i]);
+                    peerInfo.pOriginalImage = ppBltImages[properties.presentationDeviceIdx][i];
 
-                    pCmdBufferMemory = Util::VoidPtrInc(pCmdBufferMemory, palCmdBufferSize);
+                    size_t assertPalImageSize;
+                    size_t assertPalMemorySize;
+                    pPalDevice->GetPeerImageSizes(peerInfo, &assertPalImageSize, &assertPalMemorySize, nullptr);
+                    VK_ASSERT((assertPalImageSize == palPeerImageSize) &&
+                              (assertPalMemorySize == assertPalMemorySize));
 
-                    // Generate the BLT to the appropriate peer destination image
+                    palResult = pPalDevice->OpenPeerImage(peerInfo,
+                        pPeerImageMemory,
+                        pPeerMemoryMemory,
+                        &ppBltImages[deviceIdx][i],
+                        &ppBltMemory[deviceIdx][i]);
+
+                    pPeerImageMemory  = Util::VoidPtrInc(pPeerImageMemory, palPeerImageSize);
+                    pPeerMemoryMemory = Util::VoidPtrInc(pPeerMemoryMemory, palPeerMemorySize);
+
                     if (palResult == Pal::Result::Success)
                     {
-                        ppBltCmdBuffers[deviceIdx][i]->Begin(buildInfo);
+                        palResult = pPalDevice->CreateCmdBuffer(
+                            cmdBufCreateInfo,
+                            pCmdBufferMemory,
+                            &ppBltCmdBuffers[deviceIdx][i]);
 
-                        ppBltCmdBuffers[deviceIdx][i]->CmdCopyImage(
-                            *Image::ObjectFromHandle(properties.images[i])->PalImage(deviceIdx),
-                            srcLayout,
-                            *ppBltImages[deviceIdx][i],
-                            dstLayout,
-                            1,
-                            &region,
-                            0);
+                        pCmdBufferMemory = Util::VoidPtrInc(pCmdBufferMemory, palCmdBufferSize);
 
-                        ppBltCmdBuffers[deviceIdx][i]->End();
+                        // Generate the BLT to the appropriate peer destination image
+                        if (palResult == Pal::Result::Success)
+                        {
+                            ppBltCmdBuffers[deviceIdx][i]->Begin(buildInfo);
+
+                            ppBltCmdBuffers[deviceIdx][i]->CmdCopyImage(
+                                *Image::ObjectFromHandle(properties.images[i])->PalImage(deviceIdx),
+                                srcLayout,
+                                *ppBltImages[deviceIdx][i],
+                                dstLayout,
+                                1,
+                                &region,
+                                0);
+
+                            ppBltCmdBuffers[deviceIdx][i]->End();
+                        }
                     }
+                }
+
+                // Add memory references to the presentable image memory
+                if (palResult == Pal::Result::Success)
+                {
+                    gpuMemoryRef.pGpuMemory = ppBltMemory[deviceIdx][i];
+
+                    palResult = pPalDevice->AddGpuMemoryReferences(1, &gpuMemoryRef, nullptr, memoryRefFlags);
                 }
 
                 // Clean up and break if any error is encountered
                 if (palResult != Pal::Result::Success)
                 {
-                    result = PalToVkError(palResult);
-
                     pObject->Destroy(pDevice, pAllocator);
                     pObject = nullptr;
 
@@ -1477,6 +1475,8 @@ void SwCompositor::Destroy(
         {
             if (m_ppBltMemory[deviceIdx][i] != nullptr)
             {
+                pDevice->PalDevice(deviceIdx)->RemoveGpuMemoryReferences(1, &m_ppBltMemory[deviceIdx][i], nullptr);
+
                 m_ppBltMemory[deviceIdx][i]->Destroy();
                 m_ppBltMemory[deviceIdx][i] = nullptr;
             }
@@ -1511,13 +1511,11 @@ Pal::IQueue* SwCompositor::DoSwCompositing(
 {
     Pal::IQueue* pPalQueue = pPresentQueue->PalQueue(deviceIdx);
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 441
     // SW compositing uses separate queues for present, so notify the original PAL queue first to prevent developer mode
     // tracking information and the overlay from being dropped.
     pPresentInfo->flags.notifyOnly = 1;
     pPalQueue->PresentSwapChain(*pPresentInfo);
     pPresentInfo->flags.notifyOnly = 0;
-#endif
 
     pPalQueue = pDevice->PerformSwCompositing(deviceIdx,
                                               m_presentationDeviceIdx,

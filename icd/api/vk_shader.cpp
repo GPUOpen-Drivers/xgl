@@ -107,6 +107,31 @@ Pal::ShaderHash ShaderModule::GetCodeHash(
 }
 
 // =====================================================================================================================
+// Gets shader data per compiler type.
+void* ShaderModule::GetShaderData(
+    PipelineCompilerType compilerType) const
+{
+    void* pShaderModule = nullptr;
+    if (compilerType == PipelineCompilerTypeLlpc)
+    {
+        pShaderModule = m_handle.pLlpcShaderModule;
+    }
+    return pShaderModule;
+}
+
+// =====================================================================================================================
+// Gets first valid shader data.
+void* ShaderModule::GetFirstValidShaderData() const
+{
+    if (m_handle.pLlpcShaderModule)
+    {
+        return m_handle.pLlpcShaderModule;
+    }
+
+    return nullptr;
+}
+
+// =====================================================================================================================
 ShaderModule::ShaderModule(
     size_t      codeSize,
     const void* pCode)
@@ -120,8 +145,7 @@ ShaderModule::ShaderModule(
     Util::MetroHash128::Hash(static_cast<const uint8_t*>(pCode), codeSize, codeHash.bytes);
 
     MetroHashTo128Bit(codeHash, &m_codeHash.lower, &m_codeHash.upper);
-    m_pLlpcShaderModule = nullptr;
-
+    memset(&m_handle, 0, sizeof(m_handle));
 }
 
 // =====================================================================================================================
@@ -162,8 +186,8 @@ VkResult ShaderModule::Init(const Device* pDevice)
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
     return pCompiler->BuildShaderModule(pDevice,
                                         m_codeSize,
-                                        m_pCode
-                                        , &m_pLlpcShaderModule
+                                        m_pCode,
+                                        &m_handle
                                         );
 }
 
@@ -174,7 +198,7 @@ VkResult ShaderModule::Destroy(
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
 
-    pCompiler->FreeShaderModule(m_pLlpcShaderModule);
+    pCompiler->FreeShaderModule(&m_handle);
 
     Util::Destructor(this);
 

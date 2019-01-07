@@ -290,6 +290,8 @@ private:
     void BuildTuningProfile();
     void BuildAppProfile();
 
+    void BuildAppProfileLlpc();
+
 #if ICD_RUNTIME_APP_PROFILE
     void BuildRuntimeProfile();
     void RuntimeProfileParseError();

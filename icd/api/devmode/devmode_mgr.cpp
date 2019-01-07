@@ -1983,6 +1983,7 @@ Pal::Result DevModeMgr::TimedSignalQueueSemaphore(
     uint32_t              deviceIdx,
     Queue*                pQueue,
     VkSemaphore           semaphore,
+    uint64_t              value,
     Pal::IQueueSemaphore* pQueueSemaphore)
 {
     Pal::IQueue* pPalQueue = pQueue->PalQueue(deviceIdx);
@@ -1995,14 +1996,21 @@ Pal::Result DevModeMgr::TimedSignalQueueSemaphore(
 
         timedSemaphoreInfo.semaphoreID = (uint64_t)semaphore;
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+        result = m_trace.pGpaSession->TimedSignalQueueSemaphore(pPalQueue, pQueueSemaphore, timedSemaphoreInfo, value);
+#else
         result = m_trace.pGpaSession->TimedSignalQueueSemaphore(pPalQueue, pQueueSemaphore, timedSemaphoreInfo);
-
+#endif
         VK_ASSERT(result == Pal::Result::Success);
     }
 
     if (result != Pal::Result::Success)
     {
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+        result = pPalQueue->SignalQueueSemaphore(pQueueSemaphore, value);
+#else
         result = pPalQueue->SignalQueueSemaphore(pQueueSemaphore);
+#endif
     }
 
     return result;
@@ -2013,6 +2021,7 @@ Pal::Result DevModeMgr::TimedWaitQueueSemaphore(
     uint32_t              deviceIdx,
     Queue*                pQueue,
     VkSemaphore           semaphore,
+    uint64_t              value,
     Pal::IQueueSemaphore* pQueueSemaphore)
 {
     Pal::IQueue* pPalQueue = pQueue->PalQueue(deviceIdx);
@@ -2024,15 +2033,21 @@ Pal::Result DevModeMgr::TimedWaitQueueSemaphore(
         GpuUtil::TimedQueueSemaphoreInfo timedSemaphoreInfo = {};
 
         timedSemaphoreInfo.semaphoreID = (uint64_t)semaphore;
-
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+        result = m_trace.pGpaSession->TimedWaitQueueSemaphore(pPalQueue, pQueueSemaphore, timedSemaphoreInfo, value);
+#else
         result = m_trace.pGpaSession->TimedWaitQueueSemaphore(pPalQueue, pQueueSemaphore, timedSemaphoreInfo);
-
+#endif
         VK_ASSERT(result == Pal::Result::Success);
     }
 
     if (result != Pal::Result::Success)
     {
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+        result = pPalQueue->WaitQueueSemaphore(pQueueSemaphore, value);
+#else
         result = pPalQueue->WaitQueueSemaphore(pQueueSemaphore);
+#endif
     }
 
     return result;

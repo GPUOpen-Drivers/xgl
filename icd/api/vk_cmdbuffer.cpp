@@ -2944,30 +2944,16 @@ void CmdBuffer::FlushBarriers(
     Pal::BarrierInfo*              pBarrier,
     Pal::BarrierTransition* const  pTransitions,
     const Image**                  pTransitionImages,
-    uint32_t                       mainTransitionCount,
-    uint32_t                       postTransitionStartIdx,
-    uint32_t                       postTransitionCount)
+    uint32_t                       mainTransitionCount)
 {
     pBarrier->transitionCount = mainTransitionCount;
     pBarrier->pTransitions    = pTransitions;
 
     PalCmdBarrier(pBarrier, pTransitions, pTransitionImages);
 
-    if (postTransitionCount > 0)
-    {
-        Pal::BarrierInfo postBarrier = {};
-
-        postBarrier.reason             = pBarrier->reason;
-        postBarrier.waitPoint          = pBarrier->waitPoint;
-        postBarrier.pipePointWaitCount = pBarrier->pipePointWaitCount;
-        postBarrier.pPipePoints        = pBarrier->pPipePoints;
-        postBarrier.transitionCount    = postTransitionCount;
-        postBarrier.pTransitions       = pTransitions + postTransitionStartIdx;
-
-        PalCmdBarrier(&postBarrier,
-                      pTransitions      + postTransitionStartIdx,
-                      pTransitionImages + postTransitionStartIdx);
-    }
+    // Remove any signaled events as we do not want to wait more than once.
+    pBarrier->gpuEventWaitCount = 0;
+    pBarrier->ppGpuEvents = nullptr;
 }
 
 // =====================================================================================================================
@@ -2993,10 +2979,8 @@ void CmdBuffer::ExecuteBarriers(
     constexpr uint32_t MaxTransitionCount = 512;
     constexpr uint32_t MaxLocationCount = 128;
 
-    Pal::BarrierTransition* pTransitions     = virtStackFrame.AllocArray<Pal::BarrierTransition>(MaxTransitionCount);
-    Pal::BarrierTransition* pPostTransitions = pTransitions + (MaxTransitionCount - 1);
-    Pal::BarrierTransition* pNextMain        = pTransitions;
-    Pal::BarrierTransition* pNextPost        = pPostTransitions;
+    Pal::BarrierTransition* pTransitions = virtStackFrame.AllocArray<Pal::BarrierTransition>(MaxTransitionCount);
+    Pal::BarrierTransition* pNextMain    = pTransitions;
 
     if (pTransitions == nullptr)
     {
@@ -3007,8 +2991,6 @@ void CmdBuffer::ExecuteBarriers(
 
     const Image** pTransitionImages = (m_pDevice->NumPalDevices() > 1) && (imageMemoryBarrierCount > 0) ?
         virtStackFrame.AllocArray<const Image*>(MaxTransitionCount) : nullptr;
-
-    uint32_t barrierOptions = m_pDevice->GetRuntimeSettings().resourceBarrierOptions;
 
     for (uint32_t i = 0; i < memBarrierCount; ++i)
     {
@@ -3026,7 +3008,8 @@ void CmdBuffer::ExecuteBarriers(
 
         if (MaxPalAspectsPerMask + mainTransitionCount > MaxTransitionCount)
         {
-            FlushBarriers(pBarrier, pTransitions, nullptr, mainTransitionCount, 0, 0);
+            FlushBarriers(pBarrier, pTransitions, nullptr, mainTransitionCount);
+
             pNextMain = pTransitions;
         }
     }
@@ -3050,7 +3033,8 @@ void CmdBuffer::ExecuteBarriers(
 
         if (MaxPalAspectsPerMask + mainTransitionCount > MaxTransitionCount)
         {
-            FlushBarriers(pBarrier, pTransitions, nullptr, mainTransitionCount, 0, 0);
+            FlushBarriers(pBarrier, pTransitions, nullptr, mainTransitionCount);
+
             pNextMain = pTransitions;
         }
     }
@@ -3063,11 +3047,6 @@ void CmdBuffer::ExecuteBarriers(
 
     for (uint32_t i = 0; i < imageMemoryBarrierCount; ++i)
     {
-        if (pImageMemoryBarriers[i].image == VK_NULL_HANDLE)
-        {
-            continue;
-        }
-
         const Image*           pImage                 = Image::ObjectFromHandle(pImageMemoryBarriers[i].image);
         VkFormat               format                 = pImage->GetFormat();
         Pal::BarrierTransition barrierTransition      = { 0 };
@@ -3188,35 +3167,23 @@ void CmdBuffer::ExecuteBarriers(
         }
 
         const uint32_t mainTransitionCount = static_cast<uint32_t>(pNextMain - pTransitions);
-        const uint32_t postTransitionCount = static_cast<uint32_t>(pPostTransitions - pNextPost);
 
         // Accounting for the maximum sub ranges, do we have enough space left for another image ?
-        const bool full = ((MaxPalAspectsPerMask + mainTransitionCount + postTransitionCount) > MaxTransitionCount) ||
+        const bool full = ((MaxPalAspectsPerMask + mainTransitionCount) > MaxTransitionCount) ||
                           (locationIndex == locationCount);
 
         if (full)
         {
-            const uint32_t postTransitionStartIdx = static_cast<uint32_t>(pNextPost - pTransitions);
-
-            FlushBarriers(pBarrier, pTransitions, pTransitionImages, mainTransitionCount,
-                                                                     postTransitionStartIdx, postTransitionCount);
-
-            // remove any signaled events as we do not want to wait more than once.
-            pBarrier->gpuEventWaitCount = 0;
-            pBarrier->ppGpuEvents = nullptr;
+            FlushBarriers(pBarrier, pTransitions, pTransitionImages, mainTransitionCount);
 
             pNextMain = pTransitions;
-            pNextPost = pPostTransitions;
             locationIndex = 0;
         }
     }
 
-    const uint32_t postTransitionStartIdx = static_cast<uint32_t>(pNextPost - pTransitions);
-    const uint32_t mainTransitionCount    = static_cast<uint32_t>(pNextMain - pTransitions);
-    const uint32_t postTransitionCount    = static_cast<uint32_t>(pPostTransitions - pNextPost);
+    const uint32_t mainTransitionCount = static_cast<uint32_t>(pNextMain - pTransitions);
 
-    FlushBarriers(pBarrier, pTransitions, pTransitionImages, mainTransitionCount,
-                                                             postTransitionStartIdx, postTransitionCount);
+    FlushBarriers(pBarrier, pTransitions, pTransitionImages, mainTransitionCount);
 
     virtStackFrame.FreeArray(pLocations);
 
@@ -4633,14 +4600,14 @@ void CmdBuffer::RPResolveAttachments(
         }
         else
         {
+            const uint32_t subpass = m_renderPassInstance.subpass;
             if (Formats::HasDepth(resolveFormat))
             {
                 resolveAspects[aspectRegionCount++] = Pal::ImageAspect::Depth;
 
                 // Must be specified because the source image was created with sampleLocsAlwaysKnown set
-                pSampleLocations = &m_renderPassInstance.pSamplePatterns[m_renderPassInstance.subpass].locations;
+                pSampleLocations = &m_renderPassInstance.pSamplePatterns[subpass].locations;
             }
-
             if (Formats::HasStencil(resolveFormat))
             {
                 resolveAspects[aspectRegionCount++] = Pal::ImageAspect::Stencil;

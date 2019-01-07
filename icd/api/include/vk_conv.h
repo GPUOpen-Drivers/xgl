@@ -1889,11 +1889,9 @@ VK_INLINE Pal::WsiPlatform VkToPalWsiPlatform(VkIcdWsiPlatform Platform)
     case VK_ICD_WSI_PLATFORM_MIR:
         palPlatform = Pal::WsiPlatform::Mir;
         break;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
     case VK_ICD_WSI_PLATFORM_DISPLAY:
         palPlatform = Pal::WsiPlatform::DirectDisplay;
         break;
-#endif
     case VK_ICD_WSI_PLATFORM_WIN32:
     default:
         palPlatform = Pal::WsiPlatform::Win32;
@@ -1919,7 +1917,6 @@ VK_INLINE Pal::SwapChainMode VkToPalSwapChainMode(VkPresentModeKHR presentMode)
     return convert::SwapChainMode(presentMode);
 }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 445
 namespace convert
 {
     VK_INLINE Pal::CompositeAlphaMode CompositeAlpha(VkCompositeAlphaFlagBitsKHR compositeAlpha)
@@ -1951,7 +1948,6 @@ VK_INLINE Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlag
 {
     return convert::CompositeAlpha(compositeAlpha);
 }
-#endif
 
 // =====================================================================================================================
 // Converts Vulkan image creation flags to PAL image creation flags (unfortunately, PAL doesn't define a dedicated type

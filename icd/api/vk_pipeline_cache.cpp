@@ -71,7 +71,7 @@ VkResult PipelineCache::Create(
     size_t                  shaderCacheSize  = 0;
     size_t                  pipelineCacheSize[MaxPalDevices];
 
-    PipelineCacheType       cacheType = pDevice->GetCompiler(DefaultDeviceIndex)->GetShaderCacheType();
+    PipelineCompilerType       cacheType = pDevice->GetCompiler(DefaultDeviceIndex)->GetShaderCacheType();
 
     for (uint32_t i = 0; i < numPalDevices; i++)
     {

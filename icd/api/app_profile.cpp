@@ -792,7 +792,7 @@ static bool QueryPalProfile(
 
 // =====================================================================================================================
 // Queries PAL for app profile settings
-bool ReloadAppProfileSettings(
+void ReloadAppProfileSettings(
     Instance*          pInstance,
     RuntimeSettings*   pRuntimeSettings,
     ChillSettings*     pChillSettings,
@@ -843,18 +843,16 @@ bool ReloadAppProfileSettings(
 
         if (foundProfile == false)
         {
-            foundProfile = QueryPalProfile(pInstance,
-                                           pRuntimeSettings,
-                                           pChillSettings,
-                                           pTurboSyncSettings,
-                                           Pal::ApplicationProfileClient::Chill, //CHILL area
-                                           pExeNameLower);
+            QueryPalProfile(pInstance,
+                            pRuntimeSettings,
+                            pChillSettings,
+                            pTurboSyncSettings,
+                            Pal::ApplicationProfileClient::Chill, //CHILL area
+                            pExeNameLower);
         }
 
         free(pExeNameLower);
     }
-
-    return true;
 }
 
 };

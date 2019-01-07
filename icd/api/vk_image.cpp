@@ -222,11 +222,15 @@ static VkResult ConvertImageCreateInfo(
     // regarding DCC.
     pPalCreateInfo->flags.perSubresInit = 1;
 
-    if (Formats::IsColorFormat(pCreateInfo->format) &&
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 459 || \
+    (PAL_CLIENT_INTERFACE_MAJOR_VERSION == 459 && PAL_CLIENT_INTERFACE_MINOR_VERSION == 0)
+    if ((settings.dccBitsPerPixelThreshold != UINT_MAX) &&
+        Formats::IsColorFormat(pCreateInfo->format) &&
         (Pal::Formats::BitsPerPixel(pPalCreateInfo->swizzledFormat.format) < settings.dccBitsPerPixelThreshold))
     {
         pPalCreateInfo->flags.noMetadata = 1;
     }
+#endif
 
     return result;
 }
@@ -791,7 +795,9 @@ VkResult Image::CreatePresentableImage(
         palMemOffset += palMemSize;
 
         // We assert that preferredHeap crossing device group shall be same, actually, shall be LocalInvisible.
-        VK_ASSERT(pPalMemory[deviceIdx]->Desc().preferredHeap == pPalMemory[DefaultDeviceIndex]->Desc().preferredHeap);
+        VK_ASSERT((pPalMemory[DefaultDeviceIndex] == nullptr) ||
+                  (pPalMemory[deviceIdx]->Desc().preferredHeap ==
+                   pPalMemory[DefaultDeviceIndex]->Desc().preferredHeap));
     }
 
     // from PAL, toomanyflippableAllocation is a warning, instead of a failure. the allocate should be success.

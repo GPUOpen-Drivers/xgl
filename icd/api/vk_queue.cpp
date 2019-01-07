@@ -295,6 +295,7 @@ VkResult Queue::Submit(
                 result = PalWaitSemaphores(
                     submitInfo.waitSemaphoreCount,
                     submitInfo.pWaitSemaphores,
+                    nullptr,
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->waitSemaphoreCount          : 0),
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pWaitSemaphoreDeviceIndices : nullptr));
             }
@@ -399,6 +400,7 @@ VkResult Queue::Submit(
                 result = PalSignalSemaphores(
                     submitInfo.signalSemaphoreCount,
                     submitInfo.pSignalSemaphores,
+                    nullptr,
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->signalSemaphoreCount          : 0),
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pSignalSemaphoreDeviceIndices : nullptr));
             }
@@ -430,6 +432,7 @@ VkResult Queue::WaitIdle(void)
 VkResult Queue::PalSignalSemaphores(
     uint32_t            semaphoreCount,
     const VkSemaphore*  pSemaphores,
+    const uint64_t*     pSemaphoreValues,
     const uint32_t      semaphoreDeviceIndicesCount,
     const uint32_t*     pSemaphoreDeviceIndices)
 {
@@ -459,6 +462,21 @@ VkResult Queue::PalSignalSemaphores(
 
         Semaphore* pVkSemaphore = Semaphore::ObjectFromHandle(pSemaphores[i]);
         Pal::IQueueSemaphore* pPalSemaphore = pVkSemaphore->PalSemaphore(deviceIdx);
+        uint64_t              pointValue    = 0;
+
+        if (pVkSemaphore->IsTimelineSemaphore())
+        {
+            if (pSemaphoreValues == nullptr)
+            {
+                palResult = Pal::Result::ErrorInvalidPointer;
+                break;
+            }
+            else
+            {
+                VK_ASSERT(pSemaphoreValues[i] != 0);
+                pointValue = pSemaphoreValues[i];
+            }
+        }
 
         if (timedQueueEvents == false)
         {
@@ -466,13 +484,17 @@ VkResult Queue::PalSignalSemaphores(
             {
                 pPalSemaphore = pVkSemaphore->PalTemporarySemaphore(deviceIdx);
             }
-
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+            palResult = PalQueue(deviceIdx)->SignalQueueSemaphore(pPalSemaphore, pointValue);
+#else
             palResult = PalQueue(deviceIdx)->SignalQueueSemaphore(pPalSemaphore);
+#endif
         }
         else
         {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-            palResult = pDevModeMgr->TimedSignalQueueSemaphore(deviceIdx, this, pSemaphores[i], pPalSemaphore);
+            palResult = pDevModeMgr->TimedSignalQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
+                                                               pPalSemaphore);
 #else
             VK_NEVER_CALLED();
 
@@ -491,6 +513,7 @@ VkResult Queue::PalSignalSemaphores(
 VkResult Queue::PalWaitSemaphores(
     uint32_t            semaphoreCount,
     const VkSemaphore*  pSemaphores,
+    const uint64_t*     pSemaphoreValues,
     const uint32_t      semaphoreDeviceIndicesCount,
     const uint32_t*     pSemaphoreDeviceIndices)
 {
@@ -512,6 +535,21 @@ VkResult Queue::PalWaitSemaphores(
     {
         Semaphore*  pSemaphore              = Semaphore::ObjectFromHandle(pSemaphores[i]);
         Pal::IQueueSemaphore* pPalSemaphore = nullptr;
+        uint64_t              pointValue    = 0;
+
+        if (pSemaphore->IsTimelineSemaphore())
+        {
+            if (pSemaphoreValues == nullptr)
+            {
+                palResult = Pal::Result::ErrorInvalidPointer;
+                break;
+            }
+            else
+            {
+                VK_ASSERT(pSemaphoreValues[i] != 0);
+                pointValue = pSemaphoreValues[i];
+            }
+        }
 
         if (i < semaphoreDeviceIndicesCount)
         {
@@ -536,12 +574,17 @@ VkResult Queue::PalWaitSemaphores(
         {
             if (timedQueueEvents == false)
             {
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+                palResult = PalQueue(deviceIdx)->WaitQueueSemaphore(pPalSemaphore, pointValue);
+#else
                 palResult = PalQueue(deviceIdx)->WaitQueueSemaphore(pPalSemaphore);
+#endif
             }
             else
             {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-                palResult = pDevModeMgr->TimedWaitQueueSemaphore(deviceIdx, this, pSemaphores[i], pPalSemaphore);
+                palResult = pDevModeMgr->TimedWaitQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
+                                                                 pPalSemaphore);
 #else
                 VK_NEVER_CALLED();
 
@@ -647,6 +690,7 @@ VkResult Queue::Present(
         result = PalWaitSemaphores(
             pPresentInfo->waitSemaphoreCount,
             pPresentInfo->pWaitSemaphores,
+            nullptr,
             0,
             nullptr);
     }
@@ -1005,10 +1049,11 @@ End:
 
 // =====================================================================================================================
 // Peek the resource and memory device indices from a chained VkDeviceGroupBindSparseInfo structure.
-static bool PeekDeviceGroupBindSparseDeviceIndices(
+static void PeekDeviceGroupBindSparseDeviceIndices(
     const VkBindSparseInfo& bindInfo,
     uint32_t*               pResourceDeviceIndex,
     uint32_t*               pMemoryDeviceIndex)
+
 {
     union
     {
@@ -1020,7 +1065,7 @@ static bool PeekDeviceGroupBindSparseDeviceIndices(
          pHeader != nullptr;
          pHeader  = pHeader->pNext)
     {
-        switch (pHeader->sType)
+        switch (static_cast<uint32_t>(pHeader->sType))
         {
             case VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO:
             {
@@ -1033,20 +1078,14 @@ static bool PeekDeviceGroupBindSparseDeviceIndices(
                     *pMemoryDeviceIndex = pDeviceGroupBindSparseInfo->memoryDeviceIndex;
                 }
 
-                // Ignore anything else that follows
-                return true;
+                break;
             }
-
             default:
                 // Skip any unknown extension structures
                 break;
         }
     }
-
-    // Indices not found
-    return false;
 }
-
 // =====================================================================================================================
 // Update sparse bindings.
 VkResult Queue::BindSparse(
@@ -1087,7 +1126,6 @@ VkResult Queue::BindSparse(
         uint32_t    resourceDeviceIndex     = DefaultDeviceIndex;
         uint32_t    memoryDeviceIndex       = DefaultDeviceIndex;
         uint32_t    nextResourceDeviceIndex = DefaultDeviceIndex;
-
         PeekDeviceGroupBindSparseDeviceIndices(bindInfo, &resourceDeviceIndex, &memoryDeviceIndex);
 
         if (!lastEntry)
@@ -1103,6 +1141,7 @@ VkResult Queue::BindSparse(
             result = PalWaitSemaphores(
                     bindInfo.waitSemaphoreCount,
                     bindInfo.pWaitSemaphores,
+                    nullptr,
                     1,  // number of device indices
                     &resourceDeviceIndex);
         }
@@ -1139,6 +1178,7 @@ VkResult Queue::BindSparse(
                 result = PalSignalSemaphores(
                     bindInfo.signalSemaphoreCount,
                     bindInfo.pSignalSemaphores,
+                    nullptr,
                     1,  // number of device indices
                     &resourceDeviceIndex);
             }

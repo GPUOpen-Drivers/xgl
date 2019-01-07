@@ -380,7 +380,11 @@ void UpdatePalSettings(
 {
     Pal::PalPublicSettings* pPalSettings = pPalDevice->GetPublicSettings();
 
-    pPalSettings->textureOptLevel = pSettings->vulkanTexFilterQuality;
+    pPalSettings->textureOptLevel          = pSettings->vulkanTexFilterQuality;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION > 459 || \
+    (PAL_CLIENT_INTERFACE_MAJOR_VERSION == 459 && PAL_CLIENT_INTERFACE_MINOR_VERSION >= 1)
+    pPalSettings->dccBitsPerPixelThreshold = pSettings->dccBitsPerPixelThreshold;
+#endif
 }
 
 };

@@ -94,7 +94,7 @@ struct TurboSyncSettings
 
 extern AppProfile ScanApplicationProfile(const VkInstanceCreateInfo& instanceInfo);
 
-bool ReloadAppProfileSettings(
+void ReloadAppProfileSettings(
     Instance*          pInstance,
     RuntimeSettings*   pRuntimeSettings,
     ChillSettings*     pChillSettings,

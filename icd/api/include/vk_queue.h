@@ -85,16 +85,17 @@ public:
         VkFence             fence);
 
     VkResult WaitIdle(void);
-
     VkResult PalSignalSemaphores(
         uint32_t            semaphoreCount,
         const VkSemaphore*  pSemaphores,
+        const uint64_t*     pSemaphoreValues,
         const uint32_t      semaphoreDeviceIndicesCount,    // May be 0 to use DefaultDeviceIndex
         const uint32_t*     pSemaphoreDeviceIndices);
 
     VkResult PalWaitSemaphores(
         uint32_t            semaphoreCount,
         const VkSemaphore*  pSemaphores,
+        const uint64_t*     pSemaphoreValues,
         const uint32_t      semaphoreDeviceIndicesCount,    // May be 0 to use DefaultDeviceIndex
         const uint32_t*     pSemaphoreDeviceIndices);
 

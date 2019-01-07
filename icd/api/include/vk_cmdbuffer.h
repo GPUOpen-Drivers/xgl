@@ -836,9 +836,7 @@ private:
         Pal::BarrierInfo*              pBarrier,
         Pal::BarrierTransition* const  pTransitions,
         const Image**                  pTransitionImages,
-        uint32_t                       mainTransitionCount,
-        uint32_t                       postTransitionStartIdx,
-        uint32_t                       postTransitionCount);
+        uint32_t                       mainTransitionCount);
 
     void ExecuteBarriers(
         VirtualStackFrame&           virtStackFrame,

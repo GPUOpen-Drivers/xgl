@@ -482,6 +482,20 @@ void SubpassDescription::Init(
 {
     viewMask = subpassDesc.viewMask;
 
+    union
+    {
+        const VkStructHeader*                             pHeader;
+    };
+
+    for (pHeader = static_cast<const VkStructHeader*>(subpassDesc.pNext); pHeader != nullptr; pHeader = pHeader->pNext)
+    {
+        switch (static_cast<uint32_t>(pHeader->sType))
+        {
+        default:
+            break;
+        }
+    }
+
     InitSubpassDescription<VkSubpassDescription2KHR>(
         subpassIndex,
         subpassDesc,

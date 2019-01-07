@@ -476,7 +476,6 @@ VkResult Device::Create(
 
             break;
         }
-
         case VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD:
         {
             const VkDeviceMemoryOverallocationCreateInfoAMD* pMemoryOverallocationCreateInfo =
@@ -1286,7 +1285,7 @@ VkResult Device::CreateInternalComputePipeline(
 
     VkResult             result              = VK_SUCCESS;
     PipelineCompiler*    pCompiler           = GetCompiler(DefaultDeviceIndex);
-    void*                pLlpcShaderModule   = nullptr;
+    ShaderModuleHandle   shaderModule        = {};
     const void*          pPipelineBinary     = nullptr;
     size_t               pipelineBinarySize  = 0;
 
@@ -1299,19 +1298,20 @@ VkResult Device::CreateInternalComputePipeline(
     result = pCompiler->BuildShaderModule(
         this,
         codeByteSize,
-        pCode
-        , &pLlpcShaderModule
-    );
+        pCode,
+        &shaderModule);
 
     if (result == VK_SUCCESS)
     {
         // Build pipeline binary
         auto pShaderInfo = &pipelineBuildInfo.pipelineInfo.cs;
-        pShaderInfo->pModuleData         = pLlpcShaderModule;
+        pipelineBuildInfo.compilerType = PipelineCompilerTypeLlpc;
+        pShaderInfo->pModuleData         = shaderModule.pLlpcShaderModule;
         pShaderInfo->pSpecializationInfo = nullptr;
         pShaderInfo->pEntryTarget        = "main";
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
+
         pCompiler->ApplyDefaultShaderOptions(&pShaderInfo->options
                                              );
 
@@ -1352,7 +1352,7 @@ VkResult Device::CreateInternalComputePipeline(
     }
 
     // Cleanup
-    pCompiler->FreeShaderModule(pLlpcShaderModule);
+    pCompiler->FreeShaderModule(&shaderModule);
 
     if ((pPipelineBinary) || (result != VK_SUCCESS))
     {

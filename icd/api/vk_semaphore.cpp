@@ -141,7 +141,7 @@ VkResult Semaphore::Create(
     };
     for (pInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
-        switch (pHeader->sType)
+        switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO:
             {
@@ -243,9 +243,7 @@ VkResult Semaphore::ImportSemaphore(
     palOpenInfo.flags.crossProcess = true;
     PAL_ASSERT((handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
                (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT));
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 398
     palOpenInfo.flags.isReference  = (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
-#endif
 
     //Todo: Check whether pDevice is the same as the one created the semaphore.
 
@@ -358,6 +356,69 @@ VkResult Semaphore::Destroy(
     pAllocator->pfnFree(pAllocator->pUserData, this);
 
     return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+VkResult Semaphore::GetSemaphoreState(
+    Device*                         pDevice,
+    Semaphore*                      pSemaphore,
+    uint64_t*                       pValue)
+{
+    Pal::Result palResult = Pal::Result::Success;
+    Pal::IQueueSemaphore* pPalSemaphore = nullptr;
+
+    if (pSemaphore != nullptr)
+    {
+        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+        palResult = pPalSemaphore->QuerySemaphoreValue(pValue);
+#endif
+    }
+
+    return PalToVkResult(palResult);
+}
+
+// =====================================================================================================================
+VkResult Semaphore::WaitSemaphoreValue(
+    Device*                         pDevice,
+    Semaphore*                      pSemaphore,
+    uint64_t                        value,
+    uint64_t                        timeout)
+{
+    Pal::Result palResult = Pal::Result::Success;
+
+    Pal::IQueueSemaphore* pPalSemaphore = nullptr;
+
+    if (pSemaphore != nullptr)
+    {
+        VK_ASSERT(pSemaphore->IsTimelineSemaphore());
+        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+        palResult = pPalSemaphore->WaitSemaphoreValue(value, timeout);
+#endif
+    }
+
+    return PalToVkResult(palResult);
+}
+
+// =====================================================================================================================
+VkResult Semaphore::SignalSemaphoreValue(
+    Device*                         pDevice,
+    Semaphore*                      pSemaphore,
+    uint64_t                        value)
+{
+    Pal::Result palResult = Pal::Result::Success;
+    Pal::IQueueSemaphore* pPalSemaphore = nullptr;
+
+    if (pSemaphore != nullptr)
+    {
+        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+        palResult = pPalSemaphore->SignalSemaphoreValue(value);
+#endif
+    }
+
+    return PalToVkResult(palResult);
 }
 
 namespace entry

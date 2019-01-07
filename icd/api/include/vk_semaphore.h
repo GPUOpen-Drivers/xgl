@@ -64,6 +64,22 @@ public:
         Device*                    pDevice,
         const ImportSemaphoreInfo& importInfo);
 
+    VkResult GetSemaphoreState(
+        Device*                   pDevice,
+        Semaphore*                pSemaphore,
+        uint64_t*                 pValue);
+
+    VkResult WaitSemaphoreValue(
+        Device*                 pDevice,
+        Semaphore*              pSemaphore,
+        uint64_t                value,
+        uint64_t                timeout);
+
+    VkResult SignalSemaphoreValue(
+        Device*                 pDevice,
+        Semaphore*              pSemaphore,
+        uint64_t                value);
+
     VK_FORCEINLINE Pal::IQueueSemaphore* PalSemaphore(uint32_t deviceIdx) const
     {
         return m_pPalSemaphores[deviceIdx];
@@ -109,6 +125,15 @@ public:
         Device*                                     device,
         VkExternalSemaphoreHandleTypeFlagBits       handleType,
         Pal::OsExternalHandle*                      pHandle);
+
+    VK_FORCEINLINE bool IsTimelineSemaphore() const
+    {
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
+        return m_palCreateInfo.flags.timeline;
+#else
+        return false;
+#endif
+    }
 
 private:
     Semaphore(

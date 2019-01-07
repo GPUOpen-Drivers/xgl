@@ -426,9 +426,7 @@ Pal::Result RenderPassBuilder::BuildLoadOps(
 
     VK_ASSERT(refMask != 0);
 
-    // Load-op clear only if requested and the first reference isn't a resolve attachment (which will overwrite
-    // the results of the clear and make it redundant).
-    if ((refMask != AttachRefResolveDst) && (clearAspect != 0))
+    if (clearAspect != 0)
     {
         RPLoadOpClearInfo clearInfo = {};
 
@@ -436,13 +434,18 @@ Pal::Result RenderPassBuilder::BuildLoadOps(
         clearInfo.layout     = pAttachment->prevReferenceLayout;
         clearInfo.aspect     = clearAspect;
 
-        if (Formats::IsColorFormat(pAttachment->pDesc->format))
+        // Load-op clear only if requested and the first reference isn't a resolve attachment (which will overwrite
+        // the results of the clear and make it redundant).
+        if (refMask != AttachRefResolveDst)
         {
-            result = pSubpass->colorClears.PushBack(clearInfo);
-        }
-        else
-        {
-            result = pSubpass->dsClears.PushBack(clearInfo);
+            if (Formats::IsColorFormat(pAttachment->pDesc->format))
+            {
+                result = pSubpass->colorClears.PushBack(clearInfo);
+            }
+            else
+            {
+                result = pSubpass->dsClears.PushBack(clearInfo);
+            }
         }
     }
 

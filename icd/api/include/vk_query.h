@@ -67,6 +67,7 @@ public:
         const VkAllocationCallbacks*    pAllocator) = 0;
 
     virtual VkResult GetResults(
+        Device*             pDevice,
         uint32_t            startQuery,
         uint32_t            queryCount,
         size_t              dataSize,
@@ -125,6 +126,7 @@ public:
         const VkAllocationCallbacks*    pAllocator) override;
 
     virtual VkResult GetResults(
+        Device*             pDevice,
         uint32_t            startQuery,
         uint32_t            queryCount,
         size_t              dataSize,
@@ -178,6 +180,7 @@ public:
         const VkAllocationCallbacks*    pAllocator) override;
 
     virtual VkResult GetResults(
+        Device*             pDevice,
         uint32_t            startQuery,
         uint32_t            queryCount,
         size_t              dataSize,

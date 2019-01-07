@@ -392,11 +392,7 @@ VkResult PhysicalDevice::Initialize()
                 // We do not currently create a high priority universal queue, so we don't need that engine.
                 // In order to support global priority, we still need exclusive compute engine to be initialized
                 // but this engine can only be selected according to the global priority set by application
-                if (idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityUniversal)
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
-                    && idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityGraphics)
-#endif
-                   )
+                if (idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityUniversal))
                 {
                     const auto& engineProps = m_properties.engineProperties[idx];
                     finalizeInfo.requestedEngineCounts[idx].engines = ((1 << engineProps.engineCount) - 1);
@@ -418,9 +414,6 @@ VkResult PhysicalDevice::Initialize()
 
         finalizeInfo.indirectUserDataTable[tableId].offsetInDwords = vertBufTableCeRamOffset;
         finalizeInfo.indirectUserDataTable[tableId].sizeInDwords   = vertBufTableCeRamSize;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 403
-        finalizeInfo.indirectUserDataTable[tableId].ringSize       = m_settings.vbTableInstanceRingSize;
-#endif
 
         if (m_settings.fullScreenFrameMetadataSupport)
         {
@@ -1546,20 +1539,12 @@ bool PhysicalDevice::QueueSupportsPresents(
     const Pal::EngineType palEngineType = m_queueFamilies[queueFamilyIndex].palEngineType;
     const auto& engineProps             = m_properties.engineProperties[palEngineType];
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
     Pal::PresentMode presentMode =
         (platform == VK_ICD_WSI_PLATFORM_DISPLAY)? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
 
-    bool supported = (engineProps.engineCount > 0) &&
-                     (m_pPalDevice->GetSupportedSwapChainModes(VkToPalWsiPlatform(platform), presentMode) != 0);
-#else
-    const uint32_t presentMode = static_cast<uint32_t>(Pal::PresentMode::Windowed);
+    return (engineProps.engineCount > 0) &&
+           (m_pPalDevice->GetSupportedSwapChainModes(VkToPalWsiPlatform(platform), presentMode) != 0);
 
-    bool supported = (engineProps.engineCount > 0) &&
-                     (m_properties.swapChainProperties.supportedSwapChainModes[presentMode]);
-#endif
-
-    return supported;
 }
 
 // =====================================================================================================================
@@ -2084,9 +2069,7 @@ void PhysicalDevice::PopulateLimits()
 
     m_sampleLocationSampleCounts = m_limits.framebufferColorSampleCounts;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 417
     if (m_properties.gfxipProperties.flags.support1xMsaaSampleLocations == false)
-#endif
     {
         m_sampleLocationSampleCounts &= ~VK_SAMPLE_COUNT_1_BIT;
     }
@@ -2732,14 +2715,12 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VARIABLE_POINTERS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_VERTEX_ATTRIBUTE_DIVISOR));
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
     if ((pPhysicalDevice == nullptr) ||
         (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportConservativeRasterization &&
         pInstance->IsExtensionSupported(InstanceExtensions::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2)))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONSERVATIVE_RASTERIZATION));
     }
-#endif
 
 #if VKI_SHADER_COMPILER_CONTROL
 #endif
@@ -2782,10 +2763,6 @@ void PhysicalDevice::PopulateQueueFamilies()
         0,
         // Pal::EngineTypeHighPriorityUniversal
         0,
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
-        // Pal::EngineTypeHighPriorityGraphics
-        0,
-#endif
     };
 
     // While it's possible for an engineType to support multiple queueTypes,
@@ -2798,9 +2775,6 @@ void PhysicalDevice::PopulateQueueFamilies()
         Pal::QueueTypeDma,
         Pal::QueueTypeTimer,
         Pal::QueueTypeUniversal,
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
-        Pal::QueueTypeUniversal,
-#endif
     };
 
     static_assert((VK_ARRAY_SIZE(vkQueueFlags) == Pal::EngineTypeCount) &&
@@ -2810,12 +2784,7 @@ void PhysicalDevice::PopulateQueueFamilies()
                   (Pal::EngineTypeExclusiveCompute == 2) &&
                   (Pal::EngineTypeDma              == 3) &&
                   (Pal::EngineTypeTimer            == 4) &&
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 431
-                  (Pal::EngineTypeHighPriorityUniversal == 0x5) &&
-                  (Pal::EngineTypeHighPriorityGraphics  == 0x6),
-#else
                   (Pal::EngineTypeHighPriorityUniversal == 0x5),
-#endif
         "PAL engine types have changed, need to update the tables above");
 
     // Always enable core queue flags.  Final determination of support will be done on a per-engine basis.
@@ -2963,14 +2932,9 @@ VkResult PhysicalDevice::AcquireXlibDisplay(
 {
     Pal::OsDisplayHandle hDisplay = dpy;
     Pal::IScreen* pScreens        = reinterpret_cast<Pal::IScreen*>(display);
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
-    VkResult result = PalToVkResult(pScreens->AcquireScreenAccess(hDisplay,
-                                                                  VkToPalWsiPlatform(VK_ICD_WSI_PLATFORM_XLIB)));
-#else
-    VkResult result = VK_INCOMPLETE;
-#endif
 
-    return result;
+    return PalToVkResult(pScreens->AcquireScreenAccess(hDisplay,
+                                                       VkToPalWsiPlatform(VK_ICD_WSI_PLATFORM_XLIB)));
 }
 
 // =====================================================================================================================
@@ -2999,13 +2963,9 @@ VkResult PhysicalDevice::GetRandROutputDisplay(
 VkResult PhysicalDevice::ReleaseDisplay(
     VkDisplayKHR display)
 {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 415
     Pal::IScreen* pScreen = reinterpret_cast<Pal::IScreen*>(display);
-    VkResult result = PalToVkResult(pScreen->ReleaseScreenAccess());
-#else
-    VkResult result = VK_INCOMPLETE;
-#endif
-    return result;
+
+    return PalToVkResult(pScreen->ReleaseScreenAccess());
 }
 
 // =====================================================================================================================
@@ -3198,7 +3158,6 @@ void PhysicalDevice::GetFeatures2(
 
                 break;
             }
-
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_YCBCR_CONVERSION_FEATURES:
             {
                 VkPhysicalDeviceSamplerYcbcrConversionFeatures* pSamplerYcbcrConversionFeatures =
@@ -3413,9 +3372,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*        pMinMaxProperties;
         VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
         VkPhysicalDeviceDescriptorIndexingPropertiesEXT*         pDescriptorIndexingProperties;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
         VkPhysicalDeviceConservativeRasterizationPropertiesEXT*  pConservativeRasterizationProperties;
-#endif
 
         VkPhysicalDeviceDriverPropertiesKHR*                     pDriverProperties;
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
@@ -3575,7 +3532,6 @@ void PhysicalDevice::GetDeviceProperties2(
 
             break;
         }
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 425
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT:
         {
             pConservativeRasterizationProperties->primitiveOverestimationSize                   = 0;
@@ -3590,7 +3546,6 @@ void PhysicalDevice::GetDeviceProperties2(
 
             break;
         }
-#endif
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR:
         {
@@ -3734,7 +3689,6 @@ void PhysicalDevice::GetExternalFenceProperties(
 
     if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_FENCE_FD))
     {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 398
         if ((pExternalFenceInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
             (pExternalFenceInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT))
         {
@@ -3744,7 +3698,6 @@ void PhysicalDevice::GetExternalFenceProperties(
                                                                   VK_EXTERNAL_FENCE_FEATURE_IMPORTABLE_BIT;
             }
         }
-#endif
     }
 
     if (pExternalFenceProperties->externalFenceFeatures == 0)

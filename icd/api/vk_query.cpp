@@ -36,6 +36,7 @@
 #include "include/vk_object.h"
 #include "include/vk_query.h"
 
+#include "palAutoBuffer.h"
 #include "palQueryPool.h"
 
 namespace vk
@@ -237,6 +238,7 @@ VkResult PalQueryPool::Destroy(
 // =====================================================================================================================
 // Get the results of a range of query slots (PAL query pools)
 VkResult PalQueryPool::GetResults(
+    Device*             pDevice,
     uint32_t            startQuery,
     uint32_t            queryCount,
     size_t              dataSize,
@@ -244,21 +246,62 @@ VkResult PalQueryPool::GetResults(
     VkDeviceSize        stride,
     VkQueryResultFlags  flags)
 {
-    VkResult result = VK_SUCCESS;
+    VK_ASSERT(queryCount * stride <= dataSize);
+
+    VkResult           result               = VK_SUCCESS;
+    void*              pQueryData           = pData;
+    VkQueryResultFlags queryFlags           = flags;
+    size_t             queryDataSize        = dataSize;
+    VkDeviceSize       queryDataStride      = stride;
+    const uint32_t     numXfbQueryDataElems = 2;
+    // Vulkan supports 32-bit unsigned integer values data of transform feedback query, but Pal supports 64-bit only.
+    // So the query data is stored into xfbQueryData first.
+    Util::AutoBuffer<uint64_t, 4, PalAllocator> xfbQueryData(queryCount * numXfbQueryDataElems,
+                                                             pDevice->VkInstance()->Allocator());
+
+    if (m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
+    {
+        pQueryData      = &xfbQueryData[0];
+        queryDataStride = sizeof(uint64_t) * numXfbQueryDataElems;
+        queryDataSize   = sizeof(uint64_t) * numXfbQueryDataElems * queryCount;
+        queryFlags      |= VK_QUERY_RESULT_64_BIT;
+    }
 
     if (queryCount > 0)
     {
         Pal::Result palResult = m_pPalQueryPool[DefaultDeviceIndex]->GetResults(
-            VkToPalQueryResultFlags(flags),
+            VkToPalQueryResultFlags(queryFlags),
             m_palQueryType,
             startQuery,
             queryCount,
             m_internalMem.CpuAddr(DefaultDeviceIndex),
-            &dataSize,
-            pData,
-            static_cast<size_t>(stride));
+            &queryDataSize,
+            pQueryData,
+            static_cast<size_t>(queryDataStride));
 
         result = PalToVkResult(palResult);
+    }
+
+    if ((result == VK_SUCCESS) && (m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT))
+    {
+        for (size_t i = 0; i < queryCount; i++)
+        {
+            // The number of written primitives and the number of needed primitives are in reverse order in Pal.
+            const size_t firstElement  = i * 2 + 0;
+            const size_t secondElement = i * 2 + 1;
+            if ((flags & VK_QUERY_RESULT_64_BIT) == 0)
+            {
+                uint32_t* pPrimitivesCount      = static_cast<uint32_t*>(pData);
+                pPrimitivesCount[firstElement]  = static_cast<uint32_t>(xfbQueryData[secondElement]);
+                pPrimitivesCount[secondElement] = static_cast<uint32_t>(xfbQueryData[firstElement]);
+            }
+            else
+            {
+                uint64_t* pPrimitivesCount      = static_cast<uint64_t*>(pData);
+                pPrimitivesCount[firstElement]  = xfbQueryData[secondElement];
+                pPrimitivesCount[secondElement] = xfbQueryData[firstElement];
+            }
+        }
     }
 
     return result;
@@ -420,6 +463,7 @@ VkResult TimestampQueryPool::Destroy(
 // =====================================================================================================================
 // Get the results of a range of query slots (Timestamp query pools)
 VkResult TimestampQueryPool::GetResults(
+    Device*             pDevice,
     uint32_t            startQuery,
     uint32_t            queryCount,
     size_t              dataSize,
@@ -537,7 +581,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetQueryPoolResults(
     VkDeviceSize                                stride,
     VkQueryResultFlags                          flags)
 {
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
     return QueryPool::ObjectFromHandle(queryPool)->GetResults(
+        pDevice,
         firstQuery,
         queryCount,
         dataSize,

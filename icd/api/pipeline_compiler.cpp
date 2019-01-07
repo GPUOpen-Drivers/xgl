@@ -38,6 +38,9 @@
 #include "include/vk_render_pass.h"
 #include "include/vk_graphics_pipeline.h"
 
+#include "palFile.h"
+#include "palHashSetImpl.h"
+
 #include "palPipelineAbiProcessorImpl.h"
 
 #include <inttypes.h>
@@ -59,8 +62,8 @@ ShaderCache::ShaderCache()
 // =====================================================================================================================
 // Initializes shader cache object.
 void ShaderCache::Init(
-    PipelineCacheType  cacheType,  // Shader cache type
-    ShaderCachePtr     cachePtr)   // Pointer of the shader cache implementation
+    PipelineCompilerType  cacheType,  // Shader cache type
+    ShaderCachePtr        cachePtr)   // Pointer of the shader cache implementation
 {
     m_cacheType = cacheType;
     m_cache = cachePtr;
@@ -120,6 +123,9 @@ PipelineCompiler::PipelineCompiler(
     :
     m_pPhysicalDevice(pPhysicalDevice)
     , m_pLlpc(nullptr)
+#if ICD_BUILD_MULIT_COMPILER
+    , m_llpcModeMixHashList(32, pPhysicalDevice->Manager()->VkInstance()->Allocator())
+#endif
 {
 
 }
@@ -174,6 +180,29 @@ VkResult PipelineCompiler::Initialize()
     // Create compiler objects
     VkResult result = VK_SUCCESS;
     result = CreateLlpcCompiler();
+
+#if ICD_BUILD_MULIT_COMPILER
+    // Each line of the file is a hex string which start with "0x", e.g. 0xFFFFAAAABBBBCCCC
+    if ((settings.enableLlpc == LlpcModeMixScpcHashList) ||
+        (settings.enableLlpc == LlpcModeMixLlpcHashList) ||
+        (settings.enableLlpc == LlpcModeMixRcpcHashList))
+    {
+        Util::File hashListFile;
+        if (hashListFile.Open(settings.llpcMixModeHashListFileName, Util::FileAccessRead) == Util::Result::Success)
+        {
+            m_llpcModeMixHashList.Init();
+            char hash[256];
+            while ((hashListFile.ReadLine(hash, sizeof(char) * 256, nullptr) == Util::Result::Success))
+            {
+                // Only read hex string
+                if((hash[0] == '0') && (hash[1] == 'x'))
+                {
+                    m_llpcModeMixHashList.Insert(strtoull(hash, nullptr, 16));
+                }
+            }
+        }
+    }
+#endif
 
     return result;
 }
@@ -453,7 +482,7 @@ VkResult PipelineCompiler::CreateShaderCache(
 {
     VkResult                     result         = VK_SUCCESS;
     const RuntimeSettings&       settings       = m_pPhysicalDevice->GetRuntimeSettings();
-    PipelineCacheType            cacheType      = GetShaderCacheType();
+    PipelineCompilerType         cacheType      = GetShaderCacheType();
     ShaderCache::ShaderCachePtr  shaderCachePtr = {};
 
     {
@@ -469,7 +498,7 @@ VkResult PipelineCompiler::CreateShaderCache(
 
         if (llpcResult == Llpc::Result::Success)
         {
-            pShaderCache->Init(PipelineCacheTypeLlpc, shaderCachePtr);
+            pShaderCache->Init(PipelineCompilerTypeLlpc, shaderCachePtr);
         }
         else
         {
@@ -483,7 +512,7 @@ VkResult PipelineCompiler::CreateShaderCache(
 // =====================================================================================================================
 // Gets the size of shader cache object.
 size_t PipelineCompiler::GetShaderCacheSize(
-    PipelineCacheType cacheType)
+    PipelineCompilerType cacheType)
 {
     size_t shaderCacheSize = 0;
     return shaderCacheSize;
@@ -491,53 +520,50 @@ size_t PipelineCompiler::GetShaderCacheSize(
 
 // =====================================================================================================================
 // Gets shader cache type.
-PipelineCacheType PipelineCompiler::GetShaderCacheType()
+PipelineCompilerType PipelineCompiler::GetShaderCacheType()
 {
-    PipelineCacheType cacheType;
-    cacheType = PipelineCacheTypeLlpc;
+    PipelineCompilerType cacheType;
+    cacheType = PipelineCompilerTypeLlpc;
     return cacheType;
 }
 
 // =====================================================================================================================
 // Builds shader module from SPIR-V binary code.
 VkResult PipelineCompiler::BuildShaderModule(
-    const Device*   pDevice,
-    size_t          codeSize,
-    const void*     pCode
-    , void**          ppLlpcShaderModule
-    )
+    const Device*       pDevice,
+    size_t              codeSize,
+    const void*         pCode,
+    ShaderModuleHandle* pShaderModule)
 {
     const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-
     VkResult result = VK_SUCCESS;
+    uint32_t compilerMask = GetCompilerCollectionMask();
+    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
     {
-        if (ppLlpcShaderModule != nullptr)
+        // Build LLPC shader module
+        Llpc::ShaderModuleBuildInfo  moduleInfo = {};
+        Llpc::ShaderModuleBuildOut   buildOut = {};
+        void* pShaderMemory = nullptr;
+
+        moduleInfo.pInstance      = pInstance;
+        moduleInfo.pfnOutputAlloc = AllocateShaderOutput;
+        moduleInfo.pUserData      = &pShaderMemory;
+        moduleInfo.shaderBin.pCode    = pCode;
+        moduleInfo.shaderBin.codeSize = codeSize;
+
+        Llpc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
+
+        if ((llpcResult == Llpc::Result::Success) || (llpcResult == Llpc::Result::Delayed))
         {
-            // Build LLPC shader module
-            Llpc::ShaderModuleBuildInfo  moduleInfo = {};
-            Llpc::ShaderModuleBuildOut   buildOut = {};
-            void* pShaderMemory = nullptr;
-
-            moduleInfo.pInstance      = pInstance;
-            moduleInfo.pfnOutputAlloc = AllocateShaderOutput;
-            moduleInfo.pUserData      = &pShaderMemory;
-            moduleInfo.shaderBin.pCode    = pCode;
-            moduleInfo.shaderBin.codeSize = codeSize;
-
-            Llpc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
-
-            if ((llpcResult == Llpc::Result::Success) || (llpcResult == Llpc::Result::Delayed))
-            {
-                *ppLlpcShaderModule = buildOut.pModuleData;
-                VK_ASSERT(pShaderMemory == *ppLlpcShaderModule);
-            }
-            else
-            {
-                // Clean up if fail
-                pInstance->FreeMem(pShaderMemory);
-                result = VK_ERROR_INITIALIZATION_FAILED;
-            }
+            pShaderModule->pLlpcShaderModule = buildOut.pModuleData;
+            VK_ASSERT(pShaderMemory == pShaderModule->pLlpcShaderModule);
+        }
+        else
+        {
+            // Clean up if fail
+            pInstance->FreeMem(pShaderMemory);
+            result = VK_ERROR_INITIALIZATION_FAILED;
         }
     }
 
@@ -547,10 +573,10 @@ VkResult PipelineCompiler::BuildShaderModule(
 // =====================================================================================================================
 // Frees shader module memory
 void PipelineCompiler::FreeShaderModule(
-    void* pShaderModule)
+    ShaderModuleHandle* pShaderModule)
 {
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-    pInstance->FreeMem(pShaderModule);
+    pInstance->FreeMem(pShaderModule->pLlpcShaderModule);
 }
 
 // =====================================================================================================================
@@ -653,6 +679,30 @@ void PipelineCompiler::DropPipelineBinaryInst(
 }
 
 // =====================================================================================================================
+// Gets the name string of shader stage.
+const char* PipelineCompiler::GetShaderStageName(
+    ShaderStage shaderStage)
+{
+    const char* pName = nullptr;
+
+    VK_ASSERT(shaderStage < ShaderStageCount);
+
+    static const char* ShaderStageNames[] =
+    {
+        "Vertex  ",
+        "Tessellation control",
+        "Tessellation evaluation",
+        "Geometry",
+        "Fragment",
+        "Compute ",
+    };
+
+    pName = ShaderStageNames[static_cast<uint32_t>(shaderStage)];
+
+    return pName;
+}
+
+// =====================================================================================================================
 // Creates graphics pipeline binary.
 VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     Device*                             pDevice,
@@ -668,22 +718,23 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     const RuntimeSettings& settings      = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance     = m_pPhysicalDevice->Manager()->VkInstance();
 
-    // Build the LLPC pipeline
-    Llpc::GraphicsPipelineBuildOut  pipelineOut         = {};
-    void*                           pLlpcPipelineBuffer = nullptr;
-
     int64_t compileTime = 0;
+    uint64_t pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
 
     if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
     {
         if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
         {
             shouldCompile = false;
-
         }
     }
 
+    if ((pCreateInfo->compilerType == PipelineCompilerTypeLlpc) && shouldCompile)
     {
+        // Build the LLPC pipeline
+        Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
+        void* pLlpcPipelineBuffer = nullptr;
+
         int64_t startTime = Util::GetPerfCpuTime();
         // Fill pipeline create info for LLPC
         auto pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
@@ -695,7 +746,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         if ((pPipelineCache != nullptr) &&
             (settings.shaderCacheMode != ShaderCacheDisable))
         {
-            if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCacheTypeLlpc)
+            if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCompilerTypeLlpc)
             {
                 pPipelineBuildInfo->pShaderCache =
                     pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
@@ -707,10 +758,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         {
             // There shouldn't be anything to free for the failure case
             VK_ASSERT(pLlpcPipelineBuffer == nullptr);
-
-            {
-                result = VK_ERROR_INITIALIZATION_FAILED;
-            }
+            result = VK_ERROR_INITIALIZATION_FAILED;
         }
         else
         {
@@ -744,16 +792,17 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     pPipelineBuildInfo->deviceIndex                    = deviceIdx;
 
     int64_t compileTime = 0;
+    uint64_t pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
 
     if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
     {
         if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
         {
             shouldCompile = false;
-
         }
     }
 
+    if ((pCreateInfo->compilerType == PipelineCompilerTypeLlpc) && shouldCompile)
     {
         int64_t startTime = Util::GetPerfCpuTime();
 
@@ -769,7 +818,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         if ((pPipelineCache != nullptr) &&
             (settings.shaderCacheMode != ShaderCacheDisable))
         {
-            if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCacheTypeLlpc)
+            if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCompilerTypeLlpc)
             {
                 pPipelineBuildInfo->pShaderCache =
                     pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
@@ -782,10 +831,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         {
             // There shouldn't be anything to free for the failure case
             VK_ASSERT(pLlpcPipelineBuffer == nullptr);
-
-            {
-                result = VK_ERROR_INITIALIZATION_FAILED;
-            }
+            result = VK_ERROR_INITIALIZATION_FAILED;
         }
         else
         {
@@ -1047,8 +1093,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             continue;
 
         auto pShaderModule = ShaderModule::ObjectFromHandle(pStage->module);
-        pCreateInfo->pShaderModules[stage] = pShaderModule;
-        pShaderInfo->pModuleData           = pShaderModule->GetShaderData(true);
+        pShaderInfo->pModuleData           = pShaderModule->GetFirstValidShaderData();
         pShaderInfo->pSpecializationInfo   = pStage->pSpecializationInfo;
         pShaderInfo->pEntryTarget          = pStage->pName;
 
@@ -1078,7 +1123,129 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                             );
     }
 
+    pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
+    for (uint32_t stage = 0; stage < ShaderGfxStageCount; ++stage)
+    {
+        auto pStage = pStageInfos[stage];
+        auto pShaderInfo = shaderInfos[stage];
+
+        if (pStage == nullptr)
+            continue;
+
+        auto pShaderModule = ShaderModule::ObjectFromHandle(pStage->module);
+        pShaderInfo->pModuleData = pShaderModule->GetShaderData(pCreateInfo->compilerType);
+    }
+
     return result;
+}
+
+// =====================================================================================================================
+// Checks which compiler is used
+template<class PipelineBuildInfo>
+PipelineCompilerType PipelineCompiler::CheckCompilerType(
+    const PipelineBuildInfo* pPipelineBuildInfo)
+{
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    uint32_t availCompilerMask = 0;
+    uint32_t compilerMask = 0;
+    availCompilerMask |= (1 << PipelineCompilerTypeLlpc);
+
+    compilerMask = availCompilerMask;
+
+#if ICD_BUILD_MULIT_COMPILER
+    bool useHashRange = false;
+    switch(settings.enableLlpc)
+    {
+    case LlpcModeLlpcOnly:
+        compilerMask = (1 << PipelineCompilerTypeLlpc);
+        break;
+    case LlpcModeScpcOnly:
+        break;
+    case LlpcModeRcpcOnly:
+        break;
+    case LlpcModeMixLlpcInclusive:
+    case LlpcModeMixScpcInclusive:
+    case LlpcModeMixRcpcInclusive:
+        useHashRange = true; // Pass-through
+    case LlpcModeMixLlpcHashList:
+    case LlpcModeMixScpcHashList:
+    case LlpcModeMixRcpcHashList:
+    {
+        uint64_t pipeHash = Llpc::IPipelineDumper::GetPipelineHash(pPipelineBuildInfo);
+        bool isInRange = false;
+        if (useHashRange)
+        {
+            if ((pipeHash <= settings.llpcMixModeHashCodeEnd) && (pipeHash >= settings.llpcMixModeHashCodeStart))
+            {
+                isInRange = true;
+            }
+        }
+        else
+        {
+            if (m_llpcModeMixHashList.Contains(pipeHash))
+            {
+                isInRange = true;
+            }
+        }
+        uint32_t checkCompilerMask = 0;
+        if ((settings.enableLlpc == LlpcModeMixLlpcInclusive) || (settings.enableLlpc == LlpcModeMixLlpcHashList))
+        {
+            checkCompilerMask = (1 << PipelineCompilerTypeLlpc);
+        }
+        if (isInRange)
+        {
+            compilerMask = checkCompilerMask;
+        }
+        else
+        {
+            compilerMask &= ~checkCompilerMask;
+        }
+        break;
+    }
+    default:
+        break;
+    }
+#endif
+
+    if (compilerMask == 0)
+    {
+        compilerMask = availCompilerMask;
+    }
+
+    PipelineCompilerType compilerType = PipelineCompilerTypeLlpc;
+
+    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
+    {
+        compilerType = PipelineCompilerTypeLlpc;
+    }
+
+    return compilerType;
+}
+
+// =====================================================================================================================
+// Checks which compiler is available in pipeline build
+uint32_t PipelineCompiler::GetCompilerCollectionMask()
+{
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    uint32_t availCompilerMask = 0;
+    availCompilerMask |= (1 << PipelineCompilerTypeLlpc);
+
+#if ICD_BUILD_MULIT_COMPILER
+    switch (settings.enableLlpc)
+    {
+    case LlpcModeLlpcOnly:
+        availCompilerMask = (1 << PipelineCompilerTypeLlpc);
+        break;
+    case LlpcModeScpcOnly:
+        break;
+    case LlpcModeRcpcOnly:
+        break;
+    default:
+        break;
+    }
+#endif
+
+    return availCompilerMask;
 }
 
 // =====================================================================================================================
@@ -1139,8 +1306,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     }
 
      ShaderModule* pShaderModule = ShaderModule::ObjectFromHandle(pIn->stage.module);
-     pCreateInfo->pShaderModule = pShaderModule;
-     pCreateInfo->pipelineInfo.cs.pModuleData         = pShaderModule->GetShaderData(true);
+     pCreateInfo->pipelineInfo.cs.pModuleData         = pShaderModule->GetFirstValidShaderData();
      pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
      pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
 
@@ -1157,6 +1323,9 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             nullptr,
             false);
     }
+
+    pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
+    pCreateInfo->pipelineInfo.cs.pModuleData = pShaderModule->GetShaderData(pCreateInfo->compilerType);
 
     ApplyDefaultShaderOptions(&pCreateInfo->pipelineInfo.cs.options
                               );
@@ -1198,11 +1367,6 @@ void PipelineCompiler::ApplyProfileOptions(
     if (settings.pipelineUseShaderHashAsProfileHash)
     {
         const void* pModuleData = pShaderInfo->pModuleData;
-        if (pModuleData == nullptr)
-        {
-            pModuleData = pShaderModule->GetShaderData(false);
-        }
-
         shaderKey.codeHash.lower = Llpc::IPipelineDumper::GetShaderHash(pModuleData);
         shaderKey.codeHash.upper = 0;
     }
@@ -1228,7 +1392,11 @@ void PipelineCompiler::FreeComputePipelineBinary(
     size_t                     binarySize)
 {
     {
-        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+        {
+            m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+        }
+
     }
 }
 
@@ -1240,7 +1408,11 @@ void PipelineCompiler::FreeGraphicsPipelineBinary(
     size_t                      binarySize)
 {
     {
-        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+        {
+            m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+        }
+
     }
 }
 

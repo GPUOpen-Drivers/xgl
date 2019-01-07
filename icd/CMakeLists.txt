@@ -82,6 +82,7 @@ endif()
 
 ### Build Definitions ##################################################################################################
 target_compile_definitions(xgl PRIVATE ${TARGET_ARCHITECTURE_ENDIANESS}ENDIAN_CPU)
+target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
 
 # Internal developer build
 if(VK_INTERNAL_DEVELOPER)

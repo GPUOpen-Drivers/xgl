@@ -156,12 +156,14 @@ public:
         uint32_t                       deviceIdx,
         Queue*                         pQueue,
         VkSemaphore                    semaphore,
+        uint64_t                       value,
         Pal::IQueueSemaphore*          pQueueSemaphore);
 
     Pal::Result TimedWaitQueueSemaphore(
         uint32_t                       deviceIdx,
         Queue*                         pQueue,
         VkSemaphore                    semaphore,
+        uint64_t                       value,
         Pal::IQueueSemaphore*          pQueueSemaphore);
 
     VK_INLINE bool IsQueueTimingActive(const Device* pDevice) const;

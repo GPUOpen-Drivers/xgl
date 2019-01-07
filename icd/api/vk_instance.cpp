@@ -538,7 +538,7 @@ VkResult Instance::LoadAndCommitSettings(
                         &pSettings[deviceIdx]);
 
         // Overlay the application profile from Radeon Settings
-        QueryApplicationProfile(&pSettings[deviceIdx]);
+        QueryApplicationProfile(ppDevices[deviceIdx], &pSettings[deviceIdx]);
 
         // Make sure the final settings have legal values and update dependant parameters
         ValidateSettings(ppDevices[deviceIdx], &pSettings[deviceIdx]);
@@ -1007,14 +1007,21 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
 
 // =====================================================================================================================
 // Query dynamic applicaiton profile settings
-VkResult Instance::QueryApplicationProfile(RuntimeSettings* pRuntimeSettings)
+void Instance::QueryApplicationProfile(
+    Pal::IDevice*    pPalDevice,
+    RuntimeSettings* pRuntimeSettings)
 {
-    VkResult result = VK_ERROR_FEATURE_NOT_PRESENT;
-    if (ReloadAppProfileSettings(this, pRuntimeSettings, &m_chillSettings, &m_turboSyncSettings))
+    ReloadAppProfileSettings(this, pRuntimeSettings, &m_chillSettings, &m_turboSyncSettings);
+
+    if (m_turboSyncSettings.turboSyncEnable == false)
     {
-        result = VK_SUCCESS;
+        // Read TurboSync global key
+        pPalDevice->ReadSetting("TurboSync",
+                                Pal::SettingScope::Global,
+                                Util::ValueType::Boolean,
+                                &m_turboSyncSettings.turboSyncEnable,
+                                sizeof(m_turboSyncSettings.turboSyncEnable));
     }
-    return result;
 }
 
 // =====================================================================================================================
