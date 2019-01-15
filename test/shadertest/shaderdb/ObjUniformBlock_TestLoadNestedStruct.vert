@@ -22,3 +22,10 @@ void main()
     S1 s1 = block.s1;
     gl_Position = (s1.i > s1.s0.i) ? s1.s0.f4 : vec4(0.0);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

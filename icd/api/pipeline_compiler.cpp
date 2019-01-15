@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -291,34 +291,6 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     if (settings.enablePipelineDump)
     {
         llpcOptions[numOptions++] = "-enable-pipeline-dump";
-        if (settings.filterPipelineDumpByType)
-        {
-            optionLength = Util::Snprintf(pOptionBuffer,
-                                          bufSize,
-                                          "-filter-pipeline-dump-by-type=%u",
-                                          settings.filterPipelineDumpByType);
-            ++optionLength;
-            llpcOptions[numOptions++] = pOptionBuffer;
-            pOptionBuffer += optionLength;
-            bufSize -= optionLength;
-        }
-
-        if (settings.dumpDuplicatePipelines)
-        {
-            llpcOptions[numOptions++] = "-dump-duplicate-pipelines";
-        }
-
-        if (settings.filterPipelineDumpByHash != 0)
-        {
-            optionLength = Util::Snprintf(pOptionBuffer,
-                                          bufSize,
-                                          "-filter-pipeline-dump-by-hash=0x%016" PRIX64,
-                                          settings.filterPipelineDumpByHash);
-            ++optionLength;
-            llpcOptions[numOptions++] = pOptionBuffer;
-            pOptionBuffer += optionLength;
-            bufSize -= optionLength;
-        }
     }
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-pipeline-dump-dir=%s", settings.pipelineDumpDir);
@@ -721,6 +693,19 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     int64_t compileTime = 0;
     uint64_t pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
 
+    void* pPipelineDumpHandle = nullptr;
+
+    if (settings.enablePipelineDump)
+    {
+        Llpc::PipelineDumpOptions dumpOptions = {};
+        dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
+        dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
+        dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
+        dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
+        pPipelineDumpHandle = Llpc::IPipelineDumper::BeginPipelineDump(
+            &dumpOptions, nullptr, &pCreateInfo->pipelineInfo);
+    }
+
     if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
     {
         if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
@@ -753,7 +738,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
             }
         }
 
-        auto llpcResult = m_pLlpc->BuildGraphicsPipeline(pPipelineBuildInfo, &pipelineOut);
+        auto llpcResult = m_pLlpc->BuildGraphicsPipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
         if (llpcResult != Llpc::Result::Success)
         {
             // There shouldn't be anything to free for the failure case
@@ -766,6 +751,18 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
             *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
         }
         compileTime = Util::GetPerfCpuTime() - startTime;
+    }
+
+    if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
+    {
+        if (result == VK_SUCCESS)
+        {
+            Llpc::BinaryData pipelineBinary = {};
+            pipelineBinary.codeSize = *pPipelineBinarySize;
+            pipelineBinary.pCode = *ppPipelineBinary;
+            Llpc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
+        }
+        Llpc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 
     DropPipelineBinaryInst(pDevice, settings, *ppPipelineBinary, *pPipelineBinarySize);
@@ -793,6 +790,20 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
     int64_t compileTime = 0;
     uint64_t pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
+
+    void* pPipelineDumpHandle = nullptr;
+
+    if (settings.enablePipelineDump)
+    {
+        Llpc::PipelineDumpOptions dumpOptions = {};
+        dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
+        dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
+        dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
+        dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
+
+        pPipelineDumpHandle = Llpc::IPipelineDumper::BeginPipelineDump(
+            &dumpOptions, &pCreateInfo->pipelineInfo, nullptr);
+    }
 
     if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
     {
@@ -826,7 +837,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         }
 
         // Build pipline binary
-        auto llpcResult = m_pLlpc->BuildComputePipeline(pPipelineBuildInfo, &pipelineOut);
+        auto llpcResult = m_pLlpc->BuildComputePipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
         if (llpcResult != Llpc::Result::Success)
         {
             // There shouldn't be anything to free for the failure case
@@ -841,6 +852,18 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         VK_ASSERT(*ppPipelineBinary == pLlpcPipelineBuffer);
 
         compileTime = Util::GetPerfCpuTime() - startTime;
+    }
+
+    if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
+    {
+        if (result == VK_SUCCESS)
+        {
+            Llpc::BinaryData pipelineBinary = {};
+            pipelineBinary.codeSize = *pPipelineBinarySize;
+            pipelineBinary.pCode = *ppPipelineBinary;
+            Llpc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
+        }
+        Llpc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 
     DropPipelineBinaryInst(pDevice, settings, *ppPipelineBinary, *pPipelineBinarySize);
@@ -1007,7 +1030,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                     }
                 }
 
-                dualSourceBlend = GetDualSourceBlendEnableState(src);
+                dualSourceBlend |= GetDualSourceBlendEnableState(src);
             }
         }
         pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = dualSourceBlend;
@@ -1023,6 +1046,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
     {
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
+        pCreateInfo->pipelineInfo.options.includeIr = true;
     }
 
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))
@@ -1271,6 +1295,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
     {
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
+        pCreateInfo->pipelineInfo.options.includeIr = true;
     }
 
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))

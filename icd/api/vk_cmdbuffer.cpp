@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -2108,7 +2108,10 @@ void CmdBuffer::CopyBufferToImage(
                 Pal::SwizzledFormat dstFormat = VkToPalFormat(Formats::GetAspectFormat(
                     pDstImage->GetFormat(), pRegions[regionIdx + i].imageSubresource.aspectMask));
 
-                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, srcMemOffset);
+                Pal::ImageAspect aspectMask =  VkToPalImageAspectSingle(pDstImage->GetFormat(),
+                    pRegions[regionIdx + i].imageSubresource.aspectMask);
+
+                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, aspectMask, srcMemOffset);
             }
 
             PalCmdCopyMemoryToImage(pSrcBuffer, pDstImage, layout, regionBatch, pPalRegions);
@@ -2164,7 +2167,10 @@ void CmdBuffer::CopyImageToBuffer(
                 Pal::SwizzledFormat srcFormat = VkToPalFormat(Formats::GetAspectFormat(pSrcImage->GetFormat(),
                     pRegions[regionIdx + i].imageSubresource.aspectMask));
 
-                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], srcFormat.format, dstMemOffset);
+                Pal::ImageAspect aspectMask = VkToPalImageAspectSingle(pSrcImage->GetFormat(),
+                    pRegions[regionIdx + i].imageSubresource.aspectMask);
+
+                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], srcFormat.format, aspectMask, dstMemOffset);
             }
 
             PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionBatch, pPalRegions);
@@ -4056,12 +4062,13 @@ void CmdBuffer::BeginRenderPass(
             const RPImageLayout initialLayout =
             { m_state.allGpuState.pRenderPass->GetAttachmentDesc(a).initialLayout, 0 };
 
-            if (firstAspect == Pal::ImageAspect::Color)
+            if ((firstAspect != Pal::ImageAspect::Depth) &&
+                (firstAspect != Pal::ImageAspect::Stencil))
             {
                 RPSetAttachmentLayout(
                     a,
-                    Pal::ImageAspect::Color,
-                    attachment.pImage->GetAttachmentLayout(initialLayout, Pal::ImageAspect::Color, this));
+					firstAspect,
+                    attachment.pImage->GetAttachmentLayout(initialLayout, firstAspect, this));
 
                 RPSetAttachmentLayout(a, Pal::ImageAspect::Depth, NullLayout);
                 RPSetAttachmentLayout(a, Pal::ImageAspect::Stencil, NullLayout);
@@ -4448,10 +4455,12 @@ void CmdBuffer::RPLoadOpClearColor(
     {
         const RPLoadOpClearInfo& clear = pClears[i];
 
-        VK_ASSERT(clear.aspect == VK_IMAGE_ASPECT_COLOR_BIT);
-
         const Framebuffer::Attachment& attachment = m_state.allGpuState.pFramebuffer->GetAttachment(clear.attachment);
-        const Pal::ImageLayout clearLayout        = RPGetAttachmentLayout(clear.attachment, Pal::ImageAspect::Color);
+
+        Pal::SubresRange subresRange;
+        attachment.pView->GetFrameBufferAttachmentSubresRange(&subresRange);
+
+        const Pal::ImageLayout clearLayout = RPGetAttachmentLayout(clear.attachment, subresRange.startSubres.aspect);
 
         VK_ASSERT(clearLayout.usages & Pal::LayoutColorTarget);
 
@@ -4504,9 +4513,6 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
     for (uint32_t i = 0; i < count; ++i)
     {
         const RPLoadOpClearInfo& clear = pClears[i];
-
-        VK_ASSERT((clear.aspect & VK_IMAGE_ASPECT_COLOR_BIT) == 0);
-        VK_ASSERT(clear.aspect != 0);
 
         const Framebuffer::Attachment& attachment = m_state.allGpuState.pFramebuffer->GetAttachment(clear.attachment);
 
@@ -5346,7 +5352,7 @@ void CmdBuffer::BeginTransformFeedback(
     const VkDeviceSize* pCounterBufferOffsets)
 {
     utils::IterateMask deviceGroup(m_palDeviceMask);
-    while (deviceGroup.Iterate())
+    while ((m_pTransformFeedbackState != nullptr) && deviceGroup.Iterate())
     {
         uint64_t counterBufferAddr[Pal::MaxStreamOutTargets] = {};
 
@@ -5388,7 +5394,7 @@ void CmdBuffer::EndTransformFeedback(
     const VkBuffer*     pCounterBuffers,
     const VkDeviceSize* pCounterBufferOffsets)
 {
-    if (m_pTransformFeedbackState->enabled)
+    if ((m_pTransformFeedbackState != nullptr) && (m_pTransformFeedbackState->enabled))
     {
         utils::IterateMask deviceGroup(m_palDeviceMask);
         while (deviceGroup.Iterate())
@@ -6227,6 +6233,26 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerInsertEXT(
     // extension is not enabled when the SQTT layer is not also enabled, so these functions are currently
     // just blank placeholder functions in case there will be a time where we need to do something with them
     // on this path also.
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginDebugUtilsLabelEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkDebugUtilsLabelEXT*                 pLabelInfo)
+{
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdEndDebugUtilsLabelEXT(
+    VkCommandBuffer                             commandBuffer)
+{
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdInsertDebugUtilsLabelEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkDebugUtilsLabelEXT*                 pLabelInfo)
+{
 }
 
 // =====================================================================================================================

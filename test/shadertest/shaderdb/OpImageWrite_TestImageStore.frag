@@ -20,3 +20,10 @@ void main()
     imageStore(imgCubeArray[index + 1], ivec3(5, 6, 7), data);
     imageStore(img2DMS, ivec2(8, 9), 3, data);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

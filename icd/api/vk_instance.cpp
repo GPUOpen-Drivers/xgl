@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2015-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2015-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -87,7 +87,8 @@ Instance::Instance(
     m_screenCount(0),
     m_pScreenStorage(nullptr),
     m_pDevModeMgr(nullptr),
-    m_debugReportCallbacks(&m_palAllocator)
+    m_debugReportCallbacks(&m_palAllocator),
+    m_debugUtilsMessengers(&m_palAllocator)
 {
     m_flags.u32All = 0;
 
@@ -1095,25 +1096,35 @@ void Instance::LogMessage(uint32_t    level,
     m_logCallbackInternalOnlyMutex.Lock();
 
     uint32_t flags = 0;
+    VkDebugUtilsMessageSeverityFlagBitsEXT debugUtilsSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+    VkDebugUtilsMessageTypeFlagsEXT        debugUtilsTypes = 0;
 
     if (categoryMask == Pal::LogCategoryMaskInternal)
     {
-        if ((level == static_cast<uint32_t>(Pal::LogLevel::Info)) ||
-            (level == static_cast<uint32_t>(Pal::LogLevel::Verbose)))
+        if (level == static_cast<uint32_t>(Pal::LogLevel::Info))
         {
             flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT;
+            debugUtilsSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT;
+        }
+        else if (level == static_cast<uint32_t>(Pal::LogLevel::Verbose))
+        {
+            flags = VK_DEBUG_REPORT_INFORMATION_BIT_EXT;
+            debugUtilsSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
         }
         else if (level == static_cast<uint32_t>(Pal::LogLevel::Alert))
         {
             flags = VK_DEBUG_REPORT_WARNING_BIT_EXT;
+            debugUtilsSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
         }
         else if (level == static_cast<uint32_t>(Pal::LogLevel::Error))
         {
             flags = VK_DEBUG_REPORT_ERROR_BIT_EXT;
+            debugUtilsSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         }
         else if (level == static_cast<uint32_t>(Pal::LogLevel::Debug))
         {
             flags = VK_DEBUG_REPORT_DEBUG_BIT_EXT;
+            debugUtilsSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT;
         }
         else if (level == static_cast<uint32_t>(Pal::LogLevel::Always))
         {
@@ -1121,11 +1132,18 @@ void Instance::LogMessage(uint32_t    level,
                     VK_DEBUG_REPORT_INFORMATION_BIT_EXT |
                     VK_DEBUG_REPORT_WARNING_BIT_EXT |
                     VK_DEBUG_REPORT_ERROR_BIT_EXT;
+
+            // Map Always to error, as it is intended to be the most severe log level
+            debugUtilsSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         }
+
+        debugUtilsTypes = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT;
     }
     else if (categoryMask == Pal::LogCategoryMaskPerformance)
     {
         flags = VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
+        debugUtilsSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT;
+        debugUtilsTypes    = VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     }
 
     constexpr uint64_t  object = 0;
@@ -1148,6 +1166,25 @@ void Instance::LogMessage(uint32_t    level,
                           messageCode,
                           layerPrefix,
                           message);
+
+    VkDebugUtilsMessengerCallbackDataEXT callbackData = {};
+
+    callbackData.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CALLBACK_DATA_EXT;
+    callbackData.pNext = nullptr;
+    callbackData.flags = 0; // reserved for future use
+    callbackData.pMessageIdName = nullptr;
+    callbackData.messageIdNumber = 0;
+    callbackData.pMessage = message;
+    callbackData.queueLabelCount = 0;
+    callbackData.pQueueLabels = nullptr;
+    callbackData.cmdBufLabelCount = 0;
+    callbackData.pCmdBufLabels = nullptr;
+    callbackData.objectCount = 0;
+    callbackData.pObjects = nullptr;
+
+    CallExternalMessengers(debugUtilsSeverity,
+                           debugUtilsTypes,
+                           &callbackData);
 
     m_logCallbackInternalOnlyMutex.Unlock();
 }
@@ -1176,6 +1213,82 @@ void Instance::CallExternalCallbacks(
             void* pUserData = element->GetUserData();
 
             (*pfnCallback)(flags, objectType, object, location, messageCode, pLayerPrefix, pMessage, pUserData);
+        }
+    }
+
+    m_logCallbackInternalExternalMutex.Unlock();
+}
+
+// =====================================================================================================================
+// Add the given Debug Utils Messenger to the instance.
+VkResult Instance::RegisterDebugUtilsMessenger(
+    DebugUtilsMessenger* pMessenger)
+{
+    VkResult result = VK_SUCCESS;
+
+    Pal::Result palResult = m_debugUtilsMessengers.PushBack(pMessenger);
+
+    if (palResult == Pal::Result::Success)
+    {
+        result = VK_SUCCESS;
+    }
+    else
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Remove the given Debug Utils Messenger from the instance.
+void Instance::UnregisterDebugUtilsMessenger(
+    DebugUtilsMessenger* pMessenger)
+{
+    auto it = m_debugUtilsMessengers.Begin();
+
+    DebugUtilsMessenger* element = *it.Get();
+
+    while (element != nullptr)
+    {
+        if (pMessenger == element)
+        {
+            m_debugUtilsMessengers.Erase(&it);
+
+            // Each element should only be in the list once; break out of loop once found
+            element = nullptr;
+        }
+        else
+        {
+            it.Next();
+            element = *it.Get();
+        }
+    }
+}
+
+// =====================================================================================================================
+// Call all registered callbacks with the given VkDebugUtilsMessageSeverityFlagsBitsEXT.
+void Instance::CallExternalMessengers(
+    VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
+    VkDebugUtilsMessageTypeFlagsEXT             messageTypes,
+    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData)
+{
+    // Guarantee serialization of this function to keep internal and external log messages from getting intermixed
+    m_logCallbackInternalExternalMutex.Lock();
+
+    for (auto it = m_debugUtilsMessengers.Begin(); it.Get() != nullptr; it.Next())
+    {
+        DebugUtilsMessenger* element = *it.Get();
+
+        if (messageSeverity & element->GetMessageSeverityFlags())
+        {
+            if (messageTypes & element->GetMessageTypeFlags())
+            {
+                PFN_vkDebugUtilsMessengerCallbackEXT pfnCallback = element->GetCallbackFunc();
+                void* pUserData = element->GetUserData();
+
+                (*pfnCallback)(messageSeverity, messageTypes, pCallbackData, pUserData);
+            }
         }
     }
 

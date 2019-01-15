@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -78,6 +78,10 @@ Pal::Formats::NumericSupportFlags Formats::GetNumberFormat(
         const auto info = Pal::Formats::FormatInfoTable[static_cast<size_t>(palFormat.format)];
 
         numType = info.numericSupport;
+    }
+    else if (IsYuvFormat(format))
+    {
+        numType = NumericSupportFlags::Unorm;
     }
     else
     {

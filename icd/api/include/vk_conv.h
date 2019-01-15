@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -596,23 +596,99 @@ VK_INLINE Pal::ImageTexOptLevel VkToPalTexFilterQuality(TextureFilterOptimizatio
     return Pal::ImageTexOptLevel::Default;
 }
 
+namespace convert
+{
+#define VK_YUV_FORMAT_COUNT VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM - VK_FORMAT_G8B8G8R8_422_UNORM + 1
+
+constexpr Pal::ImageAspect UnknownImageAspect = static_cast<Pal::ImageAspect>(~0u);
+constexpr Pal::ImageAspect VkToPalYuvImageAspectLookupTableStorage[VK_YUV_FORMAT_COUNT][MaxPalAspectsPerMask] = {
+    { Pal::ImageAspect::YCbCr, UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G8B8G8R8_422_UNORM
+    { Pal::ImageAspect::YCbCr, UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_B8G8R8G8_422_UNORM
+    { Pal::ImageAspect::Y,     Pal::ImageAspect::Cb,   Pal::ImageAspect::Cr },    // VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM
+    { Pal::ImageAspect::Y,     Pal::ImageAspect::CbCr, UnknownImageAspect   },    // VK_FORMAT_G8_B8R8_2PLANE_420_UNORM
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G8_B8R8_2PLANE_422_UNORM
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_R10X6_UNORM_PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_R10X6G10X6_UNORM_2PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16
+    { Pal::ImageAspect::Y,     Pal::ImageAspect::CbCr, UnknownImageAspect   },    // VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_R12X4_UNORM_PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_R12X4G12X4_UNORM_2PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G16B16G16R16_422_UNORM
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_B16G16R16G16_422_UNORM
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM
+    { Pal::ImageAspect::Y,     Pal::ImageAspect::CbCr, UnknownImageAspect   },    // VK_FORMAT_G16_B16R16_2PLANE_420_UNORM
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   },    // VK_FORMAT_G16_B16R16_2PLANE_422_UNORM
+    { UnknownImageAspect,      UnknownImageAspect,     UnknownImageAspect   }     // VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM
+};
+}
+
 // =====================================================================================================================
 // Selects a single PAL aspect that directly corresponds to the specified mask.
-VK_INLINE Pal::ImageAspect VkToPalImageAspectSingle(VkImageAspectFlags aspectMask)
+VK_INLINE Pal::ImageAspect VkToPalImageAspectSingle(
+    VkFormat           format,
+    VkImageAspectFlags aspectMask)
 {
-    switch (aspectMask)
+    if (Formats::IsYuvFormat(format))
     {
-    case VK_IMAGE_ASPECT_COLOR_BIT:
-        return Pal::ImageAspect::Color;
-    case VK_IMAGE_ASPECT_DEPTH_BIT:
-        return Pal::ImageAspect::Depth;
-    case VK_IMAGE_ASPECT_STENCIL_BIT:
-        return Pal::ImageAspect::Stencil;
-    case VK_IMAGE_ASPECT_METADATA_BIT:
-        return Pal::ImageAspect::Fmask;
-    default:
-        VK_ASSERT(!"Unsupported flag combination");
-        return Pal::ImageAspect::Color;
+        uint32_t plane = 0;
+
+        switch (aspectMask)
+        {
+        case VK_IMAGE_ASPECT_PLANE_0_BIT:
+            plane = 0;
+            break;
+
+        case VK_IMAGE_ASPECT_PLANE_1_BIT:
+            plane = 1;
+            break;
+
+        case VK_IMAGE_ASPECT_PLANE_2_BIT:
+            plane = 2;
+            break;
+
+        default:
+            VK_NEVER_CALLED();
+            break;
+        };
+
+        Pal::ImageAspect imageAspect = convert::VkToPalYuvImageAspectLookupTableStorage[format - VK_FORMAT_G8B8G8R8_422_UNORM][plane];
+        VK_ASSERT(convert::UnknownImageAspect != imageAspect);
+
+        return imageAspect;
+    }
+    else
+    {
+        switch (aspectMask)
+        {
+        case VK_IMAGE_ASPECT_COLOR_BIT:
+            return Pal::ImageAspect::Color;
+        case VK_IMAGE_ASPECT_DEPTH_BIT:
+            return Pal::ImageAspect::Depth;
+        case VK_IMAGE_ASPECT_STENCIL_BIT:
+            return Pal::ImageAspect::Stencil;
+        case VK_IMAGE_ASPECT_METADATA_BIT:
+            return Pal::ImageAspect::Fmask;
+        default:
+            VK_ASSERT(!"Unsupported flag combination");
+            return Pal::ImageAspect::Color;
+        }
     }
 }
 
@@ -647,6 +723,73 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
             aspectMask ^= VK_IMAGE_ASPECT_STENCIL_BIT;
 
             return Pal::ImageAspect::Stencil;
+        }
+    }
+    else if ((aspectMask & (VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT | VK_IMAGE_ASPECT_PLANE_2_BIT)) != 0)
+    {
+        // Only the YUV specific aspects can be specified in this case.
+        VK_ASSERT((aspectMask & ~(VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT | VK_IMAGE_ASPECT_PLANE_2_BIT)) == 0);
+
+        // Must be a YUV image.
+        VK_ASSERT(Pal::Formats::IsYuv(format));
+
+        switch (format)
+        {
+            // YUV packed formats.
+        case Pal::ChNumFormat::AYUV:
+        case Pal::ChNumFormat::UYVY:
+        case Pal::ChNumFormat::VYUY:
+        case Pal::ChNumFormat::YUY2:
+        case Pal::ChNumFormat::YVY2:
+            // Application must specify all 3 YUV aspects, and only that.
+            VK_ASSERT(aspectMask == VK_IMAGE_ASPECT_PLANE_0_BIT);
+
+            aspectMask = 0;
+            return Pal::ImageAspect::YCbCr;
+
+            // YUV planar formats with separate Y and UV planes.
+        case Pal::ChNumFormat::NV11:
+        case Pal::ChNumFormat::NV12:
+        case Pal::ChNumFormat::NV21:
+        case Pal::ChNumFormat::P016:
+        case Pal::ChNumFormat::P010:
+            if (aspectMask & VK_IMAGE_ASPECT_PLANE_0_BIT)
+            {
+                aspectMask ^= VK_IMAGE_ASPECT_PLANE_0_BIT;
+                return Pal::ImageAspect::Y;
+            }
+            else
+            {
+                // Only the CbCr aspect can be selected besides the Y one.
+                VK_ASSERT(aspectMask == VK_IMAGE_ASPECT_PLANE_1_BIT);
+
+                aspectMask = 0;
+                return Pal::ImageAspect::CbCr;
+            }
+
+            // YUV planar formats with spearate Y, U, and V planes.
+        case Pal::ChNumFormat::YV12:
+            if (aspectMask & VK_IMAGE_ASPECT_PLANE_0_BIT)
+            {
+                aspectMask ^= VK_IMAGE_ASPECT_PLANE_0_BIT;
+                return Pal::ImageAspect::Y;
+            }
+            else if (aspectMask & VK_IMAGE_ASPECT_PLANE_1_BIT)
+            {
+                aspectMask ^= VK_IMAGE_ASPECT_PLANE_1_BIT;
+                return Pal::ImageAspect::Cb;
+            }
+            else
+            {
+                // Only the Cr aspect can be selected besides the Y and Cb one.
+                VK_ASSERT(aspectMask == VK_IMAGE_ASPECT_PLANE_2_BIT);
+
+                aspectMask = 0;
+                return Pal::ImageAspect::Cr;
+            }
+            break;
+        default:
+            VK_ASSERT(!"Unexpected YUV image format");
         }
     }
 
@@ -1138,6 +1281,44 @@ VK_INLINE Pal::Offset3d TexelsToBlocks(Pal::Offset3d texels, Pal::Extent3d block
 }
 
 // =====================================================================================================================
+// Queries the number of bytes in a pixel or element for the given format.
+VK_INLINE Pal::uint32 BytesPerPixel(Pal::ChNumFormat format, Pal::ImageAspect aspect)
+{
+    if (Pal::Formats::IsYuvPlanar(format))
+    {
+        Pal::uint32 bytesPerPixel = 0;
+
+        switch (format)
+        {
+        case Pal::ChNumFormat::YV12:
+            VK_ASSERT((Pal::ImageAspect::Y == aspect) || (Pal::ImageAspect::Cb == aspect) || (Pal::ImageAspect::Cr == aspect));
+            bytesPerPixel = 1;
+            break;
+        case Pal::ChNumFormat::NV11:
+        case Pal::ChNumFormat::NV12:
+        case Pal::ChNumFormat::NV21:
+            VK_ASSERT((Pal::ImageAspect::Y == aspect) || (Pal::ImageAspect::CbCr == aspect));
+            bytesPerPixel = (Pal::ImageAspect::Y == aspect) ? 1 : 2;
+            break;
+        case Pal::ChNumFormat::P016:
+        case Pal::ChNumFormat::P010:
+            VK_ASSERT((Pal::ImageAspect::Y == aspect) || (Pal::ImageAspect::CbCr == aspect));
+            bytesPerPixel = (Pal::ImageAspect::Y == aspect) ? 2 : 4;
+            break;
+        default:
+            VK_NEVER_CALLED();
+            break;
+        }
+
+        return bytesPerPixel;
+    }
+    else
+    {
+        return Pal::Formats::BytesPerPixel(format);
+    }
+}
+
+// =====================================================================================================================
 // Converts a Vulkan image-copy structure to one or more PAL image-copy-region structures.
 VK_INLINE void VkToPalImageCopyRegion(
     const VkImageCopy&      imageCopy,
@@ -1181,19 +1362,16 @@ VK_INLINE void VkToPalImageCopyRegion(
         region.dstOffset        = TexelsToBlocks(region.dstOffset, blockDim);
     }
 
-    // Source and destination aspect masks must match
-    VK_ASSERT(imageCopy.srcSubresource.aspectMask == imageCopy.dstSubresource.aspectMask);
-
-    // As we don't allow copying between different types of aspects we don't need to worry about dealing with both
-    // aspect masks separately.
-    VkImageAspectFlags aspectMask = imageCopy.srcSubresource.aspectMask;
+    VkImageAspectFlags srcAspectMask = imageCopy.srcSubresource.aspectMask;
+    VkImageAspectFlags dstAspectMask = imageCopy.dstSubresource.aspectMask;
 
     do
     {
-        region.srcSubres.aspect = region.dstSubres.aspect = VkToPalImageAspectExtract(srcFormat, aspectMask);
+        region.srcSubres.aspect = VkToPalImageAspectExtract(srcFormat, srcAspectMask);
+        region.dstSubres.aspect = VkToPalImageAspectExtract(dstFormat, dstAspectMask);
         pPalRegions[palRegionIndex++] = region;
     }
-    while (aspectMask != 0);
+    while (srcAspectMask != 0 || dstAspectMask != 0);
 }
 
 // =====================================================================================================================
@@ -1383,12 +1561,12 @@ VK_INLINE void VkToPalImageResolveRegion(
 VK_INLINE Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
     const VkBufferImageCopy&    bufferImageCopy,
     Pal::ChNumFormat            format,
+    Pal::ImageAspect            aspectMask,
     Pal::gpusize                baseMemOffset)
 {
     Pal::MemoryImageCopyRegion region = {};
 
-    region.imageSubres.aspect       = VkToPalImageAspectSingle(bufferImageCopy.imageSubresource.aspectMask);
-
+    region.imageSubres.aspect       = aspectMask;
     region.imageSubres.arraySlice   = bufferImageCopy.imageSubresource.baseArrayLayer;
     region.imageSubres.mipLevel     = bufferImageCopy.imageSubresource.mipLevel;
 
@@ -1417,7 +1595,7 @@ VK_INLINE Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
     }
 
     // Convert pitch to bytes per pixel and multiply depth pitch by row pitch after the texel-to-block conversion
-    region.gpuMemoryRowPitch   *= Pal::Formats::BytesPerPixel(format);
+    region.gpuMemoryRowPitch   *= BytesPerPixel(format, aspectMask);
     region.gpuMemoryDepthPitch *= region.gpuMemoryRowPitch;
 
     return region;
@@ -1449,6 +1627,21 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format)
     }
     else
     {
+        switch (static_cast<int32_t>(format))
+        {
+        case VK_FORMAT_G8B8G8R8_422_UNORM:             return PalFmt(Pal::ChNumFormat::YUY2,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_B8G8R8G8_422_UNORM:             return PalFmt(Pal::ChNumFormat::UYVY,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:      return PalFmt(Pal::ChNumFormat::YV12,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:       return PalFmt(Pal::ChNumFormat::NV12,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:    return PalFmt(Pal::ChNumFormat::P010,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:    return PalFmt(Pal::ChNumFormat::P016,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        }
         return Pal::UndefinedSwizzledFormat;
     }
 }

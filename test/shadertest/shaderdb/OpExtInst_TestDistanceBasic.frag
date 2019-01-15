@@ -9,3 +9,10 @@ void main()
 {
     color = vec4(distance(a0.x,b0.y) + distance(double(a0.x) , double(b0.y)));
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

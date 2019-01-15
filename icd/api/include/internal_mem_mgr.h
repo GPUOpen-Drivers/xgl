@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -67,7 +67,8 @@ union InternalMemCreateFlags
                                         // frequently mapped allocations.
         uint32_t noSuballocation  : 1;  // Set this flag if you want to disallow sub-allocation for whatever
                                         // reason.
-        uint32_t reserved         : 29; // Reserved
+        uint32_t needShadow       : 1;  // If a shadow table is needed.
+        uint32_t reserved         : 28; // Reserved
     };
     uint32_t u32All;
 };
@@ -114,9 +115,12 @@ struct DeviceGroupMemory
 // Structure holding information about an internal GPU memory base allocation
 struct InternalMemoryPool
 {
-    DeviceGroupMemory                   groupMemory;     // Memory allocations for each physical device contained
-                                                         // within a single logical device
-                                                         // TODO. Match VA addresses across devices where available
+    DeviceGroupMemory                   groupMemory;        // Memory allocations for each physical device contained
+                                                            // within a single logical device
+                                                            // TODO. Match VA addresses across devices where available
+
+    DeviceGroupMemory                   groupShadowMemory;  // Memory allocations for the shadow memory.
+
     Util::BuddyAllocator<PalAllocator>* pBuddyAllocator; // Buddy allocator used to sub-allocate
                                                          // from the pool
 };
@@ -146,6 +150,12 @@ public:
         return m_gpuVA[idx];
     }
 
+    Pal::gpusize GpuShadowVirtAddr(int32_t idx) const
+    {
+        VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
+        return m_gpuShadowVA[idx];
+    }
+
     void* CpuAddr(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
@@ -159,17 +169,20 @@ public:
         { return m_size; }
 
     Pal::Result Map(uint32_t idx, void** pCpuAddr);
+    Pal::Result ShadowMap(uint32_t idx, void** pCpuAddr);
+
     Pal::Result Unmap(uint32_t idx);
 
 private:
     friend class InternalMemMgr;
 
-    InternalMemoryPool  m_memoryPool;           // Memory pool the suballocation comes from (its pBuddyAllocator is
-                                                // null if the memory is base allocation, not a suballocation)
-    Pal::gpusize        m_gpuVA[MaxPalDevices]; // GPU virtual address to the start of the sub-allocation
-    Pal::gpusize        m_offset;               // Offset within the memory pool the suballocation starts from
-    Pal::gpusize        m_size;                 // Size of the suballocation
-    Pal::gpusize        m_alignment;            // Alignment of the suballocation
+    InternalMemoryPool  m_memoryPool;                   // Memory pool the suballocation comes from (its pBuddyAllocator is
+                                                        // null if the memory is base allocation, not a suballocation)
+    Pal::gpusize        m_gpuVA[MaxPalDevices];         // GPU virtual address to the start of the sub-allocation
+    Pal::gpusize        m_gpuShadowVA[MaxPalDevices];   // GPU virtual address for the shadow table
+    Pal::gpusize        m_offset;                       // Offset within the memory pool the suballocation starts from
+    Pal::gpusize        m_size;                         // Size of the suballocation
+    Pal::gpusize        m_alignment;                    // Alignment of the suballocation
 };
 
 // =====================================================================================================================
@@ -179,8 +192,9 @@ InternalMemory::InternalMemory()
     m_size(0),
     m_alignment(0)
 {
-    memset(&m_gpuVA,      0, sizeof(m_gpuVA));
-    memset(&m_memoryPool, 0, sizeof(m_memoryPool));
+    memset(&m_gpuVA,       0, sizeof(m_gpuVA));
+    memset(&m_gpuShadowVA, 0, sizeof(m_gpuShadowVA));
+    memset(&m_memoryPool,  0, sizeof(m_memoryPool));
 }
 
 // These are identifiers for commonly used pool configurations for internal memory allocation that can be used
@@ -191,7 +205,6 @@ enum InternalSubAllocPool
     InternalPoolGpuReadOnlyCpuVisible,      // All read-only persistent mapped CPU-visible pools (incl. local visible)
     InternalPoolCpuVisible,                 // All CPU-visible pools
     InternalPoolDescriptorTable,            // Persistent mapped pool used for descriptor sets (main table)
-    InternalPoolShadowDescriptorTable,      // Persistent mapped pool used for descriptor sets (shadow table)
     InternalPoolCount
 };
 
@@ -254,7 +267,8 @@ private:
         const Pal::GpuMemoryCreateInfo& createInfo,
         bool                            readOnly,
         InternalMemoryPool*             pGpuMemory,
-        uint32_t                        allocMask);
+        uint32_t                        allocMask,
+        bool                            needShadow);
 
     void FreeBaseGpuMem(
         const InternalMemoryPool*       pGpuMemory);

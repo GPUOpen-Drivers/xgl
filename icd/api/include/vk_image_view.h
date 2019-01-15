@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -79,7 +79,7 @@ public:
     VK_INLINE const Pal::Range GetZRange() const
         { return m_zRange; }
 
-    VK_INLINE void GetFrameBufferAttachmentSubresRange(Pal::ImageAspect aspect, Pal::SubresRange* pRange) const;
+    VK_INLINE void GetFrameBufferAttachmentSubresRange(Pal::SubresRange* pRange) const;
 
     VK_INLINE bool NeedsFmaskViewSrds() const
         { return m_needsFmaskViewSrds; }
@@ -182,15 +182,12 @@ const void* ImageView::Descriptor(
 // =====================================================================================================================
 // Returns the subresource range of the given aspect from this view for a frame buffer attachment
 void ImageView::GetFrameBufferAttachmentSubresRange(
-    Pal::ImageAspect  aspect,
     Pal::SubresRange* pRange
     ) const
 {
     *pRange = m_subresRange;
 
     pRange->numMips = (pRange->numMips > 1) ? 1 : pRange->numMips;
-
-    pRange->startSubres.aspect = aspect;
 }
 
 namespace entry

@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -38,6 +38,13 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/icd/imported/pa
 include(CMakeDependentOption)
 include(AmdCmakeHelper)
 include(SetupAmdGlobalRoots)
+
+### Strip the symbols for release build ################################################################################
+if(UNIX)
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        string(APPEND CMAKE_SHARED_LINKER_FLAGS_RELEASE " -s")
+    endif()
+endif()
 
 ### Cached Project Options #############################################################################################
 option(VK_INTERNAL_DEVELOPER "Build Internal Developer Build?" OFF)

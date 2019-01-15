@@ -35,3 +35,11 @@ void main()
     mOut5 = clamp(m2, m3, m7) + clamp(m2, m1, m9);
     mOut6 = clamp(m5, m6, m8) + clamp(m5, m4, m10);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

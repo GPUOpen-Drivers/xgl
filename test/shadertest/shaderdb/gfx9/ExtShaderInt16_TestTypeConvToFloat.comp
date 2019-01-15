@@ -19,3 +19,11 @@ void main()
     mOut2 = vec4(m1) + vec4(m2);
     mOut3 = dvec4(m1) + dvec4(m2);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

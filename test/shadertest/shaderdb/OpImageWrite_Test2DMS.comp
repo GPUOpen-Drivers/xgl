@@ -13,3 +13,11 @@ void main()
     imageStore(img2DMS, ivec2(0, 0), 1, mIn);
     imageStore(img2DMSArray, ivec3(0, 0, 0), 1, mIn);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

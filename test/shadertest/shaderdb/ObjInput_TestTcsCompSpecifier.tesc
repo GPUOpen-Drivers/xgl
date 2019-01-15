@@ -10,3 +10,10 @@ void main(void)
     vec3 f3 = vec3(f1[gl_InvocationID], f2[gl_InvocationID]);
     gl_out[gl_InvocationID].gl_Position = vec4(f3, 1.0);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

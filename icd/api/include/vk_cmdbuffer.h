@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -182,10 +182,10 @@ struct RenderPassInstanceState
     // Per-attachment instance state
     struct AttachmentState
     {
-        Pal::ImageLayout aspectLayout[3];       // Current per-aspect (color, depth, stencil) PAL layout
-        VkClearValue     clearValue;            // Specified load-op clear value for this attachment
-        SamplePattern    initialSamplePattern;  // Initial sample pattern at first layout transition of
-                                                // depth/stencil attachment.
+        Pal::ImageLayout aspectLayout[static_cast<uint32_t>(Pal::ImageAspect::Count)];    // Per-aspect PAL layout
+        VkClearValue     clearValue;              // Specified load-op clear value for this attachment
+        SamplePattern    initialSamplePattern;    // Initial sample pattern at first layout transition of
+                                                  // depth/stencil attachment.
     };
 
     union
@@ -1035,10 +1035,15 @@ Pal::ImageLayout CmdBuffer::RPGetAttachmentLayout(
     uint32_t         attachment,
     Pal::ImageAspect aspect)
 {
-    VK_ASSERT(aspect == Pal::ImageAspect::Color ||
-              aspect == Pal::ImageAspect::Depth ||
-              aspect == Pal::ImageAspect::Stencil);
-    VK_ASSERT(static_cast<size_t>(aspect) < 3);
+    VK_ASSERT(aspect == Pal::ImageAspect::Color   ||
+              aspect == Pal::ImageAspect::Depth   ||
+              aspect == Pal::ImageAspect::Stencil ||
+              aspect == Pal::ImageAspect::Y       ||
+              aspect == Pal::ImageAspect::CbCr    ||
+              aspect == Pal::ImageAspect::Cb      ||
+              aspect == Pal::ImageAspect::Cr      ||
+              aspect == Pal::ImageAspect::YCbCr);
+    VK_ASSERT(static_cast<Pal::uint32>(aspect) < static_cast<Pal::uint32>(Pal::ImageAspect::Count));
     VK_ASSERT(attachment < m_state.allGpuState.pRenderPass->GetAttachmentCount());
     VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
 
@@ -1051,10 +1056,15 @@ void CmdBuffer::RPSetAttachmentLayout(
     Pal::ImageAspect aspect,
     Pal::ImageLayout layout)
 {
-    VK_ASSERT(aspect == Pal::ImageAspect::Color ||
-              aspect == Pal::ImageAspect::Depth ||
-              aspect == Pal::ImageAspect::Stencil);
-    VK_ASSERT(static_cast<size_t>(aspect) < 3);
+    VK_ASSERT(aspect == Pal::ImageAspect::Color   ||
+              aspect == Pal::ImageAspect::Depth   ||
+              aspect == Pal::ImageAspect::Stencil ||
+              aspect == Pal::ImageAspect::Y       ||
+              aspect == Pal::ImageAspect::CbCr    ||
+              aspect == Pal::ImageAspect::Cb      ||
+              aspect == Pal::ImageAspect::Cr      ||
+              aspect == Pal::ImageAspect::YCbCr);
+    VK_ASSERT(static_cast<Pal::uint32>(aspect) < static_cast<Pal::uint32>(Pal::ImageAspect::Count));
     VK_ASSERT(attachment < m_state.allGpuState.pRenderPass->GetAttachmentCount());
     VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
 
@@ -1443,6 +1453,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarkerAMD(
     VkBuffer                dstBuffer,
     VkDeviceSize            dstOffset,
     uint32_t                marker);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginDebugUtilsLabelEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkDebugUtilsLabelEXT*                 pLabelInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdEndDebugUtilsLabelEXT(
+    VkCommandBuffer                             commandBuffer);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdInsertDebugUtilsLabelEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkDebugUtilsLabelEXT*                 pLabelInfo);
 
 } // namespace entry
 

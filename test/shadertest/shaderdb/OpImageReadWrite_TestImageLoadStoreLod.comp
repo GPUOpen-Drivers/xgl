@@ -28,3 +28,11 @@ void main()
     imageStoreLodAMD(img2DArray,     ivec3(9, 9, 9), 7, temp);
     imageStoreLodAMD(imgCubeArray,   ivec3(9, 9, 9), 7, temp);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

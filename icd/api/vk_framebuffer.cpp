@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -64,7 +64,14 @@ Framebuffer::Attachment::FindSubresRanges(
         const bool stencilAvailable = (aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) &&
                                       (attachmentAspect == Pal::ImageAspect::Stencil);
 
-        if (colorAvailable || depthAvailable || stencilAvailable)
+        const bool     yuvAvailable = (aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) &&
+                                      ((attachmentAspect == Pal::ImageAspect::Y)    ||
+                                       (attachmentAspect == Pal::ImageAspect::CbCr) ||
+                                       (attachmentAspect == Pal::ImageAspect::Cb)   ||
+                                       (attachmentAspect == Pal::ImageAspect::Cr)   ||
+                                       (attachmentAspect == Pal::ImageAspect::YCbCr));
+
+        if (colorAvailable || depthAvailable || stencilAvailable || yuvAvailable)
         {
             VK_ASSERT(subresRanges.NumElements() < MaxRangePerAttachment);
 
@@ -149,8 +156,7 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
             (!(pImage->HasStencil())))
         {
             pAttachment->subresRangeCount = 1;
-            pAttachment->pView->GetFrameBufferAttachmentSubresRange(Pal::ImageAspect::Color,
-                                                                    &pAttachment->subresRange[0]);
+            pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[0]);
         }
         else
         {
@@ -159,15 +165,15 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
 
             if (pImage->HasDepth())
             {
-                pAttachment->pView->GetFrameBufferAttachmentSubresRange(Pal::ImageAspect::Depth,
-                                                                        &pAttachment->subresRange[count]);
+                pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[count]);
+				pAttachment->subresRange[count].startSubres.aspect = Pal::ImageAspect::Depth;
                 count++;
             }
 
             if (pImage->HasStencil())
             {
-                pAttachment->pView->GetFrameBufferAttachmentSubresRange(Pal::ImageAspect::Stencil,
-                                                                        &pAttachment->subresRange[count]);
+                pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[count]);
+				pAttachment->subresRange[count].startSubres.aspect = Pal::ImageAspect::Stencil;
                 count++;
             }
 

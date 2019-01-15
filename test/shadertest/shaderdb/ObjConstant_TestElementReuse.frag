@@ -29,3 +29,10 @@ void main()
     Struct data = constData;
     fragColor = vec4(data.f1_0 + data.f1_1) + vec4(data.f3[i]) + vec4(data.m2x3[i][j]);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

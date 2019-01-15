@@ -18,3 +18,11 @@ void main()
     ssbo[1].v4_array[0] = vec4(4);
     ssbo[1].v4_array[1] = vec4(5);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

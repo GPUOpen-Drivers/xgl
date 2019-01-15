@@ -35,3 +35,10 @@ void main()
     sb1 = texture(s1, vec2(0)) + texture(s2, vec2(0));
     sb_2 = imageLoad(i1, ivec2(0)) + imageLoad(i2, ivec2(0));
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

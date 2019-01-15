@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -2905,6 +2905,24 @@ VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectNameEXT(
     // extension is not enabled when the SQTT layer is not also enabled, so these functions are currently
     // just blank placeholder functions in case there will be a time where we need to do something with them
     // on this path also.
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(
+    VkDevice                                    device,
+    const VkDebugUtilsObjectTagInfoEXT*         pTagInfo)
+{
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
+    VkDevice                                    device,
+    const VkDebugUtilsObjectNameInfoEXT*        pNameInfo)
+{
 
     return VK_SUCCESS;
 }

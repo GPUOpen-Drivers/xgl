@@ -9,3 +9,11 @@ void main()
     oColor = vec4(textureLodOffset(samp, inUV, 1, ivec2(2, 3)));
 }
 
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

@@ -29,3 +29,10 @@ void main()
     texel = textureGradOffsetClampARB(samp2DArrayShadow, vec4(0.2), vec2(1.2), vec2(1.3), ivec2(3), lodClamp);
     fragColor += texel;
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

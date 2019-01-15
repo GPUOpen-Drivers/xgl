@@ -14,3 +14,10 @@ void main()
     else
         gl_Position = block.pos[gl_InstanceIndex % 2][gl_DrawIDARB % 4];
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

@@ -14,3 +14,10 @@ void main()
     fOut += vec2(interpolateAtVertexAMD(iv2In, 1));
     fOut += vec2(interpolateAtVertexAMD(uv2In, 0));
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

@@ -10,3 +10,11 @@ void main()
     oColor1 = texelFetch(iSamp2D, ivec2(0, 1), 0);
     oColor2 = texelFetch(uSamp2D, ivec2(0, 1), 0);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

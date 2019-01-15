@@ -18,3 +18,10 @@ void main()
     bd.z = bd.z && bc;
     color = vec4(bd)  + nf + vec4(nuvf) + vec4(iuvf);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

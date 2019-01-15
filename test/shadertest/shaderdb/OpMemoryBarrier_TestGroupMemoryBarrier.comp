@@ -14,3 +14,11 @@ void main()
     f4[gl_LocalInvocationID.y % 4] *= f4[gl_LocalInvocationID.x % 4];
 }
 
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

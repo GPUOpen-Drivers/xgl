@@ -18,3 +18,10 @@ void main()
 
     fragColor = ((i1_3 == i1_4) || (i3_3 == i3_4)) ? vec4(0.0) : vec4(1.0);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

@@ -28,3 +28,11 @@ void main()
 
     fragColor.x += textureOffsetClampARB(samp2DArrayShadow, vec4(0.1), ivec2(2), lodClamp);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

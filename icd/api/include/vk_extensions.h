@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -195,6 +195,7 @@ public:
 #endif
         EXT_DIRECT_MODE_DISPLAY,
         KHR_GET_DISPLAY_PROPERTIES2,
+        EXT_DEBUG_UTILS,
         Count
     };
 };

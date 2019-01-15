@@ -21,3 +21,10 @@ void main()
     mat3x4 m3 = m2 * colorIn1.x;
     color = m3[0] + m3[1] + m3[2];
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

@@ -8,3 +8,11 @@ layout (location = 0) out vec4 uFragColor;
 void main() {
    uFragColor = texture(sampler2D(t0, s1), texcoord.xy) + texture(sampler2D(t1, s1), texcoord.xy);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

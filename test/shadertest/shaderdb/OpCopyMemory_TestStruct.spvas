@@ -1,3 +1,10 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Khronos SPIR-V Tools Assembler; 0
@@ -20,7 +27,6 @@
                OpDecorate %5 DescriptorSet 0
                OpDecorate %5 Binding 1
                OpDecorate %6 ArrayStride 4
-               OpMemberDecorate %3 0 Offset 0
           %7 = OpTypeBool
           %8 = OpTypeVoid
           %9 = OpTypeFunction %8

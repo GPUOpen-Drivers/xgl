@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -119,21 +119,25 @@ Image::Image(
     m_barrierPolicy(barrierPolicy),
     m_pSwapChain(nullptr)
 {
-    m_internalFlags.u32All = internalFlags.u32All;
+	m_internalFlags.u32All = internalFlags.u32All;
 
-    // Set hasDepth and hasStencil flags based on the image's format.
-    if (Formats::IsColorFormat(imageFormat))
-    {
-        m_internalFlags.isColorFormat = 1;
-    }
-    if (Formats::HasDepth(imageFormat))
-    {
-        m_internalFlags.hasDepth = 1;
-    }
-    if (Formats::HasStencil(imageFormat))
-    {
-        m_internalFlags.hasStencil = 1;
-    }
+	// Set hasDepth and hasStencil flags based on the image's format.
+	if (Formats::IsColorFormat(imageFormat))
+	{
+		m_internalFlags.isColorFormat = 1;
+	}
+	if (Formats::HasDepth(imageFormat))
+	{
+		m_internalFlags.hasDepth = 1;
+	}
+	if (Formats::HasStencil(imageFormat))
+	{
+		m_internalFlags.hasStencil = 1;
+	}
+	if (Formats::IsYuvFormat(imageFormat))
+	{
+		m_internalFlags.isYuvFormat = 1;
+	}
     if (flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
     {
         m_internalFlags.sparseBinding = 1;
@@ -178,13 +182,16 @@ static VkResult ConvertImageCreateInfo(
     // of the usages to makes sure barriers properly handle each.
     if ((pCreateInfo->flags & VK_IMAGE_CREATE_EXTENDED_USAGE_BIT) != 0)
     {
-        VkFormatProperties formatProperties;
+        Pal::MergedFormatPropertiesTable fmtProperties = {};
+        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalDevice()->GetFormatProperties(&fmtProperties);
 
-        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetFormatProperties(pCreateInfo->format, &formatProperties);
+        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(pCreateInfo->format);
 
-        imageUsage &= VkFormatFeatureFlagsToImageUsageFlags((pCreateInfo->tiling == VK_IMAGE_TILING_OPTIMAL) ?
-                                                            formatProperties.optimalTilingFeatures :
-                                                            formatProperties.linearTilingFeatures);
+        const size_t formatIdx = static_cast<size_t>(swizzledFormat.format);
+        const size_t tilingIdx = ((pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR) ? Pal::IsLinear : Pal::IsNonLinear);
+
+        const VkFormatFeatureFlags flags = PalToVkFormatFeatureFlags(fmtProperties.features[formatIdx][tilingIdx]);
+        imageUsage &= VkFormatFeatureFlagsToImageUsageFlags(flags);
     }
 
     memset(pPalCreateInfo, 0, sizeof(*pPalCreateInfo));
@@ -221,16 +228,6 @@ static VkResult ConvertImageCreateInfo(
     // have to set this bit for PAL to be able to support this.  This may have performance implications
     // regarding DCC.
     pPalCreateInfo->flags.perSubresInit = 1;
-
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 459 || \
-    (PAL_CLIENT_INTERFACE_MAJOR_VERSION == 459 && PAL_CLIENT_INTERFACE_MINOR_VERSION == 0)
-    if ((settings.dccBitsPerPixelThreshold != UINT_MAX) &&
-        Formats::IsColorFormat(pCreateInfo->format) &&
-        (Pal::Formats::BitsPerPixel(pPalCreateInfo->swizzledFormat.format) < settings.dccBitsPerPixelThreshold))
-    {
-        pPalCreateInfo->flags.noMetadata = 1;
-    }
-#endif
 
     return result;
 }
@@ -1164,7 +1161,7 @@ VkResult Image::GetSubresourceLayout(
     Pal::SubresLayout palLayout = {};
     Pal::SubresId palSubResId = {};
 
-    palSubResId.aspect     = VkToPalImageAspectSingle(pSubresource->aspectMask);
+    palSubResId.aspect     = VkToPalImageAspectSingle(m_format, pSubresource->aspectMask);
     palSubResId.mipLevel   = pSubresource->mipLevel;
     palSubResId.arraySlice = pSubresource->arrayLayer;
 
@@ -1428,12 +1425,22 @@ Pal::ImageLayout Image::GetAttachmentLayout(
 
     if (((aspect == Pal::ImageAspect::Color)   && IsColorFormat()) ||
         ((aspect == Pal::ImageAspect::Depth)   && HasDepth())      ||
-        ((aspect == Pal::ImageAspect::Stencil) && HasStencil()))
+        ((aspect == Pal::ImageAspect::Stencil) && HasStencil())    ||
+        ((aspect == Pal::ImageAspect::Y)       && IsYuvFormat())   ||
+        ((aspect == Pal::ImageAspect::CbCr)    && IsYuvFormat())   ||
+        ((aspect == Pal::ImageAspect::Cb)      && IsYuvFormat())   ||
+        ((aspect == Pal::ImageAspect::Cr)      && IsYuvFormat())   ||
+        ((aspect == Pal::ImageAspect::YCbCr)   && IsYuvFormat()))
     {
         uint32_t aspectIndex = 0;
 
         if ((aspect == Pal::ImageAspect::Color) ||
             (aspect == Pal::ImageAspect::Depth) ||
+            (aspect == Pal::ImageAspect::Y)     ||
+            (aspect == Pal::ImageAspect::CbCr)  ||
+            (aspect == Pal::ImageAspect::Cb)    ||
+            (aspect == Pal::ImageAspect::Cr)    ||
+            (aspect == Pal::ImageAspect::YCbCr) ||
             (HasDepth() == false)) // Stencil aspect for stencil-only format
         {
             aspectIndex = 0;

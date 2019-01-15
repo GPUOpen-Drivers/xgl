@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -184,6 +184,7 @@ target_sources(xgl PRIVATE
     api/vk_compute_pipeline.cpp
     api/vk_conv.cpp
     api/vk_debug_report.cpp
+    api/vk_debug_utils.cpp
     api/vk_descriptor_set.cpp
     api/vk_descriptor_set_layout.cpp
     api/vk_descriptor_pool.cpp

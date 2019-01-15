@@ -10,3 +10,10 @@ void main()
     mat4x3 x = outerProduct(l0,l1);
     color.xyz = x[0] + x[1] + x[2] + x[3];
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

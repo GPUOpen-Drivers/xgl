@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -50,6 +50,9 @@ struct Formats
     VK_INLINE static bool IsColorFormat(VkFormat format);
     VK_INLINE static bool IsDepthStencilFormat(VkFormat format);
     VK_INLINE static bool IsBcCompressedFormat(VkFormat format);
+    VK_INLINE static bool IsYuvFormat(VkFormat format);
+    VK_INLINE static bool IsYuvPlanar(VkFormat format);
+    VK_INLINE static bool IsYuvPacked(VkFormat format);
     VK_INLINE static bool HasDepth(VkFormat format);
     VK_INLINE static bool HasStencil(VkFormat format);
     VK_INLINE static VkFormat GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask);
@@ -62,7 +65,7 @@ struct Formats
 };
 
 // Number of formats supported by the driver.
-#define VK_SUPPORTED_FORMAT_COUNT   VK_FORMAT_RANGE_SIZE
+#define VK_SUPPORTED_FORMAT_COUNT   (VK_FORMAT_RANGE_SIZE + (VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM - VK_FORMAT_G8B8G8R8_422_UNORM + 1))
 
 // =====================================================================================================================
 // Get a linear index for a format (used to address tables indirectly indexed by formats).
@@ -72,6 +75,10 @@ uint32_t Formats::GetIndex(VkFormat format)
     {
         // Core format
         return static_cast<uint32_t>(format);
+    }
+    else if ((format >= VK_FORMAT_G8B8G8R8_422_UNORM) && (format <= VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM))
+    {
+        return VK_FORMAT_RANGE_SIZE + (format - VK_FORMAT_G8B8G8R8_422_UNORM);
     }
     else
     {
@@ -88,6 +95,11 @@ VkFormat Formats::FromIndex(uint32_t index)
     {
         // Core format
         return static_cast<VkFormat>(index);
+    }
+    else if ((index >= VK_FORMAT_RANGE_SIZE) &&
+             (index <= (VK_FORMAT_RANGE_SIZE + VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM - VK_FORMAT_G8B8G8R8_422_UNORM)))
+    {
+        return static_cast<VkFormat>(VK_FORMAT_G8B8G8R8_422_UNORM + index - VK_FORMAT_RANGE_SIZE);
     }
     else
     {
@@ -170,6 +182,59 @@ bool Formats::IsBcCompressedFormat(VkFormat format)
     static_assert(VK_FORMAT_RANGE_SIZE == 185,
         "Number of formats changed.  Double check whether any of them are BC block-compressed");
     return (format >= VK_FORMAT_BC1_RGB_UNORM_BLOCK && format <= VK_FORMAT_BC7_SRGB_BLOCK);
+}
+
+// =====================================================================================================================
+// Returns true if the given format is a yuv format.
+bool Formats::IsYuvFormat(VkFormat format)
+{
+    return (format >= VK_FORMAT_G8B8G8R8_422_UNORM && format <= VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM);
+}
+
+// =====================================================================================================================
+// Returns true if the given format is a yuv format.
+bool Formats::IsYuvPlanar(VkFormat format)
+{
+    return (VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM                  == format) ||
+           (VK_FORMAT_G8_B8R8_2PLANE_420_UNORM                   == format) ||
+           (VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM                  == format) ||
+           (VK_FORMAT_G8_B8R8_2PLANE_422_UNORM                   == format) ||
+           (VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM                  == format) ||
+           (VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16 == format) ||
+           (VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16  == format) ||
+           (VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16 == format) ||
+           (VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16  == format) ||
+           (VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16 == format) ||
+           (VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16 == format) ||
+           (VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16  == format) ||
+           (VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16 == format) ||
+           (VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16  == format) ||
+           (VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16 == format) ||
+           (VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM               == format) ||
+           (VK_FORMAT_G16_B16R16_2PLANE_420_UNORM                == format) ||
+           (VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM               == format) ||
+           (VK_FORMAT_G16_B16R16_2PLANE_422_UNORM                == format) ||
+           (VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM               == format);
+}
+
+// =====================================================================================================================
+// Returns true if the given format is a yuv format.
+bool Formats::IsYuvPacked(VkFormat format)
+{
+    return (VK_FORMAT_G8B8G8R8_422_UNORM                     == format) ||
+           (VK_FORMAT_B8G8R8G8_422_UNORM                     == format) ||
+           (VK_FORMAT_R10X6_UNORM_PACK16                     == format) ||
+           (VK_FORMAT_R10X6G10X6_UNORM_2PACK16               == format) ||
+           (VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16     == format) ||
+           (VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16 == format) ||
+           (VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16 == format) ||
+           (VK_FORMAT_R12X4_UNORM_PACK16                     == format) ||
+           (VK_FORMAT_R12X4G12X4_UNORM_2PACK16               == format) ||
+           (VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16     == format) ||
+           (VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16 == format) ||
+           (VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16 == format) ||
+           (VK_FORMAT_G16B16G16R16_422_UNORM                 == format) ||
+           (VK_FORMAT_B16G16R16G16_422_UNORM                 == format);
 }
 
 // =====================================================================================================================

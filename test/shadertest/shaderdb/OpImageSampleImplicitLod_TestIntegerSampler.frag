@@ -10,3 +10,11 @@ void main()
     oColor1 = texture(iSamp2D, vec2(0, 1));
     oColor2 = texture(uSamp2D, vec2(0, 1));
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

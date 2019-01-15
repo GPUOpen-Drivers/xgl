@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -84,6 +84,9 @@ public:
     VK_INLINE void* CpuAddr(uint32_t deviceIdx) const
         { return m_pCpuAddr[deviceIdx]; }
 
+    VK_INLINE void* CpuShadowAddr(uint32_t deviceIdx) const
+        { return m_pCpuShadowAddr[deviceIdx]; }
+
 protected:
     struct DynamicAllocBlock
     {
@@ -129,7 +132,9 @@ protected:
     uint32_t                  m_numPalDevices;                      // Number of Pal devices handed by this Heap class
     Pal::gpusize              m_gpuMemOffsetRangeStart;             // Start of bound GPU address range
     Pal::gpusize              m_gpuMemOffsetRangeEnd;               // End of bound GPU address range
+
     void*                     m_pCpuAddr[MaxPalDevices];            // The mapped Cpu addresses
+    void*                     m_pCpuShadowAddr[MaxPalDevices];      // The mapped Shadow Cpu addresses
 };
 
 // =====================================================================================================================
@@ -250,7 +255,6 @@ private:
     DescriptorGpuMemHeap m_gpuMemHeap;        // Allocates GPU memory for descriptor sets
 
     InternalMemory       m_staticInternalMem; // Static Internal GPU memory
-    InternalMemory       m_fmaskInternalMem;  // Fmask Internal GPU memory
 
     DescriptorAddr       m_addresses[MaxPalDevices];
 };

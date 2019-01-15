@@ -18,3 +18,10 @@ void main()
 {
     o1 = b[0].m1 + b[1].m2[i] + b[j].m2[3]+ b[i].m2[j];
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

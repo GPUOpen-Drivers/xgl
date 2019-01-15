@@ -54,3 +54,11 @@ void main()
 
     fragColor = vec3(f16) + vec3(f16v2.x) + vec3(f16v3) + vec3(f16v4.xyz);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

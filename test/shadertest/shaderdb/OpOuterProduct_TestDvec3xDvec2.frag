@@ -14,3 +14,10 @@ void main()
 
     fragColor = (dm2x3[0][0] > 0.0) ? vec4(1.0) : vec4(0.0);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

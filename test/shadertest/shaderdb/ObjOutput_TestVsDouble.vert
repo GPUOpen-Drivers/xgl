@@ -15,3 +15,10 @@ void main()
     d3[i] = dvec3(2.0);
     dm2 = dmat2(dvec2(0.5), dvec2(1.5));
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

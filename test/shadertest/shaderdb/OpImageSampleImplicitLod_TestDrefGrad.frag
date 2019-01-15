@@ -9,3 +9,11 @@ void main()
     oColor = vec4(textureGrad(samp2DS, inUV, vec2(0.1, 0.2), vec2(0.3, 0.4)));
 }
 
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

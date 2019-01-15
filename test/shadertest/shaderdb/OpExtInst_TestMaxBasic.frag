@@ -13,3 +13,10 @@ void main()
     uvec4 umax = max(uvec4(a), uvec4(b));
     frag_color = fmax + vec4(imax) + vec4(umax);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

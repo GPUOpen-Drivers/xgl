@@ -32,3 +32,10 @@ void main()
 
     sparseTextureGatherOffsetsARB(samp2DRect, vec2(1.2), offsets, texel, 3);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

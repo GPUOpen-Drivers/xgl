@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -965,7 +965,7 @@ VkResult Queue::BindSparseEntry(
             Pal::SubresLayout subResLayout = {};
             Pal::SubresId     subResId     = {};
 
-            subResId.aspect     = VkToPalImageAspectSingle(bind.subresource.aspectMask);
+            subResId.aspect     = VkToPalImageAspectSingle(image.GetFormat(), bind.subresource.aspectMask);
             subResId.mipLevel   = bind.subresource.mipLevel;
             subResId.arraySlice = bind.subresource.arrayLayer;
 
@@ -1264,6 +1264,26 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueuePresentKHR(
     const VkPresentInfoKHR*                      pPresentInfo)
 {
     return ApiQueue::ObjectFromHandle(queue)->Present(pPresentInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkQueueBeginDebugUtilsLabelEXT(
+    VkQueue                                     queue,
+    const VkDebugUtilsLabelEXT*                 pLabelInfo)
+{
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkQueueEndDebugUtilsLabelEXT(
+    VkQueue                                     queue)
+{
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkQueueInsertDebugUtilsLabelEXT(
+    VkQueue                                     queue,
+    const VkDebugUtilsLabelEXT*                 pLabelInfo)
+{
 }
 
 } // namespace entry

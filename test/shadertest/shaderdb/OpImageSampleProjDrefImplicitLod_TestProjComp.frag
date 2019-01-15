@@ -23,3 +23,11 @@ void main()
     oColor += vec4(textureProj(samp2DS, vsOut2), 1, 0, 1);
     oColor += vec4(textureProj(samp2DRS, vsOut2), 1, 0, 1);
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

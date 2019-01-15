@@ -15,3 +15,10 @@ void main()
     fragColor  = func(samp2D_0, vec2(1.0));
     fragColor += func(samp2D_1, vec2(0.0));
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

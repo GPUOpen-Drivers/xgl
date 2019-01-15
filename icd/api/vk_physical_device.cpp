@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -364,6 +364,14 @@ static void GetFormatFeatureFlags(
     if (!Formats::IsDepthStencilFormat(format))
     {
         retFlags &= ~VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    }
+
+    if (Formats::IsYuvFormat(format))
+    {
+        retFlags &= ~VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
+        retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+        retFlags &= ~VK_FORMAT_FEATURE_BLIT_SRC_BIT;
+        retFlags &= ~VK_FORMAT_FEATURE_BLIT_DST_BIT;
     }
 
     *pOutFormatFeatureFlags = retFlags;
@@ -975,6 +983,11 @@ VkResult PhysicalDevice::GetImageFormatProperties(
                 {
                     return VK_ERROR_FORMAT_NOT_SUPPORTED;
                 }
+            }
+
+            if (Formats::IsYuvFormat(format))
+            {
+                return VK_ERROR_FORMAT_NOT_SUPPORTED;
             }
 
             switch (type)

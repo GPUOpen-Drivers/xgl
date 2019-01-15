@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -517,6 +517,18 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayPlaneProperties2KHR   );
     INIT_DISPATCH_ENTRY(vkGetDisplayModeProperties2KHR                  );
     INIT_DISPATCH_ENTRY(vkGetDisplayPlaneCapabilities2KHR               );
+
+    INIT_DISPATCH_ENTRY(vkSetDebugUtilsObjectNameEXT                    );
+    INIT_DISPATCH_ENTRY(vkSetDebugUtilsObjectTagEXT                     );
+    INIT_DISPATCH_ENTRY(vkQueueBeginDebugUtilsLabelEXT                  );
+    INIT_DISPATCH_ENTRY(vkQueueEndDebugUtilsLabelEXT                    );
+    INIT_DISPATCH_ENTRY(vkQueueInsertDebugUtilsLabelEXT                 );
+    INIT_DISPATCH_ENTRY(vkCmdBeginDebugUtilsLabelEXT                    );
+    INIT_DISPATCH_ENTRY(vkCmdEndDebugUtilsLabelEXT                      );
+    INIT_DISPATCH_ENTRY(vkCmdInsertDebugUtilsLabelEXT                   );
+    INIT_DISPATCH_ENTRY(vkCreateDebugUtilsMessengerEXT                  );
+    INIT_DISPATCH_ENTRY(vkDestroyDebugUtilsMessengerEXT                 );
+    INIT_DISPATCH_ENTRY(vkSubmitDebugUtilsMessageEXT                    );
 
 }
 

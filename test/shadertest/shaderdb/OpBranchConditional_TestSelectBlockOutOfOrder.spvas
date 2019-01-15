@@ -1,3 +1,10 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Khronos SPIR-V Tools Assembler; 0
@@ -100,8 +107,8 @@
          %65 = OpFunctionParameter %16
          %66 = OpLabel
          %67 = OpVariable %26 Function
-               OpStore %67 %34
          %68 = OpVariable %27 Function
+               OpStore %67 %34
                OpStore %68 %65
                OpBranch %69
          %69 = OpLabel

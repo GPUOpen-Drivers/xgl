@@ -9,3 +9,10 @@ void main()
     ivec4 bd0 = ivec4(colorIn2);
     color = vec4(bitfieldInsert(bd, bd0, bd.x, bd.y));
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

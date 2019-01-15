@@ -29,3 +29,10 @@ void main()
     sparseTextureOffsetARB(samp2DRectShadow, vec3(0.2), ivec2(1), texel);
     fragColor.w += texel;
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -136,6 +136,8 @@ VkResult DescriptorPool::Init(
 
             pDevice->MemMgr()->GetCommonPool(InternalPoolDescriptorTable, &allocInfo);
 
+            allocInfo.flags.needShadow = m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead;
+
             result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &m_staticInternalMem, pDevice->GetPalDeviceMask());
 
             if (result != VK_SUCCESS)
@@ -149,27 +151,11 @@ VkResult DescriptorPool::Init(
             {
                 m_addresses[deviceIdx].staticGpuAddr = m_staticInternalMem.GpuVirtAddr(deviceIdx);
                 m_addresses[deviceIdx].staticCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuAddr(deviceIdx));
-            }
 
-            if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
-            {
-                // Allocate memory for shadow descriptor table for MSAA image Fmask SRDs
-                allocInfo.pal.descrVirtAddr = m_staticInternalMem.GpuVirtAddr(0);
-                pDevice->MemMgr()->GetCommonPool(InternalPoolShadowDescriptorTable, &allocInfo);
-
-                result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &m_fmaskInternalMem, pDevice->GetPalDeviceMask());
-
-                if (result != VK_SUCCESS)
+                if (m_pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
                 {
-                    return result;
-                }
-
-                m_gpuMemHeap.BindMemory(&m_fmaskInternalMem);
-
-                for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
-                {
-                    m_addresses[deviceIdx].fmaskGpuAddr = m_fmaskInternalMem.GpuVirtAddr(deviceIdx);
-                    m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuAddr(deviceIdx));
+                    m_addresses[deviceIdx].fmaskGpuAddr = m_staticInternalMem.GpuShadowVirtAddr(deviceIdx);
+                    m_addresses[deviceIdx].fmaskCpuAddr = static_cast<uint32_t*>(m_gpuMemHeap.CpuShadowAddr(deviceIdx));
                 }
             }
         }
@@ -204,11 +190,6 @@ VkResult DescriptorPool::Destroy(
     if (m_staticInternalMem.PalMemory(DefaultDeviceIndex) != nullptr)
     {
         pDevice->MemMgr()->FreeGpuMem(&m_staticInternalMem);
-    }
-
-    if (m_fmaskInternalMem.PalMemory(DefaultDeviceIndex) != nullptr)
-    {
-        pDevice->MemMgr()->FreeGpuMem(&m_fmaskInternalMem);
     }
 
     // Call destructor
@@ -353,7 +334,9 @@ m_numPalDevices(0)
 {
     m_gpuMemOffsetRangeStart = 0;
     m_gpuMemOffsetRangeEnd   = 0;
+
     memset(m_pCpuAddr, 0, sizeof(m_pCpuAddr));
+    memset(m_pCpuShadowAddr, 0, sizeof(m_pCpuShadowAddr));
 }
 
 // =====================================================================================================================
@@ -685,7 +668,9 @@ VkResult DescriptorGpuMemHeap::BindMemory(
         if (m_pCpuAddr[deviceIdx] != nullptr)
         {
             m_internalMem.Unmap(deviceIdx);
-            m_pCpuAddr[deviceIdx] = nullptr;
+
+            m_pCpuAddr[deviceIdx]       = nullptr;
+            m_pCpuShadowAddr[deviceIdx] = nullptr;
         }
     }
 
@@ -699,12 +684,15 @@ VkResult DescriptorGpuMemHeap::BindMemory(
         if ((m_gpuMemSize > 0) && (m_internalMem.PalMemory(deviceIdx) != nullptr))
         {
             Pal::Result mapResult = m_internalMem.Map(deviceIdx, &m_pCpuAddr[deviceIdx]);
+            VK_ASSERT(mapResult == Pal::Result::Success);
 
+            mapResult = m_internalMem.ShadowMap(deviceIdx, &m_pCpuShadowAddr[deviceIdx]);
             VK_ASSERT(mapResult == Pal::Result::Success);
         }
         else
         {
-            m_pCpuAddr[deviceIdx] = nullptr;
+            m_pCpuShadowAddr[deviceIdx] = nullptr;
+            m_pCpuAddr[deviceIdx]       = nullptr;
         }
     }
     Reset();

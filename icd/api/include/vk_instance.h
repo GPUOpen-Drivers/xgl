@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -41,6 +41,7 @@
 #include "include/vk_utils.h"
 #include "include/vk_extensions.h"
 #include "include/vk_debug_report.h"
+#include "include/vk_debug_utils.h"
 
 #include "palDeveloperHooks.h"
 #include "palLib.h"
@@ -232,6 +233,17 @@ public:
         const char*                 pLayerPrefix,
         const char*                 pMessage);
 
+    VkResult RegisterDebugUtilsMessenger(
+        DebugUtilsMessenger* pMessenger);
+
+    void UnregisterDebugUtilsMessenger(
+        DebugUtilsMessenger* pMessenger);
+
+    void CallExternalMessengers(
+        VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
+        VkDebugUtilsMessageTypeFlagsEXT             messageTypes,
+        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData);
+
     VkResult EnumerateAllNullPhysicalDeviceProperties(
         uint32_t*                       pPhysicalDeviceCount,
         VkPhysicalDeviceProperties**    ppPhysicalDeviceProperties);
@@ -312,6 +324,8 @@ private:
 
     Util::List<DebugReportCallback*, PalAllocator>  m_debugReportCallbacks;             // List of registered Debug
                                                                                         // Report Callbacks
+    Util::List<DebugUtilsMessenger*, PalAllocator>  m_debugUtilsMessengers;             // List of registered Debug
+                                                                                        // Utils Messengers
     Util::Mutex                                     m_logCallbackInternalOnlyMutex;     // Serialize internal log
                                                                                         // message translation prior
                                                                                         // to calling external callbacks

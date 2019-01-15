@@ -1,7 +1,14 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
 ; SPIR-V
 ; Version: 1.0
 ; Generator: Khronos Glslang Reference Front End; 1
-; Bound: 33
+; Bound: 35
 ; Schema: 0
                OpCapability Shader
                OpCapability Float64
@@ -24,6 +31,7 @@
           %7 = OpTypeFloat 64
           %8 = OpTypeVector %7 4
           %9 = OpTypePointer Uniform %8
+          %34 = OpTypePointer Function %8
          %11 = OpTypeStruct %8
          %12 = OpTypePointer Uniform %11
          %26 = OpVariable %12 Uniform
@@ -37,7 +45,7 @@
          %22 = OpVariable %21 Output
           %4 = OpFunction %2 None %3
           %5 = OpLabel
-         %10 = OpVariable %9 Function
+         %10 = OpVariable %34 Function
          %25 = OpUndef %15
          %13 = OpAccessChain %9 %26 %31
          %32 = OpLoad %8 %13

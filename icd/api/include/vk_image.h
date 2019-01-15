@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2018 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -218,6 +218,10 @@ public:
     VK_FORCEINLINE bool HasDepthAndStencil() const
         { return (m_internalFlags.hasDepth & m_internalFlags.hasStencil) == 1; }
 
+	// Returns true if the image has a yuv format.
+	VK_FORCEINLINE bool IsYuvFormat() const
+	    { return m_internalFlags.isYuvFormat == 1; }
+
 private:
     // SwapChain object needs to be able to instantiate API image objects for presentable images
     friend class SwapChain;
@@ -239,13 +243,14 @@ private:
             uint32_t externalPinnedHost     : 1;  // True if image backing memory is compatible with pinned sysmem.
             uint32_t externalD3DHandle      : 1;  // True if image is backed by a D3D11 image
             uint32_t isColorFormat          : 1;  // True if the image has a color format
+            uint32_t isYuvFormat            : 1;  // True if the image has a yuv format
             uint32_t hasDepth               : 1;  // True if the image has depth components
             uint32_t hasStencil             : 1;  // True if the image has stencil components
             uint32_t sparseBinding          : 1;  // VK_IMAGE_CREATE_SPARSE_BINDING_BIT
             uint32_t sparseResidency        : 1;  // VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT
             uint32_t is2DArrayCompat        : 1;  // VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT
             uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
-            uint32_t reserved               : 17;
+            uint32_t reserved               : 16;
         };
         uint32_t     u32All;
     };

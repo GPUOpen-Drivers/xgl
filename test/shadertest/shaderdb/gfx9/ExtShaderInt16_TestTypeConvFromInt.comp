@@ -39,3 +39,11 @@ void main()
     mOut9  = u16vec4(m5);   // u16 <- i64
     mOut10 = u16vec4(m6);   // u16 <- u64
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

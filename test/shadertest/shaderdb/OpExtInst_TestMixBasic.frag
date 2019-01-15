@@ -14,3 +14,10 @@ void main()
     uvec4 umix = mix(uvec4(a), uvec4(b), bvec4(c));
     frag_color = fmix + vec4(imix) + vec4(umix);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

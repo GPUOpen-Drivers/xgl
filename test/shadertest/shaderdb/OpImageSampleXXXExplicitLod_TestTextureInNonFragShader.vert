@@ -11,3 +11,10 @@ void main()
     texel += textureProj(samp1D, vec2(0.2));
     texel += textureProj(samp1DShadow, vec4(0.3));
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

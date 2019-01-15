@@ -16,3 +16,11 @@ void main()
     o[flatIdx * 4 + 4].xyz = gl_GlobalInvocationID;
     o[flatIdx * 4 + 5].x = gl_LocalInvocationIndex;
 }
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

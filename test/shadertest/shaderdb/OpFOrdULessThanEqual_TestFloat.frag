@@ -8,3 +8,10 @@ void main()
     bvec4 x = lessThanEqual (uvec4(colorIn1), uvec4(colorIn2));
     color = vec4(x);
 }
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST
