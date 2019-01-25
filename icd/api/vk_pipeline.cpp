@@ -61,7 +61,11 @@ Pipeline::Pipeline(
     for (uint32_t devIdx = 0; devIdx < pDevice->NumPalDevices(); devIdx++)
     {
         m_pPalPipeline[devIdx]      = pPalPipeline[devIdx];
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 460
         m_palPipelineHash[devIdx]   = pPalPipeline[devIdx]->GetInfo().pipelineHash;
+#else
+        m_palPipelineHash[devIdx] = pPalPipeline[devIdx]->GetInfo().palRuntimeHash;
+#endif
     }
 }
 

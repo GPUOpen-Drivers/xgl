@@ -2297,6 +2297,13 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
             pSurfaceCapabilities->currentTransform = PalToVkSurfaceTransform(swapChainProperties.currentTransforms);
 
             pSurfaceCapabilities->supportedUsageFlags = PalToVkImageUsageFlags(swapChainProperties.supportedUsageFlags);
+
+            if (std::is_same<T, VkSurfaceCapabilities2EXT*>::value)
+            {
+                // The capablility of surface counter is not supported until the VK_EXT_display_control is implemented.
+                VkSurfaceCapabilities2EXT* pSurfaceCap2EXT = reinterpret_cast<VkSurfaceCapabilities2EXT*>(pSurfaceCapabilities);
+                pSurfaceCap2EXT->supportedSurfaceCounters  = 0;
+            }
         }
     }
 
@@ -2708,6 +2715,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_16BIT_STORAGE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPA_INTERFACE));
 
+     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INLINE_UNIFORM_BLOCK));
+
     if ((pPhysicalDevice == nullptr) ||
         (pPhysicalDevice->PalProperties().osProperties.supportQueuePriority))
     {
@@ -2737,6 +2746,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
 #if VKI_SHADER_COMPILER_CONTROL
 #endif
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PCI_BUS_INFO));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
@@ -2852,11 +2863,13 @@ void PhysicalDevice::PopulateQueueFamilies()
             case Pal::EngineTypeUniversal:
                 palImageLayoutFlag          = Pal::LayoutUniversalEngine;
                 transferGranularityOverride = m_settings.transferGranularityUniversalOverride;
+                m_queueFamilies[m_queueFamilyCount].validShaderStages = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT;
                 break;
             case Pal::EngineTypeCompute:
             case Pal::EngineTypeExclusiveCompute:
                 palImageLayoutFlag          = Pal::LayoutComputeEngine;
                 transferGranularityOverride = m_settings.transferGranularityComputeOverride;
+                m_queueFamilies[m_queueFamilyCount].validShaderStages = VK_SHADER_STAGE_COMPUTE_BIT;
                 break;
             case Pal::EngineTypeDma:
                 palImageLayoutFlag          = Pal::LayoutDmaEngine;
@@ -3252,6 +3265,17 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES_EXT:
+            {
+                VkPhysicalDeviceInlineUniformBlockFeaturesEXT* pInlineUniformBlockFeatures =
+                    reinterpret_cast<VkPhysicalDeviceInlineUniformBlockFeaturesEXT*>(pHeader);
+
+                pInlineUniformBlockFeatures->inlineUniformBlock                                 = VK_TRUE;
+                pInlineUniformBlockFeatures->descriptorBindingInlineUniformBlockUpdateAfterBind = VK_TRUE;
+
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT:
             {
                 VkPhysicalDeviceScalarBlockLayoutFeaturesEXT* pScalarBlockLayoutFeatures =
@@ -3261,6 +3285,18 @@ void PhysicalDevice::GetFeatures2(
 
                 break;
             }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR:
+            {
+                VkPhysicalDeviceVulkanMemoryModelFeaturesKHR * pMemoryModel =
+                    reinterpret_cast<VkPhysicalDeviceVulkanMemoryModelFeaturesKHR *>(pHeader);
+
+                pMemoryModel->vulkanMemoryModel = VK_TRUE;
+                pMemoryModel->vulkanMemoryModelDeviceScope = VK_TRUE;
+
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -3389,6 +3425,8 @@ void PhysicalDevice::GetDeviceProperties2(
 
         VkPhysicalDeviceDriverPropertiesKHR*                     pDriverProperties;
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
+        VkPhysicalDeviceInlineUniformBlockPropertiesEXT*         pInlineUniformBlockProperties;
+        VkPhysicalDevicePCIBusInfoPropertiesEXT*                 pPCIBusInfoProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -3578,6 +3616,28 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
         {
             pVertexAttributeDivisorProperties->maxVertexAttribDivisor = UINT32_MAX;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT:
+        {
+            const Pal::DeviceProperties& palProps = PalProperties();
+
+            pPCIBusInfoProperties->pciDomain   = palProps.pciProperties.domainNumber;
+            pPCIBusInfoProperties->pciBus      = palProps.pciProperties.busNumber;
+            pPCIBusInfoProperties->pciDevice   = palProps.pciProperties.deviceNumber;
+            pPCIBusInfoProperties->pciFunction = palProps.pciProperties.functionNumber;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES_EXT:
+        {
+            pInlineUniformBlockProperties->maxInlineUniformBlockSize                                = 64*1024;
+            pInlineUniformBlockProperties->maxPerStageDescriptorInlineUniformBlocks                 = 16;
+            pInlineUniformBlockProperties->maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks  = 16;
+            pInlineUniformBlockProperties->maxDescriptorSetInlineUniformBlocks                      = 16;
+            pInlineUniformBlockProperties->maxDescriptorSetUpdateAfterBindInlineUniformBlocks       = 16;
+
             break;
         }
 
@@ -4458,6 +4518,38 @@ VkResult PhysicalDevice::CreateDisplayMode(
     return result;
 }
 
+// =====================================================================================================================
+// GetSurfaceCapabilities2EXT is mainly used to query the capabilities of a display (VK_ICD_WSI_PLATFORM_DISPLAY). It's
+// similar to GetSurfaceCapabilities2KHR, except for it can report some display-related capabilities.
+VkResult PhysicalDevice::GetSurfaceCapabilities2EXT(
+    VkSurfaceKHR                surface,
+    VkSurfaceCapabilities2EXT*  pSurfaceCapabilitiesExt
+    ) const
+{
+    VkResult result = VK_SUCCESS;
+    union
+    {
+        const VkStructHeader*       pHeader;
+        VkSurfaceCapabilities2EXT*  pVkSurfaceCapabilities2EXT;
+    };
+
+    for (pVkSurfaceCapabilities2EXT = pSurfaceCapabilitiesExt;
+        (pHeader != nullptr) && (result == VK_SUCCESS);
+        pHeader = pHeader->pNext)
+    {
+        switch (static_cast<uint32_t>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_EXT:
+            result = GetSurfaceCapabilities(surface, pVkSurfaceCapabilities2EXT);
+            break;
+        default:
+            break;
+        }
+    }
+
+    return result;
+}
+
 // C-style entry points
 namespace entry
 {
@@ -5046,6 +5138,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneCapabilities2KHR(
                                                                     pDisplayPlaneInfo->mode,
                                                                     pDisplayPlaneInfo->planeIndex,
                                                                     &pCapabilities->capabilities);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilities2EXT(
+    VkPhysicalDevice                            physicalDevice,
+    VkSurfaceKHR                                surface,
+    VkSurfaceCapabilities2EXT*                  pSurfaceCapabilities)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfaceCapabilities2EXT(surface,
+                                                                                           pSurfaceCapabilities);
 }
 
 }

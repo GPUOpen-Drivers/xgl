@@ -17,6 +17,7 @@ VK_EXT_direct_mode_display
 VK_EXT_acquire_xlib_display
 VK_KHR_get_display_properties2
 VK_EXT_debug_utils
+VK_EXT_display_surface_counter
 
 ###############################################################################
 # DEVICE EXTENSIONS
@@ -87,3 +88,6 @@ VK_GOOGLE_hlsl_functionality1
 VK_GOOGLE_decorate_string
 VK_AMD_memory_overallocation_behavior
 VK_EXT_scalar_block_layout
+VK_EXT_pci_bus_info
+VK_KHR_vulkan_memory_model
+VK_EXT_inline_uniform_block

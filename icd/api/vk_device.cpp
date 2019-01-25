@@ -66,6 +66,8 @@
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
 
+#include "appopt/barrier_filter_layer.h"
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
 #endif
@@ -207,6 +209,7 @@ Device::Device(
     m_enabledExtensions(enabledExtensions),
     m_dispatchTable(DispatchTable::Type::DEVICE, m_pInstance, this),
     m_pSqttMgr(nullptr),
+    m_pBarrierFilterLayer(nullptr),
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true)
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
@@ -903,6 +906,20 @@ VkResult Device::Initialize(
         }
     }
 
+    if ((result == VK_SUCCESS) && (m_settings.barrierFilterOptions != BarrierFilterDisabled))
+    {
+        void* pMemory = VkInstance()->AllocMem(sizeof(BarrierFilterLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+        if (pMemory != nullptr)
+        {
+            m_pBarrierFilterLayer = VK_PLACEMENT_NEW(pMemory) BarrierFilterLayer();
+        }
+        else
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
+
     if (result == VK_SUCCESS)
     {
         result = PalToVkResult(m_memoryMutex.Init());
@@ -1023,6 +1040,11 @@ void Device::InitDispatchTable()
         SqttOverrideDispatchTable(&m_dispatchTable, m_pSqttMgr);
     }
 
+    // Install the barrier filter layer if needed
+    if (m_pBarrierFilterLayer != nullptr)
+    {
+        m_pBarrierFilterLayer->OverrideDispatchTable(&m_dispatchTable);
+    }
 }
 
 // =====================================================================================================================
@@ -1217,6 +1239,13 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
         Util::Destructor(m_pSqttMgr);
 
         VkInstance()->FreeMem(m_pSqttMgr);
+    }
+
+    if (m_pBarrierFilterLayer != nullptr)
+    {
+        Util::Destructor(m_pBarrierFilterLayer);
+
+        VkInstance()->FreeMem(m_pBarrierFilterLayer);
     }
 
     for (uint32_t i = 0; i < Queue::MaxQueueFamilies; ++i)

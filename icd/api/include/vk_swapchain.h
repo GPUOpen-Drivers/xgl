@@ -130,6 +130,9 @@ public:
     VK_INLINE uint32_t GetAppOwnedImageCount() const
         { return m_appOwnedImageCount; }
 
+    VK_INLINE bool IsHwCompositingSupported() const
+        { return (m_properties.flags.hwCompositing == 1); }
+
     Pal::IQueue* PrePresent(
         uint32_t                   deviceIdx,
         uint32_t                   imageIndex,

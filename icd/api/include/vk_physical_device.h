@@ -177,6 +177,12 @@ public:
         return m_queueFamilies[queueFamilyIndex].palImageLayoutFlag;
     }
 
+    VK_INLINE const VkShaderStageFlags GetValidShaderStages(
+        uint32_t queueFamilyIndex) const
+    {
+        return m_queueFamilies[queueFamilyIndex].validShaderStages;
+    }
+
     VK_INLINE const VkQueueFamilyProperties& GetQueueFamilyProperties(
         uint32_t queueFamilyIndex) const
     {
@@ -406,6 +412,11 @@ public:
         const char*                 pLayerName,
         uint32_t*                   pPropertyCount,
         VkExtensionProperties*      pProperties) const;
+
+    VkResult GetSurfaceCapabilities2EXT(
+        VkSurfaceKHR                surface,
+        VkSurfaceCapabilities2EXT*  pSurfaceCapabilitiesExt) const;
+
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
     VkResult AcquireXlibDisplay(
         Display*        dpy,
@@ -493,6 +504,7 @@ protected:
     {
         Pal::QueueType               palQueueType;
         Pal::EngineType              palEngineType;
+        VkShaderStageFlags           validShaderStages;
         uint32_t                     palImageLayoutFlag;
         VkQueueFamilyProperties      properties;
     } m_queueFamilies[Queue::MaxQueueFamilies];
@@ -763,6 +775,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetDisplayPlaneCapabilities2KHR(
     VkPhysicalDevice                            physicalDevice,
     const VkDisplayPlaneInfo2KHR*               pDisplayPlaneInfo,
     VkDisplayPlaneCapabilities2KHR*             pCapabilities);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilities2EXT(
+    VkPhysicalDevice                            physicalDevice,
+    VkSurfaceKHR                                surface,
+    VkSurfaceCapabilities2EXT*                  pSurfaceCapabilities);
 
 } // namespace entry
 

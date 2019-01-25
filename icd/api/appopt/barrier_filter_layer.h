@@ -22,33 +22,40 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+***********************************************************************************************************************
+* @file  barrier_filter_layer.h
+* @brief Removes unnecessary barriers
+***********************************************************************************************************************
+*/
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#ifndef __BARRIER_FILTER_LAYER_H__
+#define __BARRIER_FILTER_LAYER_H__
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#pragma once
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+#include "include/vk_dispatch.h"
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
+namespace vk
+{
 
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   71
+// =====================================================================================================================
+// Contains any state used by the barrier filter layer
+class BarrierFilterLayer
+{
+public:
+    BarrierFilterLayer();
+    ~BarrierFilterLayer();
 
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
+    void OverrideDispatchTable(DispatchTable* pDispatchTable);
 
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      ""
+    VK_INLINE const DispatchTable* GetNextLayer() const
+        { return &m_nextLayer; }
 
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           1
-#define CTS_VERSION_SUBMINOR        1
-#define CTS_VERSION_PATCH           2
+private:
+    DispatchTable m_nextLayer; // Dispatch table to the next layer's functions
+};
+
+} // namespace vk
+
+#endif /* __BARRIER_FILTER_LAYER_H__ */

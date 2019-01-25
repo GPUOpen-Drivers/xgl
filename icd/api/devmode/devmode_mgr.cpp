@@ -2143,7 +2143,11 @@ void DevModeMgr::PipelineCreated(
         m_trace.pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
         (m_trace.pGpaSession != nullptr))
     {
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 460
         m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
+#else
+        m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex), { });
+#endif
     }
 }
 

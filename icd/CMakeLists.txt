@@ -217,6 +217,7 @@ target_sources(xgl PRIVATE
     api/vk_surface.cpp
     api/vk_gpa_session.cpp
     api/vk_descriptor_update_template.cpp
+    api/appopt/barrier_filter_layer.cpp
     api/render_state_cache.cpp
     api/renderpass/renderpass_builder.cpp
     api/renderpass/renderpass_logger.cpp

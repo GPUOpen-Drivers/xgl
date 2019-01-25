@@ -915,6 +915,7 @@ private:
     Pal::EngineType               m_palEngineType;
     uint32_t                      m_palDeviceMask;
     uint32_t                      m_palDeviceUsedMask;
+    VkShaderStageFlags            m_validShaderStageFlags;
     Pal::ICmdBuffer*              m_pPalCmdBuffers[MaxPalDevices];
     VirtualStackAllocator*        m_pStackAllocator;
     GpuEventMgr*                  m_pGpuEventMgr;

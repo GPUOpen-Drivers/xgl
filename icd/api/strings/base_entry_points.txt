@@ -315,3 +315,5 @@ vkCmdInsertDebugUtilsLabelEXT                       @instance   @iext(EXT_debug_
 vkCreateDebugUtilsMessengerEXT                      @instance   @iext(EXT_debug_utils)
 vkDestroyDebugUtilsMessengerEXT                     @instance   @iext(EXT_debug_utils)
 vkSubmitDebugUtilsMessageEXT                        @instance   @iext(EXT_debug_utils)
+
+vkGetPhysicalDeviceSurfaceCapabilities2EXT          @instance   @iext(EXT_display_surface_counter)

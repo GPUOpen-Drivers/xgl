@@ -111,6 +111,16 @@ static void OverrideProfiledSettings(
 
         pSettings->optColorTargetUsageDoesNotContainResolveLayout = true;
 
+        if (info.gfxLevel == Pal::GfxIpLevel::GfxIp9)
+        {
+            pSettings->barrierFilterOptions = SkipStrayExecutionDependencies |
+                                              SkipImageLayoutUndefined       |
+                                              SkipDuplicateResourceBarriers  |
+                                              ForceImageSharingModeExclusive;
+        }
+
+        pPalSettings->disableSkipFceOptimization = false;
+
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.
         pSettings->lenientInstanceFuncQuery = true;
@@ -131,7 +141,13 @@ static void OverrideProfiledSettings(
         {
             // this setting can be set for pre-gfxIp9 too
             pSettings->optColorTargetUsageDoesNotContainResolveLayout = true;
+
+            pSettings->barrierFilterOptions = SkipStrayExecutionDependencies |
+                                              SkipImageLayoutUndefined       |
+                                              ForceImageSharingModeExclusive;
         }
+
+        pPalSettings->disableSkipFceOptimization = false;
 
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.

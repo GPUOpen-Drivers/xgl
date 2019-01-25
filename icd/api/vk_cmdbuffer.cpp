@@ -381,6 +381,7 @@ CmdBuffer::CmdBuffer(
     m_palEngineType(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalEngineType(queueFamilyIndex)),
     m_palDeviceMask(0),
     m_palDeviceUsedMask(0),
+    m_validShaderStageFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetValidShaderStages(queueFamilyIndex)),
     m_pStackAllocator(nullptr),
     m_pGpuEventMgr(nullptr),
     m_vbMgr(pDevice),
@@ -4823,6 +4824,8 @@ void CmdBuffer::PushConstants(
     const uint32_t* const pInputValues = reinterpret_cast<const uint32_t*>(values);
 
     const PipelineLayout* pLayout = PipelineLayout::ObjectFromHandle(layout);
+
+    stageFlags &= m_validShaderStageFlags;
 
     if (stageFlags & VK_SHADER_STAGE_COMPUTE_BIT)
     {
