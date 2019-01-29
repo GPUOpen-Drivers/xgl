@@ -6277,6 +6277,89 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarkerAMD(
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->WriteBufferMarker(pipelineStage, dstBuffer, dstOffset, marker);
 }
 
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBindTransformFeedbackBuffersEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstBinding,
+    uint32_t                                    bindingCount,
+    const VkBuffer*                             pBuffers,
+    const VkDeviceSize*                         pOffsets,
+    const VkDeviceSize*                         pSizes)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BindTransformFeedbackBuffers(firstBinding,
+                                                                                bindingCount,
+                                                                                pBuffers,
+                                                                                pOffsets,
+                                                                                pSizes);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginTransformFeedbackEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstCounterBuffer,
+    uint32_t                                    counterBufferCount,
+    const VkBuffer*                             pCounterBuffers,
+    const VkDeviceSize*                         pCounterBufferOffsets)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginTransformFeedback(firstCounterBuffer,
+                                                                          counterBufferCount,
+                                                                          pCounterBuffers,
+                                                                          pCounterBufferOffsets);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdEndTransformFeedbackEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstCounterBuffer,
+    uint32_t                                    counterBufferCount,
+    const VkBuffer*                             pCounterBuffers,
+    const VkDeviceSize*                         pCounterBufferOffsets)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndTransformFeedback(firstCounterBuffer,
+                                                                        counterBufferCount,
+                                                                        pCounterBuffers,
+                                                                        pCounterBufferOffsets);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginQueryIndexedEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    query,
+    VkQueryControlFlags                         flags,
+    uint32_t                                    index)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BeginQueryIndexed(queryPool, query, flags, index);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdEndQueryIndexedEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    query,
+    uint32_t                                    index)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->EndQueryIndexed(queryPool, query, index);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectByteCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstInstance,
+    VkBuffer                                    counterBuffer,
+    VkDeviceSize                                counterBufferOffset,
+    uint32_t                                    counterOffset,
+    uint32_t                                    vertexStride)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->DrawIndirectByteCount(instanceCount,
+                                                                         firstInstance,
+                                                                         counterBuffer,
+                                                                         counterBufferOffset,
+                                                                         counterOffset,
+                                                                         vertexStride);
+}
+
 } // namespace entry
 
 } // namespace vk

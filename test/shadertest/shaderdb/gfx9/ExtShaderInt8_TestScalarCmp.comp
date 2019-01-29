@@ -1,0 +1,56 @@
+#version 450 core
+#extension GL_EXT_shader_explicit_arithmetic_types : enable
+
+layout(set = 0, binding = 0) uniform UBO {
+    int8_t m1;
+    uint8_t m2;
+    int8_t m3;
+};
+
+layout(set = 1, binding = 0) buffer SSBO {
+    uint8_t mOut1;
+};
+
+void main()
+{
+    uint8_t a;
+
+    if (m1 != m2)
+        a = uint8_t(0);
+
+    if (m1 == m2)
+        a = uint8_t(1);
+
+    if (m1 > m2)
+        a = uint8_t(2);
+
+    if (m1 >= m2)
+        a = uint8_t(3);
+
+    if (m1 < m2)
+        a = uint8_t(4);
+
+    if (m1 <= m2)
+        a = uint8_t(5);
+
+    if (m1 > m3)
+        a = uint8_t(6);
+
+    if (m1 >= m3)
+        a = uint8_t(7);
+
+    if (m1 < m3)
+        a = uint8_t(8);
+
+    if (m1 <= m3)
+        a = uint8_t(9);
+
+    mOut1 = a;
+}
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

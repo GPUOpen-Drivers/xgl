@@ -775,6 +775,7 @@ VkResult Queue::Present(
 
             result = VK_ERROR_DEVICE_LOST;
         }
+
     }
 
     return result;

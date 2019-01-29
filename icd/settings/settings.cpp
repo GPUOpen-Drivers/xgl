@@ -121,6 +121,12 @@ static void OverrideProfiledSettings(
 
         pPalSettings->disableSkipFceOptimization = false;
 
+        // Vega 20 has better performance on DOOM when DCC is disabled except for the 32 BPP surfaces
+        if (info.revision == Pal::AsicRevision::Vega20)
+        {
+            pSettings->dccBitsPerPixelThreshold = 32;
+        }
+
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.
         pSettings->lenientInstanceFuncQuery = true;
@@ -149,6 +155,12 @@ static void OverrideProfiledSettings(
 
         pPalSettings->disableSkipFceOptimization = false;
 
+        // The Vega 20 PAL default is slower on Wolfenstein II, so always allow DCC.
+        if (info.revision == Pal::AsicRevision::Vega20)
+        {
+            pSettings->dccBitsPerPixelThreshold = 0;
+        }
+
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.
         pSettings->lenientInstanceFuncQuery = true;
@@ -167,6 +179,11 @@ static void OverrideProfiledSettings(
     {
         pPalSettings->useGraphicsFastDepthStencilClear = true;
 
+        //Vega 20 has better performance on Dota 2 when DCC is disabled.
+        if (info.revision == Pal::AsicRevision::Vega20)
+        {
+            pSettings->dccBitsPerPixelThreshold = 128;
+        }
         pPalSettings->hintDisableSmallSurfColorCompressionSize = 511;
 
         pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;

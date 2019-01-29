@@ -1469,6 +1469,8 @@ void SwCompositor::Destroy(
     const Device*                pDevice,
     const VkAllocationCallbacks* pAllocator)
 {
+    // Remove all GPU memory references before destroying the memory itself because there's a dependency of peer memory
+    // on the original memory on the presenting device.
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
     {
         for (uint32_t i = 0; i < m_imageCount; ++i)
@@ -1476,7 +1478,16 @@ void SwCompositor::Destroy(
             if (m_ppBltMemory[deviceIdx][i] != nullptr)
             {
                 pDevice->PalDevice(deviceIdx)->RemoveGpuMemoryReferences(1, &m_ppBltMemory[deviceIdx][i], nullptr);
+            }
+        }
+    }
 
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); ++deviceIdx)
+    {
+        for (uint32_t i = 0; i < m_imageCount; ++i)
+        {
+            if (m_ppBltMemory[deviceIdx][i] != nullptr)
+            {
                 m_ppBltMemory[deviceIdx][i]->Destroy();
                 m_ppBltMemory[deviceIdx][i] = nullptr;
             }

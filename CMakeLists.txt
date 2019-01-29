@@ -51,6 +51,8 @@ option(VK_INTERNAL_DEVELOPER "Build Internal Developer Build?" OFF)
 
 option(ICD_OPEN_SOURCE "Build open source Vulkan?" ON)
 option(ICD_BUILD_LLPC "Build LLPC?" ON)
+option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
+option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)
 
 option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 option(ICD_BUILD_SPVONLY "Build SPV Only?" OFF)
@@ -123,6 +125,8 @@ endif()
 set(PAL_MEMTRACK ${ICD_MEMTRACK} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GPUOPEN ${ICD_GPUOPEN_DEVMODE_BUILD} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_VIDEO ${ICD_BUILD_VIDEO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(PAL_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(PAL_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 # LLVM
 set(XGL_LLVM_SRC_PATH ${PROJECT_SOURCE_DIR}/../llvm CACHE PATH "Specify the path to the LLVM.")
@@ -172,6 +176,8 @@ if(ICD_BUILD_LLPC)
     set(LLVM_ENABLE_TERMINFO OFF CACHE BOOL Force)
     set(LLVM_ENABLE_ZLIB OFF CACHE BOOL Force)
     # confict with PAL
+    set(LLPC_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+    set(LLPC_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
     #set(LLVM_OPTIMIZED_TABLEGEN ON CACHE BOOL Force)
     add_subdirectory(${XGL_LLVM_SRC_PATH} ${PROJECT_BINARY_DIR}/llvm)

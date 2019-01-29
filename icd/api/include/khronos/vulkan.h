@@ -56,9 +56,6 @@
 
 #include "devext/vk_amd_gpu_shader_half_float_fetch.h"
 #include "devext/vk_amd_gpa_interface.h"
-#if VKI_SHADER_COMPILER_CONTROL
-#include "devext/vk_amd_shader_compiler_control.h"
-#endif
 
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,

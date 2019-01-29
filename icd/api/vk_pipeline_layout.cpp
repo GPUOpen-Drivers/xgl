@@ -93,6 +93,14 @@ VkResult PipelineLayout::ConvertCreateInfo(
     pInfo->userDataLayout.setBindingRegCount        = 0;
     pInfo->userDataLayout.setBindingRegBase         = 0;
 
+    // Reserve an user-data to store the VA of buffer for transform feedback.
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+    {
+        pInfo->userDataLayout.transformFeedbackRegCount = 1;
+        pInfo->userDataRegCount                        += pInfo->userDataLayout.transformFeedbackRegCount;
+        pPipelineInfo->numUserDataNodes                += 1;
+    }
+
     // Calculate the number of bytes needed for push constants
     uint32_t pushConstantsSizeInBytes = 0;
 

@@ -18,6 +18,7 @@ VK_EXT_acquire_xlib_display
 VK_KHR_get_display_properties2
 VK_EXT_debug_utils
 VK_EXT_display_surface_counter
+VK_EXT_swapchain_colorspace
 
 ###############################################################################
 # DEVICE EXTENSIONS
@@ -80,7 +81,6 @@ VK_EXT_descriptor_indexing
 VK_KHR_create_renderpass2
 VK_KHR_8bit_storage
 VK_EXT_conservative_rasterization
-VK_EXT_swapchain_colorspace
 VK_EXT_hdr_metadata
 VK_KHR_shader_atomic_int64
 VK_KHR_driver_properties
@@ -91,3 +91,4 @@ VK_EXT_scalar_block_layout
 VK_EXT_pci_bus_info
 VK_KHR_vulkan_memory_model
 VK_EXT_inline_uniform_block
+VK_EXT_transform_feedback

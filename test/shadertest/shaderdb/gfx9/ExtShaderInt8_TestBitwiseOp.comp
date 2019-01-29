@@ -1,0 +1,66 @@
+#version 450 core
+#extension GL_EXT_shader_explicit_arithmetic_types : enable
+
+layout(set = 0, binding = 0) uniform UBO {
+    int8_t m1;
+    int8_t m2;
+    uint8_t m3;
+    uint8_t m4;
+    i8vec4 m5;
+    i8vec4 m6;
+    u8vec4 m7;
+    u8vec4 m8;
+};
+
+layout(set = 1, binding = 0) buffer SSBO {
+    int8_t mOut1;
+    uint8_t mOut2;
+    uint8_t mOut3;
+    i8vec4 mOut4;
+    u8vec4 mOut5;
+    u8vec4 mOut6;
+};
+
+void main()
+{
+    int8_t  a = m1 & m2;
+    uint8_t b = m2 & m3;
+    uint8_t c = m3 & m4;
+
+    i8vec4 va = m5 & m6;
+    u8vec4 vb = m6 & m7;
+    u8vec4 vc = m7 & m8;
+
+    int8_t  d = m1 ^ a;
+    uint8_t e = m2 ^ b;
+    uint8_t f = m3 ^ c;
+
+    i8vec4 vd = m5 ^ va;
+    u8vec4 ve = m6 ^ vb;
+    u8vec4 vf = m7 ^ vc;
+
+    int8_t  g = m1 | d;
+    uint8_t h = m2 | e;
+    uint8_t i = m3 | f;
+
+    i8vec4 vg = m5 | vd;
+    u8vec4 vh = m6 | ve;
+    u8vec4 vi = m7 | vf;
+
+    u8vec4 vj = ~vi;
+
+    mOut1 = g;
+    mOut2 = h;
+    mOut3 = i;
+    mOut4 = vg;
+    mOut5 = vh;
+    mOut6 = vj;
+}
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST
+

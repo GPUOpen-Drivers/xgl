@@ -317,3 +317,10 @@ vkDestroyDebugUtilsMessengerEXT                     @instance   @iext(EXT_debug_
 vkSubmitDebugUtilsMessageEXT                        @instance   @iext(EXT_debug_utils)
 
 vkGetPhysicalDeviceSurfaceCapabilities2EXT          @instance   @iext(EXT_display_surface_counter)
+
+vkCmdBindTransformFeedbackBuffersEXT                @device     @dext(EXT_transform_feedback)
+vkCmdBeginTransformFeedbackEXT                      @device     @dext(EXT_transform_feedback)
+vkCmdEndTransformFeedbackEXT                        @device     @dext(EXT_transform_feedback)
+vkCmdBeginQueryIndexedEXT                           @device     @dext(EXT_transform_feedback)
+vkCmdEndQueryIndexedEXT                             @device     @dext(EXT_transform_feedback)
+vkCmdDrawIndirectByteCountEXT                       @device     @dext(EXT_transform_feedback)

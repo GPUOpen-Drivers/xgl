@@ -113,6 +113,7 @@ void GraphicsPipeline::BuildRasterizationState(
         const VkPipelineRasterizationStateCreateInfo*                   pRs;
         const VkPipelineRasterizationStateRasterizationOrderAMD*        pRsOrder;
         const VkPipelineRasterizationConservativeStateCreateInfoEXT*    pRsConservative;
+        const VkPipelineRasterizationStateStreamCreateInfoEXT*          pRsStream;
     };
 
     // By default rasterization is disabled, unless rasterization creation info is present
@@ -206,6 +207,11 @@ void GraphicsPipeline::BuildRasterizationState(
                         break;
                     }
 
+                }
+                break;
+            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
+                {
+                    pInfo->rasterizationStream = pRsStream->rasterizationStream;
                 }
                 break;
             default:

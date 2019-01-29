@@ -2744,16 +2744,11 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONSERVATIVE_RASTERIZATION));
     }
 
-#if VKI_SHADER_COMPILER_CONTROL
-#endif
-
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PCI_BUS_INFO));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
-
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SCALAR_BLOCK_LAYOUT));
-
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MEMORY_OVERALLOCATION_BEHAVIOR));
 
     return availableExtensions;
@@ -3285,6 +3280,16 @@ void PhysicalDevice::GetFeatures2(
 
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT:
+            {
+                VkPhysicalDeviceTransformFeedbackFeaturesEXT* pFeedback =
+                    reinterpret_cast<VkPhysicalDeviceTransformFeedbackFeaturesEXT*>(pHeader);
+
+                pFeedback->geometryStreams   = VK_TRUE;
+                pFeedback->transformFeedback = VK_TRUE;
+
+                break;
+            }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR:
             {
@@ -3427,6 +3432,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
         VkPhysicalDeviceInlineUniformBlockPropertiesEXT*         pInlineUniformBlockProperties;
         VkPhysicalDevicePCIBusInfoPropertiesEXT*                 pPCIBusInfoProperties;
+        VkPhysicalDeviceTransformFeedbackPropertiesEXT*          pFeedbackProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -3638,6 +3644,24 @@ void PhysicalDevice::GetDeviceProperties2(
             pInlineUniformBlockProperties->maxDescriptorSetInlineUniformBlocks                      = 16;
             pInlineUniformBlockProperties->maxDescriptorSetUpdateAfterBindInlineUniformBlocks       = 16;
 
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT:
+        {
+            // For now, the transform feedback draw is only supported by CmdDrawOpaque, but the hardware register
+            // VGT_STRMOUT_DRAW_OPAQUE_VERTEX_STRIDE used in this method only has 9 bits, which means the register can
+            // represent 511 bytes at most. Due to this limitation, the max values of StreamDataSize, BufferDataSize
+            // and DataStride are all hardcode to 512, partly because 512 is VK spec's minimum requirement.
+            pFeedbackProperties->maxTransformFeedbackStreamDataSize         = 512;
+            pFeedbackProperties->maxTransformFeedbackBufferDataSize         = 512;
+            pFeedbackProperties->maxTransformFeedbackBufferDataStride       = 512;
+            pFeedbackProperties->maxTransformFeedbackBufferSize             = 0xffffffff;
+            pFeedbackProperties->maxTransformFeedbackBuffers                = Pal::MaxStreamOutTargets;
+            pFeedbackProperties->maxTransformFeedbackStreams                = Pal::MaxStreamOutTargets;
+            pFeedbackProperties->transformFeedbackDraw                      = true;
+            pFeedbackProperties->transformFeedbackQueries                   = true;
+            pFeedbackProperties->transformFeedbackStreamsLinesTriangles     = true;
+            pFeedbackProperties->transformFeedbackRasterizationStreamSelect = false;
             break;
         }
 

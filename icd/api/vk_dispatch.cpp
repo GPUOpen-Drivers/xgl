@@ -518,7 +518,12 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetDisplayModeProperties2KHR                  );
     INIT_DISPATCH_ENTRY(vkGetDisplayPlaneCapabilities2KHR               );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilities2EXT      );
-
+    INIT_DISPATCH_ENTRY(vkCmdBindTransformFeedbackBuffersEXT            );
+    INIT_DISPATCH_ENTRY(vkCmdBeginTransformFeedbackEXT                  );
+    INIT_DISPATCH_ENTRY(vkCmdEndTransformFeedbackEXT                    );
+    INIT_DISPATCH_ENTRY(vkCmdBeginQueryIndexedEXT                       );
+    INIT_DISPATCH_ENTRY(vkCmdEndQueryIndexedEXT                         );
+    INIT_DISPATCH_ENTRY(vkCmdDrawIndirectByteCountEXT                   );
     INIT_DISPATCH_ENTRY(vkSetDebugUtilsObjectNameEXT                    );
     INIT_DISPATCH_ENTRY(vkSetDebugUtilsObjectTagEXT                     );
     INIT_DISPATCH_ENTRY(vkQueueBeginDebugUtilsLabelEXT                  );

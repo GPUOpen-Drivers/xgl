@@ -92,6 +92,11 @@ VkResult PalQueryPool::Create(
     Pal::QueryPoolCreateInfo createInfo = {};
 
     Pal::QueryType           queryType = Pal::QueryType::Occlusion;
+    if (pCreateInfo->queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
+    {
+        queryType                = Pal::QueryType::StreamoutStats;
+        createInfo.queryPoolType = Pal::QueryPoolType::StreamoutStats;
+    }
 
     const VkQueryPoolCreateInfo* pVkInfo = nullptr;
 

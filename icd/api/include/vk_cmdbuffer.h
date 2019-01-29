@@ -1455,6 +1455,50 @@ VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarkerAMD(
     VkDeviceSize            dstOffset,
     uint32_t                marker);
 
+VKAPI_ATTR void VKAPI_CALL vkCmdBindTransformFeedbackBuffersEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstBinding,
+    uint32_t                                    bindingCount,
+    const VkBuffer*                             pBuffers,
+    const VkDeviceSize*                         pOffsets,
+    const VkDeviceSize*                         pSizes);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginTransformFeedbackEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstCounterBuffer,
+    uint32_t                                    counterBufferCount,
+    const VkBuffer*                             pCounterBuffers,
+    const VkDeviceSize*                         pCounterBufferOffsets);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdEndTransformFeedbackEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstCounterBuffer,
+    uint32_t                                    counterBufferCount,
+    const VkBuffer*                             pCounterBuffers,
+    const VkDeviceSize*                         pCounterBufferOffsets);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginQueryIndexedEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    query,
+    VkQueryControlFlags                         flags,
+    uint32_t                                    index);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdEndQueryIndexedEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    query,
+    uint32_t                                    index);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectByteCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    instanceCount,
+    uint32_t                                    firstInstance,
+    VkBuffer                                    counterBuffer,
+    VkDeviceSize                                counterBufferOffset,
+    uint32_t                                    counterOffset,
+    uint32_t                                    vertexStride);
+
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginDebugUtilsLabelEXT(
     VkCommandBuffer                             commandBuffer,
     const VkDebugUtilsLabelEXT*                 pLabelInfo);

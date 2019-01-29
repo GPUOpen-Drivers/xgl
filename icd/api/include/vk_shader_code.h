@@ -40,9 +40,10 @@ enum ShaderStage : uint32_t
     ShaderStageGeometry,          ///< Geomtry shader
     ShaderStageFragment,          ///< Fragment shader
     ShaderStageCompute,           ///< Compute shader
-
+    ShaderStageCount,   ///< Count of shader stages
+    ShaderStageInvalid = ~0u,
+    ShaderStageNativeStageCount = ShaderStageCompute + 1,
     ShaderGfxStageCount = ShaderStageFragment + 1,  ///< Count of graphics shader stages
-    ShaderStageCount    = ShaderStageCompute  + 1,  ///< Count of shader stages
 };
 
 /// Translate shader stage flag bits to corresponding shader stage.
