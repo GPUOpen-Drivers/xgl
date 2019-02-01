@@ -57,6 +57,7 @@
 #include "palOglPresent.h"
 #include "palListImpl.h"
 #include "palHashMapImpl.h"
+#include "palInlineFuncs.h"
 
 #include <new>
 
@@ -64,6 +65,9 @@ namespace vk
 {
 
 static VkAllocationCallbacks g_privateCallbacks = allocator::g_DefaultAllocCallback;
+
+const char* Instance::m_extensionsEnv = getenv("AMDVLK_ENABLE_DEVELOPING_EXT");
+const int   MaxExtensionStringLen     = 512;
 
 // =====================================================================================================================
 Instance::Instance(
@@ -97,6 +101,37 @@ Instance::Instance(
     m_chillSettings.chillProfileEnable  = false;
 
     memset(m_screens, 0, sizeof(m_screens));
+}
+
+// =====================================================================================================================
+bool Instance::IsExtensionEnabledByEnv(
+    const char* pExtensionName
+    )
+{
+    bool       isEnabled  = false;
+    char*      pBuffer    = nullptr;
+    char*      pExtension = nullptr;
+    const char delim[]    = " ";
+
+    char  envExtensionString[MaxExtensionStringLen] = {};
+
+    if (Instance::m_extensionsEnv != nullptr)
+    {
+        Util::Strncpy(envExtensionString, Instance::m_extensionsEnv, MaxExtensionStringLen);
+        pExtension = Util::Strtok(envExtensionString, delim, &pBuffer);
+    }
+
+    while ((pExtension != nullptr) && (strlen(pExtension) > 0))
+    {
+        if ((Util::Strcasecmp(pExtensionName, pExtension) == 0) || (Util::Strcasecmp("ALL", pExtension) == 0))
+        {
+            isEnabled = true;
+            break;
+        }
+        pExtension = Util::Strtok(nullptr, delim, &pBuffer);
+    }
+
+    return isEnabled;
 }
 
 // =====================================================================================================================
@@ -662,7 +697,20 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_SEMAPHORE_CAPABILITIES));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_FENCE_CAPABILITIES));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_REPORT));
+
+        if (Instance::IsExtensionEnabledByEnv(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)
+           )
+        {
+            supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_UTILS));
+        }
+
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_DISPLAY));
+
+        if (Instance::IsExtensionEnabledByEnv(VK_EXT_DISPLAY_SURFACE_COUNTER_EXTENSION_NAME)
+           )
+        {
+            supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DISPLAY_SURFACE_COUNTER));
+        }
 
 #if VK_USE_PLATFORM_XLIB_XRANDR_EXT
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_ACQUIRE_XLIB_DISPLAY));

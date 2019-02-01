@@ -20,7 +20,7 @@ void main (void)
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
 ; SHADERTEST: %{{[0-9]*}} = call spir_func i32 @spirv.image.atomiciadd.u32.CubeArray
 
-; SHADERTEST-LABEL: {{^// LLPC}} pipeline SPIR-V lowering results
+; SHADERTEST-LABEL: {{^// LLPC.*}} SPIR-V lowering results
 ; SHADERTEST: call i32 @llpc.image.atomiciadd.u32.CubeArray
 
 ; SHADERTEST-LABEL: {{^// LLPC}} final pipeline module info

@@ -358,7 +358,7 @@ VkResult Device::Create(
     PhysicalDevice*                   pPhysicalDevices[MaxPalDevices] = { pPhysicalDevice              };
     Pal::IDevice*                     pPalDevices[MaxPalDevices]      = { pPhysicalDevice->PalDevice() };
     Instance*                         pInstance                       = pPhysicalDevice->VkInstance();
-    bool                              physicalDeviceFeaturesVerified  = false;
+    const VkPhysicalDeviceFeatures*   pEnabledFeatures                = pCreateInfo->pEnabledFeatures;
     VkMemoryOverallocationBehaviorAMD overallocationBehavior          = VK_MEMORY_OVERALLOCATION_BEHAVIOR_DEFAULT_AMD;
 
     for (pDeviceCreateInfo = pCreateInfo; ((pHeader != nullptr) && (vkResult == VK_SUCCESS)); pHeader = pHeader->pNext)
@@ -389,12 +389,15 @@ VkResult Device::Create(
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2:
         {
+            const auto pPhysicalDeviceFeatures2 = reinterpret_cast<const VkPhysicalDeviceFeatures2*>(pHeader);
+
+            VK_ASSERT(pCreateInfo->pEnabledFeatures == nullptr);
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFeatures2>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceFeatures2*>(pHeader));
+                pPhysicalDeviceFeatures2);
 
             // If present, VkPhysicalDeviceFeatures2 controls which features are enabled instead of pEnabledFeatures
-            physicalDeviceFeaturesVerified = true;
+            pEnabledFeatures = &pPhysicalDeviceFeatures2->features;
 
             break;
         }
@@ -470,6 +473,14 @@ VkResult Device::Create(
 
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFloat16Int8FeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceFloat16Int8FeaturesKHR*>(pHeader));
+
+            break;
+        }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR:
         {
@@ -492,9 +503,8 @@ VkResult Device::Create(
         }
     }
 
-    // If not checked already with VkPhysicalDeviceFeatures2, make sure only supported features are requested.
-    if ((physicalDeviceFeaturesVerified == false) &&
-        (pCreateInfo->pEnabledFeatures  != nullptr))
+    // If the pNext chain includes a VkPhysicalDeviceFeatures2 structure, then pEnabledFeatures must be NULL.
+    if (pCreateInfo->pEnabledFeatures != nullptr)
     {
         vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFeatures>(
             pPhysicalDevice,
@@ -520,8 +530,6 @@ VkResult Device::Create(
                 {
                     const VkDeviceQueueCreateInfo* pQueueInfo = &pDeviceCreateInfo->pQueueCreateInfos[i];
 
-                    Pal::QueueType palType = pPhysicalDevices[DefaultDeviceIndex]->GetQueueFamilyPalQueueType(
-                                                                                         pQueueInfo->queueFamilyIndex);
                     queueCounts[pQueueInfo->queueFamilyIndex] = pQueueInfo->queueCount;
                     totalQueues += pQueueInfo->queueCount;
 
@@ -628,7 +636,7 @@ VkResult Device::Create(
             pPalDevices,
             barrierPolicy,
             enabledDeviceExtensions,
-            pCreateInfo->pEnabledFeatures));
+            pEnabledFeatures));
 
         DispatchableDevice* pDispatchableDevice = static_cast<DispatchableDevice*>(pMemory);
         DispatchableQueue*  pDispatchableQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
@@ -894,15 +902,44 @@ VkResult Device::Initialize(
 
     if ((result == VK_SUCCESS) && VkInstance()->IsTracingSupportEnabled())
     {
-        void* pSqttStorage = VkInstance()->AllocMem(sizeof(SqttMgr), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+        uint32_t queueFamilyIndex;
+        uint32_t queueIndex;
+        size_t   sqttQueueTotalSize = 0;
+
+        for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
+        {
+            for (queueIndex = 0; m_pQueues[queueFamilyIndex][queueIndex] != nullptr; queueIndex++)
+            {
+                sqttQueueTotalSize += sizeof(SqttQueueState);
+            }
+        }
+
+        void* pSqttStorage = VkInstance()->AllocMem(
+            sizeof(SqttMgr) + sqttQueueTotalSize,
+            VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 
         if (pSqttStorage != nullptr)
         {
             m_pSqttMgr = VK_PLACEMENT_NEW(pSqttStorage) SqttMgr(this);
+            pSqttStorage = Util::VoidPtrInc(pSqttStorage, sizeof(SqttMgr));
         }
         else
         {
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+
+        if (result == VK_SUCCESS)
+        {
+            for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
+            {
+                for (queueIndex = 0;
+                    (m_pQueues[queueFamilyIndex][queueIndex] != nullptr) && (result == VK_SUCCESS);
+                    queueIndex++)
+                {
+                    result = (*m_pQueues[queueFamilyIndex][queueIndex])->CreateSqttState(pSqttStorage);
+                    pSqttStorage = Util::VoidPtrInc(pSqttStorage, sizeof(SqttQueueState));
+                }
+            }
         }
     }
 
@@ -1236,6 +1273,14 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
     if (m_pSqttMgr != nullptr)
     {
+        for (uint32_t i = 0; i < Queue::MaxQueueFamilies; ++i)
+        {
+            for (uint32_t j = 0; (j < Queue::MaxQueuesPerFamily) && (m_pQueues[i][j] != nullptr); ++j)
+            {
+                Util::Destructor((*m_pQueues[i][j])->GetSqttState());
+            }
+        }
+
         Util::Destructor(m_pSqttMgr);
 
         VkInstance()->FreeMem(m_pSqttMgr);
@@ -1341,7 +1386,8 @@ VkResult Device::CreateInternalComputePipeline(
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
 
-        pCompiler->ApplyDefaultShaderOptions(&pShaderInfo->options
+        pCompiler->ApplyDefaultShaderOptions(ShaderStageCompute,
+                                             &pShaderInfo->options
                                              );
 
         result = pCompiler->CreateComputePipelineBinary(this,

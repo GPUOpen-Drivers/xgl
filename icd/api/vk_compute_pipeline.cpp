@@ -108,7 +108,7 @@ VkResult ComputePipeline::Create(
     VkPipeline*                             pPipeline)
 {
     // Setup PAL create info from Vulkan inputs
-    CreateInfo  createInfo                         = {};
+    CreateInfo  localPipelineInfo                  = {};
     size_t      pipelineBinarySizes[MaxPalDevices] = {};
     const void* pPipelineBinaries[MaxPalDevices]   = {};
     PipelineCompiler*   pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
@@ -133,7 +133,7 @@ VkResult ComputePipeline::Create(
 
     if (result == VK_SUCCESS)
     {
-        ConvertComputePipelineInfo(pDevice, pCreateInfo, &createInfo);
+        ConvertComputePipelineInfo(pDevice, pCreateInfo, &localPipelineInfo);
 
         // Override pipeline creation parameters based on pipeline profile
         pDevice->GetShaderOptimizer()->OverrideComputePipelineCreateInfo(
@@ -147,7 +147,8 @@ VkResult ComputePipeline::Create(
     if (result == VK_SUCCESS)
     {
         // Get the pipeline and shader size from PAL and allocate memory.
-        pipelineSize = pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(createInfo.pipeline, nullptr);
+        pipelineSize =
+            pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, nullptr);
 
         pSystemMem = pAllocator->pfnAllocation(
             pAllocator->pUserData,
@@ -173,18 +174,19 @@ VkResult ComputePipeline::Create(
             ((deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success));
             deviceIdx++)
         {
-            VK_ASSERT(pipelineSize == pDevice->PalDevice(deviceIdx)->GetComputePipelineSize(createInfo.pipeline, nullptr));
+            VK_ASSERT(pipelineSize ==
+                pDevice->PalDevice(deviceIdx)->GetComputePipelineSize(localPipelineInfo.pipeline, nullptr));
 
             // If pPipelineBinaries[DefaultDeviceIndex] is sufficient for all devices, the other pipeline binaries
             // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
             if (pPipelineBinaries[deviceIdx] != nullptr)
             {
-                createInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[deviceIdx];
-                createInfo.pipeline.pPipelineBinary    = pPipelineBinaries[deviceIdx];
+                localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[deviceIdx];
+                localPipelineInfo.pipeline.pPipelineBinary    = pPipelineBinaries[deviceIdx];
             }
 
             palResult = pDevice->PalDevice(deviceIdx)->CreateComputePipeline(
-                createInfo.pipeline,
+                localPipelineInfo.pipeline,
                 Util::VoidPtrInc(pPalMem, deviceIdx * pipelineSize),
                 &pPalPipeline[deviceIdx]);
         }
@@ -207,9 +209,9 @@ VkResult ComputePipeline::Create(
         // On success, wrap it up in a Vulkan object and return.
         VK_PLACEMENT_NEW(pSystemMem) ComputePipeline(pDevice,
                                                      pPalPipeline,
-                                                     createInfo.pLayout,
+                                                     localPipelineInfo.pLayout,
                                                      pBinary,
-                                                     createInfo.immedInfo);
+                                                     localPipelineInfo.immedInfo);
 
         *pPipeline = ComputePipeline::HandleFromVoidPointer(pSystemMem);
     }

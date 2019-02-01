@@ -198,6 +198,7 @@ public:
     static const char* GetShaderStageName(ShaderStage shaderStage);
 
     void ApplyDefaultShaderOptions(
+        ShaderStage                  stage,
         Llpc::PipelineShaderOptions* pShaderOptions
     ) const;
 
@@ -224,6 +225,16 @@ private:
         const void*            pPipelineBinary,
         size_t                 pipelineBinarySize);
 
+    bool LoadReplaceShaderBinary(
+        uint64_t shaderHash,
+        size_t*  pCodeSize,
+        void**   ppCode);
+
+    bool ReplacePipelineShaderModule(
+        const Device*             pDevice,
+        PipelineCompilerType      compilerType,
+        Llpc::PipelineShaderInfo* pShaderInfo,
+        ShaderModuleHandle*       pShaderModule);
     // -----------------------------------------------------------------------------------------------------------------
 
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object

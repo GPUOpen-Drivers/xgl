@@ -82,19 +82,32 @@ public:
 
     void Init(Device* pDevice);
 
-    VK_INLINE bool IsEnabled(VkDebugReportObjectTypeEXT objectType) const;
+    template<typename ObjectType>
+    VK_INLINE bool IsEnabled(
+        ObjectType objectType) const;
 
-    template<typename HandleType> VK_INLINE SqttMetaState* GetMetaState(VkDebugReportObjectTypeEXT objectType,
-                                                                        HandleType handle);
+    template<typename HandleType,
+             typename ObjectType> VK_INLINE SqttMetaState* GetMetaState(
+        ObjectType objectType,
+        HandleType handle);
 
-    template<typename HandleType> VK_INLINE const char* GetDebugName(VkDebugReportObjectTypeEXT objectType,
-                                                                     HandleType handle);
+    template<typename HandleType,
+             typename ObjectType> VK_INLINE const char* GetDebugName(
+        ObjectType objectType,
+        HandleType handle);
 
-    template<typename HandleType> SqttMetaState* ObjectCreated(Device* pDevice, VkDebugReportObjectTypeEXT objectType,
-                                                               HandleType handle);
+    template<typename HandleType,
+             typename ObjectType> SqttMetaState* ObjectCreated(
+        Device*    pDevice,
+        ObjectType objectType,
+        HandleType handle);
 
 private:
-    void SetMetaState(VkDebugReportObjectTypeEXT objectType, uint64_t handle, SqttMetaState* pState);
+    template<typename ObjectType>
+    void SetMetaState(
+        ObjectType     objectType,
+        uint64_t       handle,
+        SqttMetaState* pState);
 
     typedef Util::HashMap<uint64_t, SqttMetaState*, PalAllocator> MetaDataMap;
 
@@ -112,40 +125,73 @@ private:
 
     Device*          m_pDevice;
     ObjectTypeState* m_pObjects;
+
+    // Constants
+    const uint32_t   ObjectTypeBeginRange;
+    const uint32_t   ObjectTypeEndRange;
+    const uint32_t   ObjectTypeRangeSize;
 };
 
 // =====================================================================================================================
-template<typename HandleType>
+template<typename ObjectType>
+void SqttObjectMgr::SetMetaState(
+    ObjectType     objectType,
+    uint64_t       handle,
+    SqttMetaState* pState)
+{
+    if (m_pObjects != nullptr)
+    {
+        const uint32_t idx = (objectType - ObjectTypeBeginRange);
+
+        VK_ASSERT(idx < ObjectTypeRangeSize);
+
+        if (m_pObjects[idx].enabled)
+        {
+            Util::MutexAuto lock(&m_pObjects[idx].dataMutex);
+
+            VK_ASSERT(m_pObjects[idx].dataMap.FindKey(handle) == nullptr);
+
+            m_pObjects[idx].dataMap.Insert(handle, pState);
+        }
+    }
+}
+
+// =====================================================================================================================
+template<typename HandleType,
+         typename ObjectType>
 SqttMetaState* SqttObjectMgr::GetMetaState(
-    VkDebugReportObjectTypeEXT objectType,
-    HandleType                 handle)
+    ObjectType objectType,
+    HandleType handle)
 {
     return nullptr;
 }
 
 // =====================================================================================================================
+template<typename ObjectType>
 bool SqttObjectMgr::IsEnabled(
-    VkDebugReportObjectTypeEXT objectType
+    ObjectType objectType
     ) const
 {
     return false;
 }
 
 // =====================================================================================================================
-template<typename HandleType>
+template<typename HandleType,
+         typename ObjectType>
 const char* SqttObjectMgr::GetDebugName(
-    VkDebugReportObjectTypeEXT objectType,
-    HandleType                 handle)
+    ObjectType objectType,
+    HandleType handle)
 {
     return "";
 }
 
 // =====================================================================================================================
-template<typename HandleType>
+template<typename HandleType,
+         typename ObjectType>
 SqttMetaState* SqttObjectMgr::ObjectCreated(
-    Device*                    pDevice,
-    VkDebugReportObjectTypeEXT objectType,
-    HandleType                 handle)
+    Device*    pDevice,
+    ObjectType objectType,
+    HandleType handle)
 {
     SqttMetaState* pState = nullptr;
 

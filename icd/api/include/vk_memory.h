@@ -61,8 +61,8 @@ union MemoryPriority
     MemoryPriority() {}
     MemoryPriority(Pal::GpuMemPriority level, Pal::GpuMemPriorityOffset offset)
         :
-        priority(static_cast<uint32_t>(level)),
-        offset(static_cast<uint32_t>(offset))
+        offset(static_cast<uint32_t>(offset)),
+        priority(static_cast<uint32_t>(level))
     {
     }
 
@@ -72,15 +72,16 @@ union MemoryPriority
     Pal::GpuMemPriorityOffset PalOffset() const
         { return static_cast<Pal::GpuMemPriorityOffset>(offset); }
 
-    bool operator<(const MemoryPriority& priority) const
-        { return u32All < priority.u32All; }
+    bool operator<(const MemoryPriority& memPriority) const
+        { return ((priority < memPriority.priority) ||
+                  ((priority == memPriority.priority) && (offset < memPriority.offset))); }
 
     static MemoryPriority FromSetting(uint32_t value);
 
     struct
     {
-        uint32_t priority : 16;
         uint32_t offset   : 16;
+        uint32_t priority : 16;
     };
     uint32_t u32All;
 };

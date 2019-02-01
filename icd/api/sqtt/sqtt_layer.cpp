@@ -72,6 +72,161 @@ static_assert(RgpSqttMarkerPresentWordCount * sizeof(uint32_t) == sizeof(RgpSqtt
     "Marker size mismatch");
 
 // =====================================================================================================================
+// Construct per-queue SQTT layer info
+SqttQueueState::SqttQueueState(
+    Queue* pQueue)
+    :
+    m_pQueue(pQueue),
+    m_pDevice(pQueue->VkDevice()),
+    m_cmdBufferMap(32, pQueue->VkDevice()->VkInstance()->GetPrivateAllocator()),
+    m_pNextLayer(pQueue->VkDevice()->GetSqttMgr()->GetNextLayer())
+{
+}
+
+// =====================================================================================================================
+// Initialize per-queue SQTT layer info
+VkResult SqttQueueState::Init()
+{
+    Util::Result palResult = m_lock.Init();
+
+    if (palResult == Util::Result::Success)
+    {
+        palResult = m_cmdBufferMap.Init();
+    }
+
+    VkResult result = PalToVkResult(palResult);
+
+    VkCommandPoolCreateInfo poolCreateInfo = {};
+    poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+    poolCreateInfo.queueFamilyIndex = m_pQueue->GetFamilyIndex();
+
+    result = CmdPool::Create(
+        m_pDevice,
+        &poolCreateInfo,
+        &vk::allocator::g_DefaultAllocCallback,
+        &m_cmdPool);
+
+    return result;
+}
+
+// =====================================================================================================================
+void SqttQueueState::DebugLabelBegin(const VkDebugUtilsLabelEXT* pMarkerInfo)
+{
+    SubmitUserEventMarker(RgpSqttMarkerUserEventPush, pMarkerInfo->pLabelName);
+}
+
+// =====================================================================================================================
+void SqttQueueState::DebugLabelEnd()
+{
+    SubmitUserEventMarker(RgpSqttMarkerUserEventPop, nullptr);
+}
+
+// =====================================================================================================================
+void SqttQueueState::DebugLabelInsert(const VkDebugUtilsLabelEXT* pMarkerInfo)
+{
+    SubmitUserEventMarker(RgpSqttMarkerUserEventTrigger, pMarkerInfo->pLabelName);
+}
+
+// =====================================================================================================================
+// Submits a user event string queue marker
+void SqttQueueState::SubmitUserEventMarker(RgpSqttMarkerUserEventType eventType, const char* pString)
+{
+    VkResult         result    = VK_SUCCESS;
+    VkCommandBuffer  cmdBuffer = VK_NULL_HANDLE;
+    VkCommandBuffer* pEntry    = nullptr;
+
+    CmdBufferMapKey key;
+    key.u64All = 0;
+    key.eventType = eventType;
+
+    if (pString != nullptr)
+    {
+        key.stringHash = Util::HashString(pString, strlen(pString));
+    }
+
+    {
+        Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> readLock(&m_lock);
+
+        pEntry = m_cmdBufferMap.FindKey(key.u64All);
+
+        if (pEntry != nullptr)
+        {
+            // Command buffer found in cache
+            cmdBuffer = *pEntry;
+        }
+    }
+
+    if (pEntry == nullptr)
+    {
+        Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> readWriteLock(&m_lock);
+
+        // Build command buffer and cache it
+        VkCommandBufferAllocateInfo allocInfo = {};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.commandBufferCount = 1;
+        allocInfo.commandPool = m_cmdPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+        result = CmdBuffer::Create(
+            m_pDevice,
+            &allocInfo,
+            &cmdBuffer);
+
+        CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(cmdBuffer);
+
+        if (result == VK_SUCCESS)
+        {
+            VkCommandBufferBeginInfo beginInfo = {};
+            beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+            result = pCmdBuffer->Begin(&beginInfo);
+        }
+
+        if (result == VK_SUCCESS)
+        {
+            pCmdBuffer->GetSqttState()->WriteUserEventMarker(eventType, pString);
+
+            result = pCmdBuffer->End();
+        }
+
+        if (result == VK_SUCCESS)
+        {
+            m_cmdBufferMap.Insert(key.u64All, cmdBuffer);
+        }
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        VkSubmitInfo submitInfo = {};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &cmdBuffer;
+
+        result = m_pQueue->Submit(1, &submitInfo, VK_NULL_HANDLE);
+    }
+
+    VK_ASSERT(result == VK_SUCCESS);
+}
+
+// =====================================================================================================================
+// Destroy per-queue SQTT layer info
+SqttQueueState::~SqttQueueState()
+{
+    VkResult result = VK_SUCCESS;
+
+    for (CmdBufferMap::Iterator iter = m_cmdBufferMap.Begin(); iter.Get() != nullptr; iter.Next())
+    {
+        ApiCmdBuffer::ObjectFromHandle(iter.Get()->value)->Destroy();
+    }
+
+    result = CmdPool::ObjectFromHandle(m_cmdPool)->Destroy(
+        m_pDevice,
+        &vk::allocator::g_DefaultAllocCallback);
+
+    VK_ASSERT(result == VK_SUCCESS);
+}
+
+// =====================================================================================================================
 // Initialize per-cmdbuf SQTT layer info
 SqttCmdBufferState::SqttCmdBufferState(
     CmdBuffer* pCmdBuf)
@@ -639,6 +794,26 @@ void SqttCmdBufferState::DebugMarkerInsert(
     const VkDebugMarkerMarkerInfoEXT* pMarkerInfo)
 {
     WriteUserEventMarker(RgpSqttMarkerUserEventTrigger, pMarkerInfo->pMarkerName);
+}
+
+// =====================================================================================================================
+void SqttCmdBufferState::DebugLabelBegin(
+    const VkDebugUtilsLabelEXT* pMarkerInfo)
+{
+    WriteUserEventMarker(RgpSqttMarkerUserEventPush, pMarkerInfo->pLabelName);
+}
+
+// =====================================================================================================================
+void SqttCmdBufferState::DebugLabelEnd()
+{
+    WriteUserEventMarker(RgpSqttMarkerUserEventPop, nullptr);
+}
+
+// =====================================================================================================================
+void SqttCmdBufferState::DebugLabelInsert(
+    const VkDebugUtilsLabelEXT* pMarkerInfo)
+{
+    WriteUserEventMarker(RgpSqttMarkerUserEventTrigger, pMarkerInfo->pLabelName);
 }
 
 // =====================================================================================================================
@@ -1532,6 +1707,79 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDebugMarkerInsertEXT(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginDebugUtilsLabelEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkDebugUtilsLabelEXT*                 pMarkerInfo)
+{
+    const VkCommandBuffer cmdBuffer = commandBuffer;
+    SQTT_SETUP();
+
+    pSqtt->DebugLabelBegin(pMarkerInfo);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdBeginDebugUtilsLabelEXT)(commandBuffer, pMarkerInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdEndDebugUtilsLabelEXT(
+    VkCommandBuffer                             commandBuffer)
+{
+    VkCommandBuffer cmdBuffer = commandBuffer;
+    SQTT_SETUP();
+
+    pSqtt->DebugLabelEnd();
+
+    SQTT_CALL_NEXT_LAYER(vkCmdEndDebugUtilsLabelEXT)(commandBuffer);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdInsertDebugUtilsLabelEXT(
+    VkCommandBuffer                             commandBuffer,
+    const VkDebugUtilsLabelEXT*                 pMarkerInfo)
+{
+    VkCommandBuffer cmdBuffer = commandBuffer;
+    SQTT_SETUP();
+
+    pSqtt->DebugLabelInsert(pMarkerInfo);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdInsertDebugUtilsLabelEXT)(commandBuffer, pMarkerInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkQueueBeginDebugUtilsLabelEXT(
+    VkQueue                                     queue,
+    const VkDebugUtilsLabelEXT*                 pMarkerInfo)
+{
+    SqttQueueState* pSqtt = ApiQueue::ObjectFromHandle(queue)->GetSqttState();
+
+    pSqtt->DebugLabelBegin(pMarkerInfo);
+
+    SQTT_CALL_NEXT_LAYER(vkQueueBeginDebugUtilsLabelEXT)(queue, pMarkerInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkQueueEndDebugUtilsLabelEXT(
+    VkQueue                                     queue)
+{
+    SqttQueueState* pSqtt = ApiQueue::ObjectFromHandle(queue)->GetSqttState();
+
+    pSqtt->DebugLabelEnd();
+
+    SQTT_CALL_NEXT_LAYER(vkQueueEndDebugUtilsLabelEXT)(queue);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkQueueInsertDebugUtilsLabelEXT(
+    VkQueue                                     queue,
+    const VkDebugUtilsLabelEXT*                 pMarkerInfo)
+{
+    SqttQueueState* pSqtt = ApiQueue::ObjectFromHandle(queue)->GetSqttState();
+
+    pSqtt->DebugLabelInsert(pMarkerInfo);
+
+    SQTT_CALL_NEXT_LAYER(vkQueueInsertDebugUtilsLabelEXT)(queue, pMarkerInfo);
+}
+
+// =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(
     VkDevice                                    device,
     VkPipelineCache                             pipelineCache,
@@ -1722,6 +1970,76 @@ VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectTagEXT(
     return SQTT_CALL_NEXT_LAYER(vkDebugMarkerSetObjectTagEXT)(device, pTagInfo);
 }
 
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
+    VkDevice                                    device,
+    const VkDebugUtilsObjectNameInfoEXT*        pNameInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    SqttMgr* pSqtt = pDevice->GetSqttMgr();
+    auto* pObjectMgr = pSqtt->GetObjectMgr();
+
+    if (pObjectMgr->IsEnabled(pNameInfo->objectType))
+    {
+        SqttMetaState* pMeta = pObjectMgr->GetMetaState(pNameInfo->objectType, pNameInfo->objectHandle);
+
+        if (pMeta == nullptr)
+        {
+            pObjectMgr->ObjectCreated(pDevice, pNameInfo->objectType, pNameInfo->objectHandle);
+
+            pMeta = pObjectMgr->GetMetaState(pNameInfo->objectType, pNameInfo->objectHandle);
+        }
+
+        if (pMeta != nullptr)
+        {
+            size_t nameSize = strlen(pNameInfo->pObjectName) + 1;
+
+            if (pMeta->debugNameCapacity < nameSize)
+            {
+                if (pMeta->pDebugName != nullptr)
+                {
+                    pDevice->VkInstance()->FreeMem(pMeta->pDebugName);
+                }
+
+                pMeta->pDebugName = static_cast<char*>(pDevice->VkInstance()->AllocMem(nameSize,
+                    VK_SYSTEM_ALLOCATION_SCOPE_DEVICE));
+
+                if (pMeta->pDebugName != nullptr)
+                {
+                    pMeta->debugNameCapacity = nameSize;
+                }
+            }
+
+            if (pMeta->debugNameCapacity >= nameSize)
+            {
+                memcpy(pMeta->pDebugName, pNameInfo->pObjectName, nameSize);
+            }
+        }
+    }
+
+    return SQTT_CALL_NEXT_LAYER(vkSetDebugUtilsObjectNameEXT)(device, pNameInfo);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(
+    VkDevice                                    device,
+    const VkDebugUtilsObjectTagInfoEXT*         pTagInfo)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    SqttMgr* pSqtt = pDevice->GetSqttMgr();
+
+    if ((pTagInfo != nullptr) &&
+        (pTagInfo->objectType == VK_OBJECT_TYPE_COMMAND_BUFFER) &&
+        (pTagInfo->objectHandle != VK_NULL_HANDLE))
+    {
+        SqttCmdBufferState* pCmdBuf = ApiCmdBuffer::ObjectFromHandle(VkCommandBuffer(pTagInfo->objectHandle))->GetSqttState();
+
+        pCmdBuf->AddDebugTag(pTagInfo->tagName);
+    }
+
+    return SQTT_CALL_NEXT_LAYER(vkSetDebugUtilsObjectTagEXT)(device, pTagInfo);
+}
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
 // =====================================================================================================================
 // This function looks for specific tags in a submit's command buffers to identify when to force an RGP trace start
@@ -1894,11 +2212,19 @@ void SqttOverrideDispatchTable(
     SQTT_OVERRIDE_ENTRY(vkCmdDebugMarkerBeginEXT);
     SQTT_OVERRIDE_ENTRY(vkCmdDebugMarkerEndEXT);
     SQTT_OVERRIDE_ENTRY(vkCmdDebugMarkerInsertEXT);
+    SQTT_OVERRIDE_ENTRY(vkCmdBeginDebugUtilsLabelEXT);
+    SQTT_OVERRIDE_ENTRY(vkCmdEndDebugUtilsLabelEXT);
+    SQTT_OVERRIDE_ENTRY(vkCmdInsertDebugUtilsLabelEXT);
+    SQTT_OVERRIDE_ENTRY(vkQueueBeginDebugUtilsLabelEXT);
+    SQTT_OVERRIDE_ENTRY(vkQueueEndDebugUtilsLabelEXT);
+    SQTT_OVERRIDE_ENTRY(vkQueueInsertDebugUtilsLabelEXT);
     SQTT_OVERRIDE_ENTRY(vkCreateGraphicsPipelines);
     SQTT_OVERRIDE_ENTRY(vkCreateComputePipelines);
     SQTT_OVERRIDE_ENTRY(vkDestroyPipeline);
     SQTT_OVERRIDE_ENTRY(vkDebugMarkerSetObjectNameEXT);
     SQTT_OVERRIDE_ENTRY(vkDebugMarkerSetObjectTagEXT);
+    SQTT_OVERRIDE_ENTRY(vkSetDebugUtilsObjectNameEXT);
+    SQTT_OVERRIDE_ENTRY(vkSetDebugUtilsObjectTagEXT);
     SQTT_OVERRIDE_ENTRY(vkQueueSubmit);
 }
 

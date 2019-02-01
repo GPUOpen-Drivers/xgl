@@ -45,6 +45,7 @@
 #include "sqtt/sqtt_rgp_annotations.h"
 
 #include "palList.h"
+#include "palHashMap.h"
 
 namespace vk
 {
@@ -61,6 +62,49 @@ struct SqttBindTargetParams
     const ImageView*             pColorTargets[Pal::MaxColorTargets];
     const ImageView*             pDepthStencil;
     const Pal::BindTargetParams* pBindParams;
+};
+
+// =====================================================================================================================
+// This is an auxiliary structure that tracks whatever queue-level state is necessary to handle SQTT marker
+// annotations.
+class SqttQueueState
+{
+public:
+    SqttQueueState(Queue* pQueue);
+    ~SqttQueueState();
+
+    VkResult Init();
+
+    void DebugLabelBegin(const VkDebugUtilsLabelEXT* pMarkerInfo);
+    void DebugLabelEnd();
+    void DebugLabelInsert(const VkDebugUtilsLabelEXT* pMarkerInfo);
+
+    VK_INLINE const DispatchTable* GetNextLayer() const
+        { return m_pNextLayer; }
+
+private:
+
+    void SubmitUserEventMarker(RgpSqttMarkerUserEventType eventType, const char* pString);
+
+    union CmdBufferMapKey
+    {
+        struct
+        {
+            uint32_t stringHash : 32;
+            uint32_t eventType  : 3;
+            uint32_t reserved   : 29;
+        };
+        uint64_t u64All;
+    };
+
+    typedef Util::HashMap<uint64_t, VkCommandBuffer, PalAllocator> CmdBufferMap;
+
+    VkCommandPool        m_cmdPool;
+    Util::RWLock         m_lock;
+    Queue*               m_pQueue;
+    Device*              m_pDevice;
+    CmdBufferMap         m_cmdBufferMap; // Local command buffer cache
+    const DispatchTable* m_pNextLayer;   // Pointer to next layer's dispatch table
 };
 
 // =====================================================================================================================
@@ -110,6 +154,12 @@ public:
     void DebugMarkerEnd();
     void DebugMarkerInsert(const VkDebugMarkerMarkerInfoEXT* pMarkerInfo);
 
+    void DebugLabelBegin(const VkDebugUtilsLabelEXT* pMarkerInfo);
+    void DebugLabelEnd();
+    void DebugLabelInsert(const VkDebugUtilsLabelEXT* pMarkerInfo);
+
+    void WriteUserEventMarker(RgpSqttMarkerUserEventType eventType, const char* pString) const;
+
     void AddDebugTag(uint64_t tag);
     bool HasDebugTag(uint64_t tag) const;
 
@@ -123,7 +173,6 @@ private:
     void WriteBarrierStartMarker(const Pal::Developer::BarrierData& data) const;
     void WriteLayoutTransitionMarker(const Pal::Developer::BarrierData& data) const;
     void WriteBarrierEndMarker(const Pal::Developer::BarrierData& data) const;
-    void WriteUserEventMarker(RgpSqttMarkerUserEventType eventType, const char* pString) const;
     void ResetBarrierState();
     void WriteEventMarker(
         RgpSqttMarkerEventType apiType,

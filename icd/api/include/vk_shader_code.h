@@ -34,16 +34,16 @@ namespace vk
 /// Enumerates various shader stages.
 enum ShaderStage : uint32_t
 {
-    ShaderStageVertex = 0,        ///< Vertex shader
-    ShaderStageTessControl,       ///< Tessellation control shader
-    ShaderStageTessEvaluation,    ///< Tessellation evaluation shader
-    ShaderStageGeometry,          ///< Geomtry shader
-    ShaderStageFragment,          ///< Fragment shader
-    ShaderStageCompute,           ///< Compute shader
-    ShaderStageCount,   ///< Count of shader stages
-    ShaderStageInvalid = ~0u,
-    ShaderStageNativeStageCount = ShaderStageCompute + 1,
-    ShaderGfxStageCount = ShaderStageFragment + 1,  ///< Count of graphics shader stages
+    ShaderStageVertex = 0,                                ///< Vertex shader
+    ShaderStageTessControl,                               ///< Tessellation control shader
+    ShaderStageTessEvaluation,                            ///< Tessellation evaluation shader
+    ShaderStageGeometry,                                  ///< Geomtry shader
+    ShaderStageFragment,                                  ///< Fragment shader
+    ShaderStageCompute,                                   ///< Compute shader
+    ShaderStageCount,                                     ///< Count of shader stages
+    ShaderStageInvalid = ~0u,                             ///< Invalid shader stage
+    ShaderStageNativeStageCount = ShaderStageCompute + 1, ///< Native supported shader stage count
+    ShaderGfxStageCount = ShaderStageFragment + 1,        ///< Count of graphics shader stages
 };
 
 /// Translate shader stage flag bits to corresponding shader stage.

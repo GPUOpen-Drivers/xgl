@@ -67,9 +67,14 @@ public:
 
     Pal::ShaderHash GetCodeHash(const char* pEntryPoint) const;
 
-    void* GetShaderData(PipelineCompilerType compilerType) const;
+    void* GetShaderData(PipelineCompilerType compilerType) const
+    {
+        return GetShaderData(compilerType, &m_handle);
+    }
 
     void* GetFirstValidShaderData() const;
+
+    static void* GetShaderData(PipelineCompilerType compilerType, const ShaderModuleHandle* pHandle);
 
 protected:
     ShaderModule(size_t codeSize, const void* pCode);

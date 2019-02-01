@@ -96,6 +96,11 @@ public:
         const VkAllocationCallbacks* pAllocCb,
         VkInstance*                  pInstance);
 
+    // Tell if the hidden extensions enabled by AMDVLK_ENABLE_DEVELOPING_EXT?
+    static bool IsExtensionEnabledByEnv(
+        const char* pExtensionName
+    );
+
     VkResult Init(
         const VkApplicationInfo* pAppInfo);
 
@@ -332,6 +337,10 @@ private:
     Util::Mutex                                     m_logCallbackInternalExternalMutex; // Serialize all calls to
                                                                                         // external callbacks from
                                                                                         // internal and external sources
+
+    // The ratified extensions (including instance and device) under developing could be enabled by environmental
+    // variable, AMDVLK_ENABLE_DEVELOPING_EXT.
+    static const char* m_extensionsEnv;
 };
 
 // =====================================================================================================================

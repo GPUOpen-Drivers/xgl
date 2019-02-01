@@ -109,12 +109,13 @@ Pal::ShaderHash ShaderModule::GetCodeHash(
 // =====================================================================================================================
 // Gets shader data per compiler type.
 void* ShaderModule::GetShaderData(
-    PipelineCompilerType compilerType) const
+    PipelineCompilerType       compilerType,
+    const ShaderModuleHandle*  pHandle)
 {
     void* pShaderModule = nullptr;
     if (compilerType == PipelineCompilerTypeLlpc)
     {
-        pShaderModule = m_handle.pLlpcShaderModule;
+        pShaderModule = pHandle->pLlpcShaderModule;
     }
     return pShaderModule;
 }

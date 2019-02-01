@@ -61,6 +61,7 @@ class  Instance;
 class  SwapChain;
 class  FrtcFramePacer;
 class  TurboSync;
+class  SqttQueueState;
 
 // =====================================================================================================================
 // A Vulkan queue.
@@ -107,6 +108,9 @@ public:
         const VkBindSparseInfo*                     pBindInfo,
         VkFence                                     fence);
 
+    VkResult CreateSqttState(
+        void* pMemory);
+
     enum
     {
         MaxQueueFamilies    = Pal::EngineTypeCount,  // Maximum number of queue families
@@ -131,8 +135,11 @@ public:
     uint32_t GetFlags() const
         { return m_queueFlags; }
 
-   const Pal::PerSourceFrameMetadataControl* GetFrameMetadataControl() const
+    const Pal::PerSourceFrameMetadataControl* GetFrameMetadataControl() const
         { return &m_palFrameMetadataControl; }
+
+    SqttQueueState* GetSqttState()
+        { return m_pSqttState; }
 
 protected:
     // This is a helper structure during a virtual remap (sparse bind) call to batch remaps into
@@ -224,6 +231,7 @@ protected:
     VidPnSourceFlipStatus              m_flipStatus;
     Pal::PerSourceFrameMetadataControl m_palFrameMetadataControl;
     Pal::ICmdBuffer*                   m_pDummyCmdBuffer[MaxPalDevices];
+    SqttQueueState*                    m_pSqttState; // Per-queue state for handling SQ thread-tracing annotations
 };
 
 VK_DEFINE_DISPATCHABLE(Queue);

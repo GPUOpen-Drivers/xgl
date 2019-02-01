@@ -233,8 +233,14 @@ VkResult SwapChain::Create(
     Pal::Result              palResult           = Pal::Result::Success;
     Pal::ISwapChain*         pPalSwapChain       = nullptr;
     Pal::SwapChainCreateInfo swapChainCreateInfo = {};
-    const uint32_t           swapImageCount      = Util::Max((pDevice->NumPalDevices() + 1),
-                                                             pCreateInfo->minImageCount);
+
+    // In AFR with SWComp we need a minimum of 5 images.
+    // Two on the slave (1 to render, 1 to copy). 3 on the master (1 to present, 1 to recieve copy, 1 render)
+    // (This was also verified with looking at GPU traces)
+    // TODO: Rework PAL to release image after the copy and in Vulkan allocate 3 images on GPU0 and 2 images on GPU1.
+    const uint32_t           swapImageCount      = (pDevice->NumPalDevices() > 1) ?
+                                                        Util::Max<uint32_t>(5, pCreateInfo->minImageCount) :
+                                                        pCreateInfo->minImageCount;
 
     swapChainCreateInfo.hDisplay            = properties.displayableInfo.displayHandle;
     swapChainCreateInfo.hWindow             = properties.displayableInfo.windowHandle;

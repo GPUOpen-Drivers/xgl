@@ -361,27 +361,6 @@ VkResult PipelineCompiler::CreateLlpcCompiler()
     pOptionBuffer += optionLength;
     bufSize -= optionLength;
 
-    if (settings.shaderReplaceMode != 0)
-    {
-        optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-replace-mode=%d", settings.shaderReplaceMode);
-        ++optionLength;
-        llpcOptions[numOptions++] = pOptionBuffer;
-        pOptionBuffer += optionLength;
-        bufSize -= optionLength;
-
-        optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-replace-dir=%s", settings.shaderReplaceDir);
-        ++optionLength;
-        llpcOptions[numOptions++] = pOptionBuffer;
-        pOptionBuffer += optionLength;
-        bufSize -= optionLength;
-
-        optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-replace-pipeline-hashes=%s", settings.shaderReplacePipelineHashes);
-        ++optionLength;
-        llpcOptions[numOptions++] = pOptionBuffer;
-        pOptionBuffer += optionLength;
-        bufSize -= optionLength;
-    }
-
     if (settings.llpcOptions[0] != '\0')
     {
         const char* pOptions = &settings.llpcOptions[0];
@@ -500,6 +479,41 @@ PipelineCompilerType PipelineCompiler::GetShaderCacheType()
 }
 
 // =====================================================================================================================
+// Loads shader binary  from replace shader folder with specified shader hash code.
+bool PipelineCompiler::LoadReplaceShaderBinary(
+    uint64_t shaderHash,
+    size_t*  pCodeSize,
+    void**   ppCode)
+{
+    auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
+    bool findShader = false;
+
+    char replaceFileName[4096] = {};
+    Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/Shader_0x%016llX_replace.spv",
+        pSettings->shaderReplaceDir, shaderHash);
+
+    Util::File replaceFile;
+    if (replaceFile.Open(replaceFileName, Util::FileAccessRead | Util::FileAccessBinary) == Util::Result::Success)
+    {
+        size_t replaceCodeSize = replaceFile.GetFileSize(replaceFileName);
+        auto pReplaceCode = pInstance->AllocMem(replaceCodeSize,
+            VK_DEFAULT_MEM_ALIGN,
+            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        size_t readBytes = 0;
+        replaceFile.Read(pReplaceCode, replaceCodeSize, &readBytes);
+        VK_ASSERT(readBytes == replaceCodeSize);
+
+        *ppCode = pReplaceCode;
+        *pCodeSize = replaceCodeSize;
+        findShader = true;
+    }
+
+    return findShader;
+}
+
+// =====================================================================================================================
 // Builds shader module from SPIR-V binary code.
 VkResult PipelineCompiler::BuildShaderModule(
     const Device*       pDevice,
@@ -511,6 +525,23 @@ VkResult PipelineCompiler::BuildShaderModule(
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
     VkResult result = VK_SUCCESS;
     uint32_t compilerMask = GetCompilerCollectionMask();
+    Util::MetroHash::Hash hash = {};
+    Util::MetroHash64::Hash(reinterpret_cast<const uint8_t*>(pCode), codeSize, hash.bytes);
+    bool findReplaceShader = false;
+
+    if (pSettings->shaderReplaceMode == ShaderReplaceShaderHash)
+    {
+        size_t replaceCodeSize = 0;
+        void* pReplaceCode = nullptr;
+        uint64_t hash64 = Util::MetroHash::Compact64(&hash);
+        findReplaceShader = LoadReplaceShaderBinary(hash64, &replaceCodeSize, &pReplaceCode);
+        if (findReplaceShader)
+        {
+            pCode = pReplaceCode;
+            codeSize = replaceCodeSize;
+        }
+    }
+
     if (compilerMask & (1 << PipelineCompilerTypeLlpc))
     {
         // Build LLPC shader module
@@ -535,10 +566,21 @@ VkResult PipelineCompiler::BuildShaderModule(
         {
             // Clean up if fail
             pInstance->FreeMem(pShaderMemory);
-            result = VK_ERROR_INITIALIZATION_FAILED;
+            if (llpcResult == Llpc::Result::ErrorOutOfMemory)
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            else
+            {
+                result = VK_ERROR_INITIALIZATION_FAILED;
+            }
         }
     }
 
+    if (findReplaceShader)
+    {
+        pInstance->FreeMem(const_cast<void*>(pCode));
+    }
     return result;
 }
 
@@ -590,6 +632,39 @@ bool PipelineCompiler::ReplacePipelineBinary(
         }
     }
     return false;
+}
+
+// =====================================================================================================================
+// Replaces shader module data in the input PipelineShaderInfo
+bool PipelineCompiler::ReplacePipelineShaderModule(
+    const Device*             pDevice,
+    PipelineCompilerType      compilerType,
+    Llpc::PipelineShaderInfo* pShaderInfo,
+    ShaderModuleHandle*       pShaderModule)
+{
+    bool replaced = false;
+    auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
+    if (pShaderInfo->pModuleData != nullptr)
+    {
+        uint64_t hash64 = Llpc::IPipelineDumper::GetShaderHash(pShaderInfo->pModuleData);
+        size_t codeSize = 0;
+        void* pCode = nullptr;
+
+        if (LoadReplaceShaderBinary(hash64, &codeSize, &pCode))
+        {
+            VkResult result = BuildShaderModule(pDevice, codeSize, pCode, pShaderModule);
+            if (result == VK_SUCCESS)
+            {
+                pShaderInfo->pModuleData = ShaderModule::GetShaderData(compilerType, pShaderModule);
+                replaced = true;
+            }
+
+            pInstance->FreeMem(pCode);
+        }
+    }
+
+    return replaced;
 }
 
 // =====================================================================================================================
@@ -694,6 +769,47 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     uint64_t pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
 
     void* pPipelineDumpHandle = nullptr;
+    const void* moduleDataBaks[ShaderGfxStageCount];
+    ShaderModuleHandle shaderModuleReplaceHandles[ShaderGfxStageCount];
+    bool shaderModuleReplaced = false;
+
+    Llpc::PipelineShaderInfo* shaderInfos[ShaderGfxStageCount] =
+    {
+        &pCreateInfo->pipelineInfo.vs,
+        &pCreateInfo->pipelineInfo.tcs,
+        &pCreateInfo->pipelineInfo.tes,
+        &pCreateInfo->pipelineInfo.gs,
+        &pCreateInfo->pipelineInfo.fs,
+    };
+
+    if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
+    {
+        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
+        {
+            shouldCompile = false;
+        }
+    }
+    else if (settings.shaderReplaceMode == ShaderReplaceShaderPipelineHash)
+    {
+        char pipelineHashString[64];
+        Util::Snprintf(pipelineHashString, 64, "0x%016" PRIX64, pipelineHash);
+
+        if (strstr(settings.shaderReplacePipelineHashes, pipelineHashString) != nullptr)
+        {
+            memset(shaderModuleReplaceHandles, 0, sizeof(shaderModuleReplaceHandles));
+            for (uint32_t i = 0; i < ShaderGfxStageCount; ++i)
+            {
+                moduleDataBaks[i] = shaderInfos[i]->pModuleData;
+                shaderModuleReplaced |= ReplacePipelineShaderModule(pDevice,
+                    pCreateInfo->compilerType, shaderInfos[i], &shaderModuleReplaceHandles[i]);
+            }
+
+            if (shaderModuleReplaced)
+            {
+                pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
+            }
+        }
+    }
 
     if (settings.enablePipelineDump)
     {
@@ -704,14 +820,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
         pPipelineDumpHandle = Llpc::IPipelineDumper::BeginPipelineDump(
             &dumpOptions, nullptr, &pCreateInfo->pipelineInfo);
-    }
-
-    if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
-    {
-        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
-        {
-            shouldCompile = false;
-        }
     }
 
     if ((pCreateInfo->compilerType == PipelineCompilerTypeLlpc) && shouldCompile)
@@ -765,6 +873,15 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         Llpc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 
+    if (shaderModuleReplaced)
+    {
+        for (uint32_t i = 0; i < ShaderGfxStageCount; ++i)
+        {
+            shaderInfos[i]->pModuleData = moduleDataBaks[i];
+            FreeShaderModule(&shaderModuleReplaceHandles[i]);
+        }
+    }
+
     DropPipelineBinaryInst(pDevice, settings, *ppPipelineBinary, *pPipelineBinarySize);
 
     return result;
@@ -792,6 +909,9 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     uint64_t pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
 
     void* pPipelineDumpHandle = nullptr;
+    const void* pModuleDataBak = nullptr;
+    ShaderModuleHandle shaderModuleReplaceHandle = {};
+    bool shaderModuleReplaced = false;
 
     if (settings.enablePipelineDump)
     {
@@ -810,6 +930,23 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
         {
             shouldCompile = false;
+        }
+    }
+    else if (settings.shaderReplaceMode == ShaderReplaceShaderPipelineHash)
+    {
+        char pipelineHashString[64];
+        Util::Snprintf(pipelineHashString, 64, "0x%016" PRIX64, pipelineHash);
+
+        if (strstr(settings.shaderReplacePipelineHashes, pipelineHashString) != nullptr)
+        {
+            pModuleDataBak = pCreateInfo->pipelineInfo.cs.pModuleData;
+            shaderModuleReplaced = ReplacePipelineShaderModule(
+                pDevice, pCreateInfo->compilerType, &pCreateInfo->pipelineInfo.cs, &shaderModuleReplaceHandle);
+
+            if (shaderModuleReplaced)
+            {
+                pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
+            }
         }
     }
 
@@ -842,7 +979,14 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         {
             // There shouldn't be anything to free for the failure case
             VK_ASSERT(pLlpcPipelineBuffer == nullptr);
-            result = VK_ERROR_INITIALIZATION_FAILED;
+            if (llpcResult == Llpc::Result::ErrorOutOfMemory)
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            else
+            {
+                result = VK_ERROR_INITIALIZATION_FAILED;
+            }
         }
         else
         {
@@ -864,6 +1008,12 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
             Llpc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
         }
         Llpc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
+    }
+
+    if (shaderModuleReplaced)
+    {
+        pCreateInfo->pipelineInfo.cs.pModuleData = pModuleDataBak;
+        FreeShaderModule(&shaderModuleReplaceHandle);
     }
 
     DropPipelineBinaryInst(pDevice, settings, *ppPipelineBinary, *pPipelineBinarySize);
@@ -1136,7 +1286,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 lastVertexStage == static_cast<ShaderStage>(stage));
         }
 
-        ApplyDefaultShaderOptions(&pShaderInfo->options
+        ApplyDefaultShaderOptions(static_cast<ShaderStage>(stage),
+                                  &pShaderInfo->options
                                   );
 
         ApplyProfileOptions(pDevice,
@@ -1352,7 +1503,8 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
     pCreateInfo->pipelineInfo.cs.pModuleData = pShaderModule->GetShaderData(pCreateInfo->compilerType);
 
-    ApplyDefaultShaderOptions(&pCreateInfo->pipelineInfo.cs.options
+    ApplyDefaultShaderOptions(ShaderStageCompute,
+                              &pCreateInfo->pipelineInfo.cs.options
                               );
 
     ApplyProfileOptions(pDevice,
@@ -1368,6 +1520,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 // =====================================================================================================================
 // Set any non-zero shader option defaults
 void PipelineCompiler::ApplyDefaultShaderOptions(
+    ShaderStage                  stage,
     Llpc::PipelineShaderOptions* pShaderOptions
     ) const
 {

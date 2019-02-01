@@ -42,7 +42,14 @@ namespace vk
 SqttObjectMgr::SqttObjectMgr()
     :
     m_pDevice(nullptr),
-    m_pObjects(nullptr)
+    m_pObjects(nullptr),
+    ObjectTypeBeginRange(Util::Min(
+        static_cast<uint32_t>(VK_DEBUG_REPORT_OBJECT_TYPE_BEGIN_RANGE_EXT),
+        static_cast<uint32_t>(VK_OBJECT_TYPE_BEGIN_RANGE))),
+    ObjectTypeEndRange(Util::Max(
+        static_cast<uint32_t>(VK_DEBUG_REPORT_OBJECT_TYPE_END_RANGE_EXT),
+        static_cast<uint32_t>(VK_OBJECT_TYPE_END_RANGE))),
+    ObjectTypeRangeSize(ObjectTypeEndRange - ObjectTypeBeginRange + 1)
 {
 
 }
@@ -52,7 +59,7 @@ SqttObjectMgr::~SqttObjectMgr()
 {
     if (m_pObjects != nullptr)
     {
-        for (uint32_t idx = 0; idx < VK_DEBUG_REPORT_OBJECT_TYPE_RANGE_SIZE_EXT; ++idx)
+        for (uint32_t idx = 0; idx < ObjectTypeRangeSize; ++idx)
         {
             if (m_pObjects[idx].enabled)
             {
@@ -70,29 +77,6 @@ void SqttObjectMgr::Init(
 {
     m_pDevice = pDevice;
 
-}
-
-// =====================================================================================================================
-void SqttObjectMgr::SetMetaState(
-    VkDebugReportObjectTypeEXT objectType,
-    uint64_t                   handle,
-    SqttMetaState*             pState)
-{
-    if (m_pObjects != nullptr)
-    {
-        const uint32_t idx = (objectType - VK_DEBUG_REPORT_OBJECT_TYPE_BEGIN_RANGE_EXT);
-
-        VK_ASSERT(idx < VK_DEBUG_REPORT_OBJECT_TYPE_RANGE_SIZE_EXT);
-
-        if (m_pObjects[idx].enabled)
-        {
-            Util::MutexAuto lock(&m_pObjects[idx].dataMutex);
-
-            VK_ASSERT(m_pObjects[idx].dataMap.FindKey(handle) == nullptr);
-
-            m_pObjects[idx].dataMap.Insert(handle, pState);
-        }
-    }
 }
 
 // =====================================================================================================================

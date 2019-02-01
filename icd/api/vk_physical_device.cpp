@@ -2718,6 +2718,14 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INLINE_UNIFORM_BLOCK));
 
     if ((pPhysicalDevice == nullptr) ||
+        ((pPhysicalDevice->PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions) &&
+         (Instance::IsExtensionEnabledByEnv(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME)
+         )))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_FLOAT16_INT8));
+    }
+
+    if ((pPhysicalDevice == nullptr) ||
         (pPhysicalDevice->PalProperties().osProperties.supportQueuePriority))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_GLOBAL_PRIORITY));
@@ -2750,6 +2758,12 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SCALAR_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MEMORY_OVERALLOCATION_BEHAVIOR));
+
+    if (Instance::IsExtensionEnabledByEnv(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)
+       )
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TRANSFORM_FEEDBACK));
+    }
 
     return availableExtensions;
 }
@@ -3257,6 +3271,16 @@ void PhysicalDevice::GetFeatures2(
                 pDescIndexingFeatures->descriptorBindingVariableDescriptorCount            = VK_TRUE;
                 pDescIndexingFeatures->runtimeDescriptorArray                              = VK_TRUE;
 
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT16_INT8_FEATURES_KHR:
+            {
+                VkPhysicalDeviceFloat16Int8FeaturesKHR* pFloat16Int8Features =
+                    reinterpret_cast<VkPhysicalDeviceFloat16Int8FeaturesKHR*>(pHeader);
+
+                pFloat16Int8Features->shaderFloat16                  = VK_TRUE;
+                pFloat16Int8Features->shaderInt8                     = VK_TRUE;
                 break;
             }
 

@@ -48,6 +48,8 @@
 #include "devmode/devmode_mgr.h"
 #endif
 
+#include "sqtt/sqtt_layer.h"
+
 #include "palQueue.h"
 
 namespace vk
@@ -1221,6 +1223,14 @@ VkResult Queue::BindSparse(
     virtStackFrame.FreeArray(remapState.pRanges);
 
     return result;
+}
+
+VkResult Queue::CreateSqttState(
+    void* pMemory)
+{
+    m_pSqttState = VK_PLACEMENT_NEW(pMemory) SqttQueueState(this);
+
+    return m_pSqttState->Init();
 }
 
 /**

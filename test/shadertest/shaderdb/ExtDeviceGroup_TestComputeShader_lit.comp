@@ -17,7 +17,7 @@ void main()
 /*
 ; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
-; SHADERTEST-LABEL: {{^// LLPC}} pipeline SPIR-V lowering results
+; SHADERTEST-LABEL: {{^// LLPC.*}} SPIR-V lowering results
 ; SHADERTEST: call i32 @llpc.input.import.builtin.DeviceIndex.i32.i32
 ; SHADERTEST-LABEL: {{^// LLPC}} final ELF info
 ; SHADERTEST: AMDLLPC SUCCESS
