@@ -53,7 +53,8 @@ public:
         { return &m_nextLayer; }
 
 private:
-    DispatchTable m_nextLayer; // Dispatch table to the next layer's functions
+    DispatchTable m_nextLayer;                               // Dispatch table to the next layer's functions
+
 };
 
 } // namespace vk

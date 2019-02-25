@@ -286,6 +286,7 @@ public:
         AMD_MEMORY_OVERALLOCATION_BEHAVIOR,
         EXT_TRANSFORM_FEEDBACK,
         KHR_VULKAN_MEMORY_MODEL,
+        EXT_MEMORY_PRIORITY,
         Count
     };
 };

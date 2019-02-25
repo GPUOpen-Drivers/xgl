@@ -118,13 +118,81 @@ void ShaderCache::Destroy(
 }
 
 // =====================================================================================================================
+CompilerSolution::CompilerSolution(
+    PhysicalDevice* pPhysicalDevice)
+    : m_pPhysicalDevice(pPhysicalDevice)
+{
+
+}
+
+// =====================================================================================================================
+CompilerSolution::~CompilerSolution()
+{
+
+}
+
+// =====================================================================================================================
+// Initialize CompilerSolution class
+VkResult CompilerSolution::Initialize()
+{
+    Pal::IDevice* pPalDevice = m_pPhysicalDevice->PalDevice();
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+
+    // Initialize GfxIp informations per PAL device properties
+    Pal::DeviceProperties info;
+    pPalDevice->GetProperties(&info);
+
+    switch (info.gfxLevel)
+    {
+    case Pal::GfxIpLevel::GfxIp6:
+        m_gfxIp.major = 6;
+        m_gfxIp.minor = 0;
+        break;
+    case Pal::GfxIpLevel::GfxIp7:
+        m_gfxIp.major = 7;
+        m_gfxIp.minor = 0;
+        break;
+    case Pal::GfxIpLevel::GfxIp8:
+        m_gfxIp.major = 8;
+        m_gfxIp.minor = 0;
+        break;
+    case Pal::GfxIpLevel::GfxIp8_1:
+        m_gfxIp.major = 8;
+        m_gfxIp.minor = 1;
+        break;
+    case Pal::GfxIpLevel::GfxIp9:
+        m_gfxIp.major = 9;
+        m_gfxIp.minor = 0;
+        break;
+
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    m_gfxIp.stepping = info.gfxStepping;
+    m_gfxIpLevel     = info.gfxLevel;
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+// Gets shader cache type.
+PipelineCompilerType CompilerSolution::GetShaderCacheType()
+{
+    PipelineCompilerType cacheType;
+    cacheType = PipelineCompilerTypeLlpc;
+    return cacheType;
+}
+
+// =====================================================================================================================
 PipelineCompiler::PipelineCompiler(
     PhysicalDevice* pPhysicalDevice)
     :
     m_pPhysicalDevice(pPhysicalDevice)
     , m_pLlpc(nullptr)
 #if ICD_BUILD_MULIT_COMPILER
-    , m_llpcModeMixHashList(32, pPhysicalDevice->Manager()->VkInstance()->Allocator())
+    , m_multiCompilerMixHashList(32, pPhysicalDevice->Manager()->VkInstance()->Allocator())
 #endif
 {
 
@@ -190,14 +258,14 @@ VkResult PipelineCompiler::Initialize()
         Util::File hashListFile;
         if (hashListFile.Open(settings.llpcMixModeHashListFileName, Util::FileAccessRead) == Util::Result::Success)
         {
-            m_llpcModeMixHashList.Init();
+            m_multiCompilerMixHashList.Init();
             char hash[256];
             while ((hashListFile.ReadLine(hash, sizeof(char) * 256, nullptr) == Util::Result::Success))
             {
                 // Only read hex string
                 if((hash[0] == '0') && (hash[1] == 'x'))
                 {
-                    m_llpcModeMixHashList.Insert(strtoull(hash, nullptr, 16));
+                    m_multiCompilerMixHashList.Insert(strtoull(hash, nullptr, 16));
                 }
             }
         }
@@ -428,7 +496,6 @@ VkResult PipelineCompiler::CreateShaderCache(
     const void*   pInitialData,
     size_t        initialDataSize,
     void*         pShaderCacheMem,
-    bool          isScpcInternalCache,
     ShaderCache*  pShaderCache)
 {
     VkResult                     result         = VK_SUCCESS;
@@ -723,30 +790,6 @@ void PipelineCompiler::DropPipelineBinaryInst(
             }
         }
     }
-}
-
-// =====================================================================================================================
-// Gets the name string of shader stage.
-const char* PipelineCompiler::GetShaderStageName(
-    ShaderStage shaderStage)
-{
-    const char* pName = nullptr;
-
-    VK_ASSERT(shaderStage < ShaderStageCount);
-
-    static const char* ShaderStageNames[] =
-    {
-        "Vertex  ",
-        "Tessellation control",
-        "Tessellation evaluation",
-        "Geometry",
-        "Fragment",
-        "Compute ",
-    };
-
-    pName = ShaderStageNames[static_cast<uint32_t>(shaderStage)];
-
-    return pName;
 }
 
 // =====================================================================================================================
@@ -1108,6 +1151,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             pCreateInfo->pipelineInfo.rsState.cullMode                = pRs->cullMode;
             pCreateInfo->pipelineInfo.rsState.frontFace               = pRs->frontFace;
             pCreateInfo->pipelineInfo.rsState.depthBiasEnable         = pRs->depthBiasEnable;
+
         }
 
         const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;
@@ -1357,7 +1401,7 @@ PipelineCompilerType PipelineCompiler::CheckCompilerType(
         }
         else
         {
-            if (m_llpcModeMixHashList.Contains(pipeHash))
+            if (m_multiCompilerMixHashList.Contains(pipeHash))
             {
                 isInRange = true;
             }

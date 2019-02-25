@@ -59,10 +59,21 @@ public:
         const Device*                   pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
+    VK_INLINE uint64_t GetApiHash() const
+        { return m_apiHash; }
+
 protected:
-    Sampler(Device* pDevice)
+    Sampler(
+        uint64_t apiHash)
+        :
+        m_apiHash(apiHash)
     {
     }
+
+    static uint64_t BuildApiHash(
+        const VkSamplerCreateInfo* pCreateInfo);
+
+    const uint64_t          m_apiHash;
 };
 
 namespace entry

@@ -151,7 +151,6 @@ VkResult PipelineCache::Create(
                     pInitialData,
                     initialDataSize,
                     Util::VoidPtrInc(pMemory, shaderCacheOffset),
-                    false,
                     &shaderCaches[i]);
             }
             else

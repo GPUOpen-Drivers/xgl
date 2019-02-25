@@ -111,7 +111,8 @@ static void OverrideProfiledSettings(
 
         pSettings->optColorTargetUsageDoesNotContainResolveLayout = true;
 
-        if (info.gfxLevel == Pal::GfxIpLevel::GfxIp9)
+        // No gains were seen pre-GFX9
+        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp9)
         {
             pSettings->barrierFilterOptions = SkipStrayExecutionDependencies |
                                               SkipImageLayoutUndefined       |
@@ -143,11 +144,13 @@ static void OverrideProfiledSettings(
     {
         pSettings->enableSpvPerfOptimal = true;
 
-        if (Pal::GfxIpLevel::GfxIp9 == info.gfxLevel)
-        {
-            // this setting can be set for pre-gfxIp9 too
-            pSettings->optColorTargetUsageDoesNotContainResolveLayout = true;
+        pSettings->zeroInitIlRegs = true;
 
+        pSettings->optColorTargetUsageDoesNotContainResolveLayout = true;
+
+        // No gains were seen pre-GFX9
+        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp9)
+        {
             pSettings->barrierFilterOptions = SkipStrayExecutionDependencies |
                                               SkipImageLayoutUndefined       |
                                               ForceImageSharingModeExclusive;

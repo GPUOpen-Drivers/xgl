@@ -37,6 +37,13 @@
 #include "include/khronos/vulkan.h"
 #include "include/vk_dispatch.h"
 
+namespace Util
+{
+
+class MetroHash64;
+
+}
+
 namespace vk
 {
 
@@ -160,10 +167,14 @@ public:
         return offset;
     }
 
+    VK_INLINE uint64_t GetApiHash() const
+        { return m_apiHash; }
+
 protected:
     DescriptorSetLayout(
         const Device*     pDevice,
-        const CreateInfo& info);
+        const CreateInfo& info,
+        uint64_t          apiHash);
 
     ~DescriptorSetLayout()
         { }
@@ -187,8 +198,16 @@ protected:
         ImmSectionInfo*                     pSectionInfo,
         BindingSectionInfo*                 pBindingSectionInfo);
 
+    static void GenerateHashFromBinding(
+        Util::MetroHash64*                  pHasher,
+        const VkDescriptorSetLayoutBinding& desc);
+
+    static uint64_t BuildApiHash(
+        const VkDescriptorSetLayoutCreateInfo* pCreateInfo);
+
     const CreateInfo          m_info;    // Create-time information
     const Device* const       m_pDevice; // Device pointer
+    const uint64_t            m_apiHash;
 };
 
 namespace entry

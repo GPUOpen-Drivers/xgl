@@ -106,6 +106,7 @@ VkResult SwapChain::Create(
         const VkSwapchainCreateInfoKHR*            pVkSwapchainCreateInfoKHR;
         const VkDeviceGroupSwapchainCreateInfoKHR* pVkDeviceGroupSwapchainCreateInfoKHR;
         const VkImageFormatListCreateInfoKHR*      pVkImageFormatListCreateInfoKHR;
+
     };
 
     for (pVkSwapchainCreateInfoKHR = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -859,9 +860,9 @@ bool FullscreenMgr::TryEnterExclusive(
 
                         if (m_mode != Implicit)
                         {
-                            m_colorParams.format     = VkToPalFormat(props.fullscreenSurfaceFormat.format).format;
-                            m_colorParams.colorSpace = VkToPalScreenSpace(props.fullscreenSurfaceFormat);
-                            m_colorParams.u32All     = 0;
+                            m_colorParams.format              = VkToPalFormat(props.fullscreenSurfaceFormat.format).format;
+                            m_colorParams.colorSpace          = VkToPalScreenSpace(props.fullscreenSurfaceFormat);
+                            m_colorParams.localDimmingDisable = props.localDimmingDisable;
 
                             m_pScreen->SetColorConfiguration(&m_colorParams);
                         }

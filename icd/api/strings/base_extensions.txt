@@ -93,3 +93,4 @@ VK_KHR_vulkan_memory_model
 VK_EXT_inline_uniform_block
 VK_EXT_transform_feedback
 VK_KHR_shader_float16_int8
+VK_EXT_memory_priority

@@ -40,9 +40,48 @@
 #include "palPipeline.h"
 #include "palPipelineAbi.h"
 #include "palPipelineAbiProcessorImpl.h"
+#include "palMetroHash.h"
 
 namespace vk
 {
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkSpecializationInfo struct
+void Pipeline::GenerateHashFromSpecializationInfo(
+    Util::MetroHash128*         pHasher,
+    const VkSpecializationInfo& desc)
+{
+    pHasher->Update(desc.mapEntryCount);
+
+    for (uint32_t i = 0; i < desc.mapEntryCount; i++)
+    {
+        pHasher->Update(desc.pMapEntries[i]);
+    }
+
+    pHasher->Update(desc.dataSize);
+
+    if (desc.pData != nullptr)
+    {
+        pHasher->Update(reinterpret_cast<const uint8_t*>(desc.pData), desc.dataSize);
+    }
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineShaderStageCreateInfo struct
+void Pipeline::GenerateHashFromShaderStageCreateInfo(
+    Util::MetroHash128*                    pHasher,
+    const VkPipelineShaderStageCreateInfo& desc)
+{
+    pHasher->Update(desc.flags);
+    pHasher->Update(desc.stage);
+    pHasher->Update(ShaderModule::ObjectFromHandle(desc.module)->GetCodeHash(desc.pName));
+
+    if (desc.pSpecializationInfo != nullptr)
+    {
+        GenerateHashFromSpecializationInfo(pHasher, *desc.pSpecializationInfo);
+    }
+
+}
 
 // =====================================================================================================================
 Pipeline::Pipeline(
@@ -53,6 +92,7 @@ Pipeline::Pipeline(
     :
     m_pDevice(pDevice),
     m_UserDataLayout(pLayout->GetInfo().userDataLayout),
+    m_apiHash(0),
     m_pBinary(pBinary)
 {
     memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));

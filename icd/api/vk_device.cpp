@@ -197,7 +197,8 @@ Device::Device(
     Pal::IDevice**                      pPalDevices,
     const DeviceBarrierPolicy&          barrierPolicy,
     const DeviceExtensions::Enabled&    enabledExtensions,
-    const VkPhysicalDeviceFeatures*     pFeatures)
+    const VkPhysicalDeviceFeatures*     pFeatures,
+    bool                                useComputeAsTransferQueue)
     :
     m_pInstance(pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_settings(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings()),
@@ -210,7 +211,8 @@ Device::Device(
     m_dispatchTable(DispatchTable::Type::DEVICE, m_pInstance, this),
     m_pSqttMgr(nullptr),
     m_pBarrierFilterLayer(nullptr),
-    m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true)
+    m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
+    m_useComputeAsTransferQueue(useComputeAsTransferQueue)
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
 
@@ -264,7 +266,8 @@ static void ConstructQueueCreateInfo(
     uint32_t                    queueIndex,
     uint32_t                    dedicatedComputeUnits,
     VkQueueGlobalPriorityEXT    queuePriority,
-    Pal::QueueCreateInfo*       pQueueCreateInfo)
+    Pal::QueueCreateInfo*       pQueueCreateInfo,
+    bool                        useComputeAsTransferQueue)
 {
     const Pal::QueueType palQueueType =
         pPhysicalDevices[deviceIdx]->GetQueueFamilyPalQueueType(queueFamilyIndex);
@@ -302,6 +305,12 @@ static void ConstructQueueCreateInfo(
 
     pQueueCreateInfo->queueType = palQueueType;
     pQueueCreateInfo->priority  = palQueuePriority;
+
+    if ((pQueueCreateInfo->queueType == Pal::QueueType::QueueTypeDma) && useComputeAsTransferQueue)
+    {
+        pQueueCreateInfo->queueType  = Pal::QueueType::QueueTypeCompute;
+        pQueueCreateInfo->engineType = Pal::EngineType::EngineTypeCompute;
+    }
 }
 
 // =====================================================================================================================
@@ -481,7 +490,6 @@ VkResult Device::Create(
 
             break;
         }
-
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR:
         {
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderAtomicInt64FeaturesKHR>(
@@ -490,6 +498,15 @@ VkResult Device::Create(
 
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceMemoryPriorityFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceMemoryPriorityFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD:
         {
             const VkDeviceMemoryOverallocationCreateInfoAMD* pMemoryOverallocationCreateInfo =
@@ -582,6 +599,18 @@ VkResult Device::Create(
         }
     }
 
+    bool useComputeAsTransferQueue = false;
+
+    // If the app requested any sparse residency features, but we can't reliably support PRT on transfer queues,
+    // we have to fall-back on a compute queue instead and avoid using DMA.
+    if ((pEnabledFeatures != nullptr) &&
+        (pPhysicalDevices[DefaultDeviceIndex]->IsPrtSupportedOnDmaEngine() == false))
+    {
+        useComputeAsTransferQueue = (pEnabledFeatures->sparseResidencyBuffer  ||
+                                     pEnabledFeatures->sparseResidencyImage2D ||
+                                     pEnabledFeatures->sparseResidencyImage3D);
+    }
+
     // Create the queues for the device up-front and hand them to the new device object.
     size_t apiDeviceSize = ObjectSize(sizeof(DispatchableDevice), numDevices);
     size_t apiQueueSize  = sizeof(DispatchableQueue);
@@ -604,7 +633,8 @@ VkResult Device::Create(
                     queueIndex,
                     dedicatedComputeUnits[queueFamilyIndex][queueIndex],
                     queuePriority[queueFamilyIndex],
-                    &queueCreateInfo);
+                    &queueCreateInfo,
+                    useComputeAsTransferQueue);
 
                 palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSize(queueCreateInfo, &palResult);
 
@@ -636,7 +666,8 @@ VkResult Device::Create(
             pPalDevices,
             barrierPolicy,
             enabledDeviceExtensions,
-            pEnabledFeatures));
+            pEnabledFeatures,
+            useComputeAsTransferQueue));
 
         DispatchableDevice* pDispatchableDevice = static_cast<DispatchableDevice*>(pMemory);
         DispatchableQueue*  pDispatchableQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
@@ -666,7 +697,8 @@ VkResult Device::Create(
                                              queueIndex,
                                              dedicatedComputeUnits[queueFamilyIndex][queueIndex],
                                              queuePriority[queueFamilyIndex],
-                                             &queueCreateInfo);
+                                             &queueCreateInfo,
+                                             useComputeAsTransferQueue);
 
                     palResult = pPalDevices[deviceIdx]->CreateQueue(queueCreateInfo,
                                                             Util::VoidPtrInc(pPalQueueMemory, palQueueMemoryOffset),
@@ -1348,6 +1380,34 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 }
 
 // =====================================================================================================================
+Pal::QueueType Device::GetQueueFamilyPalQueueType(
+    uint32_t queueFamilyIndex) const
+{
+    auto palQueueType = VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalQueueType(queueFamilyIndex);
+
+    if ((palQueueType == Pal::QueueType::QueueTypeDma) && m_useComputeAsTransferQueue)
+    {
+        palQueueType = Pal::QueueType::QueueTypeCompute;
+    }
+
+    return palQueueType;
+}
+
+// =====================================================================================================================
+Pal::EngineType Device::GetQueueFamilyPalEngineType(
+    uint32_t queueFamilyIndex) const
+{
+    auto palEngineType = VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalEngineType(queueFamilyIndex);
+
+    if ((palEngineType == Pal::EngineType::EngineTypeDma) && m_useComputeAsTransferQueue)
+    {
+        palEngineType = Pal::EngineType::EngineTypeCompute;
+    }
+
+    return palEngineType;
+}
+
+// =====================================================================================================================
 VkResult Device::CreateInternalComputePipeline(
     size_t                           codeByteSize,
     const uint8_t*                   pCode,
@@ -1365,7 +1425,7 @@ VkResult Device::CreateInternalComputePipeline(
 
     void*                pPipelineMem        = nullptr;
 
-    PipelineCompiler::ComputePipelineCreateInfo pipelineBuildInfo = {};
+    ComputePipelineCreateInfo pipelineBuildInfo = {};
 
     // Build shader module
     auto settings = GetRuntimeSettings();

@@ -72,26 +72,30 @@ void Image::CalcMemoryPriority(
 
     m_priority = MemoryPriority::FromSetting(settings.memoryPriorityDefault);
 
-    UpgradeToHigherPriority(settings.memoryPriorityImageAny, &m_priority);
-
-    if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & (Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead))
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_MEMORY_PRIORITY) == false)
     {
-        UpgradeToHigherPriority(settings.memoryPriorityImageShaderRead, &m_priority);
-    }
+        UpgradeToHigherPriority(settings.memoryPriorityImageAny, &m_priority);
 
-    if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutShaderWrite)
-    {
-        UpgradeToHigherPriority(settings.memoryPriorityImageShaderWrite, &m_priority);
-    }
+        if (GetBarrierPolicy().GetSupportedLayoutUsageMask() &
+            (Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead))
+        {
+            UpgradeToHigherPriority(settings.memoryPriorityImageShaderRead, &m_priority);
+        }
 
-    if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutColorTarget)
-    {
-        UpgradeToHigherPriority(settings.memoryPriorityImageColorTarget, &m_priority);
-    }
+        if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutShaderWrite)
+        {
+            UpgradeToHigherPriority(settings.memoryPriorityImageShaderWrite, &m_priority);
+        }
 
-    if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutDepthStencilTarget)
-    {
-        UpgradeToHigherPriority(settings.memoryPriorityImageDepthStencil, &m_priority);
+        if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutColorTarget)
+        {
+            UpgradeToHigherPriority(settings.memoryPriorityImageColorTarget, &m_priority);
+        }
+
+        if (GetBarrierPolicy().GetSupportedLayoutUsageMask() & Pal::LayoutDepthStencilTarget)
+        {
+            UpgradeToHigherPriority(settings.memoryPriorityImageDepthStencil, &m_priority);
+        }
     }
 }
 
@@ -1054,7 +1058,10 @@ VkResult Image::BindMemory(
                 // After applying any necessary base address offset, the full GPU address should be aligned
                 VK_ASSERT(Util::IsPow2Aligned(baseGpuAddr + baseAddrOffset + memOffset, reqs.alignment));
 
-                pMemory->ElevatePriority(m_priority);
+                if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_MEMORY_PRIORITY) == false)
+                {
+                    pMemory->ElevatePriority(m_priority);
+                }
             }
 
             result = pPalImage->BindGpuMemory(pGpuMem, baseAddrOffset + memOffset);

@@ -78,6 +78,8 @@ union MemoryPriority
 
     static MemoryPriority FromSetting(uint32_t value);
 
+    static MemoryPriority FromVkMemoryPriority(float value);
+
     struct
     {
         uint32_t offset   : 16;

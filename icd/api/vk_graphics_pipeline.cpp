@@ -41,6 +41,7 @@
 #include "palDevice.h"
 #include "palPipeline.h"
 #include "palInlineFuncs.h"
+#include "palMetroHash.h"
 
 #include <float.h>
 #include <math.h>
@@ -49,6 +50,500 @@ using namespace Util;
 
 namespace vk
 {
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineVertexInputStateCreateInfo struct
+// Pipeline compilation affected by:
+//     - desc.pVertexBindingDescriptions
+//     - desc.pVertexAttributeDescriptions
+//     - pDivisorStateCreateInfo->pVertexBindingDivisors
+void GraphicsPipeline::GenerateHashFromVertexInputStateCreateInfo(
+    Util::MetroHash128*                         pHasher,
+    const VkPipelineVertexInputStateCreateInfo& desc)
+{
+    pHasher->Update(desc.flags);
+    pHasher->Update(desc.vertexBindingDescriptionCount);
+
+    for (uint32_t i = 0; i < desc.vertexBindingDescriptionCount; i++)
+    {
+        pHasher->Update(desc.pVertexBindingDescriptions[i]);
+    }
+
+    pHasher->Update(desc.vertexAttributeDescriptionCount);
+
+    for (uint32_t i = 0; i < desc.vertexAttributeDescriptionCount; i++)
+    {
+        pHasher->Update(desc.pVertexAttributeDescriptions[i]);
+    }
+
+    if (desc.pNext != nullptr)
+    {
+        union
+        {
+            const VkStructHeader*                                 pInfo;
+            const VkPipelineVertexInputDivisorStateCreateInfoEXT* pDivisorStateCreateInfo;
+        };
+
+        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
+
+        while (pInfo != nullptr)
+        {
+            switch (static_cast<uint32_t>(pInfo->sType))
+            {
+            case VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT:
+                pHasher->Update(pDivisorStateCreateInfo->sType);
+                pHasher->Update(pDivisorStateCreateInfo->vertexBindingDivisorCount);
+
+                for (uint32_t i = 0; i < pDivisorStateCreateInfo->vertexBindingDivisorCount; i++)
+                {
+                    pHasher->Update(pDivisorStateCreateInfo->pVertexBindingDivisors[i]);
+                }
+
+                break;
+            default:
+                break;
+            }
+
+            pInfo = pInfo->pNext;
+        }
+    }
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineInputAssemblyStateCreateInfo struct
+// Pipeline compilation affected by:
+//     - desc.topology
+void GraphicsPipeline::GenerateHashFromInputAssemblyStateCreateInfo(
+    Util::MetroHash128*                           pBaseHasher,
+    Util::MetroHash128*                           pApiHasher,
+    const VkPipelineInputAssemblyStateCreateInfo& desc)
+{
+    pBaseHasher->Update(desc.flags);
+    pBaseHasher->Update(desc.topology);
+    pApiHasher->Update(desc.primitiveRestartEnable);
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineTessellationStateCreateInfo struct
+// Pipeline compilation affected by:
+//     - desc.patchControlPoints
+//     - pDomainOriginStateCreateInfo->domainOrigin
+void GraphicsPipeline::GenerateHashFromTessellationStateCreateInfo(
+    Util::MetroHash128*                          pHasher,
+    const VkPipelineTessellationStateCreateInfo& desc)
+{
+    pHasher->Update(desc.flags);
+    pHasher->Update(desc.patchControlPoints);
+
+    if (desc.pNext != nullptr)
+    {
+        union
+        {
+            const VkStructHeader*                                    pInfo;
+            const VkPipelineTessellationDomainOriginStateCreateInfo* pDomainOriginStateCreateInfo;
+        };
+
+        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
+
+        while (pInfo != nullptr)
+        {
+            switch (static_cast<uint32_t>(pInfo->sType))
+            {
+            case VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO:
+                pHasher->Update(pDomainOriginStateCreateInfo->sType);
+                pHasher->Update(pDomainOriginStateCreateInfo->domainOrigin);
+
+                break;
+            default:
+                break;
+            }
+
+            pInfo = pInfo->pNext;
+        }
+    }
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineViewportStateCreateInfo struct
+// Pipeline compilation affected by: none
+void GraphicsPipeline::GenerateHashFromViewportStateCreateInfo(
+    Util::MetroHash128*                      pHasher,
+    const VkPipelineViewportStateCreateInfo& desc)
+{
+    pHasher->Update(desc.flags);
+    pHasher->Update(desc.viewportCount);
+
+    if (desc.pViewports != nullptr)
+    {
+        for (uint32_t i = 0; i < desc.viewportCount; i++)
+        {
+            pHasher->Update(desc.pViewports[i]);
+        }
+    }
+
+    pHasher->Update(desc.scissorCount);
+
+    if (desc.pScissors != nullptr)
+    {
+        for (uint32_t i = 0; i < desc.scissorCount; i++)
+        {
+            pHasher->Update(desc.pScissors[i]);
+        }
+    }
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineRasterizationStateCreateInfo struct
+// Pipeline compilation affected by:
+//     - desc.depthClampEnable
+//     - desc.rasterizerDiscardEnable
+//     - desc.polygonMode
+//     - desc.cullMode
+//     - desc.frontFace
+//     - desc.depthBiasEnable
+//     - pStreamCreateInfo->rasterizationStream
+void GraphicsPipeline::GenerateHashFromRasterizationStateCreateInfo(
+    Util::MetroHash128*                           pBaseHasher,
+    Util::MetroHash128*                           pApiHasher,
+    const VkPipelineRasterizationStateCreateInfo& desc)
+{
+    pBaseHasher->Update(desc.flags);
+    pBaseHasher->Update(desc.depthClampEnable);
+    pBaseHasher->Update(desc.rasterizerDiscardEnable);
+    pBaseHasher->Update(desc.polygonMode);
+    pBaseHasher->Update(desc.cullMode);
+    pBaseHasher->Update(desc.frontFace);
+    pBaseHasher->Update(desc.depthBiasEnable);
+    pApiHasher->Update(desc.depthBiasConstantFactor);
+    pApiHasher->Update(desc.depthBiasClamp);
+    pApiHasher->Update(desc.depthBiasSlopeFactor);
+    pApiHasher->Update(desc.lineWidth);
+
+    if (desc.pNext != nullptr)
+    {
+        union
+        {
+            const VkStructHeader*                                        pInfo;
+            const VkPipelineRasterizationConservativeStateCreateInfoEXT* pConservativeStateCreateInfo;
+            const VkPipelineRasterizationStateRasterizationOrderAMD*     pRasterizationOrder;
+            const VkPipelineRasterizationStateStreamCreateInfoEXT*       pStreamCreateInfo;
+        };
+
+        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
+
+        while (pInfo != nullptr)
+        {
+            switch (static_cast<uint32_t>(pInfo->sType))
+            {
+            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT:
+                pApiHasher->Update(pConservativeStateCreateInfo->sType);
+                pApiHasher->Update(pConservativeStateCreateInfo->flags);
+                pApiHasher->Update(pConservativeStateCreateInfo->conservativeRasterizationMode);
+                pApiHasher->Update(pConservativeStateCreateInfo->extraPrimitiveOverestimationSize);
+
+                break;
+            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD:
+                pApiHasher->Update(pRasterizationOrder->sType);
+                pApiHasher->Update(pRasterizationOrder->rasterizationOrder);
+
+                break;
+            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
+                pBaseHasher->Update(pStreamCreateInfo->sType);
+                pBaseHasher->Update(pStreamCreateInfo->flags);
+                pBaseHasher->Update(pStreamCreateInfo->rasterizationStream);
+
+                break;
+            default:
+                break;
+            }
+
+            pInfo = pInfo->pNext;
+        }
+    }
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineMultisampleStateCreateInfo struct
+// Pipeline compilation affected by:
+//     - desc.rasterizationSamples
+//     - desc.sampleShadingEnable
+//     - desc.minSampleShading
+//     - desc.alphaToCoverageEnable
+void GraphicsPipeline::GenerateHashFromMultisampleStateCreateInfo(
+    Util::MetroHash128*                         pBaseHasher,
+    Util::MetroHash128*                         pApiHasher,
+    const VkPipelineMultisampleStateCreateInfo& desc)
+{
+    pBaseHasher->Update(desc.flags);
+    pBaseHasher->Update(desc.rasterizationSamples);
+    pBaseHasher->Update(desc.sampleShadingEnable);
+    pBaseHasher->Update(desc.minSampleShading);
+
+    if (desc.pSampleMask != nullptr)
+    {
+        for (uint32_t i = 0; i < ceil(((float)desc.rasterizationSamples) / 32.0f); i++)
+        {
+            pApiHasher->Update(desc.pSampleMask[i]);
+        }
+    }
+
+    pBaseHasher->Update(desc.alphaToCoverageEnable);
+    pApiHasher->Update(desc.alphaToOneEnable);
+
+    if (desc.pNext != nullptr)
+    {
+        union
+        {
+            const VkStructHeader*                              pInfo;
+            const VkPipelineSampleLocationsStateCreateInfoEXT* pSampleLocationsStateCreateInfo;
+        };
+
+        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
+
+        while (pInfo != nullptr)
+        {
+            switch (static_cast<uint32_t>(pInfo->sType))
+            {
+            case VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT:
+                pApiHasher->Update(pSampleLocationsStateCreateInfo->sType);
+                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsEnable);
+                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.sType);
+                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.sampleLocationsPerPixel);
+                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.sampleLocationGridSize);
+                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.sampleLocationsCount);
+
+                for (uint32_t i = 0; i < pSampleLocationsStateCreateInfo->sampleLocationsInfo.sampleLocationsCount; i++)
+                {
+                    pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.pSampleLocations[i]);
+                }
+
+                break;
+            default:
+                break;
+            }
+
+            pInfo = pInfo->pNext;
+        }
+    }
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineDepthStencilStateCreateInfo struct
+// Pipeline compilation affected by: none
+void GraphicsPipeline::GenerateHashFromDepthStencilStateCreateInfo(
+    Util::MetroHash128*                          pHasher,
+    const VkPipelineDepthStencilStateCreateInfo& desc)
+{
+    pHasher->Update(desc.flags);
+    pHasher->Update(desc.depthTestEnable);
+    pHasher->Update(desc.depthWriteEnable);
+    pHasher->Update(desc.depthCompareOp);
+    pHasher->Update(desc.depthBoundsTestEnable);
+    pHasher->Update(desc.stencilTestEnable);
+    pHasher->Update(desc.front);
+    pHasher->Update(desc.back);
+    pHasher->Update(desc.minDepthBounds);
+    pHasher->Update(desc.maxDepthBounds);
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineColorBlendStateCreateInfo struct
+// Pipeline compilation affected by:
+//     - desc.pAttachments
+void GraphicsPipeline::GenerateHashFromColorBlendStateCreateInfo(
+    Util::MetroHash128*                        pBaseHasher,
+    Util::MetroHash128*                        pApiHasher,
+    const VkPipelineColorBlendStateCreateInfo& desc)
+{
+    pBaseHasher->Update(desc.flags);
+    pApiHasher->Update(desc.logicOpEnable);
+    pApiHasher->Update(desc.logicOp);
+    pBaseHasher->Update(desc.attachmentCount);
+
+    for (uint32_t i = 0; i < desc.attachmentCount; i++)
+    {
+        pBaseHasher->Update(desc.pAttachments[i]);
+    }
+
+    pApiHasher->Update(desc.blendConstants);
+
+    if (desc.pNext != nullptr)
+    {
+        union
+        {
+            const VkStructHeader*                                 pInfo;
+            const VkPipelineColorBlendAdvancedStateCreateInfoEXT* pAdvancedStateCreateInfo;
+        };
+
+        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
+
+        while (pInfo != nullptr)
+        {
+            switch (static_cast<uint32_t>(pInfo->sType))
+            {
+            case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
+                pApiHasher->Update(pAdvancedStateCreateInfo->sType);
+                pApiHasher->Update(pAdvancedStateCreateInfo->srcPremultiplied);
+                pApiHasher->Update(pAdvancedStateCreateInfo->dstPremultiplied);
+                pApiHasher->Update(pAdvancedStateCreateInfo->blendOverlap);
+
+                break;
+            default:
+                break;
+            }
+
+            pInfo = pInfo->pNext;
+        }
+    }
+}
+
+// =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineDynamicStateCreateInfo struct
+// Pipeline compilation affected by: none
+void GraphicsPipeline::GenerateHashFromDynamicStateCreateInfo(
+    Util::MetroHash128*                     pHasher,
+    const VkPipelineDynamicStateCreateInfo& desc)
+{
+    pHasher->Update(desc.flags);
+    pHasher->Update(desc.dynamicStateCount);
+
+    for (uint32_t i = 0; i < desc.dynamicStateCount; i++)
+    {
+        pHasher->Update(desc.pDynamicStates[i]);
+    }
+}
+
+// =====================================================================================================================
+// Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
+// Pipeline compilation affected by:
+//     - pCreateInfo->pStages
+//     - pCreateInfo->pVertexInputState
+//     - pCreateInfo->pInputAssemblyState
+//     - pCreateInfo->pTessellationState
+//     - pCreateInfo->pRasterizationState
+//     - pCreateInfo->pMultisampleState
+//     - pCreateInfo->pColorBlendState
+//     - pCreateInfo->layout
+//     - pCreateInfo->renderPass
+//     - pCreateInfo->subpass
+uint64_t GraphicsPipeline::BuildApiHash(
+    const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    Util::MetroHash::Hash*              pBaseHash)
+{
+    Util::MetroHash128 baseHasher;
+    Util::MetroHash128 apiHasher;
+
+    baseHasher.Update(pCreateInfo->flags);
+    baseHasher.Update(pCreateInfo->stageCount);
+
+    for (uint32_t i = 0; i < pCreateInfo->stageCount; i++)
+    {
+        GenerateHashFromShaderStageCreateInfo(&baseHasher, pCreateInfo->pStages[i]);
+    }
+
+    if (pCreateInfo->pVertexInputState != nullptr)
+    {
+        GenerateHashFromVertexInputStateCreateInfo(&baseHasher, *pCreateInfo->pVertexInputState);
+    }
+
+    if (pCreateInfo->pInputAssemblyState != nullptr)
+    {
+        GenerateHashFromInputAssemblyStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pInputAssemblyState);
+    }
+
+    if (pCreateInfo->pTessellationState != nullptr)
+    {
+        GenerateHashFromTessellationStateCreateInfo(&baseHasher, *pCreateInfo->pTessellationState);
+    }
+
+    if (pCreateInfo->pViewportState != nullptr)
+    {
+        GenerateHashFromViewportStateCreateInfo(&apiHasher, *pCreateInfo->pViewportState);
+    }
+
+    if (pCreateInfo->pRasterizationState != nullptr)
+    {
+        GenerateHashFromRasterizationStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pRasterizationState);
+    }
+
+    if (pCreateInfo->pMultisampleState != nullptr)
+    {
+        GenerateHashFromMultisampleStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pMultisampleState);
+    }
+
+    if (pCreateInfo->pDepthStencilState != nullptr)
+    {
+        GenerateHashFromDepthStencilStateCreateInfo(&apiHasher, *pCreateInfo->pDepthStencilState);
+    }
+
+    if (pCreateInfo->pColorBlendState != nullptr)
+    {
+        GenerateHashFromColorBlendStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pColorBlendState);
+    }
+
+    if (pCreateInfo->pDynamicState != nullptr)
+    {
+        GenerateHashFromDynamicStateCreateInfo(&apiHasher, *pCreateInfo->pDynamicState);
+    }
+
+    baseHasher.Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
+    baseHasher.Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
+    baseHasher.Update(pCreateInfo->subpass);
+
+    if (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE)
+    {
+        apiHasher.Update(Pipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
+    }
+
+    apiHasher.Update(pCreateInfo->basePipelineIndex);
+
+    if (pCreateInfo->pNext != nullptr)
+    {
+        union
+        {
+            const VkStructHeader*                                    pInfo;
+            const VkPipelineDiscardRectangleStateCreateInfoEXT*      pDiscardRectangleStateCreateInfo;
+        };
+
+        pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+
+        while (pInfo != nullptr)
+        {
+            switch (static_cast<uint32_t>(pInfo->sType))
+            {
+            case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
+                apiHasher.Update(pDiscardRectangleStateCreateInfo->sType);
+                apiHasher.Update(pDiscardRectangleStateCreateInfo->flags);
+                apiHasher.Update(pDiscardRectangleStateCreateInfo->discardRectangleMode);
+                apiHasher.Update(pDiscardRectangleStateCreateInfo->discardRectangleCount);
+
+                if (pDiscardRectangleStateCreateInfo->pDiscardRectangles != nullptr)
+                {
+                    for (uint32_t i = 0; i < pDiscardRectangleStateCreateInfo->discardRectangleCount; i++)
+                    {
+                        apiHasher.Update(pDiscardRectangleStateCreateInfo->pDiscardRectangles[i]);
+                    }
+                }
+
+                break;
+            default:
+                break;
+            }
+
+            pInfo = pInfo->pNext;
+        }
+    }
+
+    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(pBaseHash));
+
+    uint64_t              apiHash;
+    Util::MetroHash::Hash apiHashFull;
+    apiHasher.Update(*pBaseHash);
+    apiHasher.Finalize(reinterpret_cast<uint8_t* const>(&apiHashFull));
+    apiHash = Util::MetroHash::Compact64(&apiHashFull);
+
+    return apiHash;
+}
 
 // =====================================================================================================================
 // Returns true if the given VkBlendFactor factor is a dual source blend factor
@@ -668,11 +1163,12 @@ VkResult GraphicsPipeline::Create(
     // Parse the create info and build patched AMDIL shaders
     CreateInfo    localPipelineInfo                  = {};
     VbBindingInfo vbInfo                             = {};
-    PipelineCompiler::GraphicsPipelineCreateInfo binaryCreateInfo = {};
+    GraphicsPipelineCreateInfo binaryCreateInfo = {};
     size_t        pipelineBinarySizes[MaxPalDevices] = {};
     const void*   pPipelineBinaries[MaxPalDevices]   = {};
     Pal::Result   palResult                          = Pal::Result::Success;
     PipelineCompiler*     pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
+    uint64_t      apiPsoHash                         = BuildApiHash(pCreateInfo, &binaryCreateInfo.basePipelineHash);
 
     VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo);
     ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &localPipelineInfo);
@@ -693,7 +1189,7 @@ VkResult GraphicsPipeline::Create(
         }
         else
         {
-            PipelineCompiler::GraphicsPipelineCreateInfo binaryCreateInfoMGPU = {};
+            GraphicsPipelineCreateInfo binaryCreateInfoMGPU = {};
             VbBindingInfo vbInfoMGPU = {};
             pDefaultCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &binaryCreateInfoMGPU, &vbInfoMGPU);
 
@@ -851,7 +1347,8 @@ VkResult GraphicsPipeline::Create(
             pPalDepthStencil,
             localPipelineInfo.sampleCoverage,
             viewIndexFromDeviceIndex,
-            pBinaryInfo);
+            pBinaryInfo,
+            apiPsoHash);
 
         *pPipeline = GraphicsPipeline::HandleFromVoidPointer(pSystemMem);
     }
@@ -905,7 +1402,8 @@ GraphicsPipeline::GraphicsPipeline(
     Pal::IDepthStencilState**              pPalDepthStencil,
     uint32_t                               coverageSamples,
     bool                                   viewIndexFromDeviceIndex,
-    PipelineBinaryInfo*                    pBinary)
+    PipelineBinaryInfo*                    pBinary,
+    uint64_t                               apiHash)
     :
     Pipeline(pDevice, pPalPipeline, pLayout, pBinary),
     m_info(immedInfo),
@@ -913,6 +1411,7 @@ GraphicsPipeline::GraphicsPipeline(
     m_coverageSamples(coverageSamples),
     m_flags()
 {
+    m_apiHash = apiHash;
     m_flags.viewIndexFromDeviceIndex = viewIndexFromDeviceIndex;
 
     memcpy(m_pPalMsaa,         pPalMsaa,         sizeof(pPalMsaa[0])         * pDevice->NumPalDevices());

@@ -1730,23 +1730,6 @@ namespace convert
             palColorSpaceBits |= Pal::ScreenColorSpace::CsUserDefined;
             break;
 
-#if VK_USE_PLATFORM_WIN32_KHR
-        case VK_COLOR_SPACE_FREESYNC_2_AMD:
-        {
-            if (surfaceFormat.format == VK_FORMAT_R16G16B16A16_SFLOAT)
-            {
-                palColorSpaceBits = Pal::ScreenColorSpace::TfLinear0_125;
-                palColorSpaceBits |= Pal::ScreenColorSpace::CsScrgb;
-            }
-            else
-            {
-                palColorSpaceBits = Pal::ScreenColorSpace::TfGamma22;
-                palColorSpaceBits |= Pal::ScreenColorSpace::CsNative;
-            }
-            break;
-        }
-#endif
-
         // Unknown
         default:
             palColorSpace = Pal::ScreenColorSpace::TfUndefined;

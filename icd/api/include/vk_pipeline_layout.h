@@ -144,6 +144,9 @@ public:
         Device*                             pDevice,
         const VkAllocationCallbacks*        pAllocator);
 
+    VK_INLINE uint64_t GetApiHash() const
+        { return m_apiHash; }
+
     VK_INLINE const PipelineInfo* GetPipelineInfo() const
         { return &m_pipelineInfo; }
 
@@ -160,7 +163,8 @@ protected:
     PipelineLayout(
         const Device*       pDevice,
         const Info&         info,
-        const PipelineInfo& pipelineInfo);
+        const PipelineInfo& pipelineInfo,
+        uint64_t            apiHash);
 
     ~PipelineLayout() { }
 
@@ -180,11 +184,16 @@ protected:
         const VkPipelineVertexInputStateCreateInfo* pInput,
         VbBindingInfo*                              pVbInfo) const;
 
+    static uint64_t BuildApiHash(
+        const VkPipelineLayoutCreateInfo* pCreateInfo);
+
     static Llpc::ResourceMappingNodeType MapLlpcResourceNodeType(
         VkDescriptorType descriptorType);
+
     const Info              m_info;
     const PipelineInfo      m_pipelineInfo;
     const Device* const     m_pDevice;
+    const uint64_t          m_apiHash;
 };
 
 namespace entry

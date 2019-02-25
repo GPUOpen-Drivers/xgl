@@ -33,15 +33,96 @@
 #include "include/vk_device.h"
 #include "include/vk_sampler.h"
 
+#include "palMetroHash.h"
+
 namespace vk
 {
 
 // =====================================================================================================================
+// Generates a hash using the contents of a VkDescriptorSetLayoutBinding struct
+void DescriptorSetLayout::GenerateHashFromBinding(
+    Util::MetroHash64*                  pHasher,
+    const VkDescriptorSetLayoutBinding& desc)
+{
+    pHasher->Update(desc.binding);
+    pHasher->Update(desc.descriptorType);
+    pHasher->Update(desc.descriptorCount);
+    pHasher->Update(desc.stageFlags);
+
+    if (desc.pImmutableSamplers != nullptr)
+    {
+        Sampler* sampler = nullptr;
+
+        for (uint32_t i = 0; i < desc.descriptorCount; i++)
+        {
+            sampler = Sampler::ObjectFromHandle(desc.pImmutableSamplers[i]);
+
+            pHasher->Update(sampler->GetApiHash());
+        }
+    }
+}
+
+// =====================================================================================================================
+// Generates the API hash using the contents of the VkDescriptorSetLayoutCreateInfo struct
+uint64_t DescriptorSetLayout::BuildApiHash(
+    const VkDescriptorSetLayoutCreateInfo* pCreateInfo)
+{
+    Util::MetroHash64    hasher;
+
+    hasher.Update(pCreateInfo->flags);
+    hasher.Update(pCreateInfo->bindingCount);
+
+    for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++)
+    {
+        GenerateHashFromBinding(&hasher, pCreateInfo->pBindings[i]);
+    }
+
+    if (pCreateInfo->pNext != nullptr)
+    {
+        union
+        {
+            const VkStructHeader*                                 pInfo;
+            const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT* pBindingFlagsCreateInfo;
+        };
+
+        pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+
+        while (pInfo != nullptr)
+        {
+            switch (static_cast<uint32_t>(pInfo->sType))
+            {
+            case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT:
+                hasher.Update(pBindingFlagsCreateInfo->sType);
+                hasher.Update(pBindingFlagsCreateInfo->bindingCount);
+
+                for (uint32_t i = 0; i < pBindingFlagsCreateInfo->bindingCount; i++)
+                {
+                    hasher.Update(pBindingFlagsCreateInfo->pBindingFlags[i]);
+                }
+
+                break;
+            default:
+                break;
+            }
+
+            pInfo = pInfo->pNext;
+        }
+    }
+
+    uint64_t hash;
+    hasher.Finalize(reinterpret_cast<uint8_t* const>(&hash));
+
+    return hash;
+}
+
+// =====================================================================================================================
 DescriptorSetLayout::DescriptorSetLayout(
     const Device*     pDevice,
-    const CreateInfo& info) :
+    const CreateInfo& info,
+    uint64_t          apiHash) :
     m_info(info),
-    m_pDevice(pDevice)
+    m_pDevice(pDevice),
+    m_apiHash(apiHash)
 {
 
 }
@@ -422,6 +503,8 @@ VkResult DescriptorSetLayout::Create(
     const VkAllocationCallbacks*                 pAllocator,
     VkDescriptorSetLayout*                       pLayout)
 {
+    uint64_t apiHash = BuildApiHash(pCreateInfo);
+
     // We add pBinding size to the apiSize so that they would reside consecutively in memory
     // The reasoning is that we don't know the size of pBinding until now in creation time,
     // and we don't want to use dynamic allocation for small sets, where we don't know where
@@ -483,7 +566,7 @@ VkResult DescriptorSetLayout::Create(
         return result;
     }
 
-    VK_PLACEMENT_NEW (pSysMem) DescriptorSetLayout (pDevice, info);
+    VK_PLACEMENT_NEW (pSysMem) DescriptorSetLayout (pDevice, info, apiHash);
 
     *pLayout = DescriptorSetLayout::HandleFromVoidPointer(pSysMem);
 
@@ -513,7 +596,7 @@ void DescriptorSetLayout::Copy(
     // Set the base pointer of the immutable sampler data to the appropriate location within the allocated memory
     info.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(pImmutableSamplerData);
 
-    VK_PLACEMENT_NEW(pOutLayout) DescriptorSetLayout(pDevice, info);
+    VK_PLACEMENT_NEW(pOutLayout) DescriptorSetLayout(pDevice, info, GetApiHash());
 }
 
 // =====================================================================================================================

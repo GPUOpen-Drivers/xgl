@@ -35,10 +35,47 @@
 #include "include/vk_memory.h"
 
 #include "palPipeline.h"
+#include "palMetroHash.h"
 #include "llpc.h"
 
 namespace vk
 {
+
+// =====================================================================================================================
+// Generates the API PSO hash using the contents of the VkComputePipelineCreateInfo struct
+// Pipeline compilation affected by:
+//     - pCreateInfo->pStage
+//     - pCreateInfo->layout
+uint64_t ComputePipeline::BuildApiHash(
+    const VkComputePipelineCreateInfo* pCreateInfo,
+    Util::MetroHash::Hash*             pBaseHash)
+{
+    Util::MetroHash128 baseHasher;
+    Util::MetroHash128 apiHasher;
+
+    baseHasher.Update(pCreateInfo->flags);
+
+    GenerateHashFromShaderStageCreateInfo(&baseHasher, pCreateInfo->stage);
+
+    baseHasher.Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
+
+    if (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE)
+    {
+        apiHasher.Update(Pipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
+    }
+
+    apiHasher.Update(pCreateInfo->basePipelineIndex);
+
+    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(pBaseHash));
+
+    uint64_t              apiHash;
+    Util::MetroHash::Hash apiHashFull;
+    apiHasher.Update(*pBaseHash);
+    apiHasher.Finalize(reinterpret_cast<uint8_t* const>(&apiHashFull));
+    apiHash = Util::MetroHash::Compact64(&apiHashFull);
+
+    return apiHash;
+}
 
 // =====================================================================================================================
 // Converts Vulkan compute pipeline parameters to an internal structure
@@ -62,11 +99,13 @@ ComputePipeline::ComputePipeline(
     Pal::IPipeline**                     pPalPipeline,
     const PipelineLayout*                pPipelineLayout,
     PipelineBinaryInfo*                  pPipelineBinary,
-    const ImmedInfo&                     immedInfo)
+    const ImmedInfo&                     immedInfo,
+    uint64_t                             apiHash)
     :
     Pipeline(pDevice, pPalPipeline, pPipelineLayout, pPipelineBinary),
     m_info(immedInfo)
 {
+    m_apiHash = apiHash;
     CreateStaticState();
 }
 
@@ -112,7 +151,8 @@ VkResult ComputePipeline::Create(
     size_t      pipelineBinarySizes[MaxPalDevices] = {};
     const void* pPipelineBinaries[MaxPalDevices]   = {};
     PipelineCompiler*   pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
-    PipelineCompiler::ComputePipelineCreateInfo binaryCreateInfo = {};
+    ComputePipelineCreateInfo binaryCreateInfo = {};
+    uint64_t    apiPsoHash                         = BuildApiHash(pCreateInfo, &binaryCreateInfo.basePipelineHash);
     VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo);
 
     for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < pDevice->NumPalDevices()); deviceIdx++)
@@ -211,7 +251,8 @@ VkResult ComputePipeline::Create(
                                                      pPalPipeline,
                                                      localPipelineInfo.pLayout,
                                                      pBinary,
-                                                     localPipelineInfo.immedInfo);
+                                                     localPipelineInfo.immedInfo,
+                                                     apiPsoHash);
 
         *pPipeline = ComputePipeline::HandleFromVoidPointer(pSystemMem);
     }

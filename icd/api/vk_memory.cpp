@@ -96,8 +96,6 @@ VkResult Memory::Create(
     // Assign default priority based on panel setting (this may get elevated later by memory binds)
     MemoryPriority priority = MemoryPriority::FromSetting(pDevice->GetRuntimeSettings().memoryPriorityDefault);
 
-    createInfo.priority       = priority.PalPriority();
-    createInfo.priorityOffset = priority.PalOffset();
     Image* pBoundImage        = nullptr;
 
     for (pInfo = pAllocInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -203,6 +201,15 @@ VkResult Memory::Create(
             }
             break;
 
+            case VK_STRUCTURE_TYPE_MEMORY_PRIORITY_ALLOCATE_INFO_EXT:
+            {
+                const VkMemoryPriorityAllocateInfoEXT* pMemPriorityInfo =
+                    reinterpret_cast<const VkMemoryPriorityAllocateInfoEXT *>(pHeader);
+
+                priority = MemoryPriority::FromVkMemoryPriority(pMemPriorityInfo->priority);
+            }
+            break;
+
             default:
                 switch (static_cast<uint32_t>(pHeader->sType))
                 {
@@ -251,6 +258,9 @@ VkResult Memory::Create(
         }
         else
         {
+            createInfo.priority       = priority.PalPriority();
+            createInfo.priorityOffset = priority.PalOffset();
+
             if (pPinnedHostPtr == nullptr)
             {
                 vkResult = CreateGpuMemory(
@@ -987,7 +997,8 @@ void Memory::Unmap(void)
 
 // =====================================================================================================================
 // Returns the actual number of bytes that are currently committed to this memory object
-VkResult Memory::GetCommitment(VkDeviceSize* pCommittedMemoryInBytes)
+VkResult Memory::GetCommitment(
+    VkDeviceSize* pCommittedMemoryInBytes)
 {
     VK_ASSERT(pCommittedMemoryInBytes != nullptr);
 
@@ -1000,7 +1011,8 @@ VkResult Memory::GetCommitment(VkDeviceSize* pCommittedMemoryInBytes)
 // =====================================================================================================================
 // This function increases the priority of this memory's allocation to be at least that of the given priority.  This
 // function may be called e.g. when this memory is bound to a high-priority VkImage.
-void Memory::ElevatePriority(MemoryPriority priority)
+void Memory::ElevatePriority(
+    MemoryPriority priority)
 {
     // Update PAL memory object's priority using a double-checked lock if the current priority is lower than
     // the new given priority.
@@ -1025,7 +1037,8 @@ void Memory::ElevatePriority(MemoryPriority priority)
 
 // =====================================================================================================================
 // Decodes a priority setting value into a compatible PAL priority/offset pair.
-MemoryPriority MemoryPriority::FromSetting(uint32_t value)
+MemoryPriority MemoryPriority::FromSetting(
+    uint32_t value)
 {
     static_assert(
         (static_cast<uint32_t>(Pal::GpuMemPriority::Unused)      == 0) &&
@@ -1044,6 +1057,39 @@ MemoryPriority MemoryPriority::FromSetting(uint32_t value)
     priority.priority = (value / 16);
     priority.offset   = (value % 16);
 
+    return priority;
+}
+
+// =====================================================================================================================
+// Convert VkMemoryPriority(from VkMemoryPriorityAllocateInfoEXT) value to a compatible PAL priority/offset pair.
+MemoryPriority MemoryPriority::FromVkMemoryPriority(
+    float value)
+{
+    static_assert(
+        (static_cast<uint32_t>(Pal::GpuMemPriority::Unused) == 0) &&
+        (static_cast<uint32_t>(Pal::GpuMemPriority::VeryLow) == 1) &&
+        (static_cast<uint32_t>(Pal::GpuMemPriority::Low) == 2) &&
+        (static_cast<uint32_t>(Pal::GpuMemPriority::Normal) == 3) &&
+        (static_cast<uint32_t>(Pal::GpuMemPriority::High) == 4) &&
+        (static_cast<uint32_t>(Pal::GpuMemPriority::VeryHigh) == 5) &&
+        (static_cast<uint32_t>(Pal::GpuMemPriority::Count) == 6) &&
+        (static_cast<uint32_t>(Pal::GpuMemPriorityOffset::Count) == 8),
+        "PAL GpuMemPriority or GpuMemPriorityOffset values changed. Consider to update strategy to convert"
+        "VkMemoryPriority to compatible PAL priority/offset pair");
+
+    // From Vulkan Spec, 0.0 <= value <= 1.0, and the granularity of the priorities is implementation-dependent.
+    // One thing Spec forced is that if VkMemoryPriority not specified as default behavior, it is as if the
+    // priority value is 0.5. Our strategy is that map 0.5 to GpuMemPriority::Normal-GpuMemPriorityOffset::Offset0,
+    // which is consistent to MemoryPriorityDefault. We adopts GpuMemPriority::VeryLow, GpuMemPriority::Low,
+    // GpuMemPriority::Normal, GpuMemPriority::High, 4 priority grades, each of which contains 8 steps of offests.
+    // This maps [0.0-1.0) to totally 32 steps. Finally, 1.0 maps to GpuMemPriority::VeryHigh.
+    VK_ASSERT((value >= 0.0f) && (value <= 1.0f));
+    static constexpr uint32_t TotalMemoryPrioritySteps = 32;
+    uint32_t uintValue = static_cast<uint32_t>(value * TotalMemoryPrioritySteps);
+
+    MemoryPriority priority = {};
+    priority.priority = ((uintValue / 8) + 1);
+    priority.offset   = (uintValue % 8);
     return priority;
 }
 

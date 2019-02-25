@@ -379,6 +379,11 @@ public:
         return subgroupSize;
     }
 
+    VK_INLINE bool IsPrtSupportedOnDmaEngine() const
+    {
+        return m_prtOnDmaSupported;
+    }
+
     VkResult GetDisplayProperties(
         uint32_t*                                   pPropertyCount,
         utils::ArrayView<VkDisplayPropertiesKHR>    properties);
@@ -510,13 +515,14 @@ protected:
     } m_queueFamilies[Queue::MaxQueueFamilies];
 
     const AppProfile                 m_appProfile;
+    bool                             m_prtOnDmaSupported;
 
     DeviceExtensions::Supported      m_supportedExtensions;
 
     // Device properties related to the VK_AMD_gpu_perf_api_interface extension
     PhysicalDeviceGpaProperties      m_gpaProps;
 
-    PipelineCompiler                         m_compiler;
+    PipelineCompiler                 m_compiler;
 };
 
 VK_DEFINE_DISPATCHABLE(PhysicalDevice);

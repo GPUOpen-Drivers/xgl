@@ -31,9 +31,75 @@
 #include "include/vk_sampler.h"
 
 #include "palDevice.h"
+#include "palMetroHash.h"
 
 namespace vk
 {
+
+// =====================================================================================================================
+// Generates the API hash using the contents of the VkSamplerCreateInfo struct
+uint64_t Sampler::BuildApiHash(
+    const VkSamplerCreateInfo* pCreateInfo)
+{
+    Util::MetroHash64 hasher;
+
+    hasher.Update(pCreateInfo->flags);
+    hasher.Update(pCreateInfo->magFilter);
+    hasher.Update(pCreateInfo->minFilter);
+    hasher.Update(pCreateInfo->mipmapMode);
+    hasher.Update(pCreateInfo->addressModeU);
+    hasher.Update(pCreateInfo->addressModeV);
+    hasher.Update(pCreateInfo->addressModeW);
+    hasher.Update(pCreateInfo->mipLodBias);
+    hasher.Update(pCreateInfo->anisotropyEnable);
+    hasher.Update(pCreateInfo->maxAnisotropy);
+    hasher.Update(pCreateInfo->compareEnable);
+    hasher.Update(pCreateInfo->compareOp);
+    hasher.Update(pCreateInfo->minLod);
+    hasher.Update(pCreateInfo->maxLod);
+    hasher.Update(pCreateInfo->borderColor);
+    hasher.Update(pCreateInfo->unnormalizedCoordinates);
+
+    if (pCreateInfo->pNext != nullptr)
+    {
+        union
+        {
+            const VkStructHeader*                      pInfo;
+            const VkSamplerYcbcrConversionInfo*        pYcbcrConversionInfo;
+            const VkSamplerReductionModeCreateInfoEXT* pReductionModeCreateInfo;
+        };
+
+        pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+
+        while (pInfo != nullptr)
+        {
+            switch (static_cast<uint32_t>(pInfo->sType))
+            {
+            case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
+                hasher.Update(pYcbcrConversionInfo->sType);
+
+                VK_NOT_IMPLEMENTED;
+
+                break;
+            case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
+                hasher.Update(pReductionModeCreateInfo->sType);
+                hasher.Update(pReductionModeCreateInfo->reductionMode);
+
+                break;
+            default:
+                break;
+            }
+
+            pInfo = pInfo->pNext;
+        }
+    }
+
+    uint64_t hash;
+    hasher.Finalize(reinterpret_cast<uint8_t* const>(&hash));
+
+    return hash;
+}
+
 // =====================================================================================================================
 // Create a new sampler object
 VkResult Sampler::Create(
@@ -42,8 +108,9 @@ VkResult Sampler::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkSampler*                      pSampler)
 {
+    uint64_t         apiHash     = BuildApiHash(pCreateInfo);
     Pal::SamplerInfo samplerInfo = {};
-    samplerInfo.filterMode = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
+    samplerInfo.filterMode       = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
 
     union
     {
@@ -134,7 +201,7 @@ VkResult Sampler::Create(
             &samplerInfo,
             Util::VoidPtrInc(pMemory, apiSize));
 
-    VK_PLACEMENT_NEW (pMemory) Sampler(pDevice);
+    VK_PLACEMENT_NEW (pMemory) Sampler(apiHash);
 
     *pSampler = Sampler::HandleFromVoidPointer(pMemory);
 

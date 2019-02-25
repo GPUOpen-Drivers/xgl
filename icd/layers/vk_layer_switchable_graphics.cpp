@@ -193,59 +193,59 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
         // device for HG platforms, AMD layer should add the following logic to support the case of loader call NV
         // first, in this case, AMD layer needs to report all physical devices to NV layer, then NV layer can have them
         // and then filter out the correct physical device and report it to loader and apps.
-        if (isHybridGraphics && (physicalDeviceCount >= 3))
+        if (isHybridGraphics)
         {
-            void* pTmpLayerPhysicalDeviceMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                                    physicalDeviceCount * sizeof(VkPhysicalDevice),
-                                                    sizeof(void*),
-                                                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-            void* pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                                    physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
-                                                    sizeof(void*),
-                                                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-            if ((pTmpLayerPhysicalDeviceMemory == nullptr) || (pPropertiesMemory == nullptr))
+            if (physicalDeviceCount >= 3)
             {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-            }
-            else
-            {
-                VkPhysicalDevice* pTmpLayerPhysicalDevice =
-                    static_cast<VkPhysicalDevice*>(pTmpLayerPhysicalDeviceMemory);
-                VkPhysicalDeviceProperties* pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
-
-                result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance,
-                                                                     &physicalDeviceCount,
-                                                                     pTmpLayerPhysicalDevice);
-                if (result == VK_SUCCESS)
+                void* pTmpLayerPhysicalDeviceMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                                        physicalDeviceCount * sizeof(VkPhysicalDevice),
+                                                        sizeof(void*),
+                                                        VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+                void* pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                                        physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
+                                                        sizeof(void*),
+                                                        VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+                if ((pTmpLayerPhysicalDeviceMemory == nullptr) || (pPropertiesMemory == nullptr))
                 {
-                    for (uint32_t i = 0; i < physicalDeviceCount; i++)
-                    {
-                       g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pTmpLayerPhysicalDevice[i], &pProperties[i]);
-                    }
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+                else
+                {
+                    VkPhysicalDevice* pTmpLayerPhysicalDevice =
+                        static_cast<VkPhysicalDevice*>(pTmpLayerPhysicalDeviceMemory);
+                    VkPhysicalDeviceProperties* pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
 
-                    // For HG I+N+A and HG I+A+N, the last physical device is always Intel device, if NVIDIA device
-                    // is next to Intel device, then loader will call NV layer first
-                    if ((pProperties[physicalDeviceCount - 1].vendorID == VENDOR_ID_INTEL) &&
-                        (pProperties[physicalDeviceCount - 2].vendorID == VENDOR_ID_NVIDIA))
+                    result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance,
+                                                                         &physicalDeviceCount,
+                                                                         pTmpLayerPhysicalDevice);
+                    if (result == VK_SUCCESS)
                     {
-                        loaderCallNvLayerFirst = true;
+                        for (uint32_t i = 0; i < physicalDeviceCount; i++)
+                        {
+                           g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pTmpLayerPhysicalDevice[i], &pProperties[i]);
+                        }
+
+                        // For HG I+N+A and HG I+A+N, the last physical device is always Intel device, if NVIDIA device
+                        // is next to Intel device, then loader will call NV layer first
+                        if ((pProperties[physicalDeviceCount - 1].vendorID == VENDOR_ID_INTEL) &&
+                            (pProperties[physicalDeviceCount - 2].vendorID == VENDOR_ID_NVIDIA))
+                        {
+                            loaderCallNvLayerFirst = true;
+                        }
                     }
+                }
+
+                if (pTmpLayerPhysicalDeviceMemory != nullptr)
+                {
+                    pAllocCb->pfnFree(pAllocCb->pUserData, pTmpLayerPhysicalDeviceMemory);
+                }
+                if (pPropertiesMemory != nullptr)
+                {
+                    pAllocCb->pfnFree(pAllocCb->pUserData, pPropertiesMemory);
                 }
             }
 
-            if (pTmpLayerPhysicalDeviceMemory != nullptr)
-            {
-                pAllocCb->pfnFree(pAllocCb->pUserData, pTmpLayerPhysicalDeviceMemory);
-            }
-            if (pPropertiesMemory != nullptr)
-            {
-                pAllocCb->pfnFree(pAllocCb->pUserData, pPropertiesMemory);
-            }
-        }
-
-        if ((physicalDeviceCount >= 2) && (!loaderCallNvLayerFirst))
-        {
-            if (isHybridGraphics)
+            if ((physicalDeviceCount >= 2) && (!loaderCallNvLayerFirst))
             {
                 if (pPhysicalDevices != nullptr)
                 {
@@ -269,6 +269,35 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
 
                 // Always report physical device count as 1 for hybrid graphics when loader call AMD layer first
                 *pPhysicalDeviceCount = 1;
+            }
+        }
+        else if ((pPhysicalDevices != nullptr) && (physicalDeviceCount == 2))
+        {
+            // On some intel+amd platform(non-hybrid) Amd Gpu will be first physical device, while Intel Gpu
+            // will be first on some others. We need to set the one that is referred as default one by Os
+            // to fisrt physical device.
+            VkPhysicalDeviceProperties properties = {};
+            g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[0], &properties);
+
+            if (properties.vendorID == VENDOR_ID_INTEL)
+            {
+                uint32_t d3dZerothVendorId = 0;
+                uint32_t d3dZerothDeviceId = 0;
+                QueryOsSettingsForApplication(&d3dZerothVendorId, &d3dZerothDeviceId);
+
+                for (uint32_t i = 1; i < physicalDeviceCount; i++)
+                {
+                    g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[i], &properties);
+
+                    if (((properties.vendorID == d3dZerothVendorId) && (properties.deviceID == d3dZerothDeviceId)) &&
+                        ((properties.vendorID == VENDOR_ID_AMD) || (properties.vendorID == VENDOR_ID_ATI)))
+                    {
+                        VkPhysicalDevice tmpPhysDevice = pLayerPhysicalDevices[i];
+                        pLayerPhysicalDevices[i] = pLayerPhysicalDevices[0];
+                        pLayerPhysicalDevices[0] = tmpPhysDevice;
+                        break;
+                    }
+                }
             }
         }
 

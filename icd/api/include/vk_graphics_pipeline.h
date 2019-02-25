@@ -258,7 +258,8 @@ protected:
         Pal::IDepthStencilState**              pPalDepthStencil,
         uint32_t                               coverageSamples,
         bool                                   viewIndexFromDeviceIndex,
-        PipelineBinaryInfo*                    pBinary);
+        PipelineBinaryInfo*                    pBinary,
+        uint64_t                               apiHash);
 
     void CreateStaticState();
     void DestroyStaticState(const VkAllocationCallbacks* pAllocator);
@@ -290,6 +291,50 @@ protected:
         const VkPipelineRasterizationStateCreateInfo* pIn,
         CreateInfo*                                   pInfo,
         const bool                                    dynamicStateFlags[]);
+
+    static void GenerateHashFromVertexInputStateCreateInfo(
+        Util::MetroHash128*                         pHasher,
+        const VkPipelineVertexInputStateCreateInfo& desc);
+
+    static void GenerateHashFromInputAssemblyStateCreateInfo(
+        Util::MetroHash128*                           pBaseHasher,
+        Util::MetroHash128*                           pApiHasher,
+        const VkPipelineInputAssemblyStateCreateInfo& desc);
+
+    static void GenerateHashFromTessellationStateCreateInfo(
+        Util::MetroHash128*                          pHasher,
+        const VkPipelineTessellationStateCreateInfo& desc);
+
+    static void GenerateHashFromViewportStateCreateInfo(
+        Util::MetroHash128*                      pHasher,
+        const VkPipelineViewportStateCreateInfo& desc);
+
+    static void GenerateHashFromRasterizationStateCreateInfo(
+        Util::MetroHash128*                           pBaseHasher,
+        Util::MetroHash128*                           pApiHasher,
+        const VkPipelineRasterizationStateCreateInfo& desc);
+
+    static void GenerateHashFromMultisampleStateCreateInfo(
+        Util::MetroHash128*                         pBaseHasher,
+        Util::MetroHash128*                         pApiHasher,
+        const VkPipelineMultisampleStateCreateInfo& desc);
+
+    static void GenerateHashFromDepthStencilStateCreateInfo(
+        Util::MetroHash128*                          pHasher,
+        const VkPipelineDepthStencilStateCreateInfo& desc);
+
+    static void GenerateHashFromColorBlendStateCreateInfo(
+        Util::MetroHash128*                        pBaseHasher,
+        Util::MetroHash128*                        pApiHasher,
+        const VkPipelineColorBlendStateCreateInfo& desc);
+
+    static void GenerateHashFromDynamicStateCreateInfo(
+        Util::MetroHash128*                     pHasher,
+        const VkPipelineDynamicStateCreateInfo& desc);
+
+    static uint64_t BuildApiHash(
+        const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        Util::MetroHash::Hash*              pBaseHash);
 
 private:
     ImmedInfo                 m_info;                             // Immediate state that will go in CmdSet* functions

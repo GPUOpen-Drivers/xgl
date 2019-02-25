@@ -863,7 +863,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         // Use GpaSession to update the sqtt token mask via UpdateSampleTraceParams.
         if (result == Pal::Result::Success)
         {
-            pState->pGpaSession->UpdateSampleTraceParams(pBeginSqttCmdBuf, pState->gpaSampleId);
+            pState->pGpaSession->UpdateSampleTraceParams(pBeginSqttCmdBuf, pState->gpaSampleId, GpuUtil::UpdateSampleTraceMode::MinimalToFullMask);
         }
 
         // Finish building the trace-begin-sqtt command buffer
@@ -2146,7 +2146,10 @@ void DevModeMgr::PipelineCreated(
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 460
         m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
 #else
-        m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex), { });
+        GpuUtil::RegisterPipelineInfo pipelineInfo = { 0 };
+        pipelineInfo.apiPsoHash = pPipeline->GetApiHash();
+
+        m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex), pipelineInfo);
 #endif
     }
 }

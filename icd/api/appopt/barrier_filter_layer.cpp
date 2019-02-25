@@ -31,6 +31,7 @@
 
 #include "barrier_filter_layer.h"
 
+#include "include/vk_conv.h"
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_device.h"
 #include "include/vk_dispatch.h"
@@ -67,115 +68,118 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(
     uint32_t                                    imageMemoryBarrierCount,
     const VkImageMemoryBarrier*                 pImageMemoryBarriers)
 {
-    uint32_t memoryCount = memoryBarrierCount;
-    uint32_t bufferCount = bufferMemoryBarrierCount;
-    uint32_t imageCount  = imageMemoryBarrierCount;
+    CmdBuffer*          pCmdBuffer    = ApiCmdBuffer::ObjectFromHandle(cmdBuffer);
+    BarrierFilterLayer* pLayer        = pCmdBuffer->VkDevice()->GetBarrierFilterLayer();
+    const uint32_t      filterOptions = pCmdBuffer->VkDevice()->GetRuntimeSettings().barrierFilterOptions;
 
-    VkMemoryBarrier*       pMemory  = nullptr;
-    VkBufferMemoryBarrier* pBuffers = nullptr;
-    VkImageMemoryBarrier*  pImages  = nullptr;
-
-    CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(cmdBuffer);
-
-    VirtualStackFrame virtStackFrame(pCmdBuffer->GetStackAllocator());
-
-    const uint32_t filterOptions = pCmdBuffer->VkDevice()->GetRuntimeSettings().barrierFilterOptions;
-
-    if (memoryCount > 0)
     {
-        pMemory = virtStackFrame.AllocArray<VkMemoryBarrier>(memoryCount);
+        uint32_t memoryCount = memoryBarrierCount;
+        uint32_t bufferCount = bufferMemoryBarrierCount;
+        uint32_t imageCount  = imageMemoryBarrierCount;
+
+        VkMemoryBarrier*       pMemory  = nullptr;
+        VkBufferMemoryBarrier* pBuffers = nullptr;
+        VkImageMemoryBarrier*  pImages  = nullptr;
+
+        VirtualStackFrame virtStackFrame(pCmdBuffer->GetStackAllocator());
+
+        if (memoryCount > 0)
+        {
+            pMemory = virtStackFrame.AllocArray<VkMemoryBarrier>(memoryCount);
+
+            if (pMemory != nullptr)
+            {
+                // Reset the count and loop through to filter out memory barriers deemed unnecessary
+                memoryCount = 0;
+
+                for (uint32_t i = 0; i < memoryBarrierCount; ++i)
+                {
+                    if (((filterOptions & SkipDuplicateResourceBarriers) == 0) ||
+                        (pMemoryBarriers[i].srcAccessMask != pMemoryBarriers[i].dstAccessMask))
+                    {
+                        pMemory[memoryCount++] = pMemoryBarriers[i];
+                    }
+                }
+            }
+        }
+
+        if (bufferCount > 0)
+        {
+            pBuffers = virtStackFrame.AllocArray<VkBufferMemoryBarrier>(bufferCount);
+
+            if (pBuffers != nullptr)
+            {
+                // Reset the count and loop through to filter out buffer memory barriers deemed unnecessary
+                bufferCount = 0;
+
+                for (uint32_t i = 0; i < bufferMemoryBarrierCount; ++i)
+                {
+                    if (((filterOptions & SkipDuplicateResourceBarriers) == 0) ||
+                        (pBufferMemoryBarriers[i].srcAccessMask != pBufferMemoryBarriers[i].dstAccessMask) ||
+                        (pBufferMemoryBarriers[i].srcQueueFamilyIndex != pBufferMemoryBarriers[i].dstQueueFamilyIndex))
+                    {
+                        pBuffers[bufferCount++] = pBufferMemoryBarriers[i];
+                    }
+                }
+            }
+        }
+
+        if (imageCount > 0)
+        {
+            pImages = virtStackFrame.AllocArray<VkImageMemoryBarrier>(imageCount);
+
+            if (pImages != nullptr)
+            {
+                // Reset the count and loop through to filter out image memory barriers deemed unnecessary
+                imageCount = 0;
+
+                for (uint32_t i = 0; i < imageMemoryBarrierCount; ++i)
+                {
+                    if ((((filterOptions & SkipImageLayoutUndefined) == 0) ||
+                         (pImageMemoryBarriers[i].oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) ||
+                         (pImageMemoryBarriers[i].newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)) &&
+                        (((filterOptions & SkipDuplicateResourceBarriers) == 0) ||
+                         (pImageMemoryBarriers[i].oldLayout != pImageMemoryBarriers[i].newLayout) ||
+                         (pImageMemoryBarriers[i].srcAccessMask != pImageMemoryBarriers[i].dstAccessMask) ||
+                         (pImageMemoryBarriers[i].srcQueueFamilyIndex != pImageMemoryBarriers[i].dstQueueFamilyIndex)))
+                    {
+                        pImages[imageCount++] = pImageMemoryBarriers[i];
+                    }
+                }
+            }
+        }
+
+        const uint32_t resourceBarrierCount = memoryCount + bufferCount + imageCount;
+
+        if ((resourceBarrierCount > 0) || ((filterOptions & SkipStrayExecutionDependencies) == 0))
+        {
+            pLayer->GetNextLayer()->GetEntryPoints().vkCmdPipelineBarrier(
+                cmdBuffer,
+                srcStageMask,
+                dstStageMask,
+                dependencyFlags,
+                memoryCount,
+                (pMemory != nullptr) ? pMemory : pMemoryBarriers,
+                bufferCount,
+                (pBuffers != nullptr) ? pBuffers : pBufferMemoryBarriers,
+                imageCount,
+                (pImages != nullptr) ? pImages : pImageMemoryBarriers);
+        }
 
         if (pMemory != nullptr)
         {
-            // Reset the count and loop through to filter out memory barriers deemed unnecessary
-            memoryCount = 0;
-
-            for (uint32_t i = 0; i < memoryBarrierCount; ++i)
-            {
-                if (((filterOptions & SkipDuplicateResourceBarriers) == 0) ||
-                    (pMemoryBarriers[i].srcAccessMask != pMemoryBarriers[i].dstAccessMask))
-                {
-                    pMemory[memoryCount++] = pMemoryBarriers[i];
-                }
-            }
+            virtStackFrame.FreeArray(pMemory);
         }
-    }
-
-    if (bufferCount > 0)
-    {
-        pBuffers = virtStackFrame.AllocArray<VkBufferMemoryBarrier>(bufferCount);
 
         if (pBuffers != nullptr)
         {
-            // Reset the count and loop through to filter out buffer memory barriers deemed unnecessary
-            bufferCount = 0;
-
-            for (uint32_t i = 0; i < bufferMemoryBarrierCount; ++i)
-            {
-                if (((filterOptions & SkipDuplicateResourceBarriers) == 0) ||
-                    (pBufferMemoryBarriers[i].srcAccessMask != pBufferMemoryBarriers[i].dstAccessMask) ||
-                    (pBufferMemoryBarriers[i].srcQueueFamilyIndex != pBufferMemoryBarriers[i].dstQueueFamilyIndex))
-                {
-                    pBuffers[bufferCount++] = pBufferMemoryBarriers[i];
-                }
-            }
+            virtStackFrame.FreeArray(pBuffers);
         }
-    }
-
-    if (imageCount > 0)
-    {
-        pImages = virtStackFrame.AllocArray<VkImageMemoryBarrier>(imageCount);
 
         if (pImages != nullptr)
         {
-            // Reset the count and loop through to filter out image memory barriers deemed unnecessary
-            imageCount = 0;
-
-            for (uint32_t i = 0; i < imageMemoryBarrierCount; ++i)
-            {
-                if ((((filterOptions & SkipImageLayoutUndefined) == 0) ||
-                     (pImageMemoryBarriers[i].oldLayout != VK_IMAGE_LAYOUT_UNDEFINED)) &&
-                    (((filterOptions & SkipDuplicateResourceBarriers) == 0) ||
-                     (pImageMemoryBarriers[i].oldLayout != pImageMemoryBarriers[i].newLayout) ||
-                     (pImageMemoryBarriers[i].srcAccessMask != pImageMemoryBarriers[i].dstAccessMask) ||
-                     (pImageMemoryBarriers[i].srcQueueFamilyIndex != pImageMemoryBarriers[i].dstQueueFamilyIndex)))
-                {
-                    pImages[imageCount++] = pImageMemoryBarriers[i];
-                }
-            }
+            virtStackFrame.FreeArray(pImages);
         }
-    }
-
-    const uint32_t resourceBarrierCount = memoryCount + bufferCount + imageCount;
-
-    if ((resourceBarrierCount > 0) || ((filterOptions & SkipStrayExecutionDependencies) == 0))
-    {
-        pCmdBuffer->VkDevice()->GetBarrierFilterLayer()->GetNextLayer()->GetEntryPoints().vkCmdPipelineBarrier(
-            cmdBuffer,
-            srcStageMask,
-            dstStageMask,
-            dependencyFlags,
-            memoryCount,
-            (pMemory != nullptr) ? pMemory : pMemoryBarriers,
-            bufferCount,
-            (pBuffers != nullptr) ? pBuffers : pBufferMemoryBarriers,
-            imageCount,
-            (pImages != nullptr) ? pImages : pImageMemoryBarriers);
-    }
-
-    if (pMemory != nullptr)
-    {
-        virtStackFrame.FreeArray(pMemory);
-    }
-
-    if (pBuffers != nullptr)
-    {
-        virtStackFrame.FreeArray(pBuffers);
-    }
-
-    if (pImages != nullptr)
-    {
-        virtStackFrame.FreeArray(pImages);
     }
 }
 
@@ -217,22 +221,26 @@ void BarrierFilterLayer::OverrideDispatchTable(
     // Save current device dispatch table to use as the next layer.
     m_nextLayer = *pDispatchTable;
 
-    const uint32_t options = pDispatchTable->GetDevice()->GetRuntimeSettings().barrierFilterOptions;
+    const RuntimeSettings& settings = pDispatchTable->GetDevice()->GetRuntimeSettings();
 
     // It is not useful to add this layer without any filter options set.
-    VK_ASSERT(options != BarrierFilterDisabled);
+    VK_ASSERT(settings.barrierFilterOptions != BarrierFilterDisabled);
 
-    if (options & (SkipStrayExecutionDependencies |
-                   SkipImageLayoutUndefined       |
-                   SkipDuplicateResourceBarriers))
+    if (settings.barrierFilterOptions & (SkipStrayExecutionDependencies |
+                                         SkipImageLayoutUndefined       |
+                                         SkipDuplicateResourceBarriers  |
+                                         SkipWithAppProfile             |
+                                         SkipWithAppProfileRegen        |
+                                         SkipWithIntDevOverlay))
     {
         BARRIER_FILTER_LAYER_OVERRIDE_ENTRY(vkCmdPipelineBarrier);
     }
 
-    if (options & ForceImageSharingModeExclusive)
+    if (settings.barrierFilterOptions & ForceImageSharingModeExclusive)
     {
         BARRIER_FILTER_LAYER_OVERRIDE_ENTRY(vkCreateImage);
     }
+
 }
 
 } // namespace vk

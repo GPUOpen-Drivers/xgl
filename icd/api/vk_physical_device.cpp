@@ -254,6 +254,7 @@ PhysicalDevice::PhysicalDevice(
     m_RtCuHighComputeSubEngineIndex(UINT32_MAX),
     m_queueFamilyCount(0),
     m_appProfile(appProfile),
+    m_prtOnDmaSupported(true),
     m_supportedExtensions(),
     m_compiler(this)
 {
@@ -2317,9 +2318,9 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
 {
     union
     {
-        const VkStructHeader*                  pHeader;
-        const VkPhysicalDeviceSurfaceInfo2KHR* pVkPhysicalDeviceSurfaceInfo2KHR;
-        VkSurfaceCapabilities2KHR*             pVkSurfaceCapabilities2KHR;
+        const VkStructHeader*                     pHeader;
+        const VkPhysicalDeviceSurfaceInfo2KHR*    pVkPhysicalDeviceSurfaceInfo2KHR;
+        VkSurfaceCapabilities2KHR*                pVkSurfaceCapabilities2KHR;
     };
 
     VkResult result = VK_SUCCESS;
@@ -2550,6 +2551,8 @@ VkResult PhysicalDevice::GetSurfaceFormats(
             {
                 result = VK_INCOMPLETE;
             }
+
+            *pSurfaceFormatCount = count;
         }
     }
 
@@ -2841,6 +2844,10 @@ void PhysicalDevice::PopulateQueueFamilies()
         }
     }
 
+    // Remember the following lookups for later.
+    VkQueueFamilyProperties* pTransferQueueFamilyProperties = nullptr;
+    VkQueueFamilyProperties* pComputeQueueFamilyProperties  = nullptr;
+
     // Determine the queue family to PAL engine type mapping and populate its properties
     for (uint32_t engineType = 0; engineType < Pal::EngineTypeCount; ++engineType)
     {
@@ -2870,19 +2877,27 @@ void PhysicalDevice::PopulateQueueFamilies()
             switch (engineType)
             {
             case Pal::EngineTypeUniversal:
-                palImageLayoutFlag          = Pal::LayoutUniversalEngine;
-                transferGranularityOverride = m_settings.transferGranularityUniversalOverride;
+                palImageLayoutFlag            = Pal::LayoutUniversalEngine;
+                transferGranularityOverride   = m_settings.transferGranularityUniversalOverride;
                 m_queueFamilies[m_queueFamilyCount].validShaderStages = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT;
                 break;
             case Pal::EngineTypeCompute:
+                pComputeQueueFamilyProperties = &m_queueFamilies[m_queueFamilyCount].properties;
+                // fallthrough
             case Pal::EngineTypeExclusiveCompute:
-                palImageLayoutFlag          = Pal::LayoutComputeEngine;
-                transferGranularityOverride = m_settings.transferGranularityComputeOverride;
+                palImageLayoutFlag            = Pal::LayoutComputeEngine;
+                transferGranularityOverride   = m_settings.transferGranularityComputeOverride;
                 m_queueFamilies[m_queueFamilyCount].validShaderStages = VK_SHADER_STAGE_COMPUTE_BIT;
                 break;
             case Pal::EngineTypeDma:
-                palImageLayoutFlag          = Pal::LayoutDmaEngine;
-                transferGranularityOverride = m_settings.transferGranularityDmaOverride;
+                pTransferQueueFamilyProperties = &m_queueFamilies[m_queueFamilyCount].properties;
+                palImageLayoutFlag             = Pal::LayoutDmaEngine;
+                transferGranularityOverride    = m_settings.transferGranularityDmaOverride;
+#if VK_IS_PAL_VERSION_AT_LEAST(465, 2)
+                m_prtOnDmaSupported            = engineProps.flags.supportsUnmappedPrtPageAccess;
+#else
+                m_prtOnDmaSupported            = true;
+#endif
                 break;
             default:
                 break; // no-op
@@ -2906,6 +2921,24 @@ void PhysicalDevice::PopulateQueueFamilies()
             }
 
             m_queueFamilyCount++;
+        }
+    }
+
+    // If PRT is not supported on the DMA engine, we have to fall-back on compute. Check that transfer and compute
+    // queues have compatible family properties.
+    if ((m_prtOnDmaSupported == false) &&
+        (pTransferQueueFamilyProperties != nullptr) && (pComputeQueueFamilyProperties != nullptr))
+    {
+        // If compute doesn't support sparse binding, remove it from transfer as well.
+        if ((pComputeQueueFamilyProperties->queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) == 0)
+        {
+            pTransferQueueFamilyProperties->queueFlags &= ~VK_QUEUE_SPARSE_BINDING_BIT;
+        }
+
+        // Don't report more transfer queues than compute queues.
+        if (pTransferQueueFamilyProperties->queueCount > pComputeQueueFamilyProperties->queueCount)
+        {
+            pTransferQueueFamilyProperties->queueCount = pComputeQueueFamilyProperties->queueCount;
         }
     }
 }
@@ -3326,6 +3359,13 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT:
+            {
+                VkPhysicalDeviceMemoryPriorityFeaturesEXT* pMemPriorityFeature =
+                    reinterpret_cast<VkPhysicalDeviceMemoryPriorityFeaturesEXT *>(pHeader);
+                pMemPriorityFeature->memoryPriority = VK_TRUE;
+                break;
+            }
             default:
             {
                 // skip any unsupported extension structures

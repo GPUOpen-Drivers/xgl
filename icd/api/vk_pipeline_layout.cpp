@@ -33,6 +33,8 @@
 #include "include/vk_descriptor_set_layout.h"
 #include "include/vk_shader.h"
 
+#include "palMetroHash.h"
+
 #include "llpc.h"
 
 #include "include/vert_buf_binding_mgr.h"
@@ -41,14 +43,44 @@ namespace vk
 {
 
 // =====================================================================================================================
+// Generates the API hash using the contents of the VkPipelineLayoutCreateInfo struct
+uint64_t PipelineLayout::BuildApiHash(
+    const VkPipelineLayoutCreateInfo* pCreateInfo)
+{
+    Util::MetroHash64 hasher;
+
+    hasher.Update(pCreateInfo->flags);
+    hasher.Update(pCreateInfo->setLayoutCount);
+
+    for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; i++)
+    {
+        hasher.Update(DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i])->GetApiHash());
+    }
+
+    hasher.Update(pCreateInfo->pushConstantRangeCount);
+
+    for (uint32_t i = 0; i < pCreateInfo->pushConstantRangeCount; i++)
+    {
+        hasher.Update(pCreateInfo->pPushConstantRanges[i]);
+    }
+
+    uint64_t hash;
+    hasher.Finalize(reinterpret_cast<uint8_t* const>(&hash));
+
+    return hash;
+}
+
+// =====================================================================================================================
 PipelineLayout::PipelineLayout(
     const Device*       pDevice,
     const Info&         info,
-    const PipelineInfo& pipelineInfo)
+    const PipelineInfo& pipelineInfo,
+    uint64_t            apiHash)
     :
     m_info(info),
     m_pipelineInfo(pipelineInfo),
-    m_pDevice(pDevice)
+    m_pDevice(pDevice),
+    m_apiHash(apiHash)
 {
 
 }
@@ -221,6 +253,7 @@ VkResult PipelineLayout::Create(
 {
     Info info = {};
     PipelineInfo pipelineInfo = {};
+    uint64_t apiHash = BuildApiHash(pCreateInfo);
 
     size_t setLayoutsOffset[MaxDescriptorSets];
     size_t setLayoutsArraySize = 0;
@@ -267,7 +300,7 @@ VkResult PipelineLayout::Create(
         pLayout->Copy(pDevice, info.pSetLayouts[i]);
     }
 
-    VK_PLACEMENT_NEW(pSysMem) PipelineLayout(pDevice, info, pipelineInfo);
+    VK_PLACEMENT_NEW(pSysMem) PipelineLayout(pDevice, info, pipelineInfo, apiHash);
 
     *pPipelineLayout = PipelineLayout::HandleFromVoidPointer(pSysMem);
 

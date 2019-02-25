@@ -34,11 +34,20 @@
 #include "include/vk_dispatch.h"
 #include "include/internal_mem_mgr.h"
 
+#include "palFile.h"
+
 namespace Pal
 {
 
 class IDevice;
 class IPipeline;
+
+}
+
+namespace Util
+{
+
+class MetroHash128;
 
 }
 
@@ -118,6 +127,9 @@ public:
         return m_palPipelineHash[idx];
     }
 
+    VK_INLINE uint64_t GetApiHash() const
+        { return m_apiHash; }
+
     VK_INLINE const PipelineBinaryInfo* GetBinary() const
         { return m_pBinary; }
 
@@ -130,10 +142,19 @@ protected:
 
     virtual ~Pipeline();
 
+    static void GenerateHashFromSpecializationInfo(
+        Util::MetroHash128*         pHasher,
+        const VkSpecializationInfo& desc);
+
+    static void GenerateHashFromShaderStageCreateInfo(
+        Util::MetroHash128*                    pHasher,
+        const VkPipelineShaderStageCreateInfo& desc);
+
     Device* const                      m_pDevice;
     UserDataLayout                     m_UserDataLayout;
     Pal::IPipeline*                    m_pPalPipeline[MaxPalDevices];
     uint64_t                           m_palPipelineHash[MaxPalDevices];
+    uint64_t                           m_apiHash;
 
 private:
     PipelineBinaryInfo* const       m_pBinary;

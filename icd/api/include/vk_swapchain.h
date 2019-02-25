@@ -85,6 +85,8 @@ public:
 
         Surface*                        pFullscreenSurface;
         VkSurfaceFormatKHR              fullscreenSurfaceFormat;
+
+        bool                            localDimmingDisable;
     };
 
     static VkResult Create(

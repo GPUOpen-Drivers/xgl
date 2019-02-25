@@ -33,6 +33,18 @@
 
 #include "palPipeline.h"
 
+namespace Util
+{
+
+namespace MetroHash
+{
+
+struct Hash;
+
+}
+
+}
+
 namespace vk
 {
 
@@ -99,7 +111,8 @@ protected:
         Pal::IPipeline**                     pPalPipeline,
         const PipelineLayout*                pPipelineLayout,
         PipelineBinaryInfo*                  pPipelineBinary,
-        const ImmedInfo&                     immedInfo);
+        const ImmedInfo&                     immedInfo,
+        uint64_t                             apiHash);
 
     void CreateStaticState();
     void DestroyStaticState(const VkAllocationCallbacks* pAllocator);
@@ -123,6 +136,10 @@ protected:
         CreateInfo*                        pCreateInfo,
         size_t                             pipelineBinarySizes[MaxPalDevices],
         void*                              pPipelineBinaries[MaxPalDevices]);
+
+    static uint64_t BuildApiHash(
+        const VkComputePipelineCreateInfo* pCreateInfo,
+        Util::MetroHash::Hash*             pBaseHash);
 
 private:
     ImmedInfo m_info; // Immediate state that will go in CmdSet* functions

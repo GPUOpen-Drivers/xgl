@@ -333,17 +333,11 @@ public:
     VK_FORCEINLINE const Properties& GetProperties() const
         { return m_properties; }
 
-    VK_INLINE Pal::QueueType GetQueueFamilyPalQueueType(
-        uint32_t queueFamilyIndex) const
-    {
-        return VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalQueueType(queueFamilyIndex);
-    }
+    Pal::QueueType GetQueueFamilyPalQueueType(
+        uint32_t queueFamilyIndex) const;
 
-    VK_INLINE Pal::EngineType GetQueueFamilyPalEngineType(
-        uint32_t queueFamilyIndex) const
-    {
-        return VkPhysicalDevice(DefaultDeviceIndex)->GetQueueFamilyPalEngineType(queueFamilyIndex);
-    }
+    Pal::EngineType GetQueueFamilyPalEngineType(
+        uint32_t queueFamilyIndex) const;
 
     VK_INLINE uint32_t GetQueueFamilyPalImageLayoutFlag(
         uint32_t queueFamilyIndex) const
@@ -530,7 +524,8 @@ protected:
         Pal::IDevice**                   pPalDevices,
         const DeviceBarrierPolicy&       barrierPolicy,
         const DeviceExtensions::Enabled& enabledExtensions,
-        const VkPhysicalDeviceFeatures*  pFeatures);
+        const VkPhysicalDeviceFeatures*  pFeatures,
+        bool                             useComputeAsTransferQueue);
 
     VkResult CreateInternalComputePipeline(
         size_t                           codeByteSize,
@@ -592,6 +587,9 @@ protected:
     // Determines if the allocated memory size will be tracked (error will be thrown when
     // allocation exceeds threshold size)
     bool                                m_allocationSizeTracking;
+
+    // If set to true, will use a compute queue internally for transfers.
+    bool                                m_useComputeAsTransferQueue;
 
     struct PerGpuInfo
     {

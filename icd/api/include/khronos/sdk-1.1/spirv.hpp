@@ -780,7 +780,8 @@ enum Capability {
     CapabilityStencilExportEXT = 5013,
     CapabilityImageReadWriteLodAMD = 5015,
 #if VKI_KHR_SHADER_CLOCK
-    CapabilityShaderClockKHR = 5054,
+    CapabilityShaderClockWorkgroupKHR = 5054,
+    CapabilityShaderClockDeviceKHR = 5055,
 #endif
     CapabilitySampleMaskOverrideCoverageNV = 5249,
     CapabilityGeometryShaderPassthroughNV = 5251,
@@ -1178,8 +1179,7 @@ enum Op {
     OpFragmentMaskFetchAMD = 5011,
     OpFragmentFetchAMD = 5012,
 #if VKI_KHR_SHADER_CLOCK
-    OpTimeKHR = 5055,
-    OpRealTimeKHR = 5056,
+    OpReadClockKHR = 5056,
 #endif
     OpImageSampleFootprintNV = 5283,
     OpGroupNonUniformPartitionNV = 5296,
