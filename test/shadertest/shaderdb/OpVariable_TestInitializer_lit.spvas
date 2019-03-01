@@ -2,9 +2,9 @@
 ; BEGIN_SHADERTEST
 ; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
-; SHADERTEST : store [4 x <4 x float>] zeroinitializer
-; SHADERTEST : {.*} = fadd {.*} <4 x float> {.*}, zeroinitializer
-; SHADERTEST : AMDLLPC SUCCESS
+; SHADERTEST: store [4 x <4 x float>] zeroinitializer
+; SHADERTEST: {{.*}} = fadd {{.*}} <4 x float> {{.*}}, zeroinitializer
+; SHADERTEST: AMDLLPC SUCCESS
 ; END_SHADERTEST
 
 ; SPIR-V

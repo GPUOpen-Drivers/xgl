@@ -1,0 +1,72 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: switch i32
+
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 1
+; Bound: 36
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main" %22
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource GLSL 450
+               OpName %4 "main"
+               OpName %7 "Uniform"
+               OpMemberName %7 0 "cond"
+               OpName %9 ""
+               OpName %22 "outColor"
+               OpMemberDecorate %7 0 Offset 0
+               OpDecorate %7 Block
+               OpDecorate %9 DescriptorSet 0
+               OpDecorate %9 Binding 0
+               OpDecorate %22 Location 0
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %6 = OpTypeInt 32 1
+          %7 = OpTypeStruct %6
+          %8 = OpTypePointer Uniform %7
+          %9 = OpVariable %8 Uniform
+         %10 = OpConstant %6 0
+         %11 = OpTypePointer Uniform %6
+         %19 = OpTypeFloat 32
+         %20 = OpTypeVector %19 4
+         %21 = OpTypePointer Output %20
+         %22 = OpVariable %21 Output
+         %23 = OpConstant %19 1
+         %24 = OpConstantComposite %20 %23 %23 %23 %23
+         %26 = OpConstant %19 2
+         %27 = OpConstantComposite %20 %26 %26 %26 %26
+         %29 = OpConstant %19 3
+         %30 = OpConstantComposite %20 %29 %29 %29 %29
+         %32 = OpConstant %19 0
+         %33 = OpConstantComposite %20 %32 %32 %32 %32
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+         %12 = OpAccessChain %11 %9 %10
+         %13 = OpLoad %6 %12
+               OpSelectionMerge %18 DontFlatten
+               OpSwitch %13 %17 0 %14 1 %15 2 %16
+         %17 = OpLabel
+               OpStore %22 %33
+               OpBranch %18
+         %14 = OpLabel
+               OpStore %22 %24
+               OpBranch %18
+         %15 = OpLabel
+               OpStore %22 %27
+               OpBranch %18
+         %16 = OpLabel
+               OpStore %22 %30
+               OpBranch %18
+         %18 = OpLabel
+               OpReturn
+               OpFunctionEnd
+

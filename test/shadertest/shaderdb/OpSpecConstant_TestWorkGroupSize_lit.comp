@@ -1,0 +1,21 @@
+#version 450
+
+layout(local_size_x_id = 1, local_size_x = 12, local_size_y = 16) in;
+
+shared float f1[3];
+
+void main()
+{
+    f1[gl_LocalInvocationID.x] += 0.2;
+}
+
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: fadd reassoc nnan arcp contract float %{{[0-9]*}}, 0x3FC99999A0000000
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

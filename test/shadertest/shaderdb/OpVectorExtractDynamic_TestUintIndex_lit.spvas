@@ -1,0 +1,115 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; %{*.} = extractelement <4 x float> %{*.}, i32 %{*.}
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos SPIR-V Tools Assembler; 0
+; Bound: 71
+; Schema: 0
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %1 "main" %2 %3 %4 %5 %6 %7
+               OpName %1 "main"
+               OpName %8 "gl_PerVertex"
+               OpMemberName %8 0 "gl_Position"
+               OpMemberName %8 1 "gl_PointSize"
+               OpMemberName %8 2 "gl_ClipDistance"
+               OpMemberName %8 3 "gl_CullDistance"
+               OpName %9 "testfun(vf4;"
+               OpName %2 ""
+               OpName %3 "position"
+               OpName %4 "vtxColor"
+               OpName %5 "color"
+               OpName %6 "gl_VertexID"
+               OpName %7 "gl_InstanceID"
+               OpMemberDecorate %8 0 BuiltIn Position
+               OpMemberDecorate %8 1 BuiltIn PointSize
+               OpMemberDecorate %8 2 BuiltIn ClipDistance
+               OpMemberDecorate %8 3 BuiltIn CullDistance
+               OpDecorate %8 Block
+               OpDecorate %3 Location 0
+               OpDecorate %4 Location 1
+               OpDecorate %5 Location 1
+               OpDecorate %6 BuiltIn VertexId
+               OpDecorate %7 BuiltIn InstanceId
+         %10 = OpTypeVoid
+         %11 = OpTypeBool
+         %12 = OpTypeInt 32 1
+         %13 = OpTypeInt 32 0
+         %14 = OpTypeFloat 32
+         %15 = OpTypeVector %14 3
+         %16 = OpTypeVector %14 4
+         %17 = OpTypeFunction %16 %16
+         %18 = OpTypeFunction %10
+         %19 = OpTypePointer Input %14
+         %20 = OpTypePointer Input %12
+         %21 = OpTypePointer Input %15
+         %22 = OpTypePointer Input %16
+         %23 = OpTypePointer Output %14
+         %24 = OpTypePointer Output %16
+         %25 = OpTypePointer Function %14
+         %26 = OpTypePointer Function %12
+         %27 = OpTypePointer Function %16
+         %28 = OpConstant %14 1
+         %29 = OpConstant %14 0
+         %30 = OpConstant %14 0.5
+         %31 = OpConstant %14 -1
+         %32 = OpConstant %14 7
+         %33 = OpConstant %14 8
+         %34 = OpConstant %12 0
+         %35 = OpConstant %12 1
+         %36 = OpConstant %12 2
+         %37 = OpConstant %12 3
+         %38 = OpConstant %12 4
+         %39 = OpConstant %13 0
+         %40 = OpConstant %13 1
+         %41 = OpConstant %13 2
+         %42 = OpConstant %13 3
+         %43 = OpConstant %13 32
+         %44 = OpConstant %13 4
+         %45 = OpConstant %13 2147483647
+         %46 = OpConstantComposite %16 %28 %28 %28 %28
+         %47 = OpConstantComposite %16 %28 %29 %29 %28
+         %48 = OpConstantComposite %16 %30 %30 %30 %30
+         %49 = OpTypeArray %14 %40
+         %50 = OpTypeArray %14 %41
+         %51 = OpTypeArray %16 %42
+         %52 = OpTypeArray %14 %44
+         %53 = OpTypeArray %16 %43
+         %54 = OpTypePointer Input %51
+         %55 = OpTypePointer Input %53
+         %56 = OpTypePointer Output %50
+         %57 = OpTypePointer Output %51
+         %58 = OpTypePointer Output %52
+          %8 = OpTypeStruct %16 %14 %49 %49
+         %59 = OpTypePointer Output %8
+          %2 = OpVariable %59 Output
+          %3 = OpVariable %22 Input
+          %4 = OpVariable %24 Output
+          %5 = OpVariable %22 Input
+          %6 = OpVariable %20 Input
+          %7 = OpVariable %20 Input
+          %1 = OpFunction %10 None %18
+         %60 = OpLabel
+         %61 = OpLoad %16 %3
+         %62 = OpAccessChain %24 %2 %34
+               OpStore %62 %61
+         %63 = OpLoad %16 %5
+         %64 = OpFunctionCall %16 %9 %63
+               OpStore %4 %64
+               OpReturn
+               OpFunctionEnd
+          %9 = OpFunction %16 None %17
+         %65 = OpFunctionParameter %16
+         %66 = OpLabel
+         %67 = OpUndef %13
+         %68 = OpIMul %13 %67 %34
+         %69 = OpVectorExtractDynamic %14 %65 %68
+         %70 = OpVectorInsertDynamic %16 %65 %69 %34
+               OpReturnValue %70
+               OpFunctionEnd

@@ -1,0 +1,64 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST : %{.*} = extractelement <4 x float> %{.*}, i32 -5
+; SHADERTEST : %{.*} = insertelement <2 x float> undef, float %{.*}, i32 0
+; SHADERTEST : %{.*} = extractelement <4 x float> %{.*}, i32 2
+; SHADERTEST : %{.*} = insertelement <2 x float> %{.*}, float %{.*}, i32 1
+; SHADERTEST : %{.*} = extractelement <2 x float> %{.*}, i32 0
+; SHADERTEST : %{.*} = insertelement <4 x float> undef, float %{.*}, i32 0
+; SHADERTEST : %{.*} = extractelement <2 x float> %{.*}, i32 1
+; SHADERTEST : %{.*} = insertelement <4 x float> %{.*}, float %{.*}, i32 1
+; SHADERTEST : %{.*} = extractelement <4 x float> %{.*}, i32 2
+; SHADERTEST : %{.*} = insertelement <4 x float> %{.*}, float %{.*}, i32 2
+; SHADERTEST : %{.*} = extractelement <4 x float> %{.*}, i32 3
+; SHADERTEST : %{.*} = insertelement <4 x float> %{.*}, float %{.*}, i32 3
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST : %{.*} = shufflevector <4 x float> %{.*}, <4 x float> undef, <4 x i32> <i32 undef, i32 2, i32 2, i32 3>
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 1
+; Bound: 22
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main" %12 %20
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource GLSL 450
+               OpName %4 "main"
+               OpName %10 "f4_1"
+               OpName %12 "f4_0"
+               OpName %20 "fragColor"
+               OpDecorate %12 Location 0
+               OpDecorate %20 Location 0
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %7 = OpTypeFloat 32
+          %8 = OpTypeVector %7 4
+          %9 = OpTypePointer Function %8
+         %11 = OpTypePointer Input %8
+         %12 = OpVariable %11 Input
+         %15 = OpTypeVector %7 2
+         %19 = OpTypePointer Output %8
+         %20 = OpVariable %19 Output
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+         %10 = OpVariable %9 Function
+         %13 = OpLoad %8 %12
+               OpStore %10 %13
+         %14 = OpLoad %8 %10
+         %16 = OpVectorShuffle %15 %14 %14 4294967295 2
+         %17 = OpLoad %8 %10
+         %18 = OpVectorShuffle %8 %17 %16 4 5 2 3
+               OpStore %10 %18
+         %21 = OpLoad %8 %10
+               OpStore %20 %21
+               OpBranch %6
+          %6 = OpLabel
+               OpReturn
+               OpFunctionEnd

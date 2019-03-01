@@ -519,7 +519,7 @@ VkResult Image::Create(
         {
             // Skip any entries that specify the same format as the base format of the image as the PAL interface
             // expects that to be excluded from the list.
-            if (pViewFormats[i] != pImageCreateInfo->format)
+            if (VkToPalFormat(pViewFormats[i]).format != VkToPalFormat(pImageCreateInfo->format).format)
             {
                 palFormatList[palCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i]);
             }

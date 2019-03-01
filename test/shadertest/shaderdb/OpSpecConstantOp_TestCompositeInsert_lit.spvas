@@ -1,0 +1,65 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: store <3 x float>  %{{[0-9]*}}, <3 x float> addrspace({{[0-9]*}})* @{{.*}}
+
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 1
+; Bound: 36
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main" %28 %32
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource GLSL 450
+               OpName %4 "main"
+               OpName %10 "m2x3"
+               OpName %28 "f0"
+               OpName %32 "f1"
+               OpDecorate %28 Location 0
+               OpDecorate %32 Location 1
+               OpDecorate %12 SpecId 1
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %6 = OpTypeFloat 32
+          %7 = OpTypeVector %6 3
+          %8 = OpTypeMatrix %7 2
+          %9 = OpTypePointer Function %8
+         %11 = OpConstant %6 1
+         %12 = OpSpecConstant %6 2
+         %13 = OpConstantNull %6
+         %14 = OpSpecConstantComposite %7 %11 %12 %13
+         %15 = OpUndef %6
+         %16 = OpConstant %6 5
+         %17 = OpConstant %6 6
+         %18 = OpConstantComposite %7 %15 %16 %17
+         %19 = OpSpecConstantComposite %8 %14 %18
+         %20 = OpTypeInt 32 1
+         %21 = OpConstant %20 0
+         %22 = OpConstant %6 7
+         %23 = OpSpecConstantOp %8 CompositeInsert %22 %19 1 0
+         %24 = OpSpecConstantOp %8 CompositeInsert %22 %23 0 2
+         %25 = OpTypePointer Function %6
+         %27 = OpTypePointer Output %7
+         %28 = OpVariable %27 Output
+         %29 = OpTypePointer Function %7
+         %32 = OpVariable %27 Output
+         %33 = OpConstant %20 1
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+         %10 = OpVariable %9 Function
+               OpStore %10 %24
+         %30 = OpAccessChain %29 %10 %21
+         %31 = OpLoad %7 %30
+               OpStore %28 %31
+         %34 = OpAccessChain %29 %10 %33
+         %35 = OpLoad %7 %34
+               OpStore %32 %35
+               OpReturn
+               OpFunctionEnd

@@ -1,0 +1,84 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST:   switch i64 %2, label %3 [
+; SHADERTEST:    i64 0, label %{{[0-9]*}}
+; SHADERTEST:    i64 1, label %{{[0-9]*}}
+; SHADERTEST:    i64 2, label %{{[0-9]*}}
+; SHADERTEST:  ]
+
+; SHADERTEST: <label>
+; SHADERTEST: br label %{{[0-9]*}}
+
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.3
+; Generator: Khronos SPIR-V Tools Assembler; 0
+; Bound: 25
+; Schema: 0
+        OpCapability Shader
+        OpCapability Int64
+
+        OpMemoryModel Logical GLSL450
+        OpEntryPoint Vertex %BP_main "main"
+
+        OpDecorate %input DescriptorSet 0
+        OpDecorate %input Binding 0
+
+        OpDecorate %output DescriptorSet 0
+        OpDecorate %output Binding 1
+
+        OpDecorate %buf BufferBlock
+        OpMemberDecorate %buf 0 Offset 0
+
+        %void = OpTypeVoid
+        %void_function = OpTypeFunction %void
+
+        %u32 = OpTypeInt 32 0
+        %c_u32_0 = OpConstant %u32 0
+
+        %testtype       = OpTypeInt 64 0
+        %c_casedefault  = OpConstant %testtype 9999
+        %c_case0        = OpConstant %testtype 1000
+        %c_case1        = OpConstant %testtype 1001
+        %c_case2        = OpConstant %testtype 1002
+
+        %testtype_ptr = OpTypePointer Uniform %testtype
+        %buf = OpTypeStruct %testtype
+        %buf_ptr = OpTypePointer Uniform %buf
+        %input = OpVariable %buf_ptr Uniform
+        %output = OpVariable %buf_ptr Uniform
+
+        %BP_main = OpFunction %void None %void_function
+        %BP_label = OpLabel
+
+        %output_loc = OpAccessChain %testtype_ptr %output %c_u32_0
+        %input_loc  = OpAccessChain %testtype_ptr %input %c_u32_0
+        %input_val  = OpLoad %testtype %input_loc
+
+        OpSelectionMerge %switch_exit None
+        OpSwitch %input_val %default 0 %case0 1 %case1 2 %case2
+
+        %default = OpLabel
+        OpStore %output_loc %c_casedefault
+        OpBranch %switch_exit
+
+        %case0 = OpLabel
+        OpStore %output_loc %c_case0
+        OpBranch %switch_exit
+
+        %case1 = OpLabel
+        OpStore %output_loc %c_case1
+        OpBranch %switch_exit
+
+        %case2 = OpLabel
+        OpStore %output_loc %c_case2
+        OpBranch %switch_exit
+
+        %switch_exit = OpLabel
+
+        OpReturn
+        OpFunctionEnd

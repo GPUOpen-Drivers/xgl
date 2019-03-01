@@ -1,0 +1,23 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+shared float f1[3];
+
+void main()
+{
+    f1[gl_LocalInvocationID.x] += 0.2;
+    memoryBarrierShared();
+    f1[gl_LocalInvocationID.y] *= f1[gl_LocalInvocationID.x];
+}
+
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: fence acq_rel
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

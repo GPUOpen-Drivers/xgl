@@ -1,0 +1,26 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0, std430) buffer Buffer
+{
+    vec4 f4;
+};
+
+void main()
+{
+    f4[gl_LocalInvocationID.x % 4] += 0.2;
+    groupMemoryBarrier();
+    f4[gl_LocalInvocationID.y % 4] *= f4[gl_LocalInvocationID.x % 4];
+}
+
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: fence syncscope("singlethread") acq_rel
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

@@ -2,8 +2,8 @@
 ; BEGIN_SHADERTEST
 ; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
-; SHADERTEST : %{.*} = call %{.*} %{.*}.SampledImage.{.*} {.*} @_Z12SampledImage{.*}(%spirv.SampledImage{.*} undef, i32 %{.*})
-; SHADERTEST : AMDLLPC SUCCESS
+; SHADERTEST: %{{.*}} = call {{.*}} %{{.*}}.SampledImage.{{.*}} {{.*}} @_Z12SampledImage{{.*}}(%spirv.SampledImage{{.*}} undef, i32 %{{.*}})
+; SHADERTEST: AMDLLPC SUCCESS
 ; END_SHADERTEST
 
 ; SPIR-V

@@ -1,0 +1,76 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST : %{.*} = extractelement <4 x double> %{.*}, i32 -5
+; SHADERTEST : %{.*} = insertelement <2 x double> %{.*}, double %{.*}, i32 1
+; SHADERTEST : %{.*} = extractelement <2 x double> %{.*}, i32 0
+; SHADERTEST : %{.*} = insertelement <4 x double> undef, double %{.*}, i32 0
+; SHADERTEST : %{.*} = extractelement <2 x double> %{.*}, i32 1
+; SHADERTEST : %{.*} = insertelement <4 x double> %{.*}, double %{.*}, i32 1
+; SHADERTEST : %{.*} = extractelement <4 x double> %{.*}, i32 2
+; SHADERTEST : %{.*} = insertelement <4 x double> %{.*}, double %{.*}, i32 2
+; SHADERTEST : %{.*} = extractelement <4 x double> %{.*}, i32 3
+; SHADERTEST : %{.*} = insertelement <4 x double> %{.*}, double %{.*}, i32 3
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST : %{.*} = shufflevector <4 x double> %{.*}, <4 x double> undef, <4 x i32> <i32 3, i32 undef, i32 2, i32 3>
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 1
+; Bound: 35
+; Schema: 0
+               OpCapability Shader
+               OpCapability Float64
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main" %22
+               OpExecutionMode %4 OriginLowerLeft
+               OpSource GLSL 450
+               OpName %4 "main"
+               OpName %10 "d4_1"
+               OpName %11 "Uniforms"
+               OpMemberName %11 0 "d4_0"
+               OpName %22 "fragColor"
+               OpMemberDecorate %11 0 Offset 0
+               OpDecorate %11 Block
+               OpDecorate %26 DescriptorSet 0
+               OpDecorate %26 Binding 0
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %7 = OpTypeFloat 64
+          %8 = OpTypeVector %7 4
+          %9 = OpTypePointer Uniform %8
+          %34 = OpTypePointer Function %8
+         %11 = OpTypeStruct %8
+         %12 = OpTypePointer Uniform %11
+         %26 = OpVariable %12 Uniform
+         %27 = OpTypeInt 32 1
+         %28 = OpConstant %27 0
+         %31 = OpConstant %27 0
+         %15 = OpTypeVector %7 2
+         %19 = OpTypeFloat 32
+         %20 = OpTypeVector %19 4
+         %21 = OpTypePointer Output %20
+         %22 = OpVariable %21 Output
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+         %10 = OpVariable %34 Function
+         %13 = OpAccessChain %9 %26 %31
+         %32 = OpLoad %8 %13
+               OpStore %10 %32
+         %14 = OpLoad %8 %10
+         %16 = OpVectorShuffle %15 %14 %14 3 4294967295
+         %17 = OpLoad %8 %10
+         %18 = OpVectorShuffle %8 %17 %16 4 5 2 3
+               OpStore %10 %18
+         %23 = OpLoad %8 %10
+         %24 = OpFConvert %20 %23
+               OpStore %22 %24
+               OpBranch %6
+          %6 = OpLabel
+               OpReturn
+               OpFunctionEnd
+

@@ -1,0 +1,26 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16) in;
+
+layout(binding = 0) buffer Buffers
+{
+    float f1;
+    vec4  f4;
+};
+
+void main()
+{
+    f1 *= 2;
+    memoryBarrier();
+    f4 = vec4(f1);
+}
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: fence acq_rel
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST
