@@ -1,0 +1,32 @@
+#version 450
+
+layout(binding = 0, std430) buffer Buffer
+{
+    uvec4 o[100];
+};
+
+layout(local_size_x = 2, local_size_y = 3) in;
+void main()
+{
+    o[0].xyz = gl_NumWorkGroups;
+    o[1].xyz = gl_WorkGroupSize;
+    uint flatIdx = gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * gl_NumWorkGroups.x;
+    o[flatIdx * 4 + 2].xyz = gl_WorkGroupID;
+    o[flatIdx * 4 + 3].xyz = gl_LocalInvocationID;
+    o[flatIdx * 4 + 4].xyz = gl_GlobalInvocationID;
+    o[flatIdx * 4 + 5].x = gl_LocalInvocationIndex;
+}
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST: call i32 @llpc.input.import.builtin.LocalInvocationIndex{{.*}}
+; SHADERTEST: call <3 x i32> @llpc.input.import.builtin.LocalInvocationId.v3i32{{.*}}
+; SHADERTEST: call <3 x i32> @llpc.input.import.builtin.WorkgroupId.v3i32{{.*}}
+; SHADERTEST: call <3 x i32> @llpc.input.import.builtin.GlobalInvocationId.v3i32{{.*}}
+; SHADERTEST: call <3 x i32> @llpc.input.import.builtin.NumWorkgroups.v3i32{{.*}}
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

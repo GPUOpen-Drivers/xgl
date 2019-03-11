@@ -142,7 +142,9 @@ Pal::Result RenderPassBuilder::BuildInitialState()
         {
             for (uint32_t attachment = 0; attachment < m_attachmentCount; ++attachment)
             {
-                if (GetSubpassReferenceMask(subpass, attachment) != 0)
+                // When calculating first use, ignore preserve attachments because this subpass will not use it,
+                // and it should be loaded by the first subpass that actually does.
+                if ((GetSubpassReferenceMask(subpass, attachment) & ~AttachRefPreserve) != 0)
                 {
                     if (m_pAttachments[attachment].firstUseSubpass == VK_SUBPASS_EXTERNAL)
                     {
@@ -225,6 +227,10 @@ uint32_t RenderPassBuilder::GetSubpassReferenceMask(
     {
         refMask |= AttachRefDepthStencil;
 
+        if (m_pInfo->pSubpasses[subpass].depthStencilResolveAttachment.attachment != VK_ATTACHMENT_UNUSED)
+        {
+            refMask |= AttachRefResolveSrc;
+        }
     }
 
     if ((desc.inputAttachmentCount > 0) && (desc.pInputAttachments != nullptr))
@@ -258,6 +264,13 @@ uint32_t RenderPassBuilder::GetSubpassReferenceMask(
                 refMask |= AttachRefResolveDst;
             }
         }
+    }
+
+    if ((desc.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED) &&
+        (desc.depthStencilResolveAttachment.attachment != VK_ATTACHMENT_UNUSED) &&
+        (desc.depthStencilResolveAttachment.attachment == attachment))
+    {
+        refMask |= AttachRefResolveDst;
     }
 
     return refMask;
@@ -447,6 +460,17 @@ Pal::Result RenderPassBuilder::BuildLoadOps(
                 result = pSubpass->dsClears.PushBack(clearInfo);
             }
         }
+        else
+        {
+            // depth stencil resovle attachment will be cleared if depth/stencil resolve mode is none.
+            if (((clearAspect & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+                 (pSubpass->pDesc->depthResolveMode == VK_RESOLVE_MODE_NONE_KHR)) ||
+                ((clearAspect & VK_IMAGE_ASPECT_STENCIL_BIT) &&
+                 (pSubpass->pDesc->stencilResolveMode == VK_RESOLVE_MODE_NONE_KHR)))
+            {
+                result = pSubpass->dsClears.PushBack(clearInfo);
+            }
+        }
     }
 
     return result;
@@ -622,6 +646,45 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
             }
         }
     }
+
+    if ((subpassDesc.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED) &&
+        (subpassDesc.depthStencilResolveAttachment.attachment != VK_ATTACHMENT_UNUSED))
+    {
+        const AttachmentReference& src = subpassDesc.depthStencilAttachment;
+        const AttachmentReference& dst = subpassDesc.depthStencilResolveAttachment;
+
+        const RPImageLayout srcLayout = { src.layout, Pal::LayoutResolveSrc };
+        const RPImageLayout dstLayout = { dst.layout, Pal::LayoutResolveDst };
+
+            result = TrackAttachmentUsage(subpass, AttachRefResolveSrc, src.attachment, srcLayout,
+                &pSubpass->syncPreResolve);
+
+            if (result == Pal::Result::Success)
+            {
+                result = TrackAttachmentUsage(subpass, AttachRefResolveDst, dst.attachment, dstLayout,
+                    &pSubpass->syncPreResolve);
+            }
+
+            if (result == Pal::Result::Success)
+            {
+                RPResolveInfo resolve = {};
+
+                resolve.src.attachment = src.attachment;
+                resolve.src.layout = m_pAttachments[src.attachment].prevReferenceLayout;
+
+                resolve.dst.attachment = dst.attachment;
+                resolve.dst.layout = m_pAttachments[dst.attachment].prevReferenceLayout;
+
+                result = pSubpass->resolves.PushBack(resolve);
+
+                VK_ASSERT(Formats::IsDepthStencilFormat(m_pAttachments[resolve.src.attachment].pDesc->format));
+                pSubpass->syncPreResolve.barrier.flags.preDsResolveSync = 1;
+
+                m_pAttachments[resolve.src.attachment].resolvesInFlight = true;
+                m_pAttachments[resolve.dst.attachment].resolvesInFlight = true;
+            }
+        }
+
     return result;
 }
 

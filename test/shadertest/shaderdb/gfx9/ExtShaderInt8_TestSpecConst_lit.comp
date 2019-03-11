@@ -1,0 +1,154 @@
+#version 450 core
+
+#extension GL_EXT_shader_explicit_arithmetic_types_int64: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int16: enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int8: enable
+
+layout(binding = 0) buffer Buf
+{
+    uint8_t  u8;
+    uint16_t u16;
+    uint     u32;
+    uint64_t u64;
+    bool     b;
+} buf;
+
+layout(constant_id = 100) const uint8_t  u8  = uint8_t(8);
+layout(constant_id = 101) const uint16_t u16 = 16us;
+layout(constant_id = 102) const uint     u32 = 32;
+layout(constant_id = 103) const uint64_t u64 = 64ul;
+layout(constant_id = 104) const int8_t   i8  = int8_t(-8);
+layout(constant_id = 105) const int16_t  i16 = -16s;
+layout(constant_id = 106) const int      i32 = -32;
+layout(constant_id = 107) const int64_t  i64 = -64l;
+
+const uint8_t u16_to_u8 = uint8_t(u16);
+const uint8_t u32_to_u8 = uint8_t(u32);
+const uint8_t u64_to_u8 = uint8_t(u64);
+
+const int8_t i16_to_i8 = int8_t(i16);
+const int8_t i32_to_i8 = int8_t(i32);
+const int8_t i64_to_i8 = int8_t(i64);
+
+const uint16_t u8_to_u16 = u8;
+const uint     u8_to_u32 = u8;
+const uint64_t u8_to_u64 = u8;
+
+const int16_t i8_to_i16 = i8;
+const int     i8_to_i32 = i8;
+const int64_t i8_to_i64 = i8;
+
+const uint8_t u8_add = u8 + u8;
+const uint8_t i8_add = i8 + i8;
+
+const uint8_t u8_sub = u8 - u8;
+const uint8_t i8_sub = i8 - i8;
+
+const uint8_t u8_mul = u8 * u8;
+const uint8_t i8_mul = i8 * i8;
+
+const uint8_t u8_div = u8 / u8;
+const uint8_t i8_div = i8 / i8;
+
+const uint8_t u8_mod = u8 % u8;
+const uint8_t i8_mod = i8 % i8;
+
+const uint8_t i8_neg = -i8;
+
+const uint8_t u8_not = ~u8;
+const uint8_t u8_and = u8 & i8;
+const uint8_t u8_or  = u8 | u8;
+const uint8_t u8_xor = u8 ^ u8;
+
+const uint8_t u8_shl  = u8 << 3;
+const uint8_t u8_ashr = i8 >> 3;
+const uint8_t u8_lshr = u8 >> 3;
+
+const bool u8_eq = u8 == i8;
+const bool u8_ne = u8 != i8;
+
+const bool u8_ge = u8 >= u8;
+const bool u8_gt = u8 > u8;
+const bool u8_le = u8 <= u8;
+const bool u8_lt = u8 < u8;
+
+const bool i8_ge = i8 >= i8;
+const bool i8_gt = i8 > i8;
+const bool i8_le = i8 <= i8;
+const bool i8_lt = i8 < i8;
+
+void main()
+{
+    buf.u8 += u16_to_u8;
+    buf.u8 += u32_to_u8;
+    buf.u8 += u64_to_u8;
+
+    buf.u8 += i16_to_i8;
+    buf.u8 += i32_to_i8;
+    buf.u8 += i64_to_i8;
+
+    buf.u16 += u8_to_u16;
+    buf.u16 += i8_to_i16;
+
+    buf.u32 += u8_to_u32;
+    buf.u32 += i8_to_i32;
+
+    buf.u64 += u8_to_u64;
+    buf.u64 += i8_to_i64;
+
+    buf.u8 += u8_add;
+    buf.u8 += u8_sub;
+    buf.u8 += u8_mul;
+    buf.u8 += u8_div;
+    buf.u8 += u8_mod;
+
+    buf.u8 += i8_add;
+    buf.u8 += i8_sub;
+    buf.u8 += i8_mul;
+    buf.u8 += i8_div;
+    buf.u8 += i8_mod;
+
+    buf.u8 += u8_not;
+    buf.u8 += u8_and;
+    buf.u8 += u8_or;
+    buf.u8 += u8_xor;
+
+    buf.u8 += u8_shl;
+    buf.u8 += u8_ashr;
+    buf.u8 += u8_lshr;
+
+    buf.b = buf.b || u8_eq;
+    buf.b = buf.b || u8_ne;
+
+    buf.b = buf.b || u8_ge;
+    buf.b = buf.b || u8_gt;
+    buf.b = buf.b || u8_le;
+    buf.b = buf.b || u8_lt;
+
+    buf.b = buf.b || i8_ge;
+    buf.b = buf.b || i8_gt;
+    buf.b = buf.b || i8_le;
+    buf.b = buf.b || i8_lt;
+}
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST: add i8 %{{[0-9]*}}, 16,
+; SHADERTEST: add i8 %{{[0-9]*}}, 32,
+; SHADERTEST: add i8 %{{[0-9]*}}, 64,
+; SHADERTEST: add i8 %{{[0-9]*}}, -16,
+; SHADERTEST: add i8 %{{[0-9]*}}, -32,
+; SHADERTEST: add i8 %{{[0-9]*}}, -64,
+; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
+; SHADERTEST: add i8 %{{[0-9]*}}, 16,
+; SHADERTEST: add i8 %{{[0-9]*}}, 32,
+; SHADERTEST: add i8 %{{[0-9]*}}, 64,
+; SHADERTEST: add i8 %{{[0-9]*}}, -16,
+; SHADERTEST: add i8 %{{[0-9]*}}, -32,
+; SHADERTEST: add i8 %{{[0-9]*}}, -64,
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST
+

@@ -765,24 +765,6 @@ void SwapChain::MarkAsDeprecated()
 }
 
 // =====================================================================================================================
-VkResult SwapChain::AcquireWin32FullscreenOwnership(
-    Device*     pDevice)
-{
-    VK_ASSERT(m_pFullscreenMgr != nullptr);
-
-    return m_pFullscreenMgr->TryEnterExclusive(this) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
-}
-
-// =====================================================================================================================
-VkResult SwapChain::ReleaseWin32FullscreenOwnership(
-    Device*     pDevice)
-{
-    VK_ASSERT(m_pFullscreenMgr != nullptr);
-
-    return m_pFullscreenMgr->TryExitExclusive(this) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
-}
-
-// =====================================================================================================================
 FullscreenMgr::FullscreenMgr(
     Device*                         pDevice,
     FullscreenMgr::Mode             mode,
@@ -862,8 +844,6 @@ bool FullscreenMgr::TryEnterExclusive(
                         {
                             m_colorParams.format              = VkToPalFormat(props.fullscreenSurfaceFormat.format).format;
                             m_colorParams.colorSpace          = VkToPalScreenSpace(props.fullscreenSurfaceFormat);
-                            m_colorParams.localDimmingDisable = props.localDimmingDisable;
-
                             m_pScreen->SetColorConfiguration(&m_colorParams);
                         }
                     }

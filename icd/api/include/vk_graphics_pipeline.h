@@ -70,7 +70,7 @@ struct VbBindingInfo
     {
         uint32_t slot;
         uint32_t byteStride;
-    } bindings[MaxVertexBuffers];
+    } bindings[Pal::MaxVertexBuffers];
 };
 
 // =====================================================================================================================

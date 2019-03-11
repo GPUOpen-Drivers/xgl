@@ -1,0 +1,42 @@
+#version 450
+
+layout (local_size_x = 16, local_size_y = 16) in;
+shared uint s_uiarray[gl_WorkGroupSize.x];
+
+struct StrType {
+    uint ui;
+    uint uiarray[gl_WorkGroupSize.x];
+};
+
+shared StrType str1;
+
+uint g_ui;
+
+void main()
+{
+    uint uiarray[gl_WorkGroupSize.x] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
+    s_uiarray = uiarray;
+    uiarray = s_uiarray;
+
+    str1.uiarray = uiarray;
+    uiarray = str1.uiarray;
+
+    g_ui = str1.uiarray[gl_LocalInvocationID.x];
+}
+
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: @str1 = internal addrspace(3) global { i32, [16 x i32] }
+; SHADERTEST: getelementptr { i32, [16 x i32] }, { i32, [16 x i32] } addrspace(3)* @str1, i32 0, i32 1
+; SHADERTEST: store [16 x i32] %{{[0-9]*}}, [16 x i32] addrspace(3)* %{{[0-9]*}}
+; SHADERTEST: getelementptr { i32, [16 x i32] }, { i32, [16 x i32] } addrspace(3)* @str1, i32 0, i32 1
+; SHADERTEST: load [16 x i32], [16 x i32] addrspace(3)* %{{[0-9]*}}
+; SHADERTEST: getelementptr { i32, [16 x i32] }, { i32, [16 x i32] } addrspace(3)* @str1, i32 0, i32 1, i32 %{{[0-9]*}}
+; SHADERTEST: load i32, i32 addrspace(3)* %{{[0-9]*}}
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

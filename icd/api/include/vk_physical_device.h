@@ -154,6 +154,12 @@ public:
         return m_memoryVkIndexToPalHeap[vkIndex];
     }
 
+    VK_INLINE Pal::GpuHeap GetPalHeapFromVkHeapIndex(uint32_t heapIndex) const
+    {
+        VK_ASSERT(heapIndex < (VK_MEMORY_TYPE_NUM - 1));
+        return m_heapVkToPal[heapIndex];
+    }
+
     VK_INLINE const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const
     {
         return m_memoryProperties;
@@ -422,6 +428,9 @@ public:
         VkSurfaceKHR                surface,
         VkSurfaceCapabilities2EXT*  pSurfaceCapabilitiesExt) const;
 
+    void GetMemoryBudgetProperties(
+        VkPhysicalDeviceMemoryBudgetPropertiesEXT* pMemBudgetProps);
+
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
     VkResult AcquireXlibDisplay(
         Display*        dpy,
@@ -471,6 +480,19 @@ public:
     {
         return &m_compiler;
     }
+
+    VkResult TryIncreaseAllocatedMemorySize(
+        Pal::gpusize allocationSize,
+        uint32_t     heapIdx);
+
+    void IncreaseAllocatedMemorySize(
+        Pal::gpusize allocationSize,
+        uint32_t     heapIdx);
+
+    void DecreaseAllocatedMemorySize(
+        Pal::gpusize allocationSize,
+        uint32_t     heapIdx);
+
 protected:
     PhysicalDevice(PhysicalDeviceManager* pPhysicalDeviceManager,
                    Pal::IDevice*          pPalDevice,
@@ -494,6 +516,7 @@ protected:
     uint32_t                         m_memoryTypeMask;
     uint32_t                         m_memoryPalHeapToVkIndex[Pal::GpuHeapCount];
     Pal::GpuHeap                     m_memoryVkIndexToPalHeap[Pal::GpuHeapCount];
+    Pal::GpuHeap                     m_heapVkToPal[VK_MEMORY_TYPE_NUM - 1];
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
     RuntimeSettings                  m_settings;
     VkPhysicalDeviceLimits           m_limits;
@@ -523,6 +546,13 @@ protected:
     PhysicalDeviceGpaProperties      m_gpaProps;
 
     PipelineCompiler                 m_compiler;
+
+    struct
+    {
+        Util::Mutex  trackerMutex;                                    // Mutex for memory usage tracking
+        Pal::gpusize allocatedMemorySize[Pal::GpuHeap::GpuHeapCount]; // Number of bytes allocated per heap
+        Pal::gpusize totalMemorySize[Pal::GpuHeap::GpuHeapCount];     // The total memory (in bytes) per heap
+    } m_memoryUsageTracker;
 };
 
 VK_DEFINE_DISPATCHABLE(PhysicalDevice);

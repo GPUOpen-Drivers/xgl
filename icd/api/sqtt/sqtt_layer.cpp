@@ -70,6 +70,8 @@ static_assert(RgpSqttMarkerGeneralApiWordCount * sizeof(uint32_t) == sizeof(RgpS
     "Marker size mismatch");
 static_assert(RgpSqttMarkerPresentWordCount * sizeof(uint32_t) == sizeof(RgpSqttMarkerPresent),
     "Marker size mismatch");
+static_assert(RgpSqttMarkerPipelineBindWordCount * sizeof(uint32_t) == sizeof(RgpSqttMarkerPipelineBind),
+    "Marker size mismatch");
 
 // =====================================================================================================================
 // Construct per-queue SQTT layer info
@@ -233,11 +235,13 @@ SqttCmdBufferState::SqttCmdBufferState(
     :
     m_pCmdBuf(pCmdBuf),
     m_pSqttMgr(pCmdBuf->VkDevice()->GetSqttMgr()),
+    m_pDevModeMgr(pCmdBuf->VkDevice()->VkInstance()->GetDevModeMgr()),
     m_settings(pCmdBuf->VkDevice()->GetRuntimeSettings()),
     m_pNextLayer(m_pSqttMgr->GetNextLayer()),
     m_currentEntryPoint(RgpSqttMarkerGeneralApiType::Invalid),
     m_currentEventId(0),
     m_currentEventType(RgpSqttMarkerEventType::InternalUnknown),
+    m_instructionTrace({ false, 0, VK_PIPELINE_BIND_POINT_MAX_ENUM }),
     m_debugTags(pCmdBuf->VkInstance()->Allocator())
 {
     m_cbId.u32All       = 0;
@@ -274,6 +278,13 @@ void SqttCmdBufferState::Begin(
 {
     m_currentEventId = 0;
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    if (m_pDevModeMgr != nullptr)
+    {
+        m_instructionTrace.targetHash = m_pDevModeMgr->GetInstructionTraceTargetHash();
+    }
+#endif
+
     m_cbId = m_pSqttMgr->GetNextCmdBufID(m_pCmdBuf->GetQueueFamilyIndex(), pBeginInfo);
 
     // Clear the list of debug tags whenever a new command buffer is started.
@@ -290,6 +301,15 @@ void SqttCmdBufferState::Begin(
 // Inserts a CbEnd marker when command buffer building has finished.
 void SqttCmdBufferState::End()
 {
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    if ((m_pDevModeMgr != nullptr) &&
+        (m_instructionTrace.started))
+    {
+        m_pDevModeMgr->StopInstructionTrace(m_pCmdBuf);
+        m_instructionTrace.started = false;
+    }
+#endif
+
     WriteCbEndMarker();
 }
 
@@ -537,6 +557,14 @@ void SqttCmdBufferState::PalDrawDispatchCallback(
 }
 
 // =====================================================================================================================
+// Writes SQTT marker data based on PAL bind pipeline callbacks.
+void SqttCmdBufferState::PalBindPipelineCallback(
+    const Pal::Developer::BindPipelineData& bindPipeline)
+{
+    WritePipelineBindMarker(bindPipeline);
+}
+
+// =====================================================================================================================
 void SqttCmdBufferState::WriteBarrierStartMarker(
     const Pal::Developer::BarrierData& data
     ) const
@@ -666,6 +694,37 @@ void SqttCmdBufferState::WriteCbEndMarker() const
 }
 
 // =====================================================================================================================
+// Inserts a pipeline bind marker
+void SqttCmdBufferState::WritePipelineBindMarker(
+    const Pal::Developer::BindPipelineData& data) const
+{
+    if (m_enabledMarkers & DevModeSqttMarkerEnablePipelineBind)
+    {
+        RgpSqttMarkerPipelineBind marker = {};
+
+        marker.identifier = RgpSqttMarkerIdentifierBindPipeline;
+        marker.cbID = m_cbId.u32All;
+
+        switch (data.bindPoint)
+        {
+        case Pal::PipelineBindPoint::Compute:
+            marker.bindPoint = 1;
+            break;
+        case Pal::PipelineBindPoint::Graphics:
+            marker.bindPoint = 0;
+            break;
+        default:
+            VK_NEVER_CALLED();
+        }
+
+        static_assert(sizeof(marker.apiPsoHash) == sizeof(data.apiPsoHash), "Api Pso Hash size mismatch");
+        memcpy(marker.apiPsoHash, &data.apiPsoHash, sizeof(marker.apiPsoHash));
+
+        WriteMarker(&marker, sizeof(marker));
+    }
+}
+
+// =====================================================================================================================
 // Writes a general API marker at the top of the call
 void SqttCmdBufferState::WriteBeginGeneralApiMarker(
     RgpSqttMarkerGeneralApiType apiType
@@ -725,6 +784,32 @@ void SqttCmdBufferState::EndEntryPoint()
         WriteEndGeneralApiMarker(m_currentEntryPoint);
 
         m_currentEntryPoint = RgpSqttMarkerGeneralApiType::Invalid;
+    }
+}
+
+// =====================================================================================================================
+// Called when a pipeline is bound
+void SqttCmdBufferState::PipelineBound(
+    VkPipelineBindPoint bindPoint,
+    VkPipeline          pipeline)
+{
+    if (pipeline != VK_NULL_HANDLE)
+    {
+        const Pipeline* pPipeline = Pipeline::ObjectFromHandle(pipeline);
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
+        if (m_pDevModeMgr != nullptr)
+        {
+            if ((m_instructionTrace.started == false) &&
+                (pPipeline->GetApiHash() == m_instructionTrace.targetHash))
+            {
+                m_pDevModeMgr->StartInstructionTrace(m_pCmdBuf);
+                m_instructionTrace.bindPoint = bindPoint;
+                m_instructionTrace.started = true;
+            }
+        }
+#endif
+
     }
 }
 
@@ -875,6 +960,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindPipeline(
     SQTT_SETUP();
 
     pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdBindPipeline);
+
+    pSqtt->PipelineBound(pipelineBindPoint, pipeline);
 
     SQTT_CALL_NEXT_LAYER(vkCmdBindPipeline)(cmdBuffer, pipelineBindPoint, pipeline);
 

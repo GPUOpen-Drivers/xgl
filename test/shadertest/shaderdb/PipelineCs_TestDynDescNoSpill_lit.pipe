@@ -1,0 +1,44 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST: %{{.*}} = call <4 x i32> @llpc.call.desc.load.buffer.v4i32.i32.i32.i32.i1(i32 0, i32 1, i32 0, i1 false)
+; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
+; SHADERTEST: %{{.*}} = tail call <4 x float> @llvm.amdgcn.raw.buffer.load.v4f32(<4 x i32> %{{.*}}, i32 0, i32 0, i32 0)
+; SHADERTEST: AMDLLPC SUCCESS
+; END_SHADERTEST
+
+[CsGlsl]
+#version 450
+
+layout(binding = 0, std430) buffer OUT
+{
+    uvec4 o;
+};
+layout(binding = 1, std430) buffer IN
+{
+    uvec4 i;
+};
+
+layout(local_size_x = 2, local_size_y = 3) in;
+void main()
+{
+    o = i;
+}
+
+
+[CsInfo]
+entryPoint = main
+userDataNode[0].type = DescriptorBuffer
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 4
+userDataNode[0].set = 0
+userDataNode[0].binding = 0
+userDataNode[1].type = DescriptorBuffer
+userDataNode[1].offsetInDwords = 4
+userDataNode[1].sizeInDwords = 4
+userDataNode[1].set = 0
+userDataNode[1].binding = 1
+
+

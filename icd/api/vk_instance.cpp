@@ -697,12 +697,7 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_SEMAPHORE_CAPABILITIES));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_FENCE_CAPABILITIES));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_REPORT));
-
-        if (Instance::IsExtensionEnabledByEnv(VK_EXT_DEBUG_UTILS_EXTENSION_NAME)
-           )
-        {
-            supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_UTILS));
-        }
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_UTILS));
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_DISPLAY));
 

@@ -55,6 +55,8 @@ class Device;
 class ImageView;
 class RenderPass;
 class SqttMgr;
+class Pipeline;
+class DevModeMgr;
 
 // Contains parameters that are happening when renderpass targets are bound in the driver.
 struct SqttBindTargetParams
@@ -134,6 +136,8 @@ public:
     void BeginRenderPassResolve();
     void EndRenderPassResolve();
 
+    void PipelineBound(VkPipelineBindPoint bindPoint, VkPipeline pipeline);
+
     VK_INLINE const DispatchTable* GetNextLayer() const
         { return m_pNextLayer; }
 
@@ -149,6 +153,9 @@ public:
 
     void PalDrawDispatchCallback(
         const Pal::Developer::DrawDispatchData& drawDispatch);
+
+    void PalBindPipelineCallback(
+        const Pal::Developer::BindPipelineData& bindPipeline);
 
     void DebugMarkerBegin(const VkDebugMarkerMarkerInfoEXT* pMarkerInfo);
     void DebugMarkerEnd();
@@ -167,6 +174,7 @@ private:
     RgpSqttMarkerEvent BuildEventMarker(RgpSqttMarkerEventType apiType);
     void WriteCbStartMarker() const;
     void WriteCbEndMarker() const;
+    void WritePipelineBindMarker(const Pal::Developer::BindPipelineData& data) const;
     void WriteMarker(const void* pData, size_t dataSize) const;
     void WriteBeginGeneralApiMarker(RgpSqttMarkerGeneralApiType apiType) const;
     void WriteEndGeneralApiMarker(RgpSqttMarkerGeneralApiType apiType) const;
@@ -198,6 +206,13 @@ private:
     uint32_t                    m_currentEventId;    // Current command ID for pre-draw/dispatch event markers
     RgpSqttMarkerEventType      m_currentEventType;  // Current API type for pre-draw/dispatch event markers
     uint32_t                    m_enabledMarkers;
+
+    struct
+    {
+        bool                started;    // True if a pipeline is currently being traced
+        uint64_t            targetHash; // Determines target pipeline used to trigger instruction tracing
+        VkPipelineBindPoint bindPoint;  // Bind point of the target pipeline
+    } m_instructionTrace;
 
     RgpSqttMarkerUserEventWithString* m_pUserEvent;
 

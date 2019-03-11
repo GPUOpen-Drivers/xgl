@@ -1,0 +1,31 @@
+#version 450
+
+layout(binding = 0) uniform Uniforms
+{
+    vec4 u1;
+};
+
+shared vec4 s1;
+
+layout (local_size_x = 16, local_size_y = 16) in;
+
+vec4 g_f;
+
+void main()
+{
+    s1 = u1;
+    g_f = s1;
+}
+
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: @s1 = internal addrspace(3) global <4 x float> undef
+; SHADERTEST: store <4 x float> %{{[0-9]*}}, <4 x float> addrspace(3)* @s1
+; SHADERTEST: load <4 x float>, <4 x float> addrspace(3)* @s1
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

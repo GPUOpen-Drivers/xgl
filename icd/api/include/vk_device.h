@@ -445,12 +445,12 @@ public:
 
     VkResult TryIncreaseAllocatedMemorySize(
         Pal::gpusize allocationSize,
-        uint32_t           deviceMask,
+        uint32_t     deviceMask,
         uint32_t     heapIdx);
 
-    VkResult IncreaseAllocatedMemorySize(
+    void IncreaseAllocatedMemorySize(
         Pal::gpusize allocationSize,
-        uint32_t           deviceMask,
+        uint32_t     deviceMask,
         uint32_t     heapIdx);
 
     void DecreaseAllocatedMemorySize(
@@ -596,9 +596,6 @@ protected:
         PhysicalDevice*        pPhysicalDevice;
         Pal::IDevice*          pPalDevice;
         Pal::ICmdAllocator*    pSharedPalCmdAllocator;
-
-        Pal::gpusize           allocatedMemorySize[Pal::GpuHeap::GpuHeapCount]; // Number of bytes allocated per heap
-        Pal::gpusize           totalMemorySize[Pal::GpuHeap::GpuHeapCount];     // The total memory (in bytes) per heap
 
         void*                  pSwCompositingMemory;    // Internal memory for the below PAL objects (master and slave)
         Pal::IQueue*           pSwCompositingQueue;     // Internal present queue (master) or transfer queue (slave)

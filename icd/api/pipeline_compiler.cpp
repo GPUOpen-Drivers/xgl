@@ -51,141 +51,6 @@ namespace vk
 extern bool IsSrcAlphaUsedInBlend(VkBlendFactor blend);
 
 // =====================================================================================================================
-ShaderCache::ShaderCache()
-    :
-    m_cacheType(),
-    m_cache()
-{
-
-}
-
-// =====================================================================================================================
-// Initializes shader cache object.
-void ShaderCache::Init(
-    PipelineCompilerType  cacheType,  // Shader cache type
-    ShaderCachePtr        cachePtr)   // Pointer of the shader cache implementation
-{
-    m_cacheType = cacheType;
-    m_cache = cachePtr;
-}
-
-// =====================================================================================================================
-// Serializes the shader cache data or queries the size required for serialization.
-VkResult ShaderCache::Serialize(
-    void*   pBlob,
-    size_t* pSize)
-{
-    VkResult result = VK_SUCCESS;
-
-    {
-        Llpc::Result llpcResult = m_cache.pLlpcShaderCache->Serialize(pBlob, pSize);
-        result = (llpcResult == Llpc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
-    }
-
-    return result;
-}
-
-// =====================================================================================================================
-// Merges the provided source shader caches' content into this shader cache.
-VkResult ShaderCache::Merge(
-    uint32_t              srcCacheCount,
-    const ShaderCachePtr* ppSrcCaches)
-{
-    VkResult result = VK_SUCCESS;
-
-    {
-        Llpc::Result llpcResult = m_cache.pLlpcShaderCache->Merge(srcCacheCount,
-            const_cast<const Llpc::IShaderCache **>(&ppSrcCaches->pLlpcShaderCache));
-        result = (llpcResult == Llpc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
-    }
-
-    return result;
-}
-
-// =====================================================================================================================
-// Frees all resources associated with this object.
-void ShaderCache::Destroy(
-    PipelineCompiler* pCompiler)
-{
-    VkResult result = VK_SUCCESS;
-
-    {
-        if (m_cache.pLlpcShaderCache)
-        {
-            m_cache.pLlpcShaderCache->Destroy();
-        }
-    }
-}
-
-// =====================================================================================================================
-CompilerSolution::CompilerSolution(
-    PhysicalDevice* pPhysicalDevice)
-    : m_pPhysicalDevice(pPhysicalDevice)
-{
-
-}
-
-// =====================================================================================================================
-CompilerSolution::~CompilerSolution()
-{
-
-}
-
-// =====================================================================================================================
-// Initialize CompilerSolution class
-VkResult CompilerSolution::Initialize()
-{
-    Pal::IDevice* pPalDevice = m_pPhysicalDevice->PalDevice();
-    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
-
-    // Initialize GfxIp informations per PAL device properties
-    Pal::DeviceProperties info;
-    pPalDevice->GetProperties(&info);
-
-    switch (info.gfxLevel)
-    {
-    case Pal::GfxIpLevel::GfxIp6:
-        m_gfxIp.major = 6;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp7:
-        m_gfxIp.major = 7;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8:
-        m_gfxIp.major = 8;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8_1:
-        m_gfxIp.major = 8;
-        m_gfxIp.minor = 1;
-        break;
-    case Pal::GfxIpLevel::GfxIp9:
-        m_gfxIp.major = 9;
-        m_gfxIp.minor = 0;
-        break;
-
-    default:
-        VK_NEVER_CALLED();
-        break;
-    }
-
-    m_gfxIp.stepping = info.gfxStepping;
-    m_gfxIpLevel     = info.gfxLevel;
-
-    return VK_SUCCESS;
-}
-
-// =====================================================================================================================
-// Gets shader cache type.
-PipelineCompilerType CompilerSolution::GetShaderCacheType()
-{
-    PipelineCompilerType cacheType;
-    cacheType = PipelineCompilerTypeLlpc;
-    return cacheType;
-}
-
-// =====================================================================================================================
 PipelineCompiler::PipelineCompiler(
     PhysicalDevice* pPhysicalDevice)
     :
@@ -1152,6 +1017,28 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             pCreateInfo->pipelineInfo.rsState.frontFace               = pRs->frontFace;
             pCreateInfo->pipelineInfo.rsState.depthBiasEnable         = pRs->depthBiasEnable;
 
+            union
+            {
+                const VkStructHeader*                                        pInfo;
+                const VkPipelineRasterizationDepthClipStateCreateInfoEXT*    pRsDepthClip;
+            };
+
+            pInfo = static_cast<const VkStructHeader*>(pRs->pNext);
+
+            while (pInfo != nullptr)
+            {
+                switch (static_cast<uint32_t>(pInfo->sType))
+                {
+                case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT:
+                    pCreateInfo->pipelineInfo.vpState.depthClipEnable = pRsDepthClip->depthClipEnable;
+
+                    break;
+                default:
+                    break;
+                }
+
+                pInfo = pInfo->pNext;
+            }
         }
 
         const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;

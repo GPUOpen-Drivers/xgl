@@ -613,6 +613,10 @@ void RenderPassLogger::LogRenderPassCreateInfo(
         {
             LogInfoAttachmentReference("depthStencilAttachment", 0, desc.depthStencilAttachment);
         }
+        if (desc.depthStencilResolveAttachment.attachment != VK_ATTACHMENT_UNUSED)
+        {
+            LogInfoAttachmentReference("depthStencilResolveAttachment", 0, desc.depthStencilResolveAttachment);
+        }
         Log("   .preserveAttachmentCount = %d\n", desc.preserveAttachmentCount);
         for (uint32_t j = 0; j < desc.preserveAttachmentCount; ++j)
         {

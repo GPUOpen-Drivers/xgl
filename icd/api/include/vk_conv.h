@@ -2766,6 +2766,27 @@ VK_INLINE Pal::QueuePriority VkToPalGlobalPriority(
     return palPriority;
 }
 
+// =====================================================================================================================
+VK_INLINE Pal::ResolveMode VkToPalResolveMode(
+    VkResolveModeFlagBitsKHR vkResolveMode)
+{
+    switch (vkResolveMode)
+    {
+    case VK_RESOLVE_MODE_MIN_BIT_KHR:
+        return Pal::ResolveMode::Minimum;
+    case VK_RESOLVE_MODE_MAX_BIT_KHR:
+        return Pal::ResolveMode::Maximum;
+    case VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR:
+        return Pal::ResolveMode::Average;
+    case VK_RESOLVE_MODE_AVERAGE_BIT_KHR:
+        return Pal::ResolveMode::Average;
+    case VK_RESOLVE_MODE_NONE_KHR:
+    default:
+        VK_NEVER_CALLED();
+        return Pal::ResolveMode::Average;
+    }
+}
+
 } // namespace vk
 
 #endif /* __VK_CONV_H__ */

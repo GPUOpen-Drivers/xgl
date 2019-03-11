@@ -227,6 +227,7 @@ void GraphicsPipeline::GenerateHashFromRasterizationStateCreateInfo(
             const VkPipelineRasterizationConservativeStateCreateInfoEXT* pConservativeStateCreateInfo;
             const VkPipelineRasterizationStateRasterizationOrderAMD*     pRasterizationOrder;
             const VkPipelineRasterizationStateStreamCreateInfoEXT*       pStreamCreateInfo;
+            const VkPipelineRasterizationDepthClipStateCreateInfoEXT*    pRsDepthClip;
         };
 
         pInfo = static_cast<const VkStructHeader*>(desc.pNext);
@@ -251,6 +252,10 @@ void GraphicsPipeline::GenerateHashFromRasterizationStateCreateInfo(
                 pBaseHasher->Update(pStreamCreateInfo->sType);
                 pBaseHasher->Update(pStreamCreateInfo->flags);
                 pBaseHasher->Update(pStreamCreateInfo->rasterizationStream);
+
+                break;
+            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT:
+                pBaseHasher->Update(pRsDepthClip->depthClipEnable);
 
                 break;
             default:
@@ -1603,6 +1608,9 @@ void GraphicsPipeline::BindToCmdBuffer(
                 params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
                 params.pPipeline         = m_pPalPipeline[deviceIdx];
                 params.graphics          = graphicsShaderInfos;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
+                params.apiPsoHash = m_apiHash;
+#endif
 
                 pPalCmdBuf->CmdBindPipeline(params);
             }
@@ -1613,6 +1621,9 @@ void GraphicsPipeline::BindToCmdBuffer(
             params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
             params.pPipeline         = m_pPalPipeline[deviceIdx];
             params.graphics          = graphicsShaderInfos;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
+            params.apiPsoHash = m_apiHash;
+#endif
 
             pPalCmdBuf->CmdBindPipeline(params);
         }
@@ -1741,6 +1752,9 @@ void GraphicsPipeline::BindNullPipeline(CmdBuffer* pCmdBuffer)
 
     Pal::PipelineBindParams params = {};
     params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
+    params.apiPsoHash = Pal::InternalApiPsoHash;
+#endif
 
     for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
     {

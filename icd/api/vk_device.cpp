@@ -223,12 +223,6 @@ Device::Device(
 
         m_perGpu[deviceIdx].pSharedPalCmdAllocator = nullptr;
 
-        for (uint32_t i = 0; i < Pal::GpuHeap::GpuHeapCount; ++i)
-        {
-            m_perGpu[deviceIdx].allocatedMemorySize[i] = 0;
-            m_perGpu[deviceIdx].totalMemorySize[i]     = 0;
-        }
-
         m_perGpu[deviceIdx].pSwCompositingMemory    = nullptr;
         m_perGpu[deviceIdx].pSwCompositingQueue     = nullptr;
         m_perGpu[deviceIdx].pSwCompositingSemaphore = nullptr;
@@ -1039,27 +1033,6 @@ VkResult Device::Initialize(
                 default:
                     break;
                 }
-            }
-        }
-
-        for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
-        {
-            Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
-            PalDevice(deviceIdx)->GetGpuMemoryHeapProperties(heapProperties);
-
-            for (uint32_t heapIdx = 0; heapIdx < Pal::GpuHeapCount; heapIdx++)
-            {
-                if ((heapIdx == Pal::GpuHeapInvisible) ||
-                    (heapIdx == Pal::GpuHeapLocal))
-                {
-                    m_perGpu[deviceIdx].totalMemorySize[heapIdx] = heapProperties[heapIdx].heapSize;
-                }
-            }
-
-            if (m_perGpu[deviceIdx].totalMemorySize[Pal::GpuHeapInvisible] == 0)
-            {
-                // Disable tracking for the local invisible heap and allow it to overallocate when it has size 0
-                m_perGpu[deviceIdx].totalMemorySize[Pal::GpuHeapInvisible] = UINT64_MAX;
             }
         }
     }
@@ -2314,16 +2287,15 @@ VkResult Device::TryIncreaseAllocatedMemorySize(
 {
     VkResult           vkResult = VK_SUCCESS;
     utils::IterateMask deviceGroup(deviceMask);
-    Util::MutexAuto    lock(&m_memoryMutex);
 
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        Pal::gpusize memorySizePostAllocation = m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] + allocationSize;
-        if (memorySizePostAllocation > m_perGpu[deviceIdx].totalMemorySize[heapIdx])
+        vkResult = m_perGpu[deviceIdx].pPhysicalDevice->TryIncreaseAllocatedMemorySize(allocationSize, heapIdx);
+
+        if (vkResult != VK_SUCCESS)
         {
-            vkResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
             break;
         }
     }
@@ -2334,43 +2306,19 @@ VkResult Device::TryIncreaseAllocatedMemorySize(
 // =====================================================================================================================
 // Increases the allocated memory size for device local allocations made by the application (externally) and
 // reports OOM if necessary
-VkResult Device::IncreaseAllocatedMemorySize(
+void Device::IncreaseAllocatedMemorySize(
     Pal::gpusize allocationSize,
     uint32_t     deviceMask,
     uint32_t     heapIdx)
 {
-    VkResult           vkResult = VK_SUCCESS;
     utils::IterateMask deviceGroup(deviceMask);
-    Util::MutexAuto    lock(&m_memoryMutex);
 
-    deviceMask = 0u;
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        Pal::gpusize memorySizePostAllocation = m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] + allocationSize;
-        if (memorySizePostAllocation <= m_perGpu[deviceIdx].totalMemorySize[heapIdx])
-        {
-            m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] = memorySizePostAllocation;
-            deviceMask |= 1 << deviceIdx;
-        }
-        else
-        {
-            vkResult = VK_ERROR_OUT_OF_DEVICE_MEMORY;
-
-            // Revert increases in allocation size that have been made
-            utils::IterateMask revDeviceGroup(deviceMask);
-            while (revDeviceGroup.Iterate())
-            {
-                const uint32_t revDeviceIdx = revDeviceGroup.Index();
-                m_perGpu[revDeviceIdx].allocatedMemorySize[heapIdx] -= allocationSize;
-            }
-
-            break;
-        }
+        m_perGpu[deviceIdx].pPhysicalDevice->IncreaseAllocatedMemorySize(allocationSize, heapIdx);
     }
-
-    return vkResult;
 }
 
 // =====================================================================================================================
@@ -2381,25 +2329,12 @@ void Device::DecreaseAllocatedMemorySize(
     uint32_t     heapIdx)
 {
     utils::IterateMask deviceGroup(deviceMask);
-    Util::MutexAuto lock(&m_memoryMutex);
 
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        Pal::gpusize memorySizePostDeallocation = m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] - allocationSize;
-
-        if (memorySizePostDeallocation <= m_perGpu[deviceIdx].allocatedMemorySize[heapIdx])
-        {
-            m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] = memorySizePostDeallocation;
-        }
-        else
-        {
-            VK_NEVER_CALLED();
-
-            // Set to 0 instead of underflowing, otherwise OOM will be reported.
-            m_perGpu[deviceIdx].allocatedMemorySize[heapIdx] = 0u;
-        }
+        m_perGpu[deviceIdx].pPhysicalDevice->DecreaseAllocatedMemorySize(allocationSize, heapIdx);
     }
 }
 

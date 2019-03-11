@@ -65,7 +65,7 @@ size_t VertBufBindingMgr::GetMaxVertBufTableDwSize(
 
     VK_ASSERT((vbSrdSize % sizeof(uint32_t)) == 0);
 
-    return (MaxVertexBuffers * vbSrdSize) / sizeof(uint32_t);
+    return (Pal::MaxVertexBuffers * vbSrdSize) / sizeof(uint32_t);
 }
 
 // =====================================================================================================================
@@ -97,7 +97,7 @@ void VertBufBindingMgr::Reset()
 
     for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
     {
-        for (uint32_t i = 0; i < MaxVertexBuffers; ++i)
+        for (uint32_t i = 0; i < Pal::MaxVertexBuffers; ++i)
         {
             // Format needs to be set to invalid for struct srv SRDs
             m_bindings[deviceIdx][i].swizzledFormat = Pal::UndefinedSwizzledFormat;
@@ -113,7 +113,7 @@ void VertBufBindingMgr::Reset()
 
     memset(m_pVbTblSysMem,
            0,
-           m_vbSrdDwSize * MaxVertexBuffers * sizeof(uint32_t) * m_pDevice->NumPalDevices());
+           m_vbSrdDwSize * Pal::MaxVertexBuffers * sizeof(uint32_t) * m_pDevice->NumPalDevices());
 }
 
 // =====================================================================================================================
@@ -126,7 +126,7 @@ void VertBufBindingMgr::BindVertexBuffers(
     const VkBuffer*     pInBuffers,
     const VkDeviceSize* pInOffsets)
 {
-    const uint32_t strideDw      = m_vbSrdDwSize * MaxVertexBuffers;
+    const uint32_t strideDw      = m_vbSrdDwSize * Pal::MaxVertexBuffers;
     const uint32_t startDwOffset = firstBinding  * m_vbSrdDwSize;
 
     utils::IterateMask deviceGroup(pCmdBuf->GetDeviceMask());
@@ -189,7 +189,7 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
     // Update strides for each binding used by the graphics pipeline.  Rebuild SRD data for those bindings
     // whose strides changed.
 
-    const size_t strideDw = m_vbSrdDwSize * MaxVertexBuffers;
+    const size_t strideDw = m_vbSrdDwSize * Pal::MaxVertexBuffers;
 
     for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
     {

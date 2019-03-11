@@ -54,7 +54,6 @@
 
 // Internal (under development) extension definitions
 
-#include "devext/vk_amd_gpu_shader_half_float_fetch.h"
 #include "devext/vk_amd_gpa_interface.h"
 
 enum class DynamicStatesInternal : uint32_t {

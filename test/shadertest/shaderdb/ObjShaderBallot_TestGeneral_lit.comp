@@ -1,0 +1,59 @@
+#version 450
+
+#extension GL_ARB_gpu_shader_int64: enable
+#extension GL_ARB_shader_ballot: enable
+
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(binding = 0) buffer Buffers
+{
+    vec4  f4;
+    ivec4 i4;
+    uvec4 u4; 
+} data[4];
+
+void main()
+{
+    uint invocation = (gl_SubGroupInvocationARB + gl_SubGroupSizeARB) % 4;
+
+    uint64_t relMask = gl_SubGroupEqMaskARB +
+                       gl_SubGroupGeMaskARB +
+                       gl_SubGroupGtMaskARB +
+                       gl_SubGroupLeMaskARB +
+                       gl_SubGroupLtMaskARB;
+
+    if (relMask == ballotARB(true))
+    {
+        data[invocation].f4.x   = readInvocationARB(data[0].f4.x,    invocation);
+        data[invocation].i4.xy  = readInvocationARB(data[1].i4.xy,   invocation);
+        data[invocation].u4.xyz = readInvocationARB(data[2].u4.xyz,  invocation);
+    }
+    else
+    {
+        data[invocation].f4.x   = readFirstInvocationARB(data[0].f4.x);
+        data[invocation].i4.xy  = readFirstInvocationARB(data[1].i4.xy);
+        data[invocation].u4.xyz = readFirstInvocationARB(data[2].u4.xyz);
+    }
+}
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC.*}} SPIR-V lowering results
+; SHADERTEST: call i64 @llpc.input.import.builtin.SubgroupLtMaskKHR.i64.i32
+; SHADERTEST: call i64 @llpc.input.import.builtin.SubgroupLeMaskKHR.i64.i32
+; SHADERTEST: call i64 @llpc.input.import.builtin.SubgroupGtMaskKHR.i64.i32
+; SHADERTEST: call i64 @llpc.input.import.builtin.SubgroupGeMaskKHR.i64.i32
+; SHADERTEST: call i64 @llpc.input.import.builtin.SubgroupEqMaskKHR.i64.i32
+; SHADERTEST: call i32 @llpc.input.import.builtin.SubgroupSize.i32.i32
+; SHADERTEST: call i32 @llpc.input.import.builtin.SubgroupLocalInvocationId.i32.i32
+; SHADERTEST: call i64 @llpc.subgroup.ballot
+
+; SHADERTEST-LABEL: {{^// LLPC.*}} pipeline patching results
+; SHADERTEST: call i32 @llvm.amdgcn.readlane(i32 %{{.*}}, i32 %{{.*}})
+; SHADERTEST: call i32 @llvm.amdgcn.readfirstlane(i32 %{{.*}})
+; SHADERTEST-COUNT-5: call i32 @llvm.amdgcn.readlane(i32 %{{.*}}, i32 %{{.*}})
+; SHADERTEST-COUNT-7: call i32 @llvm.amdgcn.readfirstlane(i32 %{{.*}})
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

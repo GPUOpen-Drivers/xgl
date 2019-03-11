@@ -176,9 +176,6 @@ namespace vk
     // Invalid Mask
     static const uint32_t InvalidPalDeviceMask = 1 << (MaxPalDevices+1);
 
-    // Maximum number of vertex buffer bindings
-    static const uint32_t MaxVertexBuffers = 32;
-
     // Maximum number of dynamic descriptors
     static const uint32_t MaxDynamicUniformDescriptors = 8;
     static const uint32_t MaxDynamicStorageDescriptors = 8;

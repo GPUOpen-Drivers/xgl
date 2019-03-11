@@ -147,7 +147,8 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_blockingTraceEnd(false),
     m_globalFrameIndex(1), // Must start from 1 according to RGP spec
     m_traceFrameBeginTag(0),
-    m_traceFrameEndTag(0)
+    m_traceFrameEndTag(0),
+    m_targetApiPsoHash(0)
 {
     memset(&m_trace, 0, sizeof(m_trace));
 }
@@ -655,10 +656,19 @@ void DevModeMgr::TraceIdleToPendingStep(
             m_traceFrameBeginTag = traceParameters.beginTag;
             m_traceFrameEndTag   = traceParameters.endTag;
 
+            // Store the targtet API PSO hash to be passed to GpaSession::SetSampleTraceApiInfo
+            m_targetApiPsoHash = traceParameters.pipelineHash;
+
             // If we have valid frame begin/end tags, use the tag triggered trace mode.
             const TriggerMode triggerMode =
                 ((m_traceFrameBeginTag != 0) && (m_traceFrameEndTag != 0)) ? TriggerMode::Tag
                                                                            : TriggerMode::Present;
+
+            // Assert if an unsupported capture mode is requested
+            VK_ASSERT(((triggerMode == TriggerMode::Tag) &&
+                       (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Markers)) ||
+                      ((triggerMode == TriggerMode::Present) &&
+                       (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Present)));
 
             // Override some parameters via panel
             const RuntimeSettings& settings = pState->pDevice->GetRuntimeSettings();
@@ -804,6 +814,50 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         }
 
         pState->gpaSampleId = pState->pGpaSession->BeginSample(pBeginCmdBuf, sampleConfig);
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        GpuUtil::SampleTraceApiInfo sampleTraceApiInfo = {};
+
+        switch (pState->triggerMode)
+        {
+        case TriggerMode::Present:
+            sampleTraceApiInfo.profilingMode = GpuUtil::TraceProfilingMode::Present;
+            break;
+        case TriggerMode::Tag:
+            sampleTraceApiInfo.profilingMode = GpuUtil::TraceProfilingMode::Tags;
+            break;
+        default:
+            VK_NOT_IMPLEMENTED;
+        }
+
+        sampleTraceApiInfo.profilingModeData.tagData.start = m_traceFrameBeginTag;
+        sampleTraceApiInfo.profilingModeData.tagData.start = m_traceFrameEndTag;
+
+        if (m_enableInstTracing)
+        {
+            sampleTraceApiInfo.instructionTraceMode = m_targetApiPsoHash == 0 ?
+                GpuUtil::InstructionTraceMode::FullFrame :
+                GpuUtil::InstructionTraceMode::ApiPso;
+
+            sampleTraceApiInfo.instructionTraceModeData.apiPsoHash = m_targetApiPsoHash;
+        }
+        else
+        {
+            sampleTraceApiInfo.instructionTraceMode = GpuUtil::InstructionTraceMode::Disabled;
+        }
+
+        if (settings.devModeSqttInstructionTraceEnable)
+        {
+            sampleTraceApiInfo.instructionTraceMode = settings.devModeSqttTargetApiPsoHash == 0 ?
+                GpuUtil::InstructionTraceMode::FullFrame :
+                GpuUtil::InstructionTraceMode::ApiPso;
+
+            sampleTraceApiInfo.instructionTraceModeData.apiPsoHash = settings.devModeSqttTargetApiPsoHash;
+        }
+
+        pState->pGpaSession->SetSampleTraceApiInfo(sampleTraceApiInfo, pState->gpaSampleId);
     }
 
     // Finish building the trace-begin command buffer
@@ -2166,6 +2220,40 @@ void DevModeMgr::PipelineDestroyed(
     {
         m_trace.pGpaSession->UnregisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
     }
+}
+
+// =====================================================================================================================
+// Retrieves the target API PSO hash from the RGP Server
+uint64_t DevModeMgr::GetInstructionTraceTargetHash()
+{
+    const auto& settings        = m_trace.pDevice->GetRuntimeSettings();
+    const auto  traceParameters = m_pRGPServer->QueryTraceParameters();
+
+    return settings.devModeSqttInstructionTraceEnable ?
+        settings.devModeSqttTargetApiPsoHash :
+        traceParameters.pipelineHash;
+}
+
+// =====================================================================================================================
+// Starts instruction trace
+void DevModeMgr::StartInstructionTrace(
+    CmdBuffer* pCmdBuffer)
+{
+    m_trace.pGpaSession->UpdateSampleTraceParams(
+        pCmdBuffer->PalCmdBuffer(DefaultDeviceIndex),
+        0,
+        GpuUtil::UpdateSampleTraceMode::StartInstructionTrace);
+}
+
+// =====================================================================================================================
+// Stops instruction trace
+void DevModeMgr::StopInstructionTrace(
+    CmdBuffer* pCmdBuffer)
+{
+    m_trace.pGpaSession->UpdateSampleTraceParams(
+        pCmdBuffer->PalCmdBuffer(DefaultDeviceIndex),
+        0,
+        GpuUtil::UpdateSampleTraceMode::StopInstructionTrace);
 }
 
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT

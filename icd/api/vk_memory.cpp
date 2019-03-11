@@ -83,9 +83,6 @@ VkResult Memory::Create(
 
     Pal::GpuMemoryExportInfo exportInfo = {};
 
-    // Determines towards which devices we have accounted memory size
-    uint32_t sizeAccountedForDeviceMask = 0u;
-
     // take the allocation count ahead of time.
     // it will set the VK_ERROR_TOO_MANY_OBJECTS
     vkResult = pDevice->IncreaseAllocationCount();
@@ -240,11 +237,6 @@ VkResult Memory::Create(
          (createInfo.heaps[0] == Pal::GpuHeap::GpuHeapLocal)))
     {
         vkResult = pDevice->TryIncreaseAllocatedMemorySize(createInfo.size, allocationMask, createInfo.heaps[0]);
-
-        if (vkResult == VK_SUCCESS)
-        {
-            sizeAccountedForDeviceMask = allocationMask;
-        }
     }
 
     if (vkResult == VK_SUCCESS)
@@ -287,32 +279,20 @@ VkResult Memory::Create(
         }
     }
 
-    if ((vkResult == VK_SUCCESS) &&
-        (sizeAccountedForDeviceMask != 0u))
+    if (vkResult == VK_SUCCESS)
     {
         // Account for committed size in logical device. The destructor will decrease the counter accordingly.
-        vkResult = pDevice->IncreaseAllocatedMemorySize(pMemory->m_info.size, sizeAccountedForDeviceMask, pMemory->m_info.heaps[0]);
+        pDevice->IncreaseAllocatedMemorySize(pMemory->m_info.size, allocationMask, pMemory->m_info.heaps[0]);
 
-        if (vkResult != VK_SUCCESS)
-        {
-            pMemory->Free(pDevice, pAllocator);
-        }
-    }
-
-    if (vkResult != VK_SUCCESS)
-    {
-        if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)
-        {
-            // Something failed after the allocation count was incremented
-            pDevice->DecreaseAllocationCount();
-        }
-    }
-    else
-    {
         // Notify the memory object that it is counted so that the destructor can decrease the counter accordingly
-        pMemory->SetAllocationCounted(sizeAccountedForDeviceMask);
+        pMemory->SetAllocationCounted(allocationMask);
 
         *pMemoryHandle = Memory::HandleFromObject(pMemory);
+    }
+    else if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)
+    {
+        // Something failed after the allocation count was incremented
+        pDevice->DecreaseAllocationCount();
     }
 
     return vkResult;

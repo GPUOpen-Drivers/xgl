@@ -32,14 +32,10 @@
 #pragma once
 
 #include "include/khronos/vulkan.h"
-#include "include/vk_utils.h"
-#include "include/vk_defines.h"
+#include "include/compiler_solution.h"
+#include "include/shader_cache.h"
+
 #include "include/vk_shader_code.h"
-
-#include "llpc.h"
-#include "include/app_shader_optimizer.h"
-
-#include "palMetroHash.h"
 
 #define ICD_BUILD_MULIT_COMPILER 0
 
@@ -50,148 +46,12 @@
 namespace vk
 {
 
-class PhysicalDevice;
 class PipelineLayout;
 class PipelineCache;
 class ShaderModule;
 class PipelineCompiler;
 struct VbBindingInfo;
 struct ShaderModuleHandle;
-
-// Enumerates the compiler types
-enum PipelineCompilerType : uint32_t
-{
-    PipelineCompilerTypeLlpc,  // Use shader compiler provided by LLPC
-};
-
-// Represents the result of PipelineCompiler::BuildShaderModule
-struct ShaderModuleHandle
-{
-    void*   pLlpcShaderModule;   // Shader module handle from LLPC
-};
-
-// Unified shader cache interface
-class ShaderCache
-{
-public:
-    union ShaderCachePtr
-    {
-        Llpc::IShaderCache* pLlpcShaderCache; // Pointer to LLPC shader cache object
-    };
-
-    ShaderCache();
-
-    void Init(PipelineCompilerType cacheType, ShaderCachePtr cachePtr);
-
-    VkResult Serialize(void* pBlob, size_t* pSize);
-
-    VkResult Merge(uint32_t srcCacheCount, const ShaderCachePtr* ppSrcCaches);
-
-    void Destroy(PipelineCompiler* pCompiler);
-
-    PipelineCompilerType GetCacheType() const { return m_cacheType; }
-
-    ShaderCachePtr GetCachePtr() { return m_cache; }
-
-private:
-    PipelineCompilerType  m_cacheType;
-    ShaderCachePtr        m_cache;
-};
-
-// =====================================================================================================================
-struct GraphicsPipelineCreateInfo
-{
-    Llpc::GraphicsPipelineBuildInfo        pipelineInfo;
-    VkPipelineCreateFlags                  flags;
-    void*                                  pMappingBuffer;
-    size_t                                 tempBufferStageSize;
-    VkFormat                               dbFormat;
-    PipelineOptimizerKey                   pipelineProfileKey;
-    PipelineCompilerType                   compilerType;
-    Util::MetroHash::Hash                  basePipelineHash;
-};
-
-// =====================================================================================================================
-struct ComputePipelineCreateInfo
-{
-    Llpc::ComputePipelineBuildInfo         pipelineInfo;
-    VkPipelineCreateFlags                  flags;
-    void*                                  pMappingBuffer;
-    size_t                                 tempBufferStageSize;
-    PipelineOptimizerKey                   pipelineProfileKey;
-    PipelineCompilerType                   compilerType;
-    Util::MetroHash::Hash                  basePipelineHash;
-};
-
-// =====================================================================================================================
-// Base class for compiler solution
-class CompilerSolution
-{
-public:
-    CompilerSolution(PhysicalDevice* pPhysicalDevice);
-    virtual ~CompilerSolution();
-
-    virtual VkResult Initialize() = 0;
-
-    virtual void Destroy() = 0;
-
-    virtual size_t GetShaderCacheSize(PipelineCompilerType cacheType) = 0;
-
-    virtual VkResult CreateShaderCache(
-        const void*  pInitialData,
-        size_t       initialDataSize,
-        void*        pShaderCacheMem,
-        bool         isScpcInternalCache,
-        ShaderCache* pShaderCache) = 0;
-
-    virtual VkResult BuildShaderModule(
-        const Device*       pDevice,
-        size_t              codeSize,
-        const void*         pCode,
-        ShaderModuleHandle* pModule) = 0;
-
-    virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) = 0;
-
-    virtual VkResult CreateGraphicsPipelineBinary(
-        Device*                     pDevice,
-        uint32_t                    deviceIdx,
-        PipelineCache*              pPipelineCache,
-        GraphicsPipelineCreateInfo* pCreateInfo,
-        size_t*                     pPipelineBinarySize,
-        const void**                ppPipelineBinary,
-        uint32_t                    rasterizationStream,
-        Llpc::PipelineShaderInfo**  ppShadersInfo,
-        void*                       pPipelineDumpHandle,
-        uint64_t                    pipelineHash,
-        int64_t*                    pCompileTime) = 0;
-
-    virtual VkResult CreateComputePipelineBinary(
-        Device*                     pDevice,
-        uint32_t                    deviceIdx,
-        PipelineCache*              pPipelineCache,
-        ComputePipelineCreateInfo*  pCreateInfo,
-        size_t*                     pPipelineBinarySize,
-        const void**                ppPipelineBinary,
-        void*                       pPipelineDumpHandle,
-        uint64_t                    pipelineHash,
-        int64_t*                    pCompileTime) = 0;
-
-    virtual void FreeGraphicsPipelineBinary(
-        const void*                 pPipelineBinary,
-        size_t                      binarySize) = 0;
-
-    virtual void FreeComputePipelineBinary(
-        const void*                 pPipelineBinary,
-        size_t                      binarySize) = 0;
-
-protected:
-    PipelineCompilerType GetShaderCacheType();
-
-protected:
-    PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
-    Llpc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by LLPC
-    Pal::GfxIpLevel    m_gfxIpLevel;           // Graphics IP level
-};
 
 // =====================================================================================================================
 class PipelineCompiler

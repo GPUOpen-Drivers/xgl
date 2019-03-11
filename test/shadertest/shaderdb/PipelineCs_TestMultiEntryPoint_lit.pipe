@@ -1,0 +1,127 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: define {{.*}} void @entrypoint1()
+; SHADERTEST: !{{.*}} = !{void ()* @entrypoint1, !{{.*}}}
+; SHADERTEST: !{{.*}} = !{!"spirv.ExecutionMode.GLCompute", i32 0, i32 1, i32 1, i32 1}
+; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
+; SHADERTEST: define {{.*}} void @_amdgpu_cs_main(i32 inreg, i32 inreg, i32 inreg, <3 x i32> inreg, i32 inreg, <3 x i32>)
+; SHADERTEST: AMDLLPC SUCCESS
+; END_SHADERTEST
+
+[CsSpirv]
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos SPIR-V Tools Assembler; 0
+; Bound: 51
+; Schema: 0
+               OpCapability Shader
+               OpCapability ClipDistance
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %1 "entrypoint1" %2
+               OpEntryPoint GLCompute %3 "entrypoint2" %2
+               OpEntryPoint Vertex %4 "entrypoint2" %5 %6 %7
+               OpExecutionMode %1 LocalSize 1 1 1
+               OpExecutionMode %3 LocalSize 1 1 1
+               OpName %1 "entrypoint1"
+               OpName %3 "entrypoint2"
+               OpName %4 "entrypoint2"
+               OpName %2 "gl_GlobalInvocationID"
+               OpName %8 "gl_PerVertex"
+               OpName %6 "gl_VertexIndex"
+               OpName %7 "gl_InstanceIndex"
+               OpMemberName %8 0 "gl_Position"
+               OpMemberName %8 1 "gl_PointSize"
+               OpMemberName %8 2 "gl_ClipDistance"
+               OpDecorate %2 BuiltIn GlobalInvocationId
+               OpDecorate %6 BuiltIn VertexIndex
+               OpDecorate %7 BuiltIn InstanceIndex
+               OpDecorate %8 Block
+               OpMemberDecorate %8 0 BuiltIn Position
+               OpMemberDecorate %8 1 BuiltIn PointSize
+               OpMemberDecorate %8 2 BuiltIn ClipDistance
+               OpDecorate %9 BufferBlock
+               OpDecorate %10 DescriptorSet 0
+               OpDecorate %10 Binding 0
+               OpDecorate %11 DescriptorSet 0
+               OpDecorate %11 Binding 1
+               OpDecorate %12 ArrayStride 4
+               OpMemberDecorate %9 0 Offset 0
+         %13 = OpTypeBool
+         %14 = OpTypeVoid
+         %15 = OpTypeFunction %14
+         %16 = OpTypeInt 32 0
+         %17 = OpTypeInt 32 1
+         %18 = OpTypeFloat 32
+         %19 = OpTypeVector %16 3
+         %20 = OpTypeVector %18 3
+         %21 = OpTypePointer Input %19
+         %22 = OpTypePointer Uniform %17
+         %23 = OpTypePointer Uniform %18
+         %24 = OpTypeRuntimeArray %17
+         %12 = OpTypeRuntimeArray %18
+          %9 = OpTypeStruct %12
+         %25 = OpTypePointer Uniform %9
+         %10 = OpVariable %25 Uniform
+         %11 = OpVariable %25 Uniform
+         %26 = OpConstant %17 0
+         %27 = OpConstant %16 1
+         %28 = OpConstant %18 1
+         %29 = OpTypePointer Input %17
+         %30 = OpTypeVector %18 4
+         %31 = OpTypePointer Output %30
+         %32 = OpTypeArray %18 %27
+          %8 = OpTypeStruct %30 %18 %32
+         %33 = OpTypePointer Output %8
+          %5 = OpVariable %33 Output
+          %2 = OpVariable %21 Input
+          %6 = OpVariable %29 Input
+          %7 = OpVariable %29 Input
+         %34 = OpConstantComposite %30 %28 %28 %28 %28
+          %4 = OpFunction %14 None %15
+         %35 = OpLabel
+         %36 = OpAccessChain %31 %5 %26
+               OpStore %36 %34
+               OpReturn
+               OpFunctionEnd
+          %1 = OpFunction %14 None %15
+         %37 = OpLabel
+         %38 = OpLoad %19 %2
+         %39 = OpCompositeExtract %16 %38 0
+         %40 = OpAccessChain %23 %10 %26 %39
+         %41 = OpLoad %18 %40
+         %42 = OpFAdd %18 %41 %41
+         %43 = OpAccessChain %23 %11 %26 %39
+               OpStore %43 %42
+               OpReturn
+               OpFunctionEnd
+          %3 = OpFunction %14 None %15
+         %44 = OpLabel
+         %45 = OpLoad %19 %2
+         %46 = OpCompositeExtract %16 %45 0
+         %47 = OpAccessChain %23 %10 %26 %46
+         %48 = OpLoad %18 %47
+         %49 = OpFNegate %18 %48
+         %50 = OpAccessChain %23 %11 %26 %46
+               OpStore %50 %49
+               OpReturn
+               OpFunctionEnd
+
+[CsInfo]
+entryPoint = entrypoint1
+userDataNode[0].type = DescriptorTableVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].next[0].type = DescriptorBuffer
+userDataNode[0].next[0].offsetInDwords = 0
+userDataNode[0].next[0].sizeInDwords = 4
+userDataNode[0].next[0].set = 0
+userDataNode[0].next[0].binding = 0
+userDataNode[0].next[1].type = DescriptorBuffer
+userDataNode[0].next[1].offsetInDwords = 4
+userDataNode[0].next[1].sizeInDwords = 4
+userDataNode[0].next[1].set = 0
+userDataNode[0].next[1].binding = 1
+
+

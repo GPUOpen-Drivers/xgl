@@ -85,8 +85,6 @@ public:
 
         Surface*                        pFullscreenSurface;
         VkSurfaceFormatKHR              fullscreenSurfaceFormat;
-
-        bool                            localDimmingDisable;
     };
 
     static VkResult Create(
@@ -144,12 +142,6 @@ public:
     void PostPresent(
         const Pal::PresentSwapChainInfo& presentInfo,
         Pal::Result*                     pPresentResult);
-
-    VkResult AcquireWin32FullscreenOwnership(
-        Device*                       pDevice);
-
-    VkResult ReleaseWin32FullscreenOwnership(
-        Device*                       pDevice);
 
     void MarkAsDeprecated();
 

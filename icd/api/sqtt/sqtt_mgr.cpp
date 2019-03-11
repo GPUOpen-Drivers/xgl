@@ -202,6 +202,26 @@ void SqttMgr::PalDeveloperCallback(
         }
         break;
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
+    case Pal::Developer::CallbackType::BindPipeline:
+        {
+            const auto& bindPipeline = *static_cast<const Pal::Developer::BindPipelineData*>(pCbData);
+
+            CmdBuffer* pCmdBuffer = static_cast<CmdBuffer*>(bindPipeline.pCmdBuffer->GetClientData());
+
+            if (pCmdBuffer != nullptr)
+            {
+                SqttCmdBufferState* pSqtt = pCmdBuffer->GetSqttState();
+
+                if (pSqtt != nullptr)
+                {
+                    pSqtt->PalBindPipelineCallback(bindPipeline);
+                }
+            }
+        }
+        break;
+#endif
+
     default:
         break;
     }

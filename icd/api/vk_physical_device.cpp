@@ -268,6 +268,12 @@ PhysicalDevice::PhysicalDevice(
         m_memoryPalHeapToVkIndex[i] = VK_MEMORY_TYPE_NUM; // invalid index
         m_memoryVkIndexToPalHeap[i] = Pal::GpuHeapCount; // invalid index
     }
+    memset(&m_memoryUsageTracker, 0, sizeof(m_memoryUsageTracker));
+
+    for (uint32_t i = 0; i < VK_MEMORY_TYPE_NUM - 1; ++i)
+    {
+        m_heapVkToPal[i] = Pal::GpuHeapCount; // invalid index
+    }
 }
 
 // =====================================================================================================================
@@ -379,6 +385,46 @@ static void GetFormatFeatureFlags(
 }
 
 // =====================================================================================================================
+// Checks to see if memory is available for PhysicalDevice local allocations made by the application (externally) and
+// reports OOM if necessary
+VkResult PhysicalDevice::TryIncreaseAllocatedMemorySize(
+    Pal::gpusize allocationSize,
+    uint32_t     heapIdx)
+{
+    Util::MutexAuto lock(&m_memoryUsageTracker.trackerMutex);
+
+    Pal::gpusize memorySizePostAllocation = m_memoryUsageTracker.allocatedMemorySize[heapIdx] + allocationSize;
+
+    return (memorySizePostAllocation > m_memoryUsageTracker.totalMemorySize[heapIdx]) ?
+        VK_ERROR_OUT_OF_DEVICE_MEMORY : VK_SUCCESS;
+}
+
+// =====================================================================================================================
+// Increases the allocated memory size for PhysicalDevice local allocations made by the application (externally) and
+// reports OOM if necessary
+void PhysicalDevice::IncreaseAllocatedMemorySize(
+    Pal::gpusize allocationSize,
+    uint32_t     heapIdx)
+{
+    Util::MutexAuto lock(&m_memoryUsageTracker.trackerMutex);
+
+    m_memoryUsageTracker.allocatedMemorySize[heapIdx] += allocationSize;
+}
+
+// =====================================================================================================================
+// Decreases the allocated memory size for PhysicalDevice local allocations made by the application (externally)
+void PhysicalDevice::DecreaseAllocatedMemorySize(
+    Pal::gpusize allocationSize,
+    uint32_t     heapIdx)
+{
+    Util::MutexAuto lock(&m_memoryUsageTracker.trackerMutex);
+
+    VK_ASSERT(m_memoryUsageTracker.allocatedMemorySize[heapIdx] >= allocationSize);
+
+    m_memoryUsageTracker.allocatedMemorySize[heapIdx] -= allocationSize;
+}
+
+// =====================================================================================================================
 VkResult PhysicalDevice::Initialize()
 {
     const bool nullGpu = VkInstance()->IsNullGpuModeEnabled();
@@ -409,21 +455,6 @@ VkResult PhysicalDevice::Initialize()
             }
         }
 
-        // Ask for CE-RAM (indirect user data table) support for the vertex buffer table.  We need enough CE-RAM to
-        // represent the maximum vertex buffer SRD table size.
-        const size_t vertBufTableCeRamOffset = finalizeInfo.ceRamSizeUsed[Pal::EngineTypeUniversal];
-        const size_t vertBufTableCeRamSize = VertBufBindingMgr::GetMaxVertBufTableDwSize(this);
-
-        finalizeInfo.ceRamSizeUsed[Pal::EngineTypeUniversal] += vertBufTableCeRamSize;
-
-        // Set up the vertex buffer indirect user data table information
-        constexpr uint32_t tableId = VertBufBindingMgr::VertexBufferTableId;
-
-        static_assert(tableId < Pal::MaxIndirectUserDataTables, "Invalid vertex buffer indirect user data table ID");
-
-        finalizeInfo.indirectUserDataTable[tableId].offsetInDwords = vertBufTableCeRamOffset;
-        finalizeInfo.indirectUserDataTable[tableId].sizeInDwords   = vertBufTableCeRamSize;
-
         if (m_settings.fullScreenFrameMetadataSupport)
         {
             finalizeInfo.flags.requireFlipStatus = true;
@@ -449,6 +480,22 @@ VkResult PhysicalDevice::Initialize()
     if (result == Pal::Result::Success)
     {
         result = m_pPalDevice->GetGpuMemoryHeapProperties(heapProperties);
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        for (uint32_t heapIdx = 0; heapIdx < Pal::GpuHeapCount; heapIdx++)
+        {
+            m_memoryUsageTracker.totalMemorySize[heapIdx] = heapProperties[heapIdx].heapSize;
+        }
+
+        if (m_memoryUsageTracker.totalMemorySize[Pal::GpuHeapInvisible] == 0)
+        {
+            // Disable tracking for the local invisible heap and allow it to overallocate when it has size 0
+            m_memoryUsageTracker.totalMemorySize[Pal::GpuHeapInvisible] = UINT64_MAX;
+        }
+
+        result = m_memoryUsageTracker.trackerMutex.Init();
     }
 
     if (result == Pal::Result::Success)
@@ -495,6 +542,8 @@ VkResult PhysicalDevice::Initialize()
                 memoryHeap.flags = PalGpuHeapToVkMemoryHeapFlags(palGpuHeap);
                 memoryHeap.size  = heapProps.heapSize;
 
+                m_heapVkToPal[heapIndex] = palGpuHeap;
+
                 if (palGpuHeap == Pal::GpuHeapGartUswc)
                 {
                     // These two should match because the PAL GPU heaps share the same physical memory.
@@ -510,6 +559,7 @@ VkResult PhysicalDevice::Initialize()
                 }
             }
         }
+        VK_ASSERT(m_memoryProperties.memoryHeapCount <= (Pal::GpuHeapCount - 1));
 
         // Initialize memory types
         for (uint32_t orderedHeapIndex = 0; orderedHeapIndex < Pal::GpuHeapCount; ++orderedHeapIndex)
@@ -1731,7 +1781,7 @@ void PhysicalDevice::PopulateLimits()
     // Maximum number of vertex buffers that can be specified for providing vertex attributes to a graphics pipeline.
     // These are described in the VkVertexInputBindingDescription structure that is provided at graphics pipeline
     // creation time via the pVertexBindingDescriptions member of the VkPipelineVertexInputStateCreateInfo structure.
-    m_limits.maxVertexInputBindings = MaxVertexBuffers;
+    m_limits.maxVertexInputBindings = Pal::MaxVertexBuffers;
 
     // Maximum vertex input attribute offset that can be added to the vertex input binding stride. The offsetInBytes
     // member of the VkVertexInputAttributeDescription structure must be less than or equal to the value of this limit.
@@ -2691,11 +2741,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     }
 
     if ((pPhysicalDevice == nullptr) ||
-        pPhysicalDevice->PalProperties().gfxipProperties.flags.supportFp16Fetch)
-    {
-    }
-
-    if ((pPhysicalDevice == nullptr) ||
         ((pPhysicalDevice->PalProperties().gfxipProperties.flags.support16BitInstructions) &&
          ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
           (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
@@ -2717,13 +2762,12 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_STORAGE_BUFFER_STORAGE_CLASS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_16BIT_STORAGE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPA_INTERFACE));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEPTH_STENCIL_RESOLVE));
 
      availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INLINE_UNIFORM_BLOCK));
 
     if ((pPhysicalDevice == nullptr) ||
-        ((pPhysicalDevice->PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions) &&
-         (Instance::IsExtensionEnabledByEnv(VK_KHR_SHADER_FLOAT16_INT8_EXTENSION_NAME)
-         )))
+        pPhysicalDevice->PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions)
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_FLOAT16_INT8));
     }
@@ -2741,6 +2785,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTERNAL_MEMORY_HOST));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLIP_ENABLE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_RANGE_UNRESTRICTED));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_QUEUE_FAMILY_FOREIGN));
@@ -2761,12 +2806,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SCALAR_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MEMORY_OVERALLOCATION_BEHAVIOR));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TRANSFORM_FEEDBACK));
 
-    if (Instance::IsExtensionEnabledByEnv(VK_EXT_TRANSFORM_FEEDBACK_EXTENSION_NAME)
-       )
-    {
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TRANSFORM_FEEDBACK));
-    }
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VULKAN_MEMORY_MODEL));
 
     return availableExtensions;
 }
@@ -2799,6 +2841,7 @@ void PhysicalDevice::PopulateQueueFamilies()
         0,
         // Pal::EngineTypeHighPriorityUniversal
         0,
+
     };
 
     // While it's possible for an engineType to support multiple queueTypes,
@@ -2811,6 +2854,7 @@ void PhysicalDevice::PopulateQueueFamilies()
         Pal::QueueTypeDma,
         Pal::QueueTypeTimer,
         Pal::QueueTypeUniversal,
+
     };
 
     static_assert((VK_ARRAY_SIZE(vkQueueFlags) == Pal::EngineTypeCount) &&
@@ -3035,8 +3079,6 @@ VkResult PhysicalDevice::ReleaseDisplay(
 
     return PalToVkResult(pScreen->ReleaseScreenAccess());
 }
-
-// =====================================================================================================================
 
 // =====================================================================================================================
 // Retrieving the UUID of device/driver as well as the LUID if it is for windows platform.
@@ -3350,11 +3392,12 @@ void PhysicalDevice::GetFeatures2(
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR:
             {
-                VkPhysicalDeviceVulkanMemoryModelFeaturesKHR * pMemoryModel =
-                    reinterpret_cast<VkPhysicalDeviceVulkanMemoryModelFeaturesKHR *>(pHeader);
+                VkPhysicalDeviceVulkanMemoryModelFeaturesKHR* pMemoryModel =
+                    reinterpret_cast<VkPhysicalDeviceVulkanMemoryModelFeaturesKHR*>(pHeader);
 
                 pMemoryModel->vulkanMemoryModel = VK_TRUE;
                 pMemoryModel->vulkanMemoryModelDeviceScope = VK_TRUE;
+                pMemoryModel->vulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
 
                 break;
             }
@@ -3366,6 +3409,15 @@ void PhysicalDevice::GetFeatures2(
                 pMemPriorityFeature->memoryPriority = VK_TRUE;
                 break;
             }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT:
+            {
+                VkPhysicalDeviceDepthClipEnableFeaturesEXT* pDepthClipFeatures =
+                    reinterpret_cast<VkPhysicalDeviceDepthClipEnableFeaturesEXT *>(pHeader);
+                pDepthClipFeatures->depthClipEnable = VK_TRUE;
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -3497,6 +3549,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceInlineUniformBlockPropertiesEXT*         pInlineUniformBlockProperties;
         VkPhysicalDevicePCIBusInfoPropertiesEXT*                 pPCIBusInfoProperties;
         VkPhysicalDeviceTransformFeedbackPropertiesEXT*          pFeedbackProperties;
+        VkPhysicalDeviceDepthStencilResolvePropertiesKHR*        pDepthStencilResolveProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -3729,6 +3782,19 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES_KHR:
+        {
+            pDepthStencilResolveProperties->supportedDepthResolveModes   = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
+                                                                           VK_RESOLVE_MODE_MIN_BIT_KHR |
+                                                                           VK_RESOLVE_MODE_MAX_BIT_KHR;
+            pDepthStencilResolveProperties->supportedStencilResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
+                                                                           VK_RESOLVE_MODE_MIN_BIT_KHR |
+                                                                           VK_RESOLVE_MODE_MAX_BIT_KHR;
+            pDepthStencilResolveProperties->independentResolveNone       = VK_TRUE;
+            pDepthStencilResolveProperties->independentResolve           = VK_TRUE;
+            break;
+        }
+
         default:
             break;
         }
@@ -3750,6 +3816,27 @@ void PhysicalDevice::GetMemoryProperties2(
 {
     VK_ASSERT(pMemoryProperties->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2);
     pMemoryProperties->memoryProperties = GetMemoryProperties();
+
+    union
+    {
+        const VkStructHeader*                      pHeader;
+        VkPhysicalDeviceMemoryProperties2*         pMemProps;
+        VkPhysicalDeviceMemoryBudgetPropertiesEXT* pMemBudgetProps;
+    };
+
+    for (pMemProps = pMemoryProperties; pHeader != nullptr; pHeader = pHeader->pNext)
+    {
+        switch (static_cast<uint32_t>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT:
+        {
+            GetMemoryBudgetProperties(pMemBudgetProps);
+            break;
+        }
+        default:
+            break;
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -4636,6 +4723,56 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2EXT(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Get memory budget and usage info for VkPhysicalDeviceMemoryBudgetPropertiesEXT
+void PhysicalDevice::GetMemoryBudgetProperties(
+    VkPhysicalDeviceMemoryBudgetPropertiesEXT* pMemBudgetProps)
+{
+    memset(pMemBudgetProps->heapBudget, 0, sizeof(pMemBudgetProps->heapBudget));
+    memset(pMemBudgetProps->heapUsage, 0, sizeof(pMemBudgetProps->heapUsage));
+
+    {
+        Util::MutexAuto lock(&m_memoryUsageTracker.trackerMutex);
+
+        for (uint32_t heapIndex = 0; heapIndex < m_memoryProperties.memoryHeapCount; ++heapIndex)
+        {
+            const Pal::GpuHeap palHeap = GetPalHeapFromVkHeapIndex(heapIndex);
+            // Non-local will have only 1 heap, which is GpuHeapGartUswc in Vulkan.
+            VK_ASSERT(palHeap != Pal::GpuHeapGartCacheable);
+
+            pMemBudgetProps->heapUsage[heapIndex] = m_memoryUsageTracker.allocatedMemorySize[palHeap];
+
+            if (palHeap == Pal::GpuHeapGartUswc)
+            {
+                // GartCacheable also belongs to non-local heap.
+                pMemBudgetProps->heapUsage[heapIndex] +=
+                    m_memoryUsageTracker.allocatedMemorySize[Pal::GpuHeapGartCacheable];
+            }
+
+            uint32_t budgetRatio = 100;
+
+            switch (palHeap)
+            {
+            case Pal::GpuHeapLocal:
+                budgetRatio = m_settings.heapBudgetRatioOfHeapSizeLocal;
+                break;
+            case Pal::GpuHeapInvisible:
+                budgetRatio = m_settings.heapBudgetRatioOfHeapSizeInvisible;
+                break;
+            case Pal::GpuHeapGartUswc:
+                budgetRatio = m_settings.heapBudgetRatioOfHeapSizeNonlocal;
+                break;
+            default:
+                VK_NEVER_CALLED();
+                break;
+            }
+
+            pMemBudgetProps->heapBudget[heapIndex] =
+                static_cast<VkDeviceSize>(m_memoryProperties.memoryHeaps[heapIndex].size / 100.0f * budgetRatio + 0.5f);
+        }
+    }
 }
 
 // C-style entry points

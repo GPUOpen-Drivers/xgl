@@ -1,0 +1,32 @@
+#version 450
+
+layout (local_size_x = 16, local_size_y = 16) in;
+shared uint sa1[gl_WorkGroupSize.x];
+
+uint g_f;
+
+void main()
+{
+    sa1[gl_LocalInvocationID.x] = gl_LocalInvocationID.x;
+    g_f = sa1[gl_LocalInvocationID.x];
+
+    sa1[3] = gl_LocalInvocationID.x;
+    g_f = sa1[4];
+}
+
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST: @sa1 = internal addrspace(3) global [16 x i32] undef
+; SHADERTEST: getelementptr [16 x i32], [16 x i32] addrspace(3)* @sa1, i32 0, i32 %{{[0-9]*}}
+; SHADERTEST: load i32, i32 addrspace(3)* %{{[0-9]*}}
+; SHADERTEST: getelementptr [16 x i32], [16 x i32] addrspace(3)* @sa1, i32 0, i32 3
+; SHADERTEST: store i32 %{{[0-9]*}}, i32 addrspace(3)* %{{[0-9]*}}
+; SHADERTEST: getelementptr [16 x i32], [16 x i32] addrspace(3)* @sa1, i32 0, i32 4
+; SHADERTEST: load i32, i32 addrspace(3)* %{{[0-9]*}}
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

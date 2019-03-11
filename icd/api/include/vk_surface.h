@@ -55,8 +55,7 @@ public:
 #endif
 
     Pal::OsDisplayHandle GetOSDisplayHandle() { return m_osDisplayHandle; }
-
-    bool IsExplicitFullscreenSurface() const { return m_osDisplayHandle != 0; }
+    bool IsExplicitFullscreenSurface() const  { return m_osDisplayHandle != 0; }
 
     void Destroy(
         Instance*                            pInstance,

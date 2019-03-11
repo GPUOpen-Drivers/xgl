@@ -1,0 +1,50 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST : %{.*} = getelementptr { [256 x <4 x i32>], i32 }, { [256 x <4 x i32>], i32 } {.*} {.*}, i32 0, i32 0, i32 %{.*}
+; SHADERTEST : %{.*} = load <4 x i32>, <4 x i32> addrspace(66)* %{.*}
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST : %{.*} = call <16 x i8> @llpc.buffer.load.v16i8(<4 x i32> %{.*}, i32 %{.*}, i1 true, i32 0, i1 false)
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+[CsGlsl]
+#version 450
+
+layout(binding = 0, std430) buffer OUT1
+{
+    uvec4 o1;
+} O1;
+
+layout(binding = 1) uniform B1
+{
+    uvec4 mem[256];
+    uint index;
+} b1;
+
+
+layout(local_size_x = 2, local_size_y = 3) in;
+void main()
+{
+    O1.o1 = b1.mem[gl_LocalInvocationID.x] + b1.mem[b1.index];
+}
+
+
+[CsInfo]
+entryPoint = main
+userDataNode[0].type = DescriptorTableVaPtr
+userDataNode[0].offsetInDwords = 0
+userDataNode[0].sizeInDwords = 1
+userDataNode[0].next[0].type = DescriptorBuffer
+userDataNode[0].next[0].offsetInDwords = 0
+userDataNode[0].next[0].sizeInDwords = 4
+userDataNode[0].next[0].set = 0
+userDataNode[0].next[0].binding = 0
+userDataNode[0].next[1].type = PushConst
+userDataNode[0].next[1].offsetInDwords = 4
+userDataNode[0].next[1].sizeInDwords = 64
+userDataNode[0].next[1].set = 0
+userDataNode[0].next[1].binding = 1
+
+

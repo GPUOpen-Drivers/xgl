@@ -178,9 +178,11 @@ target_sources(xgl PRIVATE
     api/app_shader_optimizer.cpp
     api/barrier_policy.cpp
     api/color_space_helper.cpp
+    api/compiler_solution.cpp
     api/gpu_event_mgr.cpp
     api/internal_mem_mgr.cpp
     api/pipeline_compiler.cpp
+    api/shader_cache.cpp
     api/stencil_ops_combiner.cpp
     api/vert_buf_binding_mgr.cpp
     api/virtual_stack_mgr.cpp

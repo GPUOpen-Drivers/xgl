@@ -1,0 +1,41 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST; call i32 @llpc.buffer.atomic.iincrement.i32(<4 x i32> %{{[0-9]*}}, i32 0, i32 0, i1 false)
+
+; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
+; SHADERTEST: call i32 @llvm.amdgcn.buffer.atomic.add(i32 1, <4 x i32> %{{[0-9]*}}, i32 0, i32 0, i1 false)
+
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+OpCapability Shader
+               OpCapability VariablePointers
+               OpExtension "SPV_KHR_storage_buffer_storage_class"
+               OpExtension "SPV_KHR_variable_pointers"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %210 "main"
+               OpDecorate %_runtimearr_uint ArrayStride 4
+               OpMemberDecorate %_struct_19 0 Offset 0
+               OpDecorate %_struct_19 Block
+               OpDecorate %84 DescriptorSet 0
+               OpDecorate %84 Binding 4
+       %uint = OpTypeInt 32 0
+%_runtimearr_uint = OpTypeRuntimeArray %uint
+ %_struct_19 = OpTypeStruct %_runtimearr_uint
+%_ptr_StorageBuffer__struct_19 = OpTypePointer StorageBuffer %_struct_19
+%_ptr_StorageBuffer_uint = OpTypePointer StorageBuffer %uint
+       %void = OpTypeVoid
+         %27 = OpTypeFunction %void
+     %uint_0 = OpConstant %uint 0
+     %uint_1 = OpConstant %uint 1
+    %uint_80 = OpConstant %uint 80
+         %84 = OpVariable %_ptr_StorageBuffer__struct_19 StorageBuffer
+        %210 = OpFunction %void None %27
+        %211 = OpLabel
+        %212 = OpAccessChain %_ptr_StorageBuffer_uint %84 %uint_0 %uint_0
+; CHECK: buffer_atomic_add v{{[0-9]*}}, off, s[{{[0-9]*}}:{{[0-9]*}}], 0 glc
+        %236 = OpAtomicIIncrement %uint %212 %uint_1 %uint_80
+               OpReturn
+               OpFunctionEnd

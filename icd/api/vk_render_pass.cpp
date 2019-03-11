@@ -94,6 +94,7 @@ static void GenerateHashFromSubpassDescription(
     pHasher->Update(desc.colorAttachmentCount);
     pHasher->Update(desc.preserveAttachmentCount);
     GenerateHashFromAttachmentReference(pHasher, desc.depthStencilAttachment);
+    GenerateHashFromAttachmentReference(pHasher, desc.depthStencilResolveAttachment);
     pHasher->Update(desc.subpassSampleCount);
 
     for (uint32_t i = 0; i < desc.inputAttachmentCount; ++i)
@@ -313,7 +314,9 @@ SubpassDescription::SubpassDescription()
     pColorAttachments       (nullptr),
     pResolveAttachments     (nullptr),
     preserveAttachmentCount (0),
-    pPreserveAttachments    (nullptr)
+    pPreserveAttachments    (nullptr),
+    depthResolveMode        (VK_RESOLVE_MODE_NONE_KHR),
+    stencilResolveMode      (VK_RESOLVE_MODE_NONE_KHR)
 {
 }
 
@@ -485,12 +488,23 @@ void SubpassDescription::Init(
     union
     {
         const VkStructHeader*                             pHeader;
+        const VkSubpassDescriptionDepthStencilResolveKHR* pDepthStencilResolveCreateInfo;
     };
 
     for (pHeader = static_cast<const VkStructHeader*>(subpassDesc.pNext); pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
+        case VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE_KHR:
+        {
+            depthResolveMode   = pDepthStencilResolveCreateInfo->depthResolveMode;
+            stencilResolveMode = pDepthStencilResolveCreateInfo->stencilResolveMode;
+
+            depthStencilResolveAttachment.Init(
+                pDepthStencilResolveCreateInfo->pDepthStencilResolveAttachment[subpassIndex]);
+            break;
+        }
+
         default:
             break;
         }

@@ -1,0 +1,30 @@
+#version 450 core
+
+layout(set = 0, binding = 0,  r32i) uniform restrict iimage2D img1;
+layout(set = 0, binding = 1,  r32i) uniform coherent iimage2D img2;
+layout(set = 0, binding = 2,  r32i) uniform volatile iimage2D img3;
+
+void main()
+{
+    imageAtomicAdd(img1, ivec2(5, 5), 9);
+    imageAtomicAdd(img2, ivec2(5, 5), 9);
+    imageAtomicAdd(img3, ivec2(5, 5), 9);
+}
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.2D.{{.*}}(i32 0, i32 0, i32 0, <2 x i32> <i32 5, i32 5>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.2D.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 5, i32 5>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.2D.{{.*}}(i32 0, i32 2, i32 0, <2 x i32> <i32 5, i32 5>, i32 9, i32 2
+
+; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.2d.i32.i32(i32 9, i32 5, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.2d.i32.i32(i32 9, i32 5, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.2d.i32.i32(i32 9, i32 5, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

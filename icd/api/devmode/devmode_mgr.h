@@ -105,6 +105,7 @@ class PhysicalDevice;
 class Pipeline;
 class Queue;
 class SqttCmdBufferState;
+class CmdBuffer;
 };
 
 namespace vk
@@ -140,6 +141,10 @@ public:
     void PostDeviceCreate(Device* pDevice);
     void PreDeviceDestroy(Device* pDevice);
     void NotifyPreSubmit();
+
+    uint64_t GetInstructionTraceTargetHash();
+    void StartInstructionTrace(CmdBuffer* pCmdBuffer);
+    void StopInstructionTrace(CmdBuffer* pCmdBuffer);
 
     VK_INLINE bool IsTracingEnabled() const
         { VK_ASSERT(m_finalized); return m_tracingEnabled; }
@@ -313,6 +318,7 @@ private:
     uint32_t                            m_globalFrameIndex;
     uint64_t                            m_traceFrameBeginTag;
     uint64_t                            m_traceFrameEndTag;
+    uint64_t                            m_targetApiPsoHash;
 
     PAL_DISALLOW_DEFAULT_CTOR(DevModeMgr);
     PAL_DISALLOW_COPY_AND_ASSIGN(DevModeMgr);

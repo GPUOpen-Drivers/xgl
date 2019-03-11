@@ -1,0 +1,70 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC.*}} SPIRV-to-LLVM translation results
+; SHADERTEST: %{{[0-9]+}} = load { <4 x float>, <4 x float>, <4 x float>, <4 x float> }, { <4 x float>, <4 x float>, <4 x float>, <4 x float> } addrspace({{[0-9]+}})* @{{[0-9]+}}
+; SHADERTEST: store { <4 x float>, <4 x float>, <4 x float>, <4 x float> } %{{[0-9]+}}, { <4 x float>, <4 x float>, <4 x float>, <4 x float> } addrspace({{[0-9]+}})* %{{[0-9]+}}
+; SHADERTEST: %{{[0-9]+}} = load { <4 x float>, <4 x float>, <4 x float>, <4 x float> }, { <4 x float>, <4 x float>, <4 x float>, <4 x float> } addrspace({{[0-9]+}})* %{{[0-9]+}}
+; SHADERTEST: store { <4 x float>, <4 x float>, <4 x float>, <4 x float> } %{{[0-9]+}}, { <4 x float>, <4 x float>, <4 x float>, <4 x float> } addrspace({{[0-9]+}})* @{{[0-9]+}}
+; SHADERTEST-LABEL: {{^// LLPC.*}} patching results
+; SHADERTEST: @llvm.amdgcn.raw.buffer.load.v4f32
+; SHADERTEST: @llvm.amdgcn.raw.buffer.load.v4f32
+; SHADERTEST: @llvm.amdgcn.raw.buffer.load.v4f32
+; SHADERTEST: @llvm.amdgcn.raw.buffer.load.v4f32
+; SHADERTEST: @llvm.amdgcn.raw.buffer.store.v4f32
+; SHADERTEST: @llvm.amdgcn.raw.buffer.store.v4f32
+; SHADERTEST: @llvm.amdgcn.raw.buffer.store.v4f32
+; SHADERTEST: @llvm.amdgcn.raw.buffer.store.v4f32
+; SHADERTEST: AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos SPIR-V Tools Assembler; 0
+; Bound: 25
+; Schema: 0
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %1 "main" %2
+               OpExecutionMode %1 LocalSize 1 1 1
+               OpName %1 "main"
+               OpName %2 "gl_GlobalInvocationID"
+               OpDecorate %2 BuiltIn GlobalInvocationId
+               OpMemberDecorate %3 0 Offset 0
+               OpMemberDecorate %3 1 Offset 16
+               OpMemberDecorate %3 2 Offset 32
+               OpMemberDecorate %3 3 Offset 48
+               OpDecorate %3 BufferBlock
+               OpDecorate %4 DescriptorSet 0
+               OpDecorate %4 Binding 0
+               OpDecorate %5 DescriptorSet 0
+               OpDecorate %5 Binding 1
+               OpDecorate %6 ArrayStride 4
+          %7 = OpTypeBool
+          %8 = OpTypeVoid
+          %9 = OpTypeFunction %8
+         %10 = OpTypeInt 32 0
+         %11 = OpTypeInt 32 1
+         %12 = OpTypeFloat 32
+         %13 = OpTypeVector %10 3
+         %14 = OpTypeVector %12 3
+         %15 = OpTypePointer Input %13
+         %16 = OpTypePointer Uniform %11
+         %17 = OpTypePointer Uniform %12
+         %18 = OpTypeRuntimeArray %11
+          %6 = OpTypeRuntimeArray %12
+         %19 = OpTypeVector %12 4
+          %3 = OpTypeStruct %19 %19 %19 %19
+         %20 = OpTypePointer Uniform %3
+          %4 = OpVariable %20 Uniform
+          %5 = OpVariable %20 Uniform
+         %21 = OpTypePointer Function %3
+          %2 = OpVariable %15 Input
+         %22 = OpConstant %11 0
+          %1 = OpFunction %8 None %9
+         %23 = OpLabel
+         %24 = OpVariable %21 Function
+               OpCopyMemory %24 %4
+               OpCopyMemory %5 %24
+               OpReturn
+               OpFunctionEnd

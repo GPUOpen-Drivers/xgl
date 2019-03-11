@@ -1,0 +1,232 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST-COUNT-6: call <3 x float> @llpc.input.import.generic.v3f32{{.*}}
+; SHADERTEST: AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Google spiregg; 0
+; Bound: 211
+; Schema: 0
+               OpCapability Tessellation
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint TessellationControl %18 "main" %26 %28 %36 %38 %53 %59 %76 %87 %90
+               OpExecutionMode %18 Triangles
+               OpExecutionMode %18 SpacingFractionalOdd
+               OpExecutionMode %18 VertexOrderCcw
+               OpExecutionMode %18 OutputVertices 3
+               OpName %66 "if.true"
+               OpName %67 "if.merge"
+               OpName %6 "type.ViewTransform"
+               OpMemberName %6 0 "model_matrix"
+               OpMemberName %6 1 "view_matrix"
+               OpMemberName %6 2 "projection_matrix"
+               OpMemberName %6 3 "model_view_matrix"
+               OpMemberName %6 4 "view_projection_matrix"
+               OpMemberName %6 5 "model_view_projection_matrix"
+               OpMemberName %6 6 "normal_matrix_world_space"
+               OpMemberName %6 7 "normal_matrix_view_space"
+               OpMemberName %6 8 "view_direction"
+               OpMemberName %6 9 "color"
+               OpName %9 "type.BlinnPhong"
+               OpMemberName %9 0 "base_color"
+               OpMemberName %9 1 "specular_color"
+               OpMemberName %9 2 "specular_power"
+               OpMemberName %9 3 "kA"
+               OpMemberName %9 4 "kD"
+               OpMemberName %9 5 "kS"
+               OpName %12 "type.Tessellation"
+               OpMemberName %12 0 "tess_factor"
+               OpName %14 "var.Tessellation"
+               OpName %18 "HSMain"
+               OpName %22 "type.gl_PerVertex"
+               OpName %26 "gl_PerVertexIn"
+               OpName %28 "gl_PerVertexOut"
+               OpName %30 "HSInput"
+               OpMemberName %30 0 "PositionWS"
+               OpMemberName %30 1 "NormalWS"
+               OpName %33 "param.var.patch"
+               OpName %36 "in.var.POSITION"
+               OpName %38 "in.var.NORMAL"
+               OpName %55 "HSOutput"
+               OpMemberName %55 0 "PositionWS"
+               OpName %59 "out.var.POSITION"
+               OpName %70 "HSTrianglePatchConstant"
+               OpMemberName %70 0 "EdgeTessFactor"
+               OpMemberName %70 1 "InsideTessFactor"
+               OpMemberName %70 2 "NormalWS"
+               OpName %90 "out.var.NORMAL"
+               OpMemberDecorate %6 0 Offset 0
+               OpMemberDecorate %6 0 MatrixStride 16
+               OpMemberDecorate %6 0 RowMajor
+               OpMemberDecorate %6 1 Offset 64
+               OpMemberDecorate %6 1 MatrixStride 16
+               OpMemberDecorate %6 1 RowMajor
+               OpMemberDecorate %6 2 Offset 128
+               OpMemberDecorate %6 2 MatrixStride 16
+               OpMemberDecorate %6 2 RowMajor
+               OpMemberDecorate %6 3 Offset 192
+               OpMemberDecorate %6 3 MatrixStride 16
+               OpMemberDecorate %6 3 RowMajor
+               OpMemberDecorate %6 4 Offset 256
+               OpMemberDecorate %6 4 MatrixStride 16
+               OpMemberDecorate %6 4 RowMajor
+               OpMemberDecorate %6 5 Offset 320
+               OpMemberDecorate %6 5 MatrixStride 16
+               OpMemberDecorate %6 5 RowMajor
+               OpMemberDecorate %6 6 Offset 384
+               OpMemberDecorate %6 6 MatrixStride 16
+               OpMemberDecorate %6 6 RowMajor
+               OpMemberDecorate %6 7 Offset 432
+               OpMemberDecorate %6 7 MatrixStride 16
+               OpMemberDecorate %6 7 RowMajor
+               OpMemberDecorate %6 8 Offset 480
+               OpMemberDecorate %6 9 Offset 496
+               OpDecorate %6 Block
+               OpMemberDecorate %9 0 Offset 0
+               OpMemberDecorate %9 1 Offset 16
+               OpMemberDecorate %9 2 Offset 32
+               OpMemberDecorate %9 3 Offset 48
+               OpMemberDecorate %9 4 Offset 64
+               OpMemberDecorate %9 5 Offset 80
+               OpDecorate %9 Block
+               OpMemberDecorate %12 0 Offset 0
+               OpDecorate %12 Block
+               OpMemberDecorate %22 0 BuiltIn Position
+               OpMemberDecorate %22 1 BuiltIn PointSize
+               OpMemberDecorate %22 2 BuiltIn ClipDistance
+               OpMemberDecorate %22 3 BuiltIn CullDistance
+               OpDecorate %22 Block
+               OpDecorate %53 BuiltIn InvocationId
+               OpDecorate %76 BuiltIn TessLevelOuter
+               OpDecorate %76 Patch
+               OpDecorate %87 BuiltIn TessLevelInner
+               OpDecorate %87 Patch
+               OpDecorate %90 Patch
+               OpDecorate %36 Location 0
+               OpDecorate %38 Location 1
+               OpDecorate %90 Location 0
+               OpDecorate %59 Location 1
+               OpDecorate %14 DescriptorSet 0
+               OpDecorate %14 Binding 2
+         %19 = OpTypeInt 32 0
+         %96 = OpTypeInt 32 1
+          %1 = OpTypeFloat 32
+          %2 = OpTypeVector %1 4
+          %3 = OpTypeMatrix %2 4
+          %4 = OpTypeVector %1 3
+          %5 = OpTypeMatrix %4 3
+          %6 = OpTypeStruct %3 %3 %3 %3 %3 %3 %5 %5 %4 %4
+          %7 = OpTypePointer Uniform %6
+          %9 = OpTypeStruct %2 %2 %2 %2 %2 %2
+         %10 = OpTypePointer Uniform %9
+         %12 = OpTypeStruct %1
+         %13 = OpTypePointer Uniform %12
+         %16 = OpTypeVoid
+         %17 = OpTypeFunction %16
+         %20 = OpConstant %19 1
+         %21 = OpTypeArray %1 %20
+         %22 = OpTypeStruct %2 %1 %21 %21
+         %23 = OpConstant %19 3
+         %24 = OpTypeArray %22 %23
+         %25 = OpTypePointer Input %24
+         %27 = OpTypePointer Output %24
+         %30 = OpTypeStruct %4 %4
+         %31 = OpTypeArray %30 %23
+         %32 = OpTypePointer Function %31
+         %34 = OpTypeArray %4 %23
+         %35 = OpTypePointer Input %34
+         %50 = OpTypePointer Function %19
+         %52 = OpTypePointer Input %19
+         %55 = OpTypeStruct %4
+         %58 = OpTypePointer Output %34
+         %60 = OpTypePointer Output %4
+         %64 = OpTypeBool
+         %69 = OpTypeArray %1 %23
+         %70 = OpTypeStruct %69 %1 %34
+         %73 = OpConstant %19 4
+         %74 = OpTypeArray %1 %73
+         %75 = OpTypePointer Output %74
+         %77 = OpTypePointer Output %1
+         %63 = OpConstant %19 2
+         %85 = OpTypeArray %1 %63
+         %86 = OpTypePointer Output %85
+         %91 = OpTypeFunction %70 %32
+         %94 = OpTypePointer Function %4
+         %98 = OpTypePointer Uniform %1
+        %102 = OpTypePointer Function %1
+        %107 = OpTypePointer Function %70
+        %132 = OpTypeFunction %55 %32 %50
+        %136 = OpTypePointer Function %55
+         %62 = OpConstant %19 0
+         %97 = OpConstant %96 0
+        %104 = OpConstant %1 3
+        %112 = OpConstant %96 1
+         %14 = OpVariable %13 Uniform
+         %26 = OpVariable %25 Input
+         %28 = OpVariable %27 Output
+         %36 = OpVariable %35 Input
+         %38 = OpVariable %35 Input
+         %53 = OpVariable %52 Input
+         %59 = OpVariable %58 Output
+         %76 = OpVariable %75 Output
+         %87 = OpVariable %86 Output
+         %90 = OpVariable %58 Output
+        %179 = OpTypePointer Function %69
+        %182 = OpTypePointer Function %34
+         %18 = OpFunction %16 None %17
+         %29 = OpLabel
+         %33 = OpVariable %32 Function
+         %37 = OpLoad %34 %36
+         %39 = OpLoad %34 %38
+         %40 = OpCompositeExtract %4 %37 0
+         %41 = OpCompositeExtract %4 %39 0
+         %42 = OpCompositeConstruct %30 %40 %41
+         %43 = OpCompositeExtract %4 %37 1
+         %44 = OpCompositeExtract %4 %39 1
+         %45 = OpCompositeConstruct %30 %43 %44
+         %46 = OpCompositeExtract %4 %37 2
+         %47 = OpCompositeExtract %4 %39 2
+         %48 = OpCompositeConstruct %30 %46 %47
+         %49 = OpCompositeConstruct %31 %42 %45 %48
+               OpStore %33 %49
+         %54 = OpLoad %19 %53
+        %146 = OpAccessChain %94 %33 %54 %97
+        %147 = OpLoad %4 %146
+        %196 = OpCompositeConstruct %55 %147
+         %61 = OpAccessChain %60 %59 %54
+               OpStore %61 %147
+               OpControlBarrier %63 %20 %62
+         %65 = OpIEqual %64 %54 %62
+               OpSelectionMerge %67 None
+               OpBranchConditional %65 %66 %67
+         %66 = OpLabel
+        %155 = OpAccessChain %98 %14 %97
+        %156 = OpLoad %1 %155
+        %157 = OpCompositeConstruct %4 %156 %156 %156
+        %169 = OpAccessChain %94 %33 %62 %112
+        %170 = OpLoad %4 %169
+        %172 = OpAccessChain %94 %33 %20 %112
+        %173 = OpLoad %4 %172
+        %175 = OpAccessChain %94 %33 %63 %112
+        %176 = OpLoad %4 %175
+        %210 = OpCompositeConstruct %34 %170 %173 %176
+        %203 = OpCompositeConstruct %69 %156 %156 %156
+        %193 = OpCompositeConstruct %70 %203 %104 %210
+         %78 = OpAccessChain %77 %76 %62
+               OpStore %78 %156
+         %80 = OpAccessChain %77 %76 %20
+               OpStore %80 %156
+         %82 = OpAccessChain %77 %76 %63
+               OpStore %82 %156
+         %88 = OpAccessChain %77 %87 %62
+               OpStore %88 %104
+               OpStore %90 %210
+               OpBranch %67
+         %67 = OpLabel
+               OpReturn
+               OpFunctionEnd

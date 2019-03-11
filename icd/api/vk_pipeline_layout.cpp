@@ -188,7 +188,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
             }
 
             // Add space for the user data node entries needed for dynamic descriptors
-            pPipelineInfo->numUserDataNodes += setLayoutInfo.dyn.numRsrcMapNodes + 1;
+            pPipelineInfo->numUserDataNodes += setLayoutInfo.dyn.numRsrcMapNodes;
 
             // Add space for immutable sampler descriptor storage needed by the set
             pPipelineInfo->numDescRangeValueNodes += setLayoutInfo.imm.numDescriptorValueNodes;
@@ -221,7 +221,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
     VK_ASSERT(totalDynDescCount <= MaxDynamicDescriptors);
 
     // In case we need an internal vertex buffer table, add nodes required for its entries, and its set pointer.
-    pPipelineInfo->numRsrcMapNodes += MaxVertexBuffers;
+    pPipelineInfo->numRsrcMapNodes += Pal::MaxVertexBuffers;
 
     // Add the user data nodes count to the total number of resource mapping nodes
     pPipelineInfo->numRsrcMapNodes += pPipelineInfo->numUserDataNodes;
@@ -433,7 +433,7 @@ int32_t PipelineLayout::BuildLlpcVertexInputDescriptors(
     uint32_t activeBindings = 0;
 
     // Sort the strides by binding slot
-    uint32_t strideByBindingSlot[MaxVertexBuffers] = {};
+    uint32_t strideByBindingSlot[Pal::MaxVertexBuffers] = {};
 
     for (uint32_t recordIndex = 0; recordIndex < pInput->vertexBindingDescriptionCount; ++recordIndex)
     {
@@ -456,7 +456,7 @@ int32_t PipelineLayout::BuildLlpcVertexInputDescriptors(
     {
         const VkVertexInputAttributeDescription& attrib = pInput->pVertexAttributeDescriptions[aindex];
 
-        VK_ASSERT(attrib.binding < MaxVertexBuffers);
+        VK_ASSERT(attrib.binding < Pal::MaxVertexBuffers);
 
         bool isNotActiveBinding = ((1 << attrib.binding) & activeBindings) == 0;
 

@@ -8,7 +8,7 @@
 ; SHADERTEST: call void @llpc.buffer.store.v4i8
 
 ; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
-; SHADERTEST: call void @llvm.amdgcn.buffer.store.f32
+; SHADERTEST: call void @llvm.amdgcn.raw.buffer.store.f32
 
 ; SHADERTEST : AMDLLPC SUCCESS
 ; END_SHADERTEST

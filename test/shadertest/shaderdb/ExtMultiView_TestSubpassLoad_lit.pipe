@@ -4,8 +4,8 @@
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
 ; SHADERTEST: call i32 @llpc.input.import.builtin.ViewIndex.i32.i32
-; SHADERTEST: call <4 x float> @llpc.image.read.f32.SubpassData.dimaware
-; SHADERTEST : AMDLLPC SUCCESS
+; SHADERTEST: call <4 x float> @llpc.image.read.f32.SubpassDataArray
+; SHADERTEST: AMDLLPC SUCCESS
 ; END_SHADERTEST
 
 [Version]

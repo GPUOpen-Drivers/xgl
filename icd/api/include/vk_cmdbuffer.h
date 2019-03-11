@@ -736,6 +736,7 @@ public:
         Pal::ImageLayout               srcImageLayout,
         const Image&                   dstImage,
         Pal::ImageLayout               dstImageLayout,
+        Pal::ResolveMode               resolveMode,
         uint32_t                       regionCount,
         const Pal::ImageResolveRegion* pRegions);
 

@@ -1,0 +1,45 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC.*}} SPIRV-to-LLVM translation results
+; SHADERTEST: %{{[0-9]+}} = load <4 x float>, <4 x float> addrspace({{[0-9]+}})* %f4
+; SHADERTEST: store <4 x float> %{{[0-9]+}}, <4 x float> addrspace({{[0-9]+}})* %{{[0-9]+}}
+; SHADERTEST: %{{[0-9]+}} = load <4 x float>, <4 x float> addrspace({{[0-9]+}})* %{{[0-9]+}}
+; SHADERTEST: store <4 x float> %{{[0-9]+}}, <4 x float> addrspace({{[0-9]+}})* @fragColor
+; SHADERTEST-LABEL: {{^// LLPC.*}} lowering results
+; SHADERTEST: @llpc.output.export.generic.i32.i32.v4f32
+; SHADERTEST: AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 1
+; Bound: 17
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main" %10
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource GLSL 450
+               OpName %4 "main"
+               OpName %10 "fragColor"
+               OpName %12 "f4"
+               OpDecorate %10 Location 0
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %7 = OpTypeFloat 32
+          %8 = OpTypeVector %7 4
+          %9 = OpTypePointer Output %8
+          %16 = OpTypePointer Function %8
+         %10 = OpVariable %9 Output
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+         %12 = OpVariable %16 Function
+         %13 = OpLoad %8 %12
+         %14 = OpCopyObject %8 %13
+               OpStore %10 %14
+               OpBranch %6
+          %6 = OpLabel
+               OpReturn
+               OpFunctionEnd

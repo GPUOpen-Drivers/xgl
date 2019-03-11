@@ -2664,6 +2664,7 @@ void CmdBuffer::PalCmdResolveImage(
     Pal::ImageLayout               srcImageLayout,
     const Image&                   dstImage,
     Pal::ImageLayout               dstImageLayout,
+    Pal::ResolveMode               resolveMode,
     uint32_t                       regionCount,
     const Pal::ImageResolveRegion* pRegions)
 {
@@ -2681,7 +2682,7 @@ void CmdBuffer::PalCmdResolveImage(
                     srcImageLayout,
                     *dstImage.PalImage(deviceIdx),
                     dstImageLayout,
-                    Pal::ResolveMode::Average,
+                    resolveMode,
                     regionCount,
                     pRegions + (regionPerDevice ? (MaxRangePerAttachment * deviceIdx) : 0) );
     }
@@ -2698,6 +2699,7 @@ template void CmdBuffer::PalCmdResolveImage<true>(
     Pal::ImageLayout               srcImageLayout,
     const Image&                   dstImage,
     Pal::ImageLayout               dstImageLayout,
+    Pal::ResolveMode               resolveMode,
     uint32_t                       regionCount,
     const Pal::ImageResolveRegion* pRegions);
 
@@ -2898,6 +2900,7 @@ void CmdBuffer::ResolveImage(
                 palSrcImageLayout,
                 *pDstImage,
                 palDestImageLayout,
+                Pal::ResolveMode::Average,
                 palRegionCount,
                 pPalRegions);
         }
@@ -3776,9 +3779,15 @@ void CmdBuffer::CopyQueryPoolResults(
             // Backup PAL compute state
             PalCmdBuffer(deviceIdx)->CmdSaveComputeState(Pal::ComputeStatePipelineAndUserData);
 
+            Pal::PipelineBindParams bindParams = {};
+            bindParams.pipelineBindPoint = Pal::PipelineBindPoint::Compute;
+            bindParams.pPipeline         = pipeline.pPipeline[deviceIdx];
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
+            bindParams.apiPsoHash        = Pal::InternalApiPsoHash;
+#endif
+
             // Bind the copy compute pipeline
-            PalCmdBuffer(deviceIdx)->CmdBindPipeline({Pal::PipelineBindPoint::Compute,
-                                                      pipeline.pPipeline[deviceIdx],});
+            PalCmdBuffer(deviceIdx)->CmdBindPipeline(bindParams);
 
             // Set the timestamp buffer SRD (copy source) as typed 64-bit storage view
             memcpy(&userData[timestampViewOffset], pPool->GetStorageView(deviceIdx), storageViewSize);
@@ -4588,76 +4597,92 @@ void CmdBuffer::RPResolveAttachments(
             srcAttachment.subresRange[0].numSlices,
             dstAttachment.subresRange[0].numSlices);
 
-        // During split-frame-rendering, the image to resolve could be split across multiple devices.
-        Pal::ImageResolveRegion regions[MaxPalDevices][MaxRangePerAttachment];
-
         // We expect MSAA images to never have mipmaps
         VK_ASSERT(srcAttachment.subresRange[0].startSubres.mipLevel == 0);
 
         uint32_t         aspectRegionCount                     = 0;
         Pal::ImageAspect resolveAspects[MaxRangePerAttachment] = {};
         const VkFormat   resolveFormat                         = srcAttachment.pView->GetViewFormat();
+        Pal::ResolveMode resolveModes[MaxRangePerAttachment]   = {};
 
         const Pal::MsaaQuadSamplePattern* pSampleLocations = nullptr;
 
         if (Formats::IsDepthStencilFormat(resolveFormat) == false)
         {
+            resolveModes[0]   = Pal::ResolveMode::Average;
             resolveAspects[0] = Pal::ImageAspect::Color;
             aspectRegionCount = 1;
         }
         else
         {
             const uint32_t subpass = m_renderPassInstance.subpass;
+
+            const VkResolveModeFlagBitsKHR depthResolveMode =
+                m_state.allGpuState.pRenderPass->GetDepthResolveMode(subpass);
+            const VkResolveModeFlagBitsKHR stencilResolveMode =
+                m_state.allGpuState.pRenderPass->GetStencilResolveMode(subpass);
+
             if (Formats::HasDepth(resolveFormat))
             {
-                resolveAspects[aspectRegionCount++] = Pal::ImageAspect::Depth;
+                if (depthResolveMode != VK_RESOLVE_MODE_NONE_KHR)
+                {
+                    resolveModes[aspectRegionCount]     = VkToPalResolveMode(depthResolveMode);
+                    resolveAspects[aspectRegionCount++] = Pal::ImageAspect::Depth;
+                }
 
                 // Must be specified because the source image was created with sampleLocsAlwaysKnown set
                 pSampleLocations = &m_renderPassInstance.pSamplePatterns[subpass].locations;
             }
-            if (Formats::HasStencil(resolveFormat))
+
+            if (Formats::HasStencil(resolveFormat) && (stencilResolveMode != VK_RESOLVE_MODE_NONE_KHR))
             {
+                resolveModes[aspectRegionCount]     = VkToPalResolveMode(stencilResolveMode);
                 resolveAspects[aspectRegionCount++] = Pal::ImageAspect::Stencil;
             }
         }
 
-        const Pal::ImageLayout srcLayout = RPGetAttachmentLayout(params.src.attachment, resolveAspects[0]);
-        const Pal::ImageLayout dstLayout = RPGetAttachmentLayout(params.dst.attachment, resolveAspects[0]);
-
-        for (uint32_t idx = 0; idx < m_renderPassInstance.renderAreaCount; idx++)
+        // Depth and stencil might have different resolve mode, so allowing resolve each aspect independently.
+        for (uint32_t aspectRegionIndex = 0; aspectRegionIndex < aspectRegionCount; ++aspectRegionIndex)
         {
-            for (uint32_t aspectRegionIndex = 0; aspectRegionIndex < aspectRegionCount; ++aspectRegionIndex)
+            // During split-frame-rendering, the image to resolve could be split across multiple devices.
+            Pal::ImageResolveRegion regions[MaxPalDevices];
+
+            const Pal::ImageLayout srcLayout = RPGetAttachmentLayout(params.src.attachment, resolveAspects[aspectRegionIndex]);
+            const Pal::ImageLayout dstLayout = RPGetAttachmentLayout(params.dst.attachment, resolveAspects[aspectRegionIndex]);
+
+            for (uint32_t idx = 0; idx < m_renderPassInstance.renderAreaCount; idx++)
             {
                 const Pal::Rect& renderArea = m_renderPassInstance.renderArea[idx];
 
-                regions[idx][aspectRegionIndex].srcAspect      = resolveAspects[aspectRegionIndex];
-                regions[idx][aspectRegionIndex].srcSlice       = srcAttachment.subresRange[0].startSubres.arraySlice;
-                regions[idx][aspectRegionIndex].srcOffset.x    = renderArea.offset.x;
-                regions[idx][aspectRegionIndex].srcOffset.y    = renderArea.offset.y;
-                regions[idx][aspectRegionIndex].srcOffset.z    = 0;
-                regions[idx][aspectRegionIndex].dstAspect      = resolveAspects[aspectRegionIndex];
-                regions[idx][aspectRegionIndex].dstMipLevel    = dstAttachment.subresRange[0].startSubres.mipLevel;
-                regions[idx][aspectRegionIndex].dstSlice       = dstAttachment.subresRange[0].startSubres.arraySlice;
-                regions[idx][aspectRegionIndex].dstOffset.x    = renderArea.offset.x;
-                regions[idx][aspectRegionIndex].dstOffset.y    = renderArea.offset.y;
-                regions[idx][aspectRegionIndex].dstOffset.z    = 0;
-                regions[idx][aspectRegionIndex].extent.width   = renderArea.extent.width;
-                regions[idx][aspectRegionIndex].extent.height  = renderArea.extent.height;
-                regions[idx][aspectRegionIndex].extent.depth   = 1;
-                regions[idx][aspectRegionIndex].numSlices      = sliceCount;
-                regions[idx][aspectRegionIndex].swizzledFormat = Pal::UndefinedSwizzledFormat;
+                regions[idx].srcAspect      = resolveAspects[aspectRegionIndex];
+                regions[idx].srcSlice       = srcAttachment.subresRange[0].startSubres.arraySlice;
+                regions[idx].srcOffset.x    = renderArea.offset.x;
+                regions[idx].srcOffset.y    = renderArea.offset.y;
+                regions[idx].srcOffset.z    = 0;
+                regions[idx].dstAspect      = resolveAspects[aspectRegionIndex];
+                regions[idx].dstMipLevel    = dstAttachment.subresRange[0].startSubres.mipLevel;
+                regions[idx].dstSlice       = dstAttachment.subresRange[0].startSubres.arraySlice;
+                regions[idx].dstOffset.x    = renderArea.offset.x;
+                regions[idx].dstOffset.y    = renderArea.offset.y;
+                regions[idx].dstOffset.z    = 0;
+                regions[idx].extent.width   = renderArea.extent.width;
+                regions[idx].extent.height  = renderArea.extent.height;
+                regions[idx].extent.depth   = 1;
+                regions[idx].numSlices      = sliceCount;
+                regions[idx].swizzledFormat = Pal::UndefinedSwizzledFormat;
 
-                regions[idx][aspectRegionIndex].pQuadSamplePattern = pSampleLocations;
+                regions[idx].pQuadSamplePattern = pSampleLocations;
             }
-        }
 
-        PalCmdResolveImage<true>(
-            *srcAttachment.pImage,
-            srcLayout,
-            *dstAttachment.pImage,
-            dstLayout,
-            aspectRegionCount,
-            regions[0]);
+            PalCmdResolveImage<false>(
+                *srcAttachment.pImage,
+                srcLayout,
+                *dstAttachment.pImage,
+                dstLayout,
+                resolveModes[aspectRegionIndex],
+                m_renderPassInstance.renderAreaCount,
+                regions);
+        }
     }
 
     if (m_pSqttState != nullptr)

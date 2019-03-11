@@ -139,6 +139,10 @@ struct SubpassDescription
     uint32_t                    preserveAttachmentCount;
     uint32_t*                   pPreserveAttachments;
 
+    VkResolveModeFlagBitsKHR    depthResolveMode;
+    VkResolveModeFlagBitsKHR    stencilResolveMode;
+    AttachmentReference         depthStencilResolveAttachment;
+
     SubpassSampleCount          subpassSampleCount;
 };
 
@@ -225,6 +229,11 @@ public:
 
     uint32_t GetColorAttachmentSamples(uint32_t subPassIndex, uint32_t colorTarget) const;
     uint32_t GetDepthStencilAttachmentSamples(uint32_t subPassIndex) const;
+    VK_INLINE VkResolveModeFlagBitsKHR GetDepthResolveMode(uint32_t subpass) const
+        { return m_createInfo.pSubpasses[subpass].depthResolveMode; }
+
+    VK_INLINE VkResolveModeFlagBitsKHR GetStencilResolveMode(uint32_t subpass) const
+        { return m_createInfo.pSubpasses[subpass].stencilResolveMode; }
 
     uint32_t GetSubpassColorReferenceCount(uint32_t subPassIndex) const;
     VK_INLINE uint32_t GetAttachmentCount() const { return m_createInfo.attachmentCount; }

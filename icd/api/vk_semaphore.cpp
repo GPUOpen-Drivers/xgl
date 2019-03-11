@@ -157,6 +157,11 @@ VkResult Semaphore::Create(
             break;
         }
     }
+    if (pDevice->NumPalDevices() > 1)
+    {
+        // mark this semaphore as shareable.
+        palCreateInfo.flags.shareable         = 1;
+    }
 
     void* pMemory = pAllocator->pfnAllocation(
         pAllocator->pUserData,

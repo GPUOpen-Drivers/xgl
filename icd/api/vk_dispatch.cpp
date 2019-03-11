@@ -206,6 +206,7 @@ void DispatchTable::Init()
 
     INIT_DISPATCH_ENTRY(vkGetDeviceProcAddr                             );
     INIT_DISPATCH_ENTRY(vkAcquireNextImageKHR                           );
+
     INIT_DISPATCH_ENTRY(vkAllocateDescriptorSets                        );
     INIT_DISPATCH_ENTRY(vkAllocateMemory                                );
     INIT_DISPATCH_ENTRY(vkBeginCommandBuffer                            );
@@ -535,7 +536,6 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateDebugUtilsMessengerEXT                  );
     INIT_DISPATCH_ENTRY(vkDestroyDebugUtilsMessengerEXT                 );
     INIT_DISPATCH_ENTRY(vkSubmitDebugUtilsMessageEXT                    );
-
 }
 
 // =====================================================================================================================

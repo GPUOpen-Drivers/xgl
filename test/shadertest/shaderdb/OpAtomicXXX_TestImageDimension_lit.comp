@@ -1,0 +1,308 @@
+#version 450 core
+
+layout(set = 0, binding = 0,  r32i) uniform iimage1D        img1D;
+layout(set = 0, binding = 1,  r32i) uniform iimage2D        img2D;
+layout(set = 0, binding = 2,  r32i) uniform iimage3D        img3D;
+layout(set = 0, binding = 3,  r32i) uniform iimage2DRect    img2DRect;
+layout(set = 0, binding = 4,  r32i) uniform iimageCube      imgCube;
+layout(set = 0, binding = 5,  r32i) uniform iimageBuffer    imgBuffer;
+layout(set = 0, binding = 6,  r32i) uniform iimage1DArray   img1DArray;
+layout(set = 0, binding = 7,  r32i) uniform iimage2DArray   img2DArray;
+layout(set = 0, binding = 8,  r32i) uniform iimageCubeArray imgCubeArray;
+layout(set = 0, binding = 9,  r32i) uniform iimage2DMS      img2DMS;
+layout(set = 0, binding = 10, r32i) uniform iimage2DMSArray img2DMSArray;
+
+layout(set = 1, binding = 0) buffer BO
+{
+    int m1;
+};
+
+void main()
+{
+    int temp;
+    temp  = imageAtomicAdd(img1D,        7,                 9);
+    temp  = imageAtomicAdd(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicAdd(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAdd(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicAdd(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAdd(imgBuffer,    7,                 9);
+    temp  = imageAtomicAdd(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicAdd(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAdd(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAdd(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicAdd(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicMin(img1D,        7,                 9);
+    temp  = imageAtomicMin(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicMin(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMin(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicMin(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMin(imgBuffer,    7,                 9);
+    temp  = imageAtomicMin(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicMin(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMin(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMin(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicMin(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicMax(img1D,        7,                 9);
+    temp  = imageAtomicMax(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicMax(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMax(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicMax(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMax(imgBuffer,    7,                 9);
+    temp  = imageAtomicMax(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicMax(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMax(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicMax(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicMax(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicAnd(img1D,        7,                 9);
+    temp  = imageAtomicAnd(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicAnd(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAnd(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicAnd(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAnd(imgBuffer,    7,                 9);
+    temp  = imageAtomicAnd(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicAnd(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAnd(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicAnd(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicAnd(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicOr(img1D,        7,                 9);
+    temp  = imageAtomicOr(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicOr(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicOr(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicOr(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicOr(imgBuffer,    7,                 9);
+    temp  = imageAtomicOr(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicOr(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicOr(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicOr(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicOr(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicXor(img1D,        7,                 9);
+    temp  = imageAtomicXor(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicXor(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicXor(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicXor(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicXor(imgBuffer,    7,                 9);
+    temp  = imageAtomicXor(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicXor(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicXor(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicXor(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicXor(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicExchange(img1D,        7,                 9);
+    temp  = imageAtomicExchange(img2D,        ivec2(7, 7),       9);
+    temp  = imageAtomicExchange(img3D,        ivec3(7, 7, 7),    9);
+    temp  = imageAtomicExchange(img2DRect,    ivec2(7, 7),       9);
+    temp  = imageAtomicExchange(imgCube,      ivec3(7, 7, 7),    9);
+    temp  = imageAtomicExchange(imgBuffer,    7,                 9);
+    temp  = imageAtomicExchange(img1DArray,   ivec2(7, 7),       9);
+    temp  = imageAtomicExchange(img2DArray,   ivec3(7, 7, 7),    9);
+    temp  = imageAtomicExchange(imgCubeArray, ivec3(7, 7, 7),    9);
+    temp  = imageAtomicExchange(img2DMS,      ivec2(7, 7),    5, 9);
+    temp  = imageAtomicExchange(img2DMSArray, ivec3(7, 7, 7), 5, 9);
+
+    temp  = imageAtomicCompSwap(img1D,        7,                 3, 9);
+    temp  = imageAtomicCompSwap(img2D,        ivec2(7, 7),       3, 9);
+    temp  = imageAtomicCompSwap(img3D,        ivec3(7, 7, 7),    3, 9);
+    temp  = imageAtomicCompSwap(img2DRect,    ivec2(7, 7),       3, 9);
+    temp  = imageAtomicCompSwap(imgCube,      ivec3(7, 7, 7),    3, 9);
+    temp  = imageAtomicCompSwap(imgBuffer,    7,                 3, 9);
+    temp  = imageAtomicCompSwap(img1DArray,   ivec2(7, 7),       3, 9);
+    temp  = imageAtomicCompSwap(img2DArray,   ivec3(7, 7, 7),    3, 9);
+    temp  = imageAtomicCompSwap(imgCubeArray, ivec3(7, 7, 7),    3, 9);
+    temp  = imageAtomicCompSwap(img2DMS,      ivec2(7, 7),    5, 3, 9);
+    temp  = imageAtomicCompSwap(img2DMSArray, ivec3(7, 7, 7), 5, 3, 9);
+
+    m1 = temp;
+}
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.2D.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.3D.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.Rect.{{.*}}(i32 0, i32 3, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.Cube.{{.*}}(i32 0, i32 4, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.Buffer(i32 0, i32 5, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.1DArray.{{.*}}(i32 0, i32 6, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.2DArray.{{.*}}(i32 0, i32 7, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.CubeArray.{{.*}}(i32 0, i32 8, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.2D.sample.{{.*}}(i32 0, i32 9, i32 0, <2 x i32> <i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.2DArray.sample.{{.*}}(i32 0, i32 10, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.2D.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.3D.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.Rect.{{.*}}(i32 0, i32 3, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.Cube.{{.*}}(i32 0, i32 4, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.Buffer(i32 0, i32 5, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.1DArray.{{.*}}(i32 0, i32 6, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.2DArray.{{.*}}(i32 0, i32 7, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.CubeArray.{{.*}}(i32 0, i32 8, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.2D.sample.{{.*}}(i32 0, i32 9, i32 0, <2 x i32> <i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.2DArray.sample.{{.*}}(i32 0, i32 10, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.2D.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.3D.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.Rect.{{.*}}(i32 0, i32 3, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.Cube.{{.*}}(i32 0, i32 4, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.Buffer(i32 0, i32 5, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.1DArray.{{.*}}(i32 0, i32 6, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.2DArray.{{.*}}(i32 0, i32 7, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.CubeArray.{{.*}}(i32 0, i32 8, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.2D.sample.{{.*}}(i32 0, i32 9, i32 0, <2 x i32> <i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.2DArray.sample.{{.*}}(i32 0, i32 10, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.2D.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.3D.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.Rect.{{.*}}(i32 0, i32 3, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.Cube.{{.*}}(i32 0, i32 4, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.Buffer(i32 0, i32 5, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.1DArray.{{.*}}(i32 0, i32 6, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.2DArray.{{.*}}(i32 0, i32 7, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.CubeArray.{{.*}}(i32 0, i32 8, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.2D.sample.{{.*}}(i32 0, i32 9, i32 0, <2 x i32> <i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.2DArray.sample.{{.*}}(i32 0, i32 10, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.2D.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.3D.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.Rect.{{.*}}(i32 0, i32 3, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.Cube.{{.*}}(i32 0, i32 4, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.Buffer(i32 0, i32 5, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.1DArray.{{.*}}(i32 0, i32 6, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.2DArray.{{.*}}(i32 0, i32 7, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.CubeArray.{{.*}}(i32 0, i32 8, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.2D.sample.{{.*}}(i32 0, i32 9, i32 0, <2 x i32> <i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.2DArray.sample.{{.*}}(i32 0, i32 10, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.2D.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.3D.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.Rect.{{.*}}(i32 0, i32 3, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.Cube.{{.*}}(i32 0, i32 4, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.Buffer(i32 0, i32 5, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.1DArray.{{.*}}(i32 0, i32 6, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.2DArray.{{.*}}(i32 0, i32 7, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.CubeArray.{{.*}}(i32 0, i32 8, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.2D.sample.{{.*}}(i32 0, i32 9, i32 0, <2 x i32> <i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.2DArray.sample.{{.*}}(i32 0, i32 10, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.2D.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.3D.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.Rect.{{.*}}(i32 0, i32 3, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.Cube.{{.*}}(i32 0, i32 4, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.Buffer(i32 0, i32 5, i32 0, i32 7, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.1DArray.{{.*}}(i32 0, i32 6, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.2DArray.{{.*}}(i32 0, i32 7, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.CubeArray.{{.*}}(i32 0, i32 8, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.2D.sample.{{.*}}(i32 0, i32 9, i32 0, <2 x i32> <i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.2DArray.sample.{{.*}}(i32 0, i32 10, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 5, i32 9, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 7, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.2D.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.3D.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.Rect.{{.*}}(i32 0, i32 3, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.Cube.{{.*}}(i32 0, i32 4, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.Buffer(i32 0, i32 5, i32 0, i32 7, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.1DArray.{{.*}}(i32 0, i32 6, i32 0, <2 x i32> <i32 7, i32 7>, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.2DArray.{{.*}}(i32 0, i32 7, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.CubeArray.{{.*}}(i32 0, i32 8, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.2D.sample.{{.*}}(i32 0, i32 9, i32 0, <2 x i32> <i32 7, i32 7>, i32 5, i32 9, i32 3, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.2DArray.sample.{{.*}}(i32 0, i32 10, i32 0, <3 x i32> <i32 7, i32 7, i32 7>, i32 5, i32 9, i32 3, i32 0
+
+; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.1d.i32.i32(i32 9, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.3d.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.struct.buffer.atomic.add.i32(i32 9, <4 x i32> %{{[0-9]*}}, i32 7, i32 0, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.1darray.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.2darray.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.2dmsaa.i32.i32(i32 9, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.2darraymsaa.i32.i32(i32 9, i32 7, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.1d.i32.i32(i32 9, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.3d.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.struct.buffer.atomic.smin.i32(i32 9, <4 x i32> %{{[0-9]*}}, i32 7, i32 0, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.1darray.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.2darray.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.2dmsaa.i32.i32(i32 9, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smin.2darraymsaa.i32.i32(i32 9, i32 7, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.1d.i32.i32(i32 9, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.3d.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.struct.buffer.atomic.smax.i32(i32 9, <4 x i32> %{{[0-9]*}}, i32 7, i32 0, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.1darray.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.2darray.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.2dmsaa.i32.i32(i32 9, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.smax.2darraymsaa.i32.i32(i32 9, i32 7, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.1d.i32.i32(i32 9, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.3d.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.struct.buffer.atomic.and.i32(i32 9, <4 x i32> %{{[0-9]*}}, i32 7, i32 0, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.1darray.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.2darray.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.2dmsaa.i32.i32(i32 9, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.and.2darraymsaa.i32.i32(i32 9, i32 7, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.1d.i32.i32(i32 9, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.3d.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.struct.buffer.atomic.or.i32(i32 9, <4 x i32> %{{[0-9]*}}, i32 7, i32 0, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.1darray.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.2darray.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.2dmsaa.i32.i32(i32 9, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.or.2darraymsaa.i32.i32(i32 9, i32 7, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.1d.i32.i32(i32 9, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.3d.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.struct.buffer.atomic.xor.i32(i32 9, <4 x i32> %{{[0-9]*}}, i32 7, i32 0, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.1darray.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.2darray.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.2dmsaa.i32.i32(i32 9, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.xor.2darraymsaa.i32.i32(i32 9, i32 7, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.1d.i32.i32(i32 9, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.3d.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.2d.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.struct.buffer.atomic.swap.i32(i32 9, <4 x i32> %{{[0-9]*}}, i32 7, i32 0, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.1darray.i32.i32(i32 9, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.2darray.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.cube.i32.i32(i32 9, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.2dmsaa.i32.i32(i32 9, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.swap.2darraymsaa.i32.i32(i32 9, i32 7, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.1d.i32.i32(i32 9, i32 3, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.2d.i32.i32(i32 9, i32 3, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.3d.i32.i32(i32 9, i32 3, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.2d.i32.i32(i32 9, i32 3, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.cube.i32.i32(i32 9, i32 3, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.struct.buffer.atomic.cmpswap.i32(i32 9, i32 3, <4 x i32> %{{[0-9]*}}, i32 7, i32 0, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.1darray.i32.i32(i32 9, i32 3, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.2darray.i32.i32(i32 9, i32 3, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.cube.i32.i32(i32 9, i32 3, i32 7, i32 7, i32 7, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.2dmsaa.i32.i32(i32 9, i32 3, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.cmpswap.2darraymsaa.i32.i32(i32 9, i32 3, i32 7, i32 7, i32 7, i32 5, <8 x i32> %{{[0-9]*}}, i32 0
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

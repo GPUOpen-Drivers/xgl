@@ -94,8 +94,8 @@
 
 // Helper macro to make code conditional on being a minimum PAL major/minor version
 #define VK_IS_PAL_VERSION_AT_LEAST(major, minor) \
-    (PAL_CLIENT_INTERFACE_MAJOR_VERSION == major && PAL_CLIENT_INTERFACE_MINOR_VERSION >= minor) || \
-    (PAL_CLIENT_INTERFACE_MAJOR_VERSION > major)
+    ((PAL_CLIENT_INTERFACE_MAJOR_VERSION == major && PAL_CLIENT_INTERFACE_MINOR_VERSION >= minor) || \
+     (PAL_CLIENT_INTERFACE_MAJOR_VERSION > major))
 
 namespace vk
 {

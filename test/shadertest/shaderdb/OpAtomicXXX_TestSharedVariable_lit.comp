@@ -1,0 +1,85 @@
+#version 450
+
+layout(local_size_x = 8) in;
+
+shared int  imem;
+shared uint umem[4];
+
+layout(binding = 0) uniform Uniforms
+{
+    int   idata;
+    uint  udata;
+
+    int index;
+};
+
+uvec4 u4;
+
+void main()
+{
+    int i1  = 0;
+    uint u1 = 0;
+
+    switch (gl_LocalInvocationID.x)
+    {
+    case 0:
+        i1 = atomicAdd(imem, idata);
+        u1 = atomicAdd(umem[1], udata);
+        break;
+    case 1:
+        i1 = atomicMin(imem, idata);
+        u1 = atomicMin(umem[0], udata);
+        break;
+    case 2:
+        i1 = atomicMax(imem, idata);
+        u1 = atomicMax(umem[2], udata);
+        break;
+    case 3:
+        i1 = atomicAnd(imem, idata);
+        u1 = atomicAnd(umem[3], udata);
+        break;
+    case 4:
+        i1 = atomicOr(imem, idata);
+        u1 = atomicOr(umem[index], udata);
+        break;
+    case 5:
+        i1 = atomicXor(imem, idata);
+        u1 = atomicXor(umem[index], udata);
+        break;
+    case 6:
+        i1 = atomicExchange(imem, idata);
+        u1 = atomicExchange(umem[index], udata);
+        break;
+    case 7:
+        i1 = atomicCompSwap(imem, 28, idata);
+        u1 = atomicCompSwap(umem[index], 17u, udata);
+        break;
+    }
+
+    u4[i1 % 4] = u1;
+}
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST: @imem = internal addrspace(3) global i32
+; SHADERTEST: @umem = internal addrspace(3) global [4 x i32]
+; SHADERTEST: atomicrmw volatile add i32 addrspace(3)* @imem, i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile add i32 addrspace(3)* getelementptr inbounds ([4 x i32], [4 x i32] addrspace(3)* @umem, i32 0, i32 1), i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile min i32 addrspace(3)* @imem, i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile umin i32 addrspace(3)* getelementptr inbounds ([4 x i32], [4 x i32] addrspace(3)* @umem, i32 0, i32 0), i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile max i32 addrspace(3)* @imem, i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile umax i32 addrspace(3)* getelementptr inbounds ([4 x i32], [4 x i32] addrspace(3)* @umem, i32 0, i32 2), i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile and i32 addrspace(3)* @imem, i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile and i32 addrspace(3)* getelementptr inbounds ([4 x i32], [4 x i32] addrspace(3)* @umem, i32 0, i32 3), i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile or i32 addrspace(3)* @imem, i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile or i32 addrspace(3)* %{{[0-9]*}}, i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile xor i32 addrspace(3)* @imem, i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile xor i32 addrspace(3)* %{{[0-9]*}}, i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile xchg i32 addrspace(3)* @imem, i32 %{{[0-9]*}} seq_cst,
+; SHADERTEST: atomicrmw volatile xchg i32 addrspace(3)* %{{[0-9]*}}, i32 %{{[0-9]*}} seq_cst,
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

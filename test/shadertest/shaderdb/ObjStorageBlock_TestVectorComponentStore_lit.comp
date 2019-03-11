@@ -1,0 +1,27 @@
+#version 450
+layout(set = 0, binding = 0) buffer BO
+{
+    vec4 m;
+};
+
+layout(local_size_x = 1) in;
+void main()
+{
+    vec4 v = vec4(0, 0, 0, 0);
+    v.y = m.y;
+    m.y = v.y;
+}
+
+
+// BEGIN_SHADERTEST
+/*
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST: call <4 x i8> @llpc.buffer.load.v4i8(<4 x i32> %{{[0-9]*}}, i32 4
+; SHADERTEST: call void @llpc.buffer.store.v4i8(<4 x i32> %{{[0-9]*}}, i32 4, <4 x i8> %{{[0-9]*}}, i32 0
+
+
+; SHADERTEST: AMDLLPC SUCCESS
+*/
+// END_SHADERTEST

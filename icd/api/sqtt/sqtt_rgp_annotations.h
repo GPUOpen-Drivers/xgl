@@ -65,7 +65,7 @@ enum RgpSqttMarkerIdentifier : uint32_t
     RgpSqttMarkerIdentifierLayoutTransition    = 0x9,
     RgpSqttMarkerIdentifierRenderPass          = 0xA,
     RgpSqttMarkerIdentifierReserved2           = 0xB,
-    RgpSqttMarkerIdentifierReserved3           = 0xC,
+    RgpSqttMarkerIdentifierBindPipeline        = 0xC,
     RgpSqttMarkerIdentifierReserved4           = 0xD,
     RgpSqttMarkerIdentifierReserved5           = 0xE,
     RgpSqttMarkerIdentifierReserved6           = 0xF
@@ -507,6 +507,39 @@ union RgpSqttMarkerPresent
 };
 
 constexpr uint32_t RgpSqttMarkerPresentWordCount = 1;
+
+// RgpSqttMarkerPipelineBind - RGP SQ thread-tracing marker written whenever a pipeline is bound (Table 12).
+struct RgpSqttMarkerPipelineBind
+{
+    union
+    {
+        struct
+        {
+            uint32_t identifier : 4;  // Identifier for this marker
+            uint32_t extDwords  : 3;  // Number of extra dwords following this marker
+            uint32_t bindPoint  : 1;  // The bind point of the pipeline within a queue
+                                      // 0 = graphics bind point
+                                      // 1 = compute bind point
+            uint32_t cbID       : 20; // A command buffer ID encoded as per Table 13.
+            uint32_t reserved   : 4;  // Reserved
+        };
+
+        uint32_t     dword01;         // The first dword
+    };
+
+    union
+    {
+        uint32_t apiPsoHash[2];       // The API PSO hash of the pipeline being bound
+
+        struct
+        {
+            uint32_t dword02;         // The second dword
+            uint32_t dword03;         // The third dword
+        };
+    };
+};
+
+constexpr uint32_t RgpSqttMarkerPipelineBindWordCount = 3;
 
 // Table 15: RgpSqttBarrierReason - Value for the reason field of an RGP barrier start marker originating from the
 // Vulkan client (does not include PAL-defined values).

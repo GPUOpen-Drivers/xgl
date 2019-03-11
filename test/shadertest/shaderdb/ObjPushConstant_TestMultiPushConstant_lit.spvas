@@ -1,0 +1,59 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC.*}} SPIR-V lowering results
+; SHADERTEST: call <16 x i8> @llpc.pushconst.load.v16i8
+
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 1
+; Bound: 23
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main" %9
+               OpEntryPoint Fragment %19 "main1" %9
+               OpExecutionMode %4 OriginUpperLeft
+               OpExecutionMode %19 OriginUpperLeft
+               OpSource GLSL 450
+               OpName %4 "main"
+               OpName %19 "main1"
+               OpName %9 "o1"
+               OpName %10 "PushConstant"
+               OpMemberName %10 0 "m1"
+               OpName %12 "pushConst1"
+               OpName %18 "pushConst2"
+               OpMemberDecorate %10 0 Offset 0
+               OpDecorate %10 Block
+               OpDecorate %12 Binding 1
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %6 = OpTypeFloat 32
+          %7 = OpTypeVector %6 4
+          %8 = OpTypePointer Output %7
+          %9 = OpVariable %8 Output
+         %10 = OpTypeStruct %7
+         %11 = OpTypePointer PushConstant %10
+         %12 = OpVariable %11 PushConstant
+         %18 = OpVariable %11 PushConstant
+         %13 = OpTypeInt 32 1
+         %14 = OpConstant %13 0
+         %15 = OpTypePointer PushConstant %7
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+         %16 = OpAccessChain %15 %12 %14
+         %17 = OpLoad %7 %16
+               OpStore %9 %17
+               OpReturn
+               OpFunctionEnd
+         %19 = OpFunction %2 None %3
+         %20 = OpLabel
+         %21 = OpAccessChain %15 %18 %14
+         %22 = OpLoad %7 %21
+               OpStore %9 %22
+               OpReturn
+               OpFunctionEnd

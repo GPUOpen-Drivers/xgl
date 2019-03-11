@@ -1,0 +1,70 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+
+; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
+; SHADERTEST : void @llpc.buffer.atomic.store.i32(<4 x i32> %{{[0-9]*}}, i32 %{{[0-9]*}}, i32 %{{[0-9]*}}, i32 0, i1 false)
+
+; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
+; SHADERTEST : call i32 @llvm.amdgcn.raw.buffer.atomic.swap.i32(i32 %{{[0-9]*}}, <4 x i32> %{{[0-9]*}}, i32 %{{[0-9]*}}, i32 0, i32 0)
+
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos SPIR-V Tools Assembler; 0
+; Bound: 32
+; Schema: 0
+               OpCapability Shader
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint GLCompute %1 "main" %2
+               OpExecutionMode %1 LocalSize 1 1 1
+               OpSource GLSL 430
+               OpName %1 "main"
+               OpName %2 "gl_GlobalInvocationID"
+               OpDecorate %2 BuiltIn GlobalInvocationId
+               OpDecorate %3 BufferBlock
+               OpDecorate %4 DescriptorSet 0
+               OpDecorate %4 Binding 0
+               OpDecorate %5 ArrayStride 4
+               OpMemberDecorate %3 0 Offset 0
+               OpDecorate %6 BufferBlock
+               OpDecorate %7 DescriptorSet 0
+               OpDecorate %7 Binding 1
+               OpMemberDecorate %6 0 Coherent
+               OpMemberDecorate %6 0 Offset 0
+          %8 = OpTypeBool
+          %9 = OpTypeVoid
+         %10 = OpTypeFunction %9
+         %11 = OpTypeInt 32 0
+         %12 = OpTypeInt 32 1
+         %13 = OpTypeFloat 32
+         %14 = OpTypeVector %11 3
+         %15 = OpTypeVector %13 3
+         %16 = OpTypePointer Input %14
+         %17 = OpTypePointer Uniform %12
+         %18 = OpTypePointer Uniform %13
+          %5 = OpTypeRuntimeArray %12
+         %19 = OpTypeRuntimeArray %13
+          %3 = OpTypeStruct %5
+         %20 = OpTypePointer Uniform %3
+          %4 = OpVariable %20 Uniform
+          %6 = OpTypeStruct %5
+         %21 = OpTypePointer Uniform %6
+          %7 = OpVariable %21 Uniform
+          %2 = OpVariable %16 Input
+         %22 = OpConstant %12 -1
+         %23 = OpConstant %12 0
+         %24 = OpConstant %11 1
+         %25 = OpConstant %12 2
+          %1 = OpFunction %9 None %10
+         %26 = OpLabel
+         %27 = OpLoad %14 %2
+         %28 = OpCompositeExtract %11 %27 0
+         %29 = OpAccessChain %17 %4 %23 %28
+         %30 = OpLoad %12 %29
+         %31 = OpAccessChain %17 %7 %23 %28
+               OpAtomicStore %31 %23 %23 %30
+               OpReturn
+               OpFunctionEnd
