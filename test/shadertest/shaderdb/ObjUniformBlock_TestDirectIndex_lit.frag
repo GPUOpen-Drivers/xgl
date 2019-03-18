@@ -21,9 +21,9 @@ void main()
 ; SHADERTEST: getelementptr [4 x { <4 x float>, [10 x <4 x float>] }], [4 x { <4 x float>, [10 x <4 x float>] }] addrspace({{.*}})* @{{.*}}, i32 0, i32 3, i32 1, i32 5
 
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
-; SHADERTEST: call <4 x i32> @llpc.call.desc.load.buffer.v4i32.i32.i32.i32.i1(i32 1, i32 0, i32 0
+; SHADERTEST: call <4 x i32> {{.*}}@llpc.call.desc.load.buffer.{{[0-9a-z.]*}}(i32 1, i32 0, i32 0
 ; SHADERTEST: call <16 x i8> @llpc.buffer.load.v16i8(<4 x i32> %{{[[0-9]*}}, i32 0
-; SHADERTEST: call <4 x i32> @llpc.call.desc.load.buffer.v4i32.i32.i32.i32.i1(i32 1, i32 0, i32 3
+; SHADERTEST: call <4 x i32> {{.*}}@llpc.call.desc.load.buffer.{{[0-9a-z.]*}}(i32 1, i32 0, i32 3
 ; SHADERTEST: call <16 x i8> @llpc.buffer.load.v16i8(<4 x i32> %{{[[0-9]*}}, i32 96
 
 ; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results

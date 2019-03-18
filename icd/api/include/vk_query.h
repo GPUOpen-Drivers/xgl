@@ -159,8 +159,6 @@ private:
 class TimestampQueryPool : public QueryPool
 {
 public:
-    static constexpr size_t SlotSize = sizeof(uint64_t);
-
     static constexpr uint32_t TimestampNotReadyChunk = UINT32_MAX;
     // +------------------------+------------------------+
     // | TimestampNotReadyChunk | TimestampNotReadyChunk |
@@ -195,8 +193,11 @@ public:
     {
         VK_ASSERT(query < m_entryCount);
 
-        return m_internalMem.Offset() + query * SlotSize;
+        return m_internalMem.Offset() + query * m_slotSize;
     }
+
+    VK_INLINE uint32_t GetSlotSize() const
+        { return m_slotSize;}
 
     VK_INLINE const Pal::IGpuMemory& PalMemory(uint32_t deviceIdx) const
         { return *m_internalMem.PalMemory(deviceIdx); }
@@ -210,16 +211,10 @@ private:
         VkQueryType           queryType,
         uint32_t              entryCount,
         const InternalMemory& internalMem,
-        void**                ppStorageView)
-        :
-        QueryPool(pDevice, queryType),
-        m_entryCount(entryCount),
-        m_internalMem(internalMem)
-    {
-      memcpy(m_pStorageView, ppStorageView, sizeof(m_pStorageView));
-    }
+        void**                ppStorageView);
 
     const uint32_t    m_entryCount;
+    const uint32_t    m_slotSize;
     InternalMemory    m_internalMem;
     const void*       m_pStorageView[MaxPalDevices];
 };

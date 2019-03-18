@@ -4,7 +4,7 @@
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
 ; SHADERTEST: %{{.*}} = call spir_func <4 x float> @spirv.image.fetch.f32.2D.sample.patchfmaskusage(%{{.*}} {{.*}} %{{.*}}, <2 x i32> <i32 0, i32 1>, i32 4, i32 1089)
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
-; SHADERTEST: %{{.*}} = call <4 x float> @llpc.image.fetch.f32.2D.sample.fmaskbased.dimaware(i32 0, i32 0, i32 0, <2 x i32> <i32 0, i32 1>, i32 4, i32 1089)
+; SHADERTEST: %{{.*}} = call <4 x float> @llpc.image.fetch.f32.2D.sample.fmaskbased.dimaware
 ; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
 ; SHADERTEST: %{{.*}} = tail call float @llvm.amdgcn.image.load.2d.f32.i32(i32 1, i32 0, i32 1, <8 x i32> %{{.*}}, i32 0, i32 0)
 ; SHADERTEST: %{{.*}} = tail call <4 x float> @llvm.amdgcn.image.load.2dmsaa.v4f32.i32(i32 15, i32 0, i32 1, i32 %{{.*}}, <8 x i32> %{{.*}}, i32 0, i32 0)

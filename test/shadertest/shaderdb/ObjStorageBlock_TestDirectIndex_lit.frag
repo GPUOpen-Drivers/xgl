@@ -24,15 +24,15 @@ void main()
 ; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
 
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
-; SHADERTEST: call <4 x i32> @llpc.call.desc.load.buffer.v4i32.i32.i32.i32.i1(i32 0, i32 1, i32 0
+; SHADERTEST: call <4 x i32> {{.*}}@llpc.call.desc.load.buffer.{{[0-9a-z.]*}}(i32 0, i32 1, i32 0
 ; SHADERTEST: call <16 x i8> @llpc.buffer.load.v16i8(<4 x i32> %{{[0-9]*}}, i32 48
-; SHADERTEST: call <4 x i32> @llpc.call.desc.load.buffer.v4i32.i32.i32.i32.i1(i32 0, i32 1, i32 1
+; SHADERTEST: call <4 x i32> {{.*}}@llpc.call.desc.load.buffer.{{[0-9a-z.]*}}(i32 0, i32 1, i32 1
 ; SHADERTEST: call void @llpc.buffer.store.v4i8(<4 x i32> %{{[0-9]*}}, i32 0
-; SHADERTEST: call <4 x i32> @llpc.call.desc.load.buffer.v4i32.i32.i32.i32.i1(i32 0, i32 1, i32 1
+; SHADERTEST: call <4 x i32> {{.*}}@llpc.call.desc.load.buffer.{{[0-9a-z.]*}}(i32 0, i32 1, i32 1
 ; SHADERTEST: call void @llpc.buffer.store.v16i8(<4 x i32> %{{[0-9]*}}, i32 16,
-; SHADERTEST: call <4 x i32> @llpc.call.desc.load.buffer.v4i32.i32.i32.i32.i1(i32 0, i32 1, i32 1
+; SHADERTEST: call <4 x i32> {{.*}}@llpc.call.desc.load.buffer.{{[0-9a-z.]*}}(i32 0, i32 1, i32 1
 ; SHADERTEST: call void @llpc.buffer.store.v16i8(<4 x i32> %{{[0-9]*}}, i32 32
-; SHADERTEST: call <4 x i32> @llpc.call.desc.load.buffer.v4i32.i32.i32.i32.i1(i32 0, i32 1, i32 1
+; SHADERTEST: call <4 x i32> {{.*}}@llpc.call.desc.load.buffer.{{[0-9a-z.]*}}(i32 0, i32 1, i32 1
 ; SHADERTEST: call void @llpc.buffer.store.v16i8(<4 x i32> %{{[0-9]*}}, i32 48
 
 ; SHADERTEST: AMDLLPC SUCCESS

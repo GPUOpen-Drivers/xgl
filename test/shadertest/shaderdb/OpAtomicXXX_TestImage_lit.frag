@@ -48,23 +48,23 @@ void main()
 ; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
 
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
-; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 1, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.2D.{{.*}}(i32 1, i32 0, i32 %{{[0-9]*}}, <2 x i32> <i32 2, i32 2>, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.2D.{{.*}}(i32 1, i32 0, i32 %{{[0-9]*}}, <2 x i32> <i32 2, i32 2>, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicand.i32.2D.sample.{{.*}}(i32 0, i32 1, i32 0, <2 x i32> <i32 2, i32 2>, i32 4, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicor.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 1, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicxor.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 2, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 1, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.1D.{{.*}}(i32 0, i32 0, i32 0, i32 1, i32 %{{[0-9]*}}, i32 28, i32 0
-; SHADERTEST: call i32 @llpc.image.atomiciadd.u32.Cube.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 1, i32 1, i32 1>, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicumin.u32.Buffer(i32 2, i32 0, i32 %{{[0-9]*}}, i32 2, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicumax.u32.Buffer(i32 2, i32 0, i32 %{{[0-9]*}}, i32 1, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicand.u32.2DArray.sample.{{.*}}(i32 0, i32 3, i32 0, <3 x i32> <i32 2, i32 2, i32 2>, i32 5, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicor.u32.Cube.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 1, i32 1, i32 1>, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicxor.u32.Cube.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 2, i32 2, i32 2>, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomicexchange.u32.Cube.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 1, i32 1, i32 1>, i32 %{{[0-9]*}}, i32 0
-; SHADERTEST: call i32 @llpc.image.atomiccompexchange.u32.Cube.{{.*}}(i32 0, i32 2, i32 0, <3 x i32> <i32 1, i32 1, i32 1>, i32 %{{[0-9]*}}, i32 17, i32 0
-; SHADERTEST: call float @llpc.image.atomicexchange.f32.Rect.{{.*}}(i32 0, i32 4, i32 0, <2 x i32> <i32 3, i32 3>, float %{{[0-9]*}}, i32 0
+; SHADERTEST: call i32 @llpc.image.atomiciadd.i32.1D.
+; SHADERTEST: call i32 @llpc.image.atomicsmin.i32.2D.
+; SHADERTEST: call i32 @llpc.image.atomicsmax.i32.2D.
+; SHADERTEST: call i32 @llpc.image.atomicand.i32.2D.sample.
+; SHADERTEST: call i32 @llpc.image.atomicor.i32.1D.
+; SHADERTEST: call i32 @llpc.image.atomicxor.i32.1D.
+; SHADERTEST: call i32 @llpc.image.atomicexchange.i32.1D.
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.i32.1D.
+; SHADERTEST: call i32 @llpc.image.atomiciadd.u32.Cube.
+; SHADERTEST: call i32 @llpc.image.atomicumin.u32.Buffer
+; SHADERTEST: call i32 @llpc.image.atomicumax.u32.Buffer
+; SHADERTEST: call i32 @llpc.image.atomicand.u32.2DArray.sample.
+; SHADERTEST: call i32 @llpc.image.atomicor.u32.Cube.
+; SHADERTEST: call i32 @llpc.image.atomicxor.u32.Cube.
+; SHADERTEST: call i32 @llpc.image.atomicexchange.u32.Cube.
+; SHADERTEST: call i32 @llpc.image.atomiccompexchange.u32.Cube.
+; SHADERTEST: call float @llpc.image.atomicexchange.f32.Rect.
 
 ; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
 ; SHADERTEST: call i32 @llvm.amdgcn.image.atomic.add.1d.i32.i32(i32 %{{[0-9]*}}, i32 1, <8 x i32> %{{[0-9]*}}, i32 0

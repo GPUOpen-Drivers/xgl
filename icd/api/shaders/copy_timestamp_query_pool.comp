@@ -7,8 +7,29 @@ layout (push_constant) uniform QueryParam
     uvec4 queryParam;
 };
 
+#ifdef STRIDED_COPY
+struct StridedData
+{
+    // 64-bit source timestamp data
+    uint timestamp0;
+    uint timestamp1;
+    // 24-byte padding for timestamp query pool whose min alignment is 32-byte
+    uint padding2;
+    uint padding3;
+    uint padding4;
+    uint padding5;
+    uint padding6;
+    uint padding7;
+};
+
+layout (set = 0, binding = 0, std430) buffer StridedBuffer
+{
+   StridedData data[];
+} uav0;
+#else
 // 64-bit source timestamp buffer uav
 layout (set = 0, binding = 0, rg32ui) uniform uimageBuffer uav0;
+#endif
 
 // destination buffer uav
 layout (set = 0, binding = 1, std430) buffer UAV1
@@ -29,8 +50,13 @@ void main()
         // compute timestamp 64-bit element offset from thread_id + start_query
         r0.x = gl_GlobalInvocationID.x + queryParam.w;
 
+#ifdef STRIDED_COPY
+        r1.x = uav0.data[r0.x].timestamp0;
+        r1.y = uav0.data[r0.x].timestamp1;
+#else
         // 64-bit read of timestamp counter
         r1.xy = imageLoad(uav0, int(r0.x)).xy;
+#endif
 
         // determine if 64-bit results are required
         r2.x = queryParam.y & 1;

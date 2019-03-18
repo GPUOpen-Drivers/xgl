@@ -3475,7 +3475,7 @@ void CmdBuffer::FillTimestampQueryPool(
         PalCmdBuffer(deviceIdx)->CmdFillMemory(
             timestampQueryPool.PalMemory(deviceIdx),
             timestampQueryPool.GetSlotOffset(firstQuery),
-            TimestampQueryPool::SlotSize * queryCount,
+            timestampQueryPool.GetSlotSize() * queryCount,
             timestampChunk);
     }
 

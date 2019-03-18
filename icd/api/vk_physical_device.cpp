@@ -1465,37 +1465,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 uint32_t PhysicalDevice::GetSupportedAPIVersion() const
 {
     // Currently all of our HW supports Vulkan 1.1
-    uint32_t apiVersion = (VK_API_VERSION_1_1 | VK_HEADER_VERSION);
-
-    // For sanity check we do at least want to make sure that all the necessary extensions are supported and exposed.
-    // The spec does not require Vulkan 1.1 implementations to expose the corresponding 1.0 extensions, but we'll
-    // continue doing so anyways to maximize application compatibility (which is why the spec allows this).
-    VK_ASSERT( IsExtensionSupported(DeviceExtensions::KHR_16BIT_STORAGE)
-            && IsExtensionSupported(DeviceExtensions::KHR_BIND_MEMORY2)
-            && IsExtensionSupported(DeviceExtensions::KHR_DEDICATED_ALLOCATION)
-            && IsExtensionSupported(DeviceExtensions::KHR_DESCRIPTOR_UPDATE_TEMPLATE)
-            && IsExtensionSupported(DeviceExtensions::KHR_DEVICE_GROUP)
-            && IsExtensionSupported(InstanceExtensions::KHR_DEVICE_GROUP_CREATION)
-            && IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_MEMORY)
-            && IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_MEMORY_CAPABILITIES)
-            && IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_SEMAPHORE)
-            && IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_SEMAPHORE_CAPABILITIES)
-            && IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_FENCE)
-            && IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_FENCE_CAPABILITIES)
-            && IsExtensionSupported(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2)
-            && IsExtensionSupported(InstanceExtensions::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2)
-            && IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE1)
-            && IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE2)
-            && IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE3)
-            && IsExtensionSupported(DeviceExtensions::KHR_MULTIVIEW)
-            && IsExtensionSupported(DeviceExtensions::KHR_RELAXED_BLOCK_LAYOUT)
-//            && IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION)
-            && IsExtensionSupported(DeviceExtensions::KHR_SHADER_DRAW_PARAMETERS)
-            && IsExtensionSupported(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS)
-            && IsExtensionSupported(DeviceExtensions::KHR_VARIABLE_POINTERS)
-        );
-
-    return apiVersion;
+    return (VK_API_VERSION_1_1 | VK_HEADER_VERSION);
 }
 
 // =====================================================================================================================
@@ -2806,6 +2776,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SCALAR_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MEMORY_OVERALLOCATION_BEHAVIOR));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_PRIORITY));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TRANSFORM_FEEDBACK));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VULKAN_MEMORY_MODEL));
@@ -4422,6 +4393,43 @@ static void VerifyRequiredFormats(
 }
 
 // =====================================================================================================================
+// Verifies that the given device/instance supports and exposes the necessary extensions.
+static void VerifyExtensions(
+    const PhysicalDevice& dev)
+{
+    const uint32_t apiVersion = dev.GetSupportedAPIVersion();
+
+    // The spec does not require Vulkan 1.1 implementations to expose the corresponding 1.0 extensions, but we'll
+    // continue doing so anyways to maximize application compatibility (which is why the spec allows this).
+    if (apiVersion >= VK_API_VERSION_1_1)
+    {
+        VK_ASSERT(dev.IsExtensionSupported(DeviceExtensions::KHR_16BIT_STORAGE)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_BIND_MEMORY2)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_DEDICATED_ALLOCATION)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_DESCRIPTOR_UPDATE_TEMPLATE)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_DEVICE_GROUP)
+               && dev.IsExtensionSupported(InstanceExtensions::KHR_DEVICE_GROUP_CREATION)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_MEMORY)
+               && dev.IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_MEMORY_CAPABILITIES)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_SEMAPHORE)
+               && dev.IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_SEMAPHORE_CAPABILITIES)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_FENCE)
+               && dev.IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_FENCE_CAPABILITIES)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_GET_MEMORY_REQUIREMENTS2)
+               && dev.IsExtensionSupported(InstanceExtensions::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE1)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE2)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE3)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_MULTIVIEW)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_RELAXED_BLOCK_LAYOUT)
+//             && dev.IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_DRAW_PARAMETERS)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_VARIABLE_POINTERS));
+    }
+}
+
+// =====================================================================================================================
 static void VerifyProperties(
     const PhysicalDevice& device)
 {
@@ -4434,6 +4442,8 @@ static void VerifyProperties(
     VerifyLimits(device, limits, features);
 
     VerifyRequiredFormats(device, features);
+
+    VerifyExtensions(device);
 }
 #endif
 

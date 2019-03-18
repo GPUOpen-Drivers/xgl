@@ -313,6 +313,23 @@ VkResult PalQueryPool::GetResults(
 }
 
 // =====================================================================================================================
+/// Constructor of TimestampQueryPool
+TimestampQueryPool::TimestampQueryPool(
+    Device*               pDevice,
+    VkQueryType           queryType,
+    uint32_t              entryCount,
+    const InternalMemory& internalMem,
+    void**                ppStorageView)
+    :
+    QueryPool(pDevice, queryType),
+    m_entryCount(entryCount),
+    m_slotSize(pDevice->GetProperties().timestampQueryPoolSlotSize),
+    m_internalMem(internalMem)
+{
+    memcpy(m_pStorageView, ppStorageView, sizeof(m_pStorageView));
+}
+
+// =====================================================================================================================
 // Creates a new query pool object (Timestamp query pool).
 VkResult TimestampQueryPool::Create(
     Device*                      pDevice,
@@ -336,6 +353,7 @@ VkResult TimestampQueryPool::Create(
     size_t viewSize  = pDevice->GetProperties().descriptorSizes.bufferView;
     size_t totalSize = apiSize + (viewSize * pDevice->NumPalDevices());
     void*  pMemory   = nullptr;
+    const uint32_t slotSize = pDevice->GetProperties().timestampQueryPoolSlotSize;
 
     if (result == VK_SUCCESS)
     {
@@ -356,12 +374,12 @@ VkResult TimestampQueryPool::Create(
 
     if ((result == VK_SUCCESS) && (entryCount > 0))
     {
-        const VkDeviceSize poolSize = entryCount * SlotSize;
+        const VkDeviceSize poolSize = entryCount * slotSize;
 
         InternalMemCreateInfo info = {};
 
         info.pal.size               = poolSize;
-        info.pal.alignment          = SlotSize;
+        info.pal.alignment          = slotSize;
         info.pal.priority           = Pal::GpuMemPriority::Normal;
         info.flags.persistentMapped = true;
 
@@ -389,37 +407,56 @@ VkResult TimestampQueryPool::Create(
 
     if (result == VK_SUCCESS)
     {
-        // Construct an SSBO (UAV) typed RG32 buffer view into the timestamp memory.  This will be used by
-        // compute shaders performing vkCmdCopyQueryPoolResults.
+        // Construct an untyped bufferView or SSBO (UAV) typed RG32 buffer view into the timestamp memory.  This
+        // will be used by compute shaders performing vkCmdCopyQueryPoolResults.
         void* pViewMem = Util::VoidPtrInc(pMemory, apiSize);
         void* pStorageViews[MaxPalDevices] = {};
 
         if (entryCount > 0)
         {
-            constexpr Pal::SwizzledFormat QueryCopyFormat =
-            {
-                Pal::ChNumFormat::X32Y32_Uint,
-                {
-                    Pal::ChannelSwizzle::X,
-                    Pal::ChannelSwizzle::Y,
-                    Pal::ChannelSwizzle::Zero,
-                    Pal::ChannelSwizzle::Zero
-                },
-            };
-
             Pal::BufferViewInfo info = {};
 
-            info.range          = internalMemory.Size();
-            info.stride         = SlotSize;
-            info.swizzledFormat = QueryCopyFormat;
+            info.range = internalMemory.Size();
 
-            for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+            if (pDevice->UseStridedCopyQueryResults())
             {
-                info.gpuAddr = internalMemory.GpuVirtAddr(deviceIdx);
+                info.swizzledFormat = Pal::UndefinedSwizzledFormat;
+                info.stride         = 0;
 
-                pStorageViews[deviceIdx] = Util::VoidPtrInc(pMemory, apiSize + (viewSize * deviceIdx));
+                for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+                {
+                    info.gpuAddr = internalMemory.GpuVirtAddr(deviceIdx);
 
-                pDevice->PalDevice(deviceIdx)->CreateTypedBufferViewSrds(1, &info, pStorageViews[deviceIdx]);
+                    pStorageViews[deviceIdx] = Util::VoidPtrInc(pMemory, apiSize + (viewSize * deviceIdx));
+
+                    pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &info, pStorageViews[deviceIdx]);
+                }
+            }
+            else
+            {
+                VK_ASSERT(slotSize == 8);
+                constexpr Pal::SwizzledFormat QueryCopyFormat =
+                {
+                    Pal::ChNumFormat::X32Y32_Uint,
+                    {
+                        Pal::ChannelSwizzle::X,
+                        Pal::ChannelSwizzle::Y,
+                        Pal::ChannelSwizzle::Zero,
+                        Pal::ChannelSwizzle::Zero
+                    },
+                };
+
+                info.stride = slotSize;
+                info.swizzledFormat = QueryCopyFormat;
+
+                for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+                {
+                    info.gpuAddr = internalMemory.GpuVirtAddr(deviceIdx);
+
+                    pStorageViews[deviceIdx] = Util::VoidPtrInc(pMemory, apiSize + (viewSize * deviceIdx));
+
+                    pDevice->PalDevice(deviceIdx)->CreateTypedBufferViewSrds(1, &info, pStorageViews[deviceIdx]);
+                }
             }
         }
         else
@@ -504,10 +541,11 @@ VkResult TimestampQueryPool::GetResults(
         // Write results of each query slot
         for (uint32_t dstSlot = 0; dstSlot < queryCount; ++dstSlot)
         {
-            const uint32_t srcSlot = dstSlot + startQuery;
+            const uint32_t srcSlotOffset = (dstSlot + startQuery) * GetSlotSize();
 
             // Pointer to this slot's timestamp counter value
-            volatile const uint64_t* pTimestamp = pSrcData + srcSlot;
+            volatile const uint64_t* pTimestamp =
+                reinterpret_cast<const uint64_t*>(Util::VoidPtrInc(pSrcData, srcSlotOffset));
 
             // Test if the timestamp query is available
             uint64_t value = *pTimestamp;

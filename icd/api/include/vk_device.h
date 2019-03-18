@@ -135,6 +135,8 @@ public:
             size_t depthStencilView;
         } palSizes;
 
+        uint32_t timestampQueryPoolSlotSize;
+
         bool connectThroughThunderBolt;
     };
 
@@ -509,6 +511,9 @@ public:
 
     VK_INLINE const bool IsAllocationSizeTrackingEnabled() const
         { return m_allocationSizeTracking; }
+
+    VK_INLINE bool UseStridedCopyQueryResults() const
+        { return (m_properties.timestampQueryPoolSlotSize == 32); }
 
     Pal::IQueue* PerformSwCompositing(
         uint32_t         deviceIdx,

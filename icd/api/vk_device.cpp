@@ -909,6 +909,11 @@ VkResult Device::Initialize(
 
     m_properties.connectThroughThunderBolt = (deviceProps.pciProperties.flags.gpuConnectedViaThunderbolt) ? true : false;
 
+    m_properties.timestampQueryPoolSlotSize =
+        deviceProps.engineProperties[Pal::EngineTypeDma].minTimestampAlignment > 0 ?
+        deviceProps.engineProperties[Pal::EngineTypeDma].minTimestampAlignment :
+        deviceProps.engineProperties[Pal::EngineTypeUniversal].minTimestampAlignment;
+
     if (result == VK_SUCCESS)
     {
         result = CreateInternalPipelines();
@@ -1499,18 +1504,31 @@ VkResult Device::CreateInternalPipelines()
 {
     VkResult result = VK_SUCCESS;
 
+    const bool useStridedShader = UseStridedCopyQueryResults();
+    VK_ASSERT((m_properties.timestampQueryPoolSlotSize == 8) || (m_properties.timestampQueryPoolSlotSize == 32));
+
     // Create the compute pipeline to copy timestamp query pool results to a buffer
-    static constexpr uint8_t CopyTimestampQueryPoolIl[] =
+    static constexpr uint8_t CopyTimestampQueryPoolSpv[] =
     {
     #include "shaders/copy_timestamp_query_pool_spv.h"
     };
+
+    static constexpr uint8_t CopyTimestampQueryPoolStridedSpv[] =
+    {
+    #include "shaders/copy_timestamp_query_pool_strided_spv.h"
+    };
+
+    const uint8_t* pSpvCode  = useStridedShader ? CopyTimestampQueryPoolStridedSpv : CopyTimestampQueryPoolSpv;
+    const size_t spvCodeSize = useStridedShader ?
+        sizeof(CopyTimestampQueryPoolStridedSpv) : sizeof(CopyTimestampQueryPoolSpv);
 
     Llpc::ResourceMappingNode userDataNodes[3] = {};
 
     const uint32_t uavViewSize = m_properties.descriptorSizes.bufferView / sizeof(uint32_t);
 
     // Timestamp counter storage view
-    userDataNodes[0].type = Llpc::ResourceMappingNodeType::DescriptorTexelBuffer;
+    userDataNodes[0].type = useStridedShader ?
+        Llpc::ResourceMappingNodeType::DescriptorBuffer : Llpc::ResourceMappingNodeType::DescriptorTexelBuffer;
     userDataNodes[0].offsetInDwords = 0;
     userDataNodes[0].sizeInDwords = uavViewSize;
     userDataNodes[0].srdRange.set = 0;
@@ -1530,8 +1548,8 @@ VkResult Device::CreateInternalPipelines()
     userDataNodes[2].srdRange.set = Llpc::InternalDescriptorSetId;
 
     result = CreateInternalComputePipeline(
-        sizeof(CopyTimestampQueryPoolIl),
-        CopyTimestampQueryPoolIl,
+        spvCodeSize,
+        pSpvCode,
         VK_ARRAY_SIZE(userDataNodes),
         userDataNodes,
         &m_timestampQueryCopyPipeline);

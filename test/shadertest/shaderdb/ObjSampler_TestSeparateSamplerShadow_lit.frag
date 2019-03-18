@@ -17,7 +17,7 @@ void main()
 ; SHADERTEST: call {{.*}} float @spirv.image.sample.f32.2D.dref.lod
 
 ; SHADERTEST-LABEL: {{^// LLPC.*}} SPIR-V lowering results
-: SHADERTEST: call float @llpc.image.sample.f32.2D.dref.lod.dimaware(i32 0, i32 1,{{.*}}
+: SHADERTEST: call float @llpc.image.sample.f32.2D.dref.lod.dimaware
 
 ; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
 : SHADERTEST: call float @llvm.amdgcn.image.sample.c.l.2d.f32.f32

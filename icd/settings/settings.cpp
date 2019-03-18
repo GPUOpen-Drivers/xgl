@@ -120,8 +120,6 @@ static void OverrideProfiledSettings(
                                               ForceImageSharingModeExclusive;
         }
 
-        pPalSettings->disableSkipFceOptimization = false;
-
         // Vega 20 has better performance on DOOM when DCC is disabled except for the 32 BPP surfaces
         if (info.revision == Pal::AsicRevision::Vega20)
         {
@@ -155,8 +153,6 @@ static void OverrideProfiledSettings(
                                               SkipImageLayoutUndefined       |
                                               ForceImageSharingModeExclusive;
         }
-
-        pPalSettings->disableSkipFceOptimization = false;
 
         // The Vega 20 PAL default is slower on Wolfenstein II, so always allow DCC.
         if (info.revision == Pal::AsicRevision::Vega20)
@@ -418,6 +414,10 @@ void UpdatePalSettings(
 
     pPalSettings->textureOptLevel          = pSettings->vulkanTexFilterQuality;
     pPalSettings->dccBitsPerPixelThreshold = pSettings->dccBitsPerPixelThreshold;
+
+    // Setting disableSkipFceOptimization to false enables an optimization in PAL that disregards the FCE in a transition
+    // if one of the built in clear colors are used (white/black) and the image is TCC compatible.
+    pPalSettings->disableSkipFceOptimization = false;
 }
 
 };

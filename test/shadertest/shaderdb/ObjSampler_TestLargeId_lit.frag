@@ -46,23 +46,23 @@ void main()
 ; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
 
 ; SHADERTEST-LABEL: {{^// LLPC.*}} SPIR-V lowering results
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 0,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 1,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 2,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 3,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 4,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 5,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 6,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 7,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 8,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 9,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 10,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 11,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 12,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 13,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 14,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 15,{{.*}}
-; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware(i32 0, i32 16,{{.*}}
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
+; SHADERTEST: call <4 x float> @llpc.image.sample.f32.2D.dimaware
 
 ; SHADERTEST: AMDLLPC SUCCESS
 */

@@ -40,32 +40,39 @@ if vulkanSDK is None:
 
 glslangValidator = os.path.join(vulkanSDK, "bin" if Is64Bit() else "Bin32", "glslangValidator")
 
-inFile = "copy_timestamp_query_pool"
+def GenerateSpvHeaderFile(inFile, outFile, marcoDef):
+    # Generate spv file
+    print(">>>  (glslangValidator) " + inFile + ".comp ==> " + outFile + ".spv")
+    if len(marcoDef) == 0:
+        subprocess.call([glslangValidator, "-V", inFile + ".comp", "-o", outFile + ".spv"])
+    else:
+        subprocess.call([glslangValidator, "-V", inFile + ".comp", marcoDef, "-o", outFile + ".spv"])
 
-# Generate spv file
-print(">>>  (glslangValidator) " + inFile + ".comp ==> " + inFile + ".spv")
-subprocess.call([glslangValidator, "-V", inFile + ".comp", "-o", inFile + ".spv"])
+    # Convert .spv file to a hex file
+    spvFile = outFile + ".spv"
+    hFile = outFile +"_spv.h"
+    print(">>>  (bin2hex) " + spvFile + "  ==>  " + hFile)
+    fBin = open(spvFile, "rb")
+    binData = fBin.read()
+    fBin.close()
 
-# Convert .spv file to a hex file
-spvFile = inFile + ".spv"
-hFile = inFile +"_spv.h"
-print(">>>  (bin2hex) " + spvFile + "  ==>  " + hFile)
-fBin = open(spvFile, "rb")
-binData = fBin.read()
-fBin.close()
+    hexData = binascii.hexlify(binData).decode()
+    fHex = open(hFile, "w")
+    hexText = "// do not edit by hand; created from source file \"copy_timestamp_query_pool.comp\" by executing script make_llpc_shaders.py\n"
+    i = 0
+    while i < len(hexData):
+        hexText += "0x"
+        hexText += hexData[i]
+        hexText += hexData[i + 1]
+        i += 2
+        if (i != len(hexData)):
+            hexText += ", "
+        if (i % 32 == 0):
+            hexText += "\n"
+    fHex.write(hexText)
+    fHex.close()
 
-hexData = binascii.hexlify(binData).decode()
-fHex = open(hFile, "w")
-hexText = "// do not edit by hand; created from source file \"copy_timestamp_query_pool.comp\" by executing script make_llpc_shaders.py\n"
-i = 0
-while i < len(hexData):
-    hexText += "0x"
-    hexText += hexData[i]
-    hexText += hexData[i + 1]
-    i += 2
-    if (i != len(hexData)):
-        hexText += ", "
-    if (i % 32 == 0):
-        hexText += "\n"
-fHex.write(hexText)
-fHex.close()
+    return #GenerateSpvHeaderFile
+
+GenerateSpvHeaderFile("copy_timestamp_query_pool", "copy_timestamp_query_pool", "")
+GenerateSpvHeaderFile("copy_timestamp_query_pool", "copy_timestamp_query_pool_strided", "-DSTRIDED_COPY")

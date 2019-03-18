@@ -1,0 +1,116 @@
+
+; BEGIN_SHADERTEST
+; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
+; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; SHADERTEST-COUNT-1: fcmp ueq <2 x float>
+; SHADERTEST-COUNT-1: fcmp ult <2 x float>
+; SHADERTEST-COUNT-1: fcmp ule <2 x float>
+; SHADERTEST-COUNT-1: fcmp une <3 x double>
+; SHADERTEST-COUNT-1: fcmp ugt <3 x double>
+; SHADERTEST-COUNT-1: fcmp uge <3 x double>
+; SHADERTEST : AMDLLPC SUCCESS
+; END_SHADERTEST
+
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 1
+; Bound: 67
+; Schema: 0
+               OpCapability Shader
+               OpCapability Float64
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %4 "main" %58
+               OpExecutionMode %4 OriginUpperLeft
+               OpSource GLSL 450
+               OpName %4 "main"
+               OpName %9 "b2"
+               OpName %14 "Uniforms"
+               OpMemberName %14 0 "f2_0"
+               OpMemberName %14 1 "f2_1"
+               OpMemberName %14 2 "d3_0"
+               OpMemberName %14 3 "d3_1"
+               OpName %16 ""
+               OpName %38 "b3"
+               OpName %58 "fragColor"
+               OpMemberDecorate %14 0 Offset 0
+               OpMemberDecorate %14 1 Offset 8
+               OpMemberDecorate %14 2 Offset 32
+               OpMemberDecorate %14 3 Offset 64
+               OpDecorate %14 Block
+               OpDecorate %16 DescriptorSet 0
+               OpDecorate %16 Binding 0
+          %2 = OpTypeVoid
+          %3 = OpTypeFunction %2
+          %6 = OpTypeBool
+          %7 = OpTypeVector %6 2
+          %8 = OpTypePointer Function %7
+         %10 = OpTypeFloat 32
+         %11 = OpTypeVector %10 2
+         %12 = OpTypeFloat 64
+         %13 = OpTypeVector %12 3
+         %14 = OpTypeStruct %11 %11 %13 %13
+         %15 = OpTypePointer Uniform %14
+         %16 = OpVariable %15 Uniform
+         %17 = OpTypeInt 32 1
+         %18 = OpConstant %17 0
+         %19 = OpTypePointer Uniform %11
+         %22 = OpConstant %17 1
+         %36 = OpTypeVector %6 3
+         %37 = OpTypePointer Function %36
+         %39 = OpConstant %17 2
+         %40 = OpTypePointer Uniform %13
+         %43 = OpConstant %17 3
+         %57 = OpTypePointer Output %10
+         %58 = OpVariable %57 Output
+         %64 = OpConstant %10 0
+         %65 = OpConstant %10 1
+          %4 = OpFunction %2 None %3
+          %5 = OpLabel
+          %9 = OpVariable %8 Function
+         %38 = OpVariable %37 Function
+         %20 = OpAccessChain %19 %16 %18
+         %21 = OpLoad %11 %20
+         %23 = OpAccessChain %19 %16 %22
+         %24 = OpLoad %11 %23
+         %25 = OpFUnordEqual %7 %21 %24
+               OpStore %9 %25
+         %26 = OpAccessChain %19 %16 %18
+         %27 = OpLoad %11 %26
+         %28 = OpAccessChain %19 %16 %22
+         %29 = OpLoad %11 %28
+         %30 = OpFUnordLessThan %7 %27 %29
+               OpStore %9 %30
+         %31 = OpAccessChain %19 %16 %18
+         %32 = OpLoad %11 %31
+         %33 = OpAccessChain %19 %16 %22
+         %34 = OpLoad %11 %33
+         %35 = OpFUnordLessThanEqual %7 %32 %34
+               OpStore %9 %35
+         %41 = OpAccessChain %40 %16 %39
+         %42 = OpLoad %13 %41
+         %44 = OpAccessChain %40 %16 %43
+         %45 = OpLoad %13 %44
+         %46 = OpFUnordNotEqual %36 %42 %45
+               OpStore %38 %46
+         %47 = OpAccessChain %40 %16 %39
+         %48 = OpLoad %13 %47
+         %49 = OpAccessChain %40 %16 %43
+         %50 = OpLoad %13 %49
+         %51 = OpFUnordGreaterThan %36 %48 %50
+               OpStore %38 %51
+         %52 = OpAccessChain %40 %16 %39
+         %53 = OpLoad %13 %52
+         %54 = OpAccessChain %40 %16 %43
+         %55 = OpLoad %13 %54
+         %56 = OpFUnordGreaterThanEqual %36 %53 %55
+               OpStore %38 %56
+         %59 = OpLoad %7 %9
+         %60 = OpCompositeExtract %6 %59 0
+         %61 = OpLoad %36 %38
+         %62 = OpCompositeExtract %6 %61 1
+         %63 = OpLogicalEqual %6 %60 %62
+         %66 = OpSelect %10 %63 %65 %64
+               OpStore %58 %66
+               OpReturn
+               OpFunctionEnd

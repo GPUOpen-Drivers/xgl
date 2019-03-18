@@ -3,7 +3,7 @@
 ; RUN: amdllpc -v %gfxip %s | FileCheck -check-prefix=SHADERTEST %s
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
 ; SHADERTEST-LABEL: {{^// LLPC}} SPIR-V lowering results
-; SHADERTEST: %{{.*}} = call <4 x i32> @llpc.call.desc.load.buffer.v4i32.i32.i32.i32.i1(i32 0, i32 1, i32 0, i1 false)
+; SHADERTEST: %{{.*}} = call <4 x i32> {{.*}}@llpc.call.desc.load.buffer.{{[0-9a-z.]*}}(i32 0, i32 1, i32 0, i1 false)
 ; SHADERTEST-LABEL: {{^// LLPC}} pipeline patching results
 ; SHADERTEST: %{{.*}} = tail call <4 x float> @llvm.amdgcn.raw.buffer.load.v4f32(<4 x i32> %{{.*}}, i32 0, i32 0, i32 0)
 ; SHADERTEST: AMDLLPC SUCCESS
