@@ -42,11 +42,9 @@ glslangValidator = os.path.join(vulkanSDK, "bin" if Is64Bit() else "Bin32", "gls
 
 def GenerateSpvHeaderFile(inFile, outFile, marcoDef):
     # Generate spv file
-    print(">>>  (glslangValidator) " + inFile + ".comp ==> " + outFile + ".spv")
-    if len(marcoDef) == 0:
-        subprocess.call([glslangValidator, "-V", inFile + ".comp", "-o", outFile + ".spv"])
-    else:
-        subprocess.call([glslangValidator, "-V", inFile + ".comp", marcoDef, "-o", outFile + ".spv"])
+    print(">>>  (glslangValidator) " + inFile + " ==> " + outFile + ".spv")
+    cmdLine = "glslangValidator -V " + inFile + " "+ marcoDef + " -o " + outFile + ".spv";
+    subprocess.call(cmdLine, shell = True)
 
     # Convert .spv file to a hex file
     spvFile = outFile + ".spv"
@@ -58,7 +56,7 @@ def GenerateSpvHeaderFile(inFile, outFile, marcoDef):
 
     hexData = binascii.hexlify(binData).decode()
     fHex = open(hFile, "w")
-    hexText = "// do not edit by hand; created from source file \"copy_timestamp_query_pool.comp\" by executing script make_llpc_shaders.py\n"
+    hexText = "// do not edit by hand; created from source file " + inFile + " by executing script make_llpc_shaders.py\n"
     i = 0
     while i < len(hexData):
         hexText += "0x"
@@ -74,5 +72,6 @@ def GenerateSpvHeaderFile(inFile, outFile, marcoDef):
 
     return #GenerateSpvHeaderFile
 
-GenerateSpvHeaderFile("copy_timestamp_query_pool", "copy_timestamp_query_pool", "")
-GenerateSpvHeaderFile("copy_timestamp_query_pool", "copy_timestamp_query_pool_strided", "-DSTRIDED_COPY")
+GenerateSpvHeaderFile("copy_timestamp_query_pool.comp", "copy_timestamp_query_pool", " ")
+GenerateSpvHeaderFile("copy_timestamp_query_pool.comp", "copy_timestamp_query_pool_strided", "-DSTRIDED_COPY")
+

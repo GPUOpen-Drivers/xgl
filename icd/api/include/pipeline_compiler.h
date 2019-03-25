@@ -35,6 +35,8 @@
 #include "include/compiler_solution.h"
 #include "include/shader_cache.h"
 
+#include "include/compiler_solution_llpc.h"
+
 #include "include/vk_shader_code.h"
 
 #define ICD_BUILD_MULIT_COMPILER 0
@@ -136,14 +138,13 @@ public:
     ) const;
 
 private:
-    VkResult CreateLlpcCompiler();
 
     void ApplyProfileOptions(
-        Device*                   pDevice,
-        ShaderStage               stage,
-        ShaderModule*             pShaderModule,
-        Llpc::PipelineShaderInfo* pShaderInfo,
-        PipelineOptimizerKey*     pProfileKey
+        Device*                      pDevice,
+        ShaderStage                  stage,
+        ShaderModule*                pShaderModule,
+        Llpc::PipelineShaderInfo*    pShaderInfo,
+        PipelineOptimizerKey*        pProfileKey
     );
 
     template<class PipelineBuildInfo>
@@ -155,6 +156,12 @@ private:
     void DropPipelineBinaryInst(
         Device*                pDevice,
         const RuntimeSettings& settings,
+        const void*            pPipelineBinary,
+        size_t                 pipelineBinarySize);
+
+    void ReplacePipelineISACode(
+        Device*                pDevice,
+        const char*            pShaderFileName,
         const void*            pPipelineBinary,
         size_t                 pipelineBinarySize);
 
@@ -173,7 +180,7 @@ private:
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
     Llpc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by LLPC
 
-    Llpc::ICompiler*    m_pLlpc;               // LLPC compiler object
+    CompilerSolutionLlpc m_compilerSolutionLlpc;
 
 #if ICD_BUILD_MULIT_COMPILER
     // Store the hash list read from file when enable

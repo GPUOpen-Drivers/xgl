@@ -446,11 +446,11 @@ VkResult CmdBuffer::Create(
     Pal::Result palResult;
 
     const uint32_t numGroupedCmdBuffers = pDevice->NumPalDevices();
-    const size_t apiSize    = sizeof(ApiCmdBuffer);
-    const size_t palSize    = pDevice->PalDevice(DefaultDeviceIndex)->
+    const size_t apiSize = sizeof(ApiCmdBuffer);
+    const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->
                                         GetCmdBufferSize(palCreateInfo, &palResult) * numGroupedCmdBuffers;
-    const size_t vbSize     = VertBufBindingMgr::GetSize(pDevice) * numGroupedCmdBuffers;
-    const size_t cmdBufSize = apiSize + palSize + vbSize;
+
+    const size_t cmdBufSize = apiSize + palSize;
 
     VK_ASSERT(palResult == Pal::Result::Success);
 
@@ -471,7 +471,6 @@ VkResult CmdBuffer::Create(
         if (pMemory != nullptr)
         {
             void* pPalMem = Util::VoidPtrInc(pMemory, apiSize);
-            void* pVbMem  = Util::VoidPtrInc(pPalMem, palSize);
 
             VK_INIT_API_OBJECT(CmdBuffer, pMemory, (pDevice,
                                                     pCmdPool,
@@ -482,7 +481,7 @@ VkResult CmdBuffer::Create(
 
             CmdBuffer* pCmdBuffer = ApiCmdBuffer::ObjectFromHandle(pCommandBuffers[allocCount]);
 
-            result = pCmdBuffer->Initialize(pPalMem, pVbMem, palCreateInfo);
+            result = pCmdBuffer->Initialize(pPalMem, palCreateInfo);
 
             allocCount++;
         }
@@ -514,7 +513,6 @@ VkResult CmdBuffer::Create(
 // Initializes the command buffer.  Called once during command buffer creation.
 VkResult CmdBuffer::Initialize(
     void*                           pPalMem,
-    void*                           pVbMem,
     const Pal::CmdBufferCreateInfo& createInfo)
 {
     Pal::Result result = Pal::Result::Success;
@@ -548,7 +546,7 @@ VkResult CmdBuffer::Initialize(
 
     if (result == Pal::Result::Success)
     {
-        result = m_vbMgr.Initialize(pVbMem);
+        result = m_vbMgr.Initialize();
     }
 
     if (result == Pal::Result::Success)
@@ -961,20 +959,6 @@ void CmdBuffer::PalCmdCopyImageToMemory(
                 regionCount,
                 pRegions);
         }
-    }
-}
-
-// =====================================================================================================================
-void CmdBuffer::PalCmdSetIndirectUserDataWatermark(
-    uint16_t      tableId,
-    uint32_t      dwordLimit)
-{
-    utils::IterateMask deviceGroup(m_palDeviceMask);
-    while (deviceGroup.Iterate())
-    {
-        const uint32_t deviceIdx = deviceGroup.Index();
-
-        PalCmdBuffer(deviceIdx)->CmdSetIndirectUserDataWatermark(tableId, dwordLimit);
     }
 }
 

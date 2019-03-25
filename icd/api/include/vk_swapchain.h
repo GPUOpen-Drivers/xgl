@@ -85,6 +85,7 @@ public:
 
         Surface*                        pFullscreenSurface;
         VkSurfaceFormatKHR              fullscreenSurfaceFormat;
+
     };
 
     static VkResult Create(

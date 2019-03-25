@@ -2268,8 +2268,9 @@ void PhysicalDevice::PopulateLimits()
 // Retrieve surface capabilities. Called in response to vkGetPhysicalDeviceSurfaceCapabilitiesKHR
 template <typename T>
 VkResult PhysicalDevice::GetSurfaceCapabilities(
-    VkSurfaceKHR    surface,
-    T               pSurfaceCapabilities
+    VkSurfaceKHR             surface,
+    Pal::OsDisplayHandle     displayHandle,
+    T                        pSurfaceCapabilities
     ) const
 {
     VkResult result = VK_SUCCESS;
@@ -2280,6 +2281,12 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
 
     if (result == VK_SUCCESS)
     {
+        if (displayHandle != 0)
+        {
+            VK_ASSERT(displayableInfo.displayHandle == 0);
+            displayableInfo.displayHandle = displayHandle;
+        }
+
         Pal::SwapChainProperties swapChainProperties = {};
         if (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
         {
@@ -2343,9 +2350,10 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
         VkSurfaceCapabilities2KHR*                pVkSurfaceCapabilities2KHR;
     };
 
-    VkResult result = VK_SUCCESS;
-
-    VkSurfaceKHR       surface = VK_NULL_HANDLE;
+    VkResult                 result                    = VK_SUCCESS;
+    bool                     fullScreenExplicitEnabled = false;
+    Pal::OsDisplayHandle     displayHandle             = 0;
+    VkSurfaceKHR             surface                   = VK_NULL_HANDLE;
 
     for (pVkPhysicalDeviceSurfaceInfo2KHR = pSurfaceInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
@@ -2356,6 +2364,7 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
                 surface = pVkPhysicalDeviceSurfaceInfo2KHR->surface;
                 break;
             }
+
             default:
                 break;
         }
@@ -2370,7 +2379,10 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
             case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR:
             {
                 VK_ASSERT(surface != VK_NULL_HANDLE);
-                result = GetSurfaceCapabilities(surface, &pVkSurfaceCapabilities2KHR->surfaceCapabilities);
+                result = GetSurfaceCapabilities(
+                            surface,
+                            displayHandle,
+                            &pVkSurfaceCapabilities2KHR->surfaceCapabilities);
                 break;
             }
 
@@ -2411,6 +2423,10 @@ VkBool32 PhysicalDevice::DeterminePresentationSupported(
 
 // =====================================================================================================================
 // Retrieve surface present modes. Called in response to vkGetPhysicalDeviceSurfacePresentModesKHR
+// Note:
+//  DirectDisplay platform has only fullscreen mode.
+//  Win32 fullscreen provides additional fifo relaxed mode,
+//  it will fallback to fifo for windowed mode.
 VkResult PhysicalDevice::GetSurfacePresentModes(
     const DisplayableSurfaceInfo& displayableInfo,
     Pal::PresentMode              presentType,
@@ -2535,9 +2551,10 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
 // =====================================================================================================================
 // Returns the presentable image formats we support for both windowed and fullscreen modes
 VkResult PhysicalDevice::GetSurfaceFormats(
-    Surface*            pSurface,
-    uint32_t*           pSurfaceFormatCount,
-    VkSurfaceFormatKHR* pSurfaceFormats) const
+    Surface*             pSurface,
+    Pal::OsDisplayHandle osDisplayHandle,
+    uint32_t*            pSurfaceFormatCount,
+    VkSurfaceFormatKHR*  pSurfaceFormats) const
 {
     VkResult result = VK_SUCCESS;
 
@@ -2583,13 +2600,18 @@ VkResult PhysicalDevice::GetSurfaceFormats(
 // called in response to vkGetPhysicalDeviceSurfaceFormats2KHR
 VkResult PhysicalDevice::GetSurfaceFormats(
     Surface*             pSurface,
+    Pal::OsDisplayHandle osDisplayHandle,
     uint32_t*            pSurfaceFormatCount,
     VkSurfaceFormat2KHR* pSurfaceFormats) const
 {
     VkResult result = VK_SUCCESS;
     if (pSurfaceFormats == nullptr)
     {
-        result = GetSurfaceFormats(pSurface, pSurfaceFormatCount, static_cast<VkSurfaceFormatKHR*>(nullptr));
+        result = GetSurfaceFormats(
+            pSurface,
+            osDisplayHandle,
+            pSurfaceFormatCount,
+            static_cast<VkSurfaceFormatKHR*>(nullptr));
     }
     else
     {
@@ -2603,11 +2625,10 @@ VkResult PhysicalDevice::GetSurfaceFormats(
             return VK_ERROR_OUT_OF_HOST_MEMORY;
         }
 
-        result = GetSurfaceFormats(pSurface, pSurfaceFormatCount, pTempSurfaceFormats);
+        result = GetSurfaceFormats(pSurface, osDisplayHandle, pSurfaceFormatCount, pTempSurfaceFormats);
 
         for (uint32_t i = 0; i < *pSurfaceFormatCount; i++)
         {
-            VK_ASSERT(pSurfaceFormats[i].sType == VK_STRUCTURE_TYPE_SURFACE_FORMAT_2_KHR);
             pSurfaceFormats[i].surfaceFormat = pTempSurfaceFormats[i];
         }
 
@@ -2777,6 +2798,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SCALAR_BLOCK_LAYOUT));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MEMORY_OVERALLOCATION_BEHAVIOR));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_PRIORITY));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_BUDGET));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TRANSFORM_FEEDBACK));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VULKAN_MEMORY_MODEL));
@@ -4712,6 +4734,8 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2EXT(
     ) const
 {
     VkResult result = VK_SUCCESS;
+    Pal::OsDisplayHandle osDisplayHandle = 0;
+
     union
     {
         const VkStructHeader*       pHeader;
@@ -4725,7 +4749,7 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2EXT(
         switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_EXT:
-            result = GetSurfaceCapabilities(surface, pVkSurfaceCapabilities2EXT);
+            result = GetSurfaceCapabilities(surface, osDisplayHandle, pVkSurfaceCapabilities2EXT);
             break;
         default:
             break;
@@ -4952,11 +4976,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfacePresentModesKHR(
 
     if (result == VK_SUCCESS)
     {
-        // Note:
-        // DirectDisplay platform has only fullscreen mode.
-        // Win32 fullscreen provides additional fifo relaxed mode,
-        // it will fallback to fifo for windowed mode.
-
         result = ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfacePresentModes(
             displayableInfo,
             Pal::PresentMode::Count,
@@ -4973,8 +4992,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilitiesKHR(
     VkSurfaceKHR                                surface,
     VkSurfaceCapabilitiesKHR*                   pSurfaceCapabilities)
 {
+    Pal::OsDisplayHandle osDisplayHandle = 0;
+
     return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfaceCapabilities(
-        surface, pSurfaceCapabilities);
+        surface, osDisplayHandle, pSurfaceCapabilities);
 }
 
 // =====================================================================================================================
@@ -4994,8 +5015,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceFormatsKHR(
     uint32_t*                                   pSurfaceFormatCount,
     VkSurfaceFormatKHR*                         pSurfaceFormats)
 {
+    Pal::OsDisplayHandle osDisplayhandle = 0;
+
     return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfaceFormats(
-                Surface::ObjectFromHandle(surface),pSurfaceFormatCount, pSurfaceFormats);
+                Surface::ObjectFromHandle(surface), osDisplayhandle, pSurfaceFormatCount, pSurfaceFormats);
 }
 
 // =====================================================================================================================
@@ -5011,7 +5034,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceFormats2KHR(
         const VkPhysicalDeviceSurfaceInfo2KHR* pVkPhysicalDeviceSurfaceInfo2KHR;
     };
 
-    VkResult result = VK_SUCCESS;
+    Pal::OsDisplayHandle osDisplayhandle           = 0;
+    VkResult             result                    = VK_SUCCESS;
+    VkSurfaceKHR         surface                   = VK_NULL_HANDLE;
+    bool                 fullScreenExplicitEnabled = false;
 
     for (pVkPhysicalDeviceSurfaceInfo2KHR = pSurfaceInfo;
         (pHeader != nullptr) && ((result == VK_SUCCESS) || (result == VK_INCOMPLETE));
@@ -5020,15 +5046,22 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceFormats2KHR(
         switch (static_cast<uint32_t>(pHeader->sType))
         {
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR:
-                result = ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfaceFormats(
-                    Surface::ObjectFromHandle(pVkPhysicalDeviceSurfaceInfo2KHR->surface),
-                    pSurfaceFormatCount,
-                    pSurfaceFormats);
+                surface = pVkPhysicalDeviceSurfaceInfo2KHR->surface;
+                VK_ASSERT(surface != VK_NULL_HANDLE);
                 break;
 
             default:
                 break;
         }
+    }
+
+    if (surface != VK_NULL_HANDLE)
+    {
+        result = ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfaceFormats(
+            Surface::ObjectFromHandle(surface),
+            osDisplayhandle,
+            pSurfaceFormatCount,
+            pSurfaceFormats);
     }
 
     return result;

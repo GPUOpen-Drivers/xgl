@@ -728,6 +728,7 @@ void GraphicsPipeline::BuildRasterizationState(
 void GraphicsPipeline::ConvertGraphicsPipelineInfo(
     Device*                             pDevice,
     const VkGraphicsPipelineCreateInfo* pIn,
+    const VbBindingInfo*                pVbInfo,
     CreateInfo*                         pInfo)
 {
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
@@ -782,7 +783,9 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         pInfo->immedInfo.inputAssemblyState.primitiveRestartEnable = (pIa->primitiveRestartEnable != VK_FALSE);
         pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex  = (pIa->primitiveRestartEnable != VK_FALSE)
                                                                      ? 0xFFFFFFFF : 0;
-        pInfo->immedInfo.inputAssemblyState.topology = VkToPalPrimitiveTopology(pIa->topology);
+        pInfo->immedInfo.inputAssemblyState.topology               = VkToPalPrimitiveTopology(pIa->topology);
+
+        pInfo->pipeline.iaState.vertexBufferCount                  = pVbInfo->bindingTableSize;
 
         VkToPalPrimitiveTypeAdjacency(
             pIa->topology,
@@ -1176,7 +1179,7 @@ VkResult GraphicsPipeline::Create(
     uint64_t      apiPsoHash                         = BuildApiHash(pCreateInfo, &binaryCreateInfo.basePipelineHash);
 
     VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo);
-    ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &localPipelineInfo);
+    ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &vbInfo, &localPipelineInfo);
 
     const uint32_t numPalDevices = pDevice->NumPalDevices();
     for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices); ++i)

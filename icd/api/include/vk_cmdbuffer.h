@@ -740,10 +740,6 @@ public:
         uint32_t                       regionCount,
         const Pal::ImageResolveRegion* pRegions);
 
-    void PalCmdSetIndirectUserDataWatermark(
-        uint16_t      tableId,
-        uint32_t      dwordLimit);
-
     void PreBltBindMsaaState(const Image& image);
 
     void PostBltRestoreMsaaState();
@@ -826,7 +822,6 @@ private:
 
     VkResult Initialize(
         void*                           pPalMem,
-        void*                           pVbMem,
         const Pal::CmdBufferCreateInfo& createInfo);
 
     void ResetPipelineState();

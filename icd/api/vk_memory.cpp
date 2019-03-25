@@ -120,8 +120,9 @@ VkResult Memory::Create(
 
                 if (pDevice->NumPalDevices() > 1)
                 {
-                    multiInstanceHeap = (memoryProperties.memoryHeaps[pInfo->memoryTypeIndex].flags &
-                                         VK_MEMORY_HEAP_MULTI_INSTANCE_BIT) != 0;
+                    const uint32_t heapIndex = memoryProperties.memoryTypes[pInfo->memoryTypeIndex].heapIndex;
+                    multiInstanceHeap        = (memoryProperties.memoryHeaps[heapIndex].flags &
+                                                VK_MEMORY_HEAP_MULTI_INSTANCE_BIT) != 0;
 
                     if (multiInstanceHeap)
                     {

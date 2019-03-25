@@ -130,6 +130,8 @@ endif()
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION_SUPPORTS_SHADER_CACHE_EXPECTED_ENTRIES=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
 
+target_compile_definitions(xgl PRIVATE LLPC_CLIENT_INTERFACE_MAJOR_VERSION=${LLPC_CLIENT_INTERFACE_MAJOR_VERSION})
+
 if (BUILD_WAYLAND_SUPPORT)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
     target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
@@ -295,6 +297,12 @@ if(ICD_GPUOPEN_DEVMODE_BUILD)
     # Or for a separate lib: icdapidevmode
     # add_subdirectory(api/devmode ${PROJECT_BINARY_DIR}/api/devmode)
     # target_link_libraries(xgl devmode)
+endif()
+
+if(ICD_BUILD_LLPC)
+    target_sources(xgl PRIVATE
+        api/compiler_solution_llpc.cpp
+    )
 endif()
 
 ### ICD layer ##################################################################

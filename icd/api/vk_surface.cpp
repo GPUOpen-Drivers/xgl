@@ -43,7 +43,6 @@ VkResult Surface::Create(
     const VkAllocationCallbacks*        pAllocator,
     VkSurfaceKHR*                       pSurfaceHandle)
 {
-    Pal::OsDisplayHandle osDisplayHandle = 0;
 
     VkIcdSurfaceXcb  xcbSurface  = {};
     VkIcdSurfaceXlib xlibSurface = {};
@@ -55,7 +54,6 @@ VkResult Surface::Create(
     union
     {
         const VkStructHeader*                    pHeader;
-
         const VkXcbSurfaceCreateInfoKHR*             pVkXcbSurfaceCreateInfoKHR;
         const VkXlibSurfaceCreateInfoKHR*            pVkXlibSurfaceCreateInfoKHR;
         const VkDisplaySurfaceCreateInfoKHR*         pVkDisplaySurfaceCreateInfoKHR;
@@ -136,21 +134,21 @@ VkResult Surface::Create(
 
         if (xcbSurface.base.platform == VK_ICD_WSI_PLATFORM_XCB)
         {
-            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, osDisplayHandle, xcbSurface);
+            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, xcbSurface);
         }
         else if (displaySurface.base.platform == VK_ICD_WSI_PLATFORM_DISPLAY)
         {
-            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, osDisplayHandle, displaySurface);
+            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, displaySurface);
         }
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         else if (waylandSurface.base.platform == VK_ICD_WSI_PLATFORM_WAYLAND)
         {
-            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, osDisplayHandle, waylandSurface);
+            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, waylandSurface);
         }
 #endif
         else
         {
-            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, osDisplayHandle, xlibSurface);
+            pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, xlibSurface);
         }
         *pSurfaceHandle = Surface::HandleFromObject(pSurface);
     }

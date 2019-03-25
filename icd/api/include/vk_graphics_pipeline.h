@@ -284,6 +284,7 @@ protected:
     static void ConvertGraphicsPipelineInfo(
         Device*                             pDevice,
         const VkGraphicsPipelineCreateInfo* pIn,
+        const VbBindingInfo*                pVbInfo,
         CreateInfo*                         pInfo);
 
     static void BuildRasterizationState(

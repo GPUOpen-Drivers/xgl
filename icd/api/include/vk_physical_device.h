@@ -291,8 +291,9 @@ public:
 
     template< typename T >
     VkResult GetSurfaceCapabilities(
-        VkSurfaceKHR        surface,
-        T                   pSurfaceCapabilities) const;
+        VkSurfaceKHR         surface,
+        Pal::OsDisplayHandle displayHandle,
+        T                    pSurfaceCapabilities) const;
 
     VkResult GetSurfaceCapabilities2KHR(
         const VkPhysicalDeviceSurfaceInfo2KHR*  pSurfaceInfo,
@@ -306,13 +307,15 @@ public:
 
     VkResult GetSurfaceFormats(
         Surface*             pSurface,
+        Pal::OsDisplayHandle osDisplayHandle,
         uint32_t*            pSurfaceFormatCount,
         VkSurfaceFormatKHR*  pSurfaceFormats) const;
 
     VkResult GetSurfaceFormats(
         Surface*             pSurface,
+        Pal::OsDisplayHandle osDisplayHandle,
         uint32_t*            pSurfaceFormatCount,
-        VkSurfaceFormat2KHR*  pSurfaceFormats) const;
+        VkSurfaceFormat2KHR* pSurfaceFormats) const;
 
     VkResult GetPhysicalDevicePresentRectangles(
         VkSurfaceKHR                                surface,

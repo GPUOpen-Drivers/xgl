@@ -88,6 +88,8 @@ static void OverrideSettingsByDevice(
                          pRootPath, pSettings->pipelineDumpDir);
         MakeAbsolutePath(pSettings->shaderReplaceDir, sizeof(pSettings->shaderReplaceDir),
                          pRootPath, pSettings->shaderReplaceDir);
+        MakeAbsolutePath(pSettings->shaderReplacePipelineHashes, sizeof(pSettings->shaderReplacePipelineHashes),
+                         pRootPath, pSettings->shaderReplacePipelineHashes);
 
     }
 }

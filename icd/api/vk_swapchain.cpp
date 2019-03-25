@@ -96,9 +96,10 @@ VkResult SwapChain::Create(
 
     Properties properties = {};
 
-    bool                      mutableFormat   = false;
-    uint32_t                  viewFormatCount = 0;
-    const VkFormat*           pViewFormats    = nullptr;
+    bool                      fullScreenExclusiveEnabled = false;
+    bool                      mutableFormat              = false;
+    uint32_t                  viewFormatCount            = 0;
+    const VkFormat*           pViewFormats               = nullptr;
 
     union
     {
@@ -119,18 +120,9 @@ VkResult SwapChain::Create(
 
                 Surface* pSurface = Surface::ObjectFromHandle(pVkSwapchainCreateInfoKHR->surface);
 
-                if (pSurface->IsExplicitFullscreenSurface() == false)
-                {
-                    properties.pSurface      = pSurface;
-                    properties.surfaceFormat = { pVkSwapchainCreateInfoKHR->imageFormat,
-                                                 pVkSwapchainCreateInfoKHR->imageColorSpace };
-                }
-                else
-                {
-                    properties.pFullscreenSurface      = pSurface;
-                    properties.fullscreenSurfaceFormat = { pVkSwapchainCreateInfoKHR->imageFormat,
-                                                           pVkSwapchainCreateInfoKHR->imageColorSpace };
-                }
+                properties.pSurface      = pSurface;
+                properties.surfaceFormat = { pVkSwapchainCreateInfoKHR->imageFormat,
+                                             pVkSwapchainCreateInfoKHR->imageColorSpace };
 
                 result = PhysicalDevice::UnpackDisplayableSurface(pSurface, &properties.displayableInfo);
 
@@ -243,7 +235,7 @@ VkResult SwapChain::Create(
                                                         Util::Max<uint32_t>(5, pCreateInfo->minImageCount) :
                                                         pCreateInfo->minImageCount;
 
-    swapChainCreateInfo.hDisplay            = properties.displayableInfo.displayHandle;
+    swapChainCreateInfo.hDisplay            = properties.imageCreateInfo.hDisplay;
     swapChainCreateInfo.hWindow             = properties.displayableInfo.windowHandle;
     swapChainCreateInfo.wsiPlatform         = properties.displayableInfo.palPlatform;
     swapChainCreateInfo.imageCount          = swapImageCount;
@@ -281,15 +273,11 @@ VkResult SwapChain::Create(
             ((properties.pFullscreenSurface != nullptr) ? FullscreenMgr::Explicit :
                                                           FullscreenMgr::Implicit);
 
-    Pal::OsDisplayHandle osDisplayHandle =
-        (mode == FullscreenMgr::Explicit) ? properties.pFullscreenSurface->GetOSDisplayHandle() :
-                                            properties.pSurface->GetOSDisplayHandle();
-
     // Find the monitor is associated with the given window handle
     Pal::IDevice* pPalDevice = pDevice->PalDevice(properties.presentationDeviceIdx);
     Pal::IScreen* pScreen    = pDevice->VkInstance()->FindScreen(pPalDevice,
                                                                  swapChainCreateInfo.hWindow,
-                                                                 osDisplayHandle);
+                                                                 properties.imageCreateInfo.hDisplay);
 
     Pal::ScreenProperties screenProperties = {};
 
@@ -366,7 +354,8 @@ VkResult SwapChain::Create(
     FullscreenMgr* pFullscreenMgr = nullptr;
 
     // Check for a screen because valid screen properties are required to initialize the FullscreenMgr
-    if ((pScreen != nullptr) && EnableFullScreen(pDevice, properties, mode, *pCreateInfo))
+    if ((pScreen != nullptr) &&
+        EnableFullScreen(pDevice, properties, mode, *pCreateInfo))
     {
         void* pFullscreenStorage = pAllocator->pfnAllocation(
             pAllocator->pUserData,

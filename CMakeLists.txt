@@ -98,6 +98,20 @@ endif()
 
 set(ICD_PAL_CLIENT_MAJOR_VERSION ${PAL_MAJOR_VERSION})
 
+# This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the LLPC interface
+# that the ICD supports.  LLPC uses this value to enable backwards-compatibility for older interface versions.  It must
+# be updated on each LLPC promotion after handling all of the interface changes described in llpc.h
+file(STRINGS icd/make/importdefs LLPC_MAJOR_VERSION REGEX "^ICD_LLPC_CLIENT_MAJOR_VERSION = [0-9]+")
+
+if(LLPC_MAJOR_VERSION STREQUAL "")
+    message(STATUS "Failed to find ICD_LLPC_CLIENT_MAJOR_VERSION")
+else()
+    string(REGEX REPLACE "ICD_LLPC_CLIENT_MAJOR_VERSION = " "" LLPC_MAJOR_VERSION ${LLPC_MAJOR_VERSION})
+    message(STATUS "Detected ICD_LLPC_CLIENT_MAJOR_VERSION is " ${LLPC_MAJOR_VERSION})
+endif()
+
+set(ICD_LLPC_CLIENT_MAJOR_VERSION ${LLPC_MAJOR_VERSION})
+
 # GPUOPEN
 if(ICD_GPUOPEN_DEVMODE_BUILD)
     file(STRINGS icd/make/importdefs GPUOPEN_MAJOR_VERSION REGEX "^ICD_GPUOPEN_CLIENT_MAJOR_VERSION = [0-9]+")
@@ -160,6 +174,7 @@ set(PERL_CMD ${PERL_EXECUTABLE})
 ### LLPC ###############################################################
 set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is read-only.")
 set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the LLPC.")
+set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 
 if(ICD_BUILD_LLPC)
     set(LLVM_ENABLE_ASSERTIONS ${CMAKE_BUILD_TYPE_DEBUG} CACHE BOOL Force)

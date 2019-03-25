@@ -54,9 +54,6 @@ public:
         VkIcdSurfaceWayland*  GetWaylandSurface() { return &m_waylandSurface; }
 #endif
 
-    Pal::OsDisplayHandle GetOSDisplayHandle() { return m_osDisplayHandle; }
-    bool IsExplicitFullscreenSurface() const  { return m_osDisplayHandle != 0; }
-
     void Destroy(
         Instance*                            pInstance,
         const VkAllocationCallbacks*         pAllocator);
@@ -65,42 +62,34 @@ protected:
     virtual ~Surface() {}
 
     Surface(Instance*               pInstance,
-        Pal::OsDisplayHandle        osDisplayHandle,
         const VkIcdSurfaceDisplay&  displaySurface)
         :
         m_displaySurface(displaySurface),
-        m_pInstance(pInstance),
-        m_osDisplayHandle(osDisplayHandle)
+        m_pInstance(pInstance)
     {
     }
 
     Surface(Instance*           pInstance,
-        Pal::OsDisplayHandle    osDisplayHandle,
         const VkIcdSurfaceXcb&  xcbSurface)
         :
         m_xcbSurface(xcbSurface),
-        m_pInstance(pInstance),
-        m_osDisplayHandle(osDisplayHandle)
+        m_pInstance(pInstance)
     {
     }
 
     Surface(Instance*            pInstance,
-        Pal::OsDisplayHandle     osDisplayHandle,
         const VkIcdSurfaceXlib&  xlibSurface)
         :
         m_xlibSurface(xlibSurface),
-        m_pInstance(pInstance),
-        m_osDisplayHandle(osDisplayHandle)
+        m_pInstance(pInstance)
     {
     }
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
-    Surface(Instance*            pInstance,
-        Pal::OsDisplayHandle     osDisplayHandle,
+    Surface(Instance*               pInstance,
         const VkIcdSurfaceWayland&  waylandSurface)
         :
         m_waylandSurface(waylandSurface),
-        m_pInstance(pInstance),
-        m_osDisplayHandle(osDisplayHandle)
+        m_pInstance(pInstance)
     {
     }
 #endif
@@ -115,7 +104,6 @@ protected:
     };
 
     Instance*            m_pInstance;
-    Pal::OsDisplayHandle m_osDisplayHandle;
 };
 
 namespace entry

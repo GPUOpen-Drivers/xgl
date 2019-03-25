@@ -43,10 +43,7 @@ constexpr VbBindingInfo NullVbBindingInfo = {};
 VertBufBindingMgr::VertBufBindingMgr(
     Device* pDevice)
     :
-    m_vbSrdDwSize(pDevice->GetProperties().descriptorSizes.bufferView / sizeof(uint32_t)),
-    m_pVbTblSysMem(nullptr),
-    m_pDevice(pDevice),
-    m_bindingTableSize(0)
+    m_pDevice(pDevice)
 {
 
 }
@@ -58,34 +55,10 @@ VertBufBindingMgr::~VertBufBindingMgr()
 }
 
 // =====================================================================================================================
-size_t VertBufBindingMgr::GetMaxVertBufTableDwSize(
-    const PhysicalDevice* pPhysDevice)
-{
-    const size_t vbSrdSize = pPhysDevice->PalProperties().gfxipProperties.srdSizes.bufferView;
-
-    VK_ASSERT((vbSrdSize % sizeof(uint32_t)) == 0);
-
-    return (Pal::MaxVertexBuffers * vbSrdSize) / sizeof(uint32_t);
-}
-
-// =====================================================================================================================
-// Returns the amount of bytes of command buffer state memory this manager needs.
-size_t VertBufBindingMgr::GetSize(
-    const Device* pDevice)
-{
-    const size_t sysMemTblSize = GetMaxVertBufTableDwSize(pDevice->VkPhysicalDevice(DefaultDeviceIndex)) * sizeof(uint32_t);
-
-    return sysMemTblSize;
-}
-
-// =====================================================================================================================
 // Initializes VB binding manager state.  Should be called when the command buffer is being initialized.
-Pal::Result VertBufBindingMgr::Initialize(
-    void* pVbMem)
+Pal::Result VertBufBindingMgr::Initialize()
 {
-    m_pVbTblSysMem = reinterpret_cast<uint32_t*>(pVbMem);
     Reset();
-
     return Pal::Result::Success;
 }
 
@@ -93,7 +66,6 @@ Pal::Result VertBufBindingMgr::Initialize(
 // Called to reset the state of the VB manager because the parent command buffer is being reset.
 void VertBufBindingMgr::Reset()
 {
-    m_bindingTableSize = 0;
 
     for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
     {
@@ -110,10 +82,6 @@ void VertBufBindingMgr::Reset()
             m_bindings[deviceIdx][i].stride = 0;
         }
     }
-
-    memset(m_pVbTblSysMem,
-           0,
-           m_vbSrdDwSize * Pal::MaxVertexBuffers * sizeof(uint32_t) * m_pDevice->NumPalDevices());
 }
 
 // =====================================================================================================================
@@ -126,16 +94,10 @@ void VertBufBindingMgr::BindVertexBuffers(
     const VkBuffer*     pInBuffers,
     const VkDeviceSize* pInOffsets)
 {
-    const uint32_t strideDw      = m_vbSrdDwSize * Pal::MaxVertexBuffers;
-    const uint32_t startDwOffset = firstBinding  * m_vbSrdDwSize;
-
     utils::IterateMask deviceGroup(pCmdBuf->GetDeviceMask());
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
-
-        uint32_t* pFirstSrd = m_pVbTblSysMem + (strideDw * deviceIdx) + startDwOffset;
-        uint32_t* pDestSrd  = pFirstSrd;
 
         const VkBuffer*     pBuffers = pInBuffers;
         const VkDeviceSize* pOffsets = pInOffsets;
@@ -154,25 +116,20 @@ void VertBufBindingMgr::BindVertexBuffers(
 
                 pBinding->gpuAddr = pBuffer->GpuVirtAddr(deviceIdx) + offset;
                 pBinding->range   = pBuffer->GetSize() - offset;
-
-                m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, pBinding, pDestSrd);
             }
             else
             {
-                for (uint32_t dw = 0; dw < m_vbSrdDwSize; ++dw)
-                {
-                    pDestSrd[dw] = 0;
-                }
+                pBinding->gpuAddr = 0;
+                pBinding->range   = 0;
             }
 
             pBuffers++;
             pOffsets++;
             pBinding++;
-
-            pDestSrd += m_vbSrdDwSize;
         }
-        pCmdBuf->PalCmdBuffer(deviceIdx)->CmdSetIndirectUserData(
-                                          VertexBufferTableId, startDwOffset, m_vbSrdDwSize * bindingCount, pFirstSrd);
+
+        pCmdBuf->PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(
+            firstBinding, bindingCount, &m_bindings[deviceIdx][firstBinding]);
     }
 }
 
@@ -189,8 +146,6 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
     // Update strides for each binding used by the graphics pipeline.  Rebuild SRD data for those bindings
     // whose strides changed.
 
-    const size_t strideDw = m_vbSrdDwSize * Pal::MaxVertexBuffers;
-
     for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
     {
         uint32_t firstChanged = UINT_MAX;
@@ -206,42 +161,19 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
             {
                 pBinding->stride = byteStride;
 
-                uint32_t* pDestSrd = &m_pVbTblSysMem[(strideDw * deviceIdx) + (slot * m_vbSrdDwSize)];
-
                 if (pBinding->gpuAddr != 0)
                 {
-                    m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, pBinding, pDestSrd);
+                    firstChanged = Util::Min(firstChanged, slot);
+                    lastChanged  = slot;
                 }
-                else
-                {
-                    for (uint32_t dw = 0; dw < m_vbSrdDwSize; ++dw)
-                    {
-                        pDestSrd[dw] = 0;
-                    }
-                }
-
-                firstChanged = Util::Min(firstChanged, slot);
-                lastChanged  = slot;
             }
         }
         // Upload new SRD values to CE-RAM for those that changed above
         if (firstChanged <= lastChanged)
         {
-            const uint32_t srcDwOffset = (static_cast<uint32_t>(strideDw) * deviceIdx) + (firstChanged * m_vbSrdDwSize);
-            const uint32_t dstDwOffset = firstChanged * m_vbSrdDwSize;
-            const uint32_t dwSize      = (lastChanged - firstChanged + 1) * m_vbSrdDwSize;
-
-            pCmdBuf->PalCmdBuffer(deviceIdx)->CmdSetIndirectUserData(
-                VertexBufferTableId, dstDwOffset, dwSize, &m_pVbTblSysMem[srcDwOffset]);
+            pCmdBuf->PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(
+                firstChanged, (lastChanged - firstChanged) + 1, &m_bindings[deviceIdx][firstChanged]);
         }
-    }
-
-    // Update the active size of the current vertex buffer table.  PAL only dumps CE-RAM up to this limit.
-    if (bindingInfo.bindingTableSize != m_bindingTableSize)
-    {
-        m_bindingTableSize = bindingInfo.bindingTableSize;
-
-        pCmdBuf->PalCmdSetIndirectUserDataWatermark(VertexBufferTableId, m_bindingTableSize * m_vbSrdDwSize);
     }
 }
 

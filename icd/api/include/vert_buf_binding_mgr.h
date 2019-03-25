@@ -62,15 +62,11 @@ class Queue;
 class VertBufBindingMgr
 {
 public:
-    static constexpr Pal::uint16 VertexBufferTableId = 0;
 
     VertBufBindingMgr(Device* pDevice);
     ~VertBufBindingMgr();
 
-    static size_t GetMaxVertBufTableDwSize(const PhysicalDevice* pPhysDevice);
-    static size_t GetSize(const Device* pDevice);
-
-    Pal::Result Initialize(void* pVbMem);
+    Pal::Result Initialize();
     void Reset();
 
     void BindVertexBuffers(
@@ -83,12 +79,8 @@ public:
     void GraphicsPipelineChanged(CmdBuffer* pCmdBuf, const GraphicsPipeline* pPipeline);
 
 private:
-
-    uint32_t            m_vbSrdDwSize;                                    // Size of a VB SRD in bytes
     Pal::BufferViewInfo m_bindings[MaxPalDevices][Pal::MaxVertexBuffers]; // VB bindings in source non-SRD form
-    uint32_t*           m_pVbTblSysMem;                                   // VB bindings in SRD form in system memory
     Device*             m_pDevice;                                        // Device pointer
-    uint32_t            m_bindingTableSize;                               // Current size of the active VB table in slots
 
     PAL_DISALLOW_COPY_AND_ASSIGN(VertBufBindingMgr);
 };
