@@ -34,26 +34,20 @@
 
 #pragma once
 
-#include "include/vk_dispatch.h"
+#include "opt_layer.h"
 
 namespace vk
 {
 
 // =====================================================================================================================
 // Contains any state used by the barrier filter layer
-class BarrierFilterLayer
+class BarrierFilterLayer : public OptLayer
 {
 public:
     BarrierFilterLayer();
-    ~BarrierFilterLayer();
+    virtual ~BarrierFilterLayer();
 
-    void OverrideDispatchTable(DispatchTable* pDispatchTable);
-
-    VK_INLINE const DispatchTable* GetNextLayer() const
-        { return &m_nextLayer; }
-
-private:
-    DispatchTable m_nextLayer;                               // Dispatch table to the next layer's functions
+    virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) override;
 
 };
 

@@ -70,6 +70,7 @@ enum class AppProfile : uint32_t
     RiseOfTheTombra,       // RiseOfTheTombRaider by Feral3D
     ThronesOfBritannia,    // Total War Saga: Thrones of Britannia by Feral3D
     DawnOfWarIII,          // Dawn of War III by Feral3D
+    WarHammerII,           // Total War: WarHammer II by Feral3D
     Feral3DEngine,         // Feral3D Engine (Default)
     AshesOfTheSingularity, // Ashes Of The Singularity
     NitrousEngine,         // Nitrous Engine by Oxide (Default)

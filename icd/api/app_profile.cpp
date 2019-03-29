@@ -215,6 +215,12 @@ constexpr AppProfilePatternEntry AppNameDawnOfWarIII =
     "dawnofwar3"
 };
 
+constexpr AppProfilePatternEntry AppNameWarHammerII =
+{
+    PatternAppNameLower,
+    "totalwarhammer2"
+};
+
 constexpr AppProfilePatternEntry AppEngineFeral3D =
 {
     PatternEngineNameLower,
@@ -410,6 +416,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::DawnOfWarIII,
         {
             AppNameDawnOfWarIII,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::WarHammerII,
+        {
+            AppNameWarHammerII,
             AppEngineFeral3D,
             PatternEnd
         }

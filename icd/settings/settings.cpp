@@ -88,8 +88,6 @@ static void OverrideSettingsByDevice(
                          pRootPath, pSettings->pipelineDumpDir);
         MakeAbsolutePath(pSettings->shaderReplaceDir, sizeof(pSettings->shaderReplaceDir),
                          pRootPath, pSettings->shaderReplaceDir);
-        MakeAbsolutePath(pSettings->shaderReplacePipelineHashes, sizeof(pSettings->shaderReplacePipelineHashes),
-                         pRootPath, pSettings->shaderReplacePipelineHashes);
 
     }
 }
@@ -239,6 +237,11 @@ static void OverrideProfiledSettings(
     if (appProfile == AppProfile::F1_2017)
     {
         pSettings->prefetchShaders = true;
+    }
+
+    if (appProfile == AppProfile::ThronesOfBritannia)
+    {
+        pSettings->disableHtileBasedMsaaRead = false;
     }
 
 }

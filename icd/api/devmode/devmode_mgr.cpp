@@ -804,7 +804,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         sampleConfig.sqtt.seMask                         = UINT32_MAX;
         sampleConfig.sqtt.gpuMemoryLimit                 = m_traceGpuMemLimit;
         sampleConfig.sqtt.flags.enable                   = true;
-        sampleConfig.sqtt.flags.supressInstructionTokens = (m_enableInstTracing == false);
+        sampleConfig.sqtt.flags.supressInstructionTokens = (m_enableInstTracing == false) || (m_targetApiPsoHash != 0);
         sampleConfig.sqtt.flags.stallMode                = Pal::GpuProfilerStallMode::GpuProfilerStallAlways;
 
         // Override trace buffer size from panel

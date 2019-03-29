@@ -50,10 +50,12 @@ VkResult Event::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkEvent*                        pEvent)
 {
-    const size_t numDeviceEvents = pDevice->NumPalDevices();
+    const size_t numDeviceEvents                    = pDevice->NumPalDevices();
 
     Pal::IGpuEvent* pPalGpuEvents[MaxPalDevices] = {};
-    Pal::Result palResult = Pal::Result::Success;
+    InternalMemory  internalGpuMem               = {};
+    VkResult result                              = VK_SUCCESS;
+    Pal::Result palResult                        = Pal::Result::Success;
 
     // Technically, we should vet the pCreateInfo structure here, but the only defined
     // field in it right now is reserved, so we gain nothing except protecting broken
@@ -93,18 +95,45 @@ VkResult Event::Create(
             &pPalGpuEvents[deviceIdx]);
     }
 
-    VkResult result =  PalToVkResult(palResult);
+    result = PalToVkResult(palResult);
 
     if (result == VK_SUCCESS)
     {
-        VK_PLACEMENT_NEW(pSystemMem) Event(pDevice, pDevice->NumPalDevices(), pPalGpuEvents);
+        Pal::GpuMemoryRequirements gpuMemReqs = {};
+        pPalGpuEvents[0]->GetGpuMemoryRequirements(&gpuMemReqs);
+
+        InternalMemCreateInfo allocInfo = {};
+        allocInfo.pal.size              = gpuMemReqs.size;
+        allocInfo.pal.alignment         = gpuMemReqs.alignment;
+        allocInfo.pal.priority          = Pal::GpuMemPriority::Normal;
+        allocInfo.pal.flags.shareable   = 1;
+
+        pDevice->MemMgr()->GetCommonPool(InternalPoolCpuCacheableGpuUncached, &allocInfo);
+
+        result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &internalGpuMem, pDevice->GetPalDeviceMask());
+
+        if (result == VK_SUCCESS)
+        {
+            for (uint32_t deviceIdx = 0;
+                (deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
+                deviceIdx++)
+            {
+                palResult = pPalGpuEvents[deviceIdx]->BindGpuMemory(internalGpuMem.PalMemory(deviceIdx),
+                    internalGpuMem.Offset());
+            }
+            result = PalToVkResult(palResult);
+        }
+    }
+
+   if (result == VK_SUCCESS)
+   {
+        VK_PLACEMENT_NEW(pSystemMem) Event(pDevice, pDevice->NumPalDevices(), pPalGpuEvents, &internalGpuMem);
 
         *pEvent = Event::HandleFromVoidPointer(pSystemMem);
     }
     else
     {
         // Something went wrong
-
         for (uint32_t deviceIdx = 0; (deviceIdx < pDevice->NumPalDevices()); deviceIdx++)
         {
             if (pPalGpuEvents[deviceIdx] != nullptr)
@@ -112,6 +141,7 @@ VkResult Event::Create(
                 pPalGpuEvents[deviceIdx]->Destroy();
             }
         }
+        pDevice->MemMgr()->FreeGpuMem(&internalGpuMem);
 
         // PAL event construction failed. Free system memory and return.
         pAllocator->pfnFree(pAllocator->pUserData, pSystemMem);
@@ -181,6 +211,7 @@ VkResult Event::Destroy(
     {
         PalEvent(deviceIdx)->Destroy();
     }
+    pDevice->MemMgr()->FreeGpuMem(&m_internalGpuMem);
 
     // Call my own destructor
     Util::Destructor(this);

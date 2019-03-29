@@ -39,11 +39,7 @@
 
 #include "include/vk_shader_code.h"
 
-#define ICD_BUILD_MULIT_COMPILER 0
-
-#if ICD_BUILD_MULIT_COMPILER
-#include "palHashSet.h"
-#endif
+#define ICD_BUILD_MULTI_COMPILER 0
 
 namespace vk
 {
@@ -182,11 +178,6 @@ private:
 
     CompilerSolutionLlpc m_compilerSolutionLlpc;
 
-#if ICD_BUILD_MULIT_COMPILER
-    // Store the hash list read from file when enable
-    // LlpcModeMixScpcHashList or LlpcModeMixLlpcHashList or LlpcModeMixRcpcHashList
-    Util::HashSet<uint64_t, PalAllocator>            m_multiCompilerMixHashList;
-#endif
 }; // class PipelineCompiler
 
 } // namespce vk

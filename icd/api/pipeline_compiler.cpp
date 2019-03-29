@@ -57,9 +57,6 @@ PipelineCompiler::PipelineCompiler(
     :
     m_pPhysicalDevice(pPhysicalDevice)
     , m_compilerSolutionLlpc(pPhysicalDevice)
-#if ICD_BUILD_MULIT_COMPILER
-    , m_multiCompilerMixHashList(32, pPhysicalDevice->Manager()->VkInstance()->Allocator())
-#endif
 {
 
 }
@@ -117,29 +114,6 @@ VkResult PipelineCompiler::Initialize()
     {
         result = m_compilerSolutionLlpc.Initialize();
     }
-
-#if ICD_BUILD_MULIT_COMPILER
-    // Each line of the file is a hex string which start with "0x", e.g. 0xFFFFAAAABBBBCCCC
-    if ((settings.enableLlpc == LlpcModeMixScpcHashList) ||
-        (settings.enableLlpc == LlpcModeMixLlpcHashList) ||
-        (settings.enableLlpc == LlpcModeMixRcpcHashList))
-    {
-        Util::File hashListFile;
-        if (hashListFile.Open(settings.llpcMixModeHashListFileName, Util::FileAccessRead) == Util::Result::Success)
-        {
-            m_multiCompilerMixHashList.Init();
-            char hash[256];
-            while ((hashListFile.ReadLine(hash, sizeof(char) * 256, nullptr) == Util::Result::Success))
-            {
-                // Only read hex string
-                if((hash[0] == '0') && (hash[1] == 'x'))
-                {
-                    m_multiCompilerMixHashList.Insert(strtoull(hash, nullptr, 16));
-                }
-            }
-        }
-    }
-#endif
 
     return result;
 }
@@ -1061,61 +1035,6 @@ PipelineCompilerType PipelineCompiler::CheckCompilerType(
 
     compilerMask = availCompilerMask;
 
-#if ICD_BUILD_MULIT_COMPILER
-    bool useHashRange = false;
-    switch(settings.enableLlpc)
-    {
-    case LlpcModeLlpcOnly:
-        compilerMask = (1 << PipelineCompilerTypeLlpc);
-        break;
-    case LlpcModeScpcOnly:
-        break;
-    case LlpcModeRcpcOnly:
-        break;
-    case LlpcModeMixLlpcInclusive:
-    case LlpcModeMixScpcInclusive:
-    case LlpcModeMixRcpcInclusive:
-        useHashRange = true; // Pass-through
-    case LlpcModeMixLlpcHashList:
-    case LlpcModeMixScpcHashList:
-    case LlpcModeMixRcpcHashList:
-    {
-        uint64_t pipeHash = Llpc::IPipelineDumper::GetPipelineHash(pPipelineBuildInfo);
-        bool isInRange = false;
-        if (useHashRange)
-        {
-            if ((pipeHash <= settings.llpcMixModeHashCodeEnd) && (pipeHash >= settings.llpcMixModeHashCodeStart))
-            {
-                isInRange = true;
-            }
-        }
-        else
-        {
-            if (m_multiCompilerMixHashList.Contains(pipeHash))
-            {
-                isInRange = true;
-            }
-        }
-        uint32_t checkCompilerMask = 0;
-        if ((settings.enableLlpc == LlpcModeMixLlpcInclusive) || (settings.enableLlpc == LlpcModeMixLlpcHashList))
-        {
-            checkCompilerMask = (1 << PipelineCompilerTypeLlpc);
-        }
-        if (isInRange)
-        {
-            compilerMask = checkCompilerMask;
-        }
-        else
-        {
-            compilerMask &= ~checkCompilerMask;
-        }
-        break;
-    }
-    default:
-        break;
-    }
-#endif
-
     if (compilerMask == 0)
     {
         compilerMask = availCompilerMask;
@@ -1138,21 +1057,6 @@ uint32_t PipelineCompiler::GetCompilerCollectionMask()
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     uint32_t availCompilerMask = 0;
     availCompilerMask |= (1 << PipelineCompilerTypeLlpc);
-
-#if ICD_BUILD_MULIT_COMPILER
-    switch (settings.enableLlpc)
-    {
-    case LlpcModeLlpcOnly:
-        availCompilerMask = (1 << PipelineCompilerTypeLlpc);
-        break;
-    case LlpcModeScpcOnly:
-        break;
-    case LlpcModeRcpcOnly:
-        break;
-    default:
-        break;
-    }
-#endif
 
     return availCompilerMask;
 }

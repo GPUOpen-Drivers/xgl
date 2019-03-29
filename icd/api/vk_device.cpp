@@ -210,6 +210,7 @@ Device::Device(
     m_enabledExtensions(enabledExtensions),
     m_dispatchTable(DispatchTable::Type::DEVICE, m_pInstance, this),
     m_pSqttMgr(nullptr),
+    m_pAppOptLayer(nullptr),
     m_pBarrierFilterLayer(nullptr),
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue)
@@ -305,6 +306,10 @@ static void ConstructQueueCreateInfo(
         pQueueCreateInfo->queueType  = Pal::QueueType::QueueTypeCompute;
         pQueueCreateInfo->engineType = Pal::EngineType::EngineTypeCompute;
     }
+
+#if defined(__unix__) && (PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 479)
+    pQueueCreateInfo->enableGpuMemoryPriorities = 1;
+#endif
 }
 
 // =====================================================================================================================
@@ -974,6 +979,15 @@ VkResult Device::Initialize(
         }
     }
 
+    if (result == VK_SUCCESS)
+    {
+        switch (GetAppProfile())
+        {
+        default:
+            break;
+        }
+    }
+
     if ((result == VK_SUCCESS) && (m_settings.barrierFilterOptions != BarrierFilterDisabled))
     {
         void* pMemory = VkInstance()->AllocMem(sizeof(BarrierFilterLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
@@ -1085,6 +1099,12 @@ void Device::InitDispatchTable()
     if (m_pSqttMgr != nullptr)
     {
         SqttOverrideDispatchTable(&m_dispatchTable, m_pSqttMgr);
+    }
+
+    // Install the app-specific layer if needed
+    if (m_pAppOptLayer != nullptr)
+    {
+        m_pAppOptLayer->OverrideDispatchTable(&m_dispatchTable);
     }
 
     // Install the barrier filter layer if needed
@@ -1301,6 +1321,13 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
         Util::Destructor(m_pBarrierFilterLayer);
 
         VkInstance()->FreeMem(m_pBarrierFilterLayer);
+    }
+
+    if (m_pAppOptLayer != nullptr)
+    {
+        Util::Destructor(m_pAppOptLayer);
+
+        VkInstance()->FreeMem(m_pAppOptLayer);
     }
 
     for (uint32_t i = 0; i < Queue::MaxQueueFamilies; ++i)

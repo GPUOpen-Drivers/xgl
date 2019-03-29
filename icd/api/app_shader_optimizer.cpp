@@ -120,6 +120,13 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pOptions->allowReZ = true;
                 }
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 24
+                if (shaderCreate.apply.disableLoopUnrolls)
+                {
+                    options.pOptions->forceLoopUnrollCount = 1;
+                }
+#endif
+
             }
 
         }
@@ -658,6 +665,26 @@ void ShaderOptimizer::BuildAppProfileLlpc()
             m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.apply.maxWavesPerCu = true;
             m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.maxWavesPerCu = 8u;
         }
+    }
+    else if (appProfile == AppProfile::WarHammerII)
+    {
+        uint32_t i = 0u;
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x730EEEB82E6434A876D57AACBD824DBD, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x76D57AACBD824DBD;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x730EEEB82E6434A8;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.disableLoopUnrolls = true;
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xE449709F7ED22376A6DA0F40D4C8B54F, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xA6DA0F40D4C8B54F;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xE449709F7ED22376;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.disableLoopUnrolls = true;
     }
 }
 

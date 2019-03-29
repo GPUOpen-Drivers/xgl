@@ -79,15 +79,18 @@ public:
 protected:
     Event(Device*          pDevice,
           uint32_t         numDeviceEvents,
-          Pal::IGpuEvent** pPalEvents)
+          Pal::IGpuEvent** pPalEvents,
+          InternalMemory*  pInternalGpuMem)
           :
-          m_numDeviceEvents(numDeviceEvents)
+          m_numDeviceEvents(numDeviceEvents),
+          m_internalGpuMem (*pInternalGpuMem)
     {
         memcpy(m_pPalEvents, pPalEvents, sizeof(Pal::IGpuEvent*) * m_numDeviceEvents);
     }
 
     uint32_t               m_numDeviceEvents;
     Pal::IGpuEvent*        m_pPalEvents[MaxPalDevices];
+    InternalMemory         m_internalGpuMem;
 private:
 };
 

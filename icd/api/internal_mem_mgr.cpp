@@ -171,6 +171,21 @@ VkResult InternalMemMgr::Init()
             &m_pCommonPools[InternalPoolDescriptorTable]);
     }
 
+    if (result == VK_SUCCESS)
+    {
+        m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].flags.persistentMapped = true;
+        m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].flags.needGl2Uncached = 1;
+
+        m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].vaRange = Pal::VaRange::Default;
+
+        m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].heapCount = 1;
+        m_commonPoolProps[InternalPoolCpuCacheableGpuUncached].heaps[0] = Pal::GpuHeapGartCacheable;
+
+        result = CalcSubAllocationPool(
+            m_commonPoolProps[InternalPoolCpuCacheableGpuUncached],
+            &m_pCommonPools[InternalPoolCpuCacheableGpuUncached]);
+    }
+
     return result;
 }
 
@@ -182,10 +197,10 @@ void InternalMemMgr::GetCommonPool(
     InternalMemCreateInfo* pAllocInfo
     ) const
 {
-    pAllocInfo->pPoolInfo     = m_pCommonPools[poolId];
-    pAllocInfo->flags.u32All  = m_commonPoolProps[poolId].flags.u32All;
-    pAllocInfo->pal.vaRange   = m_commonPoolProps[poolId].vaRange;
-    pAllocInfo->pal.heapCount = static_cast<uint32_t>(m_commonPoolProps[poolId].heapCount);
+    pAllocInfo->pPoolInfo             = m_pCommonPools[poolId];
+    pAllocInfo->flags.u32All          = m_commonPoolProps[poolId].flags.u32All;
+    pAllocInfo->pal.vaRange           = m_commonPoolProps[poolId].vaRange;
+    pAllocInfo->pal.heapCount         = static_cast<uint32_t>(m_commonPoolProps[poolId].heapCount);
 
     memcpy(pAllocInfo->pal.heaps, m_commonPoolProps[poolId].heaps, sizeof(pAllocInfo->pal.heaps));
 }
@@ -425,7 +440,7 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
 
         // Allocate the base GPU memory object for this pool
         result = AllocBaseGpuMem(poolInfo.pal,
-                                 poolInfo.flags.readOnly,
+                                 poolInfo.flags,
                                  pInternalMemory,
                                  allocMask,
                                  initialSubAllocInfo.flags.needShadow);
@@ -584,7 +599,7 @@ VkResult InternalMemMgr::AllocGpuMem(
         // Issue a base memory allocation and use that as the memory object
         result = AllocBaseGpuMem(
             createInfo.pal,
-            createInfo.flags.readOnly,
+            createInfo.flags,
             &pInternalMemory->m_memoryPool,
             allocMask,
             createInfo.flags.needShadow);
@@ -743,7 +758,7 @@ void InternalMemMgr::FreeGpuMem(
 // Allocates a base GPU memory object allocation.
 VkResult InternalMemMgr::AllocBaseGpuMem(
     const Pal::GpuMemoryCreateInfo& createInfo,
-    bool                            readOnly,
+    const InternalMemCreateFlags&   memCreateFlags,
     InternalMemoryPool*             pGpuMemory,
     uint32_t                        allocMask,
     bool                            needShadow)
@@ -761,6 +776,15 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
 
     localCreateInfo.size      = Util::Pow2Align(localCreateInfo.size,      alignment);
     localCreateInfo.alignment = Util::Pow2Align(localCreateInfo.alignment, alignment);
+
+    if ((palProperties.gfxipProperties.flags.supportGl2Uncached == 1) && (memCreateFlags.needGl2Uncached == 1))
+    {
+        localCreateInfo.flags.gl2Uncached = 1;
+    }
+    else
+    {
+        localCreateInfo.flags.gl2Uncached = 0;
+    }
 
     // Query system memory requirement of PAL GPU memory object
     for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
@@ -861,14 +885,14 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                         palResult = m_pDevice->AddMemReference(
                             m_pDevice->PalDevice(deviceIdx),
                             pGpuMemory->groupMemory.m_pPalMemory[deviceIdx],
-                            readOnly);
+                            memCreateFlags.readOnly);
 
                         if ((palResult == Pal::Result::Success) && needShadow)
                         {
                             palResult = m_pDevice->AddMemReference(
                                 m_pDevice->PalDevice(deviceIdx),
                                 pGpuMemory->groupShadowMemory.m_pPalMemory[deviceIdx],
-                                readOnly);
+                                memCreateFlags.readOnly);
                         }
                     }
                 }

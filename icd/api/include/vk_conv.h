@@ -2137,10 +2137,10 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
     palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)   ? 1 : 0;
     palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)  ? 1 : 0;
     palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)             ? 1 : 0;
-
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 481
     // We must not use any metadata if sparse aliasing is enabled
     palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)    ? 1 : 0;
-
+#endif
     // Always provide pQuadSamplePattern to PalCmdResolveImage for depth formats to allow optimizations
     palImageCreateInfo.flags.sampleLocsAlwaysKnown = Formats::HasDepth(format) ? 1 : 0;
 
@@ -2499,6 +2499,7 @@ VK_TO_PAL_TABLE_I_AMD(GPA_PERF_BLOCK, GpaPerfBlockAMD, GpuBlock,
     VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_EA_AMD,           GpuBlock::Ea)
     VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_RPB_AMD,          GpuBlock::Rpb)
     VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_RMI_AMD,          GpuBlock::Rmi)
+    VK_TO_PAL_ENTRY_I(GPA_PERF_BLOCK_UMCCH_AMD,        GpuBlock::Umcch)
 // =====================================================================================================================
 )
 

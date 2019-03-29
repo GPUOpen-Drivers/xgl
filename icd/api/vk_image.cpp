@@ -541,6 +541,24 @@ VkResult Image::Create(
         palCreateInfo.usageFlags.noStencilShaderRead = true;
     }
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 481
+    palCreateInfo.metadataMode = Pal::MetadataMode::Default;
+
+    // Disable TC compatible reads in order to maximize texture fetch performance.
+    if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
+        ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
+        (pDevice->GetRuntimeSettings().disableHtileBasedMsaaRead))
+    {
+        palCreateInfo.metadataMode = Pal::MetadataMode::OptForTexFetchPerf;
+    }
+
+    // We must not use any metadata if sparse aliasing is enabled.
+    if (pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)
+    {
+        palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
+    }
+#endif
+
     // If flags contains VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT, imageType must be VK_IMAGE_TYPE_3D
     VK_ASSERT(((pImageCreateInfo->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) == 0) ||
                (pImageCreateInfo->imageType == VK_IMAGE_TYPE_3D));

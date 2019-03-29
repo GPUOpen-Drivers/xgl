@@ -68,7 +68,8 @@ union InternalMemCreateFlags
         uint32_t noSuballocation  : 1;  // Set this flag if you want to disallow sub-allocation for whatever
                                         // reason.
         uint32_t needShadow       : 1;  // If a shadow table is needed.
-        uint32_t reserved         : 28; // Reserved
+        uint32_t needGl2Uncached  : 1;  // If a gl2Uncached is needed.
+        uint32_t reserved         : 27; // Reserved
     };
     uint32_t u32All;
 };
@@ -205,6 +206,7 @@ enum InternalSubAllocPool
     InternalPoolGpuReadOnlyCpuVisible,      // All read-only persistent mapped CPU-visible pools (incl. local visible)
     InternalPoolCpuVisible,                 // All CPU-visible pools
     InternalPoolDescriptorTable,            // Persistent mapped pool used for descriptor sets (main table)
+    InternalPoolCpuCacheableGpuUncached,    // Cacheable CPU-visible pool with enabled gl2Uncached if requred for the GPU
     InternalPoolCount
 };
 
@@ -265,7 +267,7 @@ private:
 
     VkResult AllocBaseGpuMem(
         const Pal::GpuMemoryCreateInfo& createInfo,
-        bool                            readOnly,
+        const InternalMemCreateFlags&   memCreateFlags,
         InternalMemoryPool*             pGpuMemory,
         uint32_t                        allocMask,
         bool                            needShadow);

@@ -82,6 +82,7 @@ class Device;
 class DispatchableDevice;
 class DispatchableQueue;
 class Instance;
+class OptLayer;
 class PhysicalDevice;
 class Queue;
 class SqttMgr;
@@ -474,6 +475,9 @@ public:
     VK_INLINE SqttMgr* GetSqttMgr()
         { return m_pSqttMgr; }
 
+    VK_INLINE OptLayer* GetAppOptLayer()
+        { return m_pAppOptLayer; }
+
     VK_INLINE BarrierFilterLayer* GetBarrierFilterLayer()
         { return m_pBarrierFilterLayer; }
 
@@ -576,6 +580,7 @@ protected:
     const DeviceExtensions::Enabled     m_enabledExtensions;    // Enabled device extensions
     DispatchTable                       m_dispatchTable;        // Device dispatch table
     SqttMgr*                            m_pSqttMgr;             // Manager for developer mode SQ thread tracing
+    OptLayer*                           m_pAppOptLayer;         // State for an app-specific layer, otherwise null
     BarrierFilterLayer*                 m_pBarrierFilterLayer;  // State for enabling barrier filtering, otherwise null
     Util::Mutex                         m_memoryMutex;          // Shared mutex used occasionally by memory objects
     Util::Mutex                         m_timerQueueMutex;      // Shared mutex used occasionally by timer queue objects
