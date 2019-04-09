@@ -229,7 +229,7 @@ VkResult PipelineCompiler::BuildShaderModule(
 
     if (compilerMask & (1 << PipelineCompilerTypeLlpc))
     {
-        result = m_compilerSolutionLlpc.BuildShaderModule(pDevice, codeSize, pCode, pShaderModule);
+        result = m_compilerSolutionLlpc.BuildShaderModule(pDevice, codeSize, pCode, pShaderModule, hash);
     }
 
     if (findReplaceShader)
@@ -382,12 +382,25 @@ void PipelineCompiler::DropPipelineBinaryInst(
 
 // =====================================================================================================================
 // Replace pipeline binary instruction.
-void PipelineCompiler::ReplacePipelineISACode(
+void PipelineCompiler::ReplacePipelineIsaCode(
     Device *     pDevice,
-    const char*  pShaderFileName,
+    uint64_t     pipelineHash,
     const void*  pPipelineBinary,
     size_t pipelineBinarySize)
 {
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+
+    char replaceFileName[256];
+    int32_t length = Util::Snprintf(replaceFileName, 256, "%s/" "0x%016" PRIX64 "_replace.txt",
+        settings.shaderReplaceDir, pipelineHash);
+
+    Util::File isaCodeFile;
+    if (isaCodeFile.Open(replaceFileName, Util::FileAccessRead) != Util::Result::Success)
+    {
+        // skip replacement if fail to replace file
+        return;
+    }
+
     const void* pPipelineCode = nullptr;
     size_t pipelineCodeSize = 0;
 
@@ -418,57 +431,54 @@ void PipelineCompiler::ReplacePipelineISACode(
         }
     }
 
-    Util::File isaCodeFile;
-    if (isaCodeFile.Open(pShaderFileName, Util::FileAccessRead) == Util::Result::Success)
+    std::vector<Util::Abi::PipelineSymbolEntry> shaderStageSymbols;
+    Util::Abi::PipelineSymbolType stageSymbolTypes[] =
     {
-        std::vector<Util::Abi::PipelineSymbolEntry> shaderStageSymbols;
-        Util::Abi::PipelineSymbolType stageSymbolTypes[] =
+        Util::Abi::PipelineSymbolType::LsMainEntry,
+        Util::Abi::PipelineSymbolType::HsMainEntry,
+        Util::Abi::PipelineSymbolType::EsMainEntry,
+        Util::Abi::PipelineSymbolType::GsMainEntry,
+        Util::Abi::PipelineSymbolType::VsMainEntry,
+        Util::Abi::PipelineSymbolType::PsMainEntry,
+        Util::Abi::PipelineSymbolType::CsMainEntry
+    };
+    Util::Abi::PipelineSymbolEntry symbol;
+    for (const auto& simbolTypeEntry : stageSymbolTypes)
+    {
+        if (abiProcessor.HasPipelineSymbolEntry(simbolTypeEntry, &symbol))
         {
-            Util::Abi::PipelineSymbolType::LsMainEntry,
-            Util::Abi::PipelineSymbolType::HsMainEntry,
-            Util::Abi::PipelineSymbolType::EsMainEntry,
-            Util::Abi::PipelineSymbolType::GsMainEntry,
-            Util::Abi::PipelineSymbolType::VsMainEntry,
-            Util::Abi::PipelineSymbolType::PsMainEntry,
-            Util::Abi::PipelineSymbolType::CsMainEntry
-        };
-        Util::Abi::PipelineSymbolEntry symbol;
-        for (const auto& simbolTypeEntry : stageSymbolTypes)
-        {
-            if (abiProcessor.HasPipelineSymbolEntry(simbolTypeEntry, &symbol))
-            {
-                shaderStageSymbols.push_back(symbol);
-            }
-        }
-        /* modified code in the 0xAAA_replace.txt looks like
-            848:0x7E120303
-            1480:0x7E1E0303
-            2592:0x7E0E030E
-        */
-        char codeLine[256] = {};
-        char codeOffset[256] = {};
-        while ((isaCodeFile.ReadLine(codeLine, sizeof(char) * 256, nullptr) == Util::Result::Success))
-        {
-            const char* offsetEnd = strchr(codeLine, ':');
-            strncpy(codeOffset, codeLine, offsetEnd - codeLine);
-            codeOffset[offsetEnd - codeLine] = '\0';
-            uint32_t offset = strtoul(codeOffset, nullptr, 10);
-            bool inRange = false;
-            for (const auto& simboEntry : shaderStageSymbols)
-            {
-                if ((offset >= simboEntry.value) && (offset < simboEntry.value + simboEntry.size))
-                {
-                    inRange = true;
-                    break;
-                }
-            }
-            VK_ASSERT(inRange);
-            offsetEnd++;
-            uint8_t* pCode = pFirstInstruction + offset;
-            uint32_t replaceCode = strtoul(offsetEnd, nullptr, 16);
-            *reinterpret_cast<uint32_t*>(pCode) = replaceCode;
+            shaderStageSymbols.push_back(symbol);
         }
     }
+    /* modified code in the 0xAAA_replace.txt looks like
+        848:0x7E120303
+        1480:0x7E1E0303
+        2592:0x7E0E030E
+    */
+    char codeLine[256] = {};
+    char codeOffset[256] = {};
+    while ((isaCodeFile.ReadLine(codeLine, sizeof(char) * 256, nullptr) == Util::Result::Success))
+    {
+        const char* offsetEnd = strchr(codeLine, ':');
+        strncpy(codeOffset, codeLine, offsetEnd - codeLine);
+        codeOffset[offsetEnd - codeLine] = '\0';
+        uint32_t offset = strtoul(codeOffset, nullptr, 10);
+        bool inRange = false;
+        for (const auto& simboEntry : shaderStageSymbols)
+        {
+            if ((offset >= simboEntry.value) && (offset < simboEntry.value + simboEntry.size))
+            {
+                inRange = true;
+                break;
+            }
+        }
+        VK_ASSERT(inRange);
+        offsetEnd++;
+        uint8_t* pCode = pFirstInstruction + offset;
+        uint32_t replaceCode = strtoul(offsetEnd, nullptr, 16);
+        *reinterpret_cast<uint32_t*>(pCode) = replaceCode;
+    }
+
 }
 
 // =====================================================================================================================
@@ -558,16 +568,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
-        char pipelineHashString[64];
-        Util::Snprintf(pipelineHashString, 64, "0x%016" PRIX64, pipelineHash);
-        if (strstr(settings.shaderReplacePipelineHashes, pipelineHashString) != nullptr)
-        {
-            char replaceFileName[256];
-            int32_t length = Util::Snprintf(replaceFileName, 256, "%s/%s_replace.txt",
-                settings.shaderReplaceDir, pipelineHashString);
-
-            ReplacePipelineISACode(pDevice, replaceFileName, *ppPipelineBinary, *pPipelineBinarySize);
-        }
+        ReplacePipelineIsaCode(pDevice, pipelineHash, *ppPipelineBinary, *pPipelineBinarySize);
     }
 
     if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
@@ -670,15 +671,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
-        char pipelineHashString[64];
-        Util::Snprintf(pipelineHashString, 64, "0x%016" PRIX64, pipelineHash);
-        if (strstr(settings.shaderReplacePipelineHashes, pipelineHashString) != nullptr)
-        {
-            char replaceFileName[256];
-            int32_t length = Util::Snprintf(replaceFileName, 256, "%s/%s_replace.txt",
-                settings.shaderReplaceDir, pipelineHashString);
-            ReplacePipelineISACode(pDevice, replaceFileName, *ppPipelineBinary, *pPipelineBinarySize);
-        }
+        ReplacePipelineIsaCode(pDevice, pipelineHash, *ppPipelineBinary, *pPipelineBinarySize);
     }
 
     if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
@@ -903,12 +896,21 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     {
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
         pCreateInfo->pipelineInfo.options.includeIr = true;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25
+        pCreateInfo->pipelineInfo.options.includeIrBinary = true;
+#endif
     }
 
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))
     {
         pCreateInfo->pipelineInfo.options.scalarBlockLayout = true;
     }
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 23
+    if (pDevice->GetEnabledFeatures().robustBufferAccess)
+    {
+        pCreateInfo->pipelineInfo.options.robustBufferAccess = true;
+    }
+#endif
 
     if (pLayout != nullptr)
     {
@@ -977,7 +979,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pShaderInfo->pSpecializationInfo   = pStage->pSpecializationInfo;
         pShaderInfo->pEntryTarget          = pStage->pName;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
-        pShaderInfo->shaderStage           = static_cast<Llpc::ShaderStage>(stage);
+        pShaderInfo->entryStage = static_cast<Llpc::ShaderStage>(stage);
 #endif
         // Build the resource mapping description for LLPC.  This data contains things about how shader
         // inputs like descriptor set bindings are communicated to this pipeline in a form that LLPC can
@@ -1085,12 +1087,21 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     {
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
         pCreateInfo->pipelineInfo.options.includeIr = true;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25
+        pCreateInfo->pipelineInfo.options.includeIrBinary = true;
+#endif
     }
 
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))
     {
         pCreateInfo->pipelineInfo.options.scalarBlockLayout = true;
     }
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 23
+    if (pDevice->GetEnabledFeatures().robustBufferAccess)
+    {
+        pCreateInfo->pipelineInfo.options.robustBufferAccess = true;
+    }
+#endif
 
     if (pLayout != nullptr)
     {
@@ -1124,7 +1135,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
      pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
      pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
-     pCreateInfo->pipelineInfo.cs.shaderStage               = Llpc::ShaderStageCompute;
+     pCreateInfo->pipelineInfo.cs.entryStage          = Llpc::ShaderStageCompute;
 #endif
 
     // Build the resource mapping description for LLPC.  This data contains things about how shader

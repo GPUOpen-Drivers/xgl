@@ -138,7 +138,8 @@ struct ShaderProfileAction
                 uint32_t fpControlFlags                     : 1;
                 uint32_t optimizationIntent                 : 1;
                 uint32_t disableLoopUnrolls                 : 1;
-                uint32_t reserved                           : 16;
+                uint32_t enableSelectiveInline              : 1;
+                uint32_t reserved                           : 14;
             };
             uint32_t u32All;
         } apply;

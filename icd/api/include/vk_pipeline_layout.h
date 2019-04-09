@@ -169,7 +169,6 @@ protected:
     ~PipelineLayout() { }
 
     VkResult BuildLlpcSetMapping(
-        ShaderStage                  stage,
         uint32_t                     setIndex,
         const DescriptorSetLayout*   pLayout,
         Llpc::ResourceMappingNode*   pStaNodes,

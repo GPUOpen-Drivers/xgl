@@ -231,7 +231,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
     pPipelineInfo->tempStageSize += (pPipelineInfo->numDescRangeValueNodes * sizeof(Llpc::DescriptorRangeValue));
 
     // Calculate scratch buffer size for building pipeline mappings for all shader stages based on this layout
-    pPipelineInfo->tempBufferSize = (ShaderStageCount * pPipelineInfo->tempStageSize);
+    pPipelineInfo->tempBufferSize = (ShaderStageNativeStageCount * pPipelineInfo->tempStageSize);
 
     // If we go past our user data limit, we can't support this pipeline
     if (pInfo->userDataRegCount >=
@@ -351,7 +351,6 @@ Llpc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
 // =====================================================================================================================
 // Builds the LLPC resource mapping nodes for a descriptor set
 VkResult PipelineLayout::BuildLlpcSetMapping(
-    ShaderStage                  stage,
     uint32_t                     setIndex,
     const DescriptorSetLayout*   pLayout,
     Llpc::ResourceMappingNode*   pStaNodes,
@@ -491,10 +490,12 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     // Vertex binding information should only be specified for the VS stage
     VK_ASSERT(stage == ShaderStageVertex || (pVertexInput == nullptr && pVbInfo == nullptr));
 
+    uint32_t stageIndex = stage;
+    uint32_t stageMask = (1 << stage);
     // Buffer of all resource mapping nodes (enough to cover requirements by all sets in this pipeline layout)
-    VK_ASSERT((stage + 1) * m_pipelineInfo.tempStageSize <= m_pipelineInfo.tempBufferSize);
+    VK_ASSERT((stageIndex + 1) * m_pipelineInfo.tempStageSize <= m_pipelineInfo.tempBufferSize);
 
-    void* pStageBuffer = Util::VoidPtrInc(pBuffer, stage * m_pipelineInfo.tempStageSize);
+    void* pStageBuffer = Util::VoidPtrInc(pBuffer, stageIndex * m_pipelineInfo.tempStageSize);
 
     Llpc::ResourceMappingNode* pUserDataNodes = reinterpret_cast<Llpc::ResourceMappingNode*>(pStageBuffer);
 
@@ -533,6 +534,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
             userDataNodeCount += 1;
         }
     }
+
     // Build descriptor for each set
     for (uint32_t setIndex = 0; (setIndex < m_info.setCount) && (result == VK_SUCCESS); ++setIndex)
     {
@@ -540,7 +542,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
         const auto* pSetLayout = m_info.pSetLayouts[setIndex];
 
         // Test if this descriptor set is active in this stage.
-        if (Util::TestAnyFlagSet(pSetLayout->Info().activeStageMask, (1UL << stage)))
+        if (Util::TestAnyFlagSet(pSetLayout->Info().activeStageMask, stageMask))
         {
             // Build the resource mapping nodes for the contents of this set.
             auto pStaNodes   = &pAllNodes[mappingNodeCount];
@@ -552,7 +554,6 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
             uint32_t dynNodeCount;
 
             result = BuildLlpcSetMapping(
-                stage,
                 setIndex,
                 pSetLayout,
                 pStaNodes,

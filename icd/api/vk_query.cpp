@@ -313,6 +313,22 @@ VkResult PalQueryPool::GetResults(
 }
 
 // =====================================================================================================================
+// Reset Pal query pool from CPU
+void PalQueryPool::Reset(
+    Device*     pDevice,
+    uint32_t    startQuery,
+    uint32_t    queryCount)
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    {
+        if (m_pPalQueryPool[deviceIdx] != nullptr)
+        {
+            m_pPalQueryPool[deviceIdx]->Reset(startQuery, queryCount, nullptr);
+        }
+    }
+}
+
+// =====================================================================================================================
 /// Constructor of TimestampQueryPool
 TimestampQueryPool::TimestampQueryPool(
     Device*               pDevice,
@@ -611,6 +627,41 @@ VkResult TimestampQueryPool::GetResults(
     return result;
 }
 
+// =====================================================================================================================
+// Reset timestamp query pool from CPU
+void TimestampQueryPool::Reset(
+    Device*     pDevice,
+    uint32_t    startQuery,
+    uint32_t    queryCount)
+{
+    if (startQuery < m_entryCount)
+    {
+        queryCount = Util::Min(queryCount, m_entryCount - startQuery);
+
+        // Query pool size needs to be reset in qwords.
+        const uint32_t queryDataSize = (m_slotSize * queryCount) / sizeof(uint64_t);
+        for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+        {
+            void* pMappedAddr = nullptr;
+            if (m_internalMem.Map(deviceIdx, &pMappedAddr) == Pal::Result::Success)
+            {
+                uint64_t* pQueryData = static_cast<uint64_t*>(Util::VoidPtrInc(pMappedAddr,
+                                                                               (m_slotSize * startQuery)));
+
+                for (uint32_t idx = 0; idx < queryDataSize; idx++)
+                {
+                    pQueryData[idx] = TimestampNotReady;
+                }
+
+                if (pMappedAddr != nullptr)
+                {
+                    m_internalMem.Unmap(deviceIdx);
+                }
+            }
+        }
+    }
+}
+
 namespace entry
 {
 // =====================================================================================================================
@@ -648,6 +699,17 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyQueryPool(
 
         QueryPool::ObjectFromHandle(queryPool)->Destroy(pDevice, pAllocCB);
     }
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkResetQueryPoolEXT(
+    VkDevice                                    device,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    firstQuery,
+    uint32_t                                    queryCount)
+{
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+    QueryPool::ObjectFromHandle(queryPool)->Reset(pDevice, firstQuery, queryCount);
 }
 
 } // namespace entry

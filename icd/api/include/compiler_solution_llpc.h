@@ -59,10 +59,11 @@ public:
         ShaderCache* pShaderCache);
 
     virtual VkResult BuildShaderModule(
-        const Device*       pDevice,
-        size_t              codeSize,
-        const void*         pCode,
-        ShaderModuleHandle* pShaderModule);
+        const Device*                pDevice,
+        size_t                       codeSize,
+        const void*                  pCode,
+        ShaderModuleHandle*          pShaderModule,
+        const Util::MetroHash::Hash& hash);
 
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule);
 

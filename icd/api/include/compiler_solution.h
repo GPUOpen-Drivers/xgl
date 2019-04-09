@@ -107,10 +107,11 @@ public:
         ShaderCache* pShaderCache) = 0;
 
     virtual VkResult BuildShaderModule(
-        const Device*       pDevice,
-        size_t              codeSize,
-        const void*         pCode,
-        ShaderModuleHandle* pShaderModule) = 0;
+        const Device*                pDevice,
+        size_t                       codeSize,
+        const void*                  pCode,
+        ShaderModuleHandle*          pShaderModule,
+        const Util::MetroHash::Hash& hash) = 0;
 
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) = 0;
 
@@ -145,9 +146,6 @@ public:
     virtual void FreeComputePipelineBinary(
         const void*                 pPipelineBinary,
         size_t                      binarySize) = 0;
-
-protected:
-    PipelineCompilerType GetShaderCacheType();
 
 protected:
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object

@@ -289,6 +289,8 @@ public:
         KHR_VULKAN_MEMORY_MODEL,
         EXT_MEMORY_PRIORITY,
         EXT_MEMORY_BUDGET,
+        EXT_HOST_QUERY_RESET,
+
         Count
     };
 };

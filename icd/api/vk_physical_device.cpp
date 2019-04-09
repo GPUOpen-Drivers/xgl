@@ -2725,16 +2725,16 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     if ((pPhysicalDevice == nullptr) ||
         ((pPhysicalDevice->PalProperties().gfxipProperties.flags.support16BitInstructions) &&
-         ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
-          (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
+        ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
+            (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_HALF_FLOAT));
     }
 
     if ((pPhysicalDevice == nullptr) ||
         ((pPhysicalDevice->PalProperties().gfxipProperties.flags.support16BitInstructions) &&
-         ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
-          (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
+        ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
+            (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_INT16));
     }
@@ -2755,7 +2755,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPA_INTERFACE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEPTH_STENCIL_RESOLVE));
 
-     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INLINE_UNIFORM_BLOCK));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INLINE_UNIFORM_BLOCK));
 
     if ((pPhysicalDevice == nullptr) ||
         pPhysicalDevice->PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions)
@@ -2786,7 +2786,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     if ((pPhysicalDevice == nullptr) ||
         (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportConservativeRasterization &&
-        pInstance->IsExtensionSupported(InstanceExtensions::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2)))
+            pInstance->IsExtensionSupported(InstanceExtensions::KHR_GET_PHYSICAL_DEVICE_PROPERTIES2)))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONSERVATIVE_RASTERIZATION));
     }
@@ -3408,6 +3408,14 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceDepthClipEnableFeaturesEXT* pDepthClipFeatures =
                     reinterpret_cast<VkPhysicalDeviceDepthClipEnableFeaturesEXT *>(pHeader);
                 pDepthClipFeatures->depthClipEnable = VK_TRUE;
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT:
+            {
+                VkPhysicalDeviceHostQueryResetFeaturesEXT* pHostQueryReset =
+                    reinterpret_cast<VkPhysicalDeviceHostQueryResetFeaturesEXT *>(pHeader);
+                pHostQueryReset->hostQueryReset =
+                    IsExtensionSupported(DeviceExtensions::EXT_HOST_QUERY_RESET) ? VK_TRUE : VK_FALSE;
                 break;
             }
 

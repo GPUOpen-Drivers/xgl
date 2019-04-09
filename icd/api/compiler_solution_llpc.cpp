@@ -79,7 +79,8 @@ void CompilerSolutionLlpc::Destroy()
 
 // =====================================================================================================================
 // Get size of shader cache object
-size_t CompilerSolutionLlpc::GetShaderCacheSize(PipelineCompilerType cacheType)
+size_t CompilerSolutionLlpc::GetShaderCacheSize(
+    PipelineCompilerType cacheType)
 {
     VK_NEVER_CALLED();
     return 0;
@@ -124,12 +125,14 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
 // =====================================================================================================================
 // Builds shader module from SPIR-V binary code.
 VkResult CompilerSolutionLlpc::BuildShaderModule(
-    const Device*       pDevice,
-    size_t              codeSize,
-    const void*         pCode,
-    ShaderModuleHandle* pShaderModule)
+    const Device*                pDevice,
+    size_t                       codeSize,
+    const void*                  pCode,
+    ShaderModuleHandle*          pShaderModule,
+    const Util::MetroHash::Hash& hash)
 {
     VK_IGNORE(pDevice);
+    VK_IGNORE(hash);
     VkResult result = VK_SUCCESS;
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 

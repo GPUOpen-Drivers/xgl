@@ -155,9 +155,9 @@ private:
         const void*            pPipelineBinary,
         size_t                 pipelineBinarySize);
 
-    void ReplacePipelineISACode(
+    void ReplacePipelineIsaCode(
         Device*                pDevice,
-        const char*            pShaderFileName,
+        uint64_t               pipelineHash,
         const void*            pPipelineBinary,
         size_t                 pipelineBinarySize);
 

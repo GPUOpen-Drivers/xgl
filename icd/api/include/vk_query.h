@@ -75,6 +75,11 @@ public:
         VkDeviceSize        stride,
         VkQueryResultFlags  flags) = 0;
 
+    virtual void Reset(
+        Device*     pDevice,
+        uint32_t    startQuery,
+        uint32_t    queryCount) = 0;
+
     VK_INLINE VkQueryType GetQueryType() const
     {
         return m_queryType;
@@ -134,6 +139,11 @@ public:
         VkDeviceSize        stride,
         VkQueryResultFlags  flags) override;
 
+    virtual void Reset(
+        Device*     pDevice,
+        uint32_t    startQuery,
+        uint32_t    queryCount) override;
+
 private:
     PalQueryPool(
         Device*           pDevice,
@@ -185,6 +195,11 @@ public:
         void*               pData,
         VkDeviceSize        stride,
         VkQueryResultFlags  flags) override;
+
+    virtual void Reset(
+        Device*     pDevice,
+        uint32_t    startQuery,
+        uint32_t    queryCount) override;
 
     VK_INLINE const InternalMemory& GetMemory() const
         { return m_internalMem; }
@@ -251,6 +266,13 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyQueryPool(
     VkDevice                                    device,
     VkQueryPool                                 queryPool,
     const VkAllocationCallbacks*                pAllocator);
+
+VKAPI_ATTR void VKAPI_CALL vkResetQueryPoolEXT(
+    VkDevice                                    device,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    firstQuery,
+    uint32_t                                    queryCount);
+
 } // namespace entry
 
 } // namespace vk

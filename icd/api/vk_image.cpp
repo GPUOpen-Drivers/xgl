@@ -544,18 +544,21 @@ VkResult Image::Create(
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 481
     palCreateInfo.metadataMode = Pal::MetadataMode::Default;
 
-    // Disable TC compatible reads in order to maximize texture fetch performance.
-    if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
-        ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
-        (pDevice->GetRuntimeSettings().disableHtileBasedMsaaRead))
+    if (pCreateInfo != nullptr)
     {
-        palCreateInfo.metadataMode = Pal::MetadataMode::OptForTexFetchPerf;
-    }
+        // Disable TC compatible reads in order to maximize texture fetch performance.
+        if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
+            ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
+            (pDevice->GetRuntimeSettings().disableHtileBasedMsaaRead))
+        {
+            palCreateInfo.metadataMode = Pal::MetadataMode::OptForTexFetchPerf;
+        }
 
-    // We must not use any metadata if sparse aliasing is enabled.
-    if (pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)
-    {
-        palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
+        // We must not use any metadata if sparse aliasing is enabled.
+        if (pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)
+        {
+            palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
+        }
     }
 #endif
 

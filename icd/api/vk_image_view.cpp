@@ -94,6 +94,9 @@ void ImageView::BuildImageSrds(
     info.flags.u32All = 0;
     info.minLod       = minLod;
 
+    info.possibleLayouts.usages  = Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead;
+    info.possibleLayouts.engines = Pal::LayoutUniversalEngine | Pal::LayoutComputeEngine;
+
     // Create all possible SRD variants
     static_assert(SrdCount == 2, "More SRD types were added; need to create them below");
 
@@ -111,7 +114,7 @@ void ImageView::BuildImageSrds(
 
         if (imageViewUsage & VK_IMAGE_USAGE_STORAGE_BIT)
         {
-            info.flags.shaderWritable = 1;
+            info.possibleLayouts.usages = info.possibleLayouts.usages | Pal::ImageLayoutUsageFlags::LayoutShaderWrite;
 
             VK_ASSERT(Pal::Result::Success == pDevice->PalDevice(deviceIdx)->ValidateImageViewInfo(info));
 

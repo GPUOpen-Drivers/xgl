@@ -92,13 +92,4 @@ VkResult CompilerSolution::Initialize()
     return VK_SUCCESS;
 }
 
-// =====================================================================================================================
-// Gets shader cache type.
-PipelineCompilerType CompilerSolution::GetShaderCacheType()
-{
-    PipelineCompilerType cacheType;
-    cacheType = PipelineCompilerTypeLlpc;
-    return cacheType;
-}
-
 }

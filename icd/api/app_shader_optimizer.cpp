@@ -822,6 +822,8 @@ static bool ParseJsonProfileActionShader(
         "maxThreadGroupsPerCu",
         "trapPresent",
         "debugMode",
+        "disableLoopUnrolls",
+        "enableSelectiveInline",
     };
 
     success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);
@@ -875,6 +877,22 @@ static bool ParseJsonProfileActionShader(
         if (pItem->integerValue != 0)
         {
             pActions->shaderCreate.apply.debugMode = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "disableLoopUnrolls")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.disableLoopUnrolls = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "enableSelectiveInline")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.enableSelectiveInline = 1;
         }
     }
 
@@ -1217,11 +1235,8 @@ void ShaderOptimizer::RuntimeProfileParseError()
 
     // Trigger an infinite loop if the panel setting is set to notify that a profile parsing failure has occurred
     // on release driver builds where asserts are not compiled in.
-    if (m_settings.pipelineProfileHaltOnParseFailure)
+    while (m_settings.pipelineProfileHaltOnParseFailure)
     {
-        while (true)
-        {
-        }
     }
 }
 

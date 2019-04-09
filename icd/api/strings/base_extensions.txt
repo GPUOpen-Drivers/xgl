@@ -97,3 +97,4 @@ VK_KHR_shader_float16_int8
 VK_EXT_memory_priority
 VK_EXT_memory_budget
 VK_KHR_depth_stencil_resolve
+VK_EXT_host_query_reset
