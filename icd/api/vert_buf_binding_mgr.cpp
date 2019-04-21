@@ -164,7 +164,7 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
                 if (pBinding->gpuAddr != 0)
                 {
                     firstChanged = Util::Min(firstChanged, slot);
-                    lastChanged  = slot;
+                    lastChanged  = Util::Max(lastChanged, slot);
                 }
             }
         }

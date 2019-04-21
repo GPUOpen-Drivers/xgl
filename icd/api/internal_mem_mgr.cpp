@@ -777,7 +777,7 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
     localCreateInfo.size      = Util::Pow2Align(localCreateInfo.size,      alignment);
     localCreateInfo.alignment = Util::Pow2Align(localCreateInfo.alignment, alignment);
 
-    if ((palProperties.gfxipProperties.flags.supportGl2Uncached == 1) && (memCreateFlags.needGl2Uncached == 1))
+    if (palProperties.gfxipProperties.flags.supportGl2Uncached && memCreateFlags.needGl2Uncached)
     {
         localCreateInfo.flags.gl2Uncached = 1;
     }

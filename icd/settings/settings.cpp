@@ -241,7 +241,7 @@ static void OverrideProfiledSettings(
 
     if (appProfile == AppProfile::ThronesOfBritannia)
     {
-        pSettings->disableHtileBasedMsaaRead = false;
+        pSettings->disableHtileBasedMsaaRead = true;
     }
 
 }

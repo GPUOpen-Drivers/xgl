@@ -1743,7 +1743,7 @@ void GraphicsPipeline::BindToCmdBuffer(
         pRenderState->allGpuState.ViewIndexFromDeviceIndex = newViewIndexFromDeviceIndex;
 
         // Sync ViewMask state in CommandBuffer.
-        pCmdBuffer->SetViewInstanceMask();
+        pCmdBuffer->SetViewInstanceMask(pCmdBuffer->GetDeviceMask());
     }
 }
 

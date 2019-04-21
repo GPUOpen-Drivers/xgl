@@ -188,6 +188,7 @@ Pal::Result CreateClearRegions (
     const VkClearRect* const    pRects,
     const RenderPass&           renderPass,
     const uint32_t              subpass,
+    const uint32_t              zOffset,
     PalClearRegionVect* const   pOutClearRegions)
 {
     using ClearRegionType = typename std::remove_pointer<decltype(pOutClearRegions->Data())>::type;
@@ -213,7 +214,7 @@ Pal::Result CreateClearRegions (
             {
                 for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
                 {
-                    pOutClearRegions->PushBack(VkToPalClearRegion<ClearRegionType>(pRects[rectIndex]));
+                    pOutClearRegions->PushBack(VkToPalClearRegion<ClearRegionType>(pRects[rectIndex], zOffset));
                     OverrideLayerRanges(pOutClearRegions->Back(), layerRangeIt.Get());
                 }
             }
@@ -227,7 +228,7 @@ Pal::Result CreateClearRegions (
         {
             for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
             {
-                pOutClearRegions->PushBack(VkToPalClearRegion<ClearRegionType>(pRects[rectIndex]));
+                pOutClearRegions->PushBack(VkToPalClearRegion<ClearRegionType>(pRects[rectIndex], zOffset));
             }
         }
     }
@@ -379,8 +380,9 @@ CmdBuffer::CmdBuffer(
     m_queueFamilyIndex(queueFamilyIndex),
     m_palQueueType(pDevice->GetQueueFamilyPalQueueType(queueFamilyIndex)),
     m_palEngineType(pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex)),
-    m_palDeviceMask(0),
-    m_palDeviceUsedMask(0),
+    m_curDeviceMask(0),
+    m_rpDeviceMask(0),
+    m_cbBeginDeviceMask(0),
     m_validShaderStageFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetValidShaderStages(queueFamilyIndex)),
     m_pStackAllocator(nullptr),
     m_pGpuEventMgr(nullptr),
@@ -584,7 +586,7 @@ Pal::Result CmdBuffer::PalCmdBufferBegin(const Pal::CmdBufferBuildInfo& cmdInfo)
 {
     Pal::Result result = Pal::Result::Success;
 
-    utils::IterateMask deviceGroup(m_palDeviceUsedMask);
+    utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -602,7 +604,7 @@ Pal::Result CmdBuffer::PalCmdBufferEnd()
 {
     Pal::Result result = Pal::Result::Success;
 
-    utils::IterateMask deviceGroup(m_palDeviceUsedMask);
+    utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -620,7 +622,7 @@ Pal::Result CmdBuffer::PalCmdBufferReset(Pal::ICmdAllocator* pCmdAllocator, bool
 {
     Pal::Result result = Pal::Result::Success;
 
-    utils::IterateMask deviceGroup(m_palDeviceUsedMask);
+    utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -644,7 +646,7 @@ void CmdBuffer::PalCmdBufferDestroy()
 // =====================================================================================================================
 void CmdBuffer::PalCmdBindIndexData(Buffer* pBuffer, Pal::gpusize offset, Pal::IndexType indexType)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -660,7 +662,7 @@ void CmdBuffer::PalCmdBindIndexData(Buffer* pBuffer, Pal::gpusize offset, Pal::I
 // =====================================================================================================================
 void CmdBuffer::PalCmdUnbindIndexData(Pal::IndexType indexType)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -676,7 +678,7 @@ void CmdBuffer::PalCmdDraw(
     uint32_t firstInstance,
     uint32_t instanceCount)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -696,7 +698,7 @@ void CmdBuffer::PalCmdDrawIndexed(
     uint32_t firstInstance,
     uint32_t instanceCount)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -715,7 +717,7 @@ void CmdBuffer::PalCmdDispatch(
     uint32_t y,
     uint32_t z)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         PalCmdBuffer(deviceGroup.Index())->CmdDispatch(x, y, z);
@@ -731,7 +733,7 @@ void CmdBuffer::PalCmdDispatchOffset(
     uint32_t size_y,
     uint32_t size_z)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         PalCmdBuffer(deviceGroup.Index())->CmdDispatchOffset(base_x, base_y, base_z, size_x, size_y, size_z);
@@ -743,7 +745,7 @@ void CmdBuffer::PalCmdDispatchIndirect(
     Buffer*      pBuffer,
     Pal::gpusize offset)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -779,7 +781,7 @@ void CmdBuffer::PalCmdCopyBuffer(
     }
     else
     {
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -800,7 +802,7 @@ void CmdBuffer::PalCmdUpdateBuffer(
     Pal::gpusize    size,
     const uint32_t* pData)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -816,7 +818,7 @@ void CmdBuffer::PalCmdFillBuffer(
     Pal::gpusize    size,
     uint32_t        data)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -847,7 +849,7 @@ void CmdBuffer::PalCmdCopyImage(
     }
     else
     {
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -880,7 +882,7 @@ void CmdBuffer::PalCmdScaledCopyImage(
     }
     else
     {
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -913,7 +915,7 @@ void CmdBuffer::PalCmdCopyMemoryToImage(
     }
     else
     {
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -947,7 +949,7 @@ void CmdBuffer::PalCmdCopyImageToMemory(
     }
     else
     {
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -992,7 +994,7 @@ VkResult CmdBuffer::Begin(
     RenderPass*  pRenderPass = nullptr;
     Framebuffer* pFramebuffer = nullptr;
 
-    m_palDeviceUsedMask = m_pDevice->GetPalDeviceMask();
+    m_cbBeginDeviceMask = m_pDevice->GetPalDeviceMask();
 
     palFlags.u32All = 0;
     palFlags.prefetchCommands = 1;
@@ -1039,9 +1041,9 @@ VkResult CmdBuffer::Begin(
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO:
         {
             // Check that the application did not set any bits outside of our device group mask.
-            VK_ASSERT((m_palDeviceUsedMask & pDeviceGroupInfo->deviceMask) == pDeviceGroupInfo->deviceMask);
+            VK_ASSERT((m_cbBeginDeviceMask & pDeviceGroupInfo->deviceMask) == pDeviceGroupInfo->deviceMask);
 
-            m_palDeviceUsedMask &= pDeviceGroupInfo->deviceMask;
+            m_cbBeginDeviceMask &= pDeviceGroupInfo->deviceMask;
             break;
         }
 
@@ -1051,7 +1053,7 @@ VkResult CmdBuffer::Begin(
         }
     }
 
-    m_palDeviceMask = m_palDeviceUsedMask;
+    m_curDeviceMask = m_cbBeginDeviceMask;
 
     Pal::InheritedStateParams inheritedStateParams = {};
 
@@ -1147,7 +1149,7 @@ VkResult CmdBuffer::Begin(
         //
         // Because secondary VkCommandBuffer will be called inside of a VkRenderPass
         // function setting ViewMask for a subpass during the VkRenderPass is called.
-        SetViewInstanceMask();
+        SetViewInstanceMask(GetDeviceMask());
     }
 
     DbgBarrierPostCmd(DbgBarrierCmdBufStart);
@@ -1238,7 +1240,7 @@ void CmdBuffer::ResetState()
 
     ResetPipelineState();
 
-    m_palDeviceMask = InvalidPalDeviceMask;
+    m_curDeviceMask = InvalidPalDeviceMask;
 
     if (m_pGpuEventMgr != nullptr)
     {
@@ -1437,7 +1439,7 @@ void CmdBuffer::ExecuteCommands(
     {
         CmdBuffer* pInteralCmdBuf = ApiCmdBuffer::ObjectFromHandle(pCmdBuffers[i]);
 
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -1803,7 +1805,7 @@ void CmdBuffer::DrawIndirect(
         const Pal::gpusize paramOffset = pBuffer->MemOffset() + offset;
         Pal::gpusize countVirtAddr = 0;
 
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
 
         while (deviceGroup.Iterate())
         {
@@ -2478,7 +2480,7 @@ void CmdBuffer::ClearBoundAttachments(
 
                     CreateClearRegions(
                         rectBatch, pRects + rectIdx,
-                        *pRenderPass, subpass,
+                        *pRenderPass, subpass, 0u,
                         &clearRegions);
 
                     // Clear the bound depth stencil target immediately
@@ -2507,7 +2509,7 @@ void CmdBuffer::ClearBoundAttachments(
 
             CreateClearRegions(
                 rectBatch, pRects + rectIdx,
-                *pRenderPass, subpass,
+                *pRenderPass, subpass, 0u,
                 &clearRegions);
 
             // Clear the bound color targets
@@ -2537,7 +2539,7 @@ void CmdBuffer::PalCmdClearColorImage(
 
     PreBltBindMsaaState(image);
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -2576,7 +2578,7 @@ void CmdBuffer::PalCmdClearDepthStencil(
 
     PreBltBindMsaaState(image);
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -2605,7 +2607,7 @@ void CmdBuffer::PalCmdResetEvent(
     EventContainer_T*       pEvent,
     Pal::HwPipePoint        resetPoint)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -2626,7 +2628,7 @@ void CmdBuffer::PalCmdSetEvent(
     EventContainer_T*       pEvent,
     Pal::HwPipePoint        setPoint)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -2650,13 +2652,14 @@ void CmdBuffer::PalCmdResolveImage(
     Pal::ImageLayout               dstImageLayout,
     Pal::ResolveMode               resolveMode,
     uint32_t                       regionCount,
-    const Pal::ImageResolveRegion* pRegions)
+    const Pal::ImageResolveRegion* pRegions,
+    uint32_t                       deviceMask)
 {
     DbgBarrierPreCmd(DbgBarrierResolve);
 
     PreBltBindMsaaState(srcImage);
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(deviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -2685,7 +2688,8 @@ template void CmdBuffer::PalCmdResolveImage<true>(
     Pal::ImageLayout               dstImageLayout,
     Pal::ResolveMode               resolveMode,
     uint32_t                       regionCount,
-    const Pal::ImageResolveRegion* pRegions);
+    const Pal::ImageResolveRegion* pRegions,
+    uint32_t                       deviceMask);
 
 // =====================================================================================================================
 // Clears a set of attachments in the current subpass using PAL's CmdClear*Image() commands.
@@ -2740,11 +2744,14 @@ void CmdBuffer::ClearImageAttachments(
                 {
                     for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
                     {
+                        // Obtain the baseArrayLayer of the image view to apply it when clearing the image itself.
+                        const uint32_t zOffset = static_cast<uint32_t>(attachment.pView->GetZRange().offset);
+
                         rectBatch = Util::Min(rectCount - rectIdx, maxRects);
 
                         CreateClearRegions(
                             rectCount, pRects + rectIdx,
-                            *pRenderPass, subpass,
+                            *pRenderPass, subpass, zOffset,
                             &clearBoxes);
 
                         CreateClearSubresRanges(
@@ -2886,7 +2893,8 @@ void CmdBuffer::ResolveImage(
                 palDestImageLayout,
                 Pal::ResolveMode::Average,
                 palRegionCount,
-                pPalRegions);
+                pPalRegions,
+                m_curDeviceMask);
         }
 
         virtStackFrame.FreeArray(pPalRegions);
@@ -2921,7 +2929,7 @@ void CmdBuffer::ResetEvent(
 
     const Pal::HwPipePoint pipePoint = VkToPalSrcPipePoint(stageMask);
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -2943,7 +2951,7 @@ void CmdBuffer::FlushBarriers(
     pBarrier->transitionCount = mainTransitionCount;
     pBarrier->pTransitions    = pTransitions;
 
-    PalCmdBarrier(pBarrier, pTransitions, pTransitionImages);
+    PalCmdBarrier(pBarrier, pTransitions, pTransitionImages, m_curDeviceMask);
 
     // Remove any signaled events as we do not want to wait more than once.
     pBarrier->gpuEventWaitCount = 0;
@@ -3316,7 +3324,7 @@ void CmdBuffer::BeginQueryIndexed(
         queryType = static_cast<Pal::QueryType>(static_cast<uint32_t>(queryType) + index);
     }
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -3346,7 +3354,7 @@ void CmdBuffer::BeginQueryIndexed(
         {
             const auto remainingQueryIndex = query + remainingQuery;
 
-            deviceGroup = utils::IterateMask(m_palDeviceMask);
+            deviceGroup = utils::IterateMask(m_curDeviceMask);
             while (deviceGroup.Iterate())
             {
                 const uint32_t deviceIdx = deviceGroup.Index();
@@ -3383,7 +3391,7 @@ void CmdBuffer::EndQueryIndexed(
         queryType = static_cast<Pal::QueryType>(static_cast<uint32_t>(queryType) + index);
     }
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -3437,7 +3445,7 @@ void CmdBuffer::FillTimestampQueryPool(
             RgpBarrierInternalPreResetQueryPoolSync // reason
         };
 
-        PalCmdBarrier(Barrier);
+        PalCmdBarrier(Barrier, m_curDeviceMask);
     }
 
     // +----------------+----------------+
@@ -3451,7 +3459,7 @@ void CmdBuffer::FillTimestampQueryPool(
     // Note that each slot in TimestampQueryPool contains only timestamp value.
     // The availability info is generated on the fly from timestamp value.
 
-    utils::IterateMask deviceGroup1(m_palDeviceMask);
+    utils::IterateMask deviceGroup1(m_curDeviceMask);
     while (deviceGroup1.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup1.Index();
@@ -3488,7 +3496,7 @@ void CmdBuffer::FillTimestampQueryPool(
             RgpBarrierInternalPostResetQueryPoolSync // reason
         };
 
-        PalCmdBarrier(Barrier);
+        PalCmdBarrier(Barrier, m_curDeviceMask);
     }
 }
 
@@ -3506,7 +3514,7 @@ void CmdBuffer::ResetQueryPool(
     {
         const PalQueryPool* pQueryPool = pBasePool->AsPalQueryPool();
 
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -3535,7 +3543,8 @@ void CmdBuffer::ResetQueryPool(
 // =====================================================================================================================
 // This is the main hook for any CmdBarrier going into PAL.  Always call this function instead of CmdBarrier directly.
 void CmdBuffer::PalCmdBarrier(
-    const Pal::BarrierInfo& info)
+    const Pal::BarrierInfo& info,
+    uint32_t                deviceMask)
 {
     // If you trip this assert, you've forgotten to populate a value for this field.  You should use one of the
     // RgpBarrierReason enum values from sqtt_rgp_annotations.h.  Preferably you should add a new one as described
@@ -3554,7 +3563,7 @@ void CmdBuffer::PalCmdBarrier(
     }
 #endif
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(deviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -3567,7 +3576,8 @@ void CmdBuffer::PalCmdBarrier(
 void CmdBuffer::PalCmdBarrier(
     Pal::BarrierInfo*             pInfo,
     Pal::BarrierTransition* const pTransitions,
-    const Image** const           pTransitionImages)
+    const Image** const           pTransitionImages,
+    uint32_t                      deviceMask)
 {
     // If you trip this assert, you've forgot to populate a value for this field.  You should use one of the
     // RgpBarrierReason enum values from sqtt_rgp_annotations.h.  Preferably you should add a new one as described
@@ -3576,7 +3586,7 @@ void CmdBuffer::PalCmdBarrier(
 
     const Pal::IGpuEvent** ppOriginalGpuEvents = pInfo->ppGpuEvents;
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(deviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -3611,7 +3621,7 @@ void CmdBuffer::PalCmdBarrier(
 void CmdBuffer::PalCmdBindMsaaStates(
     const Pal::IMsaaState* const * pStates)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -3626,7 +3636,7 @@ void CmdBuffer::PalCmdSetMsaaQuadSamplePattern(
     uint32_t                          numSamplesPerPixel,
     const Pal::MsaaQuadSamplePattern& quadSamplePattern)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -3653,7 +3663,7 @@ void CmdBuffer::CopyQueryPoolResults(
     {
         const PalQueryPool* pPool = pBasePool->AsPalQueryPool();
 
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -3705,7 +3715,7 @@ void CmdBuffer::CopyQueryPoolResults(
                 RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
             };
 
-            PalCmdBarrier(TimestampWriteWaitIdle);
+            PalCmdBarrier(TimestampWriteWaitIdle, m_curDeviceMask);
         }
 
         uint32_t userData[16];
@@ -3755,7 +3765,7 @@ void CmdBuffer::CopyQueryPoolResults(
         // Set start query index
         userData[firstQueryOffset] = firstQuery;
 
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             const uint32_t deviceIdx = deviceGroup.Index();
@@ -3812,7 +3822,7 @@ void CmdBuffer::WriteTimestamp(
 {
     DbgBarrierPreCmd(DbgBarrierWriteTimestamp);
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -3918,9 +3928,14 @@ void CmdBuffer::BeginRenderPass(
     // Copy render areas (these may be per-device in a group)
     bool replicateRenderArea = true;
 
+    // Set the render pass instance's device mask to the value the command buffer began with.
+    SetRpDeviceMask(m_cbBeginDeviceMask);
+
     if (pDeviceGroupRenderPassBeginInfo != nullptr)
     {
-        SetDeviceMask(pDeviceGroupRenderPassBeginInfo->deviceMask);
+        SetRpDeviceMask(pDeviceGroupRenderPassBeginInfo->deviceMask);
+
+        SetDeviceMask(GetRpDeviceMask());
 
         m_renderPassInstance.renderAreaCount = pDeviceGroupRenderPassBeginInfo->deviceRenderAreaCount;
 
@@ -4250,7 +4265,7 @@ void CmdBuffer::RPSyncPostLoadOpColorClear()
         RgpBarrierExternalRenderPassSync    // reason
     };
 
-    PalCmdBarrier(Barrier);
+    PalCmdBarrier(Barrier, GetRpDeviceMask());
 }
 
 // =====================================================================================================================
@@ -4292,8 +4307,8 @@ void CmdBuffer::RPBeginSubpass()
     // Bind targets
     RPBindTargets(subpass.begin.bindTargets);
 
-    // Set view instance mask
-    SetViewInstanceMask();
+    // Set view instance mask, on devices in render pass instance's device mask
+    SetViewInstanceMask(GetRpDeviceMask());
 }
 
 // =====================================================================================================================
@@ -4420,7 +4435,7 @@ void CmdBuffer::RPSyncPoint(
         ((barrier.pipePointWaitCount > 1) ||
          (barrier.pipePointWaitCount == 1 && barrier.pPipePoints[0] != Pal::HwPipeTop)))
     {
-        PalCmdBarrier(&barrier, pPalTransitions, ppImages);
+        PalCmdBarrier(&barrier, pPalTransitions, ppImages, GetRpDeviceMask());
     }
 
     if (pPalTransitions != nullptr)
@@ -4467,7 +4482,7 @@ void CmdBuffer::RPLoadOpClearColor(
             attachment, clear,
             *m_state.allGpuState.pRenderPass);
 
-        utils::IterateMask deviceGroup(GetDeviceMask());
+        utils::IterateMask deviceGroup(GetRpDeviceMask());
 
         while (deviceGroup.Iterate())
         {
@@ -4523,7 +4538,7 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
             attachment, clear,
             *m_state.allGpuState.pRenderPass);
 
-        utils::IterateMask deviceGroup(GetDeviceMask());
+        utils::IterateMask deviceGroup(GetRpDeviceMask());
 
         while (deviceGroup.Iterate())
         {
@@ -4665,7 +4680,8 @@ void CmdBuffer::RPResolveAttachments(
                 dstLayout,
                 resolveModes[aspectRegionIndex],
                 m_renderPassInstance.renderAreaCount,
-                regions);
+                regions,
+                GetRpDeviceMask());
         }
     }
 
@@ -4686,7 +4702,7 @@ void CmdBuffer::RPBindTargets(
 
     static constexpr Pal::ImageLayout NullLayout = {};
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(GetRpDeviceMask());
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -4737,12 +4753,13 @@ void CmdBuffer::RPBindTargets(
 }
 
 // =====================================================================================================================
-// Sets view instance mask for a subpass during a render pass instance.
-void CmdBuffer::SetViewInstanceMask()
+// Sets view instance mask for a subpass during a render pass instance (on devices within passed in device mask).
+void CmdBuffer::SetViewInstanceMask(
+    uint32_t deviceMask)
 {
     const uint32_t subpassViewMask = m_state.allGpuState.pRenderPass->GetViewMask(m_renderPassInstance.subpass);
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(deviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -4765,7 +4782,7 @@ void CmdBuffer::SetViewInstanceMask()
             // specifies that any shader input variables decorated as DeviceIndex
             // will be assigned values as if they were decorated as ViewIndex.
             // To satisfy above requirement DeviceMask and ViewMask has to match.
-            VK_ASSERT(m_palDeviceMask == viewMask);
+            VK_ASSERT(m_curDeviceMask == viewMask);
 
             // Currently Vulkan CTS lacks tests covering this functionality.
             VK_NOT_TESTED();
@@ -4865,7 +4882,7 @@ void CmdBuffer::PushConstants(
         // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
         if (pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase)
         {
-            utils::IterateMask deviceGroup(m_palDeviceMask);
+            utils::IterateMask deviceGroup(m_curDeviceMask);
             while (deviceGroup.Iterate())
             {
                 const uint32_t deviceIdx = deviceGroup.Index();
@@ -4910,7 +4927,7 @@ void CmdBuffer::PushConstants(
         // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
         if (pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase)
         {
-            utils::IterateMask deviceGroup(m_palDeviceMask);
+            utils::IterateMask deviceGroup(m_curDeviceMask);
             while (deviceGroup.Iterate())
             {
                 const uint32_t deviceIdx = deviceGroup.Index();
@@ -4969,7 +4986,7 @@ void CmdBuffer::SetViewport(
         VkToPalViewport(pViewports[i], firstViewport + i, khrMaintenance1, &m_state.allGpuState.viewport);
     }
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -4995,8 +5012,8 @@ void CmdBuffer::SetAllViewports(
         m_state.allGpuState.viewport.viewports[i] = params.viewports[i];
     }
 
-    VK_ASSERT(m_palDeviceUsedMask == m_pDevice->GetPalDeviceMask());
-    utils::IterateMask deviceGroup(m_palDeviceUsedMask);
+    VK_ASSERT(m_cbBeginDeviceMask == m_pDevice->GetPalDeviceMask());
+    utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -5022,7 +5039,7 @@ void CmdBuffer::SetScissor(
         VkToPalScissorRect(pScissors[i], firstScissor + i, &m_state.allGpuState.scissor);
     }
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -5048,8 +5065,8 @@ void CmdBuffer::SetAllScissors(
         m_state.allGpuState.scissor.scissors[i] = params.scissors[i];
     }
 
-    VK_ASSERT(m_palDeviceUsedMask == m_pDevice->GetPalDeviceMask());
-    utils::IterateMask deviceGroup(m_palDeviceUsedMask);
+    VK_ASSERT(m_cbBeginDeviceMask == m_pDevice->GetPalDeviceMask());
+    utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -5076,7 +5093,7 @@ void CmdBuffer::SetLineWidth(
                                                      limits.pointSizeRange[0],
                                                      limits.pointSizeRange[1] };
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -5098,7 +5115,7 @@ void CmdBuffer::SetDepthBias(
 
     const Pal::DepthBiasParams params = {depthBias, depthBiasClamp, slopeScaledDepthBias};
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -5118,7 +5135,7 @@ void CmdBuffer::SetBlendConstants(
 
     const Pal::BlendConstParams params = { blendConst[0], blendConst[1], blendConst[2], blendConst[3] };
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -5139,7 +5156,7 @@ void CmdBuffer::SetDepthBounds(
 
     const Pal::DepthBoundsParams params = { minDepthBounds, maxDepthBounds };
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -5277,7 +5294,7 @@ void CmdBuffer::DbgCmdBarrier(bool preCmd)
         barrier.pTransitions    = &transition;
     }
 
-    PalCmdBarrier(barrier);
+    PalCmdBarrier(barrier, m_curDeviceMask);
 }
 #endif
 
@@ -5291,7 +5308,7 @@ void CmdBuffer::WriteBufferMarker(
     const Buffer* pDestBuffer        = Buffer::ObjectFromHandle(dstBuffer);
     const Pal::HwPipePoint pipePoint = VkToPalSrcPipePointForMarkers(pipelineStage, m_palEngineType);
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
 
     while (deviceGroup.Iterate())
     {
@@ -5329,7 +5346,7 @@ void CmdBuffer::BindTransformFeedbackBuffers(
 
     VK_ASSERT(m_pTransformFeedbackState->enabled == false);
 
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx = deviceGroup.Index();
@@ -5363,7 +5380,7 @@ void CmdBuffer::BeginTransformFeedback(
     const VkBuffer*     pCounterBuffers,
     const VkDeviceSize* pCounterBufferOffsets)
 {
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while ((m_pTransformFeedbackState != nullptr) && deviceGroup.Iterate())
     {
         uint64_t counterBufferAddr[Pal::MaxStreamOutTargets] = {};
@@ -5408,7 +5425,7 @@ void CmdBuffer::EndTransformFeedback(
 {
     if ((m_pTransformFeedbackState != nullptr) && (m_pTransformFeedbackState->enabled))
     {
-        utils::IterateMask deviceGroup(m_palDeviceMask);
+        utils::IterateMask deviceGroup(m_curDeviceMask);
         while (deviceGroup.Iterate())
         {
             uint64_t counterBufferAddr[Pal::MaxStreamOutTargets] = {};
@@ -5448,7 +5465,7 @@ void CmdBuffer::DrawIndirectByteCount(
     uint32_t        vertexStride)
 {
     Buffer* pCounterBuffer = Buffer::ObjectFromHandle(counterBuffer);
-    utils::IterateMask deviceGroup(m_palDeviceMask);
+    utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
         const uint32_t deviceIdx   = deviceGroup.Index();

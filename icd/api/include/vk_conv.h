@@ -2575,19 +2575,20 @@ VK_INLINE uint32_t VkToPalPerfExperimentShaderFlags(
 
 // =====================================================================================================================
 template <typename PalClearRegion>
-PalClearRegion VkToPalClearRegion(const VkClearRect& clearRect);
+PalClearRegion VkToPalClearRegion(const VkClearRect& clearRect, const uint32_t zOffset);
 
 // =====================================================================================================================
 // Converts Vulkan clear rect to an equivalent PAL box
 template <>
 VK_INLINE Pal::Box VkToPalClearRegion<Pal::Box>(
-    const VkClearRect& clearRect)
+    const VkClearRect& clearRect,
+    const uint32_t     zOffset)
 {
     Pal::Box box { };
 
     box.offset.x      = clearRect.rect.offset.x;
     box.offset.y      = clearRect.rect.offset.y;
-    box.offset.z      = clearRect.baseArrayLayer;
+    box.offset.z      = clearRect.baseArrayLayer + zOffset;
     box.extent.width  = clearRect.rect.extent.width;
     box.extent.height = clearRect.rect.extent.height;
     box.extent.depth  = clearRect.layerCount;
@@ -2599,7 +2600,8 @@ VK_INLINE Pal::Box VkToPalClearRegion<Pal::Box>(
 // Converts Vulkan clear rect to an equivalent PAL clear bound target region
 template <>
 VK_INLINE Pal::ClearBoundTargetRegion VkToPalClearRegion<Pal::ClearBoundTargetRegion>(
-    const VkClearRect& clearRect)
+    const VkClearRect& clearRect,
+    const uint32_t     zOffset)
 {
     Pal::ClearBoundTargetRegion clearRegion { };
 
@@ -2607,7 +2609,7 @@ VK_INLINE Pal::ClearBoundTargetRegion VkToPalClearRegion<Pal::ClearBoundTargetRe
     clearRegion.rect.offset.y      = clearRect.rect.offset.y;
     clearRegion.rect.extent.width  = clearRect.rect.extent.width;
     clearRegion.rect.extent.height = clearRect.rect.extent.height;
-    clearRegion.startSlice         = clearRect.baseArrayLayer;
+    clearRegion.startSlice         = clearRect.baseArrayLayer + zOffset;
     clearRegion.numSlices          = clearRect.layerCount;
 
     return clearRegion;
@@ -2619,11 +2621,10 @@ VK_INLINE void OverrideLayerRanges(
     Pal::ClearBoundTargetRegion& clearRegion,
     const Pal::Range             layerRange)
 {
-    VK_ASSERT(clearRegion.startSlice == 0);
     VK_ASSERT(clearRegion.numSlices  == 1);
 
-    clearRegion.startSlice = layerRange.offset;
-    clearRegion.numSlices  = layerRange.extent;
+    clearRegion.startSlice += layerRange.offset;
+    clearRegion.numSlices   = layerRange.extent;
 }
 
 // =====================================================================================================================
@@ -2632,10 +2633,9 @@ VK_INLINE void OverrideLayerRanges(
     Pal::Box&        box,
     const Pal::Range layerRange)
 {
-    VK_ASSERT(box.offset.z     == 0);
     VK_ASSERT(box.extent.depth == 1);
 
-    box.offset.z      = layerRange.offset;
+    box.offset.z     += layerRange.offset;
     box.extent.depth  = layerRange.extent;
 }
 
