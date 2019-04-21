@@ -424,7 +424,8 @@ public:
         float                                       minDepthBounds,
         float                                       maxDepthBounds);
 
-    void SetViewInstanceMask();
+    void SetViewInstanceMask(
+        uint32_t                                    deviceMask);
 
     void SetStencilCompareMask(
         VkStencilFaceFlags                          faceMask,
@@ -556,19 +557,38 @@ public:
         VK_ASSERT((m_pDevice->GetPalDeviceMask() & deviceMask) == deviceMask);
 
         // Ensure disabled devices are not enabled during recording
-        VK_ASSERT(((m_palDeviceUsedMask ^ deviceMask) & deviceMask) == 0);
+        VK_ASSERT(((m_cbBeginDeviceMask ^ deviceMask) & deviceMask) == 0);
 
-        m_palDeviceMask = deviceMask;
+        // If called inside a render pass, ensure devices outside of render pass device mask are not enabled
+        VK_ASSERT((m_state.allGpuState.pRenderPass == nullptr) ||
+                  (((m_rpDeviceMask ^ deviceMask) & deviceMask) == 0));
+
+        m_curDeviceMask = deviceMask;
     }
 
     VK_INLINE uint32_t GetDeviceMask() const
     {
-        return m_palDeviceMask;
+        return m_curDeviceMask;
     }
 
-    VK_INLINE uint32_t GetDeviceUsedMask() const
+    VK_INLINE void SetRpDeviceMask(uint32_t deviceMask)
     {
-        return m_palDeviceUsedMask;
+        VK_ASSERT(deviceMask != 0);
+
+        // Ensure render pass device mask is within the command buffer's initial device mask
+        VK_ASSERT(((m_cbBeginDeviceMask ^ deviceMask) & deviceMask) == 0);
+
+        m_rpDeviceMask = deviceMask;
+    }
+
+    VK_INLINE uint32_t GetRpDeviceMask() const
+    {
+        return m_rpDeviceMask;
+    }
+
+    VK_INLINE uint32_t GetBeginDeviceMask() const
+    {
+        return m_cbBeginDeviceMask;
     }
 
     VkResult Destroy(void);
@@ -601,12 +621,14 @@ public:
     void RequestRenderPassEvents(uint32_t eventCount, GpuEvents*** pppGpuEvents);
 
     void PalCmdBarrier(
-        const Pal::BarrierInfo& info);
+        const Pal::BarrierInfo& info,
+        uint32_t                deviceMask);
 
     void PalCmdBarrier(
         Pal::BarrierInfo*             pInfo,
         Pal::BarrierTransition* const pTransitions,
-        const Image** const           pTransitionImages);
+        const Image** const           pTransitionImages,
+        uint32_t                      deviceMask);
 
     Pal::Result PalCmdBufferBegin(
             const Pal::CmdBufferBuildInfo& cmdInfo);
@@ -738,7 +760,8 @@ public:
         Pal::ImageLayout               dstImageLayout,
         Pal::ResolveMode               resolveMode,
         uint32_t                       regionCount,
-        const Pal::ImageResolveRegion* pRegions);
+        const Pal::ImageResolveRegion* pRegions,
+        uint32_t                       deviceMask);
 
     void PreBltBindMsaaState(const Image& image);
 
@@ -909,8 +932,9 @@ private:
     uint32_t                      m_queueFamilyIndex;
     Pal::QueueType                m_palQueueType;
     Pal::EngineType               m_palEngineType;
-    uint32_t                      m_palDeviceMask;
-    uint32_t                      m_palDeviceUsedMask;
+    uint32_t                      m_curDeviceMask;     // Device mask the command buffer is currently set to
+    uint32_t                      m_rpDeviceMask;      // Device mask for the render pass instance
+    uint32_t                      m_cbBeginDeviceMask; // Device mask this command buffer began with
     VkShaderStageFlags            m_validShaderStageFlags;
     Pal::ICmdBuffer*              m_pPalCmdBuffers[MaxPalDevices];
     VirtualStackAllocator*        m_pStackAllocator;
@@ -953,7 +977,7 @@ void CmdBuffer::PalCmdBindMsaaState(
     uint32_t               deviceIdx,
     const Pal::IMsaaState* pState)
 {
-    VK_ASSERT(((1UL << deviceIdx) & m_palDeviceMask) != 0);
+    VK_ASSERT(((1UL << deviceIdx) & m_curDeviceMask) != 0);
 
     if (pState != m_state.perGpuState[deviceIdx].pMsaaState)
     {
@@ -969,7 +993,7 @@ void CmdBuffer::PalCmdBindColorBlendState(
     uint32_t                     deviceIdx,
     const Pal::IColorBlendState* pState)
 {
-    VK_ASSERT(((1UL << deviceIdx) & m_palDeviceMask) != 0);
+    VK_ASSERT(((1UL << deviceIdx) & m_curDeviceMask) != 0);
 
     if (pState != m_state.perGpuState[deviceIdx].pColorBlendState)
     {
@@ -985,7 +1009,7 @@ void CmdBuffer::PalCmdBindDepthStencilState(
     uint32_t                       deviceIdx,
     const Pal::IDepthStencilState* pState)
 {
-    VK_ASSERT(((1UL << deviceIdx) & m_palDeviceMask) != 0);
+    VK_ASSERT(((1UL << deviceIdx) & m_curDeviceMask) != 0);
 
     if (pState != m_state.perGpuState[deviceIdx].pDepthStencilState)
     {

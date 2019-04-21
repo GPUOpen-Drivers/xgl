@@ -50,7 +50,7 @@ VkResult Event::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkEvent*                        pEvent)
 {
-    const size_t numDeviceEvents                    = pDevice->NumPalDevices();
+    const uint32_t numDeviceEvents                    = pDevice->NumPalDevices();
 
     Pal::IGpuEvent* pPalGpuEvents[MaxPalDevices] = {};
     InternalMemory  internalGpuMem               = {};
@@ -84,7 +84,7 @@ VkResult Event::Create(
     void* pPalMem = Util::VoidPtrInc(pSystemMem, apiSize);
 
     for (uint32_t deviceIdx = 0;
-        (deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
+        (deviceIdx < numDeviceEvents) && (palResult == Pal::Result::Success);
         deviceIdx++)
     {
         VK_ASSERT(palSize == pDevice->PalDevice(deviceIdx)->GetGpuEventSize(eventCreateInfo, nullptr));
@@ -102,20 +102,20 @@ VkResult Event::Create(
         Pal::GpuMemoryRequirements gpuMemReqs = {};
         pPalGpuEvents[0]->GetGpuMemoryRequirements(&gpuMemReqs);
 
-        InternalMemCreateInfo allocInfo = {};
-        allocInfo.pal.size              = gpuMemReqs.size;
-        allocInfo.pal.alignment         = gpuMemReqs.alignment;
-        allocInfo.pal.priority          = Pal::GpuMemPriority::Normal;
-        allocInfo.pal.flags.shareable   = 1;
+        InternalMemCreateInfo allocInfo  = {};
+        allocInfo.pal.size               = gpuMemReqs.size;
+        allocInfo.pal.alignment          = gpuMemReqs.alignment;
+        allocInfo.pal.priority           = Pal::GpuMemPriority::Normal;
+        allocInfo.pal.flags.shareable    = 1;
 
         pDevice->MemMgr()->GetCommonPool(InternalPoolCpuCacheableGpuUncached, &allocInfo);
 
-        result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &internalGpuMem, pDevice->GetPalDeviceMask());
+        result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &internalGpuMem, 1);
 
         if (result == VK_SUCCESS)
         {
             for (uint32_t deviceIdx = 0;
-                (deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
+                (deviceIdx < numDeviceEvents) && (palResult == Pal::Result::Success);
                 deviceIdx++)
             {
                 palResult = pPalGpuEvents[deviceIdx]->BindGpuMemory(internalGpuMem.PalMemory(deviceIdx),
@@ -127,14 +127,14 @@ VkResult Event::Create(
 
    if (result == VK_SUCCESS)
    {
-        VK_PLACEMENT_NEW(pSystemMem) Event(pDevice, pDevice->NumPalDevices(), pPalGpuEvents, &internalGpuMem);
+        VK_PLACEMENT_NEW(pSystemMem) Event(pDevice, numDeviceEvents, pPalGpuEvents, &internalGpuMem);
 
         *pEvent = Event::HandleFromVoidPointer(pSystemMem);
     }
     else
     {
         // Something went wrong
-        for (uint32_t deviceIdx = 0; (deviceIdx < pDevice->NumPalDevices()); deviceIdx++)
+        for (uint32_t deviceIdx = 0; (deviceIdx < numDeviceEvents); deviceIdx++)
         {
             if (pPalGpuEvents[deviceIdx] != nullptr)
             {
@@ -154,14 +154,7 @@ VkResult Event::Create(
 // Signal an event object
 VkResult Event::Set(void)
 {
-    Pal::Result palResult = Pal::Result::Success;
-
-    for (uint32_t deviceIdx = 0;
-        (deviceIdx < m_numDeviceEvents) && (palResult == Pal::Result::Success);
-        deviceIdx++)
-    {
-        palResult = PalEvent(deviceIdx)->Set();
-    }
+    const Pal::Result palResult = PalEvent(DefaultDeviceIndex)->Set();
 
     return PalToVkResult(palResult);
 }
@@ -170,14 +163,7 @@ VkResult Event::Set(void)
 // Reset an event object
 VkResult Event::Reset(void)
 {
-    Pal::Result palResult = Pal::Result::Success;
-
-    for (uint32_t deviceIdx = 0;
-        (deviceIdx < m_numDeviceEvents) && (palResult == Pal::Result::Success);
-        deviceIdx++)
-    {
-        palResult = PalEvent(deviceIdx)->Reset();
-    }
+    const Pal::Result palResult = PalEvent(DefaultDeviceIndex)->Reset();
 
     return PalToVkResult(palResult);
 }
@@ -186,16 +172,7 @@ VkResult Event::Reset(void)
 // Get the current status of an event object
 VkResult Event::GetStatus(void)
 {
-    Pal::Result palStatus = PalEvent(DefaultDeviceIndex)->GetStatus();
-
-    for (uint32_t deviceIdx = 1; deviceIdx < m_numDeviceEvents; deviceIdx++)
-    {
-        if (PalEvent(deviceIdx)->GetStatus() != palStatus)
-        {
-            palStatus = Pal::Result::ErrorUnknown;
-            break;
-        }
-    }
+    const Pal::Result palStatus = PalEvent(DefaultDeviceIndex)->GetStatus();
 
     return PalToVkResult(palStatus);
 }
