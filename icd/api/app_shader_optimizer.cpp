@@ -686,6 +686,33 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xE449709F7ED22376;
         m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.disableLoopUnrolls = true;
     }
+    else if (appProfile == AppProfile::StrangeBrigade)
+    {
+        if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
+        {
+            uint32_t i = 0u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 3895042bcf33699ada756541f86d98d8,CS,False,WAVES,16
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xda756541f86d98d8;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0x3895042bcf33699a;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].dynamicShaderInfo.apply.maxWavesPerCu = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].dynamicShaderInfo.maxWavesPerCu = 16u;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 4aadf469c56d08f3530864a25609abcd,PS,False,WAVES,20
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x530864a25609abcd;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x4aadf469c56d08f3;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.apply.maxWavesPerCu = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].dynamicShaderInfo.maxWavesPerCu = 20u;
+        }
+    }
 }
 
 #if PAL_ENABLE_PRINTS_ASSERTS

@@ -329,35 +329,22 @@ VkResult Queue::Submit(
                 DispatchableCmdBuffer* const * pCommandBuffers =
                     reinterpret_cast<DispatchableCmdBuffer*const*>(submitInfo.pCommandBuffers);
 
-                if (pDeviceGroupInfo == nullptr)
+                palSubmitInfo.cmdBufferCount = 0;
+
+                const uint32_t deviceMask = 1 << deviceIdx;
+
+                for (uint32_t i = 0; i < cmdBufferCount; ++i)
                 {
-                    palSubmitInfo.cmdBufferCount = cmdBufferCount;
-
-                    for (uint32_t i = 0; i < cmdBufferCount; ++i)
+                    if ((deviceCount > 1) &&
+                        (pDeviceGroupInfo->pCommandBufferDeviceMasks != nullptr) &&
+                        (pDeviceGroupInfo->pCommandBufferDeviceMasks[i] & deviceMask) == 0)
                     {
-                        const CmdBuffer& cmdBuf = *(*pCommandBuffers[i]);
-
-                        pPalCmdBuffers[i] = cmdBuf.PalCmdBuffer(deviceIdx);
+                        continue;
                     }
-                }
-                else
-                {
-                    palSubmitInfo.cmdBufferCount = 0;
 
-                    const uint32_t deviceMask = 1 << deviceIdx;
+                    const CmdBuffer& cmdBuf = *(*pCommandBuffers[i]);
 
-                    for (uint32_t i = 0; i < cmdBufferCount; ++i)
-                    {
-                        const CmdBuffer& cmdBuf = *(*pCommandBuffers[i]);
-
-                        if ((pDeviceGroupInfo->pCommandBufferDeviceMasks != nullptr) &&
-                            (pDeviceGroupInfo->pCommandBufferDeviceMasks[i] & deviceMask) == 0)
-                        {
-                            continue;
-                        }
-
-                        pPalCmdBuffers[palSubmitInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
-                    }
+                    pPalCmdBuffers[palSubmitInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
                 }
 
                 if (lastBatch && (pFence != nullptr))

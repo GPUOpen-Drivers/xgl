@@ -347,12 +347,14 @@ void DevModeMgr::AdvanceActiveTraceStep(
 
     // Only advance the trace step if we're processing the right type of trigger.
     // In present trigger mode, we should only advance when a real present occurs.
+    // In index trigger mode, we should only advance when a specific present index occurs.
     // In tag trigger mode, we should only advance when a tag trigger is encountered.
-    // We only support two trigger modes, so any time this is called with actualPresent set to false, we can safely
-    // assume this is being called because of a tag trigger.
-    const bool isPresentTrigger = actualPresent;
-    const bool isTagTrigger     = (actualPresent == false);
-    const bool isValidTrigger   = ((m_trace.triggerMode == TriggerMode::Present) ? isPresentTrigger : isTagTrigger);
+    // Tag triggers is currently the only type supported that is not based off actual present calls.
+    const bool isValidTrigger   = (((actualPresent) &&
+                                    ((m_trace.triggerMode == TriggerMode::Present) ||
+                                     (m_trace.triggerMode == TriggerMode::Index))) ||
+                                   ((actualPresent == false) &&
+                                    (m_trace.triggerMode == TriggerMode::Tag)));
 
     if (isValidTrigger)
     {
@@ -640,6 +642,14 @@ void DevModeMgr::TraceIdleToPendingStep(
 
         if (pState->status == TraceStatus::Idle)
         {
+            // Override some parameters via panel prior to updating trace parameters
+            const RuntimeSettings& settings = pState->pDevice->GetRuntimeSettings();
+
+            if (settings.devModeSqttPrepareFrameCount != UINT_MAX)
+            {
+                m_numPrepFrames = settings.devModeSqttPrepareFrameCount;
+            }
+
             // Update our trace parameters based on the new trace
             const auto traceParameters = m_pRGPServer->QueryTraceParameters();
 
@@ -652,32 +662,47 @@ void DevModeMgr::TraceIdleToPendingStep(
             // Preparing.
             m_blockingTraceEnd = false;
 
-            // Store virtual frame begin/end debug object command buffer tags
-            m_traceFrameBeginTag = traceParameters.beginTag;
-            m_traceFrameEndTag   = traceParameters.endTag;
-
             // Store the targtet API PSO hash to be passed to GpaSession::SetSampleTraceApiInfo
             m_targetApiPsoHash = traceParameters.pipelineHash;
 
-            // If we have valid frame begin/end tags, use the tag triggered trace mode.
-            const TriggerMode triggerMode =
-                ((m_traceFrameBeginTag != 0) && (m_traceFrameEndTag != 0)) ? TriggerMode::Tag
-                                                                           : TriggerMode::Present;
+            TriggerMode triggerMode = TriggerMode::Present;
 
-            // Assert if an unsupported capture mode is requested
-            VK_ASSERT(((triggerMode == TriggerMode::Tag) &&
-                       (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Markers)) ||
-                      ((triggerMode == TriggerMode::Present) &&
-                       (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Present)));
-
-            // Override some parameters via panel
-            const RuntimeSettings& settings = pState->pDevice->GetRuntimeSettings();
-
-            if (settings.devModeSqttPrepareFrameCount != UINT_MAX)
+            if (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Index)
             {
-                m_numPrepFrames = settings.devModeSqttPrepareFrameCount;
+                triggerMode = TriggerMode::Index;
+
+                m_traceFrameBeginIndex = traceParameters.captureStartIndex;
+                m_traceFrameEndIndex   = traceParameters.captureStopIndex;
+
+                m_traceFrameBeginTag = 0;
+                m_traceFrameEndTag = 0;
+
+                if (m_traceFrameBeginIndex < m_numPrepFrames)
+                {
+                    VK_NEVER_CALLED();
+                    FinishOrAbortTrace(pState, true);
+                }
+            }
+            else if (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Markers)
+            {
+                triggerMode = TriggerMode::Tag;
+
+                m_traceFrameBeginTag = traceParameters.beginTag;
+                m_traceFrameEndTag   = traceParameters.endTag;
+
+                VK_ASSERT((m_traceFrameBeginTag != 0) || (m_traceFrameEndTag != 0));
+            }
+            else if (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Present)
+            {
+                m_traceFrameBeginTag = 0;
+                m_traceFrameEndTag = 0;
+            }
+            else
+            {
+                VK_NOT_IMPLEMENTED;
             }
 
+            // Override some parameters via panel after updating trace parameters
             if (settings.devModeSqttTraceBeginEndTagEnable)
             {
                 m_traceFrameBeginTag = settings.devModeSqttTraceBeginTagValue;
@@ -708,6 +733,13 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
     bool         actualPresent)
 {
     VK_ASSERT(pState->status  == TraceStatus::Pending);
+
+    // We need to hold off untill we reach the desired frame when in Index mode
+    if ((pState->triggerMode == TriggerMode::Index) &&
+        (m_globalFrameIndex < (m_traceFrameBeginIndex - m_numPrepFrames)))
+    {
+        return Pal::Result::Success;
+    }
 
     // If we're presenting from a compute queue and the trace parameters indicate that we want to support
     // compute queue presents, then we need to enable sample updates for this trace.  Mid-trace sample updates
@@ -827,13 +859,17 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
             break;
         case TriggerMode::Tag:
             sampleTraceApiInfo.profilingMode = GpuUtil::TraceProfilingMode::Tags;
+            sampleTraceApiInfo.profilingModeData.tagData.start = m_traceFrameBeginTag;
+            sampleTraceApiInfo.profilingModeData.tagData.start = m_traceFrameEndTag;
+            break;
+        case TriggerMode::Index:
+            sampleTraceApiInfo.profilingMode = GpuUtil::TraceProfilingMode::FrameNumber;
+            sampleTraceApiInfo.profilingModeData.frameNumberData.start = m_traceFrameBeginIndex;
+            sampleTraceApiInfo.profilingModeData.frameNumberData.start = m_traceFrameEndIndex;
             break;
         default:
             VK_NOT_IMPLEMENTED;
         }
-
-        sampleTraceApiInfo.profilingModeData.tagData.start = m_traceFrameBeginTag;
-        sampleTraceApiInfo.profilingModeData.tagData.start = m_traceFrameEndTag;
 
         if (m_enableInstTracing)
         {

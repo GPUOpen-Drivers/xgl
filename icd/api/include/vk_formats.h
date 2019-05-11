@@ -64,8 +64,11 @@ struct Formats
     static Pal::Formats::NumericSupportFlags GetNumberFormat(VkFormat format);
 };
 
+#define VK_YUV_FORMAT_START VK_FORMAT_G8B8G8R8_422_UNORM
+#define VK_YUV_FORMAT_END VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM
+
 // Number of formats supported by the driver.
-#define VK_SUPPORTED_FORMAT_COUNT   (VK_FORMAT_RANGE_SIZE + (VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM - VK_FORMAT_G8B8G8R8_422_UNORM + 1))
+#define VK_SUPPORTED_FORMAT_COUNT     (VK_FORMAT_RANGE_SIZE + (VK_YUV_FORMAT_END - VK_YUV_FORMAT_START + 1))
 
 // =====================================================================================================================
 // Get a linear index for a format (used to address tables indirectly indexed by formats).
@@ -76,9 +79,9 @@ uint32_t Formats::GetIndex(VkFormat format)
         // Core format
         return static_cast<uint32_t>(format);
     }
-    else if ((format >= VK_FORMAT_G8B8G8R8_422_UNORM) && (format <= VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM))
+    else if ((format >= VK_YUV_FORMAT_START) && (format <= VK_YUV_FORMAT_END))
     {
-        return VK_FORMAT_RANGE_SIZE + (format - VK_FORMAT_G8B8G8R8_422_UNORM);
+        return VK_FORMAT_RANGE_SIZE + (format - VK_YUV_FORMAT_START);
     }
     else
     {
@@ -97,9 +100,9 @@ VkFormat Formats::FromIndex(uint32_t index)
         return static_cast<VkFormat>(index);
     }
     else if ((index >= VK_FORMAT_RANGE_SIZE) &&
-             (index <= (VK_FORMAT_RANGE_SIZE + VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM - VK_FORMAT_G8B8G8R8_422_UNORM)))
+             (index <= (VK_FORMAT_RANGE_SIZE + VK_YUV_FORMAT_END - VK_YUV_FORMAT_START)))
     {
-        return static_cast<VkFormat>(VK_FORMAT_G8B8G8R8_422_UNORM + index - VK_FORMAT_RANGE_SIZE);
+        return static_cast<VkFormat>(VK_YUV_FORMAT_START + index - VK_FORMAT_RANGE_SIZE);
     }
     else
     {
@@ -188,7 +191,7 @@ bool Formats::IsBcCompressedFormat(VkFormat format)
 // Returns true if the given format is a yuv format.
 bool Formats::IsYuvFormat(VkFormat format)
 {
-    return (format >= VK_FORMAT_G8B8G8R8_422_UNORM && format <= VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM);
+    return (format >= VK_YUV_FORMAT_START && format <= VK_YUV_FORMAT_END);
 }
 
 // =====================================================================================================================

@@ -91,6 +91,10 @@ void ComputePipeline::ConvertComputePipelineInfo(
         pOutInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 488
+    // Set heap preference for PSO
+    pOutInfo->pipeline.flags.preferNonLocalHeap = pDevice->GetRuntimeSettings().pipelinePreferNonLocalHeap;
+#endif
 }
 
 // =====================================================================================================================

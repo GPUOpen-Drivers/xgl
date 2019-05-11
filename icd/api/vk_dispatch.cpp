@@ -537,6 +537,8 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkDestroyDebugUtilsMessengerEXT                 );
     INIT_DISPATCH_ENTRY(vkSubmitDebugUtilsMessageEXT                    );
 
+    INIT_DISPATCH_ENTRY(vkGetBufferDeviceAddressEXT                     );
+
     INIT_DISPATCH_ENTRY(vkResetQueryPoolEXT                             );
 }
 

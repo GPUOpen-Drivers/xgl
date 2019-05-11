@@ -337,12 +337,11 @@ VkResult Buffer::GetMemoryRequirements(
     // it is better off to not expose visible heap for buffer to application.
     if(pDevice->GetProperties().connectThroughThunderBolt)
     {
-        uint32_t visibleMemIndex;
+        uint32_t visibleMemIndexBits;
 
-        if (pDevice->GetVkTypeIndexFromPalHeap(Pal::GpuHeap::GpuHeapLocal, &visibleMemIndex))
+        if (pDevice->GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap::GpuHeapLocal, &visibleMemIndexBits))
         {
-            uint32_t visibleMemBit = 1 << visibleMemIndex;
-            pMemoryRequirements->memoryTypeBits &= ~visibleMemBit;
+            pMemoryRequirements->memoryTypeBits &= ~visibleMemIndexBits;
         }
     }
 
@@ -435,6 +434,19 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
             }
         }
     }
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressEXT(
+    VkDevice                                    device,
+    const VkBufferDeviceAddressInfoEXT* const   pInfo)
+{
+    const Device* const pDevice = ApiDevice::ObjectFromHandle(device);
+    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_BUFFER_DEVICE_ADDRESS));
+
+    Buffer* const pBuffer = Buffer::ObjectFromHandle(pInfo->buffer);
+
+    return pBuffer->GpuVirtAddr(DefaultDeviceIndex);
 }
 
 } // namespace entry

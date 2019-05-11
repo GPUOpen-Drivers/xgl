@@ -94,7 +94,9 @@ void ImageView::BuildImageSrds(
     info.flags.u32All = 0;
     info.minLod       = minLod;
 
-    info.possibleLayouts.usages  = Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead;
+    // Restrict possible usages to only those supported by the image, e.g. no FMask based reads without MSAA.
+    info.possibleLayouts.usages  = (pImage->GetBarrierPolicy().GetSupportedLayoutUsageMask() &
+                                    (Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead));
     info.possibleLayouts.engines = Pal::LayoutUniversalEngine | Pal::LayoutComputeEngine;
 
     // Create all possible SRD variants
@@ -396,7 +398,7 @@ VkResult ImageView::Create(
     Pal::SubresRange palRanges[MaxPalAspectsPerMask];
     uint32_t palRangeCount = 0;
 
-    VkToPalSubresRange(VkToPalFormat(pImage->GetFormat()).format,
+    VkToPalSubresRange(pImage->GetFormat(),
                        subresRange,
                        pImage->GetMipLevels(),
                        pImage->GetArraySize(),

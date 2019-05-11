@@ -196,6 +196,7 @@ private:
     enum class TriggerMode
     {
         Present = 0, // Traces triggered by presents
+        Index,       // Traces triggered by frame indices
         Tag          // Traces triggered by command buffer tags
     };
 
@@ -318,6 +319,8 @@ private:
     uint32_t                            m_globalFrameIndex;
     uint64_t                            m_traceFrameBeginTag;
     uint64_t                            m_traceFrameEndTag;
+    uint32_t                            m_traceFrameBeginIndex;
+    uint32_t                            m_traceFrameEndIndex;
     uint64_t                            m_targetApiPsoHash;
 
     PAL_DISALLOW_DEFAULT_CTOR(DevModeMgr);

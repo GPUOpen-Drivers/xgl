@@ -133,31 +133,41 @@ public:
         return m_memoryTypeMask;
     }
 
-    VK_INLINE bool GetVkTypeIndexFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndex) const
+    VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
     {
         VK_ASSERT(heapIndex < Pal::GpuHeapCount);
-        VK_ASSERT(pVkIndex != nullptr);
-        *pVkIndex = m_memoryPalHeapToVkIndex[static_cast<uint32_t>(heapIndex)];
-        if (*pVkIndex >= Pal::GpuHeapCount)
+        VK_ASSERT(pVkIndexBits != nullptr);
+        *pVkIndexBits = m_memoryPalHeapToVkIndexBits[static_cast<uint32_t>(heapIndex)];
+        if (*pVkIndexBits == 0)
         {
             return false;
         }
         else
         {
+            VK_ASSERT(((*pVkIndexBits) & ~((1ULL << VK_MAX_MEMORY_TYPES) - 1)) == 0);
             return true;
         }
     }
 
     VK_INLINE Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const
     {
-        VK_ASSERT(vkIndex < VK_MEMORY_TYPE_NUM);
+        VK_ASSERT(vkIndex < m_memoryProperties.memoryTypeCount);
         return m_memoryVkIndexToPalHeap[vkIndex];
     }
 
     VK_INLINE Pal::GpuHeap GetPalHeapFromVkHeapIndex(uint32_t heapIndex) const
     {
-        VK_ASSERT(heapIndex < (VK_MEMORY_TYPE_NUM - 1));
+        VK_ASSERT(heapIndex < m_memoryProperties.memoryHeapCount);
         return m_heapVkToPal[heapIndex];
+    }
+
+    VK_INLINE bool GetVkHeapIndexFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkHeapIndex) const
+    {
+        VK_ASSERT(heapIndex < Pal::GpuHeapCount);
+
+        *pVkHeapIndex = m_memoryPalHeapToVkHeap[heapIndex];
+
+        return *pVkHeapIndex != Pal::GpuHeapCount;
     }
 
     VK_INLINE const VkPhysicalDeviceMemoryProperties& GetMemoryProperties() const
@@ -383,7 +393,7 @@ public:
 
     VK_INLINE uint32_t GetSubgroupSize() const
     {
-        uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.wavefrontSize;
+        uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.nativeWavefrontSize;
 
         return subgroupSize;
     }
@@ -517,9 +527,10 @@ protected:
     Pal::IDevice*                    m_pPalDevice;
     Pal::DeviceProperties            m_properties;
     uint32_t                         m_memoryTypeMask;
-    uint32_t                         m_memoryPalHeapToVkIndex[Pal::GpuHeapCount];
-    Pal::GpuHeap                     m_memoryVkIndexToPalHeap[Pal::GpuHeapCount];
-    Pal::GpuHeap                     m_heapVkToPal[VK_MEMORY_TYPE_NUM - 1];
+    uint32_t                         m_memoryPalHeapToVkIndexBits[Pal::GpuHeapCount];
+    uint32_t                         m_memoryPalHeapToVkHeap[Pal::GpuHeapCount];
+    Pal::GpuHeap                     m_memoryVkIndexToPalHeap[VK_MAX_MEMORY_TYPES];
+    Pal::GpuHeap                     m_heapVkToPal[VkMemoryHeapNum];
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
     RuntimeSettings                  m_settings;
     VkPhysicalDeviceLimits           m_limits;

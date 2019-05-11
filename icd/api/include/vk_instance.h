@@ -155,6 +155,9 @@ public:
     VK_INLINE uint32_t GetAPIVersion() const
         { return m_apiVersion; }
 
+    VK_INLINE uint32_t GetAppVersion() const
+        { return m_appVersion; }
+
     VK_FORCEINLINE const PhysicalDeviceManager* GetPhysicalDeviceManager() const
     {
         return m_pPhysicalDeviceManager;
@@ -257,6 +260,7 @@ private:
     Instance(
         const VkAllocationCallbacks*        pAllocCb,
         uint32_t                            apiVersion,
+        uint32_t                            appVersion,
         const InstanceExtensions::Enabled&  enabledExtensions,
         AppProfile                          preInitProfile
         );
@@ -289,6 +293,7 @@ private:
     VirtualStackMgr*                    m_pVirtualStackMgr;         // Virtual stack manager
     PhysicalDeviceManager*              m_pPhysicalDeviceManager;   // Physical device manager
     const uint32_t                      m_apiVersion;               // Requested Vulkan API version
+    const uint32_t                      m_appVersion;               // Application Version
     const InstanceExtensions::Enabled   m_enabledExtensions;        // Enabled instance extensions
     DispatchTable                       m_dispatchTable;            // Instance dispatch table
 

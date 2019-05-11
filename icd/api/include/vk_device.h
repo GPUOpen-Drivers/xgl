@@ -291,7 +291,8 @@ public:
     VkResult Initialize(
         DispatchableQueue**                         pQueues,
         const DeviceExtensions::Enabled&            enabled,
-        const VkMemoryOverallocationBehaviorAMD     overallocationBehavior);
+        const VkMemoryOverallocationBehaviorAMD     overallocationBehavior,
+        const bool                                  deviceCoherentMemoryEnabled);
 
     void InitDispatchTable();
 
@@ -353,9 +354,9 @@ public:
         return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMask();
     }
 
-    VK_INLINE bool GetVkTypeIndexFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndex) const
+    VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
     {
-        return VkPhysicalDevice(DefaultDeviceIndex)->GetVkTypeIndexFromPalHeap(heapIndex, pVkIndex);
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetVkTypeIndexBitsFromPalHeap(heapIndex, pVkIndexBits);
     }
 
     VK_INLINE Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const
@@ -519,6 +520,9 @@ public:
     VK_INLINE bool UseStridedCopyQueryResults() const
         { return (m_properties.timestampQueryPoolSlotSize == 32); }
 
+    VK_INLINE const bool IsDeviceCoherentMemoryEnabled() const
+        { return m_deviceCoherentMemoryEnabled; }
+
     Pal::IQueue* PerformSwCompositing(
         uint32_t         deviceIdx,
         uint32_t         presentationDeviceIdx,
@@ -587,6 +591,10 @@ protected:
 
     // The states of m_enabledFeatures are provided by application
     VkPhysicalDeviceFeatures            m_enabledFeatures;
+
+    // The states of enabled feature DEVICE_COHERENT_MEMORY_FEATURES_AMD which is defined by
+    // extensions VK_AMD_device_coherent_memory
+    bool                                m_deviceCoherentMemoryEnabled;
 
     // The count of allocations that has been created from the logical device.
     uint32_t                            m_allocatedCount;

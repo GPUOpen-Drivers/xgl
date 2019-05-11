@@ -73,6 +73,7 @@ const int   MaxExtensionStringLen     = 512;
 Instance::Instance(
     const VkAllocationCallbacks*        pAllocCb,
     uint32_t                            apiVersion,
+    uint32_t                            appVersion,
     const InstanceExtensions::Enabled&  enabledExtensions,
     AppProfile                          preInitProfile
     )
@@ -84,6 +85,7 @@ Instance::Instance(
     m_pVirtualStackMgr(nullptr),
     m_pPhysicalDeviceManager(nullptr),
     m_apiVersion(apiVersion),
+    m_appVersion(appVersion),
     m_enabledExtensions(enabledExtensions),
     m_dispatchTable(DispatchTable::Type::INSTANCE, this),
     m_nullGpuId(Pal::NullGpuId::Max),
@@ -101,6 +103,7 @@ Instance::Instance(
     m_chillSettings.chillProfileEnable  = false;
 
     memset(m_screens, 0, sizeof(m_screens));
+
 }
 
 // =====================================================================================================================
@@ -230,10 +233,18 @@ VkResult Instance::Create(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    // Get the app version
+    uint32_t appVersion = 0;
+    if (pAppInfo != nullptr)
+    {
+        appVersion = pAppInfo->applicationVersion;
+    }
+
     // Placement new on instance object.
     pNewInstance = reinterpret_cast<Instance*>(pInstanceData);
     new (pInstanceData) Instance(pAllocCb,
                                  apiVersion,
+                                 appVersion,
                                  enabledInstanceExtensions,
                                  preInitAppProfile);
 
@@ -569,7 +580,8 @@ VkResult Instance::LoadAndCommitSettings(
         pAppProfiles[deviceIdx] = m_preInitAppProfile;
 
         // Load per-device settings
-        ProcessSettings(ppDevices[deviceIdx],
+        ProcessSettings(m_appVersion,
+                        ppDevices[deviceIdx],
                         &pAppProfiles[deviceIdx],
                         &pSettings[deviceIdx]);
 

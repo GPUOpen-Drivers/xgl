@@ -326,3 +326,5 @@ vkCmdEndQueryIndexedEXT                             @device     @dext(EXT_transf
 vkCmdDrawIndirectByteCountEXT                       @device     @dext(EXT_transform_feedback)
 
 vkResetQueryPoolEXT                                 @device     @dext(EXT_host_query_reset)
+
+vkGetBufferDeviceAddressEXT                         @device     @dext(EXT_buffer_device_address)

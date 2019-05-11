@@ -616,7 +616,10 @@ void DescriptorUpdate::CopyDescriptorSets(
                 memcpy(pDestAddr, pSrcAddr, srcBinding.sta.dwArrayStride * sizeof(uint32_t) * count);
             }
 
-            if (fmaskBasedMsaaReadEnabled && srcBinding.sta.dwSize > 0)
+            if (fmaskBasedMsaaReadEnabled && srcBinding.sta.dwSize > 0 &&
+                ((srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) ||
+                 (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) ||
+                 (srcBinding.info.descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT)))
             {
                 uint32_t* pSrcFmaskAddr = pSrcSet->FmaskCpuAddress(deviceIdx)
                                         + srcBinding.sta.dwOffset

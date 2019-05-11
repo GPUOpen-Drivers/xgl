@@ -425,6 +425,7 @@ VkResult Image::Create(
         const VkImageCreateInfo*                    pVkImageCreateInfo;
         const VkImageSwapchainCreateInfoKHR*        pVkImageSwapchainCreateInfoKHR;
         const VkImageFormatListCreateInfoKHR*       pVkImageFormatListCreateInfoKHR;
+        const VkImageStencilUsageCreateInfoEXT*     pVkImageStencilUsageCreateInfoEXT;
     };
 
     ImageFlags imageFlags;
@@ -500,6 +501,21 @@ VkResult Image::Create(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT:
+        {
+            const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+            Pal::ImageUsageFlags usageFlags = VkToPalImageUsageFlags(
+                                        pVkImageStencilUsageCreateInfoEXT->stencilUsage,
+                                        pCreateInfo->format,
+                                        pCreateInfo->samples,
+                                        (VkImageUsageFlags)(settings.optImgMaskToApplyShaderReadUsageForTransferSrc),
+                                        (VkImageUsageFlags)(settings.optImgMaskToApplyShaderWriteUsageForTransferDst));
+
+            stencilShaderRead = usageFlags.shaderRead;
+
+            break;
+        }
+
         default:
             // Skip any unknown extension structures
             break;
@@ -532,6 +548,12 @@ VkResult Image::Create(
     // 3. Set noStencilShaderRead = true according to application profile.
 
     palCreateInfo.usageFlags.noStencilShaderRead = false;
+
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SEPARATE_STENCIL_USAGE))
+    {
+        palCreateInfo.usageFlags.noStencilShaderRead = (stencilShaderRead == false);
+    }
+
     // Disable Stencil read according to the application profile during the creation of an MSAA depth stencil target.
     if ((pCreateInfo != nullptr)                                                  &&
         (pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
@@ -1413,11 +1435,11 @@ VkResult Image::GetMemoryRequirements(
 
     for (uint32_t i = 0; i < palReqs.heapCount; ++i)
     {
-        uint32_t typeIndex;
+        uint32_t typeIndexBits;
 
-        if (pDevice->GetVkTypeIndexFromPalHeap(palReqs.heaps[i], &typeIndex))
+        if (pDevice->GetVkTypeIndexBitsFromPalHeap(palReqs.heaps[i], &typeIndexBits))
         {
-            pReqs->memoryTypeBits |= 1 << typeIndex;
+            pReqs->memoryTypeBits |= typeIndexBits;
         }
     }
 

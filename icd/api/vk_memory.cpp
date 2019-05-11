@@ -150,6 +150,14 @@ VkResult Memory::Create(
                         createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
                     }
                 }
+
+                if (((memoryProperties.memoryTypes[pInfo->memoryTypeIndex].propertyFlags &
+                    VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD) != 0) &&
+                    pDevice->IsDeviceCoherentMemoryEnabled())
+                {
+                    createInfo.flags.gl2Uncached = 1;
+                }
+
                 break;
             case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
                 {

@@ -239,6 +239,18 @@ constexpr AppProfilePatternEntry AppEngineNitrous =
     "nitrous by oxide games"
 };
 
+constexpr AppProfilePatternEntry AppNameStrangeBrigade =
+{
+    PatternAppNameLower,
+    "strange"
+};
+
+constexpr AppProfilePatternEntry AppEngineStrangeBrigade =
+{
+    PatternEngineNameLower,
+    "strange"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -455,6 +467,23 @@ AppProfilePattern AppPatternTable[] =
         }
     },
 
+    {
+        AppProfile::StrangeBrigade,
+        {
+            AppNameStrangeBrigade,
+            AppEngineStrangeBrigade,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::StrangeEngine,
+        {
+            AppEngineStrangeBrigade,
+            PatternEnd
+        }
+    },
+
 };
 
 static char* GetExecutableName(size_t* pLength, bool includeExtension = false);
@@ -494,7 +523,7 @@ AppProfile ScanApplicationProfile(
     // hopefully never).  DON'T LEAVE THIS UNCOMMENTED:
     //
     // Util::MetroHash::Hash hash = {};
-    // Util::MetroHash128::Hash(pTestPattern, strlen(pTestPattern), hash.bytes);
+    // Util::MetroHash128::Hash(reinterpret_cast<const uint8_t*>(pTestPattern), strlen(pTestPattern), hash.bytes);
 
     AppProfile profile = AppProfile::Default;
 

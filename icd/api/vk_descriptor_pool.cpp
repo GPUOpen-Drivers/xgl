@@ -132,7 +132,9 @@ VkResult DescriptorPool::Init(
 
             allocInfo.pal.size      = memReqs.size;
             allocInfo.pal.alignment = memReqs.alignment;
-            allocInfo.pal.priority  = Pal::GpuMemPriority::Normal;
+            allocInfo.pal.priority  = m_pDevice->GetRuntimeSettings().enableHighPriorityDescriptorMemory ?
+                                        Pal::GpuMemPriority::High :
+                                        Pal::GpuMemPriority::Normal;
 
             pDevice->MemMgr()->GetCommonPool(InternalPoolDescriptorTable, &allocInfo);
 

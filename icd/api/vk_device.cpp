@@ -368,6 +368,7 @@ VkResult Device::Create(
     Instance*                         pInstance                       = pPhysicalDevice->VkInstance();
     const VkPhysicalDeviceFeatures*   pEnabledFeatures                = pCreateInfo->pEnabledFeatures;
     VkMemoryOverallocationBehaviorAMD overallocationBehavior          = VK_MEMORY_OVERALLOCATION_BEHAVIOR_DEFAULT_AMD;
+    bool                              deviceCoherentMemoryEnabled     = false;
 
     for (pDeviceCreateInfo = pCreateInfo; ((pHeader != nullptr) && (vkResult == VK_SUCCESS)); pHeader = pHeader->pNext)
     {
@@ -512,6 +513,24 @@ VkResult Device::Create(
                 reinterpret_cast<const VkDeviceMemoryOverallocationCreateInfoAMD*>(pHeader);
 
             overallocationBehavior = pMemoryOverallocationCreateInfo->overallocationBehavior;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD:
+        {
+            const VkPhysicalDeviceCoherentMemoryFeaturesAMD * pDeviceCoherentMemory =
+                reinterpret_cast<const VkPhysicalDeviceCoherentMemoryFeaturesAMD *>(pHeader);
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceCoherentMemoryFeaturesAMD>(
+                pPhysicalDevice,
+                pDeviceCoherentMemory);
+
+            if (vkResult == VK_SUCCESS)
+            {
+                deviceCoherentMemoryEnabled = enabledDeviceExtensions.IsExtensionEnabled(
+                                                  DeviceExtensions::AMD_DEVICE_COHERENT_MEMORY) &&
+                                              pDeviceCoherentMemory->deviceCoherentMemory;
+            }
+
+            break;
         }
 
         default:
@@ -787,7 +806,8 @@ VkResult Device::Create(
             vkResult = (*pDispatchableDevice)->Initialize(
                 &pDispatchableQueues[0][0],
                 enabledDeviceExtensions,
-                overallocationBehavior);
+                overallocationBehavior,
+                deviceCoherentMemoryEnabled);
 
             // If we've failed to Initialize, make sure we destroy anything we might have allocated.
             if (vkResult != VK_SUCCESS)
@@ -809,7 +829,8 @@ VkResult Device::Create(
 VkResult Device::Initialize(
     DispatchableQueue**                     pQueues,
     const DeviceExtensions::Enabled&        enabled,
-    const VkMemoryOverallocationBehaviorAMD overallocationBehavior)
+    const VkMemoryOverallocationBehaviorAMD overallocationBehavior,
+    const bool                              deviceCoherentMemoryEnabled)
 {
     // Initialize the internal memory manager
     VkResult result = m_internalMemMgr.Init();
@@ -918,6 +939,8 @@ VkResult Device::Initialize(
         deviceProps.engineProperties[Pal::EngineTypeDma].minTimestampAlignment > 0 ?
         deviceProps.engineProperties[Pal::EngineTypeDma].minTimestampAlignment :
         deviceProps.engineProperties[Pal::EngineTypeUniversal].minTimestampAlignment;
+
+    m_deviceCoherentMemoryEnabled = deviceCoherentMemoryEnabled;
 
     if (result == VK_SUCCESS)
     {
@@ -1033,6 +1056,7 @@ VkResult Device::Initialize(
             case AppProfile::ThronesOfBritannia:
             case AppProfile::DawnOfWarIII:
             case AppProfile::AshesOfTheSingularity:
+            case AppProfile::StrangeBrigade:
                 m_allocationSizeTracking = false;
                 break;
             default:
@@ -1433,7 +1457,6 @@ VkResult Device::CreateInternalComputePipeline(
     ComputePipelineCreateInfo pipelineBuildInfo = {};
 
     // Build shader module
-    auto settings = GetRuntimeSettings();
     result = pCompiler->BuildShaderModule(
         this,
         codeByteSize,
@@ -2295,11 +2318,11 @@ VkDeviceSize Device::GetMemoryBaseAddrAlignment(
 uint32_t Device::GetPinnedSystemMemoryTypes() const
 {
     uint32_t memoryTypes = 0;
-    uint32_t gartIndex;
+    uint32_t gartIndexBits;
 
-    if (GetVkTypeIndexFromPalHeap(Pal::GpuHeapGartCacheable, &gartIndex))
+    if (GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeapGartCacheable, &gartIndexBits))
     {
-        memoryTypes |= (1UL << gartIndex);
+        memoryTypes |= gartIndexBits;
     }
 
     return memoryTypes;

@@ -618,7 +618,8 @@ void GraphicsPipeline::BuildRasterizationState(
 
     // By default rasterization is disabled, unless rasterization creation info is present
 
-    const VkPhysicalDeviceLimits& limits = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetLimits();
+    const PhysicalDevice*         pPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+    const VkPhysicalDeviceLimits& limits          = pPhysicalDevice->GetLimits();
 
     // Enable perpendicular end caps if we report strictLines semantics
     pInfo->pipeline.rsState.perpLineEndCapsEnable = (limits.strictLines == VK_TRUE);
@@ -666,10 +667,10 @@ void GraphicsPipeline::BuildRasterizationState(
             switch (static_cast<int32>(pHeader->sType))
             {
             case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD:
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 493
+                if (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportOutOfOrderPrimitives)
+#endif
                 {
-                    // VK_AMD_rasterization_order must be enabled
-                    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::AMD_RASTERIZATION_ORDER));
-
                     pInfo->pipeline.rsState.outOfOrderPrimsEnable =
                         VkToPalRasterizationOrder(pRsOrder->rasterizationOrder);
                 }
@@ -1157,6 +1158,10 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         }
     }
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 488
+    // Set heap preference for PSO
+    pInfo->pipeline.flags.preferNonLocalHeap = settings.pipelinePreferNonLocalHeap;
+#endif
 }
 
 // =====================================================================================================================

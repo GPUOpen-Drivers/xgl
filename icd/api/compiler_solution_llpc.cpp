@@ -379,7 +379,11 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     llpcOptions[numOptions++] = (settings.enableLog & 1) ? "-enable-errs=1" : "-enable-errs=0";
     llpcOptions[numOptions++] = (settings.enableLog & 2) ? "-enable-outs=1" : "-enable-outs=0";
 
-    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-log-file-outs=%s", settings.logFileName);
+    char logFileName[PATH_MAX] = {};
+
+    Util::Snprintf(&logFileName[0], PATH_MAX, "%s/%sLlpc", settings.pipelineDumpDir, settings.logFileName);
+
+    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-log-file-outs=%s", logFileName);
     ++optionLength;
     llpcOptions[numOptions++] = pOptionBuffer;
     pOptionBuffer += optionLength;
@@ -427,7 +431,8 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     if ((appProfile == AppProfile::Talos) ||
         (appProfile == AppProfile::MadMax) ||
         (appProfile == AppProfile::SeriousSamFusion) ||
-        (appProfile == AppProfile::SedpEngine))
+        (appProfile == AppProfile::SedpEngine) ||
+        (appProfile == AppProfile::ThronesOfBritannia))
     {
         llpcOptions[numOptions++] = "-enable-si-scheduler";
         // si-scheduler interacts badly with SIFormMemoryClauses pass, so
@@ -440,7 +445,8 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
          ((appProfile == AppProfile::MadMax) ||
           (appProfile == AppProfile::SeriousSamFusion) ||
           (appProfile == AppProfile::F1_2017) ||
-          (appProfile == AppProfile::Feral3DEngine)))
+          (appProfile == AppProfile::Feral3DEngine) ||
+          (appProfile == AppProfile::DawnOfWarIII)))
     {
         // Force to use internal disk cache.
         shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;

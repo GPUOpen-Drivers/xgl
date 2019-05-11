@@ -74,6 +74,8 @@ enum class AppProfile : uint32_t
     Feral3DEngine,         // Feral3D Engine (Default)
     AshesOfTheSingularity, // Ashes Of The Singularity
     NitrousEngine,         // Nitrous Engine by Oxide (Default)
+    StrangeBrigade,        // Strange Brigade
+    StrangeEngine,         // Strange Engine (Default)
 };
 
 // Struct describing dynamic CHILL settings

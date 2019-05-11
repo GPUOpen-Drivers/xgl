@@ -174,6 +174,10 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
     const VkBufferMemoryRequirementsInfo2*      pInfo,
     VkMemoryRequirements2*                      pMemoryRequirements);
 
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressEXT(
+    VkDevice                                    device,
+    const VkBufferDeviceAddressInfoEXT*         pInfo);
+
 } // namespace entry
 
 } // namespace vk

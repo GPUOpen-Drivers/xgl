@@ -172,6 +172,8 @@ constexpr uint32_t RgpSqttMarkerCbEndWordCount = 3;
 // all map to the same internal clear function.  Therefore, it may be misleading to describe for example all
 // events labelled RgpSqttMarkerEventClearColor as for example "vkCmdClearColorImage(...)" because the same event
 // may be triggered also by render pass load-op clears.
+// Note: to keep backward compatible for RGP, new enum values in this definition must be added to the end and
+// existing values can't be changed.
 enum class RgpSqttMarkerEventType : uint32_t
 {
     CmdDraw                        = 0,     // vkCmdDraw
@@ -201,6 +203,8 @@ enum class RgpSqttMarkerEventType : uint32_t
     RenderPassDepthStencilClear    = 24,    // Render pass: Depth-stencil clear triggered by attachment load op
     RenderPassResolve              = 25,    // Render pass: Color multisample resolve triggered by resolve attachment
     InternalUnknown                = 26,    // Draw or dispatch by PAL due to a reason we do not know
+    CmdDrawIndirectCountKHR        = 27,    // vkCmdDrawIndirectCountKHR
+    CmdDrawIndexedIndirectCountKHR = 28,    // vkCmdDrawIndexedIndirectCountKHR
 
     Invalid                        = 0xffffffff
 };
@@ -471,6 +475,8 @@ enum class RgpSqttMarkerGeneralApiType : uint32_t
     CmdSetStencilCompareMask       = 41,
     CmdSetStencilWriteMask         = 42,
     CmdSetStencilReference         = 43,
+    CmdDrawIndirectCountKHR        = 44,
+    CmdDrawIndexedIndirectCountKHR = 45,
 
     Invalid = 0xffffffff
 };

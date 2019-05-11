@@ -2251,7 +2251,7 @@ void CmdBuffer::ClearColorImage(
                 // Only color aspect is allowed here
                 VK_ASSERT(pRanges[rangeIdx].aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
 
-                VkToPalSubresRange(palFormat.format,
+                VkToPalSubresRange(pImage->GetFormat(),
                                    pRanges[rangeIdx],
                                    pImage->GetMipLevels(),
                                    pImage->GetArraySize(),
@@ -2351,7 +2351,7 @@ void CmdBuffer::ClearDepthStencilImage(
                 // Only depth or stencil aspect is allowed here
                 VK_ASSERT((pRanges[rangeIdx].aspectMask & ~(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) == 0);
 
-                VkToPalSubresRange(VkToPalFormat(pImage->GetFormat()).format,
+                VkToPalSubresRange(pImage->GetFormat(),
                                    pRanges[rangeIdx],
                                    pImage->GetMipLevels(),
                                    pImage->GetArraySize(),
@@ -2981,6 +2981,9 @@ void CmdBuffer::ExecuteBarriers(
     constexpr uint32_t MaxTransitionCount = 512;
     constexpr uint32_t MaxLocationCount = 128;
 
+    pBarrier->globalSrcCacheMask = 0u;
+    pBarrier->globalDstCacheMask = 0u;
+
     Pal::BarrierTransition* pTransitions = virtStackFrame.AllocArray<Pal::BarrierTransition>(MaxTransitionCount);
     Pal::BarrierTransition* pNextMain    = pTransitions;
 
@@ -3071,7 +3074,7 @@ void CmdBuffer::ExecuteBarriers(
         Pal::SubresRange palRanges[MaxPalAspectsPerMask];
 
         VkToPalSubresRange(
-            VkToPalFormat(format).format,
+            format,
             pImageMemoryBarriers[i].subresourceRange,
             pImage->GetMipLevels(),
             pImage->GetArraySize(),
@@ -3441,6 +3444,8 @@ void CmdBuffer::FillTimestampQueryPool(
             nullptr,                                // ppTargets
             1,                                      // transitionCount
             &Transition,                            // pTransitions
+            0,                                      // globalSrcCacheMask
+            0,                                      // globalDstCacheMask
             nullptr,                                // pSplitBarrierGpuEvent
             RgpBarrierInternalPreResetQueryPoolSync // reason
         };
@@ -3492,6 +3497,8 @@ void CmdBuffer::FillTimestampQueryPool(
             nullptr,                                 // ppTargets
             1,                                       // transitionCount
             &Transition,                             // pTransitions
+            0,                                       // globalSrcCacheMask
+            0,                                       // globalDstCacheMask
             nullptr,                                 // pSplitBarrierGpuEvent
             RgpBarrierInternalPostResetQueryPoolSync // reason
         };
@@ -3711,6 +3718,8 @@ void CmdBuffer::CopyQueryPoolResults(
                 nullptr,                                        // ppTargets
                 1,                                              // transitionCount
                 &transition,                                    // pTransitions
+                0,                                              // globalSrcCacheMask
+                0,                                              // globalDstCacheMask
                 nullptr,                                        // pSplitBarrierGpuEvent
                 RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
             };
@@ -4261,7 +4270,9 @@ void CmdBuffer::RPSyncPostLoadOpColorClear()
         nullptr,                            // ppTargets
         1,                                  // transitionCount
         &transition,                        // pTransitions
-        0,                                  // pSplitBarrierGpuEvent
+        0,                                  // globalSrcCacheMask
+        0,                                  // globalDstCacheMask
+        nullptr,                            // pSplitBarrierGpuEvent
         RgpBarrierExternalRenderPassSync    // reason
     };
 
@@ -4329,32 +4340,31 @@ void CmdBuffer::RPSyncPoint(
     barrier.pipePointWaitCount = rpBarrier.pipePointCount;
     barrier.pPipePoints        = rpBarrier.pipePoints;
 
-    const uint32_t maxTransitionCount = 1 + // For global memory dependency
-                                        MaxPalAspectsPerMask * syncPoint.transitionCount;
+    const uint32_t maxTransitionCount = MaxPalAspectsPerMask * syncPoint.transitionCount;
 
-    Pal::BarrierTransition* pPalTransitions = pVirtStack->AllocArray<Pal::BarrierTransition>(maxTransitionCount);
-    const Image** ppImages                  = pVirtStack->AllocArray<const Image*>(maxTransitionCount);
+    Pal::BarrierTransition* pPalTransitions = (maxTransitionCount != 0)                                          ?
+                                              pVirtStack->AllocArray<Pal::BarrierTransition>(maxTransitionCount) :
+                                              nullptr;
+    const Image** ppImages                  = (maxTransitionCount != 0)                                ?
+                                              pVirtStack->AllocArray<const Image*>(maxTransitionCount) :
+                                              nullptr;
+
+    // Construct global memory dependency to synchronize caches (subpass dependencies + implicit synchronization)
+    if (rpBarrier.flags.needsGlobalTransition)
+    {
+        Pal::BarrierTransition globalTransition = { };
+
+        m_barrierPolicy.ApplyBarrierCacheFlags(
+            rpBarrier.srcAccessMask,
+            rpBarrier.dstAccessMask,
+            &globalTransition);
+
+        barrier.globalSrcCacheMask = globalTransition.srcCacheMask | rpBarrier.implicitSrcCacheMask;
+        barrier.globalDstCacheMask = globalTransition.dstCacheMask | rpBarrier.implicitDstCacheMask;
+    }
 
     if ((pPalTransitions != nullptr) && (ppImages != nullptr))
     {
-        // Construct global memory dependency to synchronize caches (subpass dependencies + implicit synchronization)
-        if (rpBarrier.flags.needsGlobalTransition)
-        {
-            VK_ASSERT(barrier.transitionCount < maxTransitionCount);
-
-            Pal::BarrierTransition* pGlobalTransition = &pPalTransitions[barrier.transitionCount++];
-
-            pGlobalTransition->imageInfo.pImage = nullptr;
-
-            m_barrierPolicy.ApplyBarrierCacheFlags(
-                rpBarrier.srcAccessMask,
-                rpBarrier.dstAccessMask,
-                pGlobalTransition);
-
-            pGlobalTransition->srcCacheMask |= rpBarrier.implicitSrcCacheMask;
-            pGlobalTransition->dstCacheMask |= rpBarrier.implicitDstCacheMask;
-        }
-
         // Construct attachment-specific layout transitions
         for (uint32_t t = 0; t < syncPoint.transitionCount; ++t)
         {
@@ -4424,7 +4434,7 @@ void CmdBuffer::RPSyncPoint(
 
         barrier.pTransitions = pPalTransitions;
     }
-    else
+    else if (maxTransitionCount != 0)
     {
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }

@@ -1145,6 +1145,50 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirectCountAMD(
 }
 
 // =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectCountKHR(
+    VkCommandBuffer                             cmdBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkBuffer                                    countBuffer,
+    VkDeviceSize                                countOffset,
+    uint32_t                                    maxDrawCount,
+    uint32_t                                    stride)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDrawIndirectCountKHR);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdDrawIndirectCountKHR);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdDrawIndirectCountKHR)(cmdBuffer, buffer, offset, countBuffer, countOffset, maxDrawCount,
+        stride);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndexedIndirectCountKHR(
+    VkCommandBuffer                             cmdBuffer,
+    VkBuffer                                    buffer,
+    VkDeviceSize                                offset,
+    VkBuffer                                    countBuffer,
+    VkDeviceSize                                countOffset,
+    uint32_t                                    maxDrawCount,
+    uint32_t                                    stride)
+{
+    SQTT_SETUP();
+
+    pSqtt->BeginEntryPoint(RgpSqttMarkerGeneralApiType::CmdDrawIndexedIndirectCountKHR);
+    pSqtt->BeginEventMarkers(RgpSqttMarkerEventType::CmdDrawIndexedIndirectCountKHR);
+
+    SQTT_CALL_NEXT_LAYER(vkCmdDrawIndexedIndirectCountKHR)(cmdBuffer, buffer, offset, countBuffer, countOffset,
+        maxDrawCount, stride);
+
+    pSqtt->EndEventMarkers();
+    pSqtt->EndEntryPoint();
+}
+
+// =====================================================================================================================
 VKAPI_ATTR void VKAPI_CALL vkCmdDispatch(
     VkCommandBuffer                             cmdBuffer,
     uint32_t                                    x,
@@ -2260,8 +2304,8 @@ void SqttOverrideDispatchTable(
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirect);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndirectCountAMD);
     SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirectCountAMD);
-    SQTT_OVERRIDE_ALIAS(vkCmdDrawIndirectCountKHR, vkCmdDrawIndirectCountAMD);
-    SQTT_OVERRIDE_ALIAS(vkCmdDrawIndexedIndirectCountKHR, vkCmdDrawIndexedIndirectCountAMD),
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawIndirectCountKHR);
+    SQTT_OVERRIDE_ENTRY(vkCmdDrawIndexedIndirectCountKHR);
     SQTT_OVERRIDE_ENTRY(vkCmdDispatch);
     SQTT_OVERRIDE_ENTRY(vkCmdDispatchIndirect);
     SQTT_OVERRIDE_ENTRY(vkCmdCopyBuffer);

@@ -98,3 +98,5 @@ VK_EXT_memory_priority
 VK_EXT_memory_budget
 VK_KHR_depth_stencil_resolve
 VK_EXT_host_query_reset
+VK_AMD_device_coherent_memory
+VK_EXT_buffer_device_address

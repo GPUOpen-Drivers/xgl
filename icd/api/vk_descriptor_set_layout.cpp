@@ -49,7 +49,9 @@ void DescriptorSetLayout::GenerateHashFromBinding(
     pHasher->Update(desc.descriptorCount);
     pHasher->Update(desc.stageFlags);
 
-    if (desc.pImmutableSamplers != nullptr)
+    if ((desc.pImmutableSamplers != nullptr) &&
+        ((desc.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) ||
+         (desc.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)))
     {
         Sampler* sampler = nullptr;
 
@@ -319,11 +321,10 @@ void DescriptorSetLayout::ConvertImmutableInfo(
     ImmSectionInfo*                     pSectionInfo,
     BindingSectionInfo*                 pBindingSectionInfo)
 {
-    if (pBindingInfo->pImmutableSamplers != nullptr)
+    if ((pBindingInfo->pImmutableSamplers != nullptr) &&
+        ((pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) ||
+         (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)))
     {
-        // Only samplers and the sampler part of combined image samplers is allowed to be immutable.
-        VK_ASSERT((pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) ||
-                  (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER));
         uint32_t descCount = pBindingInfo->descriptorCount;
 
         // Dword offset to this binding's immutable data.
@@ -516,12 +517,16 @@ VkResult DescriptorSetLayout::Create(
     uint32_t bindingCount   = 0;
     for (uint32_t i = 0; i < pCreateInfo->bindingCount; ++i)
     {
-        if (pCreateInfo->pBindings[i].pImmutableSamplers != nullptr)
+        VkDescriptorSetLayoutBinding desc = pCreateInfo->pBindings[i];
+
+        if ((desc.pImmutableSamplers != nullptr) &&
+            ((desc.descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) ||
+             (desc.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)))
         {
-            immSamplerCount += pCreateInfo->pBindings[i].descriptorCount;
+            immSamplerCount += desc.descriptorCount;
         }
 
-        bindingCount = Util::Max(bindingCount, pCreateInfo->pBindings[i].binding + 1);
+        bindingCount = Util::Max(bindingCount, desc.binding + 1);
     }
 
     const size_t bindingInfoAuxSize = bindingCount * sizeof(BindingInfo);

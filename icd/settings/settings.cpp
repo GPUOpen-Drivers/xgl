@@ -96,6 +96,7 @@ static void OverrideSettingsByDevice(
 // Override defaults based on application profile.  This occurs before any CCC settings or private panel settings are
 // applied.
 static void OverrideProfiledSettings(
+    uint32_t           appVersion,
     Pal::IDevice*      pPalDevice,
     AppProfile         appProfile,
     RuntimeSettings*   pSettings)
@@ -283,6 +284,7 @@ static void DumpAppProfileChanges(
 // settings are first read and validated to produce the RuntimeSettings structure.  If PAL settings for the given GPU
 // need to be updated based on the Vulkan settings, the PAL structure will also be updated.
 void ProcessSettings(
+    uint32_t           appVersion,
     Pal::IDevice*      pPalDevice,
     AppProfile*        pAppProfile,
     RuntimeSettings*   pSettings)
@@ -293,7 +295,7 @@ void ProcessSettings(
 
     const AppProfile origProfile = *pAppProfile;
     // Override defaults based on application profile
-    OverrideProfiledSettings(pPalDevice, *pAppProfile, pSettings);
+    OverrideProfiledSettings(appVersion, pPalDevice, *pAppProfile, pSettings);
 
     // Read in the public settings from the Catalyst Control Center
     ReadPublicSettings(pPalDevice, pSettings);
@@ -317,7 +319,7 @@ void ProcessSettings(
     // values, and this allows the panel-mandated profile to override those defaults as well.
     if (*pAppProfile != origProfile)
     {
-        ProcessSettings(pPalDevice, pAppProfile, pSettings);
+        ProcessSettings(appVersion, pPalDevice, pAppProfile, pSettings);
     }
 }
 

@@ -45,6 +45,7 @@ namespace vk
 {
 
 extern void ProcessSettings(
+    uint32_t         appVersion,
     Pal::IDevice*    pPalDevice,
     AppProfile*      pAppProfile,
     RuntimeSettings* pSettings);

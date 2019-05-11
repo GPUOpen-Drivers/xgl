@@ -263,14 +263,19 @@ PhysicalDevice::PhysicalDevice(
     memset(&m_queueFamilies, 0, sizeof(m_queueFamilies));
     memset(&m_memoryProperties, 0, sizeof(m_memoryProperties));
     memset(&m_gpaProps, 0, sizeof(m_gpaProps));
-    for (uint32_t i = 0; i < VK_MEMORY_TYPE_NUM; i++)
+    for (uint32_t i = 0; i < Pal::GpuHeapCount; i++)
     {
-        m_memoryPalHeapToVkIndex[i] = VK_MEMORY_TYPE_NUM; // invalid index
+        m_memoryPalHeapToVkIndexBits[i] = 0; // invalid bits
+        m_memoryPalHeapToVkHeap[i]      = Pal::GpuHeapCount; // invalid index
+    }
+
+    for (uint32_t i = 0; i < VK_MAX_MEMORY_TYPES; i++)
+    {
         m_memoryVkIndexToPalHeap[i] = Pal::GpuHeapCount; // invalid index
     }
     memset(&m_memoryUsageTracker, 0, sizeof(m_memoryUsageTracker));
 
-    for (uint32_t i = 0; i < VK_MEMORY_TYPE_NUM - 1; ++i)
+    for (uint32_t i = 0; i < VkMemoryHeapNum; ++i)
     {
         m_heapVkToPal[i] = Pal::GpuHeapCount; // invalid index
     }
@@ -517,7 +522,7 @@ VkResult PhysicalDevice::Initialize()
         };
 
         // this order indicate a simple ordering logic we expose to API
-        constexpr Pal::GpuHeap priority[VK_MEMORY_TYPE_NUM] =
+        constexpr Pal::GpuHeap priority[Pal::GpuHeapCount] =
         {
             Pal::GpuHeapInvisible,
             Pal::GpuHeapGartUswc,
@@ -542,7 +547,8 @@ VkResult PhysicalDevice::Initialize()
                 memoryHeap.flags = PalGpuHeapToVkMemoryHeapFlags(palGpuHeap);
                 memoryHeap.size  = heapProps.heapSize;
 
-                m_heapVkToPal[heapIndex] = palGpuHeap;
+                m_heapVkToPal[heapIndex]            = palGpuHeap;
+                m_memoryPalHeapToVkHeap[palGpuHeap] = heapIndex;
 
                 if (palGpuHeap == Pal::GpuHeapGartUswc)
                 {
@@ -572,7 +578,7 @@ VkResult PhysicalDevice::Initialize()
                 uint32_t memoryTypeIndex = m_memoryProperties.memoryTypeCount++;
 
                 m_memoryVkIndexToPalHeap[memoryTypeIndex] = palGpuHeap;
-                m_memoryPalHeapToVkIndex[palGpuHeap]      = memoryTypeIndex;
+                m_memoryPalHeapToVkIndexBits[palGpuHeap] |= (1UL << memoryTypeIndex);
 
                 VkMemoryType& memoryType = m_memoryProperties.memoryTypes[memoryTypeIndex];
 
@@ -605,7 +611,7 @@ VkResult PhysicalDevice::Initialize()
             }
         }
 
-        VK_ASSERT(m_memoryProperties.memoryTypeCount <= Pal::GpuHeapCount);
+        VK_ASSERT(m_memoryProperties.memoryTypeCount <= VK_MAX_MEMORY_TYPES);
         VK_ASSERT(m_memoryProperties.memoryHeapCount <= Pal::GpuHeapCount);
     }
 
@@ -2665,7 +2671,15 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_DRAW_PARAMETERS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SWAPCHAIN));
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_RASTERIZATION_ORDER));
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 493
+    if ((pPhysicalDevice == nullptr) ||
+        (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportOutOfOrderPrimitives))
+#endif
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_RASTERIZATION_ORDER));
+    }
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_TRINARY_MINMAX));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_EXPLICIT_VERTEX_PARAMETER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GCN_SHADER));
@@ -2728,6 +2742,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
             (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
     {
+        // Deprecation by shaderFloat16 from VK_KHR_shader_float16_int8
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_HALF_FLOAT));
     }
 
@@ -2736,6 +2751,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         ((pPhysicalDevice->GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
             (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))))
     {
+        // Deprecation by shaderFloat16 from VK_KHR_shader_float16_int8 and shaderInt16
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPU_SHADER_INT16));
     }
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_FRAGMENT_MASK));
@@ -3275,6 +3291,9 @@ void PhysicalDevice::GetFeatures2(
             {
                 VkPhysicalDeviceVariablePointerFeatures* pVariablePointerFeatures =
                     reinterpret_cast<VkPhysicalDeviceVariablePointerFeatures*>(pHeader);
+
+                bool variablePointersSupport = VK_FALSE;
+
                 {
                     pVariablePointerFeatures->variablePointers = VK_TRUE;
                 }
@@ -3416,6 +3435,29 @@ void PhysicalDevice::GetFeatures2(
                     reinterpret_cast<VkPhysicalDeviceHostQueryResetFeaturesEXT *>(pHeader);
                 pHostQueryReset->hostQueryReset =
                     IsExtensionSupported(DeviceExtensions::EXT_HOST_QUERY_RESET) ? VK_TRUE : VK_FALSE;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD:
+            {
+                VkPhysicalDeviceCoherentMemoryFeaturesAMD * pDeviceCoherentMemory =
+                    reinterpret_cast<VkPhysicalDeviceCoherentMemoryFeaturesAMD *>(pHeader);
+
+                bool deviceCoherentMemoryEnabled = false;
+
+                pDeviceCoherentMemory->deviceCoherentMemory = deviceCoherentMemoryEnabled;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_ADDRESS_FEATURES_EXT:
+            {
+                VkPhysicalDeviceBufferAddressFeaturesEXT* pBufferAddressFeatures =
+                    reinterpret_cast<VkPhysicalDeviceBufferAddressFeaturesEXT*>(pHeader);
+
+                pBufferAddressFeatures->bufferDeviceAddress              = VK_TRUE;
+                pBufferAddressFeatures->bufferDeviceAddressCaptureReplay = VK_FALSE;
+                pBufferAddressFeatures->bufferDeviceAddressMultiDevice   = VK_FALSE;
+
                 break;
             }
 
@@ -3664,7 +3706,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pShaderCoreProperties->computeUnitsPerShaderArray = props.gfxipProperties.shaderCore.numCusPerShaderArray;
             pShaderCoreProperties->simdPerComputeUnit = props.gfxipProperties.shaderCore.numSimdsPerCu;
             pShaderCoreProperties->wavefrontsPerSimd = props.gfxipProperties.shaderCore.numWavefrontsPerSimd;
-            pShaderCoreProperties->wavefrontSize = props.gfxipProperties.shaderCore.wavefrontSize;
+            pShaderCoreProperties->wavefrontSize = props.gfxipProperties.shaderCore.nativeWavefrontSize;
 
             // Scalar General Purpose Registers (SGPR)
             pShaderCoreProperties->sgprsPerSimd = props.gfxipProperties.shaderCore.sgprsPerSimd;
