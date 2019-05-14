@@ -54,6 +54,8 @@ option(ICD_BUILD_LLPC "Build LLPC?" ON)
 option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
 option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)
 
+option(XGL_BUILD_LIT "Build with lit test?" OFF)
+
 option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 option(ICD_BUILD_SPVONLY "Build SPV Only?" OFF)
 
@@ -175,6 +177,7 @@ set(PERL_CMD ${PERL_EXECUTABLE})
 set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is read-only.")
 set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the LLPC.")
 set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
+set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 if(ICD_BUILD_LLPC)
     set(LLVM_ENABLE_ASSERTIONS ${CMAKE_BUILD_TYPE_DEBUG} CACHE BOOL Force)
