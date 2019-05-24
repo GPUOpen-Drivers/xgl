@@ -42,6 +42,7 @@
 #include "include/vk_queue.h"
 
 #include "include/app_shader_optimizer.h"
+#include "include/app_resource_optimizer.h"
 
 #include "include/internal_mem_mgr.h"
 #include "include/render_state_cache.h"
@@ -304,6 +305,9 @@ public:
 
     VK_FORCEINLINE ShaderOptimizer* GetShaderOptimizer()
         { return &m_shaderOptimizer; }
+
+    VK_FORCEINLINE ResourceOptimizer* GetResourceOptimizer()
+        { return &m_resourceOptimizer; }
 
     VK_FORCEINLINE bool IsMultiGpu() const
         { return m_palDeviceCount > 1; }
@@ -568,6 +572,8 @@ protected:
     InternalMemMgr                      m_internalMemMgr;
 
     ShaderOptimizer                     m_shaderOptimizer;
+
+    ResourceOptimizer                   m_resourceOptimizer;
 
     RenderStateCache                    m_renderStateCache;
 

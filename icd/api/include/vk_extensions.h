@@ -293,6 +293,7 @@ public:
         EXT_MEMORY_BUDGET,
         EXT_HOST_QUERY_RESET,
         EXT_BUFFER_DEVICE_ADDRESS,
+        KHR_UNIFORM_BUFFER_STANDARD_LAYOUT,
 
         Count
     };

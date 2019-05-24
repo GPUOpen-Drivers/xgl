@@ -29,7 +29,9 @@
  ***********************************************************************************************************************
  */
 
+#ifdef VK_USE_PLATFORM_XCB_KHR
 #include <xcb/xcb.h>
+#endif
 
 #include "include/khronos/vulkan.h"
 #include "include/vk_alloccb.h"
@@ -67,6 +69,7 @@
 #include "sqtt/sqtt_mgr.h"
 
 #include "appopt/barrier_filter_layer.h"
+#include "appopt/strange_brigade_layer.h"
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
@@ -205,6 +208,7 @@ Device::Device(
     m_palDeviceCount(palDeviceCount),
     m_internalMemMgr(this, pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_shaderOptimizer(this, pPhysicalDevices[DefaultDeviceIndex]),
+    m_resourceOptimizer(this, pPhysicalDevices[DefaultDeviceIndex]),
     m_renderStateCache(this),
     m_barrierPolicy(barrierPolicy),
     m_enabledExtensions(enabledExtensions),
@@ -251,6 +255,7 @@ Device::Device(
     m_maxAllocations = pPhysicalDevices[DefaultDeviceIndex]->GetLimits().maxMemoryAllocationCount;
 
     m_shaderOptimizer.Init();
+    m_resourceOptimizer.Init();
 }
 
 // =====================================================================================================================
@@ -1006,6 +1011,21 @@ VkResult Device::Initialize(
     {
         switch (GetAppProfile())
         {
+        case AppProfile::StrangeBrigade:
+        {
+            void* pMemory = VkInstance()->AllocMem(sizeof(StrangeBrigadeLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+            if (pMemory != nullptr)
+            {
+                m_pAppOptLayer = VK_PLACEMENT_NEW(pMemory) StrangeBrigadeLayer();
+            }
+            else
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+
+            break;
+        }
         default:
             break;
         }
@@ -1478,12 +1498,14 @@ VkResult Device::CreateInternalComputePipeline(
                                              &pShaderInfo->options
                                              );
 
+        Util::MetroHash::Hash cacheId;
         result = pCompiler->CreateComputePipelineBinary(this,
                                                         0,
                                                         nullptr,
                                                         &pipelineBuildInfo,
                                                         &pipelineBinarySize,
-                                                        &pPipelineBinary);
+                                                        &pPipelineBinary,
+                                                        &cacheId);
 
         pipelineBuildInfo.pMappingBuffer = nullptr;
     }

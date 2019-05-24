@@ -49,6 +49,40 @@ namespace vk
 {
 
 // =====================================================================================================================
+// Generates a ResourceOptimizerKey object using the contents of the VkImageCreateInfo struct
+void Image::BuildResourceKey(
+    const VkImageCreateInfo* pCreateInfo,
+    ResourceOptimizerKey*    pResourceKey)
+{
+    Util::MetroHash64 hasher;
+
+    hasher.Update(pCreateInfo->flags);
+    hasher.Update(pCreateInfo->imageType);
+    hasher.Update(pCreateInfo->format);
+    hasher.Update(pCreateInfo->extent.depth);
+    hasher.Update(pCreateInfo->mipLevels);
+    hasher.Update(pCreateInfo->arrayLayers);
+    hasher.Update(pCreateInfo->samples);
+    hasher.Update(pCreateInfo->tiling);
+    hasher.Update(pCreateInfo->usage);
+    hasher.Update(pCreateInfo->sharingMode);
+    hasher.Update(pCreateInfo->queueFamilyIndexCount);
+    hasher.Update(pCreateInfo->initialLayout);
+
+    if (pCreateInfo->pQueueFamilyIndices != nullptr)
+    {
+        hasher.Update(
+            reinterpret_cast<const uint8_t*>(pCreateInfo->pQueueFamilyIndices),
+            pCreateInfo->queueFamilyIndexCount * sizeof(uint32_t));
+    }
+
+    hasher.Finalize(reinterpret_cast<uint8_t* const>(&pResourceKey->apiHash));
+
+    pResourceKey->width = pCreateInfo->extent.width;
+    pResourceKey->height = pCreateInfo->extent.height;
+}
+
+// =====================================================================================================================
 // Given a runtime priority setting value, this function updates the given priority/offset pair if the setting's
 // priority is higher level.
 static void UpgradeToHigherPriority(
@@ -112,6 +146,7 @@ Image::Image(
     VkFormat                    imageFormat,
     VkSampleCountFlagBits       imageSamples,
     VkImageUsageFlags           usage,
+    VkImageUsageFlags           stencilUsage,
     ImageFlags                  internalFlags)
     :
     m_mipLevels(mipLevels),
@@ -119,29 +154,30 @@ Image::Image(
     m_format(imageFormat),
     m_imageSamples(imageSamples),
     m_imageUsage(usage),
+    m_imageStencilUsage(stencilUsage),
     m_tileSize(tileSize),
     m_barrierPolicy(barrierPolicy),
     m_pSwapChain(nullptr)
 {
-	m_internalFlags.u32All = internalFlags.u32All;
+    m_internalFlags.u32All = internalFlags.u32All;
 
-	// Set hasDepth and hasStencil flags based on the image's format.
-	if (Formats::IsColorFormat(imageFormat))
-	{
-		m_internalFlags.isColorFormat = 1;
-	}
-	if (Formats::HasDepth(imageFormat))
-	{
-		m_internalFlags.hasDepth = 1;
-	}
-	if (Formats::HasStencil(imageFormat))
-	{
-		m_internalFlags.hasStencil = 1;
-	}
-	if (Formats::IsYuvFormat(imageFormat))
-	{
-		m_internalFlags.isYuvFormat = 1;
-	}
+    // Set hasDepth and hasStencil flags based on the image's format.
+    if (Formats::IsColorFormat(imageFormat))
+    {
+        m_internalFlags.isColorFormat = 1;
+    }
+    if (Formats::HasDepth(imageFormat))
+    {
+        m_internalFlags.hasDepth = 1;
+    }
+    if (Formats::HasStencil(imageFormat))
+    {
+        m_internalFlags.hasStencil = 1;
+    }
+    if (Formats::IsYuvFormat(imageFormat))
+    {
+        m_internalFlags.isYuvFormat = 1;
+    }
     if (flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
     {
         m_internalFlags.sparseBinding = 1;
@@ -405,10 +441,10 @@ VkResult Image::Create(
     Pal::ImageCreateInfo palCreateInfo  = {};
     Pal::PresentableImageCreateInfo presentImageCreateInfo = {};
 
+    const RuntimeSettings&    settings         = pDevice->GetRuntimeSettings();
     const VkImageCreateInfo*  pImageCreateInfo = nullptr;
-
-    uint32_t                  viewFormatCount = 0;
-    const VkFormat*           pViewFormats    = nullptr;
+    uint32_t                  viewFormatCount  = 0;
+    const VkFormat*           pViewFormats     = nullptr;
 
     const uint32_t numDevices = pDevice->NumPalDevices();
     const bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
@@ -416,7 +452,8 @@ VkResult Image::Create(
 
     // It indicates the stencil aspect will be read by shader, so it is only meaningful if the image contains the
     // stencil aspect.
-    bool stencilShaderRead    = false;
+    bool              stencilShaderRead = false;
+    VkImageUsageFlags stencilUsage      = pCreateInfo->usage;
 
     union
     {
@@ -444,7 +481,7 @@ VkResult Image::Create(
 
             // The setting of stencilShaderRead will be overrode, if
             // VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT exists.
-            stencilShaderRead = palCreateInfo.usageFlags.shaderRead;
+            stencilShaderRead = palCreateInfo.usageFlags.shaderRead | palCreateInfo.usageFlags.resolveSrc;
 
             break;
         }
@@ -503,7 +540,6 @@ VkResult Image::Create(
 
         case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT:
         {
-            const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
             Pal::ImageUsageFlags usageFlags = VkToPalImageUsageFlags(
                                         pVkImageStencilUsageCreateInfoEXT->stencilUsage,
                                         pCreateInfo->format,
@@ -511,7 +547,10 @@ VkResult Image::Create(
                                         (VkImageUsageFlags)(settings.optImgMaskToApplyShaderReadUsageForTransferSrc),
                                         (VkImageUsageFlags)(settings.optImgMaskToApplyShaderWriteUsageForTransferDst));
 
-            stencilShaderRead = usageFlags.shaderRead;
+            stencilShaderRead = usageFlags.shaderRead | usageFlags.resolveSrc;
+            stencilUsage      = pVkImageStencilUsageCreateInfoEXT->stencilUsage;
+
+            palCreateInfo.usageFlags.u32All |= usageFlags.u32All;
 
             break;
         }
@@ -543,7 +582,7 @@ VkResult Image::Create(
     }
 
     // Configure the noStencilShaderRead:
-    // 1. Set noStencilShaderRead = false by defalut, this indicates the stencil can be read by shader.
+    // 1. Set noStencilShaderRead = false by default, this indicates the stencil can be read by shader.
     // 2. Overwrite noStencilShaderRead according to the stencilUsage.
     // 3. Set noStencilShaderRead = true according to application profile.
 
@@ -558,22 +597,43 @@ VkResult Image::Create(
     if ((pCreateInfo != nullptr)                                                  &&
         (pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
         ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
-        (pDevice->GetRuntimeSettings().disableMsaaStencilShaderRead))
+        (settings.disableMsaaStencilShaderRead))
     {
         palCreateInfo.usageFlags.noStencilShaderRead = true;
     }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 481
-    palCreateInfo.metadataMode = Pal::MetadataMode::Default;
+    palCreateInfo.metadataMode         = Pal::MetadataMode::Default;
+    palCreateInfo.metadataTcCompatMode = Pal::MetadataTcCompatMode::Default;
 
     if (pCreateInfo != nullptr)
     {
+        // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
+        // compression, another performance optimization.
+        if ((palCreateInfo.extent.width * palCreateInfo.extent.height) >
+            (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize))
+        {
+            // Enable DCC beyond what PAL does by default for color attachments
+            if ((settings.forceDccForColorAttachments) && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+            {
+                palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
+            }
+
+            // Turn DCC on/off for identified cases where memory bandwidth is not the bottleneck to improve latency.
+            // PAL may do this implicitly, so specify force enabled instead of default.
+            if ((settings.dccBitsPerPixelThreshold != UINT_MAX) && Formats::IsColorFormat(pCreateInfo->format))
+            {
+                palCreateInfo.metadataMode =
+                    (Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format) < settings.dccBitsPerPixelThreshold) ?
+                    Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
+            }
+        }
+
         // Disable TC compatible reads in order to maximize texture fetch performance.
         if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
             ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
-            (pDevice->GetRuntimeSettings().disableHtileBasedMsaaRead))
+            (settings.disableHtileBasedMsaaRead))
         {
-            palCreateInfo.metadataMode = Pal::MetadataMode::OptForTexFetchPerf;
+            palCreateInfo.metadataTcCompatMode = Pal::MetadataTcCompatMode::Disabled;
         }
 
         // We must not use any metadata if sparse aliasing is enabled.
@@ -581,8 +641,13 @@ VkResult Image::Create(
         {
             palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
         }
+
+        ResourceOptimizerKey resourceKey;
+        BuildResourceKey(pCreateInfo, &resourceKey);
+
+        // Apply per application (or run-time) options
+        pDevice->GetResourceOptimizer()->OverrideImageCreateInfo(resourceKey, &palCreateInfo);
     }
-#endif
 
     // If flags contains VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT, imageType must be VK_IMAGE_TYPE_3D
     VK_ASSERT(((pImageCreateInfo->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) == 0) ||
@@ -691,7 +756,7 @@ VkResult Image::Create(
 
         // Create barrier policy for the image.
         ImageBarrierPolicy barrierPolicy(pDevice,
-                                         pImageCreateInfo->usage,
+                                         pImageCreateInfo->usage | stencilUsage,
                                          pImageCreateInfo->sharingMode,
                                          pImageCreateInfo->queueFamilyIndexCount,
                                          pImageCreateInfo->pQueueFamilyIndices,
@@ -711,6 +776,7 @@ VkResult Image::Create(
             pImageCreateInfo->format,
             pImageCreateInfo->samples,
             pImageCreateInfo->usage,
+            stencilUsage,
             imageFlags);
 
         imageHandle = Image::HandleFromVoidPointer(pMemory);
@@ -890,6 +956,9 @@ VkResult Image::CreatePresentableImage(
                                          imageFormat,
                                          presentLayoutUsage);
 
+        // stencil usage will be treated same as usage if no separate stencil usage is specified.
+        VkImageUsageFlags stencilUsageFlags = imageUsageFlags;
+
         // Construct API image object.
         VK_PLACEMENT_NEW (pImgObjMemory) Image(
             pDevice,
@@ -903,6 +972,7 @@ VkResult Image::CreatePresentableImage(
             imageFormat,
             VK_SAMPLE_COUNT_1_BIT,
             imageUsageFlags,
+            stencilUsageFlags,
             imageFlags);
 
         *pImage = Image::HandleFromVoidPointer(pImgObjMemory);
@@ -1010,8 +1080,8 @@ void GenerateBindIndices(
                                 // We have not exposed VK_IMAGE_CREATE_BIND_SFR_BIT so rectCount must be zero.
     if (deviceIndexCount != 0)
     {
-        // Binding Indices were supplied
-        VK_ASSERT((deviceIndexCount == numDevices) && (rectCount == 0) && (multiInstanceHeap == true));
+        // Binding Indices were supplied. There must be a bind index for each device in the device group.
+        VK_ASSERT(deviceIndexCount == numDevices);
 
         for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
         {

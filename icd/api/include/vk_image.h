@@ -65,6 +65,7 @@ class DispatchableImage;
 class PeerImages;
 struct RPImageLayout;
 class SwapChain;
+struct ResourceOptimizerKey;
 
 class Image : public NonDispatchable<VkImage, Image>
 {
@@ -140,6 +141,9 @@ public:
 
     VkImageUsageFlags GetImageUsage() const
         { return m_imageUsage; }
+
+    VkImageUsageFlags GetImageStencilUsage() const
+        { return m_imageStencilUsage; }
 
     uint32_t GetMipLevels() const
         { return m_mipLevels; }
@@ -277,6 +281,7 @@ private:
         VkFormat                    imageFormat,
         VkSampleCountFlagBits       imageSamples,
         VkImageUsageFlags           usage,
+        VkImageUsageFlags           stencilUsage,
         ImageFlags                  internalFlags);
 
     // Compute size required for the object.  One copy of PerGpuInfo is included in the object and we need
@@ -296,34 +301,40 @@ private:
         m_pSwapChain = pSwapChain;
     }
 
-    uint32_t                m_mipLevels;        // This is the amount of mip levels contained in the image.
-                                                // We need this to support VK_WHOLE_SIZE during
-                                                // memory barrier creation
+    static void BuildResourceKey(
+        const VkImageCreateInfo* pCreateInfo,
+        ResourceOptimizerKey*    pResourceKey);
 
-    uint32_t                m_arraySize;        // This is the amount of array slices contained
-                                                // in the image
-                                                // we need this to support VK_WHOLE_SIZE during
-                                                // memory barrier creation
+    uint32_t                m_mipLevels;          // This is the amount of mip levels contained in the image.
+                                                  // We need this to support VK_WHOLE_SIZE during
+                                                  // memory barrier creation
 
-    VkFormat                m_format;           // The image format is needed for handling copy
-                                                // operations for compressed formats appropriately
+    uint32_t                m_arraySize;          // This is the amount of array slices contained
+                                                  // in the image
+                                                  // we need this to support VK_WHOLE_SIZE during
+                                                  // memory barrier creation
 
-    MemoryPriority          m_priority;         // Minimum priority assigned to any VkMemory object that this image is
-                                                // bound to.
+    VkFormat                m_format;             // The image format is needed for handling copy
+                                                  // operations for compressed formats appropriately
 
-    VkSampleCountFlagBits   m_imageSamples;     // Number of samples in the image
+    MemoryPriority          m_priority;           // Minimum priority assigned to any VkMemory object that this image is
+                                                  // bound to.
 
-    VkImageUsageFlags       m_imageUsage;       // Bitmask describing the intended image usage
+    VkSampleCountFlagBits   m_imageSamples;       // Number of samples in the image
 
-    ImageFlags              m_internalFlags;    // Flags describing the properties of this image
+    VkImageUsageFlags       m_imageUsage;         // Bitmask describing the intended image usage
 
-    VkExtent3D              m_tileSize;         // Cached sparse image block dimensions (tile size)
-                                                // for sparse images
+    VkImageUsageFlags       m_imageStencilUsage;  // Bitmask describing the intended stencil usage for depth stencil image.
 
-    ImageBarrierPolicy      m_barrierPolicy;    // Barrier policy to use for this image
+    ImageFlags              m_internalFlags;      // Flags describing the properties of this image
 
-    SwapChain*              m_pSwapChain;       // If this image is a presentable image this tells
-                                                // which swap chain the image belongs to
+    VkExtent3D              m_tileSize;           // Cached sparse image block dimensions (tile size)
+                                                  // for sparse images
+
+    ImageBarrierPolicy      m_barrierPolicy;      // Barrier policy to use for this image
+
+    SwapChain*              m_pSwapChain;         // If this image is a presentable image this tells
+                                                  // which swap chain the image belongs to
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

@@ -166,6 +166,28 @@ static void OverrideProfiledSettings(
         pSettings->lenientInstanceFuncQuery = true;
     }
 
+    if (appProfile == AppProfile::WorldWarZ)
+    {
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 488
+        /// This is more or less a work around for WWZ. If they can fix this in a patch they will bump the app version
+        if (appVersion <= VK_MAKE_VERSION(1, 0, 0))
+        {
+            pSettings->pipelinePreferNonLocalHeap = true;
+        }
+#endif
+
+        pSettings->robustBufferAccess = FeatureForceEnable;
+
+        pSettings->prefetchShaders = true;
+
+        pSettings->optimizeCmdbufMode = EnableOptimizeCmdbuf;
+
+        if (info.revision == Pal::AsicRevision::Vega20)
+        {
+            pSettings->dccBitsPerPixelThreshold = 16;
+        }
+    }
+
     if (appProfile == AppProfile::IdTechEngine)
     {
         pSettings->enableSpvPerfOptimal = true;
@@ -184,7 +206,7 @@ static void OverrideProfiledSettings(
         {
             pSettings->dccBitsPerPixelThreshold = 128;
         }
-        pPalSettings->hintDisableSmallSurfColorCompressionSize = 511;
+        pSettings->disableSmallSurfColorCompressionSize = 511;
 
         pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;
         pSettings->useAnisoThreshold = true;
@@ -198,7 +220,8 @@ static void OverrideProfiledSettings(
     if (appProfile == AppProfile::Source2Engine)
     {
         pPalSettings->useGraphicsFastDepthStencilClear = true;
-        pPalSettings->hintDisableSmallSurfColorCompressionSize = 511;
+
+        pSettings->disableSmallSurfColorCompressionSize = 511;
 
         pSettings->preciseAnisoMode  = DisablePreciseAnisoAll;
         pSettings->useAnisoThreshold = true;
@@ -409,6 +432,7 @@ void ValidateSettings(
     // Internal semaphore queue timing is always enabled when ETW is not available
     pSettings->devModeSemaphoreQueueTimingEnable = true;
 #endif
+
 }
 
 // =====================================================================================================================
@@ -419,12 +443,14 @@ void UpdatePalSettings(
 {
     Pal::PalPublicSettings* pPalSettings = pPalDevice->GetPublicSettings();
 
-    pPalSettings->textureOptLevel          = pSettings->vulkanTexFilterQuality;
-    pPalSettings->dccBitsPerPixelThreshold = pSettings->dccBitsPerPixelThreshold;
+    pPalSettings->textureOptLevel = pSettings->vulkanTexFilterQuality;
+
+    pPalSettings->hintDisableSmallSurfColorCompressionSize = pSettings->disableSmallSurfColorCompressionSize;
 
     // Setting disableSkipFceOptimization to false enables an optimization in PAL that disregards the FCE in a transition
     // if one of the built in clear colors are used (white/black) and the image is TCC compatible.
     pPalSettings->disableSkipFceOptimization = false;
+
 }
 
 };

@@ -1486,11 +1486,7 @@ VkResult PhysicalDevice::GetDeviceProperties(
     // Get properties from PAL
     const Pal::DeviceProperties& palProps = PalProperties();
 
-#if VKI_SDK_1_0 == 0
     pProperties->apiVersion    = GetSupportedAPIVersion();
-#else
-    pProperties->apiVersion    = (VK_API_VERSION_1_0 | VK_HEADER_VERSION);
-#endif
 
     // Radeon Settings UI diplays driverVersion using sizes 10.10.12 like apiVersion, but our driverVersion uses 10.22.
     // If this assert ever triggers, verify that it and other driver info tools that parse the raw value have been
@@ -2508,7 +2504,17 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
 {
     VkResult result = VK_SUCCESS;
 
-    if (pSurface->GetXcbSurface()->base.platform == VK_ICD_WSI_PLATFORM_XCB)
+    if (pSurface->GetDisplaySurface()->base.platform == VK_ICD_WSI_PLATFORM_DISPLAY)
+    {
+        VkIcdSurfaceDisplay* pDisplaySurface = pSurface->GetDisplaySurface();
+        pInfo->icdPlatform   = pDisplaySurface->base.platform;
+        pInfo->palPlatform   = VkToPalWsiPlatform(pDisplaySurface->base.platform);
+        pInfo->surfaceExtent = pDisplaySurface->imageExtent;
+        DisplayModeObject* pDisplayMode = reinterpret_cast<DisplayModeObject*>(pDisplaySurface->displayMode);
+        pInfo->pScreen       = pDisplayMode->pScreen;
+    }
+#ifdef VK_USE_PLATFORM_XCB_KHR
+    else if (pSurface->GetXcbSurface()->base.platform == VK_ICD_WSI_PLATFORM_XCB)
     {
         const VkIcdSurfaceXcb* pXcbSurface = pSurface->GetXcbSurface();
 
@@ -2517,6 +2523,7 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
         pInfo->displayHandle = pXcbSurface->connection;
         pInfo->windowHandle.win  = pXcbSurface->window;
     }
+#endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     else if (pSurface->GetWaylandSurface()->base.platform == VK_ICD_WSI_PLATFORM_WAYLAND)
     {
@@ -2528,6 +2535,7 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
         pInfo->windowHandle.pSurface  = pWaylandSurface->surface;
     }
 #endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
     else if (pSurface->GetXlibSurface()->base.platform == VK_ICD_WSI_PLATFORM_XLIB)
     {
         const VkIcdSurfaceXlib* pXlibSurface = pSurface->GetXlibSurface();
@@ -2537,15 +2545,7 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
         pInfo->displayHandle = pXlibSurface->dpy;
         pInfo->windowHandle.win  = pXlibSurface->window;
     }
-    else if (pSurface->GetDisplaySurface()->base.platform == VK_ICD_WSI_PLATFORM_DISPLAY)
-    {
-        VkIcdSurfaceDisplay* pDisplaySurface = pSurface->GetDisplaySurface();
-        pInfo->icdPlatform   = pDisplaySurface->base.platform;
-        pInfo->palPlatform   = VkToPalWsiPlatform(pDisplaySurface->base.platform);
-        pInfo->surfaceExtent = pDisplaySurface->imageExtent;
-        DisplayModeObject* pDisplayMode = reinterpret_cast<DisplayModeObject*>(pDisplaySurface->displayMode);
-        pInfo->pScreen       = pDisplayMode->pScreen;
-    }
+#endif
     else
     {
         result = VK_ERROR_SURFACE_LOST_KHR;
@@ -2773,11 +2773,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_INLINE_UNIFORM_BLOCK));
 
-    if ((pPhysicalDevice == nullptr) ||
-        pPhysicalDevice->PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions)
-    {
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_FLOAT16_INT8));
-    }
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_FLOAT16_INT8));
 
     if ((pPhysicalDevice == nullptr) ||
         (pPhysicalDevice->PalProperties().osProperties.supportQueuePriority))
@@ -2817,7 +2813,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_BUDGET));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TRANSFORM_FEEDBACK));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SEPARATE_STENCIL_USAGE));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VULKAN_MEMORY_MODEL));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HOST_QUERY_RESET));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_UNIFORM_BUFFER_STANDARD_LAYOUT));
 
     return availableExtensions;
 }
@@ -3366,8 +3368,9 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceFloat16Int8FeaturesKHR* pFloat16Int8Features =
                     reinterpret_cast<VkPhysicalDeviceFloat16Int8FeaturesKHR*>(pHeader);
 
-                pFloat16Int8Features->shaderFloat16                  = VK_TRUE;
-                pFloat16Int8Features->shaderInt8                     = VK_TRUE;
+                pFloat16Int8Features->shaderFloat16 =
+                    PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions ? VK_TRUE : VK_FALSE;
+                pFloat16Int8Features->shaderInt8    = VK_TRUE;
                 break;
             }
 
@@ -3461,6 +3464,16 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES_KHR:
+            {
+                VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR* pUniformBufferStandardLayoutFeatures =
+                    reinterpret_cast<VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR*>(pHeader);
+
+                pUniformBufferStandardLayoutFeatures->uniformBufferStandardLayout = VK_TRUE;
+
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -3480,81 +3493,101 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     VkResult result = VK_SUCCESS;
     VK_ASSERT(pImageFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2);
 
-    result = GetImageFormatProperties(
-                 pImageFormatInfo->format,
-                 pImageFormatInfo->type,
-                 pImageFormatInfo->tiling,
-                 pImageFormatInfo->usage,
-                 pImageFormatInfo->flags,
-                 &pImageFormatProperties->imageFormatProperties);
+    const VkStructHeader*                                   pHeader;
+    const VkPhysicalDeviceExternalImageFormatInfo*          pExternalImageFormatInfo          = nullptr;
+    const VkImageStencilUsageCreateInfoEXT*                 pImageStencilUsageCreateInfo      = nullptr;
 
-    if (result == VK_SUCCESS)
+    VkStructHeaderNonConst*                                 pHeader2;
+    VkExternalImageFormatProperties*                        pExternalImageProperties          = nullptr;
+    VkTextureLODGatherFormatPropertiesAMD*                  pTextureLODGatherFormatProperties = nullptr;
+
+    for (pHeader = reinterpret_cast<const VkStructHeader*>(pImageFormatInfo->pNext);
+         pHeader != nullptr;
+         pHeader = pHeader->pNext)
     {
-        union
+        switch (static_cast<uint32_t>(pHeader->sType))
         {
-            const VkStructHeader*                                   pHeader;
-            const VkPhysicalDeviceImageFormatInfo2*                 pFormatInfo;
-            const VkPhysicalDeviceExternalImageFormatInfo*          pExternalImageFormatInfo;
-        };
-
-        union
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO:
         {
-            const VkStructHeader*                                   pHeader2;
-            VkImageFormatProperties2*                               pImageFormatProps;
-            VkExternalImageFormatProperties*                        pExternalImageProperties;
-            VkTextureLODGatherFormatPropertiesAMD*                  pTextureLODGatherFormatProperties;
-        };
-
-        pFormatInfo = pImageFormatInfo;
-        pHeader = utils::GetExtensionStructure(pHeader,
-                                               VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO);
-
-        if (pHeader)
+            pExternalImageFormatInfo = reinterpret_cast<const VkPhysicalDeviceExternalImageFormatInfo*>(pHeader);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT:
         {
-            // decide the supported handle type for the specific image info.
-            VK_ASSERT(pExternalImageFormatInfo->handleType != 0);
-            pImageFormatProps = pImageFormatProperties;
-            pHeader2 = utils::GetExtensionStructure(
-                                  pHeader2,
-                                  VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES);
-
-            if (pExternalImageProperties)
-            {
-                result = GetExternalMemoryProperties(
-                             ((pImageFormatInfo->flags & Image::SparseEnablingFlags) != 0),
-                             pExternalImageFormatInfo->handleType,
-                             &pExternalImageProperties->externalMemoryProperties);
-            }
+            pImageStencilUsageCreateInfo = reinterpret_cast<const VkImageStencilUsageCreateInfoEXT*>(pHeader);
+            break;
         }
 
-        // handle VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD
-        pFormatInfo = pImageFormatInfo;
-        pHeader = utils::GetExtensionStructure(pHeader, VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2);
+        default:
+            break;
+        }
+    }
 
-        if (pHeader)
+    for (pHeader2 = reinterpret_cast<VkStructHeaderNonConst*>(pImageFormatProperties->pNext);
+         pHeader2 != nullptr;
+         pHeader2 = reinterpret_cast<VkStructHeaderNonConst*>(pHeader2->pNext))
+    {
+        switch (static_cast<uint32_t>(pHeader2->sType))
         {
-            pImageFormatProps = pImageFormatProperties;
-            pHeader2 = utils::GetExtensionStructure(
-                pHeader2,
-                VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD);
+        case VK_STRUCTURE_TYPE_EXTERNAL_IMAGE_FORMAT_PROPERTIES:
+        {
+            pExternalImageProperties = reinterpret_cast<VkExternalImageFormatProperties*>(pHeader2);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD:
+        {
+            pTextureLODGatherFormatProperties = reinterpret_cast<VkTextureLODGatherFormatPropertiesAMD*>(pHeader2);
+            break;
+        }
 
-            if (pTextureLODGatherFormatProperties)
-            {
-                const VkFormat& format = pImageFormatInfo->format;
+        default:
+            break;
+        }
+    }
 
-                if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)
-                {
-                    pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = true;
-                }
-                else
-                {
-                    const auto formatType = vk::Formats::GetNumberFormat(format);
-                    const bool isInteger  = (formatType == Pal::Formats::NumericSupportFlags::Sint) ||
-                                            (formatType == Pal::Formats::NumericSupportFlags::Uint);
+    // handle VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT and the common path
+    VK_ASSERT((pImageStencilUsageCreateInfo == nullptr) || (pImageStencilUsageCreateInfo->stencilUsage != 0));
 
-                    pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = !isInteger;
-                }
-            }
+    result = GetImageFormatProperties(
+                pImageFormatInfo->format,
+                pImageFormatInfo->type,
+                pImageFormatInfo->tiling,
+                pImageStencilUsageCreateInfo ? pImageFormatInfo->usage | pImageStencilUsageCreateInfo->stencilUsage
+                                             : pImageFormatInfo->usage,
+                pImageFormatInfo->flags,
+                &pImageFormatProperties->imageFormatProperties);
+
+    // handle VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_IMAGE_FORMAT_INFO
+    if ((pExternalImageFormatInfo != nullptr) && (result == VK_SUCCESS))
+    {
+        // decide the supported handle type for the specific image info.
+        VK_ASSERT(pExternalImageFormatInfo->handleType != 0);
+
+        if (pExternalImageProperties != nullptr)
+        {
+            result = GetExternalMemoryProperties(
+                            ((pImageFormatInfo->flags & Image::SparseEnablingFlags) != 0),
+                            pExternalImageFormatInfo->handleType,
+                            &pExternalImageProperties->externalMemoryProperties);
+        }
+    }
+
+    // handle VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD
+    if ((pTextureLODGatherFormatProperties != nullptr) && (result == VK_SUCCESS))
+    {
+        const VkFormat& format = pImageFormatInfo->format;
+
+        if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)
+        {
+            pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = true;
+        }
+        else
+        {
+            const auto formatType = vk::Formats::GetNumberFormat(format);
+            const bool isInteger  = (formatType == Pal::Formats::NumericSupportFlags::Sint) ||
+                                    (formatType == Pal::Formats::NumericSupportFlags::Uint);
+
+            pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = !isInteger;
         }
     }
 
@@ -5240,6 +5273,7 @@ VKAPI_ATTR void VKAPI_CALL vkTrimCommandPool(
 {
 }
 
+#ifdef VK_USE_PLATFORM_XCB_KHR
 #include <xcb/xcb.h>
 
 // =====================================================================================================================
@@ -5258,7 +5292,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXcbPresentationSupportKHR(
                                                                                                visualId,
                                                                                                queueFamilyIndex);
 }
+#endif
 
+#ifdef VK_USE_PLATFORM_XLIB_KHR
 // =====================================================================================================================
 VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXlibPresentationSupportKHR(
     VkPhysicalDevice                            physicalDevice,
@@ -5275,6 +5311,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXlibPresentationSupportKHR(
                                                                                                visual,
                                                                                                queueFamilyIndex);
 }
+#endif
 
 // =====================================================================================================================
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR

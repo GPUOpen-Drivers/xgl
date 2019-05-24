@@ -1305,9 +1305,24 @@ void CmdBuffer::BindPipeline(
 
             if (pipeline != VK_NULL_HANDLE)
             {
-                const ComputePipeline* pPipeline = NonDispatchable<VkPipeline, ComputePipeline>::ObjectFromHandle(pipeline);
+                const ComputePipeline* pPipeline       = NonDispatchable<VkPipeline,
+                                                                         ComputePipeline>::ObjectFromHandle(pipeline);
+                const PhysicalDevice*  pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+                const RuntimeSettings& settings        = m_pDevice->GetRuntimeSettings();
 
-                pPipeline->BindToCmdBuffer(this);
+                if ((pPhysicalDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex) == Pal::QueueTypeCompute) &&
+                    (settings.asyncComputeQueueMaxWavesPerCu > 0))
+                {
+                    Pal::DynamicComputeShaderInfo computeShaderInfo = {};
+
+                    computeShaderInfo.maxWavesPerCu = settings.asyncComputeQueueMaxWavesPerCu;
+
+                    pPipeline->BindToCmdBuffer(this, computeShaderInfo);
+                }
+                else
+                {
+                    pPipeline->BindToCmdBuffer(this);
+                }
 
                 m_state.allGpuState.pComputePipeline = pPipeline;
                 pNewUserDataLayout = pPipeline->GetUserDataLayout();
@@ -4085,7 +4100,7 @@ void CmdBuffer::BeginRenderPass(
             {
                 RPSetAttachmentLayout(
                     a,
-					firstAspect,
+                    firstAspect,
                     attachment.pImage->GetAttachmentLayout(initialLayout, firstAspect, this));
 
                 RPSetAttachmentLayout(a, Pal::ImageAspect::Depth, NullLayout);

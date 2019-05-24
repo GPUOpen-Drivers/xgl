@@ -393,7 +393,7 @@ public:
 
     VK_INLINE uint32_t GetSubgroupSize() const
     {
-        uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.nativeWavefrontSize;
+        uint32_t subgroupSize = 64;
 
         return subgroupSize;
     }
@@ -474,11 +474,7 @@ public:
 
     VK_INLINE uint32_t GetEnabledAPIVersion() const
     {
-#if VKI_SDK_1_0 == 0
         return Util::Min(GetSupportedAPIVersion(), VkInstance()->GetAPIVersion());
-#else
-        return VkInstance()->GetAPIVersion();
-#endif
     }
 
     VK_INLINE AppProfile GetAppProfile() const
@@ -723,17 +719,22 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFenceProperties(
     const VkPhysicalDeviceExternalFenceInfo*    pExternalFenceInfo,
     VkExternalFenceProperties*                  pExternalFenceProperties);
 
+#ifdef VK_USE_PLATFORM_XCB_KHR
 VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXcbPresentationSupportKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t                                    queueFamilyIndex,
     xcb_connection_t*                           connection,
     xcb_visualid_t                              visual_id);
+#endif
 
+#ifdef VK_USE_PLATFORM_XLIB_KHR
 VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXlibPresentationSupportKHR(
     VkPhysicalDevice                            physicalDevice,
     uint32_t                                    queueFamilyIndex,
     Display*                                    dpy,
     VisualID                                    visualID);
+#endif
+
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceWaylandPresentationSupportKHR(
     VkPhysicalDevice                            physicalDevice,

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -22,33 +22,33 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+/**
+***********************************************************************************************************************
+* @file  strange_brigade_layer.h
+* @brief Contains shadowed entry points related to strange brigade.
+***********************************************************************************************************************
+*/
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
+#ifndef __STRANGE_BRIGADE_LAYER_H__
+#define __STRANGE_BRIGADE_LAYER_H__
 
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
+#pragma once
 
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
+#include "opt_layer.h"
 
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
+namespace vk
+{
+// =====================================================================================================================
+// Class for the Strange Brigade Layer to simplify calls to the overriden dispatch table from the layer's entrypoints
+class StrangeBrigadeLayer : public OptLayer
+{
+public:
+    StrangeBrigadeLayer() {}
+    virtual ~StrangeBrigadeLayer() {}
 
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   91
+    virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) override;
+};
 
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
+}; // namespace vk
 
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      ""
-
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           1
-#define CTS_VERSION_SUBMINOR        1
-#define CTS_VERSION_PATCH           2
+#endif /* __STRANGE_BRIGADE_LAYER_H__ */

@@ -76,6 +76,7 @@ enum class AppProfile : uint32_t
     NitrousEngine,         // Nitrous Engine by Oxide (Default)
     StrangeBrigade,        // Strange Brigade
     StrangeEngine,         // Strange Engine (Default)
+    WorldWarZ,             // WorldWarZ
 };
 
 // Struct describing dynamic CHILL settings

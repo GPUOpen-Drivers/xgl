@@ -490,7 +490,8 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     GraphicsPipelineCreateInfo*         pCreateInfo,
     size_t*                             pPipelineBinarySize,
     const void**                        ppPipelineBinary,
-    uint32_t                            rasterizationStream)
+    uint32_t                            rasterizationStream,
+    Util::MetroHash::Hash*              pCacheId)
 {
     VkResult               result        = VK_SUCCESS;
     bool                   shouldCompile = true;
@@ -605,7 +606,8 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     PipelineCache*                      pPipelineCache,
     ComputePipelineCreateInfo*          pCreateInfo,
     size_t*                             pPipelineBinarySize,
-    const void**                        ppPipelineBinary)
+    const void**                        ppPipelineBinary,
+    Util::MetroHash::Hash*              pCacheId)
 {
     VkResult               result        = VK_SUCCESS;
     const RuntimeSettings& settings      = m_pPhysicalDevice->GetRuntimeSettings();

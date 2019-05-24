@@ -190,27 +190,12 @@ VkResult Instance::Create(
         }
     }
 
-#if VKI_SDK_1_0 == 0
     // According to the Vulkan 1.1 spec, if pApplicationInfo is not provided or if the apiVersion requested is 0
     // it is equivalent of providing an apiVersion of 1.0.0
     uint32_t apiVersion = VK_MAKE_VERSION(1,0,0);
-#else
-    // Default to the highest supported API version
-    uint32_t apiVersion = (VK_API_VERSION_1_0 | VK_HEADER_VERSION);
-#endif
 
     if ((pAppInfo != nullptr) && (pAppInfo->apiVersion != 0))
     {
-#if VKI_SDK_1_0
-        // Check if the requested API version is valid. Zero indicates we should ignore the field, non-zero values
-        // must be validated.
-        if (!(VK_VERSION_MAJOR(pAppInfo->apiVersion) == 1 &&
-              VK_VERSION_MINOR(pAppInfo->apiVersion) == 0))
-        {
-            return VK_ERROR_INCOMPATIBLE_DRIVER;
-        }
-#endif
-
         apiVersion = pAppInfo->apiVersion;
     }
 
@@ -446,6 +431,20 @@ VkResult Instance::Init(
         for (uint32_t deviceIdx = 0; deviceIdx < deviceCount; ++deviceIdx)
         {
             ApiPhysicalDevice::ObjectFromHandle(devices[deviceIdx])->LateInitialize();
+        }
+    }
+
+    if (status == VK_SUCCESS)
+    {
+        PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(devices[DefaultDeviceIndex]);
+        Pal::DeviceProperties info;
+        pPhysicalDevice->PalDevice()->GetProperties(&info);
+        if ((pPhysicalDevice->GetRuntimeSettings().enableSPP) && (info.gfxipProperties.flags.supportSpp))
+        {
+            char executableName[PATH_MAX];
+            char executablePath[PATH_MAX];
+            utils::GetExecutableNameAndPath(executableName, executablePath);
+            m_pPalPlatform->EnableSppProfile(executableName, executablePath);
         }
     }
 
@@ -694,8 +693,12 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
     if (!supportedExtensionsPopulated)
     {
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_SURFACE));
+#ifdef VK_USE_PLATFORM_XCB_KHR
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_XCB_SURFACE));
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_XLIB_SURFACE));
+#endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_WAYLAND_SURFACE));
 #endif
@@ -884,6 +887,7 @@ VkResult Instance::FindScreens(
     return result;
 }
 
+#ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
 // =====================================================================================================================
 Pal::IScreen* Instance::FindScreenFromRandrOutput(
     const Pal::IDevice* pDevice,
@@ -916,6 +920,7 @@ Pal::IScreen* Instance::FindScreenFromRandrOutput(
     }
     return pScreen;
 }
+#endif
 // =====================================================================================================================
 // Finds the PAL screen (if any) associated with the given window handle
 Pal::IScreen* Instance::FindScreen(

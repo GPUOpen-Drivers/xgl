@@ -47,8 +47,12 @@ public:
         const VkAllocationCallbacks*    pAllocator,
         VkSurfaceKHR*                   pSurface);
 
+#ifdef VK_USE_PLATFORM_XCB_KHR
         VkIcdSurfaceXcb*     GetXcbSurface() { return &m_xcbSurface; }
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
         VkIcdSurfaceXlib*    GetXlibSurface() { return &m_xlibSurface; }
+#endif
         VkIcdSurfaceDisplay* GetDisplaySurface() { return &m_displaySurface; }
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         VkIcdSurfaceWayland*  GetWaylandSurface() { return &m_waylandSurface; }
@@ -69,6 +73,7 @@ protected:
     {
     }
 
+#ifdef VK_USE_PLATFORM_XCB_KHR
     Surface(Instance*           pInstance,
         const VkIcdSurfaceXcb&  xcbSurface)
         :
@@ -76,7 +81,9 @@ protected:
         m_pInstance(pInstance)
     {
     }
+#endif
 
+#ifdef VK_USE_PLATFORM_XLIB_KHR
     Surface(Instance*            pInstance,
         const VkIcdSurfaceXlib&  xlibSurface)
         :
@@ -84,6 +91,8 @@ protected:
         m_pInstance(pInstance)
     {
     }
+#endif
+
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     Surface(Instance*               pInstance,
         const VkIcdSurfaceWayland&  waylandSurface)
@@ -93,10 +102,15 @@ protected:
     {
     }
 #endif
+
     union
     {
+#ifdef VK_USE_PLATFORM_XCB_KHR
         VkIcdSurfaceXcb     m_xcbSurface;
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
         VkIcdSurfaceXlib    m_xlibSurface;
+#endif
         VkIcdSurfaceDisplay m_displaySurface;
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         VkIcdSurfaceWayland m_waylandSurface;
@@ -109,17 +123,22 @@ protected:
 namespace entry
 {
 
+#ifdef VK_USE_PLATFORM_XCB_KHR
     VKAPI_ATTR VkResult VKAPI_CALL vkCreateXcbSurfaceKHR(
         VkInstance                                  instance,
         const VkXcbSurfaceCreateInfoKHR*            pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
         VkSurfaceKHR*                               pSurface);
+#endif
 
+#ifdef VK_USE_PLATFORM_XLIB_KHR
     VKAPI_ATTR VkResult VKAPI_CALL vkCreateXlibSurfaceKHR(
         VkInstance                                  instance,
         const VkXlibSurfaceCreateInfoKHR*           pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
         VkSurfaceKHR*                               pSurface);
+#endif
+
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     VKAPI_ATTR VkResult VKAPI_CALL vkCreateWaylandSurfaceKHR(
         VkInstance                                  instance,

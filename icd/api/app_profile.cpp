@@ -251,6 +251,18 @@ constexpr AppProfilePatternEntry AppEngineStrangeBrigade =
     "strange"
 };
 
+constexpr AppProfilePatternEntry AppNameWWZ =
+{
+    PatternAppNameLower,
+    "wwz"
+};
+
+constexpr AppProfilePatternEntry AppEngineHusky =
+{
+    PatternEngineNameLower,
+    "husky"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -480,6 +492,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::StrangeEngine,
         {
             AppEngineStrangeBrigade,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::WorldWarZ,
+        {
+            AppNameWWZ,
+            AppEngineHusky,
             PatternEnd
         }
     },

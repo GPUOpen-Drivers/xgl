@@ -176,6 +176,29 @@ VK_INLINE void GetExecutableNameAndPath(wchar_t* pExecutableName, wchar_t* pExec
 }
 
 // =====================================================================================================================
+VK_INLINE void GetExecutableNameAndPath(char* pExecutableName, char* pExecutablePath)
+{
+    // Get the executable name and path
+    char  executableNameAndPathBuffer[PATH_MAX];
+
+    char* pExecutablePtr;
+    Pal::Result palResult = Util::GetExecutableName(&executableNameAndPathBuffer[0],
+                                                    &pExecutablePtr,
+                                                    sizeof(executableNameAndPathBuffer));
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    // Extract the executable path and add the null terminator
+    const size_t executablePathLength = static_cast<size_t>(pExecutablePtr - executableNameAndPathBuffer);
+    memcpy(pExecutablePath, executableNameAndPathBuffer, executablePathLength * sizeof(char));
+    pExecutablePath[executablePathLength] = '\0';
+
+    // Copy the executable name and add the null terminator
+    const size_t executableNameLength = strlen(executableNameAndPathBuffer) - executablePathLength;
+    memcpy(pExecutableName, pExecutablePtr, executableNameLength * sizeof(char));
+    pExecutableName[executableNameLength] = '\0';
+}
+
+// =====================================================================================================================
 VK_INLINE int StrCmpCaseInsensitive(
     const char* a,
     const char* b)

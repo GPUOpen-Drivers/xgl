@@ -419,7 +419,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     // NOTE: For testing consistency, these options should be kept the same as those of
     // "amdllpc" (Init()).
     llpcOptions[numOptions++] = "-unroll-allow-partial";
-    llpcOptions[numOptions++] = "-lower-dyn-index";
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
 

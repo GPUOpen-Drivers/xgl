@@ -86,7 +86,8 @@ public:
         GraphicsPipelineCreateInfo*         pCreateInfo,
         size_t*                             pPipelineBinarySize,
         const void**                        ppPipelineBinary,
-        uint32_t                            rasterizationStream);
+        uint32_t                            rasterizationStream,
+        Util::MetroHash::Hash*              pCacheId);
 
     VkResult CreateComputePipelineBinary(
         Device*                             pDevice,
@@ -94,7 +95,8 @@ public:
         PipelineCache*                      pPipelineCache,
         ComputePipelineCreateInfo*          pInfo,
         size_t*                             pPipelineBinarySize,
-        const void**                        ppPipelineBinary);
+        const void**                        ppPipelineBinary,
+        Util::MetroHash::Hash*              pCacheId);
 
     VkResult ConvertGraphicsPipelineInfo(
         Device*                             pDevice,

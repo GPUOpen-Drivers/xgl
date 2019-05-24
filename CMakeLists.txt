@@ -54,7 +54,7 @@ option(ICD_BUILD_LLPC "Build LLPC?" ON)
 option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
 option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)
 
-option(XGL_BUILD_LIT "Build with lit test?" OFF)
+option(XGL_BUILD_LIT "Build with Lit test?" OFF)
 
 option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 option(ICD_BUILD_SPVONLY "Build SPV Only?" OFF)
@@ -64,7 +64,7 @@ if(ICD_BUILD_LLPCONLY)
     set(ICD_BUILD_SPVONLY OFF CACHE BOOL "ICD_BUILD_LLPCONLY override." FORCE)
 endif()
 
-option(USE_NEXT_SDK "Use next SDK?" ON)
+option(USE_NEXT_SDK "Use next SDK?" OFF)
 
 option(ICD_BUILD_VIDEO "Build Video Support?" OFF)
 

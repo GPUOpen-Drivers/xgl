@@ -200,9 +200,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateInstance                                );
     INIT_DISPATCH_ENTRY(vkEnumerateInstanceExtensionProperties          );
     INIT_DISPATCH_ENTRY(vkEnumerateInstanceLayerProperties              );
-#if VKI_SDK_1_0 == 0
     INIT_DISPATCH_ENTRY(vkEnumerateInstanceVersion                      );
-#endif
 
     INIT_DISPATCH_ENTRY(vkGetDeviceProcAddr                             );
     INIT_DISPATCH_ENTRY(vkAcquireNextImageKHR                           );
@@ -295,13 +293,21 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateShaderModule                            );
     INIT_DISPATCH_ENTRY(vkCreateSwapchainKHR                            );
     INIT_DISPATCH_ENTRY(vkDestroySurfaceKHR                             );
+#ifdef VK_USE_PLATFORM_XCB_KHR
     INIT_DISPATCH_ENTRY(vkCreateXcbSurfaceKHR                           );
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
     INIT_DISPATCH_ENTRY(vkCreateXlibSurfaceKHR                          );
+#endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     INIT_DISPATCH_ENTRY(vkCreateWaylandSurfaceKHR                       );
 #endif
+#ifdef VK_USE_PLATFORM_XCB_KHR
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceXcbPresentationSupportKHR    );
+#endif
+#ifdef VK_USE_PLATFORM_XLIB_KHR
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceXlibPresentationSupportKHR   );
+#endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceWaylandPresentationSupportKHR);
 #endif
@@ -473,7 +479,6 @@ void DispatchTable::Init()
 
     INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceExternalFencePropertiesKHR   ,
                         vkGetPhysicalDeviceExternalFenceProperties      );
-#if VKI_SDK_1_0 == 0
     INIT_DISPATCH_ENTRY(vkBindBufferMemory2                             );
     INIT_DISPATCH_ENTRY(vkBindImageMemory2                              );
     INIT_DISPATCH_ENTRY(vkCmdSetDeviceMask                              );
@@ -501,7 +506,6 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSparseImageFormatProperties2 );
     INIT_DISPATCH_ENTRY(vkTrimCommandPool                               );
     INIT_DISPATCH_ENTRY(vkUpdateDescriptorSetWithTemplate               );
-#endif
     INIT_DISPATCH_ENTRY(vkCreateDebugReportCallbackEXT                  );
     INIT_DISPATCH_ENTRY(vkDestroyDebugReportCallbackEXT                 );
     INIT_DISPATCH_ENTRY(vkDebugReportMessageEXT                         );

@@ -1176,9 +1176,10 @@ VkResult GraphicsPipeline::Create(
     // Parse the create info and build patched AMDIL shaders
     CreateInfo    localPipelineInfo                  = {};
     VbBindingInfo vbInfo                             = {};
-    GraphicsPipelineCreateInfo binaryCreateInfo = {};
+    GraphicsPipelineCreateInfo binaryCreateInfo      = {};
     size_t        pipelineBinarySizes[MaxPalDevices] = {};
     const void*   pPipelineBinaries[MaxPalDevices]   = {};
+    Util::MetroHash::Hash cacheId[MaxPalDevices]     = {};
     Pal::Result   palResult                          = Pal::Result::Success;
     PipelineCompiler*     pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
     uint64_t      apiPsoHash                         = BuildApiHash(pCreateInfo, &binaryCreateInfo.basePipelineHash);
@@ -1198,7 +1199,8 @@ VkResult GraphicsPipeline::Create(
                 &binaryCreateInfo,
                 &pipelineBinarySizes[i],
                 &pPipelineBinaries[i],
-                localPipelineInfo.rasterizationStream);
+                localPipelineInfo.rasterizationStream,
+                &cacheId[i]);
         }
         else
         {
@@ -1213,7 +1215,8 @@ VkResult GraphicsPipeline::Create(
                 &binaryCreateInfoMGPU,
                 &pipelineBinarySizes[i],
                 &pPipelineBinaries[i],
-                localPipelineInfo.rasterizationStream);
+                localPipelineInfo.rasterizationStream,
+                &cacheId[i]);
 
             pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfoMGPU);
         }

@@ -30,7 +30,9 @@
  */
 
 // These WSI header files should be included before vk_wsi_swapchain.h
+#ifdef VK_USE_PLATFORM_XCB_KHR
 #include <xcb/xcb.h>
+#endif
 #include "include/vk_conv.h"
 #include "include/vk_display.h"
 #include "include/vk_display_manager.h"

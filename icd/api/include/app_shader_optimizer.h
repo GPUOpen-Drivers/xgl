@@ -122,7 +122,6 @@ struct ShaderProfileAction
             struct
             {
                 uint32_t optStrategyFlags                   : 1;
-                uint32_t minVgprOptions                     : 1;
                 uint32_t vgprLimit                          : 1;
                 uint32_t sgprLimit                          : 1;
                 uint32_t ldsSpillLimitDwords                : 1;

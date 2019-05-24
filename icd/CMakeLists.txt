@@ -114,11 +114,9 @@ endif()
 
 # Configure Vulkan SDK version definitions
 if(USE_NEXT_SDK)
-    set(VULKAN_SDK_VERSION sdk-1.1)
-    target_compile_definitions(xgl PRIVATE VKI_SDK_1_1=1)
+    target_compile_definitions(xgl PRIVATE VKI_SDK_1_2=1)
 else()
-    set(VULKAN_SDK_VERSION sdk-1.0)
-    target_compile_definitions(xgl PRIVATE VKI_SDK_1_0=1)
+    target_compile_definitions(xgl PRIVATE VKI_SDK_1_1=1)
 endif()
 
 # Enable relevant GPUOpen preprocessor definitions
@@ -177,6 +175,7 @@ endif()
 
 target_sources(xgl PRIVATE
     api/app_profile.cpp
+    api/app_resource_optimizer.cpp
     api/app_shader_optimizer.cpp
     api/barrier_policy.cpp
     api/color_space_helper.cpp
@@ -230,6 +229,7 @@ target_sources(xgl PRIVATE
     api/vk_gpa_session.cpp
     api/vk_descriptor_update_template.cpp
     api/appopt/barrier_filter_layer.cpp
+    api/appopt/strange_brigade_layer.cpp
     api/render_state_cache.cpp
     api/renderpass/renderpass_builder.cpp
     api/renderpass/renderpass_logger.cpp
@@ -376,7 +376,7 @@ if (UNIX)
         -Wl,-Bdynamic
         -Wl,--no-undefined
         -Wl,-z,noexecstack
-        -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/make/amdicd.so.${VULKAN_SDK_VERSION}.def
+        -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/make/amdicd.so.def
         -Wl,-Map=${ICD_TARGET}.map
         -Wl,-soname=${ICD_TARGET}.so.1
     )

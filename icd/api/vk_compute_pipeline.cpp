@@ -151,9 +151,10 @@ VkResult ComputePipeline::Create(
     VkPipeline*                             pPipeline)
 {
     // Setup PAL create info from Vulkan inputs
-    CreateInfo  localPipelineInfo                  = {};
-    size_t      pipelineBinarySizes[MaxPalDevices] = {};
-    const void* pPipelineBinaries[MaxPalDevices]   = {};
+    CreateInfo            localPipelineInfo                  = {};
+    size_t                pipelineBinarySizes[MaxPalDevices] = {};
+    const void*           pPipelineBinaries[MaxPalDevices]   = {};
+    Util::MetroHash::Hash cacheId[MaxPalDevices]             = {};
     PipelineCompiler*   pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
     ComputePipelineCreateInfo binaryCreateInfo = {};
     uint64_t    apiPsoHash                         = BuildApiHash(pCreateInfo, &binaryCreateInfo.basePipelineHash);
@@ -167,7 +168,8 @@ VkResult ComputePipeline::Create(
             pPipelineCache,
             &binaryCreateInfo,
             &pipelineBinarySizes[deviceIdx],
-            &pPipelineBinaries[deviceIdx]);
+            &pPipelineBinaries[deviceIdx],
+            &cacheId[deviceIdx]);
     }
 
     if (result != VK_SUCCESS)
@@ -233,6 +235,7 @@ VkResult ComputePipeline::Create(
                 localPipelineInfo.pipeline,
                 Util::VoidPtrInc(pPalMem, deviceIdx * pipelineSize),
                 &pPalPipeline[deviceIdx]);
+
         }
 
         result = PalToVkResult(palResult);

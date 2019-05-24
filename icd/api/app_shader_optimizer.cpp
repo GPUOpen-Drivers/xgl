@@ -470,6 +470,8 @@ void ShaderOptimizer::BuildTuningProfile()
 // =====================================================================================================================
 void ShaderOptimizer::BuildAppProfile()
 {
+    memset(&m_appProfile, 0, sizeof(m_appProfile));
+
     // Early-out if the panel has dictated that we should ignore any active pipeline optimizations due to app profile
     if (m_settings.pipelineProfileIgnoresAppProfile == false)
     {
@@ -486,15 +488,14 @@ void ShaderOptimizer::BuildAppProfileLlpc()
     const Pal::GfxIpLevel gfxIpLevel = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
     const Pal::AsicRevision asicRevision = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().revision;
 
+    uint32_t i = 0;
+
     // TODO: These need to be auto-generated from source JSON but for now we write profile programmatically
-    memset(&m_appProfile, 0, sizeof(m_appProfile));
 
     if (appProfile == AppProfile::Doom)
     {
         if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
         {
-            uint32_t i = 0;
-
             // Apply late VS alloc to all (graphics) pipelines
             i = m_appProfile.entryCount++;
             m_appProfile.entries[i].pattern.match.always = 1;
@@ -581,8 +582,6 @@ void ShaderOptimizer::BuildAppProfileLlpc()
 
         if (Pal::GfxIpLevel::GfxIp8 == gfxIpLevel)
         {
-            uint32_t i = 0u;
-
             ///////////////////////////////////////////////////////////////////////////////////////////////////////////
             // fd59b52b7db5ef6bf9b17451c9c6cf06,PS,ALLOWREZ,1
             i = m_appProfile.entryCount++;
@@ -594,8 +593,6 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         }
         else if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
         {
-            uint32_t i = 0u;
-
             ///////////////////////////////////////////////////////////////////////////////////////////////////////////
             // fd59b52b7db5ef6bf9b17451c9c6cf06,PS,WAVES,24
             i = m_appProfile.entryCount++;
@@ -609,8 +606,6 @@ void ShaderOptimizer::BuildAppProfileLlpc()
     }
     else if (appProfile == AppProfile::Talos)
     {
-        uint32_t i = 0u;
-
         if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
         {
             ///////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -668,7 +663,6 @@ void ShaderOptimizer::BuildAppProfileLlpc()
     }
     else if (appProfile == AppProfile::WarHammerII)
     {
-        uint32_t i = 0u;
         ///////////////////////////////////////////////////////////////////////////////////////////////////////////
         // 0x730EEEB82E6434A876D57AACBD824DBD, PS
         i = m_appProfile.entryCount++;
@@ -690,8 +684,6 @@ void ShaderOptimizer::BuildAppProfileLlpc()
     {
         if (Pal::GfxIpLevel::GfxIp9 == gfxIpLevel)
         {
-            uint32_t i = 0u;
-
             ///////////////////////////////////////////////////////////////////////////////////////////////////////////
             // 3895042bcf33699ada756541f86d98d8,CS,False,WAVES,16
             i = m_appProfile.entryCount++;
@@ -832,7 +824,8 @@ static bool ParseJsonProfileActionShader(
     static const char* ValidKeys[] =
     {
         "optStrategyFlags",
-        "minVgprOptions",
+        "maxOccupancyOptions",
+        "lowLatencyOptions",
         "vgprLimit",
         "sgprLimit",
         "ldsSpillLimitDwords",

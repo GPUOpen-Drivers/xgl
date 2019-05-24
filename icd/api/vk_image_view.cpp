@@ -262,8 +262,19 @@ VkResult ImageView::Create(
     size_t depthViewSegmentSize   = 0;
 
     // Creation arguments that may be overridden by extensions below
-    VkImageUsageFlags imageViewUsage = pImage->GetImageUsage();
-    float             minLod         = 0.0f;
+    VkImageUsageFlags        imageViewUsage = pImage->GetImageUsage();
+    float                    minLod         = 0.0f;
+
+    if ((pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) &&
+        (pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT))
+    {
+        imageViewUsage = (pImage->GetImageStencilUsage() & pImage->GetImageUsage());
+    }
+    else
+    if (pCreateInfo->subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT)
+    {
+        imageViewUsage = pImage->GetImageStencilUsage();
+    }
 
     union
     {
