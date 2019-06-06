@@ -32,7 +32,6 @@
 #ifndef __VK_LAYER_H_PROXY__
 #define __VK_LAYER_H_PROXY__
 
-// Vulkan SDK 1.1
 #include "sdk-1.1/vk_layer.h"
 
 #endif /* __VK_LAYER_H_PROXY__ */

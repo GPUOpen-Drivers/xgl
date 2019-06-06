@@ -88,6 +88,7 @@
 #include "palSwapChain.h"
 #include "palSysMemory.h"
 #include "palQueue.h"
+#include "palQueueSemaphore.h"
 
 namespace vk
 {
@@ -256,6 +257,8 @@ Device::Device(
 
     m_shaderOptimizer.Init();
     m_resourceOptimizer.Init();
+
+    memset(m_overallocationRequestedForPalHeap, 0, sizeof(m_overallocationRequestedForPalHeap));
 }
 
 // =====================================================================================================================
@@ -1052,11 +1055,6 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        result = PalToVkResult(m_timerQueueMutex.Init());
-    }
-
-    if (result == VK_SUCCESS)
-    {
         if (m_settings.memoryDeviceOverallocationNonOverridable == false)
         {
             AppProfile profile = GetAppProfile();
@@ -1089,6 +1087,8 @@ VkResult Device::Initialize(
                 {
                 case VK_MEMORY_OVERALLOCATION_BEHAVIOR_ALLOWED_AMD:
                     m_allocationSizeTracking = false;
+                    m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapInvisible] = true;
+                    m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapLocal] = true;
                     break;
                 case VK_MEMORY_OVERALLOCATION_BEHAVIOR_DISALLOWED_AMD:
                     m_allocationSizeTracking = true;

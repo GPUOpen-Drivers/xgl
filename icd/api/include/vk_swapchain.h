@@ -169,6 +169,7 @@ protected:
     VkPresentModeKHR        m_presentMode;
     bool                    m_deprecated;      // Indicates whether the swapchain has been used as
                                                // oldSwapChain when creating a new SwapChain.
+
 };
 
 // =====================================================================================================================

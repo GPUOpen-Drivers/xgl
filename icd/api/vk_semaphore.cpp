@@ -364,7 +364,7 @@ VkResult Semaphore::Destroy(
 }
 
 // =====================================================================================================================
-VkResult Semaphore::GetSemaphoreState(
+VkResult Semaphore::GetSemaphoreCounterValue(
     Device*                         pDevice,
     Semaphore*                      pSemaphore,
     uint64_t*                       pValue)

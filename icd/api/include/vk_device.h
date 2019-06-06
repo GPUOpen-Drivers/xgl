@@ -363,6 +363,11 @@ public:
         return VkPhysicalDevice(DefaultDeviceIndex)->GetVkTypeIndexBitsFromPalHeap(heapIndex, pVkIndexBits);
     }
 
+    VK_INLINE uint32_t GetMemoryTypeForAttachmentImage() const
+    {
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeForAttachmentImage();
+    }
+
     VK_INLINE Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetPalHeapFromVkTypeIndex(vkIndex);
@@ -466,6 +471,15 @@ public:
         uint32_t     deviceMask,
         uint32_t     heapIdx);
 
+    VK_INLINE bool ShouldAddRemoteBackupHeap(
+        uint32_t deviceIdx,
+        uint32_t memoryTypeIdx,
+        uint32_t palHeapIdx) const
+    {
+        return (m_perGpu[deviceIdx].pPhysicalDevice->ShouldAddRemoteBackupHeap(memoryTypeIdx) ||
+                m_overallocationRequestedForPalHeap[palHeapIdx]);
+    }
+
     VK_INLINE const InternalPipeline& GetTimestampQueryCopyPipeline() const
         { return m_timestampQueryCopyPipeline; }
 
@@ -488,9 +502,6 @@ public:
 
     VK_INLINE Util::Mutex* GetMemoryMutex()
         { return &m_memoryMutex; }
-
-    VK_INLINE Util::Mutex* GetTimerQueueMutex()
-        { return &m_timerQueueMutex; }
 
     VK_INLINE PipelineCompiler* GetCompiler(uint32_t idx) const
         { return m_perGpu[idx].pPhysicalDevice->GetCompiler(); }
@@ -593,7 +604,6 @@ protected:
     OptLayer*                           m_pAppOptLayer;         // State for an app-specific layer, otherwise null
     BarrierFilterLayer*                 m_pBarrierFilterLayer;  // State for enabling barrier filtering, otherwise null
     Util::Mutex                         m_memoryMutex;          // Shared mutex used occasionally by memory objects
-    Util::Mutex                         m_timerQueueMutex;      // Shared mutex used occasionally by timer queue objects
 
     // The states of m_enabledFeatures are provided by application
     VkPhysicalDeviceFeatures            m_enabledFeatures;
@@ -611,6 +621,9 @@ protected:
     // Determines if the allocated memory size will be tracked (error will be thrown when
     // allocation exceeds threshold size)
     bool                                m_allocationSizeTracking;
+
+    // Determines if overallocation requested specifically via extension
+    bool                                m_overallocationRequestedForPalHeap[static_cast<uint32_t>(Pal::GpuHeap::GpuHeapCount)];
 
     // If set to true, will use a compute queue internally for transfers.
     bool                                m_useComputeAsTransferQueue;

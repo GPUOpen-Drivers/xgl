@@ -1158,10 +1158,6 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         }
     }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 488
-    // Set heap preference for PSO
-    pInfo->pipeline.flags.preferNonLocalHeap = settings.pipelinePreferNonLocalHeap;
-#endif
 }
 
 // =====================================================================================================================

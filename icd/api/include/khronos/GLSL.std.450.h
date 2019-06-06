@@ -31,5 +31,4 @@
 
 #pragma once
 
-// Vulkan SDK 1.1 (GLSL extension version 1.0, revision 3)
 #include "sdk-1.1/GLSL.std.450.h"

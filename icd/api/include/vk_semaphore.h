@@ -64,7 +64,7 @@ public:
         Device*                    pDevice,
         const ImportSemaphoreInfo& importInfo);
 
-    VkResult GetSemaphoreState(
+    VkResult GetSemaphoreCounterValue(
         Device*                   pDevice,
         Semaphore*                pSemaphore,
         uint64_t*                 pValue);

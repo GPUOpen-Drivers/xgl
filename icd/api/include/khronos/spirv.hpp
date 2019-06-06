@@ -31,5 +31,4 @@
 
 #pragma once
 
-// Vulkan SDK 1.1 (SPIR-V version 1.3, revision 1)
 #include "sdk-1.1/spirv.hpp"

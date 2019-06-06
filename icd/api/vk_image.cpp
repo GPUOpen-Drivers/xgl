@@ -1507,7 +1507,16 @@ VkResult Image::GetMemoryRequirements(
     {
         uint32_t typeIndexBits;
 
-        if (pDevice->GetVkTypeIndexBitsFromPalHeap(palReqs.heaps[i], &typeIndexBits))
+        if ((palReqs.heaps[i] == Pal::GpuHeap::GpuHeapInvisible) &&
+            (m_imageUsage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
+        {
+            // Unlike the default local/invisible memory type, allocations made under the attachment image
+            // memory type do not include a back-up heap (unless overallocation is allowed via
+            // VK_AMD_memory_overallocation_behavior). If the attachment image memory type isn't enabled,
+            // GetMemoryTypeForAttachmentImage still returns the GPU invisible memory type.
+            pReqs->memoryTypeBits |= 1 << pDevice->GetMemoryTypeForAttachmentImage();
+        }
+        else if (pDevice->GetVkTypeIndexBitsFromPalHeap(palReqs.heaps[i], &typeIndexBits))
         {
             pReqs->memoryTypeBits |= typeIndexBits;
         }

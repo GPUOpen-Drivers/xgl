@@ -461,6 +461,12 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
         llpcOptions[numOptions++] = "-pragma-unroll-threshold=4096";
     }
 
+    // Enable scratch bounds checking on GFX9
+    if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp9)
+    {
+        llpcOptions[numOptions++] = "-amdgpu-scratch-bounds-checking";
+    }
+
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);
     ++optionLength;
     llpcOptions[numOptions++] = pOptionBuffer;

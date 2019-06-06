@@ -291,7 +291,7 @@ typedef struct VkSurfaceCapabilitiesFullScreenExclusiveEXT {
 typedef struct VkSurfaceFullScreenExclusiveWin32InfoEXT {
     VkStructureType    sType;
     const void*        pNext;
-    HMONITOR           hMonitor;
+    HMONITOR           hmonitor;
 } VkSurfaceFullScreenExclusiveWin32InfoEXT;
 
 typedef VkResult (VKAPI_PTR *PFN_vkGetPhysicalDeviceSurfacePresentModes2EXT)(VkPhysicalDevice physicalDevice, const VkPhysicalDeviceSurfaceInfo2KHR* pSurfaceInfo, uint32_t* pPresentModeCount, VkPresentModeKHR* pPresentModes);

@@ -32,7 +32,6 @@
 #ifndef __VK_PLATFORM_H_PROXY__
 #define __VK_PLATFORM_H_PROXY__
 
-// Vulkan SDK 1.1
 #include "sdk-1.1/vk_platform.h"
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR

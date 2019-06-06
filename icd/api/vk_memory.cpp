@@ -142,13 +142,9 @@ VkResult Memory::Create(
                     }
                 }
 
-                if (pDevice->GetRuntimeSettings().memoryEnableRemoteBackupHeap)
+                if (pDevice->ShouldAddRemoteBackupHeap(DefaultDeviceIndex, pInfo->memoryTypeIndex, createInfo.heaps[0]))
                 {
-                    if ((createInfo.heaps[0] == Pal::GpuHeapLocal) ||
-                        (createInfo.heaps[0] == Pal::GpuHeapInvisible))
-                    {
-                        createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
-                    }
+                    createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
                 }
 
                 if (((memoryProperties.memoryTypes[pInfo->memoryTypeIndex].propertyFlags &

@@ -34,7 +34,6 @@
 
 #include "vk_platform.h"
 
-// Vulkan SDK 1.1
 #include "sdk-1.1/vulkan.h"
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR

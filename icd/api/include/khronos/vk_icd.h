@@ -32,7 +32,6 @@
 #ifndef __VK_ICD_H_PROXY__
 #define __VK_ICD_H_PROXY__
 
-// Vulkan SDK 1.1
 #include "sdk-1.1/vk_icd.h"
 
 #endif /* __VK_ICD_H_PROXY__ */

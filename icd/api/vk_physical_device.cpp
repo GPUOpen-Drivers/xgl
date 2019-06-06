@@ -248,6 +248,7 @@ PhysicalDevice::PhysicalDevice(
     m_pPhysicalDeviceManager(pPhysicalDeviceManager),
     m_pPalDevice(pPalDevice),
     m_memoryTypeMask(0),
+    m_memoryVkIndexAttachmentImage(0),
     m_settings(settings),
     m_sampleLocationSampleCounts(0),
     m_vrHighPrioritySubEngineIndex(UINT32_MAX),
@@ -263,6 +264,7 @@ PhysicalDevice::PhysicalDevice(
     memset(&m_queueFamilies, 0, sizeof(m_queueFamilies));
     memset(&m_memoryProperties, 0, sizeof(m_memoryProperties));
     memset(&m_gpaProps, 0, sizeof(m_gpaProps));
+    memset(&m_memoryVkIndexAddRemoteBackupHeap, 0, sizeof(m_memoryVkIndexAddRemoteBackupHeap));
     for (uint32_t i = 0; i < Pal::GpuHeapCount; i++)
     {
         m_memoryPalHeapToVkIndexBits[i] = 0; // invalid bits
@@ -530,6 +532,9 @@ VkResult PhysicalDevice::Initialize()
             Pal::GpuHeapGartCacheable
         };
 
+        const Pal::gpusize invisHeapSize = heapProperties[Pal::GpuHeapInvisible].heapSize;
+        const Pal::gpusize localHeapSize = heapProperties[Pal::GpuHeapLocal].heapSize;
+
         // Initialize memory heaps
         for (uint32_t orderedHeapIndex = 0; orderedHeapIndex < Pal::GpuHeapCount; ++orderedHeapIndex)
         {
@@ -607,6 +612,36 @@ VkResult PhysicalDevice::Initialize()
                     (palGpuHeap == Pal::GpuHeapLocal))
                 {
                     memoryType.propertyFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+
+                    // Add back-up heap for parts with VRAM smaller than 8GB.
+                    // Note: The back-up heap can also be added if overallocation is allowed via
+                    //       VK_AMD_memory_overallocation_behavior.
+                    // Use m_heapVkToPal instead of palGpuHeap here to handle cases where multiple memory types share
+                    // the same heap.
+                    const Pal::gpusize heapSize = heapProperties[m_heapVkToPal[memoryType.heapIndex]].heapSize;
+                    m_memoryVkIndexAddRemoteBackupHeap[memoryTypeIndex] =
+                        (heapSize < m_settings.memoryRemoteBackupHeapMinHeapSize);
+                }
+
+                if (palGpuHeap == Pal::GpuHeapInvisible)
+                {
+                    if ((invisHeapSize + localHeapSize) >= m_settings.memoryAttachmentImageMemoryTypeMinHeapSize)
+                    {
+                        // The attachment image memory type (unavailable for parts with VRAM smaller than 4GB)
+                        // reports identical properties as the default invisible. However, it does
+                        // not add a remote back-up heap unless overallocation is allowed via
+                        // VK_AMD_memory_overallocation_behavior.
+                        m_memoryVkIndexAttachmentImage = m_memoryProperties.memoryTypeCount++;
+
+                        m_memoryProperties.memoryTypes[m_memoryVkIndexAttachmentImage] =
+                            m_memoryProperties.memoryTypes[memoryTypeIndex];
+                        m_memoryVkIndexToPalHeap[m_memoryVkIndexAttachmentImage] =
+                            m_memoryVkIndexToPalHeap[memoryTypeIndex];
+                    }
+                    else
+                    {
+                        m_memoryVkIndexAttachmentImage = memoryTypeIndex;
+                    }
                 }
             }
         }
@@ -4532,6 +4567,7 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_VARIABLE_POINTERS));
     }
+
 }
 
 // =====================================================================================================================

@@ -133,6 +133,11 @@ public:
         return m_memoryTypeMask;
     }
 
+    VK_INLINE uint32_t GetMemoryTypeForAttachmentImage() const
+    {
+        return m_memoryVkIndexAttachmentImage;
+    }
+
     VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
     {
         VK_ASSERT(heapIndex < Pal::GpuHeapCount);
@@ -502,6 +507,9 @@ public:
         Pal::gpusize allocationSize,
         uint32_t     heapIdx);
 
+    VK_INLINE bool ShouldAddRemoteBackupHeap(uint32_t vkIndex) const
+        { return m_memoryVkIndexAddRemoteBackupHeap[vkIndex]; }
+
 protected:
     PhysicalDevice(PhysicalDeviceManager* pPhysicalDeviceManager,
                    Pal::IDevice*          pPalDevice,
@@ -522,12 +530,16 @@ protected:
     PhysicalDeviceManager*           m_pPhysicalDeviceManager;
     Pal::IDevice*                    m_pPalDevice;
     Pal::DeviceProperties            m_properties;
+
     uint32_t                         m_memoryTypeMask;
+    uint32_t                         m_memoryVkIndexAttachmentImage;
+    bool                             m_memoryVkIndexAddRemoteBackupHeap[VK_MAX_MEMORY_TYPES];
     uint32_t                         m_memoryPalHeapToVkIndexBits[Pal::GpuHeapCount];
     uint32_t                         m_memoryPalHeapToVkHeap[Pal::GpuHeapCount];
     Pal::GpuHeap                     m_memoryVkIndexToPalHeap[VK_MAX_MEMORY_TYPES];
     Pal::GpuHeap                     m_heapVkToPal[VkMemoryHeapNum];
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
+
     RuntimeSettings                  m_settings;
     VkPhysicalDeviceLimits           m_limits;
     VkSampleCountFlags               m_sampleLocationSampleCounts;

@@ -470,6 +470,7 @@ VkResult SwapChain::Create(
     }
     else
     {
+
         if (pFullscreenMgr != nullptr)
         {
             pFullscreenMgr->Destroy(pAllocator);

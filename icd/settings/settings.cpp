@@ -168,14 +168,6 @@ static void OverrideProfiledSettings(
 
     if (appProfile == AppProfile::WorldWarZ)
     {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 488
-        /// This is more or less a work around for WWZ. If they can fix this in a patch they will bump the app version
-        if (appVersion <= VK_MAKE_VERSION(1, 0, 0))
-        {
-            pSettings->pipelinePreferNonLocalHeap = true;
-        }
-#endif
-
         pSettings->robustBufferAccess = FeatureForceEnable;
 
         pSettings->prefetchShaders = true;
