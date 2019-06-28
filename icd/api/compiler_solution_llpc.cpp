@@ -427,6 +427,10 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
 
     // NOTE: For testing consistency, these options should be kept the same as those of
     // "amdllpc" (Init()).
+    llpcOptions[numOptions++] = "-unroll-max-percent-threshold-boost=1000";
+    llpcOptions[numOptions++] = "-unroll-threshold=700";
+    llpcOptions[numOptions++] = "-unroll-partial-threshold=700";
+    llpcOptions[numOptions++] = "-pragma-unroll-threshold=1000";
     llpcOptions[numOptions++] = "-unroll-allow-partial";
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
@@ -458,16 +462,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     {
         // Force to use internal disk cache.
         shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
-    }
-
-    if (appProfile == AppProfile::RiseOfTheTombra)
-    {
-        // Disable loop unroll
-        llpcOptions[numOptions++] = "-pragma-unroll-threshold=1";
-    }
-    else
-    {
-        llpcOptions[numOptions++] = "-pragma-unroll-threshold=4096";
     }
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);
