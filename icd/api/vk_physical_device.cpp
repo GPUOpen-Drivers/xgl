@@ -2385,6 +2385,7 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
         const VkStructHeader*                     pHeader;
         const VkPhysicalDeviceSurfaceInfo2KHR*    pVkPhysicalDeviceSurfaceInfo2KHR;
         VkSurfaceCapabilities2KHR*                pVkSurfaceCapabilities2KHR;
+        VkHdrMetadataEXT*                         pVkHdrMetadataEXT;
     };
 
     VkResult                 result                    = VK_SUCCESS;
@@ -2423,6 +2424,47 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_HDR_METADATA_EXT:
+            {
+                VkHdrMetadataEXT& vkMetadata = *pVkHdrMetadataEXT;
+
+                Surface* pSurface = Surface::ObjectFromHandle(surface);
+
+                DisplayableSurfaceInfo displayableInfo = {};
+
+                result = PhysicalDevice::UnpackDisplayableSurface(pSurface, &displayableInfo);
+
+                VK_ASSERT(displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY);
+
+                Pal::IScreen* pPalScreen = displayableInfo.pScreen;
+
+                Pal::ScreenColorCapabilities screenCaps;
+                Pal::Result palResult = pPalScreen->GetColorCapabilities(&screenCaps);
+                VK_ASSERT(palResult == Pal::Result::Success);
+
+                const Pal::ColorGamut& colorGamut = screenCaps.nativeColorGamut;
+
+                constexpr double scale = 1.0 / 10000.0;
+
+                vkMetadata.displayPrimaryRed.x       = static_cast<float>(colorGamut.chromaticityRedX        * scale);
+                vkMetadata.displayPrimaryRed.y       = static_cast<float>(colorGamut.chromaticityRedY        * scale);
+                vkMetadata.displayPrimaryGreen.x     = static_cast<float>(colorGamut.chromaticityGreenX      * scale);
+                vkMetadata.displayPrimaryGreen.y     = static_cast<float>(colorGamut.chromaticityGreenY      * scale);
+                vkMetadata.displayPrimaryBlue.x      = static_cast<float>(colorGamut.chromaticityBlueX       * scale);
+                vkMetadata.displayPrimaryBlue.y      = static_cast<float>(colorGamut.chromaticityBlueY       * scale);
+                vkMetadata.whitePoint.x              = static_cast<float>(colorGamut.chromaticityWhitePointX * scale);
+                vkMetadata.whitePoint.y              = static_cast<float>(colorGamut.chromaticityWhitePointY * scale);
+                vkMetadata.minLuminance              = static_cast<float>(colorGamut.minLuminance            * scale);
+
+                vkMetadata.maxLuminance              = static_cast<float>(colorGamut.maxLuminance);
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 512
+                vkMetadata.maxFrameAverageLightLevel = static_cast<float>(colorGamut.maxFrameAverageLightLevel);
+#endif
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 506
+                vkMetadata.maxContentLightLevel      = static_cast<float>(colorGamut.maxContentLightLevel);
+#endif
+                break;
+            }
             default:
                 break;
         }
@@ -2602,6 +2644,125 @@ VkResult PhysicalDevice::GetSurfaceFormats(
     uint32_t numPresentFormats = 0;
     const uint32_t maxBufferCount = (pSurfaceFormats != nullptr) ? *pSurfaceFormatCount : 0;
 
+    DisplayableSurfaceInfo displayableInfo = {};
+
+    result = PhysicalDevice::UnpackDisplayableSurface(pSurface, &displayableInfo);
+
+    if (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
+    {
+        // Fullscreen Presents
+        constexpr Pal::OsWindowHandle unknownHandle = Pal::NullWindowHandle;
+        Pal::IScreen* pScreen = displayableInfo.pScreen;
+
+        if (pScreen == nullptr)
+        {
+            if (pSurfaceFormats == nullptr)
+            {
+                *pSurfaceFormatCount = 0;
+                return VK_SUCCESS;
+            }
+            return VK_ERROR_INITIALIZATION_FAILED;
+        }
+
+        // Enumerate memory requirements
+        Pal::ScreenColorCapabilities palColorCaps;
+        Pal::Result palResult = pScreen->GetColorCapabilities(&palColorCaps);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
+        uint32_t colorSpaceCount = 0;
+        uint32_t numImgFormats = 0;
+
+        // Enumerate
+        ColorSpaceHelper::GetSupportedFormats(palColorCaps.supportedColorSpaces, &colorSpaceCount, nullptr);
+        palResult = pScreen->GetFormats(&numImgFormats, nullptr);
+        VK_ASSERT(palResult == Pal::Result::Success);
+        const size_t totalMem = (sizeof(Pal::SwizzledFormat)        * numImgFormats) +
+                                (sizeof(VkFormat)                   * numImgFormats) +
+                                (sizeof(vk::ColorSpaceHelper::Fmts) * colorSpaceCount);
+
+        // Allocate
+        void* pAllocMem = VkInstance()->AllocMem(totalMem, VK_DEFAULT_MEM_ALIGN, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+        if(pAllocMem == nullptr)
+        {
+            return VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+
+        // Populate
+        Pal::SwizzledFormat* pPalFormats = static_cast<Pal::SwizzledFormat*>(pAllocMem);
+
+        palResult = pScreen->GetFormats(&numImgFormats, pPalFormats);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
+        VkFormat* pVkFormats = reinterpret_cast<VkFormat*>(pPalFormats + numImgFormats);
+
+        vk::ColorSpaceHelper::Fmts* pColorSpaces =
+                        reinterpret_cast<vk::ColorSpaceHelper::Fmts*>(pVkFormats + numImgFormats);
+
+        // Convert Pal formats to Vulkan formats
+        for (uint32_t fmtIndx = 0; fmtIndx < numImgFormats; fmtIndx++)
+        {
+            const Pal::SwizzledFormat srcFormat = pPalFormats[fmtIndx];
+
+            pVkFormats[fmtIndx] = VK_FORMAT_UNDEFINED;
+
+            for (uint32_t vkFmtIdx = VK_FORMAT_BEGIN_RANGE; vkFmtIdx <= VK_FORMAT_END_RANGE; vkFmtIdx++)
+            {
+                const Pal::SwizzledFormat cmpFormat = VkToPalFormat(static_cast<VkFormat>(vkFmtIdx));
+
+                if ((srcFormat.format == cmpFormat.format) &&
+                    (srcFormat.swizzle.r == cmpFormat.swizzle.r) &&
+                    (srcFormat.swizzle.g == cmpFormat.swizzle.g) &&
+                    (srcFormat.swizzle.b == cmpFormat.swizzle.b) &&
+                    (srcFormat.swizzle.a == cmpFormat.swizzle.a))
+                {
+                    pVkFormats[fmtIndx] = static_cast<VkFormat>(vkFmtIdx);
+                    break;
+                }
+            }
+
+            VK_ASSERT(pVkFormats[fmtIndx] != VK_FORMAT_UNDEFINED);
+        }
+
+        ColorSpaceHelper::GetSupportedFormats(palColorCaps.supportedColorSpaces, &colorSpaceCount, pColorSpaces);
+
+        Pal::MergedFormatPropertiesTable formatProperties = {};
+        palResult = m_pPalDevice->GetFormatProperties(&formatProperties);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
+        for (uint32_t colorSpaceIndex = 0; colorSpaceIndex < colorSpaceCount; colorSpaceIndex++)
+        {
+            const VkColorSpaceKHR              colorSpaceFmt = pColorSpaces[colorSpaceIndex].colorSpace;
+            const ColorSpaceHelper::FmtSupport bitSupport    = pColorSpaces[colorSpaceIndex].fmtSupported;
+
+            for (uint32_t fmtIndx = 0; fmtIndx < numImgFormats; fmtIndx++)
+            {
+                if (ColorSpaceHelper::IsFormatColorSpaceCompatible(pPalFormats[fmtIndx].format, bitSupport))
+                {
+                    if (pSurfaceFormats != nullptr)
+                    {
+                        if (numImgFormats <= maxBufferCount)
+                        {
+                            pSurfaceFormats[numPresentFormats].format = pVkFormats[fmtIndx];
+                            pSurfaceFormats[numPresentFormats].colorSpace = colorSpaceFmt;
+                        }
+                        else
+                        {
+                            result = VK_INCOMPLETE;
+                        }
+                    }
+                    ++numPresentFormats;
+                }
+            }
+        }
+
+        if (pSurfaceFormats == nullptr)
+        {
+            *pSurfaceFormatCount = numPresentFormats;
+        }
+
+        VkInstance()->FreeMem(pAllocMem);
+    }
+    else
     {
         // Windowed Presents
 
@@ -2685,9 +2846,44 @@ VkResult PhysicalDevice::GetPhysicalDevicePresentRectangles(
     uint32_t*                                   pRectCount,
     VkRect2D*                                   pRects)
 {
-    VK_NOT_IMPLEMENTED;
+    VK_ASSERT(pRectCount != nullptr);
+    VkResult result = VK_SUCCESS;
 
-    return VK_ERROR_INITIALIZATION_FAILED;
+    if (pRects != nullptr)
+    {
+        if (*pRectCount > 0)
+        {
+            Surface* pSurface = Surface::ObjectFromHandle(surface);
+
+            Pal::OsDisplayHandle     osDisplayHandle     = 0;
+            VkSurfaceCapabilitiesKHR surfaceCapabilities = {};
+
+            result = GetSurfaceCapabilities(
+                surface, osDisplayHandle, &surfaceCapabilities);
+
+            if (result == VK_SUCCESS)
+            {
+                // TODO: We don't support VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_MULTI_DEVICE_BIT_KHR
+                //       so just return a single rect matching the surface.
+                VK_ASSERT(pRects != nullptr);
+                pRects[0].offset.x = 0;
+                pRects[0].offset.y = 0;
+                pRects[0].extent   = surfaceCapabilities.currentExtent;
+
+                *pRectCount = 1;
+            }
+        }
+        else
+        {
+            result = VK_INCOMPLETE;
+        }
+    }
+    else
+    {
+        *pRectCount = 1;
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -2770,6 +2966,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CREATE_RENDERPASS2));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HDR_METADATA));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_INFO));
 
     if ((pPhysicalDevice == nullptr) ||
@@ -2964,12 +3161,15 @@ void PhysicalDevice::PopulateQueueFamilies()
             uint32_t palImageLayoutFlag = 0;
             uint32_t transferGranularityOverride = 0;
 
+            m_queueFamilies[m_queueFamilyCount].validShaderStages = 0;
+
             switch (engineType)
             {
             case Pal::EngineTypeUniversal:
                 palImageLayoutFlag            = Pal::LayoutUniversalEngine;
                 transferGranularityOverride   = m_settings.transferGranularityUniversalOverride;
-                m_queueFamilies[m_queueFamilyCount].validShaderStages = VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT;
+                m_queueFamilies[m_queueFamilyCount].validShaderStages = VK_SHADER_STAGE_ALL_GRAPHICS |
+                                                                        VK_SHADER_STAGE_COMPUTE_BIT;
                 break;
             case Pal::EngineTypeCompute:
                 pComputeQueueFamilyProperties = &m_queueFamilies[m_queueFamilyCount].properties;
@@ -2977,7 +3177,7 @@ void PhysicalDevice::PopulateQueueFamilies()
             case Pal::EngineTypeExclusiveCompute:
                 palImageLayoutFlag            = Pal::LayoutComputeEngine;
                 transferGranularityOverride   = m_settings.transferGranularityComputeOverride;
-                m_queueFamilies[m_queueFamilyCount].validShaderStages = VK_SHADER_STAGE_COMPUTE_BIT;
+                m_queueFamilies[m_queueFamilyCount].validShaderStages |= VK_SHADER_STAGE_COMPUTE_BIT;
                 break;
             case Pal::EngineTypeDma:
                 pTransferQueueFamilyProperties = &m_queueFamilies[m_queueFamilyCount].properties;
@@ -3774,7 +3974,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pShaderCoreProperties->computeUnitsPerShaderArray = props.gfxipProperties.shaderCore.numCusPerShaderArray;
             pShaderCoreProperties->simdPerComputeUnit = props.gfxipProperties.shaderCore.numSimdsPerCu;
             pShaderCoreProperties->wavefrontsPerSimd = props.gfxipProperties.shaderCore.numWavefrontsPerSimd;
-            pShaderCoreProperties->wavefrontSize = props.gfxipProperties.shaderCore.nativeWavefrontSize;
+            pShaderCoreProperties->wavefrontSize = props.gfxipProperties.shaderCore.maxWavefrontSize;
 
             // Scalar General Purpose Registers (SGPR)
             pShaderCoreProperties->sgprsPerSimd = props.gfxipProperties.shaderCore.sgprsPerSimd;
@@ -5402,10 +5602,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(
     uint32_t*                                   pRectCount,
     VkRect2D*                                   pRects)
 {
-    // TODO: Currently we just return zero rectangles, as we don't support
-    // VK_DEVICE_GROUP_PRESENT_MODE_LOCAL_MULTI_DEVICE_BIT_KHR.
-    *pRectCount = 0;
-    return VK_SUCCESS;
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetPhysicalDevicePresentRectangles(
+                                                surface,
+                                                pRectCount,
+                                                pRects);
 }
 
 // =====================================================================================================================

@@ -295,6 +295,8 @@ public:
         EXT_BUFFER_DEVICE_ADDRESS,
         KHR_UNIFORM_BUFFER_STANDARD_LAYOUT,
 
+        EXT_PIPELINE_CREATION_FEEDBACK,
+
         Count
     };
 };

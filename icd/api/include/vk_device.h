@@ -568,7 +568,6 @@ protected:
 
     VkResult CreateBltMsaaStates();
     void DestroyInternalPipelines();
-
     void InitSamplePatternPalette(Pal::SamplePatternPalette* pPalette) const;
 
     VkResult InitSwCompositing(uint32_t deviceIdx);

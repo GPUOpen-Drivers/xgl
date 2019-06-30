@@ -114,6 +114,13 @@ struct PipelineBindState
     uint32_t pushConstData[MaxPushConstRegCount];
 };
 
+enum PipelineBind
+{
+    PipelineBindCompute = 0,
+    PipelineBindGraphics,
+    PipelineBindCount
+};
+
 // Members of CmdBufferRenderState that are different for each GPU
 struct PerGpuRenderState
 {
@@ -122,7 +129,7 @@ struct PerGpuRenderState
     const Pal::IColorBlendState*    pColorBlendState;
     const Pal::IDepthStencilState*  pDepthStencilState;
     // Currently bound descriptor sets and dynamic offsets (relative to base = 00)
-    uint32_t setBindingData[static_cast<uint32_t>(Pal::PipelineBindPoint::Count)][MaxBindingRegCount];
+    uint32_t setBindingData[PipelineBindCount][MaxBindingRegCount];
 };
 
 // Members of CmdBufferRenderState that are the same for each GPU
@@ -131,7 +138,6 @@ struct AllGpuRenderState
     const GraphicsPipeline*        pGraphicsPipeline;
     const ComputePipeline*         pComputePipeline;
     const RenderPass*              pRenderPass;
-    const Framebuffer*             pFramebuffer;
     const Pal::IMsaaState* const * pBltMsaaStates;
 
     // These tokens describe the current "static" values of pieces of Vulkan render state.  These are set by pipelines
@@ -153,6 +159,9 @@ struct AllGpuRenderState
         uint32_t samplePattern;
     } staticTokens;
 
+    // The Imageless Frambuffer extension allows setting this at RenderPassBind
+    Framebuffer*             pFramebuffer;
+
     // Value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
     // defined by the last bound GraphicsPipeline, which was not nullptr.
     bool ViewIndexFromDeviceIndex;
@@ -163,7 +172,13 @@ struct AllGpuRenderState
 // =====================================================================================================================
     // Keep pipelineState as the first member of the section that is selectively reset.  It is used to compute how large
     // the first part is for the memset in CmdBuffer::ResetState().
-    PipelineBindState       pipelineState[static_cast<uint32_t>(Pal::PipelineBindPoint::Count)];
+    PipelineBindState       pipelineState[PipelineBindCount];
+
+    // Which Vulkan PipelineBind enum currently owns the state of each PAL pipeline bind point.  This is
+    // relevant because e.g. multiple Vulkan pipeline bind points are implemented as compute pipelines and used through
+    // the same PAL pipeline bind point.
+    PipelineBind            palToApiPipeline[static_cast<size_t>(Pal::PipelineBindPoint::Count)];
+
     Pal::ScissorRectParams  scissor;
     Pal::ViewportParams     viewport;
 };
@@ -867,9 +882,23 @@ private:
         const VkImageMemoryBarrier*  pImageMemoryBarriers,
         Pal::BarrierInfo*            pBarrier);
 
+    enum RebindUserDataFlag : uint32_t
+    {
+        RebindUserDataDescriptorSets = 0x1,
+        RebindUserDataPushConstants  = 0x2,
+        RebindUserDataAll            = ~0u
+    };
+
+    typedef uint32_t RebindUserDataFlags;
+
+    RebindUserDataFlags SwitchUserDataLayouts(
+        PipelineBind           apiBindPoint,
+        const UserDataLayout*  pUserDataLayout);
+
     void RebindCompatibleUserData(
-        uint32_t               bindPoint,
-        const UserDataLayout*  pNewLayout);
+        PipelineBind           apiBindPoint,
+        Pal::PipelineBindPoint palBindPoint,
+        RebindUserDataFlags    flags);
 
     void PalBindPipeline(
         VkPipelineBindPoint     pipelineBindPoint,
@@ -926,6 +955,24 @@ private:
 
     template <uint32_t numPalDevices>
     static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
+
+    VK_INLINE bool PalPipelineBindingOwnedBy(
+        Pal::PipelineBindPoint palBind,
+        PipelineBind apiBind
+        ) const;
+
+    VK_INLINE static void ConvertPipelineBindPoint(
+        VkPipelineBindPoint pipelineBindPoint,
+        Pal::PipelineBindPoint* pPalBindPoint,
+        PipelineBind*           pApiBind);
+
+    VK_INLINE void WritePushConstants(
+        PipelineBind           apiBindPoint,
+        Pal::PipelineBindPoint palBindPoint,
+        const PipelineLayout*  pLayout,
+        uint32_t               startInDwords,
+        uint32_t               lengthInDwords,
+        const uint32_t* const  pInputValues);
 
     Device* const                 m_pDevice;
     CmdPool* const                m_pCmdPool;

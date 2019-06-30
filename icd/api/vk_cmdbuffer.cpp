@@ -678,6 +678,10 @@ void CmdBuffer::PalCmdDraw(
     uint32_t firstInstance,
     uint32_t instanceCount)
 {
+    // Currently only Vulkan graphics pipelines use PAL graphics pipeline bindings so there's no need to
+    // add a delayed validation check for graphics.
+    VK_ASSERT(PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Graphics, PipelineBindGraphics));
+
     utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
@@ -698,6 +702,10 @@ void CmdBuffer::PalCmdDrawIndexed(
     uint32_t firstInstance,
     uint32_t instanceCount)
 {
+    // Currently only Vulkan graphics pipelines use PAL graphics pipeline bindings so there's no need to
+    // add a delayed validation check for graphics.
+    VK_ASSERT(PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Graphics, PipelineBindGraphics));
+
     utils::IterateMask deviceGroup(m_curDeviceMask);
     while (deviceGroup.Iterate())
     {
@@ -1203,7 +1211,12 @@ void CmdBuffer::ResetPipelineState()
 
         bindIdx++;
     }
-    while (bindIdx < static_cast<uint32_t>(Pal::PipelineBindPoint::Count));
+    while (bindIdx < PipelineBindCount);
+
+    static_assert(VK_ARRAY_SIZE(m_state.allGpuState.palToApiPipeline) == 2, "");
+
+    m_state.allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Compute)]  = PipelineBindCompute;
+    m_state.allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Graphics)] = PipelineBindGraphics;
 
     m_state.allGpuState.scissor.count             = 0;
     m_state.allGpuState.viewport.count            = 0;
@@ -1284,6 +1297,30 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
 
     return result;
 }
+
+// =====================================================================================================================
+void CmdBuffer::ConvertPipelineBindPoint(
+    VkPipelineBindPoint     pipelineBindPoint,
+    Pal::PipelineBindPoint* pPalBindPoint,
+    PipelineBind*           pApiBind)
+{
+    switch (pipelineBindPoint)
+    {
+    case VK_PIPELINE_BIND_POINT_GRAPHICS:
+        *pPalBindPoint = Pal::PipelineBindPoint::Graphics;
+        *pApiBind = PipelineBindGraphics;
+        break;
+    case VK_PIPELINE_BIND_POINT_COMPUTE:
+        *pPalBindPoint = Pal::PipelineBindPoint::Compute;
+        *pApiBind = PipelineBindCompute;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        *pPalBindPoint = Pal::PipelineBindPoint::Compute;
+        *pApiBind = PipelineBindCompute;
+    }
+}
+
 // =====================================================================================================================
 // Bind pipeline to command buffer
 void CmdBuffer::BindPipeline(
@@ -1294,15 +1331,17 @@ void CmdBuffer::BindPipeline(
 
     static_assert(VK_PIPELINE_BIND_POINT_RANGE_SIZE == 2, "New pipeline bind point added");
 
-    uint32_t bindPoint = 0;
+    PipelineBind apiBindPoint;
+    Pal::PipelineBindPoint palBindPoint;
+
+    ConvertPipelineBindPoint(pipelineBindPoint, &palBindPoint, &apiBindPoint);
+
     const UserDataLayout* pNewUserDataLayout = nullptr;
 
-    switch (static_cast<int32_t>(pipelineBindPoint))
+    switch (apiBindPoint)
     {
-    case VK_PIPELINE_BIND_POINT_COMPUTE:
+    case PipelineBindCompute:
         {
-            bindPoint = static_cast<uint32_t>(Pal::PipelineBindPoint::Compute);
-
             if (pipeline != VK_NULL_HANDLE)
             {
                 const ComputePipeline* pPipeline       = NonDispatchable<VkPipeline,
@@ -1335,10 +1374,8 @@ void CmdBuffer::BindPipeline(
         }
         break;
 
-    case VK_PIPELINE_BIND_POINT_GRAPHICS:
+    case PipelineBindGraphics:
         {
-            bindPoint = static_cast<uint32_t>(Pal::PipelineBindPoint::Graphics);
-
             if (pipeline != VK_NULL_HANDLE)
             {
                 const GraphicsPipeline* pPipeline = NonDispatchable<VkPipeline, GraphicsPipeline>::ObjectFromHandle(pipeline);
@@ -1368,10 +1405,23 @@ void CmdBuffer::BindPipeline(
         break;
     }
 
+    RebindUserDataFlags rebindFlags = 0;
+
+    if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) == false)
+    {
+        rebindFlags |= RebindUserDataAll;
+
+        m_state.allGpuState.palToApiPipeline[static_cast<uint32_t>(palBindPoint)] = apiBindPoint;
+    }
+
     if (pNewUserDataLayout != nullptr)
     {
-        RebindCompatibleUserData(bindPoint, pNewUserDataLayout);
+        rebindFlags |= SwitchUserDataLayouts(apiBindPoint, pNewUserDataLayout);
+    }
 
+    if (rebindFlags != 0)
+    {
+         RebindCompatibleUserData(apiBindPoint, palBindPoint, rebindFlags);
     }
 
     DbgBarrierPostCmd(DbgBarrierBindPipeline);
@@ -1382,63 +1432,91 @@ void CmdBuffer::BindPipeline(
 // This function will compare the compatibility of those layouts and reprogram any user data to maintain previously-
 // written pipeline resources to make them available in the correct locations of the new pipeline layout.
 // compatible with the new layout remain correctly bound.
-void CmdBuffer::RebindCompatibleUserData(
-    uint32_t               bindPoint,
-    const UserDataLayout*  pUserDataLayout)
+CmdBuffer::RebindUserDataFlags CmdBuffer::SwitchUserDataLayouts(
+    PipelineBind           apiBindPoint,
+    const UserDataLayout*  pNewUserDataLayout)
 {
-    VK_ASSERT(pUserDataLayout != nullptr);
+    VK_ASSERT(pNewUserDataLayout != nullptr);
 
-    Pal::PipelineBindPoint palBindPoint = static_cast<Pal::PipelineBindPoint>(bindPoint);
-    PipelineBindState* pBindState = &m_state.allGpuState.pipelineState[bindPoint];
+    PipelineBindState* pBindState = &m_state.allGpuState.pipelineState[apiBindPoint];
 
-    if (memcmp(pUserDataLayout, &pBindState->userDataLayout, sizeof(pBindState->userDataLayout)) != 0)
+    RebindUserDataFlags flags = 0;
+
+    if (memcmp(pNewUserDataLayout, &pBindState->userDataLayout, sizeof(pBindState->userDataLayout)) != 0)
     {
-        const UserDataLayout& userDataLayout = *pUserDataLayout;
+        const UserDataLayout& newUserDataLayout = *pNewUserDataLayout;
+        const UserDataLayout& curUserDataLayout = pBindState->userDataLayout;
 
         // Rebind descriptor set bindings if necessary
-        if (userDataLayout.setBindingRegBase  != pBindState->userDataLayout.setBindingRegBase ||
-            userDataLayout.setBindingRegCount != pBindState->userDataLayout.setBindingRegCount)
+        if ((newUserDataLayout.setBindingRegBase  != curUserDataLayout.setBindingRegBase) ||
+            (newUserDataLayout.setBindingRegCount != curUserDataLayout.setBindingRegCount))
         {
-            const uint32_t count = Util::Min(userDataLayout.setBindingRegCount, pBindState->boundSetCount);
-
-            if (count > 0)
-            {
-                uint32_t deviceIdx = 0;
-                do
-                {
-                    PalCmdBuffer(deviceIdx)->CmdSetUserData(palBindPoint,
-                                                            userDataLayout.setBindingRegBase,
-                                                            count,
-                                                            m_state.perGpuState[deviceIdx].setBindingData[bindPoint]);
-
-                    deviceIdx++;
-                } while (deviceIdx < m_pDevice->NumPalDevices());
-            }
+            flags |= RebindUserDataDescriptorSets;
         }
 
         // Rebind push constants if necessary
-        if (userDataLayout.pushConstRegBase  != pBindState->userDataLayout.pushConstRegBase ||
-            userDataLayout.pushConstRegCount != pBindState->userDataLayout.pushConstRegCount)
+        if ((newUserDataLayout.pushConstRegBase  != curUserDataLayout.pushConstRegBase) ||
+            (newUserDataLayout.pushConstRegCount != curUserDataLayout.pushConstRegCount))
         {
-            const uint32_t count = Util::Min(userDataLayout.pushConstRegCount, pBindState->pushedConstCount);
-
-            if (count > 0)
-            {
-                const uint32_t perDeviceStride = 0;
-                // perDeviceStride is zero here because push constant data is replicated for all devices.
-                // Note: There might be interesting use cases where don't want to clone this data.
-
-                PalCmdBufferSetUserData(
-                    palBindPoint,
-                    userDataLayout.pushConstRegBase,
-                    count,
-                    perDeviceStride,
-                    pBindState->pushConstData);
-            }
+            flags |= RebindUserDataPushConstants;
         }
 
         // Cache the new user data layout information
-        pBindState->userDataLayout = userDataLayout;
+        pBindState->userDataLayout = newUserDataLayout;
+    }
+
+    return flags;
+}
+
+// =====================================================================================================================
+// Called during vkCmdBindPipeline when something requires rebinding API-provided top-level user data (descriptor
+// sets, push constants, etc.)
+void CmdBuffer::RebindCompatibleUserData(
+    PipelineBind           apiBindPoint,
+    Pal::PipelineBindPoint palBindPoint,
+    RebindUserDataFlags    flags)
+{
+    VK_ASSERT(flags != 0);
+
+    const PipelineBindState& bindState   = m_state.allGpuState.pipelineState[apiBindPoint];
+    const UserDataLayout& userDataLayout = bindState.userDataLayout;
+
+    if ((flags & RebindUserDataDescriptorSets) != 0)
+    {
+        const uint32_t count = Util::Min(userDataLayout.setBindingRegCount, bindState.boundSetCount);
+
+        if (count > 0)
+        {
+            uint32_t deviceIdx = 0;
+            do
+            {
+                PalCmdBuffer(deviceIdx)->CmdSetUserData(palBindPoint,
+                    userDataLayout.setBindingRegBase,
+                    count,
+                    m_state.perGpuState[deviceIdx].setBindingData[apiBindPoint]);
+
+                deviceIdx++;
+            } while (deviceIdx < m_pDevice->NumPalDevices());
+        }
+    }
+
+    if ((flags & RebindUserDataPushConstants) != 0)
+    {
+        const uint32_t count = Util::Min(userDataLayout.pushConstRegCount, bindState.pushedConstCount);
+
+        if (count > 0)
+        {
+            const uint32_t perDeviceStride = 0;
+            // perDeviceStride is zero here because push constant data is replicated for all devices.
+            // Note: There might be interesting use cases where don't want to clone this data.
+
+            PalCmdBufferSetUserData(
+                palBindPoint,
+                userDataLayout.pushConstRegBase,
+                count,
+                perDeviceStride,
+                bindState.pushConstData);
+        }
     }
 }
 
@@ -1550,12 +1628,13 @@ void CmdBuffer::BindDescriptorSets(
 
     if (setCount > 0)
     {
-        const Pal::PipelineBindPoint bindPoint = (pipelineBindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS) ?
-            Pal::PipelineBindPoint::Graphics :
-            Pal::PipelineBindPoint::Compute;
+        Pal::PipelineBindPoint palBindPoint;
+        PipelineBind           apiBindPoint;
+
+        ConvertPipelineBindPoint(pipelineBindPoint, &palBindPoint, &apiBindPoint);
 
         // Get the current binding state in the command buffer
-        PipelineBindState* pBindState = &m_state.allGpuState.pipelineState[static_cast<uint32_t>(bindPoint)];
+        PipelineBindState* pBindState = &m_state.allGpuState.pipelineState[apiBindPoint];
 
         const PipelineLayout* pLayout = PipelineLayout::ObjectFromHandle(layout);
 
@@ -1585,7 +1664,7 @@ void CmdBuffer::BindDescriptorSets(
                         pDescriptorSets[i],
                         deviceIdx,
                         &(m_state.perGpuState[deviceIdx].
-                            setBindingData[static_cast<uint32_t>(bindPoint)][setLayoutInfo.dynDescDataRegOffset]),
+                            setBindingData[apiBindPoint][setLayoutInfo.dynDescDataRegOffset]),
                         pDynamicOffsets,
                         setLayoutInfo.dynDescCount,
                         robustBufferAccess);
@@ -1607,7 +1686,7 @@ void CmdBuffer::BindDescriptorSets(
                         pDescriptorSets[i],
                         deviceIdx,
                         &(m_state.perGpuState[deviceIdx].
-                            setBindingData[static_cast<uint32_t>(bindPoint)][setLayoutInfo.setPtrRegOffset]));
+                            setBindingData[apiBindPoint][setLayoutInfo.setPtrRegOffset]));
 
                     deviceIdx++;
                 } while (deviceIdx < numPalDevices);
@@ -1635,17 +1714,17 @@ void CmdBuffer::BindDescriptorSets(
             // layout.  Otherwise, what's happening is that the application is binding descriptor sets for a future
             // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant.  A
             // future vkCmdBindPipeline will reprogram the user data register.
-            if (pBindState->userDataLayout.setBindingRegBase == layoutInfo.userDataLayout.setBindingRegBase)
+            if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
+                (pBindState->userDataLayout.setBindingRegBase == layoutInfo.userDataLayout.setBindingRegBase))
             {
                 uint32_t deviceIdx = 0;
                 do
                 {
                     PalCmdBuffer(deviceIdx)->CmdSetUserData(
-                        bindPoint,
+                        palBindPoint,
                         pBindState->userDataLayout.setBindingRegBase + rangeOffsetBegin,
                         rangeRegCount,
-                        &(m_state.perGpuState[deviceIdx].
-                            setBindingData[static_cast<uint32_t>(bindPoint)][rangeOffsetBegin]));
+                        &(m_state.perGpuState[deviceIdx].setBindingData[apiBindPoint][rangeOffsetBegin]));
 
                     deviceIdx++;
                 }
@@ -1655,6 +1734,15 @@ void CmdBuffer::BindDescriptorSets(
     }
 
     DbgBarrierPostCmd(DbgBarrierBindSetsPushConstants);
+}
+
+// =====================================================================================================================
+VK_INLINE bool CmdBuffer::PalPipelineBindingOwnedBy(
+    Pal::PipelineBindPoint palBind,
+    PipelineBind           apiBind
+    ) const
+{
+    return m_state.allGpuState.palToApiPipeline[static_cast<uint32_t>(palBind)] == apiBind;
 }
 
 // =====================================================================================================================
@@ -1864,6 +1952,11 @@ void CmdBuffer::Dispatch(
 {
     DbgBarrierPreCmd(DbgBarrierDispatch);
 
+    if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
+    {
+        RebindCompatibleUserData(PipelineBindCompute, Pal::PipelineBindPoint::Compute, RebindUserDataAll);
+    }
+
     PalCmdDispatch(x, y, z);
 
     DbgBarrierPostCmd(DbgBarrierDispatch);
@@ -1880,6 +1973,11 @@ void CmdBuffer::DispatchOffset(
 {
     DbgBarrierPreCmd(DbgBarrierDispatch);
 
+    if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
+    {
+        RebindCompatibleUserData(PipelineBindCompute, Pal::PipelineBindPoint::Compute, RebindUserDataAll);
+    }
+
     PalCmdDispatchOffset(base_x, base_y, base_z, dim_x, dim_y, dim_z);
 
     DbgBarrierPostCmd(DbgBarrierDispatch);
@@ -1891,6 +1989,11 @@ void CmdBuffer::DispatchIndirect(
     VkDeviceSize offset)
 {
     DbgBarrierPreCmd(DbgBarrierDispatchIndirect);
+
+    if (PalPipelineBindingOwnedBy(Pal::PipelineBindPoint::Compute, PipelineBindCompute) == false)
+    {
+        RebindCompatibleUserData(PipelineBindCompute, Pal::PipelineBindPoint::Compute, RebindUserDataAll);
+    }
 
     Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
 
@@ -3895,8 +3998,8 @@ void CmdBuffer::SetSampleLocations(
     const VkSampleLocationsInfoEXT* pSampleLocationsInfo)
 {
     VK_ASSERT((m_state.allGpuState.pGraphicsPipeline != nullptr) &&
-        (m_state.allGpuState.pGraphicsPipeline->PipelineSetsState(
-            DynamicStatesInternal::SAMPLE_LOCATIONS_EXT) == false));
+              (m_state.allGpuState.pGraphicsPipeline->ContainsStaticState(
+                    DynamicStatesInternal::SAMPLE_LOCATIONS_EXT) == false));
 
     Pal::MsaaQuadSamplePattern locations;
     uint32_t sampleLocationsPerPixel = (uint32_t)pSampleLocationsInfo->sampleLocationsPerPixel;
@@ -4859,6 +4962,49 @@ void CmdBuffer::EndRenderPass()
 }
 
 // =====================================================================================================================
+VK_INLINE void CmdBuffer::WritePushConstants(
+    PipelineBind           apiBindPoint,
+    Pal::PipelineBindPoint palBindPoint,
+    const PipelineLayout*  pLayout,
+    uint32_t               startInDwords,
+    uint32_t               lengthInDwords,
+    const uint32_t* const  pInputValues)
+{
+    PipelineBindState* pBindState = &m_state.allGpuState.pipelineState[apiBindPoint];
+    Pal::uint32* pUserData = reinterpret_cast<Pal::uint32*>(&pBindState->pushConstData[0]);
+    uint32_t* pUserDataPtr = pUserData + startInDwords;
+
+    for (uint32_t i = 0; i < lengthInDwords; i++)
+    {
+        pUserDataPtr[i] = pInputValues[i];
+    }
+
+    pBindState->pushedConstCount = Util::Max(pBindState->pushedConstCount, startInDwords + lengthInDwords);
+
+    const UserDataLayout& userDataLayout = pLayout->GetInfo().userDataLayout;
+
+    // Program the user data register only if the current user data layout base matches that of the given
+    // layout.  Otherwise, what's happening is that the application is pushing constants for a future
+    // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant because
+    // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
+    if (PalPipelineBindingOwnedBy(palBindPoint, apiBindPoint) &&
+        pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase)
+    {
+        utils::IterateMask deviceGroup(m_curDeviceMask);
+        while (deviceGroup.Iterate())
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+
+            PalCmdBuffer(deviceIdx)->CmdSetUserData(
+                palBindPoint,
+                pBindState->userDataLayout.pushConstRegBase + startInDwords,
+                lengthInDwords,
+                pUserDataPtr);
+        }
+    }
+}
+
+// =====================================================================================================================
 // Set push constant values
 void CmdBuffer::PushConstants(
     VkPipelineLayout                            layout,
@@ -4878,92 +5024,24 @@ void CmdBuffer::PushConstants(
 
     stageFlags &= m_validShaderStageFlags;
 
-    if (stageFlags & VK_SHADER_STAGE_COMPUTE_BIT)
+    if ((stageFlags & VK_SHADER_STAGE_COMPUTE_BIT) != 0)
     {
-        uint32_t bindingPoint = static_cast<uint32_t>(Pal::PipelineBindPoint::Compute);
-        PipelineBindState* pBindState = &m_state.allGpuState.pipelineState[bindingPoint];
-
-        Pal::uint32* pUserData = reinterpret_cast<Pal::uint32*>(&pBindState->pushConstData[0]);
-        uint32_t* pUserDataPtr = pUserData + startInDwords;
-
-        for (uint32_t i = 0; i < lengthInDwords; i++)
-        {
-            pUserDataPtr[i] = pInputValues[i];
-        }
-
-        pBindState->pushedConstCount = Util::Max(pBindState->pushedConstCount, startInDwords + lengthInDwords);
-
-        // We need access to the user data layout, but avoid dereferencing the pipeline layout if we can help it.
-
-        // In response to the above comment, We used to store the pipeline layout in the PiplineBindPoint and check
-        // if we had the same layouts and then just grab the userDataLayout from PipelineBindPoint if they were the same.
-        // Since we no longer store the PipelineLayout in PipelineBindPoint, we have no way of knowing whether the
-        // UserDataLayout in PipelineBindPoint is upto date so we must always deference the pipeline layout.
-        const UserDataLayout& userDataLayout = pLayout->GetInfo().userDataLayout;
-
-        // Program the user data register only if the current user data layout base matches that of the given
-        // layout.  Otherwise, what's happening is that the application is pushing constants for a future
-        // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant because
-        // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
-        if (pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase)
-        {
-            utils::IterateMask deviceGroup(m_curDeviceMask);
-            while (deviceGroup.Iterate())
-            {
-                const uint32_t deviceIdx = deviceGroup.Index();
-
-                PalCmdBuffer(deviceIdx)->CmdSetUserData(
-                    Pal::PipelineBindPoint::Compute,
-                    pBindState->userDataLayout.pushConstRegBase + startInDwords,
-                    lengthInDwords,
-                    pUserDataPtr);
-            }
-        }
+        WritePushConstants(PipelineBindCompute,
+                           Pal::PipelineBindPoint::Compute,
+                           pLayout,
+                           startInDwords,
+                           lengthInDwords,
+                           pInputValues);
     }
 
-    stageFlags &= ~VK_SHADER_STAGE_COMPUTE_BIT;
-
-    if (stageFlags != 0)
+    if ((stageFlags & VK_SHADER_STAGE_ALL_GRAPHICS) != 0)
     {
-        uint32_t bindingPoint = static_cast<uint32_t>(Pal::PipelineBindPoint::Graphics);
-        PipelineBindState* pBindState = &m_state.allGpuState.pipelineState[bindingPoint];
-
-        Pal::uint32* pUserData = reinterpret_cast<Pal::uint32*>(&pBindState->pushConstData[0]);
-        uint32_t* pUserDataPtr = pUserData + startInDwords;
-
-        for (uint32_t i = 0; i < lengthInDwords; i++)
-        {
-            pUserDataPtr[i] = pInputValues[i];
-        }
-
-        pBindState->pushedConstCount = Util::Max(pBindState->pushedConstCount, startInDwords + lengthInDwords);
-
-        // We need access to the user data layout, but avoid dereferencing the pipeline layout if we can help it.
-
-        // In response to the above comment, We used to store the pipeline layout in the PiplineBindPoint and check
-        // if we had the same layouts and then just grab the userDataLayout from PipelineBindPoint if they were the same.
-        // Since we no longer store the PipelineLayout in PipelineBindPoint, we have no way of knowing whether the
-        // UserDataLayout in PipelineBindPoint is upto date so we must always deference the pipeline layout.
-        const UserDataLayout& userDataLayout = pLayout->GetInfo().userDataLayout;
-
-        // Program the user data register only if the current user data layout base matches that of the given
-        // layout.  Otherwise, what's happening is that the application is pushing constants for a future
-        // pipeline layout (e.g. at the top of the command buffer) and this register write will be redundant because
-        // a future vkCmdBindPipeline will reprogram the user data registers during the rebase.
-        if (pBindState->userDataLayout.pushConstRegBase == userDataLayout.pushConstRegBase)
-        {
-            utils::IterateMask deviceGroup(m_curDeviceMask);
-            while (deviceGroup.Iterate())
-            {
-                const uint32_t deviceIdx = deviceGroup.Index();
-
-                PalCmdBuffer(deviceIdx)->CmdSetUserData(
-                    Pal::PipelineBindPoint::Graphics,
-                    pBindState->userDataLayout.pushConstRegBase + startInDwords,
-                    lengthInDwords,
-                    pUserDataPtr);
-            }
-        }
+        WritePushConstants(PipelineBindGraphics,
+                           Pal::PipelineBindPoint::Graphics,
+                           pLayout,
+                           startInDwords,
+                           lengthInDwords,
+                           pInputValues);
     }
 
     DbgBarrierPostCmd(DbgBarrierBindSetsPushConstants);

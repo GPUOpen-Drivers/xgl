@@ -715,12 +715,7 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_UTILS));
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_DISPLAY));
-
-        if (Instance::IsExtensionEnabledByEnv(VK_EXT_DISPLAY_SURFACE_COUNTER_EXTENSION_NAME)
-           )
-        {
-            supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DISPLAY_SURFACE_COUNTER));
-        }
+        supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DISPLAY_SURFACE_COUNTER));
 
 #if VK_USE_PLATFORM_XLIB_XRANDR_EXT
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_ACQUIRE_XLIB_DISPLAY));

@@ -144,6 +144,9 @@ public:
         const Pal::PresentSwapChainInfo& presentInfo,
         Pal::Result*                     pPresentResult);
 
+    void SetHdrMetadata(
+        const VkHdrMetadataEXT* pMetadata);
+
     void MarkAsDeprecated();
 
 protected:

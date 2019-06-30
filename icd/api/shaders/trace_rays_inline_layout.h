@@ -23,32 +23,6 @@
  *
  **********************************************************************************************************************/
 
-// Bump Major version to match the supported vulkan header file
-// and zero minor and subminor version numbers
-
-#define MKSTR(x) #x
-#define MAKE_VERSION_STRING(x) MKSTR(x)
-
-// This value is used for the VkPhysicalDeviceProperties uint32 driverVersion which is OS agnostic
-#define VULKAN_ICD_MAJOR_VERSION    2
-
-#define VERSION_MAJOR               VULKAN_ICD_MAJOR_VERSION
-#define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
-
-// Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   97
-
-// String version is needed with leading zeros and extra termination (unicode)
-#define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION
-#define VERSION_NUMBER_MINOR_STR    MAKE_VERSION_STRING(VULKAN_ICD_BUILD_VERSION) "\0"
-
-// These values specify the driver ID and driver info string
-#define VULKAN_DRIVER_ID            VK_DRIVER_ID_AMD_OPEN_SOURCE_KHR  // "AMDOPEN"
-#define VULKAN_DRIVER_NAME_STR      "AMD open-source driver"
-#define VULKAN_DRIVER_INFO_STR      ""
-
-// These values tell which version of the conformance test the driver is compliant against
-#define CTS_VERSION_MAJOR           1
-#define CTS_VERSION_MINOR           1
-#define CTS_VERSION_SUBMINOR        1
-#define CTS_VERSION_PATCH           2
+// Pipeline layout of trace_ray_inline_spv.h
+{ Llpc::ResourceMappingNodeType::DescriptorBufferCompact, 2, 0, { 93, 16 } },
+{ Llpc::ResourceMappingNodeType::DescriptorBufferCompact, 2, 2, {93, 17} },

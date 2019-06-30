@@ -157,7 +157,7 @@ namespace vk
         break; \
         case VK_STRUCTURE_TYPE_##NextStructureType_3: \
         { \
-            p##NextType_3 = p##NextType_2##Header; \
+            p##NextType_3 = p##NextType_3##Header; \
         } \
         break; \
         default: \

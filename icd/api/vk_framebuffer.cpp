@@ -132,62 +132,20 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
                          Attachment*                    pAttachments)
     : m_attachmentCount (info.attachmentCount)
 {
+
     for (uint32_t i = 0; i < m_attachmentCount; ++i)
     {
-        const VkImageView& src  = info.pAttachments[i];
-        Attachment* pAttachment = &pAttachments[i];
-        pAttachment->pView      = ImageView::ObjectFromHandle(info.pAttachments[i]);
-        pAttachment->pImage     = pAttachment->pView->GetImage();
-        pAttachment->viewFormat = VkToPalFormat(pAttachment->pView->GetViewFormat());
-        pAttachment->zRange     = pAttachment->pView->GetZRange();
-
+        const VkImageView& src        = info.pAttachments[i];
+        Attachment* pAttachment       = &pAttachments[i];
+        pAttachment->pView            = ImageView::ObjectFromHandle(info.pAttachments[i]);
+        pAttachment->pImage           = pAttachment->pView->GetImage();
+        pAttachment->viewFormat       = VkToPalFormat(pAttachment->pView->GetViewFormat());
+        pAttachment->zRange           = pAttachment->pView->GetZRange();
         pAttachment->subresRangeCount = 0;
-
-        // subresRangeCount and subresRange[] array in Framebuffer::attachment should be use to define the view range.
-        // An imageview does not need to be a color target view or depth/stencil target view (it can be a shader read
-        // only view, or something like that). In that case, we still need to define valid view range, based on the
-        // format, for Vulkan-Pal interface to behavior correctly. AKA, subresRangeCount CANNOT be 0 since for that
-        // PAL will not have proper range to work with when dealing with layout transition.
 
         const Image* pImage = pAttachment->pImage;
 
-        // color format, one range
-        if ((!(pImage->HasDepth())) &&
-            (!(pImage->HasStencil())))
-        {
-            pAttachment->subresRangeCount = 1;
-            pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[0]);
-        }
-        else
-        {
-            // depth/stencil format, 1 or 2 range(s)
-            uint32_t count = 0;
-
-            if (pImage->HasDepth())
-            {
-                pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[count]);
-				pAttachment->subresRange[count].startSubres.aspect = Pal::ImageAspect::Depth;
-                count++;
-            }
-
-            if (pImage->HasStencil())
-            {
-                pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[count]);
-				pAttachment->subresRange[count].startSubres.aspect = Pal::ImageAspect::Stencil;
-                count++;
-            }
-
-            pAttachment->subresRangeCount = count;
-        }
-
-        VK_ASSERT(pAttachment->subresRangeCount > 0);
-        VK_ASSERT(pAttachment->subresRange[0].numMips > 0);
-
-        const Pal::ImageCreateInfo imageInfo = pAttachment->pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
-
-        pAttachment->baseSubresExtent = ComputeLevelDimensions(
-            imageInfo.extent,
-            pAttachment->subresRange[0].startSubres.mipLevel);
+        SetSubresRanges(pImage, pAttachment);
     }
 }
 
@@ -205,6 +163,57 @@ VkResult Framebuffer::Destroy(
 
     // Cannot fail
     return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+// Update the subrange for framebuffer attachments
+void Framebuffer::SetSubresRanges(
+    const Image* pImage,
+    Attachment*  pAttachment)
+{
+    // subresRangeCount and subresRange[] array in Framebuffer::attachment should be use to define the view range.
+    // An imageview does not need to be a color target view or depth/stencil target view (it can be a shader read
+    // only view, or something like that). In that case, we still need to define valid view range, based on the
+    // format, for Vulkan-Pal interface to behavior correctly. AKA, subresRangeCount CANNOT be 0 since for that
+    // PAL will not have proper range to work with when dealing with layout transition.
+
+    // color format, one range
+    if ((!(pImage->HasDepth())) &&
+        (!(pImage->HasStencil())))
+    {
+        pAttachment->subresRangeCount = 1;
+        pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[0]);
+    }
+    else
+    {
+        // depth/stencil format, 1 or 2 range(s)
+        uint32_t count = 0;
+
+        if (pImage->HasDepth())
+        {
+            pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[count]);
+            pAttachment->subresRange[count].startSubres.aspect = Pal::ImageAspect::Depth;
+            count++;
+        }
+
+        if (pImage->HasStencil())
+        {
+            pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[count]);
+            pAttachment->subresRange[count].startSubres.aspect = Pal::ImageAspect::Stencil;
+            count++;
+        }
+
+        pAttachment->subresRangeCount = count;
+    }
+
+    VK_ASSERT(pAttachment->subresRangeCount > 0);
+    VK_ASSERT(pAttachment->subresRange[0].numMips > 0);
+
+    const Pal::ImageCreateInfo imageInfo = pAttachment->pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
+
+    pAttachment->baseSubresExtent = ComputeLevelDimensions(
+        imageInfo.extent,
+        pAttachment->subresRange[0].startSubres.mipLevel);
 }
 
 namespace entry

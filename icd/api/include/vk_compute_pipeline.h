@@ -77,14 +77,6 @@ public:
 
     static void BindNullPipeline(CmdBuffer* pCmdBuffer);
 
-    // This function returns true if any of the bits in the given state mask (corresponding to shifted values of
-    // VK_DYNAMIC_STATE_*) should be programmed by the pipeline when it is bound (instead of by the application via
-    // vkCmdSet*).
-    VK_INLINE bool PipelineSetsState(DynamicStatesInternal dynamicState) const
-    {
-        return ((m_info.staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0);
-    }
-
 protected:
     // Immediate state info that will be written during Bind() but is not
     // encapsulated within a state object.
@@ -93,9 +85,6 @@ protected:
     // are in place.
     struct ImmedInfo
     {
-        // Bitfield to detect which subset of pipeline state is static (written at bind-time).
-        uint32_t                      staticStateMask;
-
         Pal::DynamicComputeShaderInfo computeWaveLimitParams;
 
         // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
@@ -112,6 +101,7 @@ protected:
         const PipelineLayout*                pPipelineLayout,
         PipelineBinaryInfo*                  pPipelineBinary,
         const ImmedInfo&                     immedInfo,
+        uint32_t                             staticStateMask,
         uint64_t                             apiHash);
 
     void CreateStaticState();
@@ -121,6 +111,7 @@ protected:
     struct CreateInfo
     {
         ImmedInfo                              immedInfo;
+        uint32_t                               staticStateMask;
         Pal::ComputePipelineCreateInfo         pipeline;
         const PipelineLayout*                  pLayout;
     };

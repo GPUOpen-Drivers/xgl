@@ -100,10 +100,8 @@ VkResult Memory::Create(
         switch (pHeader->sType)
         {
             case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO:
-                // Get memory requirements calls don't pad to our allocation granularity, which is preferred for
-                // suballocation.  However, PAL requires that we respect this granularity on GPU memory allocs.
-                createInfo.size = Util::Pow2Align(pInfo->allocationSize,
-                                                  palProperties.gpuMemoryProperties.realMemAllocGranularity);
+
+                createInfo.size = pInfo->allocationSize;
 
                 // Calculate the required base address alignment for the given memory type.  These alignments are
                 // roughly worst-case alignments required by images that may be hosted within this memory object.
@@ -1113,7 +1111,6 @@ Pal::IGpuMemory* Memory::PalMemory(uint32_t resourceIndex, uint32_t memoryIndex)
         const bool openSharedMemory = (pBaseMemory->Desc().preferredHeap == Pal::GpuHeap::GpuHeapGartUswc) ||
                                       (pBaseMemory->Desc().preferredHeap == Pal::GpuHeap::GpuHeapGartCacheable);
 
-        Pal::GpuMemoryCreateInfo createInfo = {};
         size_t gpuMemorySize = 0;
         if (openSharedMemory)
         {

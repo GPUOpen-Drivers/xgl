@@ -188,14 +188,6 @@ public:
 
     static void BindNullPipeline(CmdBuffer* pCmdBuffer);
 
-    // This function returns true if any of the bits in the given state mask (corresponding to shifted values of
-    // VK_DYNAMIC_STATE_*) should be programmed by the pipeline when it is bound (instead of by the application via
-    // vkCmdSet*).
-    VK_INLINE bool PipelineSetsState(DynamicStatesInternal dynamicState) const
-    {
-        return ((m_info.staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0);
-    }
-
     // Returns value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
     // defined by flags member of VkGraphicsPipelineCreateInfo.
     bool ViewIndexFromDeviceIndex() const
@@ -216,9 +208,6 @@ protected:
 
         // Input to CmdSetTriangleRasterState:
         Pal::TriangleRasterStateParams triangleRasterState;
-
-        // Bitfield to detect which subset of pipeline state is static (written at bind-time).
-        uint32_t                        staticStateMask;
 
         Pal::BlendConstParams                 blendConstParams;
         Pal::DepthBiasParams                  depthBiasParams;
@@ -252,6 +241,7 @@ protected:
         Pal::IPipeline**                       pPalPipeline,
         const PipelineLayout*                  pLayout,
         const ImmedInfo&                       immedInfo,
+        uint32_t                               staticStateMask,
         const VbBindingInfo&                   vbInfo,
         Pal::IMsaaState**                      pPalMsaa,
         Pal::IColorBlendState**                pPalColorBlend,
@@ -259,7 +249,8 @@ protected:
         uint32_t                               coverageSamples,
         bool                                   viewIndexFromDeviceIndex,
         PipelineBinaryInfo*                    pBinary,
-        uint64_t                               apiHash);
+        uint64_t                               apiHash,
+        Util::MetroHash64&                     palPipelineHasher);
 
     void CreateStaticState();
     void DestroyStaticState(const VkAllocationCallbacks* pAllocator);
@@ -275,6 +266,7 @@ protected:
         Pal::ColorBlendStateCreateInfo              blend;
         Pal::DepthStencilStateCreateInfo            ds;
         ImmedInfo                                   immedInfo;
+        uint32_t                                    staticStateMask;
         const PipelineLayout*                       pLayout;
         uint32_t                                    sampleCoverage;
         VkShaderStageFlagBits                       activeStages;

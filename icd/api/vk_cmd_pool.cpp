@@ -138,7 +138,7 @@ VkResult CmdPool::Create(
                 {
                     palResult = pDevice->PalDevice(deviceIdx)->CreateCmdAllocator(
                         createInfo,
-                        pAllocatorMem,
+                        Util::VoidPtrInc(pAllocatorMem, allocatorSize * deviceIdx),
                         &pPalCmdAllocator[deviceIdx]);
                 }
 

@@ -398,7 +398,7 @@ public:
 
     VK_INLINE uint32_t GetSubgroupSize() const
     {
-        uint32_t subgroupSize = 64;
+        uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
 
         return subgroupSize;
     }

@@ -102,7 +102,7 @@ public:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
-    const UserDataLayout* GetUserDataLayout(void) const { return &m_UserDataLayout; }
+    const UserDataLayout* GetUserDataLayout(void) const { return &m_userDataLayout; }
 
     static VK_FORCEINLINE Pipeline* ObjectFromHandle(VkPipeline pipeline)
     {
@@ -121,10 +121,9 @@ public:
         return m_pPalPipeline[idx];
     }
 
-    uint64_t PalPipelineHash(int32_t idx) const
+    VK_INLINE uint64_t PalPipelineHash() const
     {
-        VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        return m_palPipelineHash[idx];
+        return m_palPipelineHash;
     }
 
     VK_INLINE uint64_t GetApiHash() const
@@ -133,12 +132,19 @@ public:
     VK_INLINE const PipelineBinaryInfo* GetBinary() const
         { return m_pBinary; }
 
+    // This function returns true if any of the bits in the given state mask (corresponding to shifted values of
+    // VK_DYNAMIC_STATE_*) should be programmed by the pipeline when it is bound (instead of by the application via
+    // vkCmdSet*).
+    VK_INLINE bool ContainsStaticState(DynamicStatesInternal dynamicState) const
+        { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0); }
+
 protected:
     Pipeline(
         Device* const         pDevice,
         Pal::IPipeline**      pPalPipeline,
         const PipelineLayout* pLayout,
-        PipelineBinaryInfo*   pBinary);
+        PipelineBinaryInfo*   pBinary,
+        uint32_t              staticStateMask);
 
     virtual ~Pipeline();
 
@@ -151,9 +157,11 @@ protected:
         const VkPipelineShaderStageCreateInfo& desc);
 
     Device* const                      m_pDevice;
-    UserDataLayout                     m_UserDataLayout;
+    UserDataLayout                     m_userDataLayout;
     Pal::IPipeline*                    m_pPalPipeline[MaxPalDevices];
-    uint64_t                           m_palPipelineHash[MaxPalDevices];
+    uint64_t                           m_palPipelineHash; // Unique hash for Pal::Pipeline
+    uint32_t                           m_staticStateMask; // Bitfield to detect which subset of pipeline state is
+                                                          // static (written at bind-time as opposed to via vkCmd*).
     uint64_t                           m_apiHash;
 
 private:

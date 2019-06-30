@@ -37,4 +37,62 @@
 #include "include/khronos/vulkan.h"
 #include "palScreen.h"
 
+namespace vk
+{
+
+// =====================================================================================================================
+class ColorSpaceHelper
+{
+public:
+
+    enum FmtSupport : uint32_t
+    {
+        Fmt_Undefined    = 0x0000,
+
+        Fmt_4bpc         = 0x0001,
+        Fmt_5bpc         = 0x0002,
+        Fmt_6bpc         = 0x0004,
+        Fmt_8bpc_srgb    = 0x0008,
+        Fmt_8bpc_unorm   = 0x0010,
+        Fmt_9bpc         = 0x0020,
+        Fmt_10bpc        = 0x0040,
+        Fmt_11bpc        = 0x0080,
+        Fmt_12bpc        = 0x0100,
+        Fmt_16bpc_unorm  = 0x0200,
+        Fmt_16bpc_sfloat = 0x0400,
+        Fmt_32bpc        = 0x0800,
+
+        Fmt_8bpc     = Fmt_8bpc_srgb   | Fmt_8bpc_unorm,
+        Fmt_16bpc    = Fmt_16bpc_unorm | Fmt_16bpc_sfloat,
+        Fmt_KnownHDR = Fmt_10bpc | Fmt_11bpc | Fmt_12bpc | Fmt_16bpc,
+        Fmt_All      = Fmt_4bpc  | Fmt_5bpc  | Fmt_6bpc  | Fmt_8bpc  | Fmt_KnownHDR | Fmt_32bpc,
+
+        Fmt_FreeSync2 = Fmt_10bpc | Fmt_16bpc,
+    };
+
+    struct Fmts
+    {
+        VkColorSpaceKHR     colorSpace;
+        FmtSupport          fmtSupported;
+    };
+
+    static VkResult GetSupportedFormats(
+        Pal::ScreenColorSpace   palColorSpaceMask,
+        uint32_t*               pFormatCount,
+        Fmts*                   pFormats);
+
+    static bool IsFormatColorSpaceCompatible(
+        Pal::ChNumFormat        palFormat,
+        FmtSupport              bitSupport)
+    {
+        return (GetBitFormat(palFormat) & bitSupport) != 0;
+    }
+
+private:
+
+    static FmtSupport GetBitFormat(Pal::ChNumFormat palFormat);
+};
+
+} //namespace vk
+
 #endif // __COLOR_SPACE_HELPER_H__

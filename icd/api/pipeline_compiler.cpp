@@ -700,12 +700,67 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 }
 
 // =====================================================================================================================
+// If provided, obtains the the pipeline creation feedback create info pointer and clears the feedback flags.
+void PipelineCompiler::GetPipelineCreationInfoNext(
+        const VkStructHeader*                             pHeader,
+        const VkPipelineCreationFeedbackCreateInfoEXT**   ppPipelineCreationFeadbackCreateInfo)
+{
+    VK_ASSERT(ppPipelineCreationFeadbackCreateInfo != nullptr);
+    for ( ; pHeader != nullptr; pHeader = pHeader->pNext)
+    {
+        switch (static_cast<int>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_PIPELINE_CREATION_FEEDBACK_CREATE_INFO_EXT:
+            *ppPipelineCreationFeadbackCreateInfo =
+                reinterpret_cast<const VkPipelineCreationFeedbackCreateInfoEXT*>(pHeader);
+            VK_ASSERT((*ppPipelineCreationFeadbackCreateInfo)->pPipelineCreationFeedback != nullptr);
+            (*ppPipelineCreationFeadbackCreateInfo)->pPipelineCreationFeedback->flags = 0;
+            if ((*ppPipelineCreationFeadbackCreateInfo)->pPipelineStageCreationFeedbacks != nullptr)
+            {
+                for (uint32_t i = 0; i < (*ppPipelineCreationFeadbackCreateInfo)->pipelineStageCreationFeedbackCount; i++)
+                {
+                    (*ppPipelineCreationFeadbackCreateInfo)->pPipelineStageCreationFeedbacks[i].flags = 0;
+                }
+            }
+            break;
+        default:
+            break;
+        }
+    }
+}
+
+// =====================================================================================================================
+VkResult PipelineCompiler::SetPipelineCreationFeedbackInfo(
+    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo,
+    const PipelineCreationFeedback*                pPipelineFeedback)
+{
+    if (pPipelineCreationFeadbackCreateInfo != nullptr)
+    {
+        if (pPipelineFeedback->feedbackValid)
+        {
+            pPipelineCreationFeadbackCreateInfo->pPipelineCreationFeedback->flags |=
+                VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT_EXT;
+        }
+        if (pPipelineFeedback->hitApplicationCache)
+        {
+            pPipelineCreationFeadbackCreateInfo->pPipelineCreationFeedback->flags |=
+                VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT_EXT;
+        }
+        pPipelineCreationFeadbackCreateInfo->pPipelineCreationFeedback->duration =
+            pPipelineFeedback->duration;
+    }
+
+    return VK_SUCCESS;
+}
+
+// =====================================================================================================================
 // Converts Vulkan graphics pipeline parameters to an internal structure
 VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
-    Device*                             pDevice,
-    const VkGraphicsPipelineCreateInfo* pIn,
-    GraphicsPipelineCreateInfo*         pCreateInfo,
-    VbBindingInfo*                      pVbInfo)
+    Device*                                         pDevice,
+    const VkGraphicsPipelineCreateInfo*             pIn,
+    GraphicsPipelineCreateInfo*                     pCreateInfo,
+    VbBindingInfo*                                  pVbInfo,
+    const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo)
 {
     VkResult               result    = VK_SUCCESS;
     const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
@@ -717,6 +772,12 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pIn,
         GRAPHICS_PIPELINE_CREATE_INFO)
 
+    if ((pIn != nullptr) && (ppPipelineCreationFeadbackCreateInfo != nullptr))
+    {
+        GetPipelineCreationInfoNext(
+            reinterpret_cast<const VkStructHeader*>(pIn->pNext),
+            ppPipelineCreationFeadbackCreateInfo);
+    }
     // Fill in necessary non-zero defaults in case some information is missing
     const RenderPass* pRenderPass = nullptr;
     const PipelineLayout* pLayout = nullptr;
@@ -898,7 +959,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     {
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
         pCreateInfo->pipelineInfo.options.includeIr = true;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25
+#if (LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25) && (LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 27)
         pCreateInfo->pipelineInfo.options.includeIrBinary = true;
 #endif
     }
@@ -1005,6 +1066,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         ApplyProfileOptions(pDevice,
                             static_cast<ShaderStage>(stage),
                             pShaderModule,
+                            &pCreateInfo->pipelineInfo.options,
                             pShaderInfo,
                             &pCreateInfo->pipelineProfileKey
                             );
@@ -1068,9 +1130,10 @@ uint32_t PipelineCompiler::GetCompilerCollectionMask()
 // =====================================================================================================================
 // Converts Vulkan compute pipeline parameters to an internal structure
 VkResult PipelineCompiler::ConvertComputePipelineInfo(
-    Device*                             pDevice,
-    const VkComputePipelineCreateInfo*  pIn,
-    ComputePipelineCreateInfo*          pCreateInfo)
+    Device*                                         pDevice,
+    const VkComputePipelineCreateInfo*              pIn,
+    ComputePipelineCreateInfo*                      pCreateInfo,
+    const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo)
 {
     VkResult result    = VK_SUCCESS;
     auto     pInstance = m_pPhysicalDevice->Manager()->VkInstance();
@@ -1079,6 +1142,9 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     PipelineLayout* pLayout = nullptr;
     VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO);
 
+    GetPipelineCreationInfoNext(
+        reinterpret_cast<const VkStructHeader*>(pIn->pNext),
+        ppPipelineCreationFeadbackCreateInfo);
     if (pIn->layout != VK_NULL_HANDLE)
     {
         pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
@@ -1089,7 +1155,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     {
         pCreateInfo->pipelineInfo.options.includeDisassembly = true;
         pCreateInfo->pipelineInfo.options.includeIr = true;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25
+#if (LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25) && (LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 27)
         pCreateInfo->pipelineInfo.options.includeIrBinary = true;
 #endif
     }
@@ -1132,12 +1198,12 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
         }
     }
 
-     ShaderModule* pShaderModule = ShaderModule::ObjectFromHandle(pIn->stage.module);
-     pCreateInfo->pipelineInfo.cs.pModuleData         = pShaderModule->GetFirstValidShaderData();
-     pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
-     pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
+    ShaderModule* pShaderModule = ShaderModule::ObjectFromHandle(pIn->stage.module);
+    pCreateInfo->pipelineInfo.cs.pModuleData         = pShaderModule->GetFirstValidShaderData();
+    pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
+    pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
-     pCreateInfo->pipelineInfo.cs.entryStage          = Llpc::ShaderStageCompute;
+    pCreateInfo->pipelineInfo.cs.entryStage          = Llpc::ShaderStageCompute;
 #endif
 
     // Build the resource mapping description for LLPC.  This data contains things about how shader
@@ -1164,6 +1230,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     ApplyProfileOptions(pDevice,
                         ShaderStageCompute,
                         pShaderModule,
+                        nullptr,
                         &pCreateInfo->pipelineInfo.cs,
                         &pCreateInfo->pipelineProfileKey
                         );
@@ -1187,12 +1254,14 @@ void PipelineCompiler::ApplyProfileOptions(
     Device*                      pDevice,
     ShaderStage                  stage,
     ShaderModule*                pShaderModule,
+    Llpc::PipelineOptions*       pPipelineOptions,
     Llpc::PipelineShaderInfo*    pShaderInfo,
     PipelineOptimizerKey*        pProfileKey
     )
 {
     auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
     PipelineShaderOptionsPtr options = {};
+    options.pPipelineOptions = pPipelineOptions;
     options.pOptions     = &pShaderInfo->options;
 
     auto& shaderKey = pProfileKey->shaders[stage];

@@ -98,16 +98,22 @@ public:
         const void**                        ppPipelineBinary,
         Util::MetroHash::Hash*              pCacheId);
 
+    VkResult SetPipelineCreationFeedbackInfo(
+        const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo,
+        const PipelineCreationFeedback*                pPipelineFeedback);
+
     VkResult ConvertGraphicsPipelineInfo(
-        Device*                             pDevice,
-        const VkGraphicsPipelineCreateInfo* pIn,
-        GraphicsPipelineCreateInfo*         pInfo,
-        VbBindingInfo*                      pVbInfo);
+        Device*                                         pDevice,
+        const VkGraphicsPipelineCreateInfo*             pIn,
+        GraphicsPipelineCreateInfo*                     pInfo,
+        VbBindingInfo*                                  pVbInfo,
+        const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo);
 
     VkResult ConvertComputePipelineInfo(
-        Device*                             pDevice,
-        const VkComputePipelineCreateInfo*  pIn,
-        ComputePipelineCreateInfo*          pInfo);
+        Device*                                         pDevice,
+        const VkComputePipelineCreateInfo*              pIn,
+        ComputePipelineCreateInfo*                      pInfo,
+        const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo);
 
     void FreeShaderModule(ShaderModuleHandle* pShaderModule);
 
@@ -135,12 +141,14 @@ public:
         Llpc::PipelineShaderOptions* pShaderOptions
     ) const;
 
+    VK_INLINE Llpc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
 private:
 
     void ApplyProfileOptions(
         Device*                      pDevice,
         ShaderStage                  stage,
         ShaderModule*                pShaderModule,
+        Llpc::PipelineOptions*       pPipelineOptions,
         Llpc::PipelineShaderInfo*    pShaderInfo,
         PipelineOptimizerKey*        pProfileKey
     );
@@ -180,6 +188,9 @@ private:
 
     CompilerSolutionLlpc m_compilerSolutionLlpc;
 
+    void GetPipelineCreationInfoNext(
+        const VkStructHeader*                             pHeader,
+        const VkPipelineCreationFeedbackCreateInfoEXT**   ppPipelineCreationFeadbackCreateInfo);
 }; // class PipelineCompiler
 
 } // namespce vk

@@ -92,6 +92,11 @@ public:
 protected:
     Framebuffer(const VkFramebufferCreateInfo& info, Attachment* pAttachments);
 
+private:
+    inline void SetSubresRanges(
+        const Image* pImage,
+        Attachment*  pAttachment);
+
     const uint32_t  m_attachmentCount;
 };
 

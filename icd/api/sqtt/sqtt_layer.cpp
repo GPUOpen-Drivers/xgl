@@ -635,7 +635,7 @@ void SqttCmdBufferState::WriteBarrierEndMarker(
         marker.identifier           = RgpSqttMarkerIdentifierBarrierEnd;
         marker.cbId                 = m_cbId.u32All;
 
-        marker.waitOnEopTs          = operations.pipelineStalls.waitOnEopTsBottomOfPipe;
+        marker.waitOnEopTs          = operations.pipelineStalls.eopTsBottomOfPipe;
         marker.vsPartialFlush       = operations.pipelineStalls.vsPartialFlush;
         marker.psPartialFlush       = operations.pipelineStalls.psPartialFlush;
         marker.csPartialFlush       = operations.pipelineStalls.csPartialFlush;

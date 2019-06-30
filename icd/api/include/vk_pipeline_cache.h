@@ -78,12 +78,15 @@ public:
     VkResult Merge(uint32_t srcCacheCount, const PipelineCache** ppSrcCaches);
 
 protected:
-    PipelineCache(const Device* pDevice, ShaderCache* pShaderCaches);
+    PipelineCache(const Device*  pDevice,
+            ShaderCache*         pShaderCaches
+            );
 
     virtual ~PipelineCache();
 
     const Device*const  m_pDevice;
     ShaderCache         m_shaderCaches[MaxPalDevices];
+
 };
 
 namespace entry

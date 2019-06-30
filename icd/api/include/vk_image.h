@@ -336,6 +336,10 @@ private:
     SwapChain*              m_pSwapChain;         // If this image is a presentable image this tells
                                                   // which swap chain the image belongs to
 
+    Memory*                 m_pImageMemory;       // If this image is Android presentable image this tells the gpuMemory
+                                                  // bound. Android swapchain is implemented in loader.Presentable image
+                                                  // use this member to track the gpuMemory created from external handle.
+
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.
     PerGpuInfo              m_perGpu[1];

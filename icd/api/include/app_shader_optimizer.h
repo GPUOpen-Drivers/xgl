@@ -110,6 +110,8 @@ struct ShaderTuningOptions
     uint32_t maxArraySizeForFastDynamicIndexing;
     uint32_t userDataSpillThreshold;
     uint32_t maxThreadGroupsPerComputeUnit;
+    uint32_t useSiScheduler;
+    uint32_t reconfigWorkgroupLayout;
 };
 
 struct ShaderProfileAction
@@ -221,6 +223,7 @@ struct PipelineProfile
 // This struct represents unified shader compiler options
 struct PipelineShaderOptionsPtr
 {
+    Llpc::PipelineOptions*       pPipelineOptions;
     Llpc::PipelineShaderOptions* pOptions;
 };
 

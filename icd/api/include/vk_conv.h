@@ -600,8 +600,9 @@ VK_INLINE Pal::ImageTexOptLevel VkToPalTexFilterQuality(TextureFilterOptimizatio
 // Selects the first PAL aspect from the Vulkan aspect mask and removes the corresponding bits from it.
 VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
     Pal::ChNumFormat    format,
-    VkImageAspectFlags& aspectMask)
+    VkImageAspectFlags* pAspectMask)
 {
+	VkImageAspectFlags& aspectMask = *pAspectMask;
     if ((aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
     {
         // No other aspect can be specified in this case.
@@ -714,7 +715,7 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectSingle(
         case VK_IMAGE_ASPECT_PLANE_0_BIT:
         case VK_IMAGE_ASPECT_PLANE_1_BIT:
         case VK_IMAGE_ASPECT_PLANE_2_BIT:
-            return VkToPalImageAspectExtract(VkToPalFormat(format).format, aspectMask);
+            return VkToPalImageAspectExtract(VkToPalFormat(format).format, &aspectMask);
         default:
             VK_ASSERT(!"Unsupported flag combination");
             return Pal::ImageAspect::Y;
@@ -1081,7 +1082,7 @@ VK_INLINE void VkToPalSubresRange(
 
     do
     {
-        palSubresRange.startSubres.aspect = VkToPalImageAspectExtract(palFormat, aspectMask);
+        palSubresRange.startSubres.aspect = VkToPalImageAspectExtract(palFormat, &aspectMask);
         pPalSubresRanges[(*pPalSubresRangeIndex)++] = palSubresRange;
     } while (aspectMask != 0);
 }
@@ -1346,8 +1347,8 @@ VK_INLINE void VkToPalImageCopyRegion(
 
     do
     {
-        region.srcSubres.aspect = VkToPalImageAspectExtract(srcFormat, srcAspectMask);
-        region.dstSubres.aspect = VkToPalImageAspectExtract(dstFormat, dstAspectMask);
+        region.srcSubres.aspect = VkToPalImageAspectExtract(srcFormat, &srcAspectMask);
+        region.dstSubres.aspect = VkToPalImageAspectExtract(dstFormat, &dstAspectMask);
         pPalRegions[palRegionIndex++] = region;
     }
     while (srcAspectMask != 0 || dstAspectMask != 0);
@@ -1407,7 +1408,7 @@ VK_INLINE void VkToPalImageScaledCopyRegion(
 
     do
     {
-        region.srcSubres.aspect = region.dstSubres.aspect = VkToPalImageAspectExtract(srcFormat, aspectMask);
+        region.srcSubres.aspect = region.dstSubres.aspect = VkToPalImageAspectExtract(srcFormat, &aspectMask);
         pPalRegions[palRegionIndex++] = region;
     }
     while (aspectMask != 0);
@@ -1529,7 +1530,7 @@ VK_INLINE void VkToPalImageResolveRegion(
 
     do
     {
-        region.srcAspect = region.dstAspect = VkToPalImageAspectExtract(srcFormat, aspectMask);
+        region.srcAspect = region.dstAspect = VkToPalImageAspectExtract(srcFormat, &aspectMask);
         pPalRegions[palRegionIndex++] = region;
     }
     while (aspectMask != 0);
@@ -2207,14 +2208,42 @@ extern VkResult PalToVkError(Pal::Result result);
 VK_INLINE VkResult PalToVkResult(
     Pal::Result result)
 {
-    if (result == Pal::Result::Success)
+    VkResult vkResult = VK_SUCCESS;
+
+    // This switch statement handles the non-error Vulkan return codes directly; the error Vulkan return codes are
+    // handled separately by the call to PalToVkError in the default case.
+    switch (result)
     {
-        return VK_SUCCESS;
+    case Pal::Result::Success:
+    // These PAL error codes currently aren't handled specially and they indicate success otherwise
+    case Pal::Result::TooManyFlippableAllocations:
+    case Pal::Result::PresentOccluded:
+        vkResult = VK_SUCCESS;
+        break;
+
+    case Pal::Result::NotReady:
+        vkResult = VK_NOT_READY;
+        break;
+
+    case Pal::Result::Timeout:
+    case Pal::Result::ErrorFenceNeverSubmitted:
+        vkResult = VK_TIMEOUT;
+        break;
+
+    case Pal::Result::EventSet:
+        vkResult = VK_EVENT_SET;
+        break;
+
+    case Pal::Result::EventReset:
+        vkResult = VK_EVENT_RESET;
+        break;
+
+    default:
+        vkResult = PalToVkError(result);
+        break;
     }
-    else
-    {
-        return PalToVkError(result);
-    }
+
+    return vkResult;
 }
 
 // =====================================================================================================================

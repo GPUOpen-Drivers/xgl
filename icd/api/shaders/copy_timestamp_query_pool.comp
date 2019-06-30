@@ -68,14 +68,13 @@ void main()
         r3.x = gl_GlobalInvocationID.x * queryParam.z;
 
         const uint TimestampNotReadyChunk = 0xFFFFFFFF;
-        // determine if counter is not TimestampNotReady to produce a 0/1 availability value
-        // (note that we could also just output any non-zero value, but we are being "pretty" here)
-        r1.z = r1.x & r1.y; // compare timestamp chunks
-        if (r1.z != TimestampNotReadyChunk) // check if both timestamp chunks are not TimestampNotReadyChunk
-        {
-            r1.z = 1;  // 64-bit low word
-        }
-        r1.w = 0; // 64-bit high word
+        // if both timestamp chunks are not TimestampNotReadyChunk, there is a result available
+        r1.z = r1.x & r1.y;
+
+        // if the query result is unavailable, we have to output 0 availability value
+        // otherwise, we always output 1 to be consistent
+        r1.z = uint(r1.z != TimestampNotReadyChunk);    // 64-bit low word
+        r1.w = 0;                                       // 64-bit high word
 
         // if results are requested in 64-bit
         if (r2.x != 0)

@@ -126,6 +126,16 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pOptions->forceLoopUnrollCount = 1;
                 }
 #endif
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 28
+                if (shaderCreate.tuningOptions.useSiScheduler)
+                {
+                    options.pOptions->useSiScheduler = true;
+                }
+                if (shaderCreate.tuningOptions.reconfigWorkgroupLayout)
+                {
+                    options.pPipelineOptions->reconfigWorkgroupLayout = true;
+                }
+#endif
 
             }
 
@@ -844,6 +854,8 @@ static bool ParseJsonProfileActionShader(
         "debugMode",
         "disableLoopUnrolls",
         "enableSelectiveInline",
+        "useSiScheduler",
+        "reconfigWorkgroupLayout",
     };
 
     success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);
@@ -945,6 +957,21 @@ static bool ParseJsonProfileActionShader(
         else
         {
             success = false;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "useSiScheduler")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.tuningOptions.useSiScheduler = true;
+        }
+    }
+    if ((pItem = utils::JsonGetValue(pJson, "reconfigWorkgroupLayout")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
         }
     }
 

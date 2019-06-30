@@ -61,6 +61,15 @@ struct ShaderModuleHandle
 };
 
 // =====================================================================================================================
+// Pipeline Creation feedback info.
+struct PipelineCreationFeedback
+{
+    bool        feedbackValid;
+    bool        hitApplicationCache;
+    uint64_t    duration;
+};
+
+// =====================================================================================================================
 struct GraphicsPipelineCreateInfo
 {
     Llpc::GraphicsPipelineBuildInfo        pipelineInfo;
@@ -71,6 +80,7 @@ struct GraphicsPipelineCreateInfo
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     Util::MetroHash::Hash                  basePipelineHash;
+    PipelineCreationFeedback               pipelineFeedback;
 };
 
 // =====================================================================================================================
@@ -83,6 +93,7 @@ struct ComputePipelineCreateInfo
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     Util::MetroHash::Hash                  basePipelineHash;
+    PipelineCreationFeedback               pipelineFeedback;
 };
 
 // =====================================================================================================================

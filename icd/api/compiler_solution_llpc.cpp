@@ -261,6 +261,7 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
 
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+    AppProfile             appProfile = m_pPhysicalDevice->GetAppProfile();
 
     Llpc::ComputePipelineBuildInfo* pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
 
@@ -276,6 +277,14 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
     pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 28
+    // Force enable automatic workgroup reconfigure.
+    if (appProfile == AppProfile::DawnOfWarIII)
+    {
+        pPipelineBuildInfo->options.reconfigWorkgroupLayout = true;
+    }
+#endif
 
     if ((pPipelineCache != nullptr) &&
         (settings.shaderCacheMode != ShaderCacheDisable))
@@ -304,7 +313,7 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     }
     else
     {
-        *ppPipelineBinary   = pipelineOut.pipelineBin.pCode;
+        *ppPipelineBinary = pipelineOut.pipelineBin.pCode;
         *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
     }
     VK_ASSERT(*ppPipelineBinary == pLlpcPipelineBuffer);
@@ -459,12 +468,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     else
     {
         llpcOptions[numOptions++] = "-pragma-unroll-threshold=4096";
-    }
-
-    // Enable scratch bounds checking on GFX9
-    if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp9)
-    {
-        llpcOptions[numOptions++] = "-amdgpu-scratch-bounds-checking";
     }
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);

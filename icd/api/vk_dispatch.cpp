@@ -354,6 +354,8 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkEnumerateDeviceExtensionProperties            );
     INIT_DISPATCH_ENTRY(vkEnumerateDeviceLayerProperties                );
 
+    INIT_DISPATCH_ENTRY(vkSetHdrMetadataEXT                             );
+
     INIT_DISPATCH_ENTRY(vkGetImageMemoryRequirements                    );
     INIT_DISPATCH_ENTRY(vkGetImageSparseMemoryRequirements              );
     INIT_DISPATCH_ENTRY(vkGetImageSubresourceLayout                     );

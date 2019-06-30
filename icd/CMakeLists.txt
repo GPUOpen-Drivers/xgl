@@ -236,6 +236,7 @@ target_sources(xgl PRIVATE
     api/utils/temp_mem_arena.cpp
     api/utils/json_reader.cpp
 )
+
 ### ICD Auto-generated String Files ####################################################################################
 set(ICD_STRING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/strings)
 # ICD settings code generation main script

@@ -37,8 +37,9 @@ namespace vk
 
 // =====================================================================================================================
 PipelineCache::PipelineCache(
-    const Device*   pDevice,
-    ShaderCache*    pShaderCaches)
+    const Device*           pDevice,
+    ShaderCache*            pShaderCaches
+    )
     :
     m_pDevice(pDevice)
 {
@@ -190,6 +191,7 @@ VkResult PipelineCache::Destroy(
     const Device*                   pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+
     this->~PipelineCache();
 
     pAllocator->pfnFree(pAllocator->pUserData, this);

@@ -439,6 +439,13 @@ void UpdatePalSettings(
 
     pPalSettings->hintDisableSmallSurfColorCompressionSize = pSettings->disableSmallSurfColorCompressionSize;
 
+    {
+        Pal::DeviceProperties info;
+        pPalDevice->GetProperties(&info);
+        pPalSettings->useAcqRelInterface      = info.gfxipProperties.flags.supportReleaseAcquireInterface && pSettings->useAcqRelInterface;
+        pPalSettings->enableGpuEventMultiSlot = pSettings->enableGpuEventMultiSlot;
+    }
+
     // Setting disableSkipFceOptimization to false enables an optimization in PAL that disregards the FCE in a transition
     // if one of the built in clear colors are used (white/black) and the image is TCC compatible.
     pPalSettings->disableSkipFceOptimization = false;

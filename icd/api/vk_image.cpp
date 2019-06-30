@@ -157,7 +157,8 @@ Image::Image(
     m_imageStencilUsage(stencilUsage),
     m_tileSize(tileSize),
     m_barrierPolicy(barrierPolicy),
-    m_pSwapChain(nullptr)
+    m_pSwapChain(nullptr),
+    m_pImageMemory(nullptr)
 {
     m_internalFlags.u32All = internalFlags.u32All;
 
@@ -668,7 +669,19 @@ VkResult Image::Create(
             pImageCreateInfo->queueFamilyIndexCount,
             pImageCreateInfo->pQueueFamilyIndices,
             &pDeviceMemory);
-        Image* pTempImage = Image::ObjectFromHandle(*pImage);
+
+        if (result == VK_SUCCESS)
+        {
+            Image* pPresentableImage = Image::ObjectFromHandle(*pImage);
+            pPresentableImage->m_pImageMemory = Memory::ObjectFromHandle(pDeviceMemory);
+
+            Pal::Result palResult = pDevice->AddMemReference(
+                pDevice->PalDevice(DefaultDeviceIndex),
+                pPresentableImage->m_pImageMemory->PalMemory(DefaultDeviceIndex),
+                false);
+
+            result = PalToVkResult(palResult);
+        }
 
         return result;
     }
@@ -1026,6 +1039,14 @@ VkResult Image::Destroy(
     {
         // Free the system memory allocated by InitSparseVirtualMemory
         pAllocator->pfnFree(pAllocator->pUserData, m_perGpu[0].pPalMemory);
+    }
+
+    if (m_pImageMemory != nullptr)
+    {
+        pDevice->RemoveMemReference(pDevice->PalDevice(DefaultDeviceIndex),
+                                    m_pImageMemory->PalMemory(DefaultDeviceIndex));
+        m_pImageMemory->PalMemory(DefaultDeviceIndex)->Destroy();
+        pAllocator->pfnFree(pAllocator->pUserData, m_pImageMemory);
     }
 
     Util::Destructor(this);

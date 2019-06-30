@@ -872,31 +872,8 @@ VkResult PalToVkError(
 
     switch (result)
     {
-    // These PAL error codes currently aren't handled specially and they indicate success otherwise
-    case Pal::Result::TooManyFlippableAllocations:
-    case Pal::Result::PresentOccluded:
-        vkResult = VK_SUCCESS;
-        break;
-
     case Pal::Result::Unsupported:
         vkResult = VK_ERROR_FORMAT_NOT_SUPPORTED;
-        break;
-
-    case Pal::Result::NotReady:
-        vkResult = VK_NOT_READY;
-        break;
-
-    case Pal::Result::Timeout:
-    case Pal::Result::ErrorFenceNeverSubmitted:
-        vkResult = VK_TIMEOUT;
-        break;
-
-    case Pal::Result::EventSet:
-        vkResult = VK_EVENT_SET;
-        break;
-
-    case Pal::Result::EventReset:
-        vkResult = VK_EVENT_RESET;
         break;
 
     case Pal::Result::ErrorInitializationFailed:

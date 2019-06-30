@@ -88,20 +88,22 @@ Pipeline::Pipeline(
     Device* const         pDevice,
     Pal::IPipeline**      pPalPipeline,
     const PipelineLayout* pLayout,
-    PipelineBinaryInfo*     pBinary)
+    PipelineBinaryInfo*   pBinary,
+    uint32_t              staticStateMask)
     :
     m_pDevice(pDevice),
-    m_UserDataLayout(pLayout->GetInfo().userDataLayout),
+    m_userDataLayout(pLayout->GetInfo().userDataLayout),
+    m_staticStateMask(staticStateMask),
     m_apiHash(0),
     m_pBinary(pBinary)
 {
     memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));
-    memset(m_palPipelineHash, 0, sizeof(m_palPipelineHash));
+
+    m_palPipelineHash = pPalPipeline[DefaultDeviceIndex]->GetInfo().internalPipelineHash.unique;
 
     for (uint32_t devIdx = 0; devIdx < pDevice->NumPalDevices(); devIdx++)
     {
-        m_pPalPipeline[devIdx]    = pPalPipeline[devIdx];
-        m_palPipelineHash[devIdx] = pPalPipeline[devIdx]->GetInfo().internalPipelineHash.unique;
+        m_pPalPipeline[devIdx] = pPalPipeline[devIdx];
     }
 }
 

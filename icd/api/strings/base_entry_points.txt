@@ -328,3 +328,5 @@ vkCmdDrawIndirectByteCountEXT                       @device     @dext(EXT_transf
 vkResetQueryPoolEXT                                 @device     @dext(EXT_host_query_reset)
 
 vkGetBufferDeviceAddressEXT                         @device     @dext(EXT_buffer_device_address)
+
+vkSetHdrMetadataEXT                                 @device     @dext(EXT_hdr_metadata)

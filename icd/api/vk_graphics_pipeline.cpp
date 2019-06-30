@@ -643,7 +643,7 @@ void GraphicsPipeline::BuildRasterizationState(
 
                 if (pRs->depthBiasEnable && (dynamicStateFlags[VK_DYNAMIC_STATE_DEPTH_BIAS] == false))
                 {
-                    pInfo->immedInfo.staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BIAS;
+                    pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BIAS;
                 }
 
                 // point size must be set via gl_PointSize, otherwise it must be 1.0f.
@@ -656,7 +656,7 @@ void GraphicsPipeline::BuildRasterizationState(
 
                 if (dynamicStateFlags[VK_DYNAMIC_STATE_LINE_WIDTH] == false)
                 {
-                    pInfo->immedInfo.staticStateMask |= 1 << VK_DYNAMIC_STATE_LINE_WIDTH;
+                    pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_LINE_WIDTH;
                 }
             }
             break;
@@ -804,7 +804,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 pInfo->pipeline.iaState.topologyInfo.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
             }
 
-        pInfo->immedInfo.staticStateMask = 0;
+        pInfo->staticStateMask = 0;
 
         const VkPipelineDynamicStateCreateInfo* pDy = pGraphicsPipelineCreateInfo->pDynamicState;
 
@@ -861,7 +861,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                         &pInfo->immedInfo.viewportParams);
                 }
 
-                pInfo->immedInfo.staticStateMask |= 1 << VK_DYNAMIC_STATE_VIEWPORT;
+                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_VIEWPORT;
             }
 
             if (dynamicStateFlags[VK_DYNAMIC_STATE_SCISSOR] == false)
@@ -873,7 +873,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                     VkToPalScissorRect(pVp->pScissors[i], i, &pInfo->immedInfo.scissorRectParams);
                 }
 
-                pInfo->immedInfo.staticStateMask |= 1 << VK_DYNAMIC_STATE_SCISSOR;
+                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_SCISSOR;
             }
         }
 
@@ -985,7 +985,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
                         VK_ASSERT(pInfo->immedInfo.samplePattern.sampleCount == rasterizationSampleCount);
 
-                        pInfo->immedInfo.staticStateMask |=
+                        pInfo->staticStateMask |=
                             (1 << static_cast<uint32_t>(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT));
                     }
                 }
@@ -996,7 +996,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                     pInfo->immedInfo.samplePattern.locations =
                         *Device::GetDefaultQuadSamplePattern(rasterizationSampleCount);
 
-                    pInfo->immedInfo.staticStateMask |=
+                    pInfo->staticStateMask |=
                         1 << static_cast<uint32_t>(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT);
                 }
             }
@@ -1015,8 +1015,9 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         }
         else
         {
-            pInfo->pipeline.cbState.logicOp = (pCb->logicOpEnable) ? VkToPalLogicOp(pCb->logicOp) :
-                Pal::LogicOp::Copy;
+            pInfo->pipeline.cbState.logicOp = (pCb->logicOpEnable) ?
+                                              VkToPalLogicOp(pCb->logicOp) :
+                                              Pal::LogicOp::Copy;
 
             const uint32_t numColorTargets = Min(pCb->attachmentCount, Pal::MaxColorTargets);
 
@@ -1063,7 +1064,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
             memcpy(&pInfo->immedInfo.blendConstParams, pCb->blendConstants, sizeof(pCb->blendConstants));
 
-            pInfo->immedInfo.staticStateMask |= 1 << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
+            pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
         }
 
         VkFormat dbFormat = { };
@@ -1087,7 +1088,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
             if (pInfo->ds.depthBoundsEnable && dynamicStateFlags[VK_DYNAMIC_STATE_DEPTH_BOUNDS] == false)
             {
-                pInfo->immedInfo.staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BOUNDS;
+                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BOUNDS;
             }
 
             // According to Graham, we should program the stencil state at PSO bind time,
@@ -1095,17 +1096,17 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             // to inherit the first PSO's settings
             if (dynamicStateFlags[VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK] == false)
             {
-                pInfo->immedInfo.staticStateMask |= 1 << VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
+                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
             }
 
             if (dynamicStateFlags[VK_DYNAMIC_STATE_STENCIL_WRITE_MASK] == false)
             {
-                pInfo->immedInfo.staticStateMask |= 1 << VK_DYNAMIC_STATE_STENCIL_WRITE_MASK;
+                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_STENCIL_WRITE_MASK;
             }
 
             if (dynamicStateFlags[VK_DYNAMIC_STATE_STENCIL_REFERENCE] == false)
             {
-                pInfo->immedInfo.staticStateMask |= 1 << VK_DYNAMIC_STATE_STENCIL_REFERENCE;
+                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_STENCIL_REFERENCE;
             }
         }
         else
@@ -1169,18 +1170,24 @@ VkResult GraphicsPipeline::Create(
     const VkAllocationCallbacks*            pAllocator,
     VkPipeline*                             pPipeline)
 {
+    int64_t                     startTime                           = Util::GetPerfCpuTime();
     // Parse the create info and build patched AMDIL shaders
-    CreateInfo    localPipelineInfo                  = {};
-    VbBindingInfo vbInfo                             = {};
-    GraphicsPipelineCreateInfo binaryCreateInfo      = {};
-    size_t        pipelineBinarySizes[MaxPalDevices] = {};
-    const void*   pPipelineBinaries[MaxPalDevices]   = {};
-    Util::MetroHash::Hash cacheId[MaxPalDevices]     = {};
-    Pal::Result   palResult                          = Pal::Result::Success;
-    PipelineCompiler*     pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
-    uint64_t      apiPsoHash                         = BuildApiHash(pCreateInfo, &binaryCreateInfo.basePipelineHash);
+    CreateInfo                  localPipelineInfo                  = {};
+    VbBindingInfo               vbInfo                             = {};
+    GraphicsPipelineCreateInfo  binaryCreateInfo                   = {};
+    size_t                      pipelineBinarySizes[MaxPalDevices] = {};
+    const void*                 pPipelineBinaries[MaxPalDevices]   = {};
+    Util::MetroHash::Hash       cacheId[MaxPalDevices]             = {};
+    Pal::Result                 palResult                          = Pal::Result::Success;
+    PipelineCompiler*           pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
+    uint64_t                    apiPsoHash                         = BuildApiHash(pCreateInfo,
+                                                                        &binaryCreateInfo.basePipelineHash);
+    Util::MetroHash64           palPipelineHasher;
 
-    VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo);
+    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo = nullptr;
+
+    VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
+        pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo, &pPipelineCreationFeadbackCreateInfo);
     ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &vbInfo, &localPipelineInfo);
 
     const uint32_t numPalDevices = pDevice->NumPalDevices();
@@ -1202,7 +1209,8 @@ VkResult GraphicsPipeline::Create(
         {
             GraphicsPipelineCreateInfo binaryCreateInfoMGPU = {};
             VbBindingInfo vbInfoMGPU = {};
-            pDefaultCompiler->ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &binaryCreateInfoMGPU, &vbInfoMGPU);
+            pDefaultCompiler->ConvertGraphicsPipelineInfo(
+                    pDevice, pCreateInfo, &binaryCreateInfoMGPU, &vbInfoMGPU, nullptr);
 
             result = pDevice->GetCompiler(i)->CreateGraphicsPipelineBinary(
                 pDevice,
@@ -1213,6 +1221,13 @@ VkResult GraphicsPipeline::Create(
                 &pPipelineBinaries[i],
                 localPipelineInfo.rasterizationStream,
                 &cacheId[i]);
+
+            if (result == VK_SUCCESS)
+            {
+                pDefaultCompiler->SetPipelineCreationFeedbackInfo(
+                    pPipelineCreationFeadbackCreateInfo,
+                    &binaryCreateInfoMGPU.pipelineFeedback);
+            }
 
             pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfoMGPU);
         }
@@ -1225,6 +1240,8 @@ VkResult GraphicsPipeline::Create(
             localPipelineInfo.activeStages,
             &localPipelineInfo.pipeline,
             &localPipelineInfo.immedInfo.graphicsWaveLimitParams);
+
+        palPipelineHasher.Update(localPipelineInfo.pipeline);
     }
 
     RenderStateCache* pRSCache = pDevice->GetRenderStateCache();
@@ -1353,6 +1370,7 @@ VkResult GraphicsPipeline::Create(
             pPalPipeline,
             localPipelineInfo.pLayout,
             localPipelineInfo.immedInfo,
+            localPipelineInfo.staticStateMask,
             vbInfo,
             pPalMsaa,
             pPalColorBlend,
@@ -1360,7 +1378,8 @@ VkResult GraphicsPipeline::Create(
             localPipelineInfo.sampleCoverage,
             viewIndexFromDeviceIndex,
             pBinaryInfo,
-            apiPsoHash);
+            apiPsoHash,
+            palPipelineHasher);
 
         *pPipeline = GraphicsPipeline::HandleFromVoidPointer(pSystemMem);
     }
@@ -1398,6 +1417,14 @@ VkResult GraphicsPipeline::Create(
 
         pAllocator->pfnFree(pAllocator->pUserData, pSystemMem);
     }
+    if (result == VK_SUCCESS)
+    {
+        binaryCreateInfo.pipelineFeedback.feedbackValid = true;
+        binaryCreateInfo.pipelineFeedback.duration = Util::GetPerfCpuTime() - startTime;
+        pDefaultCompiler->SetPipelineCreationFeedbackInfo(
+            pPipelineCreationFeadbackCreateInfo,
+            &binaryCreateInfo.pipelineFeedback);
+    }
 
     return result;
 }
@@ -1408,6 +1435,7 @@ GraphicsPipeline::GraphicsPipeline(
     Pal::IPipeline**                       pPalPipeline,
     const PipelineLayout*                  pLayout,
     const ImmedInfo&                       immedInfo,
+    uint32_t                               staticStateMask,
     const VbBindingInfo&                   vbInfo,
     Pal::IMsaaState**                      pPalMsaa,
     Pal::IColorBlendState**                pPalColorBlend,
@@ -1415,9 +1443,10 @@ GraphicsPipeline::GraphicsPipeline(
     uint32_t                               coverageSamples,
     bool                                   viewIndexFromDeviceIndex,
     PipelineBinaryInfo*                    pBinary,
-    uint64_t                               apiHash)
+    uint64_t                               apiHash,
+    Util::MetroHash64&                     palPipelineHasher)
     :
-    Pipeline(pDevice, pPalPipeline, pLayout, pBinary),
+    Pipeline(pDevice, pPalPipeline, pLayout, pBinary, staticStateMask),
     m_info(immedInfo),
     m_vbInfo(vbInfo),
     m_coverageSamples(coverageSamples),
@@ -1431,6 +1460,9 @@ GraphicsPipeline::GraphicsPipeline(
     memcpy(m_pPalDepthStencil, pPalDepthStencil, sizeof(pPalDepthStencil[0]) * pDevice->NumPalDevices());
 
     CreateStaticState();
+
+    palPipelineHasher.Update(m_palPipelineHash);
+    palPipelineHasher.Finalize(reinterpret_cast<uint8* const>(&m_palPipelineHash));
 }
 
 // =====================================================================================================================
@@ -1452,38 +1484,38 @@ void GraphicsPipeline::CreateStaticState()
     pStaticTokens->samplePattern              = DynamicRenderStateToken;
     pStaticTokens->waveLimits                 = DynamicRenderStateToken;
 
-    if (PipelineSetsState(DynamicStatesInternal::LINE_WIDTH))
+    if (ContainsStaticState(DynamicStatesInternal::LINE_WIDTH))
     {
         pStaticTokens->pointLineRasterState = pCache->CreatePointLineRasterState(
             m_info.pointLineRasterParams);
     }
 
-    if (PipelineSetsState(DynamicStatesInternal::DEPTH_BIAS))
+    if (ContainsStaticState(DynamicStatesInternal::DEPTH_BIAS))
     {
         pStaticTokens->depthBias = pCache->CreateDepthBias(m_info.depthBiasParams);
     }
 
-    if (PipelineSetsState(DynamicStatesInternal::BLEND_CONSTANTS))
+    if (ContainsStaticState(DynamicStatesInternal::BLEND_CONSTANTS))
     {
         pStaticTokens->blendConst = pCache->CreateBlendConst(m_info.blendConstParams);
     }
 
-    if (PipelineSetsState(DynamicStatesInternal::DEPTH_BOUNDS))
+    if (ContainsStaticState(DynamicStatesInternal::DEPTH_BOUNDS))
     {
         pStaticTokens->depthBounds = pCache->CreateDepthBounds(m_info.depthBoundParams);
     }
 
-    if (PipelineSetsState(DynamicStatesInternal::VIEWPORT))
+    if (ContainsStaticState(DynamicStatesInternal::VIEWPORT))
     {
         pStaticTokens->viewport = pCache->CreateViewport(m_info.viewportParams);
     }
 
-    if (PipelineSetsState(DynamicStatesInternal::SCISSOR))
+    if (ContainsStaticState(DynamicStatesInternal::SCISSOR))
     {
         pStaticTokens->scissorRect = pCache->CreateScissorRect(m_info.scissorRectParams);
     }
 
-    if (PipelineSetsState(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT))
+    if (ContainsStaticState(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT))
     {
         pStaticTokens->samplePattern = pCache->CreateSamplePattern(m_info.samplePattern);
     }
@@ -1582,14 +1614,14 @@ void GraphicsPipeline::BindToCmdBuffer(
     // This code will attempt to skip programming state state based on redundant value checks.  These checks are often
     // represented as token compares, where the tokens are two perfect hashes of previously compiled pipelines' static
     // parameter values.
-    if (PipelineSetsState(DynamicStatesInternal::VIEWPORT) &&
+    if (ContainsStaticState(DynamicStatesInternal::VIEWPORT) &&
         CmdBuffer::IsStaticStateDifferent(oldTokens.viewports, newTokens.viewport))
     {
         pCmdBuffer->SetAllViewports(m_info.viewportParams, newTokens.viewport);
         viewportCountDirty = false;
     }
 
-    if (PipelineSetsState(DynamicStatesInternal::SCISSOR) &&
+    if (ContainsStaticState(DynamicStatesInternal::SCISSOR) &&
         CmdBuffer::IsStaticStateDifferent(oldTokens.scissorRect, newTokens.scissorRect))
     {
         pCmdBuffer->SetAllScissors(m_info.scissorRectParams, newTokens.scissorRect);
@@ -1605,8 +1637,8 @@ void GraphicsPipeline::BindToCmdBuffer(
 
         if (pRenderState->allGpuState.pGraphicsPipeline != nullptr)
         {
-            const uint64_t oldHash = pRenderState->allGpuState.pGraphicsPipeline->PalPipelineHash(deviceIdx);
-            const uint64_t newHash = PalPipelineHash(deviceIdx);
+            const uint64_t oldHash = pRenderState->allGpuState.pGraphicsPipeline->PalPipelineHash();
+            const uint64_t newHash = PalPipelineHash();
 
             if ((oldHash != newHash)
                 )
@@ -1654,35 +1686,35 @@ void GraphicsPipeline::BindToCmdBuffer(
             pRenderState->allGpuState.staticTokens.triangleRasterState = newTokens.triangleRasterState;
         }
 
-        if (PipelineSetsState(DynamicStatesInternal::LINE_WIDTH) &&
+        if (ContainsStaticState(DynamicStatesInternal::LINE_WIDTH) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.pointLineRasterState, newTokens.pointLineRasterState))
         {
             pPalCmdBuf->CmdSetPointLineRasterState(m_info.pointLineRasterParams);
             pRenderState->allGpuState.staticTokens.pointLineRasterState = newTokens.pointLineRasterState;
         }
 
-        if (PipelineSetsState(DynamicStatesInternal::DEPTH_BIAS) &&
+        if (ContainsStaticState(DynamicStatesInternal::DEPTH_BIAS) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.depthBiasState, newTokens.depthBias))
         {
             pPalCmdBuf->CmdSetDepthBiasState(m_info.depthBiasParams);
             pRenderState->allGpuState.staticTokens.depthBiasState = newTokens.depthBias;
         }
 
-        if (PipelineSetsState(DynamicStatesInternal::BLEND_CONSTANTS) &&
+        if (ContainsStaticState(DynamicStatesInternal::BLEND_CONSTANTS) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.blendConst, newTokens.blendConst))
         {
             pPalCmdBuf->CmdSetBlendConst(m_info.blendConstParams);
             pRenderState->allGpuState.staticTokens.blendConst = newTokens.blendConst;
         }
 
-        if (PipelineSetsState(DynamicStatesInternal::DEPTH_BOUNDS) &&
+        if (ContainsStaticState(DynamicStatesInternal::DEPTH_BOUNDS) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.depthBounds, newTokens.depthBounds))
         {
             pPalCmdBuf->CmdSetDepthBounds(m_info.depthBoundParams);
             pRenderState->allGpuState.staticTokens.depthBounds = newTokens.depthBounds;
         }
 
-        if (PipelineSetsState(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT) &&
+        if (ContainsStaticState(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.samplePattern, newTokens.samplePattern))
         {
             pCmdBuffer->PalCmdSetMsaaQuadSamplePattern(
@@ -1702,9 +1734,9 @@ void GraphicsPipeline::BindToCmdBuffer(
         }
     }
 
-    const bool stencilMasks = PipelineSetsState(DynamicStatesInternal::STENCIL_COMPARE_MASK) |
-                              PipelineSetsState(DynamicStatesInternal::STENCIL_WRITE_MASK)   |
-                              PipelineSetsState(DynamicStatesInternal::STENCIL_REFERENCE);
+    const bool stencilMasks = ContainsStaticState(DynamicStatesInternal::STENCIL_COMPARE_MASK) |
+                              ContainsStaticState(DynamicStatesInternal::STENCIL_WRITE_MASK)   |
+                              ContainsStaticState(DynamicStatesInternal::STENCIL_REFERENCE);
 
     // Until we expose Stencil Op Value, we always inherit the PSO value, which is currently Default == 1
     pStencilCombiner->Set(StencilRefMaskParams::FrontOpValue, m_info.stencilRefMasks.frontOpValue);
@@ -1713,17 +1745,17 @@ void GraphicsPipeline::BindToCmdBuffer(
     if (stencilMasks)
     {
         // We don't have to use tokens for these since the combiner does a redundancy check on the full value
-        if (PipelineSetsState(DynamicStatesInternal::STENCIL_COMPARE_MASK))
+        if (ContainsStaticState(DynamicStatesInternal::STENCIL_COMPARE_MASK))
         {
             pStencilCombiner->Set(StencilRefMaskParams::FrontReadMask, m_info.stencilRefMasks.frontReadMask);
             pStencilCombiner->Set(StencilRefMaskParams::BackReadMask,  m_info.stencilRefMasks.backReadMask);
         }
-        if (PipelineSetsState(DynamicStatesInternal::STENCIL_WRITE_MASK))
+        if (ContainsStaticState(DynamicStatesInternal::STENCIL_WRITE_MASK))
         {
             pStencilCombiner->Set(StencilRefMaskParams::FrontWriteMask, m_info.stencilRefMasks.frontWriteMask);
             pStencilCombiner->Set(StencilRefMaskParams::BackWriteMask,  m_info.stencilRefMasks.backWriteMask);
         }
-        if (PipelineSetsState(DynamicStatesInternal::STENCIL_REFERENCE))
+        if (ContainsStaticState(DynamicStatesInternal::STENCIL_REFERENCE))
         {
             pStencilCombiner->Set(StencilRefMaskParams::FrontRef, m_info.stencilRefMasks.frontRef);
             pStencilCombiner->Set(StencilRefMaskParams::BackRef,  m_info.stencilRefMasks.backRef);

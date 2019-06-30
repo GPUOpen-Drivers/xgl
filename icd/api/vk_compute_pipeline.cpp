@@ -91,6 +91,8 @@ void ComputePipeline::ConvertComputePipelineInfo(
         pOutInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
 
+    pOutInfo->staticStateMask = 0;
+
 }
 
 // =====================================================================================================================
@@ -100,12 +102,14 @@ ComputePipeline::ComputePipeline(
     const PipelineLayout*                pPipelineLayout,
     PipelineBinaryInfo*                  pPipelineBinary,
     const ImmedInfo&                     immedInfo,
+    uint32_t                             staticStateMask,
     uint64_t                             apiHash)
     :
-    Pipeline(pDevice, pPalPipeline, pPipelineLayout, pPipelineBinary),
+    Pipeline(pDevice, pPalPipeline, pPipelineLayout, pPipelineBinary, staticStateMask),
     m_info(immedInfo)
 {
     m_apiHash = apiHash;
+
     CreateStaticState();
 }
 
@@ -146,15 +150,19 @@ VkResult ComputePipeline::Create(
     const VkAllocationCallbacks*            pAllocator,
     VkPipeline*                             pPipeline)
 {
+    int64_t startTime = Util::GetPerfCpuTime();
+
     // Setup PAL create info from Vulkan inputs
-    CreateInfo            localPipelineInfo                  = {};
-    size_t                pipelineBinarySizes[MaxPalDevices] = {};
-    const void*           pPipelineBinaries[MaxPalDevices]   = {};
-    Util::MetroHash::Hash cacheId[MaxPalDevices]             = {};
-    PipelineCompiler*   pDefaultCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
-    ComputePipelineCreateInfo binaryCreateInfo = {};
-    uint64_t    apiPsoHash                         = BuildApiHash(pCreateInfo, &binaryCreateInfo.basePipelineHash);
-    VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(pDevice, pCreateInfo, &binaryCreateInfo);
+    size_t                    pipelineBinarySizes[MaxPalDevices] = {};
+    const void*               pPipelineBinaries[MaxPalDevices]   = {};
+    Util::MetroHash::Hash     cacheId[MaxPalDevices]             = {};
+    PipelineCompiler*         pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
+    ComputePipelineCreateInfo binaryCreateInfo                   = {};
+    uint64_t                  apiPsoHash                         = BuildApiHash(pCreateInfo, &binaryCreateInfo.basePipelineHash);
+
+    const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo = nullptr;
+    VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(
+        pDevice, pCreateInfo, &binaryCreateInfo, &pPipelineCreationFeadbackCreateInfo);
 
     for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < pDevice->NumPalDevices()); deviceIdx++)
     {
@@ -172,6 +180,8 @@ VkResult ComputePipeline::Create(
     {
         return result;
     }
+
+    CreateInfo localPipelineInfo = {};
 
     if (result == VK_SUCCESS)
     {
@@ -255,6 +265,7 @@ VkResult ComputePipeline::Create(
                                                      localPipelineInfo.pLayout,
                                                      pBinary,
                                                      localPipelineInfo.immedInfo,
+                                                     localPipelineInfo.staticStateMask,
                                                      apiPsoHash);
 
         *pPipeline = ComputePipeline::HandleFromVoidPointer(pSystemMem);
@@ -280,6 +291,7 @@ VkResult ComputePipeline::Create(
                 &binaryCreateInfo, pPipelineBinaries[deviceIdx], pipelineBinarySizes[deviceIdx]);
         }
     }
+
     pDefaultCompiler->FreeComputePipelineCreateInfo(&binaryCreateInfo);
 
     // Something went wrong with creating the PAL object. Free memory and return error.
@@ -292,6 +304,15 @@ VkResult ComputePipeline::Create(
         {
             pBinary->Destroy(pAllocator);
         }
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        binaryCreateInfo.pipelineFeedback.feedbackValid = true;
+        binaryCreateInfo.pipelineFeedback.duration = Util::GetPerfCpuTime() - startTime;
+        pDefaultCompiler->SetPipelineCreationFeedbackInfo(
+                pPipelineCreationFeadbackCreateInfo,
+                &binaryCreateInfo.pipelineFeedback);
     }
 
     return result;
