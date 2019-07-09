@@ -143,7 +143,10 @@ static void OverrideProfiledSettings(
     {
         pSettings->enableSpvPerfOptimal = true;
 
-        pSettings->zeroInitIlRegs = true;
+        if (appProfile == AppProfile::WolfensteinII)
+        {
+            pSettings->zeroInitIlRegs = true;
+        }
 
         pSettings->optColorTargetUsageDoesNotContainResolveLayout = true;
 
@@ -178,6 +181,7 @@ static void OverrideProfiledSettings(
         {
             pSettings->dccBitsPerPixelThreshold = 16;
         }
+
     }
 
     if (appProfile == AppProfile::IdTechEngine)
@@ -207,6 +211,7 @@ static void OverrideProfiledSettings(
         pSettings->prefetchShaders = true;
         pSettings->disableMsaaStencilShaderRead = true;
 
+        pSettings->shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
     }
 
     if (appProfile == AppProfile::Source2Engine)
@@ -424,7 +429,6 @@ void ValidateSettings(
     // Internal semaphore queue timing is always enabled when ETW is not available
     pSettings->devModeSemaphoreQueueTimingEnable = true;
 #endif
-
 }
 
 // =====================================================================================================================

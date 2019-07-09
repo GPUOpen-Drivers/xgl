@@ -41,6 +41,7 @@
 #include "palHashMap.h"
 #include "palQueue.h"
 #include "palUtil.h"
+#include "palList.h"
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 // gpuopen headers
@@ -298,7 +299,6 @@ private:
     DevDriver::DevDriverServer*         m_pDevDriverServer;
     DevDriver::RGPProtocol::RGPServer*  m_pRGPServer;
     DevDriver::PipelineUriService*      m_pPipelineUriService;
-    bool                                m_pipelineServiceRegistered;
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
     DevDriver::ETWProtocol::ETWClient*  m_pEtwClient;               // ETW client pointer used to collect gpu
                                                                     // events for RGP

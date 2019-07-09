@@ -927,12 +927,15 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 if (pRenderPass)
                 {
                     auto cbFormat = pRenderPass->GetColorAttachmentFormat(pGraphicsPipelineCreateInfo->subpass, i);
+
                     // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
                     // want to write to any attachment for that output (VK_ATTACHMENT_UNUSED).  Under such cases,
-                    // disable shader writes through that target.
-                    if (cbFormat != VK_FORMAT_UNDEFINED)
+                    // disable shader writes through that target. There is one exception for alphaToCoverageEnable
+                    // and attachment zero, which can be set to VK_ATTACHMENT_UNUSED.
+                    if ((cbFormat != VK_FORMAT_UNDEFINED) ||
+                        (pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable && (i == 0u)))
                     {
-                        pLlpcCbDst->format               = cbFormat;
+                        pLlpcCbDst->format               = cbFormat != VK_FORMAT_UNDEFINED ? cbFormat  : pRenderPass->GetAttachmentDesc(i).format;
                         pLlpcCbDst->blendEnable          = (src.blendEnable == VK_TRUE);
                         pLlpcCbDst->blendSrcAlphaToColor = IsSrcAlphaUsedInBlend(src.srcAlphaBlendFactor) ||
                                                            IsSrcAlphaUsedInBlend(src.dstAlphaBlendFactor) ||

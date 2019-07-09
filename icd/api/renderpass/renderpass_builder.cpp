@@ -380,6 +380,11 @@ Pal::Result RenderPassBuilder::BuildSubpass(
         pSubpass->syncTop.barrier.flags.preColorClearSync = 1;
     }
 
+    if (pSubpass->dsClears.NumElements() > 1)
+    {
+        pSubpass->syncTop.barrier.flags.preDsClearSync = 1;
+    }
+
     // Pre-calculate a master flag for whether this subpass's sync points are active based on what was added to them.
     PostProcessSyncPoint(&pSubpass->syncTop);
     PostProcessSyncPoint(&pSubpass->syncPreResolve);
@@ -621,8 +626,7 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
 
                 if (result == Pal::Result::Success)
                 {
-                    result = TrackAttachmentUsage(subpass, AttachRefResolveDst, dst.attachment, dstLayout,
-                        &pSubpass->syncPreResolve);
+                    result = TrackAttachmentUsage(subpass, AttachRefResolveDst, dst.attachment, dstLayout, &pSubpass->syncPreResolve);
                 }
 
                 if (result == Pal::Result::Success)
@@ -661,8 +665,16 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
 
             if (result == Pal::Result::Success)
             {
-                result = TrackAttachmentUsage(subpass, AttachRefResolveDst, dst.attachment, dstLayout,
-                    &pSubpass->syncPreResolve);
+                // Depth stencil resovle attachment will be cleared if depth/stencil resolve mode is none.
+                const bool hasDepthClearOp   = (m_pAttachments[dst.attachment].pDesc->loadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) &&
+                                               (m_pSubpasses[subpass].pDesc->depthResolveMode == VK_RESOLVE_MODE_NONE_KHR);
+                const bool hasStencilClearOp = (m_pAttachments[dst.attachment].pDesc->stencilLoadOp == VK_ATTACHMENT_LOAD_OP_CLEAR) &&
+                                               (m_pSubpasses[subpass].pDesc->stencilResolveMode == VK_RESOLVE_MODE_NONE_KHR);
+                const bool hasClearOp        = (m_pAttachments[dst.attachment].loaded == false) && (hasDepthClearOp || hasStencilClearOp);
+
+                // If depth stencil resovle attachment will be cleared, using top sync point to guarantee metadata init before clear.
+                SyncPointState* pSync = hasClearOp ? &pSubpass->syncTop : &pSubpass->syncPreResolve;
+                result = TrackAttachmentUsage(subpass, AttachRefResolveDst, dst.attachment, dstLayout, pSync);
             }
 
             if (result == Pal::Result::Success)
@@ -788,7 +800,8 @@ static void ConvertImplicitSyncs(RPBarrierInfo* pBarrier)
 
     // Wait for (non-auto-synced) pre-clear if necessary.  No need to augment the pipe point because the prior work falls
     // under subpass dependency, but we may need to move the wait point forward to cover blts.
-    if (pBarrier->flags.preColorClearSync)
+    if (pBarrier->flags.preColorClearSync ||
+        pBarrier->flags.preDsClearSync)
     {
         IncludeWaitPoint(pBarrier, Pal::HwPipePreBlt);
 

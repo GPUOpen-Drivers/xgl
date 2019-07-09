@@ -297,6 +297,8 @@ static const char* PipelineStageFlagString(
         return compact ? "BOTTOM" : "BOTTOM_OF_PIPE_BIT";
     case VK_PIPELINE_STAGE_HOST_BIT:
         return compact ? "HOST" : "HOST_BIT";
+    case VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT:
+        return compact ? "XFB" : "TRANSFORM_FEEDBACK_BIT";
     case VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT:
         return compact ? "ALL_GFX" : "ALL_GRAPHICS_BIT";
     case VK_PIPELINE_STAGE_ALL_COMMANDS_BIT:
@@ -350,6 +352,7 @@ void RenderPassLogger::LogPipelineStageMask(
     LogFlag(VK_PIPELINE_STAGE_TRANSFER_BIT);
     LogFlag(VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
     LogFlag(VK_PIPELINE_STAGE_HOST_BIT);
+    LogFlag(VK_PIPELINE_STAGE_TRANSFORM_FEEDBACK_BIT_EXT);
 
     if (flags != 0)
     {
@@ -487,6 +490,12 @@ static const char* AccessFlagString(VkAccessFlagBits flag, bool compact)
         return compact ? "MEM_RD" : "MEMORY_READ_BIT";
     case VK_ACCESS_MEMORY_WRITE_BIT:
         return compact ? "MEM_WR" : "MEMORY_WRITE_BIT";
+    case VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT:
+        return compact ? "XFB_WR" : "TRANSFORM_FEEDBACK_WRITE_BIT";
+    case VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT:
+        return compact ? "XFB_CNTR_RD" : "VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT";
+    case VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT:
+        return compact ? "XFB_CNTR_WR" : "VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT";
     default:
         VK_NEVER_CALLED();
         return "<unknown access flag>";
@@ -534,6 +543,9 @@ void RenderPassLogger::LogAccessMask(VkAccessFlags flags, bool compact)
     LogFlag(VK_ACCESS_HOST_WRITE_BIT);
     LogFlag(VK_ACCESS_MEMORY_READ_BIT);
     LogFlag(VK_ACCESS_MEMORY_WRITE_BIT);
+    LogFlag(VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT);
+    LogFlag(VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT);
+    LogFlag(VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT);
 
     if (flags != 0)
     {
@@ -947,6 +959,7 @@ void RenderPassLogger::LogExecuteRPSyncPoint(
     LogFlag("    .flags.preDsResolveSync         = 1\n", syncPoint.barrier.flags.preDsResolveSync);
     LogFlag("    .flags.postResolveSync          = 1\n", syncPoint.barrier.flags.postResolveSync);
     LogFlag("    .flags.preColorClearSync        = 1\n", syncPoint.barrier.flags.preColorClearSync);
+    LogFlag("    .flags.preDsClearSync           = 1\n", syncPoint.barrier.flags.preDsClearSync);
 
     for (uint32_t i = 0; i < syncPoint.transitionCount; ++i)
     {

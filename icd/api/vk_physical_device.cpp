@@ -3354,8 +3354,6 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
     uint32_t* pBusNumber        = reinterpret_cast<uint32_t *>(pDeviceUUID);
     uint32_t* pDeviceNumber     = reinterpret_cast<uint32_t *>(pDeviceUUID+4);
     uint32_t* pFunctionNumber   = reinterpret_cast<uint32_t *>(pDeviceUUID+8);
-    uint32_t* pPalMajor         = reinterpret_cast<uint32_t *>(pDriverUUID);
-    uint32_t* pPalMinor         = reinterpret_cast<uint32_t *>(pDriverUUID+4);
 
     memset(pDeviceLUID, 0, VK_LUID_SIZE);
     memset(pDeviceUUID, 0, VK_UUID_SIZE);
@@ -3365,23 +3363,22 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
     *pDeviceNumber   = props.pciProperties.deviceNumber;
     *pFunctionNumber = props.pciProperties.functionNumber;
 
-    *pPalMajor  = PAL_INTERFACE_MAJOR_VERSION;
-    *pPalMinor  = PAL_INTERFACE_MINOR_VERSION;
-
     *pDeviceNodeMask = (1u << props.gpuIndex);
 
     *pDeviceLUIDValid = VK_FALSE;
-    uint32_t* pIcdTimeStamp = reinterpret_cast<uint32_t *>(pDriverUUID+8);
 
-    Dl_info info = {};
-    struct stat st = {};
-    if (dladdr("vk_icdGetInstanceProcAddr", &info) || !info.dli_fname)
-    {
-        if (info.dli_fname && (stat(info.dli_fname, &st) == 0))
-        {
-            *pIcdTimeStamp = st.st_mtim.tv_sec;
-        }
-    }
+#if defined(INTEROP_DRIVER_UUID)
+    const char* pDriverUuidString = INTEROP_DRIVER_UUID;
+#else
+    const char* pDriverUuidString = "AMD-LINUX-DRV";
+#endif
+
+    static_assert(VK_UUID_SIZE >= sizeof(pDriverUuidString),
+                  "The driver UUID string has changed and now exceeds the maximum length permitted by Vulkan");
+
+    memcpy(pDriverUUID,
+           pDriverUuidString,
+           strlen(pDriverUuidString));
 }
 
 // =====================================================================================================================
@@ -3529,11 +3526,7 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceVariablePointerFeatures* pVariablePointerFeatures =
                     reinterpret_cast<VkPhysicalDeviceVariablePointerFeatures*>(pHeader);
 
-                bool variablePointersSupport = VK_FALSE;
-
-                {
-                    pVariablePointerFeatures->variablePointers = VK_TRUE;
-                }
+                pVariablePointerFeatures->variablePointers = VK_TRUE;
                 pVariablePointerFeatures->variablePointersStorageBuffer = VK_TRUE;
                 break;
             }
