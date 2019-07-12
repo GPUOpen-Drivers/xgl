@@ -24,76 +24,31 @@
  **********************************************************************************************************************/
 /**
 ***********************************************************************************************************************
-* @file  compiler_solution.cpp
-* @brief Contains implementation of CompilerSolution
+* @file  wolfenstein2_layer.h
+* @brief App optimization layer for Wolfenstein II: The New Colossus
 ***********************************************************************************************************************
 */
-#include "include/compiler_solution.h"
-#include "include/vk_physical_device.h"
+
+#ifndef __WOLFENSTEIN_2_LAYER_H__
+#define __WOLFENSTEIN_2_LAYER_H__
+
+#pragma once
+
+#include "opt_layer.h"
 
 namespace vk
 {
-    // =====================================================================================================================
-CompilerSolution::CompilerSolution(
-    PhysicalDevice* pPhysicalDevice)
-    : m_pPhysicalDevice(pPhysicalDevice)
-{
-
-}
-
 // =====================================================================================================================
-CompilerSolution::~CompilerSolution()
+// Class for the Wolfenstein2 Layer to simplify calls to the overriden dispatch table from the layer's entrypoints
+class Wolfenstein2Layer : public OptLayer
 {
+public:
+    Wolfenstein2Layer();
+    virtual ~Wolfenstein2Layer();
 
-}
+    virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) override;
+};
 
-// =====================================================================================================================
-// Initialize CompilerSolution class
-VkResult CompilerSolution::Initialize()
-{
-    Pal::IDevice* pPalDevice = m_pPhysicalDevice->PalDevice();
-    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+} // namespace vk
 
-    // Initialize GfxIp informations per PAL device properties
-    Pal::DeviceProperties info;
-    pPalDevice->GetProperties(&info);
-
-    switch (info.gfxLevel)
-    {
-    case Pal::GfxIpLevel::GfxIp6:
-        m_gfxIp.major = 6;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp7:
-        m_gfxIp.major = 7;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8:
-        m_gfxIp.major = 8;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8_1:
-        m_gfxIp.major = 8;
-        m_gfxIp.minor = 1;
-        break;
-    case Pal::GfxIpLevel::GfxIp9:
-        m_gfxIp.major = 9;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp10_1:
-        m_gfxIp.major = 10;
-        m_gfxIp.minor = 1;
-        break;
-
-    default:
-        VK_NEVER_CALLED();
-        break;
-    }
-
-    m_gfxIp.stepping = info.gfxStepping;
-    m_gfxIpLevel     = info.gfxLevel;
-
-    return VK_SUCCESS;
-}
-
-}
+#endif /* __WOLFENSTEIN_2_LAYER_H__ */

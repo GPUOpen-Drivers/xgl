@@ -151,6 +151,7 @@ private:
         Llpc::PipelineOptions*       pPipelineOptions,
         Llpc::PipelineShaderInfo*    pShaderInfo,
         PipelineOptimizerKey*        pProfileKey
+        , Llpc::NggState*            pNggState
     );
 
     template<class PipelineBuildInfo>

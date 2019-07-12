@@ -106,6 +106,13 @@ static void OverrideProfiledSettings(
     Pal::DeviceProperties info;
     pPalDevice->GetProperties(&info);
 
+    // In general, DCC is very beneficial for color attachments. If this is completely offset, maybe by increased
+    // shader read latency or partial writes of DCC blocks, it should be debugged on a case by case basis.
+    if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+    {
+        pSettings->forceDccForColorAttachments = true;
+    }
+
     if (appProfile == AppProfile::Doom)
     {
         pSettings->enableSpvPerfOptimal = true;
@@ -169,6 +176,16 @@ static void OverrideProfiledSettings(
         pSettings->lenientInstanceFuncQuery = true;
     }
 
+    if (((appProfile == AppProfile::WolfensteinII) ||
+         (appProfile == AppProfile::Doom)) &&
+        (info.gfxLevel > Pal::GfxIpLevel::GfxIp9))
+    {
+        pSettings->asyncComputeQueueMaxWavesPerCu = 40;
+        pSettings->nggSubgroupSizing   = NggSubgroupExplicit;
+        pSettings->nggVertsPerSubgroup = 254;
+        pSettings->nggPrimsPerSubgroup = 128;
+    }
+
     if (appProfile == AppProfile::WorldWarZ)
     {
         pSettings->robustBufferAccess = FeatureForceEnable;
@@ -182,6 +199,11 @@ static void OverrideProfiledSettings(
             pSettings->dccBitsPerPixelThreshold = 16;
         }
 
+        // WWZ performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
+        if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+        {
+            pSettings->forceDccForColorAttachments = false;
+        }
     }
 
     if (appProfile == AppProfile::IdTechEngine)

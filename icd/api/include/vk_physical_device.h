@@ -400,6 +400,10 @@ public:
     {
         uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
 
+        if (m_settings.subgroupSize != 0)
+        {
+            subgroupSize = m_settings.subgroupSize;
+        }
         return subgroupSize;
     }
 
