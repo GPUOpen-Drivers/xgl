@@ -106,6 +106,13 @@ static void OverrideProfiledSettings(
     Pal::DeviceProperties info;
     pPalDevice->GetProperties(&info);
 
+    // In general, DCC is very beneficial for color attachments. If this is completely offset, maybe by increased
+    // shader read latency or partial writes of DCC blocks, it should be debugged on a case by case basis.
+    if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+    {
+        pSettings->forceDccForColorAttachments = true;
+    }
+
     if (appProfile == AppProfile::Doom)
     {
         pSettings->enableSpvPerfOptimal = true;
@@ -143,7 +150,10 @@ static void OverrideProfiledSettings(
     {
         pSettings->enableSpvPerfOptimal = true;
 
-        pSettings->zeroInitIlRegs = true;
+        if (appProfile == AppProfile::WolfensteinII)
+        {
+            pSettings->zeroInitIlRegs = true;
+        }
 
         pSettings->optColorTargetUsageDoesNotContainResolveLayout = true;
 
@@ -166,6 +176,16 @@ static void OverrideProfiledSettings(
         pSettings->lenientInstanceFuncQuery = true;
     }
 
+    if (((appProfile == AppProfile::WolfensteinII) ||
+         (appProfile == AppProfile::Doom)) &&
+        (info.gfxLevel > Pal::GfxIpLevel::GfxIp9))
+    {
+        pSettings->asyncComputeQueueMaxWavesPerCu = 40;
+        pSettings->nggSubgroupSizing   = NggSubgroupExplicit;
+        pSettings->nggVertsPerSubgroup = 254;
+        pSettings->nggPrimsPerSubgroup = 128;
+    }
+
     if (appProfile == AppProfile::WorldWarZ)
     {
         pSettings->robustBufferAccess = FeatureForceEnable;
@@ -177,6 +197,12 @@ static void OverrideProfiledSettings(
         if (info.revision == Pal::AsicRevision::Vega20)
         {
             pSettings->dccBitsPerPixelThreshold = 16;
+        }
+
+        // WWZ performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
+        if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+        {
+            pSettings->forceDccForColorAttachments = false;
         }
     }
 
@@ -207,6 +233,7 @@ static void OverrideProfiledSettings(
         pSettings->prefetchShaders = true;
         pSettings->disableMsaaStencilShaderRead = true;
 
+        pSettings->shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
     }
 
     if (appProfile == AppProfile::Source2Engine)
@@ -424,7 +451,6 @@ void ValidateSettings(
     // Internal semaphore queue timing is always enabled when ETW is not available
     pSettings->devModeSemaphoreQueueTimingEnable = true;
 #endif
-
 }
 
 // =====================================================================================================================

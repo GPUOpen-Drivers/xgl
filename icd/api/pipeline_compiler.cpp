@@ -99,6 +99,10 @@ VkResult PipelineCompiler::Initialize()
         m_gfxIp.major = 9;
         m_gfxIp.minor = 0;
         break;
+    case Pal::GfxIpLevel::GfxIp10_1:
+        m_gfxIp.major = 10;
+        m_gfxIp.minor = 1;
+        break;
 
     default:
         VK_NEVER_CALLED();
@@ -927,12 +931,15 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 if (pRenderPass)
                 {
                     auto cbFormat = pRenderPass->GetColorAttachmentFormat(pGraphicsPipelineCreateInfo->subpass, i);
+
                     // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
                     // want to write to any attachment for that output (VK_ATTACHMENT_UNUSED).  Under such cases,
-                    // disable shader writes through that target.
-                    if (cbFormat != VK_FORMAT_UNDEFINED)
+                    // disable shader writes through that target. There is one exception for alphaToCoverageEnable
+                    // and attachment zero, which can be set to VK_ATTACHMENT_UNUSED.
+                    if ((cbFormat != VK_FORMAT_UNDEFINED) ||
+                        (pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable && (i == 0u)))
                     {
-                        pLlpcCbDst->format               = cbFormat;
+                        pLlpcCbDst->format               = cbFormat != VK_FORMAT_UNDEFINED ? cbFormat  : pRenderPass->GetAttachmentDesc(i).format;
                         pLlpcCbDst->blendEnable          = (src.blendEnable == VK_TRUE);
                         pLlpcCbDst->blendSrcAlphaToColor = IsSrcAlphaUsedInBlend(src.srcAlphaBlendFactor) ||
                                                            IsSrcAlphaUsedInBlend(src.dstAlphaBlendFactor) ||
@@ -953,6 +960,37 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             dbFormat = pRenderPass->GetDepthStencilAttachmentFormat(pGraphicsPipelineCreateInfo->subpass);
             pCreateInfo->dbFormat = dbFormat;
         }
+    }
+
+    if (m_gfxIp.major >= 10)
+    {
+        pCreateInfo->pipelineInfo.nggState.enableNgg                  = settings.enableNgg;
+        pCreateInfo->pipelineInfo.nggState.enableGsUse                = settings.nggEnableGsUse;
+        pCreateInfo->pipelineInfo.nggState.forceNonPassthrough        = settings.nggForceNonPassthrough;
+        pCreateInfo->pipelineInfo.nggState.alwaysUsePrimShaderTable   = settings.nggAlwaysUsePrimShaderTable;
+        pCreateInfo->pipelineInfo.nggState.compactMode                =
+            static_cast<Llpc::NggCompactMode>(settings.nggCompactionMode);
+
+        pCreateInfo->pipelineInfo.nggState.enableFastLaunch           = false;
+        pCreateInfo->pipelineInfo.nggState.enableVertexReuse          = false;
+        pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling      = settings.nggEnableBackfaceCulling;
+        pCreateInfo->pipelineInfo.nggState.enableFrustumCulling       = settings.nggEnableFrustumCulling;
+        pCreateInfo->pipelineInfo.nggState.enableBoxFilterCulling     = settings.nggEnableBoxFilterCulling;
+        pCreateInfo->pipelineInfo.nggState.enableSphereCulling        = settings.nggEnableSphereCulling;
+        pCreateInfo->pipelineInfo.nggState.enableSmallPrimFilter      = settings.nggEnableSmallPrimFilter;
+        pCreateInfo->pipelineInfo.nggState.enableCullDistanceCulling  = settings.nggEnableCullDistanceCulling;
+
+        pCreateInfo->pipelineInfo.nggState.backfaceExponent           = settings.nggBackfaceExponent;
+        pCreateInfo->pipelineInfo.nggState.subgroupSizing             =
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 26
+            static_cast<Llpc::NggSubgroupSizingType>(settings.nggSubgroupSizing);
+#else
+            (settings.nggSubgroupSizing == NggSubgroupSizingType::NggSubgroupAuto) ?
+            Llpc::NggSubgroupSizingType::MaximumSize :
+            static_cast<Llpc::NggSubgroupSizingType>(static_cast<uint32_t>(settings.nggSubgroupSizing) - 1);
+#endif
+        pCreateInfo->pipelineInfo.nggState.primsPerSubgroup           = settings.nggPrimsPerSubgroup;
+        pCreateInfo->pipelineInfo.nggState.vertsPerSubgroup           = settings.nggVertsPerSubgroup;
     }
 
     if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
@@ -1069,6 +1107,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                             &pCreateInfo->pipelineInfo.options,
                             pShaderInfo,
                             &pCreateInfo->pipelineProfileKey
+                            , &pCreateInfo->pipelineInfo.nggState
                             );
     }
 
@@ -1233,6 +1272,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
                         nullptr,
                         &pCreateInfo->pipelineInfo.cs,
                         &pCreateInfo->pipelineProfileKey
+                      , nullptr
                         );
 
     return result;
@@ -1245,6 +1285,34 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
     Llpc::PipelineShaderOptions* pShaderOptions
     ) const
 {
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+
+    switch (stage)
+    {
+    case ShaderStageVertex:
+        pShaderOptions->waveSize = settings.vsWaveSize;
+        break;
+    case ShaderStageTessControl:
+        pShaderOptions->waveSize = settings.tcsWaveSize;
+        break;
+    case ShaderStageTessEvaluation:
+        pShaderOptions->waveSize = settings.tesWaveSize;
+        break;
+    case ShaderStageGeometry:
+        pShaderOptions->waveSize = settings.gsWaveSize;
+        break;
+    case ShaderStageFragment:
+        pShaderOptions->waveSize = settings.fsWaveSize;
+        break;
+    case ShaderStageCompute:
+        pShaderOptions->waveSize = settings.csWaveSize;
+        break;
+    default:
+        break;
+    }
+
+    pShaderOptions->wgpMode       = ((settings.enableWgpMode & (1 << stage)) != 0);
+    pShaderOptions->waveBreakSize = static_cast<Llpc::WaveBreakSize>(settings.waveBreakSize);
 
 }
 
@@ -1257,12 +1325,14 @@ void PipelineCompiler::ApplyProfileOptions(
     Llpc::PipelineOptions*       pPipelineOptions,
     Llpc::PipelineShaderInfo*    pShaderInfo,
     PipelineOptimizerKey*        pProfileKey
+    , Llpc::NggState*            pNggState
     )
 {
     auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
     PipelineShaderOptionsPtr options = {};
     options.pPipelineOptions = pPipelineOptions;
     options.pOptions     = &pShaderInfo->options;
+    options.pNggState    = pNggState;
 
     auto& shaderKey = pProfileKey->shaders[stage];
     if (settings.pipelineUseShaderHashAsProfileHash)

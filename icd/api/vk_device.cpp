@@ -72,6 +72,8 @@
 #include "appopt/barrier_filter_layer.h"
 #include "appopt/strange_brigade_layer.h"
 
+#include "appopt/wolfenstein2_layer.h"
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
 #endif
@@ -1027,6 +1029,22 @@ VkResult Device::Initialize(
 
             break;
         }
+        case AppProfile::WolfensteinII:
+            // This application optimization layer is currently GFX10-specific
+            if (deviceProps.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+            {
+                void* pMemory = VkInstance()->AllocMem(sizeof(Wolfenstein2Layer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+                if (pMemory != nullptr)
+                {
+                    m_pAppOptLayer = VK_PLACEMENT_NEW(pMemory) Wolfenstein2Layer();
+                }
+                else
+                {
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                }
+            }
+            break;
         default:
             break;
         }

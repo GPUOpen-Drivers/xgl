@@ -137,6 +137,61 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 }
 #endif
 
+                if (shaderCreate.apply.waveSize)
+                {
+                    options.pOptions->waveSize = shaderCreate.tuningOptions.waveSize;
+                }
+
+                if (shaderCreate.apply.wgpMode)
+                {
+                    options.pOptions->wgpMode = true;
+                }
+
+                if (shaderCreate.apply.waveBreakSize)
+                {
+                    options.pOptions->waveBreakSize =
+                        static_cast<Llpc::WaveBreakSize>(shaderCreate.tuningOptions.waveBreakSize);
+                }
+
+                if (shaderCreate.apply.nggDisable)
+                {
+                    options.pNggState->enableNgg = false;
+                }
+
+                if (shaderCreate.apply.nggFasterLaunchRate)
+                {
+                    options.pNggState->enableFastLaunch = true;
+                }
+
+                if (shaderCreate.apply.nggVertexReuse)
+                {
+                    options.pNggState->enableVertexReuse = true;
+                }
+
+                if (shaderCreate.apply.nggEnableFrustumCulling)
+                {
+                    options.pNggState->enableFrustumCulling = true;
+                }
+
+                if (shaderCreate.apply.nggEnableBoxFilterCulling)
+                {
+                    options.pNggState->enableBoxFilterCulling = true;
+                }
+
+                if (shaderCreate.apply.nggEnableSphereCulling)
+                {
+                    options.pNggState->enableSphereCulling = true;
+                }
+
+                if (shaderCreate.apply.nggEnableBackfaceCulling)
+                {
+                    options.pNggState->enableBackfaceCulling = true;
+                }
+
+                if (shaderCreate.apply.nggEnableSmallPrimFilter)
+                {
+                    options.pNggState->enableSmallPrimFilter = true;
+                }
             }
 
         }
@@ -441,6 +496,35 @@ void ShaderOptimizer::BuildTuningProfile()
     }
 
     action.shaderCreate.apply.allowReZ = m_settings.overrideAllowReZ;
+
+    switch (m_settings.overrideWaveSize)
+    {
+    case ShaderWaveSize::WaveSizeAuto:
+        break;
+    case ShaderWaveSize::WaveSize64:
+        action.shaderCreate.apply.waveSize = true;
+        action.shaderCreate.tuningOptions.waveSize = 64;
+        break;
+    case ShaderWaveSize::WaveSize32:
+        action.shaderCreate.apply.waveSize = true;
+        action.shaderCreate.tuningOptions.waveSize = 32;
+        break;
+    default:
+        VK_NEVER_CALLED();
+    }
+
+    switch (m_settings.overrideWgpMode)
+    {
+    case WgpMode::WgpModeAuto:
+        break;
+    case WgpMode::WgpModeCu:
+        break;
+    case WgpMode::WgpModeWgp:
+        action.shaderCreate.apply.wgpMode = true;
+        break;
+    default:
+        VK_NEVER_CALLED();
+    }
 
     if (m_settings.overrideWavesPerCu != 0)
     {
@@ -856,6 +940,19 @@ static bool ParseJsonProfileActionShader(
         "enableSelectiveInline",
         "useSiScheduler",
         "reconfigWorkgroupLayout",
+        "waveSize",
+        "wgpMode",
+        "waveBreakSize",
+        "nggDisable",
+        "nggFasterLaunchRate",
+        "nggVertexReuse",
+        "nggEnableFrustumCulling",
+        "nggEnableBoxFilterCulling",
+        "nggEnableSphereCulling",
+        "nggEnableBackfaceCulling",
+        "nggEnableSmallPrimFilter",
+        "enableSubvector",
+        "enableSubvectorSharedVgprs",
     };
 
     success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);
@@ -925,6 +1022,106 @@ static bool ParseJsonProfileActionShader(
         if (pItem->integerValue != 0)
         {
             pActions->shaderCreate.apply.enableSelectiveInline = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "waveSize")) != nullptr)
+    {
+        pActions->shaderCreate.apply.waveSize = true;
+        pActions->shaderCreate.tuningOptions.waveSize = static_cast<uint32_t>(pItem->integerValue);
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "wgpMode")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.wgpMode = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "waveBreakSize")) != nullptr)
+    {
+        pActions->shaderCreate.apply.waveBreakSize = true;
+        pActions->shaderCreate.tuningOptions.waveBreakSize = static_cast<uint32_t>(pItem->integerValue);
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "nggDisable")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.nggDisable = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "nggFasterLaunchRate")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.nggFasterLaunchRate = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "nggVertexReuse")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.nggVertexReuse = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "nggEnableFrustumCulling")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.nggEnableFrustumCulling = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "nggEnableBoxFilterCulling")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.nggEnableBoxFilterCulling = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "nggEnableSphereCulling")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.nggEnableSphereCulling = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "nggEnableBackfaceCulling")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.nggEnableBackfaceCulling = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "nggEnableSmallPrimFilter")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.nggEnableSmallPrimFilter = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "enableSubvector")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.enableSubvector = 1;
+        }
+    }
+
+    if ((pItem = utils::JsonGetValue(pJson, "enableSubvectorSharedVgprs")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.apply.enableSubvectorSharedVgprs = 1;
         }
     }
 

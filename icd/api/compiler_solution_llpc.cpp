@@ -435,6 +435,7 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
 
+    if (m_gfxIp.major < 10)
     {
         llpcOptions[numOptions++] = "-amdgpu-atomic-optimizations";
     }
@@ -477,6 +478,12 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     bufSize -= optionLength;
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-shader-cache-mode=%d", shaderCacheMode);
+    ++optionLength;
+    llpcOptions[numOptions++] = pOptionBuffer;
+    pOptionBuffer += optionLength;
+    bufSize -= optionLength;
+
+    optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-subgroup-size=%d", m_pPhysicalDevice->GetSubgroupSize());
     ++optionLength;
     llpcOptions[numOptions++] = pOptionBuffer;
     pOptionBuffer += optionLength;

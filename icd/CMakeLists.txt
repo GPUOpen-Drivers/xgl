@@ -99,6 +99,11 @@ if(ICD_BUILD_LLPC)
         target_compile_definitions(xgl PRIVATE VKI_BUILD_VEGA20=1)
         target_compile_definitions(xgl PRIVATE PAL_BUILD_VEGA20)
     endif()
+    if(XGL_BUILD_GFX10)
+        target_compile_definitions(xgl PRIVATE VKI_BUILD_GFX10=1)
+        target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX10)
+        target_compile_definitions(xgl PRIVATE LLPC_BUILD_GFX10)
+    endif()
 endif()
 
 if(TARGET_ARCHITECTURE_BITS EQUAL 32)
@@ -236,6 +241,10 @@ target_sources(xgl PRIVATE
     api/utils/temp_mem_arena.cpp
     api/utils/json_reader.cpp
 )
+
+if(XGL_BUILD_GFX10)
+    target_sources(xgl PRIVATE api/appopt/wolfenstein2_layer.cpp)
+endif()
 
 ### ICD Auto-generated String Files ####################################################################################
 set(ICD_STRING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/strings)

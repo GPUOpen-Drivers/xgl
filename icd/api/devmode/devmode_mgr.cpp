@@ -46,6 +46,8 @@
 #include "palCmdAllocator.h"
 #include "palFence.h"
 #include "palQueueSemaphore.h"
+#include "palListImpl.h"
+#include "palHashBaseImpl.h"
 
 // gpuutil headers
 #include "gpuUtil/palGpaSession.h"
@@ -56,6 +58,7 @@
 #include "msgTransport.h"
 #include "protocols/rgpServer.h"
 #include "protocols/driverControlServer.h"
+#include "protocols/ddPipelineUriService.h"
 
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
 #include "protocols/etwClient.h"
@@ -131,7 +134,6 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_pDevDriverServer(pInstance->PalPlatform()->GetDevDriverServer()),
     m_pRGPServer(nullptr),
     m_pPipelineUriService(nullptr),
-    m_pipelineServiceRegistered(false),
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
     m_pEtwClient(nullptr),
 #endif

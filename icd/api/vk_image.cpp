@@ -643,6 +643,17 @@ VkResult Image::Create(
             palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
         }
 
+        // a. If devs don't enable the extension: can keep DCC enabled for UAVs with mips
+        // b. If dev enables the extension: keep DCC enabled for UAVs with <= 4 mips
+        // c. Can app-detect un-disable DCC for cases where we know devs don't store to multiple mips
+        Pal::GfxIpLevel gfxLevel = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
+        if ((gfxLevel > Pal::GfxIpLevel::GfxIp9) && (gfxLevel <= Pal::GfxIpLevel::GfxIp10_1) &&
+            pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_IMAGE_LOAD_STORE_LOD) &&
+            (pCreateInfo->mipLevels > 4) && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))
+        {
+            palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
+        }
+
         ResourceOptimizerKey resourceKey;
         BuildResourceKey(pCreateInfo, &resourceKey);
 

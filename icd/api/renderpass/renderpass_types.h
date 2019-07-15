@@ -137,8 +137,10 @@ struct RPBarrierInfo
             uint32_t postResolveSync          : 1; // Barrier needs to synchronize against a prior resolve operation.
             uint32_t preColorClearSync        : 1; // Barrier needs to synchronize before an impending load-op color
                                                    // clear.
+            uint32_t preDsClearSync           : 1; // Barrier needs to synchronize before an impending load-op
+                                                   // depth/stencil clear.
 
-            uint32_t reserved                 : 25;
+            uint32_t reserved                 : 24;
         };
         uint32_t u32All;
     } flags;

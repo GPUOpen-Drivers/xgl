@@ -246,6 +246,9 @@ VkResult Semaphore::ImportSemaphore(
 
     palOpenInfo.externalSemaphore  = importInfo.handle;
     palOpenInfo.flags.crossProcess = true;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 517
+    palOpenInfo.flags.timeline     = m_palCreateInfo.flags.timeline;
+#endif
     PAL_ASSERT((handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
                (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT));
     palOpenInfo.flags.isReference  = (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
@@ -374,7 +377,14 @@ VkResult Semaphore::GetSemaphoreCounterValue(
 
     if (pSemaphore != nullptr)
     {
-        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+        if (pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex) != nullptr)
+        {
+            pPalSemaphore = pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex);
+        }
+        else
+        {
+            pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+        }
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         palResult = pPalSemaphore->QuerySemaphoreValue(pValue);
 #endif
@@ -397,7 +407,15 @@ VkResult Semaphore::WaitSemaphoreValue(
     if (pSemaphore != nullptr)
     {
         VK_ASSERT(pSemaphore->IsTimelineSemaphore());
-        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+        if (pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex) != nullptr)
+        {
+            pPalSemaphore = pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex);
+            pSemaphore->ClearPalTemporarySemaphore();
+        }
+        else
+        {
+            pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+        }
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         palResult = pPalSemaphore->WaitSemaphoreValue(value, timeout);
 #endif
@@ -417,7 +435,14 @@ VkResult Semaphore::SignalSemaphoreValue(
 
     if (pSemaphore != nullptr)
     {
-        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+        if (pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex) != nullptr)
+        {
+            pPalSemaphore = pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex);
+        }
+        else
+        {
+            pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+        }
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         palResult = pPalSemaphore->SignalSemaphoreValue(value);
 #endif

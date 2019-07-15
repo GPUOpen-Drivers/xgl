@@ -110,6 +110,8 @@ struct ShaderTuningOptions
     uint32_t maxArraySizeForFastDynamicIndexing;
     uint32_t userDataSpillThreshold;
     uint32_t maxThreadGroupsPerComputeUnit;
+    uint32_t waveSize;
+    uint32_t waveBreakSize;
     uint32_t useSiScheduler;
     uint32_t reconfigWorkgroupLayout;
 };
@@ -140,7 +142,20 @@ struct ShaderProfileAction
                 uint32_t optimizationIntent                 : 1;
                 uint32_t disableLoopUnrolls                 : 1;
                 uint32_t enableSelectiveInline              : 1;
-                uint32_t reserved                           : 14;
+                uint32_t waveSize                           : 1;
+                uint32_t wgpMode                            : 1;
+                uint32_t waveBreakSize                      : 1;
+                uint32_t nggDisable                         : 1;
+                uint32_t nggFasterLaunchRate                : 1;
+                uint32_t nggVertexReuse                     : 1;
+                uint32_t nggEnableFrustumCulling            : 1;
+                uint32_t nggEnableBoxFilterCulling          : 1;
+                uint32_t nggEnableSphereCulling             : 1;
+                uint32_t nggEnableBackfaceCulling           : 1;
+                uint32_t nggEnableSmallPrimFilter           : 1;
+                uint32_t enableSubvector                    : 1;
+                uint32_t enableSubvectorSharedVgprs         : 1;
+                uint32_t reserved                           : 1;
             };
             uint32_t u32All;
         } apply;
@@ -225,6 +240,7 @@ struct PipelineShaderOptionsPtr
 {
     Llpc::PipelineOptions*       pPipelineOptions;
     Llpc::PipelineShaderOptions* pOptions;
+    Llpc::NggState*              pNggState;
 };
 
 // =====================================================================================================================
