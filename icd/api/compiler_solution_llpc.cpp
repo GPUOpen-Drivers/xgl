@@ -428,7 +428,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     // NOTE: For testing consistency, these options should be kept the same as those of
     // "amdllpc" (Init()).
     llpcOptions[numOptions++] = "-unroll-max-percent-threshold-boost=1000";
-    llpcOptions[numOptions++] = "-unroll-threshold=700";
     llpcOptions[numOptions++] = "-unroll-partial-threshold=700";
     llpcOptions[numOptions++] = "-pragma-unroll-threshold=1000";
     llpcOptions[numOptions++] = "-unroll-allow-partial";
@@ -438,6 +437,13 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     if (m_gfxIp.major < 10)
     {
         llpcOptions[numOptions++] = "-amdgpu-atomic-optimizations";
+    }
+
+    if ((appProfile == AppProfile::Talos) ||
+        (appProfile == AppProfile::WolfensteinII)) {
+        llpcOptions[numOptions++] = "-unroll-threshold=2150";
+    } else {
+        llpcOptions[numOptions++] = "-unroll-threshold=700";
     }
 
     ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
