@@ -133,6 +133,10 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
     : m_attachmentCount (info.attachmentCount)
 {
 
+    // If Imageless framebuffer don't process attachments
+    if (info.flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT_KHR)
+        return;
+
     for (uint32_t i = 0; i < m_attachmentCount; ++i)
     {
         const VkImageView& src        = info.pAttachments[i];
@@ -163,6 +167,26 @@ VkResult Framebuffer::Destroy(
 
     // Cannot fail
     return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+// Set ImageViews for a Framebuffer attachment
+void Framebuffer::SetImageViews(
+    const VkRenderPassAttachmentBeginInfoKHR* pRenderPassAttachmentBeginInfoKHR)
+{
+    Attachment* pAttachments = static_cast<Attachment*>(Util::VoidPtrInc(this, sizeof(*this)));
+
+    for (uint32_t i = 0; i < pRenderPassAttachmentBeginInfoKHR->attachmentCount; i++)
+    {
+        pAttachments[i].pView  = ImageView::ObjectFromHandle(pRenderPassAttachmentBeginInfoKHR->pAttachments[i]);
+        pAttachments[i].zRange = pAttachments[i].pView->GetZRange();
+
+        const Image* pImage        = pAttachments[i].pView->GetImage();
+        pAttachments[i].pImage     = pImage;
+        pAttachments[i].viewFormat = VkToPalFormat(pImage->GetFormat());
+
+        SetSubresRanges(pImage, &pAttachments[i]);
+    }
 }
 
 // =====================================================================================================================

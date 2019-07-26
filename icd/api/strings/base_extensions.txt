@@ -75,6 +75,7 @@ VK_KHR_device_group
 VK_KHR_maintenance3
 VK_KHR_multiview
 VK_AMD_shader_core_properties
+VK_AMD_shader_core_properties2
 VK_EXT_queue_family_foreign
 VK_KHR_variable_pointers
 VK_EXT_vertex_attribute_divisor
@@ -102,3 +103,5 @@ VK_AMD_device_coherent_memory
 VK_EXT_buffer_device_address
 VK_EXT_separate_stencil_usage
 VK_KHR_uniform_buffer_standard_layout
+VK_KHR_imageless_framebuffer
+VK_EXT_shader_demote_to_helper_invocation

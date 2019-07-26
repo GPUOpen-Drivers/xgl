@@ -329,22 +329,24 @@ set(ICD_GENDIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate)
 # ICD settings code generation main script
 set(ICD_GEN_SETTINGS ${ICD_GENDIR}/genSettingsCode.py)
 
-set(ICD_GEN_SETTINGS_FILES ${ICD_GEN_SETTINGS} ${ICD_GENDIR}/settingsCodeTemplates.py)
+set(ICD_GEN_SETTINGS_FILES ${ICD_GEN_SETTINGS} ${ICD_GENDIR}/vulkanSettingsCodeTemplates.py)
 
 set(ICD_SETTINGS_DIR ${CMAKE_CURRENT_SOURCE_DIR}/settings)
 
 set(PAL_GENDIR ${XGL_PAL_PATH}/tools/generate)
 
+set(COMPONENT_NAME vulkan)
+
 add_custom_command(
     OUTPUT ${ICD_SETTINGS_DIR}/g_settings.cpp ${ICD_SETTINGS_DIR}/g_settings.h
-    COMMAND ${PYTHON_CMD} ${ICD_GEN_SETTINGS} ${ICD_SETTINGS_DIR}/settings.cfg ${ICD_SETTINGS_DIR} g_settings ${PAL_GENDIR}
-    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/settings.cfg
-    COMMENT "Generating Vulkan settings code from settings.cfg"
+    COMMAND ${PYTHON_CMD} ${ICD_GEN_SETTINGS} ${XGL_PAL_PATH} ${COMPONENT_NAME}
+    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/settings_xgl.json
+    COMMENT "Generating Vulkan settings code from settings_xgl.json"
 )
 
 add_custom_target(
     RunVKSettingsGenerator
-    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/settings.cfg
+    DEPENDS ${ICD_GEN_SETTINGS_FILES} ${ICD_SETTINGS_DIR}/settings_xgl.json
     COMMENT "Checking if re-generation is required for settings"
 )
 

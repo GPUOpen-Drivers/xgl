@@ -45,6 +45,7 @@ namespace Pal
 namespace vk
 {
 class Instance;
+class VulkanSettingsLoader;
 struct RuntimeSettings;
 };
 
@@ -58,25 +59,28 @@ enum class AppProfile : uint32_t
     Doom,                  // Doom (2016) by id Software
     DoomVFR,               // DoomVFR by id Software
     WolfensteinII,         // Wolfenstein 2: The New Colossus by Machine Games
-    IdTechEngine,          // id Tech Engine (Default)
     Dota2,                 // Dota 2 by Valve Software
-    Source2Engine,         // Source 2 Engine (Default)
     Talos,                 // Talos Principle by Croteam
     TalosVR,               // Talos Principle VR by Croteam
     SeriousSamFusion,      // Serious Sam Fusion by Croteam
-    SedpEngine,            // Serious Engine (Default)
     MadMax,                // MadMax by Feral3D
     F1_2017,               // F1 2017 by Feral3D
     RiseOfTheTombra,       // RiseOfTheTombRaider by Feral3D
     ThronesOfBritannia,    // Total War Saga: Thrones of Britannia by Feral3D
     DawnOfWarIII,          // Dawn of War III by Feral3D
     WarHammerII,           // Total War: WarHammer II by Feral3D
-    Feral3DEngine,         // Feral3D Engine (Default)
     AshesOfTheSingularity, // Ashes Of The Singularity
-    NitrousEngine,         // Nitrous Engine by Oxide (Default)
     StrangeBrigade,        // Strange Brigade
-    StrangeEngine,         // Strange Engine (Default)
     WorldWarZ,             // WorldWarZ
+    ThreeKingdoms,         // Three Kingdoms by Feral3D
+    DiRT4,                 // DiRT4 by Feral3D
+
+    IdTechEngine,          // id Tech Engine (Default)
+    Feral3DEngine,         // Feral3D Engine (Default)
+    StrangeEngine,         // Strange Engine (Default)
+    SedpEngine,            // Serious Engine (Default)
+    Source2Engine,         // Source 2 Engine (Default)
+    NitrousEngine,         // Nitrous Engine by Oxide (Default)
 };
 
 // Struct describing dynamic CHILL settings
@@ -99,10 +103,10 @@ struct TurboSyncSettings
 extern AppProfile ScanApplicationProfile(const VkInstanceCreateInfo& instanceInfo);
 
 void ReloadAppProfileSettings(
-    Instance*          pInstance,
-    RuntimeSettings*   pRuntimeSettings,
-    ChillSettings*     pChillSettings,
-    TurboSyncSettings* pTurboSyncSettings);
+    Instance*             pInstance,
+    VulkanSettingsLoader* pSettingsLoader,
+    ChillSettings*        pChillSettings,
+    TurboSyncSettings*    pTurboSyncSettings);
 
 };
 

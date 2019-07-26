@@ -290,6 +290,7 @@ public:
         const ImportSemaphoreInfo& importInfo);
 
     VkResult Initialize(
+        PhysicalDevice*                             pPhysicalDevice,
         DispatchableQueue**                         pQueues,
         const DeviceExtensions::Enabled&            enabled,
         const VkMemoryOverallocationBehaviorAMD     overallocationBehavior,

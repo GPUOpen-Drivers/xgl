@@ -270,20 +270,24 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
 
     DestroyLockedPhysicalDeviceList();
 
-    RuntimeSettings* pSettings = nullptr;
+    // Create a temporary array of pointers to VulkanSettingsLoader objects
+    VulkanSettingsLoader* settingsArray[Pal::MaxDevices] = { nullptr };
 
     if (palDeviceCount > 0)
     {
-        pSettings = reinterpret_cast<RuntimeSettings*>(
-            m_pInstance->AllocMem(sizeof(RuntimeSettings) * palDeviceCount, VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+        for (uint32_t i = 0; i < palDeviceCount; ++i)
+        {
+            void* pLoader = m_pInstance->AllocMem(sizeof(VulkanSettingsLoader), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
 
-        if (pSettings != nullptr)
-        {
-            memset(pSettings, 0, sizeof(RuntimeSettings) * palDeviceCount);
-        }
-        else
-        {
-            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            if (pLoader != nullptr)
+            {
+                settingsArray[i] = VK_PLACEMENT_NEW(pLoader) VulkanSettingsLoader(pPalDeviceList[i], m_pInstance->PalPlatform(), i);
+            }
+            else
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                break;
+            }
         }
     }
 
@@ -294,7 +298,7 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
     // related).
     if (result == VK_SUCCESS)
     {
-        result = m_pInstance->LoadAndCommitSettings(palDeviceCount, pPalDeviceList, pSettings, appProfiles);
+        result = m_pInstance->LoadAndCommitSettings(palDeviceCount, pPalDeviceList, settingsArray, appProfiles);
     }
 
     if (result == VK_SUCCESS)
@@ -308,7 +312,7 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
             result = PhysicalDevice::Create(
                 this,
                 pPalDeviceList[i],
-                pSettings[i],
+                settingsArray[i],
                 appProfiles[i],
                 &newPhysicalDevice);
 
@@ -326,11 +330,22 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
 
     if (result != VK_SUCCESS)
     {
-        // Destroy created devices
+        // Destroy already created devices
         while (deviceCount-- > 0)
         {
             PhysicalDevice* pDevice = ApiPhysicalDevice::ObjectFromHandle(deviceList[deviceCount]);
             pDevice->Destroy();
+        }
+
+        // Destroy any settings loaders left and free memory
+        for (uint32_t i = 0; i < palDeviceCount; i++)
+        {
+            if (settingsArray[i] != nullptr)
+            {
+                settingsArray[i]->~VulkanSettingsLoader();
+                m_pInstance->FreeMem(settingsArray[i]);
+                settingsArray[i] = nullptr;
+            }
         }
     }
     else
@@ -397,7 +412,7 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
             perf.presentMode         = 0;
             perf.hasAttachedScreens  = info.attachedScreenCount > 0;
             perf.device              = deviceList[currentDeviceIndex];
-            perf.isPreferredDevice   = (pSettings[0].enumPreferredDeviceIndex == currentDeviceIndex);
+            perf.isPreferredDevice   = (settingsArray[0]->GetSettings().enumPreferredDeviceIndex == currentDeviceIndex);
 
             sortedList.push_back(perf);
         }
@@ -410,11 +425,6 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
         {
             m_devices.PushBack(it->device);
         }
-    }
-
-    if (pSettings != nullptr)
-    {
-        m_pInstance->FreeMem(pSettings);
     }
 
     if (result == VK_SUCCESS)
@@ -437,8 +447,15 @@ void PhysicalDeviceManager::DestroyLockedPhysicalDeviceList(void)
 
         PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(physicalDevice);
 
+        // Get settingsLoader pointer so its memory can be freed after physical device is destroyed
+        VulkanSettingsLoader* pSettingsLoader = pPhysicalDevice->GetSettingsLoader();
+
         // Destroy physical device object
         pPhysicalDevice->Destroy();
+
+        // Free settingsLoader memory
+        pSettingsLoader->~VulkanSettingsLoader();
+        m_pInstance->FreeMem(pSettingsLoader);
     }
 }
 

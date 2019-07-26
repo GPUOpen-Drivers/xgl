@@ -98,7 +98,6 @@ public:
     virtual void FreeComputePipelineBinary(
         const void*                 pPipelineBinary,
         size_t                      binarySize);
-
 private:
     VkResult CreateLlpcCompiler();
 

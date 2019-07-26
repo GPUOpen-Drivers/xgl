@@ -37,6 +37,7 @@
 
 #include "palHashSetImpl.h"
 #include "palIntrusiveListImpl.h"
+#include "palVectorImpl.h"
 
 namespace vk
 {
@@ -196,6 +197,7 @@ VkResult CmdPool::Destroy(
     const Device*                   pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+
     // When a command pool is destroyed, all command buffers allocated from the pool are implicitly freed and
     // become invalid.
     while (m_cmdBufferRegistry.GetNumEntries() > 0)

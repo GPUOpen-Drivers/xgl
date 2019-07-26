@@ -435,7 +435,7 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
 
-    if (m_gfxIp.major < 10)
+    if ((m_gfxIp.major < 10) && (appProfile != AppProfile::ThreeKingdoms))
     {
         llpcOptions[numOptions++] = "-amdgpu-atomic-optimizations";
     }

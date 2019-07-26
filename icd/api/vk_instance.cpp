@@ -567,10 +567,10 @@ void Instance::InitDispatchTable()
 // Loads panel settings for all devices and commits them to PAL.  This happens immediately after device enumeration
 // from PAL and this function is called by the physical device manager.
 VkResult Instance::LoadAndCommitSettings(
-    uint32_t         deviceCount,
-    Pal::IDevice**   ppDevices,
-    RuntimeSettings* pSettings,
-    AppProfile*      pAppProfiles)
+    uint32_t              deviceCount,
+    Pal::IDevice**        ppDevices,
+    VulkanSettingsLoader* settingsLoaders[],
+    AppProfile*           pAppProfiles)
 {
     VkResult result = VK_SUCCESS;
 
@@ -579,26 +579,29 @@ VkResult Instance::LoadAndCommitSettings(
         pAppProfiles[deviceIdx] = m_preInitAppProfile;
 
         // Load per-device settings
-        ProcessSettings(m_appVersion,
-                        ppDevices[deviceIdx],
-                        &pAppProfiles[deviceIdx],
-                        &pSettings[deviceIdx]);
+        result = PalToVkResult(settingsLoaders[deviceIdx]->Init());
 
-        // Overlay the application profile from Radeon Settings
-        QueryApplicationProfile(ppDevices[deviceIdx], &pSettings[deviceIdx]);
+        if (result == VK_SUCCESS)
+        {
+            settingsLoaders[deviceIdx]->ProcessSettings(m_appVersion, &pAppProfiles[deviceIdx]);
 
-        // Make sure the final settings have legal values and update dependant parameters
-        ValidateSettings(ppDevices[deviceIdx], &pSettings[deviceIdx]);
+            // Overlay the application profile from Radeon Settings
+            QueryApplicationProfile(ppDevices[deviceIdx], settingsLoaders[deviceIdx]);
 
-        // Update PAL settings based on runtime settings and desired driver defaults if needed
-        UpdatePalSettings(ppDevices[deviceIdx], &pSettings[deviceIdx]);
+            // Make sure the final settings have legal values and update dependant parameters
+            settingsLoaders[deviceIdx]->ValidateSettings();
+
+            // Update PAL settings based on runtime settings and desired driver defaults if needed
+            settingsLoaders[deviceIdx]->UpdatePalSettings();
+
+        }
     }
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
     // Inform developer mode manager of settings.  This also finalizes the developer mode manager.
     if (m_pDevModeMgr != nullptr)
     {
-        m_pDevModeMgr->Finalize(deviceCount, ppDevices, pSettings);
+        m_pDevModeMgr->Finalize(deviceCount, ppDevices, settingsLoaders);
     }
 #endif
 
@@ -1062,12 +1065,12 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
 }
 
 // =====================================================================================================================
-// Query dynamic applicaiton profile settings
+// Query dynamic application profile settings
 void Instance::QueryApplicationProfile(
-    Pal::IDevice*    pPalDevice,
-    RuntimeSettings* pRuntimeSettings)
+    Pal::IDevice*         pPalDevice,
+    VulkanSettingsLoader* pSettingsLoader)
 {
-    ReloadAppProfileSettings(this, pRuntimeSettings, &m_chillSettings, &m_turboSyncSettings);
+    ReloadAppProfileSettings(this, pSettingsLoader, &m_chillSettings, &m_turboSyncSettings);
 
     if (m_turboSyncSettings.turboSyncEnable == false)
     {

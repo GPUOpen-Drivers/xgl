@@ -53,9 +53,12 @@
 
 // Internal (under development) extension definitions
 
+#include "devext/vk_amd_shader_core_properties2.h"
 #include "devext/vk_amd_gpa_interface.h"
 
 #include "devext/vk_amd_device_coherent_memory.h"
+
+#include "devext/vk_khr_imageless_framebuffer.h"
 
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,

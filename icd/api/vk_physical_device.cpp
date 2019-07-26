@@ -241,7 +241,7 @@ static bool VerifyBCFormatSupport(
 PhysicalDevice::PhysicalDevice(
     PhysicalDeviceManager*  pPhysicalDeviceManager,
     Pal::IDevice*           pPalDevice,
-    const RuntimeSettings&  settings,
+    VulkanSettingsLoader*   pSettingsLoader,
     AppProfile              appProfile
     )
     :
@@ -249,7 +249,7 @@ PhysicalDevice::PhysicalDevice(
     m_pPalDevice(pPalDevice),
     m_memoryTypeMask(0),
     m_memoryVkIndexAttachmentImage(0),
-    m_settings(settings),
+    m_pSettingsLoader(pSettingsLoader),
     m_sampleLocationSampleCounts(0),
     m_vrHighPrioritySubEngineIndex(UINT32_MAX),
     m_RtCuHighComputeSubEngineIndex(UINT32_MAX),
@@ -288,7 +288,7 @@ PhysicalDevice::PhysicalDevice(
 VkResult PhysicalDevice::Create(
     PhysicalDeviceManager* pPhysicalDeviceManager,
     Pal::IDevice*          pPalDevice,
-    const RuntimeSettings& settings,
+    VulkanSettingsLoader*  pSettingsLoader,
     AppProfile             appProfile,
     VkPhysicalDevice*      pPhysicalDevice)
 {
@@ -303,7 +303,7 @@ VkResult PhysicalDevice::Create(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    VK_INIT_DISPATCHABLE(PhysicalDevice, pMemory, (pPhysicalDeviceManager, pPalDevice, settings, appProfile));
+    VK_INIT_DISPATCHABLE(PhysicalDevice, pMemory, (pPhysicalDeviceManager, pPalDevice, pSettingsLoader, appProfile));
 
     VkPhysicalDevice handle = reinterpret_cast<VkPhysicalDevice>(pMemory);
 
@@ -439,6 +439,8 @@ VkResult PhysicalDevice::Initialize()
     // Collect generic device properties
     Pal::Result result = m_pPalDevice->GetProperties(&m_properties);
 
+    const RuntimeSettings& settings = GetRuntimeSettings();
+
     if (result == Pal::Result::Success)
     {
         // Finalize the PAL device
@@ -462,7 +464,7 @@ VkResult PhysicalDevice::Initialize()
             }
         }
 
-        if (m_settings.fullScreenFrameMetadataSupport)
+        if (settings.fullScreenFrameMetadataSupport)
         {
             finalizeInfo.flags.requireFlipStatus = true;
             finalizeInfo.flags.requireFrameMetadata = true;
@@ -475,7 +477,7 @@ VkResult PhysicalDevice::Initialize()
             finalizeInfo.supportedFullScreenFrameMetadata.postFrameTimerSubmission  = true;
         }
 
-        finalizeInfo.internalTexOptLevel = VkToPalTexFilterQuality(m_settings.vulkanTexFilterQuality);
+        finalizeInfo.internalTexOptLevel = VkToPalTexFilterQuality(settings.vulkanTexFilterQuality);
 
             // Finalize the PAL device
             result = m_pPalDevice->Finalize(finalizeInfo);
@@ -620,12 +622,12 @@ VkResult PhysicalDevice::Initialize()
                     // the same heap.
                     const Pal::gpusize heapSize = heapProperties[m_heapVkToPal[memoryType.heapIndex]].heapSize;
                     m_memoryVkIndexAddRemoteBackupHeap[memoryTypeIndex] =
-                        (heapSize < m_settings.memoryRemoteBackupHeapMinHeapSize);
+                        (heapSize < settings.memoryRemoteBackupHeapMinHeapSize);
                 }
 
                 if (palGpuHeap == Pal::GpuHeapInvisible)
                 {
-                    if ((invisHeapSize + localHeapSize) >= m_settings.memoryAttachmentImageMemoryTypeMinHeapSize)
+                    if ((invisHeapSize + localHeapSize) >= settings.memoryAttachmentImageMemoryTypeMinHeapSize)
                     {
                         // The attachment image memory type (unavailable for parts with VRAM smaller than 4GB)
                         // reports identical properties as the default invisible. However, it does
@@ -810,6 +812,7 @@ void PhysicalDevice::LateInitialize()
 VkResult PhysicalDevice::Destroy(void)
 {
     m_compiler.Destroy();
+
     this->~PhysicalDevice();
 
     VkInstance()->FreeMem(ApiPhysicalDevice::FromObject(this));
@@ -1295,6 +1298,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     uint32_t bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(VkToPalFormat(format).format));
 
     bool supported = true
+        // If VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT is unsupported, this function should return zero results.
+        && GetRuntimeSettings().optEnablePrt
         // Currently we only support optimally tiled sparse images
         && (tiling == VK_IMAGE_TILING_OPTIMAL)
         // Currently we don't support 1D sparse images
@@ -1699,6 +1704,7 @@ void PhysicalDevice::PopulateLimits()
 
     const Pal::DeviceProperties& palProps = PalProperties();
     const auto& imageProps = palProps.imageProperties;
+    const RuntimeSettings& settings = GetRuntimeSettings();
 
     // Maximum dimension (width) of an image created with an imageType of VK_IMAGE_TYPE_1D.
     m_limits.maxImageDimension1D = imageProps.maxDimensions.width;
@@ -1740,9 +1746,9 @@ void PhysicalDevice::PopulateLimits()
     // Maximum number of device memory allocations, as created by vkAllocMemory, that can exist simultaneously.
     // relax the limitation on Linux since there is no real limitation from OS's perspective.
     m_limits.maxMemoryAllocationCount = UINT_MAX;
-    if (m_settings.memoryCustomDeviceAllocationCountLimit > 0)
+    if (settings.memoryCustomDeviceAllocationCountLimit > 0)
     {
-        m_limits.maxMemoryAllocationCount = m_settings.memoryCustomDeviceAllocationCountLimit;
+        m_limits.maxMemoryAllocationCount = settings.memoryCustomDeviceAllocationCountLimit;
     }
 
     // Maximum number of sampler objects
@@ -3023,6 +3029,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLIP_ENABLE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_RANGE_UNRESTRICTED));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES));
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_QUEUE_FAMILY_FOREIGN));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DESCRIPTOR_INDEXING));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VARIABLE_POINTERS));
@@ -3052,6 +3059,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HOST_QUERY_RESET));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_UNIFORM_BUFFER_STANDARD_LAYOUT));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGELESS_FRAMEBUFFER));
 
     return availableExtensions;
 }
@@ -3163,11 +3172,13 @@ void PhysicalDevice::PopulateQueueFamilies()
 
             m_queueFamilies[m_queueFamilyCount].validShaderStages = 0;
 
+            const RuntimeSettings& settings = GetRuntimeSettings();
+
             switch (engineType)
             {
             case Pal::EngineTypeUniversal:
                 palImageLayoutFlag            = Pal::LayoutUniversalEngine;
-                transferGranularityOverride   = m_settings.transferGranularityUniversalOverride;
+                transferGranularityOverride   = settings.transferGranularityUniversalOverride;
                 m_queueFamilies[m_queueFamilyCount].validShaderStages = VK_SHADER_STAGE_ALL_GRAPHICS |
                                                                         VK_SHADER_STAGE_COMPUTE_BIT;
                 break;
@@ -3176,13 +3187,13 @@ void PhysicalDevice::PopulateQueueFamilies()
                 // fallthrough
             case Pal::EngineTypeExclusiveCompute:
                 palImageLayoutFlag            = Pal::LayoutComputeEngine;
-                transferGranularityOverride   = m_settings.transferGranularityComputeOverride;
+                transferGranularityOverride   = settings.transferGranularityComputeOverride;
                 m_queueFamilies[m_queueFamilyCount].validShaderStages |= VK_SHADER_STAGE_COMPUTE_BIT;
                 break;
             case Pal::EngineTypeDma:
                 pTransferQueueFamilyProperties = &m_queueFamilies[m_queueFamilyCount].properties;
                 palImageLayoutFlag             = Pal::LayoutDmaEngine;
-                transferGranularityOverride    = m_settings.transferGranularityDmaOverride;
+                transferGranularityOverride    = settings.transferGranularityDmaOverride;
 #if VK_IS_PAL_VERSION_AT_LEAST(465, 2)
                 m_prtOnDmaSupported            = engineProps.flags.supportsUnmappedPrtPageAccess;
 #else
@@ -3198,7 +3209,9 @@ void PhysicalDevice::PopulateQueueFamilies()
             VkQueueFamilyProperties* pQueueFamilyProps     = &m_queueFamilies[m_queueFamilyCount].properties;
 
             pQueueFamilyProps->queueFlags                  = (vkQueueFlags[engineType] & supportedQueueFlags);
-            pQueueFamilyProps->queueCount                  = engineProps.engineCount;
+            pQueueFamilyProps->queueCount                  = (engineType == Pal::EngineTypeCompute)
+                                                             ? Util::Min(settings.asyncComputeQueueLimit, engineProps.engineCount)
+                                                             : engineProps.engineCount;
             pQueueFamilyProps->timestampValidBits          = (engineProps.flags.supportsTimestamps != 0) ? 64 : 0;
             pQueueFamilyProps->minImageTransferGranularity = PalToVkExtent3d(engineProps.minTiledImageCopyAlignment);
 
@@ -3645,6 +3658,16 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT:
+            {
+                VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT* pShaderDemoteToHelperInvocation =
+                    reinterpret_cast<VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT*>(pHeader);
+
+                pShaderDemoteToHelperInvocation->shaderDemoteToHelperInvocation = VK_FALSE;
+
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT:
             {
                 VkPhysicalDeviceMemoryPriorityFeaturesEXT* pMemPriorityFeature =
@@ -3702,6 +3725,15 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES_KHR:
+            {
+                VkPhysicalDeviceImagelessFramebufferFeaturesKHR* pImagelessFramebufferFeatures =
+                    reinterpret_cast<VkPhysicalDeviceImagelessFramebufferFeaturesKHR *>(pHeader);
+
+                pImagelessFramebufferFeatures->imagelessFramebuffer = VK_TRUE;
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -3722,12 +3754,12 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     VK_ASSERT(pImageFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2);
 
     const VkStructHeader*                                   pHeader;
-    const VkPhysicalDeviceExternalImageFormatInfo*          pExternalImageFormatInfo          = nullptr;
-    const VkImageStencilUsageCreateInfoEXT*                 pImageStencilUsageCreateInfo      = nullptr;
+    const VkPhysicalDeviceExternalImageFormatInfo*          pExternalImageFormatInfo           = nullptr;
+    const VkImageStencilUsageCreateInfoEXT*                 pImageStencilUsageCreateInfo       = nullptr;
 
     VkStructHeaderNonConst*                                 pHeader2;
-    VkExternalImageFormatProperties*                        pExternalImageProperties          = nullptr;
-    VkTextureLODGatherFormatPropertiesAMD*                  pTextureLODGatherFormatProperties = nullptr;
+    VkExternalImageFormatProperties*                        pExternalImageProperties           = nullptr;
+    VkTextureLODGatherFormatPropertiesAMD*                  pTextureLODGatherFormatProperties  = nullptr;
 
     for (pHeader = reinterpret_cast<const VkStructHeader*>(pImageFormatInfo->pNext);
          pHeader != nullptr;
@@ -3767,7 +3799,6 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
             pTextureLODGatherFormatProperties = reinterpret_cast<VkTextureLODGatherFormatPropertiesAMD*>(pHeader2);
             break;
         }
-
         default:
             break;
         }
@@ -3845,6 +3876,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceExternalMemoryHostPropertiesEXT*         pExternalMemoryHostProperties;
         VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*        pMinMaxProperties;
         VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
+        VkPhysicalDeviceShaderCoreProperties2AMD*                pShaderCoreProperties2;
         VkPhysicalDeviceDescriptorIndexingPropertiesEXT*         pDescriptorIndexingProperties;
         VkPhysicalDeviceConservativeRasterizationPropertiesEXT*  pConservativeRasterizationProperties;
 
@@ -3980,6 +4012,24 @@ void PhysicalDevice::GetDeviceProperties2(
             pShaderCoreProperties->minVgprAllocation = props.gfxipProperties.shaderCore.minVgprAlloc;
             pShaderCoreProperties->maxVgprAllocation = props.gfxipProperties.shaderCore.numAvailableVgprs;
             pShaderCoreProperties->vgprAllocationGranularity = props.gfxipProperties.shaderCore.vgprAllocGranularity;
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES2_AMD:
+        {
+            const Pal::DeviceProperties& props = PalProperties();
+
+            pShaderCoreProperties2->shaderCoreFeatures = 0;
+            pShaderCoreProperties2->activeComputeUnitCount = 0;
+            for (uint32_t i = 0; i < props.gfxipProperties.shaderCore.numShaderEngines; ++i)
+            {
+                for (uint32_t j = 0; j < props.gfxipProperties.shaderCore.numShaderArrays; ++j)
+                {
+                    pShaderCoreProperties2->activeComputeUnitCount +=
+                        Util::CountSetBits(props.gfxipProperties.shaderCore.activeCuMask[i][j]);
+                }
+            }
 
             break;
         }
@@ -5099,16 +5149,18 @@ void PhysicalDevice::GetMemoryBudgetProperties(
 
             uint32_t budgetRatio = 100;
 
+            const RuntimeSettings& settings = GetRuntimeSettings();
+
             switch (palHeap)
             {
             case Pal::GpuHeapLocal:
-                budgetRatio = m_settings.heapBudgetRatioOfHeapSizeLocal;
+                budgetRatio = settings.heapBudgetRatioOfHeapSizeLocal;
                 break;
             case Pal::GpuHeapInvisible:
-                budgetRatio = m_settings.heapBudgetRatioOfHeapSizeInvisible;
+                budgetRatio = settings.heapBudgetRatioOfHeapSizeInvisible;
                 break;
             case Pal::GpuHeapGartUswc:
-                budgetRatio = m_settings.heapBudgetRatioOfHeapSizeNonlocal;
+                budgetRatio = settings.heapBudgetRatioOfHeapSizeNonlocal;
                 break;
             default:
                 VK_NEVER_CALLED();

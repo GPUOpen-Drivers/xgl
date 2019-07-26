@@ -25,38 +25,83 @@
 /**
  ***********************************************************************************************************************
  * @file  settings.h
- * @brief Loads runtime settings for Vulkan applications.
+ * @brief Settings Loader class for Vulkan.
  ***********************************************************************************************************************
  */
+
+#pragma once
 
 #ifndef __SETTINGS_SETTINGS_H__
 #define __SETTINGS_SETTINGS_H__
 
-#include "include/app_profile.h"
-
+#include "palSettingsLoader.h"
 #include "g_settings.h"
+
+#include "include/app_profile.h"
 
 namespace Pal
 {
-class IPhysicalGpu;
+class IDevice;
+class IPlatform;
 }
 
 namespace vk
 {
+// =====================================================================================================================
+// This class is responsible for loading and processing the Vulkan runtime settings structure encapsulated in the Vulkan
+// Settings Loader object.
+class VulkanSettingsLoader : public Pal::ISettingsLoader
+{
+public:
+    explicit VulkanSettingsLoader(Pal::IDevice* pDevice, Pal::IPlatform* pPlatform, uint32_t deviceId);
+    virtual ~VulkanSettingsLoader();
 
-extern void ProcessSettings(
-    uint32_t         appVersion,
-    Pal::IDevice*    pPalDevice,
-    AppProfile*      pAppProfile,
-    RuntimeSettings* pSettings);
+    virtual Util::Result Init() override;
 
-extern void ValidateSettings(
-    Pal::IDevice*    pPalDevice,
-    RuntimeSettings* pSettings);
+    void ProcessSettings(
+        uint32_t appVersion,
+        AppProfile* pAppProfile);
 
-extern void UpdatePalSettings(
-    Pal::IDevice*          pPalDevice,
-    const RuntimeSettings* pSettings);
+    void ValidateSettings();
+
+    void UpdatePalSettings();
+
+    void FinalizeSettings();
+
+    const RuntimeSettings& GetSettings() const { return m_settings; };
+    RuntimeSettings* GetSettingsPtr() { return &m_settings; }
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(VulkanSettingsLoader);
+    PAL_DISALLOW_DEFAULT_CTOR(VulkanSettingsLoader);
+
+    // Generate the settings hash
+    void GenerateSettingHash();
+
+    void OverrideProfiledSettings(
+        uint32_t   appVersion,
+        AppProfile appProfile);
+
+    void OverrideSettingsBySystemInfo();
+
+    void DumpAppProfileChanges(
+        AppProfile appProfile);
+
+    void ReadPublicSettings();
+
+    Pal::IDevice*   m_pDevice;
+    Pal::IPlatform* m_pPlatform;
+    RuntimeSettings m_settings;
+
+    // auto-generated functions
+    virtual void SetupDefaults() override;
+    virtual void ReadSettings() override;
+    virtual void InitSettingsInfo() override;
+    virtual void DevDriverRegister() override;
+
+    char m_pComponentName[10];
 };
+
+} //vk
 
 #endif // __SETTINGS_SETTINGS_H__

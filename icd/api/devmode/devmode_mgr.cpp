@@ -222,9 +222,9 @@ Pal::Result DevModeMgr::Init()
 //
 // This finalizes the developer driver manager.
 void DevModeMgr::Finalize(
-    uint32_t         deviceCount,
-    Pal::IDevice**   ppDevices,
-    RuntimeSettings* pSettings)
+    uint32_t              deviceCount,
+    Pal::IDevice**        ppDevices,
+    VulkanSettingsLoader* settingsLoaders[])
 {
     // Figure out if the gfxip supports tracing.  We decide tracing if there is at least one enumerated GPU
     // that can support tracing.  Since we don't yet know if that GPU will be picked as the target of an eventual
@@ -244,7 +244,7 @@ void DevModeMgr::Finalize(
 
             if (ppDevices[gpu]->GetProperties(&props) == Pal::Result::Success)
             {
-                if (GpuSupportsTracing(props, pSettings[gpu]))
+                if (GpuSupportsTracing(props, settingsLoaders[gpu]->GetSettings()))
                 {
                     m_hardwareSupportsTracing = true;
 
@@ -2028,7 +2028,11 @@ void DevModeMgr::PostDeviceCreate(Device* pDevice)
     // information to decide when it's reasonable to make certain requests of the driver through protocol functions.
     if (pDriverControlServer->IsDriverInitialized() == false)
     {
+#if GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION < GPUOPEN_DRIVER_CONTROL_CLEANUP_VERSION
         pDriverControlServer->FinishDriverInitialization();
+#else
+        pDriverControlServer->FinishDeviceInit();
+#endif
     }
 }
 

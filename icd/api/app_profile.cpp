@@ -263,6 +263,18 @@ constexpr AppProfilePatternEntry AppEngineHusky =
     "husky"
 };
 
+constexpr AppProfilePatternEntry AppNameThreeKingdoms =
+{
+    PatternAppNameLower,
+    "threekingdoms"
+};
+
+constexpr AppProfilePatternEntry AppNameDiRT4 =
+{
+    PatternAppNameLower,
+    "dirt4"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -449,6 +461,24 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::WarHammerII,
         {
             AppNameWarHammerII,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::ThreeKingdoms,
+        {
+            AppNameThreeKingdoms,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::DiRT4,
+        {
+            AppNameDiRT4,
             AppEngineFeral3D,
             PatternEnd
         }
@@ -858,14 +888,15 @@ static bool QueryPalProfile(
 // =====================================================================================================================
 // Queries PAL for app profile settings
 void ReloadAppProfileSettings(
-    Instance*          pInstance,
-    RuntimeSettings*   pRuntimeSettings,
-    ChillSettings*     pChillSettings,
-    TurboSyncSettings* pTurboSyncSettings)
+    Instance*             pInstance,
+    VulkanSettingsLoader* pSettingsLoader,
+    ChillSettings*        pChillSettings,
+    TurboSyncSettings*    pTurboSyncSettings)
 {
     size_t exeNameLength = 0;
     char* pExeName = GetExecutableName(&exeNameLength, true);
     char* pExeNameLower = nullptr;
+    RuntimeSettings* pRuntimeSettings = nullptr;
 
     if (pExeName != nullptr)
     {
@@ -873,6 +904,11 @@ void ReloadAppProfileSettings(
         exeNameLength += 1;
         pExeNameLower = StringToLower(pExeName, exeNameLength);
         free(pExeName);
+    }
+
+    if (pSettingsLoader != nullptr)
+    {
+        pRuntimeSettings = pSettingsLoader->GetSettingsPtr();
     }
 
     if (pExeNameLower != nullptr)

@@ -815,6 +815,7 @@ VkResult Device::Create(
         else
         {
             vkResult = (*pDispatchableDevice)->Initialize(
+                pPhysicalDevice,
                 &pDispatchableQueues[0][0],
                 enabledDeviceExtensions,
                 overallocationBehavior,
@@ -838,6 +839,7 @@ VkResult Device::Create(
 // =====================================================================================================================
 // Bring up the Vulkan device.
 VkResult Device::Initialize(
+    PhysicalDevice*                         pPhysicalDevice,
     DispatchableQueue**                     pQueues,
     const DeviceExtensions::Enabled&        enabled,
     const VkMemoryOverallocationBehaviorAMD overallocationBehavior,
@@ -1122,6 +1124,13 @@ VkResult Device::Initialize(
         VkInstance()->GetDevModeMgr()->PostDeviceCreate(this);
     }
 #endif
+
+    if (result == VK_SUCCESS)
+    {
+        // Finalize the device settings after driver intitalization is done
+        // This essentially generates settings hash
+        pPhysicalDevice->GetSettingsLoader()->FinalizeSettings();
+    }
 
     if (result == VK_SUCCESS)
     {

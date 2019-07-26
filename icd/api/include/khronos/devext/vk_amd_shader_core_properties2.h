@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2017-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -24,33 +24,40 @@
  **********************************************************************************************************************/
 /**
  **********************************************************************************************************************
- * @file  vk_amd_device_coherent_memory.h
- * @brief Temporary internal header for wave limit control. Should be removed once the extension is published
+ * @file  vk_amd_shader_core_properties2.h
+ * @brief Temporary internal header for shader core properties2. Should be removed once the extension is published
  *        and the API gets included in the official Vulkan header.
  **********************************************************************************************************************
  */
-#ifndef VKI_AMD_DEVICE_COHERENT_MEMORY_H_
-#define VKI_AMD_DEVICE_COHERENT_MEMORY_H_
+#ifndef VK_AMD_SHADER_CORE_PROPERTIES2_H_
+#define VK_AMD_SHADER_CORE_PROPERTIES2_H_
 
 #include "vk_internal_ext_helper.h"
 
-#define VK_AMD_device_coherent_memory 1
-#define VK_AMD_DEVICE_COHERENT_MEMORY_SPEC_VERSION 1
-#define VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NAME "VK_AMD_device_coherent_memory"
+#define VK_AMD_shader_core_properties2                             1
+#define VK_AMD_SHADER_CORE_PROPERTIES2_SPEC_VERSION                1
+#define VK_AMD_SHADER_CORE_PROPERTIES2_EXTENSION_NAME              "VK_AMD_shader_core_properties2"
 
-#define VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NUMBER 230
-#define VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_ENUM(type, offset) \
-    VK_EXTENSION_ENUM(VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_NUMBER, type, offset)
+#define VK_AMD_SHADER_CORE_PROPERTIES2_EXTENSION_NUMBER            228
 
-#define VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD VK_EXTENSION_BIT(VkMemoryPropertyFlagBits, 6)
-#define VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD VK_EXTENSION_BIT(VkMemoryPropertyFlagBits, 7)
+#define VK_AMD_SHADER_CORE_PROPERTIES2_ENUM(type, offset) \
+    VK_EXTENSION_ENUM(VK_AMD_SHADER_CORE_PROPERTIES2_EXTENSION_NUMBER, type, offset)
 
-typedef struct VkPhysicalDeviceCoherentMemoryFeaturesAMD {
-    VkStructureType    sType;
-    void*              pNext;
-    VkBool32           deviceCoherentMemory;
-} VkPhysicalDeviceCoherentMemoryFeaturesAMD;
+#define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES2_AMD \
+    VK_AMD_SHADER_CORE_PROPERTIES2_ENUM(VkStructureType, 0)
+#define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_COMPUTE_RATES_AMD \
+    VK_AMD_SHADER_CORE_PROPERTIES2_ENUM(VkStructureType, 1)
 
-#define VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD VK_AMD_DEVICE_COHERENT_MEMORY_EXTENSION_ENUM(VkStructureType, 0)
+typedef enum VkShaderCorePropertiesFlagBitsAMD {
+    VK_SHADER_CORE_PROPERTIES_FLAG_BITS_MAX_ENUM_AMD = 0x7FFFFFFF
+} VkShaderCorePropertiesFlagBitsAMD;
+typedef VkFlags VkShaderCorePropertiesFlagsAMD;
 
-#endif /* VKI_AMD_DEVICE_COHERENT_MEMORY_H_ */
+typedef struct VkPhysicalDeviceShaderCoreProperties2AMD {
+    VkStructureType                sType;
+    void*                          pNext;
+    VkShaderCorePropertiesFlagsAMD shaderCoreFeatures;     ///< Supported features of the shader core.
+    uint32_t                       activeComputeUnitCount; ///< Number of CUs that have been enabled.
+} VkPhysicalDeviceShaderCoreProperties2AMD;
+
+#endif /* VK_AMD_SHADER_CORE_PROPERTIES2_H_ */

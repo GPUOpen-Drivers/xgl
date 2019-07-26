@@ -128,7 +128,7 @@ struct ResourceProfileEntry
     ResourceProfileAction  action;
 };
 
-constexpr uint32_t MaxResourceProfileEntries = 32;
+constexpr uint32_t MaxResourceProfileEntries = 256;
 
 // Describes a collection of entries that can be used to apply application-specific resource tuning
 // to different resources.

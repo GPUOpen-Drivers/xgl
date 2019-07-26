@@ -63,8 +63,8 @@ class DevModeMgr;
 class DispatchableInstance;
 class DisplayManager;
 class PhysicalDeviceManager;
-struct RuntimeSettings;
 class VirtualStackMgr;
+class VulkanSettingsLoader;
 
 // =====================================================================================================================
 // Represents the per-Vulkan instance data as seen by the applicaton.
@@ -213,15 +213,14 @@ public:
         { return m_pDevModeMgr; }
 
     VkResult LoadAndCommitSettings(
-        uint32_t         deviceCount,
-        Pal::IDevice**   ppDevices,
-        RuntimeSettings* pSettings,
-        AppProfile*      pAppProfiles
-        );
+        uint32_t              deviceCount,
+        Pal::IDevice**        ppDevices,
+        VulkanSettingsLoader* settingsLoaders[],
+        AppProfile*           pAppProfiles);
 
     void QueryApplicationProfile(
-        Pal::IDevice*    pPalDevice,
-        RuntimeSettings* pRuntimeSettings = nullptr);
+        Pal::IDevice*         pPalDevice,
+        VulkanSettingsLoader* pSettingsLoader = nullptr);
 
     VkResult RegisterDebugCallback(
         DebugReportCallback* pCallback);

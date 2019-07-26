@@ -187,9 +187,11 @@ void ResourceOptimizer::BuildTuningProfile()
 // =====================================================================================================================
 void ResourceOptimizer::BuildAppProfile()
 {
-    const AppProfile        appProfile   = m_pDevice->GetAppProfile();
-    const Pal::GfxIpLevel   gfxIpLevel   = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
+    const AppProfile        appProfile = m_pDevice->GetAppProfile();
+    const Pal::GfxIpLevel   gfxIpLevel = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
     const Pal::AsicRevision asicRevision = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().revision;
+
+    uint32_t i = 0;
 
     memset(&m_appProfile, 0, sizeof(m_appProfile));
 
@@ -201,7 +203,6 @@ void ResourceOptimizer::BuildAppProfile()
 
     // TODO: These need to be auto-generated from source JSON but for now we write profile programmatically
 
-    // App profiles will be placed here...
 }
 
 #if ICD_RUNTIME_APP_PROFILE

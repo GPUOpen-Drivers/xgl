@@ -206,19 +206,18 @@ protected:
 
     VkResult NotifyFlipMetadata(
         uint32_t                     deviceIdx,
-        Pal::IQueue*                 pQueue,
+        Pal::ICmdBuffer*             pPresentCmdBuffer,
         const Pal::IGpuMemory*       pGpuMemory,
         FullscreenFrameMetadataFlags flags);
 
     VkResult NotifyFlipMetadataBeforePresent(
         uint32_t                         deviceIdx,
-        Pal::IQueue*                     pQueue,
         const Pal::PresentSwapChainInfo* pPresentInfo,
+        Pal::ICmdBuffer*                 pPresentCmdBuffer,
         const Pal::IGpuMemory*           pGpuMemory);
 
     VkResult NotifyFlipMetadataAfterPresent(
         uint32_t                         deviceIdx,
-        Pal::IQueue*                     pQueue,
         const Pal::PresentSwapChainInfo* pPresentInfo);
 
     Pal::IQueue*                       m_pPalQueues[MaxPalDevices];

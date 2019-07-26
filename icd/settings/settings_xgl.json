@@ -1,0 +1,4489 @@
+{
+  "Copyright": [
+    "***********************************************************************************************************************",
+    "*",
+    "*  Trade secret of Advanced Micro Devices, Inc.",
+    "*  Copyright (c) 2019, Advanced Micro Devices, Inc., (unpublished)",
+    "*",
+    "*  All rights reserved. This notice is intended as a precaution against inadvertent publication and does not imply",
+    "*  publication or any waiver of confidentiality. The year included in the foregoing notice is the year of creation of",
+    "*  the work.",
+    "*",
+    "***********************************************************************************************************************"
+  ],
+  "ComponentName": "Vulkan",
+  "Tags": [
+    "Render Passes",
+    "Command Buffer Options",
+    "Pipeline Options",
+    "Present",
+    "SPIRV Options",
+    "Raytracing",
+    "Debugging",
+    "General",
+    "Memory",
+    "Optimization",
+    "Developer Mode",
+    "Chill",
+    "Shader Tuning",
+    "Resource Tuning",
+    "Public CCC Options"
+  ],
+  "Enums": [
+    {
+      "Name": "FeatureEnableMode",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "FeatureDefault",
+          "Value": 0,
+          "Description": "Default, use application setting"
+        },
+        {
+          "Name": "FeatureForceEnable",
+          "Value": 1,
+          "Description": "Force Enable"
+        },
+        {
+          "Name": "FeatureForceDisable",
+          "Value": 2,
+          "Description": "Force Disable Default Value"
+        }
+      ]
+    },
+    {
+      "Name": "OptRenderStateCacheFlag",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "OptRenderStateCacheMsaaState",
+          "Value": 1,
+          "Description": "PAL MSAA state objects (all graphics pipelines)"
+        },
+        {
+          "Name": "OptRenderStateCacheColorBlendState",
+          "Value": 2,
+          "Description": "PAL color blend state objects (all graphics pipelines)"
+        },
+        {
+          "Name": "OptRenderStateCacheDepthStencilState",
+          "Value": 4,
+          "Description": "PAL depth stencil state objects (all graphics pipelines)"
+        },
+        {
+          "Name": "OptRenderStateCacheInputAssemblyState",
+          "Value": 8,
+          "Description": "PAL input assembly state params (all graphics pipelines)"
+        },
+        {
+          "Name": "OptRenderStateCacheTriangleRasterState",
+          "Value": 16,
+          "Description": "Triangle raster state params (part of every graphics pipeline)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticPointLineRasterState",
+          "Value": 32,
+          "Description": "Point line raster state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticDepthBias",
+          "Value": 64,
+          "Description": "Depth bias state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticBlendConst",
+          "Value": 128,
+          "Description": "Blend const state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticDepthBounds",
+          "Value": 256,
+          "Description": "Depth bounds state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticViewport",
+          "Value": 512,
+          "Description": "Viewport state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticScissorRect",
+          "Value": 1024,
+          "Description": "Scissor rect state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticSamplePattern",
+          "Value": 2048,
+          "Description": "Sample patern state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticGraphicsWaveLimits",
+          "Value": 4096,
+          "Description": "Graphics wave limits state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticComputeWaveLimits",
+          "Value": 8192,
+          "Description": "Compute wave limits state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticAnisoLodCompensation",
+          "Value": 16384,
+          "Description": "Aniso LOD compensation state (only when marked static)"
+        }
+      ]
+    },
+    {
+      "Name": "DevModeSqttMarkerEnableFlags",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "DevModeSqttMarkerEnableCbStart",
+          "Value": 1,
+          "Description": "Enable command buffer start instrumentation marker"
+        },
+        {
+          "Name": "DevModeSqttMarkerEnableCbEnd",
+          "Value": 2,
+          "Description": "Enable command buffer end instrumentation marker"
+        },
+        {
+          "Name": "DevModeSqttMarkerEnableEvent",
+          "Value": 4,
+          "Description": "Enable per-draw/dispatch event instrumentation markers"
+        },
+        {
+          "Name": "DevModeSqttMarkerEnableBarrier",
+          "Value": 8,
+          "Description": "Enable barrier instrumentation markers"
+        },
+        {
+          "Name": "DevModeSqttMarkerEnableGeneralApi",
+          "Value": 16,
+          "Description": "Enable general API (per entry point call) instrunmentation markers"
+        },
+        {
+          "Name": "DevModeSqttMarkerEnableUserEvent",
+          "Value": 32,
+          "Description": "Enable user event (app string) markers"
+        },
+        {
+          "Name": "DevModeSqttMarkerEnableEventWithDims",
+          "Value": 64,
+          "Description": "Enable dispatch events with thread dimensions"
+        },
+        {
+          "Name": "DevModeSqttMarkerEnablePipelineBind",
+          "Value": 256,
+          "Description": "Enable pipeline bind markers"
+        }
+      ]
+    },
+    {
+      "Name": "PipelineBinningMode",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "PipelineBinningModeDefault",
+          "Value": 0,
+          "Description": "'Default' follows the PBB global setting."
+        },
+        {
+          "Name": "PipelineBinningModeDisable",
+          "Value": 1,
+          "Description": "'Disable' disables pipeline binning."
+        },
+        {
+          "Name": "PipelineBinningModeEnable",
+          "Value": 2,
+          "Description": "'Enable' enables pipeline binning."
+        }
+      ]
+    }
+  ],
+  "Settings": [
+    {
+      "Name": "RenderPassNewEnable",
+      "Description": "Use new render passes",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "renderPassNewEnable"
+    },
+    {
+      "Name": "RenderPassLogEnable",
+      "Description": "Write a graph visualization of each created render pass in .dot format",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "renderPassLogEnable"
+    },
+    {
+      "Name": "RenderPassLogDirectory",
+      "Description": "Relative directory where render pass graphs are placed. Root directory is determined in device. Each unique render pass is in a separate file within that directory. The log name is based on a hash of the render pass's create info. ",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Flags": {
+        "IsPath": true
+      },
+      "Defaults": {
+        "Default": "amdpal/",
+        "WinDefault": "VulkanRenderPasses\\",
+        "LnxDefault": "amdpal/"
+      },
+      "Scope": "Driver",
+      "Type": "string",
+      "VariableName": "renderPassLogDirectory",
+      "Size": 512
+    },
+    {
+      "Name": "RenderPassLogFlags",
+      "Description": "A bitmask of flags that control what kind of information is written to the render pass log.",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Include render graph.",
+            "Value": 1
+          },
+          {
+            "Description": "Include command list.",
+            "Value": 2
+          },
+          {
+            "Description": "Include original VkSubpassDependency edges.",
+            "Value": 4
+          },
+          {
+            "Description": "Include waits and signal event info.",
+            "Value": 8
+          },
+          {
+            "Description": "Include cache/layout synchronization info.",
+            "Value": 16
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "renderPassLogFlags"
+    },
+    {
+      "Description": "If true, forces a full pipeline idle between each node rather than relying on GPU events.",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "renderPassForceWaitIdle",
+      "Name": "RenderPassForceWaitIdle"
+    },
+    {
+      "Description": "If non-zero, the following input/output caches are always force-flushed between each node.",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "renderPassForceCacheInputCoher",
+      "Name": "RenderPassForceCacheInputCoher"
+    },
+    {
+      "Description": "If non-zero, the following input/output caches are always force-flushed between each node.",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "renderPassForceCacheOutputCoher",
+      "Name": "RenderPassForceCacheOutputCoher"
+    },
+    {
+      "Description": "Use asynchronous GPU events to wait between steps of a renderpass instance.",
+      "Tags": [
+        "Render Passes"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "renderPassAsyncEventEnable",
+      "Name": "RenderPassAsyncEventEnable"
+    },
+    {
+      "Description": "Minimum number of GPU events to allocate at once by the command buffer GPU event manager.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": 128
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "cmdBufGpuEventMinAllocCount",
+      "Name": "CmdBufGpuEventMinAllocCount"
+    },
+    {
+      "Description": "Use shared CmdAllocator for all command buffers.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "useSharedCmdAllocator",
+      "Name": "UseSharedCmdAllocator"
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "GpuHeapLocal",
+            "Value": 0
+          },
+          {
+            "Name": "GpuHeapInvisible",
+            "Value": 1,
+            "Description": "This is invalid! Allocations must be mappable"
+          },
+          {
+            "Name": "GpuHeapGartUswc",
+            "Value": 2
+          },
+          {
+            "Name": "GpuHeapGartCacheable",
+            "Value": 3
+          }
+        ],
+        "Name": "Pal::GpuHeap"
+      },
+      "Description": "The primary heap for the internal CmdAllocator for command data.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": "Pal::GpuHeapGartCacheable"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "cmdAllocatorDataHeap",
+      "Name": "CmdAllocatorDataHeap"
+    },
+    {
+      "Description": "Size of allocation chunks used by CmdAllocators for command data.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": 2097152
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "cmdAllocatorDataAllocSize",
+      "Name": "CmdAllocatorDataAllocSize"
+    },
+    {
+      "Description": "Size of suballocations used by CmdAllocators for command data.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": 65536
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "cmdAllocatorDataSubAllocSize",
+      "Name": "CmdAllocatorDataSubAllocSize"
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "GpuHeapLocal",
+            "Value": 0
+          },
+          {
+            "Name": "GpuHeapInvisible",
+            "Value": 1,
+            "Description": "This is invalid! Allocations must be mappable"
+          },
+          {
+            "Name": "GpuHeapGartUswc",
+            "Value": 2
+          },
+          {
+            "Name": "GpuHeapGartCacheable",
+            "Value": 3
+          }
+        ],
+        "Name": "Pal::GpuHeap"
+      },
+      "Description": "The primary heap for the internal CmdAllocator for embedded data.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": "Pal::GpuHeapGartUswc"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "cmdAllocatorEmbeddedHeap",
+      "Name": "CmdAllocatorEmbeddedHeap"
+    },
+    {
+      "Name": "CmdAllocatorEmbeddedAllocSize",
+      "Description": "Size of allocation chunks used by CmdAllocators for embedded data",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": 131072
+      },
+      "Type": "uint32",
+      "Flags": {
+        "IsHex": true
+      },
+      "VariableName": "cmdAllocatorEmbeddedAllocSize",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "CmdAllocatorEmbeddedSubAllocSize",
+      "Description": "Size of suballocations used by CmdAllocators for embedded data",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": 16384
+      },
+      "Type": "uint32",
+      "Flags": {
+        "IsHex": true
+      },
+      "VariableName": "cmdAllocatorEmbeddedSubAllocSize",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "CmdAllocatorScratchHeap",
+      "Description": "The primary heap for the internal CmdAllocator for GPU scratch memory. Note: this field is ignored by PAL and will always be GpuHeapInvisible.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": "Pal::GpuHeapInvisible"
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "GpuHeapLocal",
+            "Value": 0
+          },
+          {
+            "Name": "GpuHeapInvisible",
+            "Value": 1
+          },
+          {
+            "Name": "GpuHeapGartUswc",
+            "Value": 2
+          },
+          {
+            "Name": "GpuHeapGartCacheable",
+            "Value": 3
+          }
+        ],
+        "Name": "Pal::GpuHeap"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "cmdAllocatorScratchHeap"
+    },
+    {
+      "Name": "CmdAllocatorScratchAllocSize",
+      "Description": "Size of allocation chunks used by CmdAllocators for GPU scratch memory.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": 131072
+      },
+      "Type": "uint32",
+      "Flags": {
+        "IsHex": true
+      },
+      "VariableName": "cmdAllocatorScratchAllocSize",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "CmdAllocatorScratchSubAllocSize",
+      "Description": "Size of suballocations used by CmdAllocators for GPU scratch memory.",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": 16384
+      },
+      "Type": "uint32",
+      "Flags": {
+        "IsHex": true
+      },
+      "VariableName": "cmdAllocatorScratchSubAllocSize",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "PipelineLinkTimeOptMode",
+      "Description": "Controls how PAL's link-time pipeline optimizations are enabled.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": "PipelineLinkTimeOptApiControlled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "PipelineLinkTimeOptApiControlled",
+            "Value": 0,
+            "Description": "Enabled unless VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT is set."
+          },
+          {
+            "Name": "PipelineLinkTimeOptAlwaysEnabled",
+            "Value": 1,
+            "Description": "Optimizations always enabled."
+          },
+          {
+            "Name": "PipelineLinkTimeOptAlwaysDisabled",
+            "Value": 2,
+            "Description": "Optimizations always disabled."
+          }
+        ],
+        "Name": "PipelineLinkTimeOptMode"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "pipelineLinkTimeOptMode"
+    },
+    {
+      "Name": "PipelineFastCompileMode",
+      "Description": "Controls how SC 'fast compile mode' (disable optimizations) is enabled",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": "PipelineFastCompileApiControlled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "PipelineFastCompileApiControlled",
+            "Value": 0,
+            "Description": "'Fast compile' disabled unless VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT is set"
+          },
+          {
+            "Name": "PipelineFastCompileAlwaysFast",
+            "Value": 1,
+            "Description": "'Fast compile' always enabled (disables SC shader optimization)."
+          },
+          {
+            "Name": "PipelineFastCompileAlwaysOptimized",
+            "Value": 2,
+            "Description": "'Fast compile' always disabled (SC default optimizations enabled)."
+          }
+        ],
+        "Name": "PipelineFastCompileMode"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "pipelineFastCompileMode"
+    },
+    {
+      "Name": "PipelineBinningMode",
+      "Description": "Specifies whether to override binning setting for pipeline.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": "PipelineBinningModeDefault"
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "PipelineBinningModeDefault",
+            "Value": 0,
+            "Description": "'Default' follows the PBB global setting."
+          },
+          {
+            "Name": "PipelineBinningModeDisable",
+            "Value": 1,
+            "Description": "'Disable' disables pipeline binning."
+          },
+          {
+            "Name": "PipelineBinningModeEnable",
+            "Value": 2,
+            "Description": "'Enable' enables pipeline binning."
+          }
+        ],
+        "Name": "PipelineBinningMode"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "pipelineBinningMode"
+    },
+    {
+      "Name": "PipelineUseProfileHashAsClientHash",
+      "Description": "If true, the profile hash (calculated exclusively from SPIRV + entry point) is used as PAL client hash and will appear in e.g. GPUProfiler layer measurements.  Useful when writing and updating pipeline profiles for applications. ",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "pipelineUseProfileHashAsClientHash"
+    },
+    {
+      "Name": "PipelineUseShaderHashAsProfileHash",
+      "Description": "If true, the shader hash (calcualte from SPIRV) is used as profile hash. ",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "pipelineUseShaderHashAsProfileHash"
+    },
+    {
+      "Name": "PipelineProfileRuntimeFile",
+      "Description": "Path to a JSON file that describes a shader app profile that is parsed at runtime.  This setting only triggers on debug builds or builds made with the ICD_RUNTIME_APP_PROFILE=1 option.  This file has the same format as the JSON files used to build production shader app profiles.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Flags": {
+        "IsPath": true
+      },
+      "Defaults": {
+        "Default": ""
+      },
+      "Scope": "Driver",
+      "Type": "string",
+      "VariableName": "pipelineProfileRuntimeFile",
+      "Size": 512
+    },
+    {
+      "Name": "PipelineProfileDbgPrintProfileMatch",
+      "Description": "Prints a message to the debugger when a pipeline profile matches a pipeline. Only valid on debug builds or builds built with PAL_ENABLE_PRINTS_ASSERTS=1.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "pipelineProfileDbgPrintProfileMatch"
+    },
+    {
+      "Name": "PipelineProfileIgnoresAppProfile",
+      "Description": "If this is true, any production app profile-installed shader optimizations are ignored.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "pipelineProfileIgnoresAppProfile"
+    },
+    {
+      "Name": "PipelineProfileHaltOnParseFailure",
+      "Description": "If the driver fails to parse a runtime profile JSON file, it will assert and enter into aninfinite loop if this setting is TRUE. ",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "pipelineProfileHaltOnParseFailure"
+    },
+    {
+      "Name": "DisableEmbedConstArrays",
+      "Description": "If indexable constant arrays end up as local variables instead of literals, this embeds them  into the shader code so they can be indexed instead of spilling to memory and reading back.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "disableEmbedConstArrays",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "UmdFramePacerControl",
+      "Description": "Enable UMD frame pacer control.",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableUmdFramePacer"
+    },
+    {
+      "Name": "EnableFRTC",
+      "Description": "Enable Frame Rate Target Control.",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableFrtc"
+    },
+    {
+      "Name": "EnableTurboSync",
+      "Description": "Enable Turbo Sync control.",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableTurboSync"
+    },
+    {
+      "Name": "FullscreenFrameMetadataSupport",
+      "Description": "Support Fullscreen Frame Metadata.",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "fullScreenFrameMetadataSupport"
+    },
+    {
+      "Name": "UseSdmaCompositingBlt",
+      "Description": "For software compositing, perform an SDMA blt on the slave device instead of using its present queue.",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "useSdmaCompositingBlt"
+    },
+    {
+      "Name": "EnableMailboxPresentMode",
+      "Description": "Enable VK_PRESENT_MODE_MAILBOX_KHR present mode support on Windows OS.",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableMailboxPresentMode"
+    },
+    {
+      "Description": "Enable pipeline dump, pipeline is stored with .pipe format. You must set AMD_DEBUG_DIR and make sure $AMD_DEBUG_DIR + pipelineDumpDir is  an available directory.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enablePipelineDump",
+      "Name": "EnablePipelineDump"
+    },
+    {
+      "Description": "Relative directory where pipeline info is dumped. Root directory is determined by AMD_DEBUG_DIR environment variable. Each unique pipeline is in a separate file within that directory. The log name is based on a hash of the pipeline's create info and  which shader stages are active.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsPath": true
+      },
+      "Defaults": {
+        "Default": "spvPipeline",
+        "WinDefault": "SpvPipeline",
+        "LnxDefault": "spvPipeline"
+      },
+      "Scope": "Driver",
+      "Name": "PipelineDumpDir",
+      "Type": "string",
+      "VariableName": "pipelineDumpDir",
+      "Size": 256
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Disable all logs.",
+            "Value": 0
+          },
+          {
+            "Description": "Enable output error message.",
+            "Value": 1
+          },
+          {
+            "Description": "Enable output general info.",
+            "Value": 2
+          },
+          {
+            "Description": "Enable output both general info and error message.",
+            "Value": 3
+          }
+        ]
+      },
+      "Description": "Enable log general output and error message in LLPC and BIL.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "enableLog",
+      "Name": "EnableLog"
+    },
+    {
+      "Description": "Filename of the log file in LLPC and BIL. Directory of the log file is PipelineDumpDir. Note that logFileName does not includes <path> and <.txt>. Full path of log file is: PipelineDumpDir+LogFileNameBil.txt or PipelineDumpDir+LogFileNameLlpc.txt. ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsFile": true
+      },
+      "Defaults": {
+        "Default": "spvLogInfo"
+      },
+      "Scope": "Driver",
+      "Name": "LogFileName",
+      "Type": "string",
+      "VariableName": "logFileName",
+      "Size": 256
+    },
+    {
+      "Description": "Enable output diagnostic info. This info may added to AMD IL or external debug log files.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableDebug",
+      "Name": "EnableDebug"
+    },
+    {
+      "Description": "Filename of the file to log debug information.  If the file name is empty, the message will be output to stderr.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsFile": true
+      },
+      "Defaults": {
+        "Default": "debugLogInfo.txt"
+      },
+      "Scope": "Driver",
+      "Name": "DebugLogFileName",
+      "Type": "string",
+      "VariableName": "debugLogFileName",
+      "Size": 256
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "ShaderReplaceDisable",
+            "Value": 0,
+            "Description": "Disable shader replacement (default)"
+          },
+          {
+            "Name": "ShaderReplaceShaderHash",
+            "Value": 1,
+            "Description": "Enable shader hash based shader replacement, for any shader whose hash is AAA, if there is a file named shader_0xAAA_replace.spv under ShaderReplacementDir, this file will be used to replace the original shader."
+          },
+          {
+            "Name": "ShaderReplaceShaderPipelineHash",
+            "Value": 2,
+            "Description": "Enable shader hash plus pipeline hash filter based shader replacement, shader hash based shader replacement will only be enabled for pipelines whose hash is in ShaderReplacementPipelineHashs."
+          },
+          {
+            "Name": "ShaderReplacePipelineBinaryHash",
+            "Value": 3,
+            "Description": "Enable pipeline binary hash based pipeline binary replacement, for any pipeline binary whose hash is AAA, if there is a file named PipelneXXX_0xAAA_replace.elf under ShaderReplacementDir, this file will be used to replace the original pipeline binary."
+          },
+          {
+            "Name": "ShaderReplaceShaderISA",
+            "Value": 4,
+            "Description": "Enable replace ISA shader in the pipeline, For every pipeline in the ShaderReplacementPipelineHashs, would find if there is a file named 0xAAA_replace.txt under ShaderReplacementDir, would be loaded for the replacement the replace shader look like this  *----offset: ISACODE----* 848:0x7E120303   1480:0x7E1E0303  2592:0x7E0E030E"
+          }
+        ],
+        "Name": "ShaderReplaceMode"
+      },
+      "Description": "Enable shader replacement. This option is valid only if LLPC path is enabled.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": "ShaderReplaceDisable"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "shaderReplaceMode",
+      "Name": "ShaderReplaceMode"
+    },
+    {
+      "Description": "Relative directory where shader replacement files are stored. Root directory is determined in device.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsPath": true
+      },
+      "Defaults": {
+        "Default": "ShaderReplace",
+        "WinDefault": "ShaderReplace",
+        "LnxDefault": "ShaderReplace"
+      },
+      "Scope": "Driver",
+      "Name": "ShaderReplaceDir",
+      "Type": "string",
+      "VariableName": "shaderReplaceDir",
+      "Size": 256
+    },
+    {
+      "Description": "Only valid if shaderReplaceMode is set to 2 and 4. This is a comma separated pipeline hash list. Hash number is in big case, example hash list looks like: 0xAD033E031BF7CB6C,0x1B707F37B7DA34E3",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": ""
+      },
+      "Scope": "Driver",
+      "Name": "ShaderReplacePipelineHashes",
+      "Type": "string",
+      "VariableName": "shaderReplacePipelineHashes",
+      "Size": 512
+    },
+    {
+      "Description": "Drop specified instruction in pipeline binary for quick debugging shader. It replaces all matching instruction opcodes with NOPs and needs to work with DropPipelineBinaryInstToken and DropPipelineBinaryInstSize together.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableDropPipelineBinaryInst",
+      "Name": "EnableDropPipelineBinaryInst"
+    },
+    {
+      "Description": "Change the API-exposed subgroupSize 0  - The maximum supported waveSize of the GPU (default) 32 - Subgroup size of 32 64 - Subgroup size of 64 ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "subgroupSize",
+      "Name": "SubgroupSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force vertex shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "vsWaveSize",
+      "Name": "VsWaveSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force tessellation control shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "tcsWaveSize",
+      "Name": "TcsWaveSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force tessellation evaluation shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "tesWaveSize",
+      "Name": "TesWaveSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force geometry shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "gsWaveSize",
+      "Name": "GsWaveSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force fragment shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "fsWaveSize",
+      "Name": "FsWaveSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force compute shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "csWaveSize",
+      "Name": "CsWaveSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable NGG mode, use an implicit primitive shader. Use this instead of PAL setting, NggEnableMode.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "enableNgg",
+      "Name": "EnableNgg",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "NggEnableGsUse",
+      "Description": "[LLPC ONLY] Enable NGG use on geometry shader.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "nggEnableGsUse",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Force NGG to run in non pass-through mode.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "nggForceNonPassthrough",
+      "Name": "NggForceNonPassthrough",
+      "Scope": "Driver"
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "NggCompactSubgroup",
+            "Value": 0
+          },
+          {
+            "Name": "NggCompactVertices",
+            "Value": 1
+          }
+        ],
+        "Name": "NggCompactMode"
+      },
+      "Description": "Compaction mode after culling operations. 0 - Compaction is based on the whole sub-group 1 - Compaction is based on vertices ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": "NggCompactSubgroup"
+      },
+      "Type": "enum",
+      "VariableName": "nggCompactionMode",
+      "Name": "NggCompactionMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Always use primitive shader table to fetch culling-control registers.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "nggAlwaysUsePrimShaderTable",
+      "Name": "NggAlwaysUsePrimShaderTable",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Control NGG backface culling algorithm (1 ~ UINT32_MAX, 0 disables it).",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "nggBackfaceExponent",
+      "Name": "NggBackfaceExponent",
+      "Scope": "Driver"
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "NggSubgroupAuto",
+            "Value": 0,
+            "Description": "Sub-group size is allocated as optimally determined"
+          },
+          {
+            "Name": "NggSubgroupMaximumSize",
+            "Value": 1,
+            "Description": "Sub-group size is allocated to the maximum allowable size by the hardware"
+          },
+          {
+            "Name": "NggSubgroupHalfSize",
+            "Value": 2,
+            "Description": "Sub-group size is allocated as to allow half of the maximum allowable size by the hardware"
+          },
+          {
+            "Name": "NggSubgroupOptimizeForVerts",
+            "Value": 3,
+            "Description": "Sub-group size is optimized for vertex thread utilization"
+          },
+          {
+            "Name": "NggSubgroupOptimizeForPrims",
+            "Value": 4,
+            "Description": "Sub-group size is optimized for primitive thread utilization"
+          },
+          {
+            "Name": "NggSubgroupExplicit",
+            "Value": 5,
+            "Description": "Sub-group size is allocated based on explicitly-specified vertsPerSubgroup and primsPerSubgroup"
+          }
+        ],
+        "Name": "NggSubgroupSizingType"
+      },
+      "Description": "Define various sizing options of sub-group size for NGG primitive shader.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": "NggSubgroupAuto"
+      },
+      "Type": "enum",
+      "VariableName": "nggSubgroupSizing",
+      "Name": "NggSubgroupSizing",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Preferred number of GS primitives to pack into a primitive shader sub-group Use this instead of PAL setting, NggPrimsPerSubgroup. ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 256
+      },
+      "Type": "uint32",
+      "VariableName": "nggPrimsPerSubgroup",
+      "Name": "NggPrimsPerSubgroup",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Preferred number of vertices consumed by a primitive shader sub-group Use this instead of PAL setting, NggVertsPerSubgroup. ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 256
+      },
+      "Type": "uint32",
+      "VariableName": "nggVertsPerSubgroup",
+      "Name": "NggVertsPerSubgroup",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable culling of primitives that don't meet facing criteria. Use this instead of PAL setting, EnableBackfaceCullMask. ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "nggEnableBackfaceCulling",
+      "Name": "NggEnableBackfaceCulling",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable discarding of primitives outside of view frustum. Use this instead of PAL setting, EnableAccurateFrustumCullMask. ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "nggEnableFrustumCulling",
+      "Name": "NggEnableFrustumCulling",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable simpler frustum culler that is less accurate.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "nggEnableBoxFilterCulling",
+      "Name": "NggEnableBoxFilterCulling",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable frustum culling based on a sphere.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "nggEnableSphereCulling",
+      "Name": "NggEnableSphereCulling",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable trivial sub-sample primitive culling. Use this instead of PAL setting, EnableSmallPrimFilterMask. ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "nggEnableSmallPrimFilter",
+      "Name": "NggEnableSmallPrimFilter",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable culling when cull distance exports are present.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "nggEnableCullDistanceCulling",
+      "Name": "NggEnableCullDistanceCulling",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force HW to guarantee forward progress per wave on GFX10 0x00000000 - Disable (default) 0x00000001 - Enable for vertex shaders 0x00000002 - Enable for tessellation control shaders 0x00000004 - Enable for tessellation evaluation shaders 0x00000008 - Enable for geometry shaders 0x00000010 - Enable for fragment shaders 0x00000020 - Enable for compute shaders ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsHex": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "enableForwardProgress",
+      "Name": "EnableForwardProgress",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Allocate waves for execution with 4 SIMDs (WGP) instead of letting the compiler choose  WGP vs CU (2 SIMDs) on GFX10",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Compiler chooses (default)",
+            "Value": 0
+          },
+          {
+            "Description": " Enable for vertex shaders",
+            "Value": 1
+          },
+          {
+            "Description": "Enable for tessellation control shaders",
+            "Value": 2
+          },
+          {
+            "Description": "Enable for tessellation evaluation shaders",
+            "Value": 4
+          },
+          {
+            "Description": "Enable for geometry shaders",
+            "Value": 8
+          },
+          {
+            "Description": "Enable for fragment shaders",
+            "Value": 16
+          },
+          {
+            "Description": "Enable for compute shaders",
+            "Value": 32
+          }
+        ]
+      },
+      "Type": "uint32",
+      "Flags": {
+        "IsHex": true
+      },
+      "VariableName": "enableWgpMode",
+      "Name": "EnableWgpMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Choose a region size, if any, to force the end of the wavefront before the next available quad that falls outside the region. 0x0 - None     - No wave break by region 0x1 - 8x8      - Break outside a 8x8 pixel region 0x2 - 16x16    - Break outside a 16x16 pixel region 0x3 - 32x32    - Break outside a 32x32 pixel region 0xF - DrawTime - Choose wave break size per draw (default) ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsHex": true
+      },
+      "Defaults": {
+        "Default": 15
+      },
+      "Type": "uint32",
+      "VariableName": "waveBreakSize",
+      "Name": "WaveBreakSize",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "This option is valid when EnableDropPipelineBinaryInst is set to true. It should be specified with the hex value of first dword of instruction. For example: DropPipelineBinaryInstToken,0xE1084000",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "DependsOn": {
+        "Settings": [
+          {
+            "Values": [
+              true
+            ],
+            "Name": "EnableDropPipelineBinaryInst"
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dropPipelineBinaryInstToken",
+      "Name": "DropPipelineBinaryInstToken"
+    },
+    {
+      "Description": "This option is valid when EnableDropPipelineBinaryInst is set to true. It should be specified with the size in dword of instruction to be dropped.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 1
+      },
+      "DependsOn": {
+        "Settings": [
+          {
+            "Values": [
+              true
+            ],
+            "Name": "EnableDropPipelineBinaryInst"
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dropPipelineBinaryInstSize",
+      "Name": "DropPipelineBinaryInstSize"
+    },
+    {
+      "Description": "[BIL ONLY] Generate optimized IL codes for performance purpose. This may break some precision rules and may not produce 100% conforming IL codes. Therefore, the option should only be enabled via application profile.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableSpvPerfOptimal",
+      "Name": "EnableSpvPerfOptimal"
+    },
+    {
+      "Description": "[BIL ONLY] Enable SPIR-V binary validation.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableSpvValidation",
+      "Name": "EnableSpvValidation"
+    },
+    {
+      "Description": "[BIL ONLY] Zero initialize AMD IL registers. ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "zeroInitIlRegs",
+      "Name": "ZeroInitILRegs"
+    },
+    {
+      "Description": "[BIL ONLY] Skip unsupported SPIR-V instructions. ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "skipUnsupportedOpCode",
+      "Name": "SkipUnsupportedOpCode"
+    },
+    {
+      "Description": "[LLPC ONLY] LLPC general options. Max length of the option is 256. for example: Disable Loop unroll: -pragma-unroll-threshold=1 Enable si-scheduler: -enable-si-scheduler Please see amdllpc -help or -help-hidden for detail",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": ""
+      },
+      "Scope": "Driver",
+      "Name": "LlpcOptions",
+      "Type": "string",
+      "VariableName": "llpcOptions",
+      "Size": 256
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "ShaderCacheDisable",
+            "Value": 0,
+            "Description": "Shader Cache is disabled."
+          },
+          {
+            "Name": "ShaderCacheEnableRuntimeOnly",
+            "Value": 1,
+            "Description": "Shader Cache is enabled for runtime use only."
+          },
+          {
+            "Name": "ShaderCacheEnableOnDisk",
+            "Value": 2,
+            "Description": "Shader Cache is enabled with on-disk file backing."
+          },
+          {
+            "Name": "ShaderCacheForceInternalCacheOnDisk",
+            "Value": 3,
+            "Description": "Shader Cache is forced on with on-disk file backing even for applications that specify pipeline caches."
+          }
+        ],
+        "Name": "ShaderCacheMode"
+      },
+      "Description": "Controls whether the Device shader cache should be used to try to avoid redundant shader compiles.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": "ShaderCacheEnableRuntimeOnly"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "shaderCacheMode",
+      "Name": "ShaderCacheMode"
+    },
+    {
+      "Description": "This option is valid when EnableDropPipelineBinaryInst is set to true. It should be specified with the hex value to mask DropPipelineBinaryInstToken. For example: DropPipelineBinaryInstMask,0xFFFF0000",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dropPipelineBinaryInstMask",
+      "Name": "DropPipelineBinaryInstMask"
+    },
+    {
+      "Name": "AllowVkPipelineCachingToDisk",
+      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for saving shader ELFs. (Default: FALSE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "usePalPipelineCaching",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "AllowExternalPipelineCacheObject",
+      "Description": "Controls whether a pipeline cache object is allowed to be created via vkCreatePipelineCache in addition to the cache residing within the pipeline compiler. (Default: TRUE)",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "allowExternalPipelineCacheObject",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "PipelineCachingEnvironmentVariable",
+      "Description": "Environment variable to check for to enable Pal Pipeline Caching. This allows launcher applications to dynamically control whether we cache pipleline ELFs or not. When converted to an integer any 0 value will be treated as False, and any non-zero value will be treated as true. Functionally equivalent to setting UsePalPipelineCaching = True/False",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": "AMD_VK_USE_PIPELINE_CACHE"
+      },
+      "Scope": "Driver",
+      "Type": "string",
+      "VariableName": "pipelineCachingEnvironmentVariable",
+      "Size": 256
+    },
+    {
+      "Name": "UsePipelineCachingDefaultLocation",
+      "Description": "Allow use of default pipeline cache location.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "usePipelineCachingDefaultLocation"
+    },
+    {
+      "Name": "PipelineCachingDefaultLocation",
+      "Description": "Default sub folder to write PAL pipeline cache if not specified by environment variable AMD_VK_PIPELINE_CACHE_PATH. ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": "/AMD/VkCache/",
+        "WinDefault": "\\AMD\\VkCache\\",
+        "LnxDefault": "/AMD/VkCache/"
+      },
+      "Scope": "Driver",
+      "Type": "string",
+      "VariableName": "pipelineCachingDefaultLocation",
+      "Size": 256
+    },
+    {
+      "Name": "MarkPipelineCacheWithBuildTimestamp",
+      "Description": "Controles whether the pipline cache is tagged with the build timestamp. This provides extra stability by forcing a cache rebuild for every new driver released.  May be useful to disable during rapid iteration. (Default: TRUE)",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "markPipelineCacheWithBuildTimestamp"
+    },
+    {
+      "Name": "FilterPipelineDumpByType",
+      "Description": "Filter which types of pipeline dump are disabled. These options can be used to dump pipelines of a specific type. By default, all the pipelines are logged.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": "PipelineDumpFilterNone"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "PipelineDumpFilterNone",
+            "Value": 0,
+            "Description": "Do not disable any pipeline type"
+          },
+          {
+            "Name": "PipelineDumpFilterCs",
+            "Value": 1,
+            "Description": "Disable pipeline dump for Cs pipelines"
+          },
+          {
+            "Name": "PipelineDumpFilterNgg",
+            "Value": 2,
+            "Description": "Disable pipeline dump for NGG pipelines"
+          },
+          {
+            "Name": "PipelineDumpFilterGs",
+            "Value": 4,
+            "Description": "Disable pipeline dump for Gs pipelines "
+          },
+          {
+            "Name": "PipelineDumpFilterTess",
+            "Value": 8,
+            "Description": "Disable pipeline dump for Tess pipelines"
+          },
+          {
+            "Name": "PipelineDumpFilterVsPs",
+            "Value": 16,
+            "Description": "Disable pipeline dump for VsPs pipelines"
+          }
+        ],
+        "Name": "PipelineDumpFilters"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "filterPipelineDumpByType"
+    },
+    {
+      "Name": "FilterPipelineDumpByHash",
+      "Description": "If non-zero, only dump the pipeline with this compiler hash.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "VariableName": "filterPipelineDumpByHash"
+    },
+    {
+      "Description": "If true, duplicate pipelines will be dumped to a file with a numeric suffix attached to the filename to distinguish each copy of the pipeline.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "dumpDuplicatePipelines",
+      "Name": "DumpDuplicatePipelines"
+    },
+    {
+      "Name": "DbgBarrierPostCmdEnable",
+      "Description": "Triggers a CmdBarrier call after any command in the given mask.  The barrier behavior is controlled by the other DbgBarrierPost* settings in this category.  Requires VK_ENABLE_DEBUG_BARRIERS=1 to take effect. 0x8FFFFFFF: All commands (heavyweight option)",
+      "Tags": [
+        "Debugging"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DbgBarrierDrawNonIndexed",
+            "Value": 1,
+            "Description": "Any non-indexed draw (including indirect)"
+          },
+          {
+            "Name": "DbgBarrierDrawIndexed",
+            "Value": 2,
+            "Description": "Any indexed draw (including indirect)"
+          },
+          {
+            "Name": "DbgBarrierDrawIndirect",
+            "Value": 4,
+            "Description": "Any indirect draw"
+          },
+          {
+            "Name": "DbgBarrierDispatch",
+            "Value": 8,
+            "Description": "Any direct dispatch"
+          },
+          {
+            "Name": "DbgBarrierDispatchIndirect",
+            "Value": 16,
+            "Description": "Any indirect dispatch"
+          },
+          {
+            "Name": "DbgBarrierCopyBuffer",
+            "Value": 32,
+            "Description": "Any transfer copy involving a buffer"
+          },
+          {
+            "Name": "DbgBarrierCopyImage",
+            "Value": 64,
+            "Description": "Any transfer copy involving an image"
+          },
+          {
+            "Name": "DbgBarrierCopyQueryPool",
+            "Value": 128,
+            "Description": "Any transfer copy involving a query pool"
+          },
+          {
+            "Name": "DbgBarrierClearColor",
+            "Value": 256,
+            "Description": "Any color clear operation (including render pass clears)"
+          },
+          {
+            "Name": "DbgBarrierClearDepth",
+            "Value": 512,
+            "Description": "Any depth-stencil clear operation (including render pass clears)"
+          },
+          {
+            "Name": "DbgBarrierResolve",
+            "Value": 1024,
+            "Description": "Any resolve operation (including render pass resolves)"
+          },
+          {
+            "Name": "DbgBarrierBeginRenderPass",
+            "Value": 2048,
+            "Description": "vkCmdBeginRenderPass"
+          },
+          {
+            "Name": "DbgBarrierNextSubpass",
+            "Value": 4096,
+            "Description": "vkCmdNextSubpass"
+          },
+          {
+            "Name": "DbgBarrierEndRenderPass",
+            "Value": 8192,
+            "Description": "vkCmdEndRenderPass"
+          },
+          {
+            "Name": "DbgBarrierSetResetEvent",
+            "Value": 16384,
+            "Description": "vkCmdSetEvent or vkCmdResetEvent"
+          },
+          {
+            "Name": "DbgBarrierPipelineBarrierWaitEvents",
+            "Value": 32768,
+            "Description": "vkCmdPipelineBarrier or vkCmdWaitEvents"
+          },
+          {
+            "Name": "DbgBarrierQueryBeginEnd",
+            "Value": 65536,
+            "Description": "vkCmdBeginQuery or vkCmdEndQuery"
+          },
+          {
+            "Name": "DbgBarrierQueryReset",
+            "Value": 131072,
+            "Description": "vkCmdResetQueryPool"
+          },
+          {
+            "Name": "DbgBarrierExecuteCommands",
+            "Value": 262144,
+            "Description": "vkCmdExecuteCommands"
+          },
+          {
+            "Name": "DbgBarrierCmdBufStart",
+            "Value": 524288,
+            "Description": "Start of the command buffer"
+          },
+          {
+            "Name": "DbgBarrierCmdBufEnd",
+            "Value": 1048576,
+            "Description": "End of the command buffer"
+          },
+          {
+            "Name": "DbgBarrierBindPipeline",
+            "Value": 2097152,
+            "Description": "vkCmdBindPipeline"
+          },
+          {
+            "Name": "DbgBarrierBindSetsPushConstants",
+            "Value": 4194304,
+            "Description": "vkCmdBindDescriptorSets or vkCmdPushConstants"
+          },
+          {
+            "Name": "DbgBarrierBindIndexVertexBuffer",
+            "Value": 8388608,
+            "Description": "vkCmdBindIndexBuffer or vkCmdBindVertexBuffers"
+          },
+          {
+            "Name": "DbgBarrierWriteTimestamp",
+            "Value": 16777216,
+            "Description": "vkCmdWriteTimestamp"
+          },
+          {
+            "Name": "DbgBarrierSetDynamicPipelineState",
+            "Value": 33554432,
+            "Description": "Any vkCmdSet* which programs dynamic pipeline state"
+          },
+          {
+            "Name": "DbgBarrierVideo",
+            "Value": 67108864,
+            "Description": "Any video operations"
+          },
+          {
+            "Name": "DbgBarrierOther",
+            "Value": 2147483648,
+            "Description": "Any other command not listed above"
+          }
+        ],
+        "Name": "DbgBarrierCmd"
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPostCmdEnable"
+    },
+    {
+      "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier will wait.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Value": 0,
+            "Description": "HwPipeTop (heavyweight option)"
+          },
+          {
+            "Value": 1,
+            "Description": "HwPipePostIndexFetch, HwPipePreCs, or HwPipePreBlt"
+          },
+          {
+            "Value": 3,
+            "Description": "HwPipePreRasterization"
+          },
+          {
+            "Value": 4,
+            "Description": "HwPipePostPs"
+          },
+          {
+            "Value": 5,
+            "Description": "HwPipePostCs"
+          },
+          {
+            "Value": 6,
+            "Description": "HwPipePostBlt"
+          },
+          {
+            "Value": 7,
+            "Description": "HwPipeBottom"
+          }
+        ]
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPostWaitPipePoint",
+      "Name": "DbgBarrierPostWaitPipePoint"
+    },
+    {
+      "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier is signaled.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Value": 0,
+            "Description": "HwPipeTop (heavyweight option)"
+          },
+          {
+            "Value": 1,
+            "Description": "HwPipePostIndexFetch, HwPipePreCs, or HwPipePreBlt"
+          },
+          {
+            "Value": 3,
+            "Description": "HwPipePreRasterization"
+          },
+          {
+            "Value": 4,
+            "Description": "HwPipePostPs"
+          },
+          {
+            "Value": 5,
+            "Description": "HwPipePostCs"
+          },
+          {
+            "Value": 6,
+            "Description": "HwPipePostBlt"
+          },
+          {
+            "Value": 7,
+            "Description": "HwPipeBottom"
+          }
+        ]
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPostSignalPipePoint",
+      "Name": "DbgBarrierPostSignalPipePoint"
+    },
+    {
+      "Description": "For post-cmd barriers, this flag describes the PAL CacheCoherencyUsageFlags source mask.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Value": 1,
+            "Description": "CoherCpu"
+          },
+          {
+            "Value": 2,
+            "Description": "CoherShader"
+          },
+          {
+            "Value": 4,
+            "Description": "CoherCopy"
+          },
+          {
+            "Value": 8,
+            "Description": "CoherColorTarget"
+          },
+          {
+            "Value": 16,
+            "Description": "CoherDepthStencilTarget"
+          },
+          {
+            "Value": 32,
+            "Description": "CoherResolve"
+          },
+          {
+            "Value": 64,
+            "Description": "CoherClear"
+          },
+          {
+            "Value": 128,
+            "Description": "CoherIndirectArgs"
+          },
+          {
+            "Value": 256,
+            "Description": "CoherIndexData"
+          },
+          {
+            "Value": 512,
+            "Description": "CoherQueueAtomic"
+          },
+          {
+            "Value": 1024,
+            "Description": "CoherTimestamp"
+          },
+          {
+            "Value": 2048,
+            "Description": "CoherCeLoad"
+          },
+          {
+            "Value": 4096,
+            "Description": "CoherCeDump"
+          },
+          {
+            "Value": 8192,
+            "Description": "CoherStreamOut"
+          },
+          {
+            "Value": 16384,
+            "Description": "CoherMemory"
+          },
+          {
+            "Value": 32767,
+            "Description": "CoherAllUsages (heavyweight option)"
+          }
+        ]
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPostCacheSrcMask",
+      "Name": "DbgBarrierPostCacheSrcMask"
+    },
+    {
+      "Description": "For post-cmd barriers, this flag describes the PAL CacheCoherencyUsageFlags destination mask.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Value": 1,
+            "Description": "CoherCpu"
+          },
+          {
+            "Value": 2,
+            "Description": "CoherShader"
+          },
+          {
+            "Value": 4,
+            "Description": "CoherCopy"
+          },
+          {
+            "Value": 8,
+            "Description": "CoherColorTarget"
+          },
+          {
+            "Value": 16,
+            "Description": "CoherDepthStencilTarget"
+          },
+          {
+            "Value": 32,
+            "Description": "CoherResolve"
+          },
+          {
+            "Value": 64,
+            "Description": "CoherClear"
+          },
+          {
+            "Value": 128,
+            "Description": "CoherIndirectArgs"
+          },
+          {
+            "Value": 256,
+            "Description": "CoherIndexData"
+          },
+          {
+            "Value": 512,
+            "Description": "CoherQueueAtomic"
+          },
+          {
+            "Value": 1024,
+            "Description": "CoherTimestamp"
+          },
+          {
+            "Value": 2048,
+            "Description": "CoherCeLoad"
+          },
+          {
+            "Value": 4096,
+            "Description": "CoherCeDump"
+          },
+          {
+            "Value": 8192,
+            "Description": "CoherStreamOut"
+          },
+          {
+            "Value": 16384,
+            "Description": "CoherMemory"
+          },
+          {
+            "Value": 32767,
+            "Description": "CoherAllUsages (heavyweight option)"
+          }
+        ]
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPostCacheDstMask",
+      "Name": "DbgBarrierPostCacheDstMask"
+    },
+    {
+      "Description": "Triggers a CmdBarrier call before any command in the given mask.  The barrier behavior is controlled by the other DbgBarrierPre* settings in this category.  Requires VK_ENABLE_DEBUG_BARRIERS=1 to take effect. For further documentation, consult the corresponding DbgBarrierPostCmdEnable command.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPreCmdEnable",
+      "Name": "DbgBarrierPreCmdEnable"
+    },
+    {
+      "Description": "For pre-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier will wait. For further documentation, consult DbgBarrierPostWaitPipePoint.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPreWaitPipePoint",
+      "Name": "DbgBarrierPreWaitPipePoint"
+    },
+    {
+      "Description": "For pre-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier is signaled. For further documentation, consult DbgBarrierPostSignalPipePoint.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPreSignalPipePoint",
+      "Name": "DbgBarrierPreSignalPipePoint"
+    },
+    {
+      "Description": "For pre-cmd barriers, this flag describes the PAL CacheCoherencyUsageFlags source mask. For further documentation, consult DbgBarrierPostCacheSrcMask.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPreCacheSrcMask",
+      "Name": "DbgBarrierPreCacheSrcMask"
+    },
+    {
+      "Description": "For pre-cmd barriers, this flag describes the PAL CacheCoherencyUsageFlags destination mask. For further documentation, consult DbgBarrierPostCacheDstMask.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dbgBarrierPreCacheDstMask",
+      "Name": "DbgBarrierPreCacheDstMask"
+    },
+    {
+      "Name": "VulkanOverlayEnable",
+      "Description": "Enable specific channels of the Vulkan debug overlay through a bitmask.  Only takes effect for drivers compiled with the .intdev target (VK_INTERNAL_DEVELOPER=1).",
+      "Tags": [
+        "General"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "OverlayPresentInfo",
+            "Value": 1,
+            "Description": "Enable information about presents"
+          },
+          {
+            "Name": "OverlayBarrierInfo",
+            "Value": 2,
+            "Description": "Enable information about barriers"
+          },
+          {
+            "Name": "OverlayBarrierFiltering",
+            "Value": 4,
+            "Description": "Barrier filter layer debugging information"
+          }
+        ]
+      },
+      "Type": "uint32",
+      "VariableName": "overlayEnable",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Instanced vertex buffer table ring size.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 1024
+      },
+      "Type": "uint32",
+      "VariableName": "vbTableInstanceRingSize",
+      "Name": "VertexBufferTableInstanceRingSize",
+      "Scope": "Driver"
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DefaultResourceBarrier",
+            "Value": 0,
+            "Description": "Default barrier queues"
+          },
+          {
+            "Name": "CombinedAccessMasks",
+            "Value": 16384,
+            "Description": "Ignore Vulkan separate access mask rule"
+          },
+          {
+            "Name": "SkipDstCacheInv",
+            "Value": 32768,
+            "Description": "Do not invalidate dest caches if src cache was not updated"
+          },
+          {
+            "Name": "PreferFlushOverInv",
+            "Value": 8192,
+            "Description": "By default we invalidate input caches to accomodate the Vulkan separate access mask rule. When this is set we'll instead flush all output caches instead to achieve the same goal. Mutually exclusive with SkipDstCacheInv. May or may not be beneficial for certain applications."
+          },
+          {
+            "Name": "Gfx6KeepShaderCoher",
+            "Value": 256,
+            "Description": "Keep shader domain always coherent on GFX6-GFX8 thus avoiding L2 cache flushes/invalidations in shader-to-shader barrier cases at the expense of always flushing/invalidating L1 caches. This does NOT violate the Vulkan separate access mask rule. This behavior is likely preferred on GFX6-GFX8."
+          },
+          {
+            "Name": "Gfx6AvoidCpuMemoryCoher",
+            "Value": 512,
+            "Description": "Avoid CPU and memory domain coherency on GFX6-GFX8 unless corresponding flags are explicitly requested to lower the number of L2 cache flushes/invalidations. This does NOT violate the Vulkan separate access mask rule. This behavior may or may not be beneficial on GFX6-GFX8."
+          },
+          {
+            "Name": "Gfx9KeepShaderCoher",
+            "Value": 1024,
+            "Description": "Keep shader domain always coherent on GFX9+ thus avoiding L2 cache flushes/invalidations in shader-to-shader barrier cases at the expense of always flushing/invalidating L1 caches. This does NOT violate the Vulkan separate access mask rule. This behavior may not be beneficial on GFX9+."
+          },
+          {
+            "Name": "Gfx9AvoidCpuMemoryCoher",
+            "Value": 2048,
+            "Description": "Avoid CPU and memory domain coherency on GFX9+ unless corresponding flags are explicitly requested to lower the number of L2 cache flushes/invalidations. This does NOT violate the Vulkan separate access mask rule. This behavior is preferred on GFX9+ as all other accesses go through the L2."
+          }
+        ],
+        "Name": "ResourceBarrierOptions"
+      },
+      "Description": "Force command buffer based barrier queue usage. Default Value: SkipDstCacheInv | Gfx6AvoidCpuMemoryCoher | Gfx9AvoidCpuMemoryCoher",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 35328
+      },
+      "Type": "uint32",
+      "VariableName": "resourceBarrierOptions",
+      "Name": "ResourceBarrierOptions",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "BarrierFilterOptions",
+      "Description": "Flags to describe strategies of avoiding barrier operations. These are illegal optimizations according to the Vulkan spec but may be acceptable for some applications",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "BarrierFilterDisabled",
+            "Value": 0,
+            "Description": "Do nothing (default)"
+          },
+          {
+            "Name": "SkipStrayExecutionDependencies",
+            "Value": 1,
+            "Description": "The driver is unable to know if a source pipeline stage mask is for a standalone execution dependency or the access scope of a skippable memory dependency. Checking for the source and destination pipeline stage masks doesn't always provide the developer's intent either."
+          },
+          {
+            "Name": "SkipImageLayoutUndefined",
+            "Value": 2,
+            "Description": "Ignore image memory barrier transitions out of undefined in the hope that there will be a full coverage clear to the image next making this likely mask RAM initialization redundant. Transitions to transfer dst optimal are not skipped to avoid issues with slow clears and copies, which require initialized metadata."
+          },
+          {
+            "Name": "SkipDuplicateResourceBarriers",
+            "Value": 4,
+            "Description": "Ignores resource barriers that have the same source and destination parameters in case a full cross-bar sync isn't required."
+          },
+          {
+            "Name": "ForceImageSharingModeExclusive",
+            "Value": 8,
+            "Description": "Exclusive queue family access reduces some memory dependency operations and removes the restriction that the image layout must be supported for multiple queue families. VK_SHARING_MODE_CONCURRENT is only acceptable to ignore when the application unnecessarily specified extra queue families without accessing the resource using them. Setting this option illegally might avoid all the pitfalls in a given application, but they are too numerous to list (e.g. requiring a decompress on an async compute queue)."
+          },
+          {
+            "Name": "SkipWithAppProfile",
+            "Value": 16,
+            "Description": "Filter all requested pipeline barriers in an application profile specified by the setting BarrierFilterProfileFile."
+          },
+          {
+            "Name": "SkipWithAppProfileRegen",
+            "Value": 32,
+            "Description": "Same as SkipWithAppProfile but the pipeline hashes are not considered in order to regenerate strong barrier hashes after any application updates to its shaders."
+          },
+          {
+            "Name": "SkipWithIntDevOverlay",
+            "Value": 64,
+            "Description": "Manually remove barriers using keyboard shortcuts to visualize their effects. Use in conjunction with the developer overlay. See the setting VulkanOverlayEnable OverlayBarrierFiltering option for details. SkipWithAppProfile and SkipWithAppProfileRegen may be used simultaneously to refine or regenerate an existing profile."
+          }
+        ],
+        "Name": "BarrierFilterOptions"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "barrierFilterOptions"
+    },
+    {
+      "Description": "Path to a file that contains application-specific barrier filter profiles. The contents are read on startup and used if BarrierFilterOptions SkipWithAppProfile, SkipWithAppProfileRegen, or SkipWithIntDevOverlay are set. On exit, an updated profile is written to this same file. This setting only triggers on debug builds or builds made with the VK_INTERNAL_DEVELOPER=1 option.",
+      "Tags": [
+        "General"
+      ],
+      "Flags": {
+        "IsPath": true
+      },
+      "Defaults": {
+        "Default": ""
+      },
+      "Scope": "Driver",
+      "Name": "BarrierFilterProfileFile",
+      "Type": "string",
+      "VariableName": "barrierFilterProfileFile",
+      "Size": 512
+    },
+    {
+      "Description": "The number of pipeline cache count we treat as excessive and thus a smaller internal implementation is used for pipeline cache.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 256
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "excessivePipelineCacheCountThreshold",
+      "Name": "ExcessivePipelineCacheCountThreshold"
+    },
+    {
+      "Description": "If not UINT_MAX, this PAL enumerated device index will always be returned as the first enumerated physical device.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "Type": "uint32",
+      "VariableName": "enumPreferredDeviceIndex",
+      "Name": "EnumPreferredDeviceIndex",
+      "Scope": "Driver"
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "FeatureDefault",
+            "Value": 0,
+            "Description": "Default, use application setting"
+          },
+          {
+            "Name": "FeatureForceEnable",
+            "Value": 1,
+            "Description": "Force Enable"
+          },
+          {
+            "Name": "FeatureForceDisable",
+            "Value": 2,
+            "Description": "Force Disable Default Value"
+          }
+        ],
+        "Name": "FeatureEnableMode"
+      },
+      "Description": "Force VkPhysicalDeviceFeatures::robustBufferAccess.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": "FeatureDefault"
+      },
+      "Type": "enum",
+      "VariableName": "robustBufferAccess",
+      "Name": "RobustBufferAccess",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Allows instance-level functions to be queried using vkGetDeviceProcAddr.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "lenientInstanceFuncQuery",
+      "Name": "LenientInstanceFuncQuery",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Determines where the vkAppProfile.txt file will be written to. This file contains  the app profile enumeration index.",
+      "Tags": [
+        "General"
+      ],
+      "Flags": {
+        "IsPath": true
+      },
+      "Defaults": {
+        "Default": ""
+      },
+      "Name": "AppProfileDumpDir",
+      "Type": "string",
+      "VariableName": "appProfileDumpDir",
+      "Size": 512,
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OptEnablePrt",
+      "Description": "Enable PRT feature in general. The detailed feature set is decided according to caps reported by Pal.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "optEnablePrt",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "AsyncComputeQueueMaxWavesPerCu",
+      "Description": "Limit the number of waves in flight per compute unit. This can be used to throttle async compute workloads so that they don't starve the universal queue. ",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "asyncComputeQueueMaxWavesPerCu"
+    },
+    {
+      "Name": "AsyncComputeQueueLimit",
+      "Description": "Limit the number of async compute queues that are reported.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "asyncComputeQueueLimit"
+    },
+    {
+      "Description": "Custom device allocation count limitation, when larger than 0.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "memoryCustomDeviceAllocationCountLimit",
+      "Name": "MemoryCustomDeviceAllocationCountLimit"
+    },
+    {
+      "Description": "All VkMemory memory objects will have the following the GPU VA base address alignment.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 524288
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "memoryBaseAddrAlignment",
+      "Name": "MemoryBaseAddrAlignment"
+    },
+    {
+      "Description": "On 32-bit Windows builds, the following GPU VA base alignment is used for host-visible memory types instead of MemoryBaseVaAlign.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 131072
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "memoryBaseAddrAlignmentCpuVisibleWin32",
+      "Name": "MemoryBaseAddrAlignmentCpuVisibleWin32"
+    },
+    {
+      "Name": "MemoryRemoteBackupHeapMinHeapSize",
+      "Description": "If the size of a device-local heap is smaller than this value, the remote (GART USWC) heap is used as a secondary heap for VkMemory objects created using the default GPU-local memory type for that device-local heap. The remote back-up heap is added regardless when overallocation is allowed via the VK_AMD_memory_overallocation extension. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 8053063680
+      },
+      "Scope": "Driver",
+      "Type": "gpusize",
+      "Flags": {
+        "IsHex": true
+      },
+      "VariableName": "memoryRemoteBackupHeapMinHeapSize"
+    },
+    {
+      "Name": "MemoryAttachmentImageMemoryTypeMinHeapSize",
+      "Description": "If the sum of the device-local heap sizes exceeds this value, the attachment image memory type (local invisible) is enabled. A back-up heap is not added for this memory type unless overallocation is allowed via the VK_AMD_memory_overallocation extension. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true
+      },
+      "Defaults": {
+        "Default": 18446744073709551615
+      },
+      "Scope": "Driver",
+      "Type": "gpusize",
+      "VariableName": "memoryAttachmentImageMemoryTypeMinHeapSize"
+    },
+    {
+      "Description": "Default priority of all VkMemory objects as two hex digits.  The first (most-significant) digit defines the priority level, and the second digit defines the priority offset.  Valid priority level values (Pal::GpuMemPriority) are:  0: Unused 1: VeryLow 2: Low 3: Normal 4: High 5: VeryHigh. Valid priority offset values (Pal::GpuMemPriorityOffset) are: 0: Offset0 (same as base level) 1: Offset1 2: Offset2 3: Offset3 4: Offset4 5: Offset5 6: Offset6 7: Offset7 ",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 48
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "memoryPriorityDefault",
+      "Name": "MemoryPriorityDefault"
+    },
+    {
+      "Description": "Priority of all VkMemory objects containing at least one image. See MemoryPriorityDefault for valid values.",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 48
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "memoryPriorityImageAny",
+      "Name": "MemoryPriorityImageAny"
+    },
+    {
+      "Description": "Priority of all VkMemory objects containing at least one image shader-readable image. See MemoryPriorityDefault for valid values.",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 48
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "memoryPriorityImageShaderRead",
+      "Name": "MemoryPriorityImageShaderRead"
+    },
+    {
+      "Description": "Priority of all VkMemory objects containing at least one shader-writable (storage) image. See MemoryPriorityDefault for valid values.",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 48
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "memoryPriorityImageShaderWrite",
+      "Name": "MemoryPriorityImageShaderWrite"
+    },
+    {
+      "Description": "Priority of all VkMemory objects containing at least one image that can be a color target. See MemoryPriorityDefault for valid values.",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 64
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "memoryPriorityImageColorTarget",
+      "Name": "MemoryPriorityImageColorTarget"
+    },
+    {
+      "Description": "Priority of all VkMemory objects containing at least one image that can be a depth-stencil. See MemoryPriorityDefault for valid values.",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 64
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "memoryPriorityImageDepthStencil",
+      "Name": "MemoryPriorityImageDepthStencil"
+    },
+    {
+      "Description": "On wddm1 and linux, there's no os functionality to report memory budget. We fudge heap budget size as HeapBudgetRatioOfHeapSizeLocal% of heap size for GpuHeapLocal. Valid value is [0, 100]. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 95
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "heapBudgetRatioOfHeapSizeLocal",
+      "Name": "HeapBudgetRatioOfHeapSizeLocal"
+    },
+    {
+      "Description": "On wddm1 and linux, there's no os functionality to report memory budget. We fudge heap budget size as HeapBudgetRatioOfHeapSizeInvisible% of heap size for GpuHeapInvisible Valid value is [0, 100]. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 95
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "heapBudgetRatioOfHeapSizeInvisible",
+      "Name": "HeapBudgetRatioOfHeapSizeInvisible"
+    },
+    {
+      "Description": "On wddm1 and linux, there's no os functionality to report memory budget. We fudge heap budget size as HeapBudgetRatioOfHeapSizeNonlocal% of heap size for GpuHeapGartUswc and GpuHeapGartCacheable. Valid value is [0, 100]. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 95
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "heapBudgetRatioOfHeapSizeNonlocal",
+      "Name": "HeapBudgetRatioOfHeapSizeNonlocal"
+    },
+    {
+      "Description": "Override reported minImageTransferGranularity field for graphics queue families.  This is encoded as a hex string of the form 0xb000zzyyxx, where 'xx', 'yy', and 'zz' are the reported transfer granularities in the X, Y and Z extents respectively, and 'b' is a control flag: if 'b' is non-zero, this override is applies; otherwise the standard transfer granularity is used. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "transferGranularityUniversalOverride",
+      "Name": "TransferGranularityUniversalOverride"
+    },
+    {
+      "Description": "Override reported minImageTransferGranularity field for compute queue families.  For how this value is interpreted by the driver, see the description for TransferGranularityUniversalOverride. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "transferGranularityComputeOverride",
+      "Name": "TransferGranularityComputeOverride"
+    },
+    {
+      "Description": "Device-local memory that is explicitly allocated by the application can tracked on a per-device and per-heap basis. Once the size of a target heap is reached, VK_OUT_OF_DEVICE_MEMORY will be returned. Setting this parameter to TRUE will disable such tracking by DEFAULT. This parameter can be overridden by the VK_AMD_memory_overallocation_behavior device extension and specific app profiles (unless MemoryDeviceOverallocationNonOverridable is set to TRUE).",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "memoryDeviceOverallocationAllowed",
+      "Name": "MemoryDeviceOverallocationAllowed"
+    },
+    {
+      "Description": "MemoryDeviceOverallocationAllowed can be overriden by the VK_AMD_memory_overallocation_behavior device extension and specific app profiles unless this parameter is set to TRUE.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "memoryDeviceOverallocationNonOverridable",
+      "Name": "MemoryDeviceOverallocationNonOverridable"
+    },
+    {
+      "Description": "Override reported minImageTransferGranularity field for DMA (i.e. SDMA) queue families. For how this value is interpreted by the driver, see the description for TransferGranularityUniversalOverride. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "transferGranularityDmaOverride",
+      "Name": "TransferGranularityDmaOverride"
+    },
+    {
+      "Description": "Forces a particular AppProfile value.  The profile selected is the value of ForceAppProfileValue. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "forceAppProfileEnable",
+      "Name": "ForceAppProfileEnable"
+    },
+    {
+      "Description": "Forces a particular AppProfile value.  This value is the integer value of the AppProfile enum. Ignored unless ForceAppProfileEnable is true. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "DependsOn": {
+        "Settings": [
+          {
+            "Values": [
+              true
+            ],
+            "Name": "ForceAppProfileEnable"
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "forceAppProfileValue",
+      "Name": "ForceAppProfileValue"
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "EnablePreciseAniso",
+            "Value": 0,
+            "Description": "PrecisAniso will be enabled. Highest image quality."
+          },
+          {
+            "Name": "DisablePreciseAnisoAfOnly",
+            "Value": 1,
+            "Description": "PrecisAniso will be disabled only for anisotropic samplers."
+          },
+          {
+            "Name": "DisablePreciseAnisoAll",
+            "Value": 2,
+            "Description": "PrecisAniso will be disabled for all samplers. Lowest image quality."
+          }
+        ],
+        "Name": "PreciseAnisoMode"
+      },
+      "Description": "PreciseAnisoMode denotes whether preciseAniso will be enabled.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "DisablePreciseAnisoAfOnly"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "preciseAnisoMode",
+      "Name": "PreciseAnisoMode"
+    },
+    {
+      "Description": "Supply the threshold value for anisotropic filtering (DisablePreciseAniso needs to be true also) ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "useAnisoThreshold",
+      "Name": "UseAnisoThreshold"
+    },
+    {
+      "Description": "The threshold value for anisotropic filtering (DisablePreciseAniso & UseAnisoThreshold need to be true also) Default value (0.25) preserves the Pal behaviour",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 0.25
+      },
+      "Scope": "Driver",
+      "Type": "float",
+      "VariableName": "anisoThreshold",
+      "Name": "AnisoThreshold"
+    },
+    {
+      "Description": "Use flip hint for swapchain. Linux Only. The X Server make the final decision whether to go async flip.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "DependsOn": {
+        "OS": [
+          "Linux"
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "useFlipHint",
+      "Name": "UseFlipHint"
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "BGFSEnableWddm1Immediate",
+            "Value": 1,
+            "Description": "Win7-8 + VK_PRESENT_MODE_IMMEDIATE_KHR "
+          },
+          {
+            "Name": "BGFSEnableWddm1Mailbox",
+            "Value": 2,
+            "Description": "Win7-8 + VK_PRESENT_MODE_MAILBOX_KHR "
+          },
+          {
+            "Name": "BGFSEnableWddm1Fifo",
+            "Value": 4,
+            "Description": "Win7-8 + VK_PRESENT_MODE_FIFO_KHR "
+          },
+          {
+            "Name": "BGFSEnableWddm1FifoRelaxed",
+            "Value": 8,
+            "Description": "Win7-8 + VK_PRESENT_MODE_FIFO_RELAXED_KHR"
+          },
+          {
+            "Name": "BGFSEnableWddm2Immediate",
+            "Value": 16,
+            "Description": "Win10  + VK_PRESENT_MODE_IMMEDIATE_KHR"
+          },
+          {
+            "Name": "BGFSEnableWddm2Mailbox",
+            "Value": 32,
+            "Description": "Win10  + VK_PRESENT_MODE_MAILBOX_KHR"
+          },
+          {
+            "Name": "BGFSEnableWddm2Fifo",
+            "Value": 64,
+            "Description": "Win10  + VK_PRESENT_MODE_FIFO_KHR"
+          },
+          {
+            "Name": "BGFSEnableWddm2FifoRelaxed",
+            "Value": 128,
+            "Description": "Win10  + VK_PRESENT_MODE_FIFO_RELAXED_KHR"
+          },
+          {
+            "Name": "BGFSEnableWddm1MultiGpu",
+            "Value": 256,
+            "Description": "Win7-8 + Multi-GPU"
+          },
+          {
+            "Name": "BGFSEnableWddm2MultiGpu",
+            "Value": 512,
+            "Description": "Win10  + Multi GPU"
+          }
+        ],
+        "Name": "BGFSEnableFlags"
+      },
+      "Description": "Force fullscreen exclusive presents when detected safe.  The following combination of flags control whether this feature is enabled for a particular OS + swapchain combination: ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 1023
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "backgroundFullscreenPresent",
+      "Name": "BackgroundFullscreenPresent"
+    },
+    {
+      "Description": "Fullscreen presents may fail due to unexpected errors, although these cases are rare. Failing a fullscreen present and reattempting to acquire exclusive access causes dropped frames and screen flickering.  This is a fail-safe setting that permanently disables the fullscreen present logic after the given number of consecutive unexpected failures.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 2
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "backgroundFullscreenFailureDisableCount",
+      "Name": "BackgroundFullscreenFailureDisableCount"
+    },
+    {
+      "Description": "Reset the failure count only after this many consecutive successful fullscreen presents. A large value for this setting is used to guarantee that we are consistently presenting in fullscreen instead of rapidly ping-ponging between fullscreen and windowed presents. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 64
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "backgroundFullscreenSuccessResetCount",
+      "Name": "BackgroundFullscreenSuccessResetCount"
+    },
+    {
+      "Description": "When forcing fullscreen presents, this flag will ignore unexpected errors on any failed present. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "backgroundFullscreenIgnorePresentErrors",
+      "Name": "BackgroundFullscreenIgnorePresentErrors"
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "Balanced",
+            "Value": 0,
+            "Description": "Balance memory foorprint and rendering performance."
+          },
+          {
+            "Name": "OptForSpace",
+            "Value": 1,
+            "Description": "Optimize tiling mode for saving memory footprint"
+          },
+          {
+            "Name": "OptForSpeed",
+            "Value": 2,
+            "Description": "Optimize tiling mode for rendering performance."
+          }
+        ],
+        "Name": "Pal::TilingOptMode"
+      },
+      "Description": "Hints to PAL to select the appropriate tiling mode for an optimization target. 0: Balanced 1: OptForSpace 2: OptForSpeed",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "Pal::TilingOptMode::Balanced"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "imageTilingOptMode",
+      "Name": "ImageTilingOptMode"
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "Default",
+            "Value": 0,
+            "Description": "No swizzle mode is preferred."
+          },
+          {
+            "Name": "Standard",
+            "Value": 1,
+            "Description": "Prefer standard swizzle modes."
+          },
+          {
+            "Name": "XMajor",
+            "Value": 2,
+            "Description": "Prefer x-coordinate major swizzle modes."
+          },
+          {
+            "Name": "YMajor",
+            "Value": 3,
+            "Description": "Prefer y-coordinate major swizzle modes."
+          },
+          {
+            "Name": "Interleaved",
+            "Value": 4,
+            "Description": "Prefer interleaved coordinate swizzle modes."
+          }
+        ],
+        "Name": "Pal::ImageTilingPattern"
+      },
+      "Description": "Hints to pal to identify a preference for how this image is organized. 0: Default 1: Standard 2: XMajor 3: YMajor 4: Interleaved",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "Pal::ImageTilingPattern::Default"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "imageTilingPreference",
+      "Name": "ImageTilingPreference"
+    },
+    {
+      "Description": "Enable FMASK based MSAA texture reads. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "enableFmaskBasedMsaaRead",
+      "Name": "EnableFmaskBasedMsaaRead",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable high priority for descriptor memory. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "enableHighPriorityDescriptorMemory",
+      "Name": "EnableHighPriorityDescriptorMemory",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Disable Htile based MSAA texture reads. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "disableHtileBasedMsaaRead",
+      "Name": "DisableHtileBasedMsaaRead",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "If we know that a MSAA stencil aspect isn't read as a shader resource, give PAL a hint that it's okay to choose a non-TCC format.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "disableMsaaStencilShaderRead",
+      "Name": "DisableMsaaStencilShaderRead",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "For image created with usage of transfer src, add shader_read in PAL usage if VkImageUsageFlagBits in this mask is set.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "optImgMaskToApplyShaderReadUsageForTransferSrc",
+      "Name": "TransferSrcUsageAsShaderReadMask"
+    },
+    {
+      "Description": "For image created with usage of transfer dst, add shader_write in PAL usage if VkImageUsageFlagBits in this mask is set.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "optImgMaskToApplyShaderWriteUsageForTransferDst",
+      "Name": "TransferDstUsageAsShaderWriteMask"
+    },
+    {
+      "Description": "Enable extension AMD_GPU_SHADER_HALF_FLOAT and AMD_GPU_SHADER_INT16 only on ASIC >= gfx9.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "optOnlyEnableFP16ForGfx9Plus",
+      "Name": "OnlyEnableFP16ForGfx9Plus",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "If set, an image with color target usage bit does not implicitly allow to be in resolve_src or resolve_dst layout.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "optColorTargetUsageDoesNotContainResolveLayout",
+      "Name": "ColorTargetUsageDoesNotContainResolveLayout",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "RenderStateCacheEnable",
+      "Description": "This bitmask denotes which subset of pipeline render state is cached at the device-level. Caching render state enables more efficient redundancy checking when recording command buffers.  This redundancy checking is mainly limited to pipeline state that is either invisible to the API (e.g. certain PAL objects) or state that the application has marked in the pipeline as non-dynamic, meaning its values are programmed during pipeline bind.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "OptRenderStateCacheMsaaState",
+            "Value": 1,
+            "Description": "PAL MSAA state objects (all graphics pipelines)"
+          },
+          {
+            "Name": "OptRenderStateCacheColorBlendState",
+            "Value": 2,
+            "Description": "PAL color blend state objects (all graphics pipelines)"
+          },
+          {
+            "Name": "OptRenderStateCacheDepthStencilState",
+            "Value": 4,
+            "Description": "PAL depth stencil state objects (all graphics pipelines)"
+          },
+          {
+            "Name": "OptRenderStateCacheInputAssemblyState",
+            "Value": 8,
+            "Description": "PAL input assembly state params (all graphics pipelines)"
+          },
+          {
+            "Name": "OptRenderStateCacheTriangleRasterState",
+            "Value": 16,
+            "Description": "Triangle raster state params (part of every graphics pipeline)"
+          },
+          {
+            "Name": "OptRenderStateCacheStaticPointLineRasterState",
+            "Value": 32,
+            "Description": "Point line raster state (only when marked static)"
+          },
+          {
+            "Name": "OptRenderStateCacheStaticDepthBias",
+            "Value": 64,
+            "Description": "Depth bias state (only when marked static)"
+          },
+          {
+            "Name": "OptRenderStateCacheStaticBlendConst",
+            "Value": 128,
+            "Description": "Blend const state (only when marked static)"
+          },
+          {
+            "Name": "OptRenderStateCacheStaticDepthBounds",
+            "Value": 256,
+            "Description": "Depth bounds state (only when marked static)"
+          },
+          {
+            "Name": "OptRenderStateCacheStaticViewport",
+            "Value": 512,
+            "Description": "Viewport state (only when marked static)"
+          },
+          {
+            "Name": "OptRenderStateCacheStaticScissorRect",
+            "Value": 1024,
+            "Description": "Scissor rect state (only when marked static)"
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "optRenderStateCacheEnable"
+    },
+    {
+      "Description": "If set, the MUTABLE flag on image is ignored.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "ignoreMutableFlag",
+      "Name": "IgnoreMutableFlag",
+      "Scope": "Driver"
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "EnableOptimizeForRenderPassContinue",
+            "Value": 0,
+            "Description": "OptimizeCmdbuf will be enabled only for render pass continue."
+          },
+          {
+            "Name": "EnableOptimizeCmdbuf",
+            "Value": 1,
+            "Description": "OptimizeCmdbuf will be always enabled."
+          },
+          {
+            "Name": "DisableOptimizeCmdbuf",
+            "Value": 2,
+            "Description": "OptimizeCmdbuf will be disabled."
+          }
+        ],
+        "Name": "OptimizeCmdbufMode"
+      },
+      "Description": "OptimizeCmdbufMode denotes whether pm4 optimizations will be enabled.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "DisableOptimizeCmdbuf"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "optimizeCmdbufMode",
+      "Name": "OptimizeCmdbufMode"
+    },
+    {
+      "Description": "If set, shaders are prefetched to warm L2 shader cache.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "prefetchShaders",
+      "Name": "PrefetchShaders",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "If not UINT_MAX, sets the minimum BPP of surfaces which may have DCC enabled.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "dccBitsPerPixelThreshold",
+      "Name": "DccBitsPerPixelThreshold"
+    },
+    {
+      "Name": "ForceDccForColorAttachments",
+      "Description": "This is a hint for PAL to ignore any performance hueristics when determining if images with color attachment usage get DCC. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "forceDccForColorAttachments"
+    },
+    {
+      "Name": "DisableSmallSurfColorCompressionSize",
+      "Description": "Provides a hint to PAL that PAL should disable color compression on surfaces that are smaller than or equal to this setting (setting * setting) in size. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 128
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "disableSmallSurfColorCompressionSize"
+    },
+    {
+      "Name": "EnableGpuEventMultiSlot",
+      "Description": "Enable multiple slots instead of single DWORD slot for GPU event. This will enable anywhere that can utilize multiple event slots for optimization or feature purpose, such as AcqRelBarrier interface. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableGpuEventMultiSlot"
+    },
+    {
+      "Name": "UseAcqRelInterface",
+      "Description": "The acquire/release-based barrier interface is enabled. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "useAcqRelInterface"
+    },
+    {
+      "Name": "EnableSPP",
+      "Description": "Enable Shader Profiling for Power (SPP).  The gist of the initial version of this feature is that we will profile important  applications to determine which shaders are heavily memory bound, then use these profiles  to program the RLC to dynamically reduce engine clocks when running such shaders.This  should result in power savings with a limited perf impact. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "enableSPP",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableMlModelForWaveSize",
+      "Description": "Enable a machine learning model to optimally choose Wave64 or Wave32 instead of relying on per shader stage defaults. Currently, only fragment shaders are affected and compilation times will be longer. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableMlModelForWaveSize"
+    },
+    {
+      "Description": "Determines the pipeline binary max size limit (in KB) used by the PipelineUriService when injecting pipeline binaries back into the driver. The limit is 256KB by default.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": 256
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "devModePipelineUriServicePostSizeLimit",
+      "Name": "DevModePipelineUriServicePostSizeLimit"
+    },
+    {
+      "Description": "This controls whether elf files placed in DevModeElfReplacementDirectory will be read. ",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeElfReplacementDirectoryEnable",
+      "Name": "DevModeElfReplacementDirectoryEnable"
+    },
+    {
+      "Description": "Elf files placed within this directory will be cached and replace corresponding pipeline binaries as they are created. Elf files within this directory should follow this nomenclature: \"[exe name]_[hash of pipeline being replaced].elf\"",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Flags": {
+        "IsPath": true
+      },
+      "Defaults": {
+        "Default": "PipelineReplace",
+        "WinDefault": "PipelineReplace",
+        "LnxDefault": "PipelineReplace"
+      },
+      "Scope": "Driver",
+      "Name": "DevModeElfReplacementDirectory",
+      "Type": "string",
+      "VariableName": "devModeElfReplacementDirectory",
+      "Size": 512
+    },
+    {
+      "Description": "This controls whether RGP traces will include shader code of created pipelines.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeShaderIsaDbEnable",
+      "Name": "DevModeShaderIsaDbEnable"
+    },
+    {
+      "Description": "This controls whether queue operations are timed during RGP traces.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeQueueTimingEnable",
+      "Name": "DevModeQueueTimingEnable"
+    },
+    {
+      "Description": "This controls if the legacy timed queue semaphores are to be used on Windows instead of the ETW client. This parameter does not affect Linux.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "DependsOn": {
+        "OS": [
+          "Windows"
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSemaphoreQueueTimingEnable",
+      "Name": "DevModeSemaphoreQueueTimingEnable"
+    },
+    {
+      "Description": "This controls what kind of SQTT instrumentation marker data is output from the driver. Note that this only fine-tunes instrumentation: the master toggle for SQTT is always whether developer mode is enabled.  General SQTT data (event, wave, instruction) is also generated independent of this setting if SQTT is enabled. ",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 367
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Value": 1,
+            "Description": "Enable command buffer start instrumentation marker"
+          },
+          {
+            "Value": 2,
+            "Description": "Enable command buffer end instrumentation marker"
+          },
+          {
+            "Value": 4,
+            "Description": "Enable per-draw/dispatch event instrumentation markers"
+          },
+          {
+            "Value": 8,
+            "Description": "Enable barrier instrumentation markers"
+          },
+          {
+            "Value": 16,
+            "Description": "Enable general API (per entry point call) instrunmentation markers"
+          },
+          {
+            "Value": 32,
+            "Description": "Enable user event (app string) markers"
+          },
+          {
+            "Value": 64,
+            "Description": "Enable dispatch events with thread dimensions"
+          },
+          {
+            "Value": 128,
+            "Description": "Write bound shader hashes as user event markers (requires VK_INTERNAL_DEVELOPER)"
+          },
+          {
+            "Value": 256,
+            "Description": "Enable pipeline bind markers"
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "devModeSqttMarkerEnable",
+      "Name": "DevModeSqttMarkerEnable"
+    },
+    {
+      "Description": "If true, SQTT support is disabled and all RGP traces will automatically fail.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttForceDisable",
+      "Name": "DevModeSqttForceDisable"
+    },
+    {
+      "Description": "If true, a CPU device wait idle is executed prior to starting and ending a trace. PLEASE NOTE: This is currently not thread safe and may result in crashes. It is only included as a debugging option.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttWaitIdle",
+      "Name": "DevModeSqttWaitIdle"
+    },
+    {
+      "Description": "If true, inserts a full pipeline flush into all hardware queues at the beginning of the last preparation frame in an RGP trace.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttFlushAllQueues",
+      "Name": "DevModeSqttFlushAllQueues"
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Auto-calculate the size based on GPU characteristics.",
+            "Value": 0
+          },
+          {
+            "LogicOp": "MultipleOf",
+            "Description": "Current HW requires the size be aligned to 0x1000 bytes.",
+            "Value": 4096
+          }
+        ]
+      },
+      "Description": "Maximum amount of data in bytes to capture per trace. A trace will cover a span of commands based on the GpuProfilerGranularity setting. Defaults to 0, which means auto-calculate the size based on GPU characteristics. Current HW requires the size be aligned to 0x1000 bytes.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "devModeSqttGpuMemoryLimit",
+      "Name": "DevModeSqttGpuMemoryLimit"
+    },
+    {
+      "Description": "Number of frames (present calls) to trace SQTT.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": 1
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "devModeSqttFrameCount",
+      "Name": "DevModeSqttFrameCount"
+    },
+    {
+      "Description": "Any driver-generated user event markers will have this string as its prefix.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": "[AMD] "
+      },
+      "Scope": "Driver",
+      "Name": "DevModeSqttInternalUserEventPrefix",
+      "Type": "string",
+      "VariableName": "devModeSqttInternalUserEventPrefix",
+      "Size": 512
+    },
+    {
+      "Description": "If true, driver will insert user event strings of renderpass instances into RGP traces.  Requires internal developer build (VK_INTERNAL_DEVELOPER).",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttMarkRenderPasses",
+      "Name": "DevModeSqttMarkRenderPasses"
+    },
+    {
+      "Description": "If true, driver will insert user event strings when pipelines are bound (including shader hashes).  Requires internal developer build (VK_INTERNAL_DEVELOPER).",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttMarkPipelineBinds",
+      "Name": "DevModeSqttMarkPipelineBinds"
+    },
+    {
+      "Description": "If true, driver will insert user event strings when color/depth targets are bound.  Requires internal developer build (VK_INTERNAL_DEVELOPER).",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttMarkTargetBinds",
+      "Name": "DevModeSqttMarkTargetBinds"
+    },
+    {
+      "Description": "If true, driver will insert user event strings when pipeline barriers happen.  Requires internal developer build (VK_INTERNAL_DEVELOPER).",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttMarkPipelineBarriers",
+      "Name": "DevModeSqttMarkPipelineBarriers"
+    },
+    {
+      "Description": "Track metadata for object types (each bit in the mask corresponds with enum value of VkDebugReportObjectTypeEXT).  Set to all f's to track all types. Setting this will cause any debug names to be included with any of the other internal markings such as pipeline binds.  Requires internal developer build (VK_INTERNAL_DEVELOPER).  WARNING: Will likely interfere with multithreaded command buffer recording concurrency.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Flags": {
+        "IsHex": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "VariableName": "devModeSqttTrackObjectMetaData",
+      "Name": "DevModeSqttObjectMetaData"
+    },
+    {
+      "Description": "If TRUE, DevModeSqttTrace[Begin|End]TagValues are used to override trace parameter begin/end command buffer debug object tag values. This is mainly used for debugging.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttTraceBeginEndTagEnable",
+      "Name": "DevModeSqttTraceBeginEndTagEnable"
+    },
+    {
+      "Description": "Custom command buffer debug object tag value signifying virtual frame start.  Requires DevModeSqttTraceBeginEndTagEnable.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "DependsOn": {
+        "Settings": [
+          {
+            "Values": [
+              true
+            ],
+            "Name": "DevModeSqttTraceBeginEndTagEnable"
+          }
+        ]
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "VariableName": "devModeSqttTraceBeginTagValue",
+      "Name": "DevModeSqttTraceBeginTagValue"
+    },
+    {
+      "Description": "Custom command buffer debug object tag value signifying virtual frame end. Requires DevModeSqttTraceBeginEndTagEnable.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "DependsOn": {
+        "Settings": [
+          {
+            "Values": [
+              true
+            ],
+            "Name": "DevModeSqttTraceBeginEndTagEnable"
+          }
+        ]
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "VariableName": "devModeSqttTraceEndTagValue",
+      "Name": "DevModeSqttTraceEndTagValue"
+    },
+    {
+      "Description": "If TRUE, instruction-level tracing will be enabled. DevModeSqttTargetApiPsoHash can beused to specify the scope traced (full frame or individual pipeline). ",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttInstructionTraceEnable",
+      "Name": "DevModeSqttInstructionTraceEnable"
+    },
+    {
+      "Description": "Target API PSO hash used to trigger instruction level tracing. Full-frame instructiontracing will be enabled if set to 0x0. ",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "VariableName": "devModeSqttTargetApiPsoHash",
+      "Name": "DevModeSqttTargetApiPsoHash"
+    },
+    {
+      "Description": "If TRUE, the driver will block immediately after ending a trace to wait for results tocomplete rather than asynchronously checking for completion during frame boundaries.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeSqttForceBlockOnTraceEnd",
+      "Name": "DevModeSqttForceBlockOnTraceEnd"
+    },
+    {
+      "Description": "If non-default, this value will override the trace parameter prepare frame count, which isthe number of lead frames prior to enabling SQTT that include only queue timing.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "devModeSqttPrepareFrameCount",
+      "Name": "DevModeSqttPrepareFrameCount"
+    },
+    {
+      "Description": "Allow chill to run. Chill is a user interaction dependent FPS limiter,  used for power saving. ",
+      "Tags": [
+        "Chill"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "allowChill",
+      "Name": "AllowChill",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "If per-app chill profile settings is enabled. ",
+      "Tags": [
+        "Chill"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "chillProfileEnable",
+      "Name": "Chill_ProfileEnable"
+    },
+    {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "IcdChillLevelDisable",
+            "Value": 0,
+            "Description": "Disable"
+          },
+          {
+            "Name": "IcdChillLevelSubtle",
+            "Value": 1,
+            "Description": "Subtle"
+          },
+          {
+            "Name": "IcdChillLevelMedium",
+            "Value": 2,
+            "Description": "Medium"
+          },
+          {
+            "Name": "IcdChillLevelFull",
+            "Value": 3,
+            "Description": "Full"
+          }
+        ],
+        "Name": "IcdChillLevelMode"
+      },
+      "Description": "Chill level setting, default is medium.",
+      "Tags": [
+        "Chill"
+      ],
+      "Defaults": {
+        "Default": "IcdChillLevelMedium"
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "chillLevel",
+      "Name": "Chill_ChillLevel"
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "LogicOp": "GreaterThanOrEqual",
+            "Value": 30
+          },
+          {
+            "LogicOp": "LessThanOrEqual",
+            "Value": 300
+          }
+        ]
+      },
+      "Description": "Min chill frame rate; valid range is 30-300fps.",
+      "Tags": [
+        "Chill"
+      ],
+      "Defaults": {
+        "Default": 70
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "chillMinFrameRate",
+      "Name": "Chill_MinFramerate"
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "LogicOp": "GreaterThanOrEqual",
+            "Value": 30
+          },
+          {
+            "LogicOp": "LessThanOrEqual",
+            "Value": 300
+          }
+        ]
+      },
+      "Description": "Max chill frame rate; valid range is 30-300fps.",
+      "Tags": [
+        "Chill"
+      ],
+      "Defaults": {
+        "Default": 144
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "chillMaxFrameRate",
+      "Name": "Chill_MaxFramerate"
+    },
+    {
+      "Description": "The threshold number of draw calls per frame used to distinguish between loading screens and gameplay.",
+      "Tags": [
+        "Chill"
+      ],
+      "Defaults": {
+        "Default": 150
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "chillLoadingScreenDrawsThresh",
+      "Name": "Chill_LoadingScreenDrawsThresh"
+    },
+    {
+      "Description": "When true, we will not disable chill based on KMD workstation flag  or Big Software version.",
+      "Tags": [
+        "Chill"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "chillIgnoreBaseDriverRestrictions",
+      "Name": "Chill_IgnoreBaseDriverRestrictions"
+    },
+    {
+      "Name": "OverrideShaderParams",
+      "Description": "Indicate that shader parameter override is enabled - mainly used for automation",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideShaderParams",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideShaderHashUpper",
+      "Description": "Upper 64-bits of the shader hash of shader for which parameters are to be overridden",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint64",
+      "VariableName": "overrideShaderHashUpper",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideShaderHashLower",
+      "Description": "Lower 64-bits of the shader hash of shader for which parameters are to be overridden",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint64",
+      "VariableName": "overrideShaderHashLower",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideShaderStage",
+      "Description": "Shader stage for which parameters are to be overriden.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 4
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Value": 0,
+            "Description": "Vertex Shader"
+          },
+          {
+            "Value": 1,
+            "Description": "Tessellation Control Shader"
+          },
+          {
+            "Value": 2,
+            "Description": "Tessellation Evaluation Shader"
+          },
+          {
+            "Value": 3,
+            "Description": "Geometry Shader"
+          },
+          {
+            "Value": 4,
+            "Description": "Fragment Shader"
+          },
+          {
+            "Value": 5,
+            "Description": "Compute Shader"
+          }
+        ]
+      },
+      "Type": "uint32",
+      "VariableName": "overrideShaderStage",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override number of available VGPRs for the shader specified by overrideShaderCrcUpper/Lower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "overrideNumVGPRsAvailable",
+      "Name": "OverrideNumVGPRsAvailable",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override number of waves per CU for the shader specified by overrideShaderCrcUpper/Lower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "overrideWavesPerCu",
+      "Name": "OverrideWavesPerCu",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force PAL to spill user data registers to memory for the shader specified by overrideShaderCrcUpper/Lower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUserDataSpillThreshold",
+      "Name": "OverrideUserDataSpillThreshold",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Set the max LDS spill size in DWORDs for the shader specified by overrideShaderCrcUpper/Lower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "overrideMaxLdsSpillDwords",
+      "Name": "OverrideMaxLdsSpillDwords",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Set the thread-group per CU limit for compute shaders.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "overrideCsTgPerCu",
+      "Name": "OverrideCsTgPerCu",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideUsePbbPerCrc",
+      "Description": "Set option to disable PBB for shader specified by OverrideShaderCrcUpper and OverrideShaderCrcLower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "PipelineBinningModeDefault"
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "PipelineBinningModeDefault",
+            "Value": 0,
+            "Description": "Follow the behavior of the PipelineBinningMode setting."
+          },
+          {
+            "Name": "PipelineBinningModeDisable",
+            "Value": 1,
+            "Description": "Force PBB off for shader"
+          },
+          {
+            "Name": "PipelineBinningModeEnable",
+            "Value": 2,
+            "Description": "Force PBB on for shader"
+          }
+        ],
+        "Name": "PipelineBinningMode"
+      },
+      "Type": "enum",
+      "VariableName": "overrideUsePbbPerCrc",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override allowReZ for the shader specified by OverrideShaderHashUpper/Lower.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideAllowReZ",
+      "Name": "OverrideAllowReZ",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideWaveSize",
+      "Description": "Override WaveSize for the shader specified by OverrideShaderHashUpper/Lower.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "WaveSizeAuto"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "WaveSizeAuto",
+            "Value": 0,
+            "Description": "Let the driver pick the best wave size for this shader"
+          },
+          {
+            "Name": "WaveSize64",
+            "Value": 2,
+            "Description": "Force wave size to 64 threads"
+          },
+          {
+            "Name": "WaveSize32",
+            "Value": 3,
+            "Description": "Force wave size to 32 threads"
+          }
+        ],
+        "Name": "ShaderWaveSize"
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Type": "enum",
+      "VariableName": "overrideWaveSize",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideWgpMode",
+      "Description": "Override WgpMode for the shader specified by OverrideShaderHashUpper/Lower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "WgpModeAuto"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "WgpModeAuto",
+            "Value": 0,
+            "Description": "Let the driver pick the best WgpMode for this shader"
+          },
+          {
+            "Name": "WgpModeCu",
+            "Value": 1,
+            "Description": "All 4 SIMDs in a workgroup processor are considered when waves are allocated for execution"
+          },
+          {
+            "Name": "WgpModeWgp",
+            "Value": 2,
+            "Description": "Only the 2 SIMDs in a CU are considered when waves are allocated for execution"
+          }
+        ],
+        "Name": "WgpMode"
+      },
+      "Type": "enum",
+      "VariableName": "overrideWgpMode",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ResourceProfileIgnoresAppProfile",
+      "Description": "If this is true, any production app profile-installed resource optimizations are ignored.",
+      "Tags": [
+        "Resource Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "resourceProfileIgnoresAppProfile"
+    },
+    {
+      "Name": "OverrideResourceParams",
+      "Description": "Indicate that resource parameter override is enabled - mainly used for automation",
+      "Tags": [
+        "Resource Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideResourceParams",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideResourceHashDimensions",
+      "Description": "The width (upper 32-bits) and height (lower 32-bits) of the resource(s) onto which the parameters are to be applied. If 0, the dimensions will be matched up. ",
+      "Tags": [
+        "Resource Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Type": "uint64",
+      "VariableName": "overrideResourceHashDimensions",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideResourceHashCrc",
+      "Description": "The API hash of the resource(s) onto which the parameters are to be applied. If 0, the API hash will not be matched up. ",
+      "Tags": [
+        "Resource Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Type": "uint64",
+      "VariableName": "overrideResourceHashCrc",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideResourceDccOnOff",
+      "Description": "Force metadata to be enabled or disabled for the resource.",
+      "Tags": [
+        "Resource Tuning"
+      ],
+      "Defaults": {
+        "Default": "DccDefaultMode"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DccDefaultMode",
+            "Value": 0,
+            "Description": "Default"
+          },
+          {
+            "Name": "DccDisableMode",
+            "Value": 1,
+            "Description": "Disabled"
+          },
+          {
+            "Name": "DccEnableMode",
+            "Value": 2,
+            "Description": "Enabled"
+          }
+        ],
+        "Name": "DccMode"
+      },
+      "Type": "enum",
+      "Scope": "Driver",
+      "VariableName": "overrideResourceDccOnOff"
+    },
+    {
+      "Name": "VulkanTexFilterQuality",
+      "Description": "Controls texture filtering optimizations exposed by CCC.",
+      "Tags": [
+        "Public CCC Options"
+      ],
+      "Defaults": {
+        "Default": "TextureFilterOptimizationsEnabled"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "TextureFilterOptimizationsDisabled",
+            "Value": 0
+          },
+          {
+            "Name": "TextureFilterOptimizationsEnabled",
+            "Value": 1
+          },
+          {
+            "Name": "TextureFilterOptimizationsAggressive",
+            "Value": 2
+          }
+        ],
+        "Name": "TextureFilterOptimizationSettings"
+      },
+      "Scope": "Global",
+      "Type": "enum",
+      "VariableName": "vulkanTexFilterQuality"
+    },
+    {
+      "Name": "AppGpuID",
+      "Description": "Specifies the GPU ID (composed of PCI info).",
+      "Tags": [
+        "Public CCC Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Global",
+      "Type": "uint32",
+      "VariableName": "appGpuID"
+    }
+  ]
+}

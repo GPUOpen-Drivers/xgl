@@ -555,7 +555,6 @@ VkResult Image::Create(
 
             break;
         }
-
         default:
             // Skip any unknown extension structures
             break;

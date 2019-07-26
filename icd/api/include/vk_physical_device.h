@@ -101,7 +101,7 @@ public:
     static VkResult Create(
         PhysicalDeviceManager*  pPhysicalDeviceManager,
         Pal::IDevice*           pPalDevice,
-        const RuntimeSettings&  settings,
+        VulkanSettingsLoader*   pSettingsLoader,
         AppProfile              appProfile,
         VkPhysicalDevice*       pPhysicalDevice);
 
@@ -378,7 +378,12 @@ public:
 
     VK_INLINE const RuntimeSettings& GetRuntimeSettings() const
     {
-        return m_settings;
+        return m_pSettingsLoader->GetSettings();
+    }
+
+    VK_INLINE VulkanSettingsLoader* GetSettingsLoader() const
+    {
+        return m_pSettingsLoader;
     }
 
     VK_INLINE const VkPhysicalDeviceLimits& GetLimits() const
@@ -400,9 +405,10 @@ public:
     {
         uint32_t subgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
 
-        if (m_settings.subgroupSize != 0)
+        const RuntimeSettings& settings = GetRuntimeSettings();
+        if (settings.subgroupSize != 0)
         {
-            subgroupSize = m_settings.subgroupSize;
+            subgroupSize = settings.subgroupSize;
         }
         return subgroupSize;
     }
@@ -517,7 +523,7 @@ public:
 protected:
     PhysicalDevice(PhysicalDeviceManager* pPhysicalDeviceManager,
                    Pal::IDevice*          pPalDevice,
-                   const RuntimeSettings& settings,
+                   VulkanSettingsLoader*  pSettingsLoader,
                    AppProfile             appProfile
                    );
 
@@ -544,7 +550,7 @@ protected:
     Pal::GpuHeap                     m_heapVkToPal[VkMemoryHeapNum];
     VkPhysicalDeviceMemoryProperties m_memoryProperties;
 
-    RuntimeSettings                  m_settings;
+    VulkanSettingsLoader*            m_pSettingsLoader;
     VkPhysicalDeviceLimits           m_limits;
     VkSampleCountFlags               m_sampleLocationSampleCounts;
     VkFormatProperties               m_formatFeaturesTable[VK_SUPPORTED_FORMAT_COUNT];

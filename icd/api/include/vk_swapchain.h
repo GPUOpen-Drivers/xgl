@@ -138,7 +138,8 @@ public:
         uint32_t                   deviceIdx,
         uint32_t                   imageIndex,
         Pal::PresentSwapChainInfo* pPresentInfo,
-        const Queue*               pQueue);
+        const Queue*               pQueue,
+        Pal::ICmdBuffer**          ppPresentCmdBuffer);
 
     void PostPresent(
         const Pal::PresentSwapChainInfo& presentInfo,
@@ -156,9 +157,23 @@ protected:
         const Properties&   properties,
         VkPresentModeKHR    presentMode,
         FullscreenMgr*      pFullscreenMgr,
+        Pal::ICmdBuffer**   ppPresentCmdBuffers[MaxPalDevices],
         Pal::ISwapChain*    pPalSwapChain);
 
     void InitSwCompositor(Pal::QueueType presentQueueType);
+
+    void InitPresentCmdBuffers(
+        uint32_t deviceIdx,
+        uint32_t queueFamilyIndex);
+
+    void DestroyPresentCmdBuffers(
+        uint32_t deviceIdx);
+
+    Pal::ICmdBuffer* BuildPresentCmdBuffer(
+        const Pal::PresentSwapChainInfo& presentInfo,
+        uint32_t                         deviceIdx,
+        uint32_t                         imageIndex,
+        uint32_t                         queueFamilyIndex);
 
     Device*                 m_pDevice;
     const Properties        m_properties;
@@ -173,6 +188,8 @@ protected:
     bool                    m_deprecated;      // Indicates whether the swapchain has been used as
                                                // oldSwapChain when creating a new SwapChain.
 
+    uint32_t                m_queueFamilyIndex;                    // Queue family index of the last present
+    Pal::ICmdBuffer**       m_ppPresentCmdBuffers[MaxPalDevices];  // Array of command buffers for each swap chain image
 };
 
 // =====================================================================================================================

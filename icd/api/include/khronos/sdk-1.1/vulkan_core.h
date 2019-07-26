@@ -43,7 +43,7 @@ extern "C" {
 #define VK_VERSION_MINOR(version) (((uint32_t)(version) >> 12) & 0x3ff)
 #define VK_VERSION_PATCH(version) ((uint32_t)(version) & 0xfff)
 // Version of this file
-#define VK_HEADER_VERSION 109
+#define VK_HEADER_VERSION 113
 
 
 #define VK_NULL_HANDLE 0
@@ -402,6 +402,8 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT = 1000148002,
     VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_TO_COLOR_STATE_CREATE_INFO_NV = 1000149000,
     VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_MODULATION_STATE_CREATE_INFO_NV = 1000152000,
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_FEATURES_NV = 1000154000,
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SM_BUILTINS_PROPERTIES_NV = 1000154001,
     VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_LIST_EXT = 1000158000,
     VK_STRUCTURE_TYPE_DRM_FORMAT_MODIFIER_PROPERTIES_EXT = 1000158001,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_DRM_FORMAT_MODIFIER_INFO_EXT = 1000158002,
@@ -494,6 +496,7 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COVERAGE_REDUCTION_MODE_FEATURES_NV = 1000250000,
     VK_STRUCTURE_TYPE_PIPELINE_COVERAGE_REDUCTION_STATE_CREATE_INFO_NV = 1000250001,
     VK_STRUCTURE_TYPE_FRAMEBUFFER_MIXED_SAMPLES_COMBINATION_NV = 1000250002,
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADER_INTERLOCK_FEATURES_EXT = 1000251000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT = 1000252000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES_KHR = 1000253000,
     VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_INFO_EXT = 1000255000,
@@ -501,6 +504,9 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_SURFACE_FULL_SCREEN_EXCLUSIVE_WIN32_INFO_EXT = 1000255001,
     VK_STRUCTURE_TYPE_HEADLESS_SURFACE_CREATE_INFO_EXT = 1000256000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT = 1000261000,
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT = 1000276000,
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT = 1000281000,
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT = 1000281001,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTER_FEATURES = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VARIABLE_POINTERS_FEATURES,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETER_FEATURES = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DRAW_PARAMETERS_FEATURES,
     VK_STRUCTURE_TYPE_DEBUG_REPORT_CREATE_INFO_EXT = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT,
@@ -6133,11 +6139,12 @@ typedef enum VkDriverIdKHR {
     VK_DRIVER_ID_IMAGINATION_PROPRIETARY_KHR = 7,
     VK_DRIVER_ID_QUALCOMM_PROPRIETARY_KHR = 8,
     VK_DRIVER_ID_ARM_PROPRIETARY_KHR = 9,
-    VK_DRIVER_ID_GOOGLE_PASTEL_KHR = 10,
+    VK_DRIVER_ID_GOOGLE_SWIFTSHADER_KHR = 10,
     VK_DRIVER_ID_GGP_PROPRIETARY_KHR = 11,
+    VK_DRIVER_ID_BROADCOM_PROPRIETARY_KHR = 12,
     VK_DRIVER_ID_BEGIN_RANGE_KHR = VK_DRIVER_ID_AMD_PROPRIETARY_KHR,
-    VK_DRIVER_ID_END_RANGE_KHR = VK_DRIVER_ID_GGP_PROPRIETARY_KHR,
-    VK_DRIVER_ID_RANGE_SIZE_KHR = (VK_DRIVER_ID_GGP_PROPRIETARY_KHR - VK_DRIVER_ID_AMD_PROPRIETARY_KHR + 1),
+    VK_DRIVER_ID_END_RANGE_KHR = VK_DRIVER_ID_BROADCOM_PROPRIETARY_KHR,
+    VK_DRIVER_ID_RANGE_SIZE_KHR = (VK_DRIVER_ID_BROADCOM_PROPRIETARY_KHR - VK_DRIVER_ID_AMD_PROPRIETARY_KHR + 1),
     VK_DRIVER_ID_MAX_ENUM_KHR = 0x7FFFFFFF
 } VkDriverIdKHR;
 typedef struct VkConformanceVersionKHR {
@@ -7886,6 +7893,24 @@ typedef struct VkPipelineCoverageModulationStateCreateInfoNV {
 #define VK_NV_FILL_RECTANGLE_EXTENSION_NAME "VK_NV_fill_rectangle"
 
 
+#define VK_NV_shader_sm_builtins 1
+#define VK_NV_SHADER_SM_BUILTINS_SPEC_VERSION 1
+#define VK_NV_SHADER_SM_BUILTINS_EXTENSION_NAME "VK_NV_shader_sm_builtins"
+typedef struct VkPhysicalDeviceShaderSMBuiltinsPropertiesNV {
+    VkStructureType    sType;
+    void*              pNext;
+    uint32_t           shaderSMCount;
+    uint32_t           shaderWarpsPerSM;
+} VkPhysicalDeviceShaderSMBuiltinsPropertiesNV;
+
+typedef struct VkPhysicalDeviceShaderSMBuiltinsFeaturesNV {
+    VkStructureType    sType;
+    void*              pNext;
+    VkBool32           shaderSMBuiltins;
+} VkPhysicalDeviceShaderSMBuiltinsFeaturesNV;
+
+
+
 #define VK_EXT_post_depth_coverage 1
 #define VK_EXT_POST_DEPTH_COVERAGE_SPEC_VERSION 1
 #define VK_EXT_POST_DEPTH_COVERAGE_EXTENSION_NAME "VK_EXT_post_depth_coverage"
@@ -8521,7 +8546,7 @@ typedef struct VkPipelineRepresentativeFragmentTestStateCreateInfoNV {
 
 
 #define VK_EXT_filter_cubic 1
-#define VK_EXT_FILTER_CUBIC_SPEC_VERSION  1
+#define VK_EXT_FILTER_CUBIC_SPEC_VERSION  2
 #define VK_EXT_FILTER_CUBIC_EXTENSION_NAME "VK_EXT_filter_cubic"
 typedef struct VkPhysicalDeviceImageViewImageFormatInfoEXT {
     VkStructureType    sType;
@@ -9390,6 +9415,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSupportedFramebufferMixedSampl
 #endif
 
 
+#define VK_EXT_fragment_shader_interlock 1
+#define VK_EXT_FRAGMENT_SHADER_INTERLOCK_SPEC_VERSION 1
+#define VK_EXT_FRAGMENT_SHADER_INTERLOCK_EXTENSION_NAME "VK_EXT_fragment_shader_interlock"
+typedef struct VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT {
+    VkStructureType    sType;
+    void*              pNext;
+    VkBool32           fragmentShaderSampleInterlock;
+    VkBool32           fragmentShaderPixelInterlock;
+    VkBool32           fragmentShaderShadingRateInterlock;
+} VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT;
+
+
+
 #define VK_EXT_ycbcr_image_arrays 1
 #define VK_EXT_YCBCR_IMAGE_ARRAYS_SPEC_VERSION 1
 #define VK_EXT_YCBCR_IMAGE_ARRAYS_EXTENSION_NAME "VK_EXT_ycbcr_image_arrays"
@@ -9440,6 +9478,37 @@ VKAPI_ATTR void VKAPI_CALL vkResetQueryPoolEXT(
     uint32_t                                    firstQuery,
     uint32_t                                    queryCount);
 #endif
+
+
+#define VK_EXT_shader_demote_to_helper_invocation 1
+#define VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_SPEC_VERSION 1
+#define VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME "VK_EXT_shader_demote_to_helper_invocation"
+typedef struct VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT {
+    VkStructureType    sType;
+    void*              pNext;
+    VkBool32           shaderDemoteToHelperInvocation;
+} VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT;
+
+
+
+#define VK_EXT_texel_buffer_alignment 1
+#define VK_EXT_TEXEL_BUFFER_ALIGNMENT_SPEC_VERSION 1
+#define VK_EXT_TEXEL_BUFFER_ALIGNMENT_EXTENSION_NAME "VK_EXT_texel_buffer_alignment"
+typedef struct VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT {
+    VkStructureType    sType;
+    void*              pNext;
+    VkBool32           texelBufferAlignment;
+} VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT;
+
+typedef struct VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT {
+    VkStructureType    sType;
+    void*              pNext;
+    VkDeviceSize       storageTexelBufferOffsetAlignmentBytes;
+    VkBool32           storageTexelBufferOffsetSingleTexelAlignment;
+    VkDeviceSize       uniformTexelBufferOffsetAlignmentBytes;
+    VkBool32           uniformTexelBufferOffsetSingleTexelAlignment;
+} VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT;
+
 
 #ifdef __cplusplus
 }

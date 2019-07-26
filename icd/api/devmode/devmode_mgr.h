@@ -128,9 +128,9 @@ public:
     static VkResult Create(Instance* pInstance, DevModeMgr** ppObject);
 
     void Finalize(
-        uint32_t         deviceCount,
-        Pal::IDevice**   ppDevices,
-        RuntimeSettings* pSettings);
+        uint32_t              deviceCount,
+        Pal::IDevice**        ppDevices,
+        VulkanSettingsLoader* settingsLoaders[]);
 
     void Destroy();
 

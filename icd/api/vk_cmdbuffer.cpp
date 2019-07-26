@@ -4042,15 +4042,17 @@ void CmdBuffer::BeginRenderPass(
 
     Pal::Result result = Pal::Result::Success;
 
-    EXTRACT_VK_STRUCTURES_2(
+    EXTRACT_VK_STRUCTURES_3(
         RP,
         RenderPassBeginInfo,
         DeviceGroupRenderPassBeginInfo,
         RenderPassSampleLocationsBeginInfoEXT,
+        RenderPassAttachmentBeginInfoKHR,
         pRenderPassBegin,
         RENDER_PASS_BEGIN_INFO,
         DEVICE_GROUP_RENDER_PASS_BEGIN_INFO,
-        RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT)
+        RENDER_PASS_SAMPLE_LOCATIONS_BEGIN_INFO_EXT,
+        RENDER_PASS_ATTACHMENT_BEGIN_INFO_KHR)
 
     // Copy render areas (these may be per-device in a group)
     bool replicateRenderArea = true;
@@ -4170,6 +4172,15 @@ void CmdBuffer::BeginRenderPass(
         {
             result = Pal::Result::ErrorOutOfMemory;
         }
+    }
+
+    if (pRenderPassAttachmentBeginInfoKHR != nullptr)
+    {
+        VK_ASSERT(pRenderPassAttachmentBeginInfoKHR->attachmentCount == attachmentCount);
+        VK_ASSERT(pRenderPassAttachmentBeginInfoKHR->attachmentCount ==
+                  m_state.allGpuState.pFramebuffer->GetAttachmentCount());
+
+        m_state.allGpuState.pFramebuffer->SetImageViews(pRenderPassAttachmentBeginInfoKHR);
     }
 
     if (result == Pal::Result::Success)

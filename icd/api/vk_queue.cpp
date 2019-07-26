@@ -153,7 +153,7 @@ VkResult Queue::CreateDummyCmdBuffer()
 // Submit a dummy command buffer with associated command buffer info to KMD for FRTC/TurboSync/DVR features
 VkResult Queue::NotifyFlipMetadata(
     uint32_t                     deviceIdx,
-    Pal::IQueue*                 pQueue,
+    Pal::ICmdBuffer*             pPresentCmdBuffer,
     const Pal::IGpuMemory*       pGpuMemory,
     FullscreenFrameMetadataFlags flags)
 {
@@ -164,9 +164,13 @@ VkResult Queue::NotifyFlipMetadata(
         VK_ASSERT(result == VK_SUCCESS);
     }
 
-    if (m_pDummyCmdBuffer[deviceIdx] != nullptr)
+    // If there's already a command buffer that needs to be submitted, use it instead of a dummy one.
+    Pal::ICmdBuffer* pCmdBuffer = (pPresentCmdBuffer != nullptr) ? pPresentCmdBuffer : m_pDummyCmdBuffer[deviceIdx];
+
+    if (pCmdBuffer != nullptr)
     {
-        if ((flags.frameBeginFlag == 1) || (flags.frameEndFlag == 1) || (flags.primaryHandle == 1))
+        if ((flags.frameBeginFlag == 1) || (flags.frameEndFlag == 1) || (flags.primaryHandle == 1) ||
+            (pPresentCmdBuffer != nullptr))
         {
             Pal::CmdBufInfo cmdBufInfo = {};
             cmdBufInfo.isValid = 1;
@@ -187,7 +191,7 @@ VkResult Queue::NotifyFlipMetadata(
             Pal::SubmitInfo submitInfo = {};
 
             submitInfo.cmdBufferCount  = 1;
-            submitInfo.ppCmdBuffers    = &(m_pDummyCmdBuffer[deviceIdx]);
+            submitInfo.ppCmdBuffers    = &pCmdBuffer;
             submitInfo.pCmdBufInfoList = &cmdBufInfo;
 
             result = PalToVkResult(m_pPalQueues[deviceIdx]->Submit(submitInfo));
@@ -202,19 +206,19 @@ VkResult Queue::NotifyFlipMetadata(
 // Submit command buffer info with frameEndFlag and primaryHandle before frame present
 VkResult Queue::NotifyFlipMetadataBeforePresent(
     uint32_t                         deviceIdx,
-    Pal::IQueue*                     pQueue,
     const Pal::PresentSwapChainInfo* pPresentInfo,
+    Pal::ICmdBuffer*                 pPresentCmdBuffer,
     const Pal::IGpuMemory*           pGpuMemory)
 {
-    VkResult result = VK_SUCCESS;
-    return result;
+    FullscreenFrameMetadataFlags flags = {};
+
+    return NotifyFlipMetadata(deviceIdx, pPresentCmdBuffer, pGpuMemory, flags);
 }
 
 // =====================================================================================================================
 // Submit command buffer info with frameBeginFlag after frame present
 VkResult Queue::NotifyFlipMetadataAfterPresent(
     uint32_t                         deviceIdx,
-    Pal::IQueue*                     pQueue,
     const Pal::PresentSwapChainInfo* pPresentInfo)
 {
     VkResult result = VK_SUCCESS;
@@ -696,9 +700,16 @@ VkResult Queue::Present(
         // Fill in present information
         Pal::PresentSwapChainInfo presentInfo = {};
 
+        // There may be additional commands to submit prior to an end frame marker and the actual present.
+        Pal::ICmdBuffer* pPresentCmdBuffer = nullptr;
+
         // For MGPU, the swapchain and device properties might perform software composition and return
         // a different presentation device for the present of the intermediate surface.
-        Pal::IQueue* pPresentQueue = pSwapChain->PrePresent(presentationDeviceIdx, imageIndex, &presentInfo, this);
+        Pal::IQueue* pPresentQueue = pSwapChain->PrePresent(presentationDeviceIdx,
+                                                            imageIndex,
+                                                            &presentInfo,
+                                                            this,
+                                                            &pPresentCmdBuffer);
 
         // Notify gpuopen developer mode that we're about to present (frame-end boundary)
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -714,7 +725,7 @@ VkResult Queue::Present(
         const Pal::IGpuMemory* pGpuMemory =
             pSwapChain->GetPresentableImageMemory(imageIndex)->PalMemory(DefaultDeviceIndex);
 
-        result = NotifyFlipMetadataBeforePresent(presentationDeviceIdx, pPresentQueue, &presentInfo, pGpuMemory);
+        result = NotifyFlipMetadataBeforePresent(presentationDeviceIdx, &presentInfo, pPresentCmdBuffer, pGpuMemory);
         if (result != VK_SUCCESS)
         {
             break;
@@ -723,7 +734,7 @@ VkResult Queue::Present(
         // Perform the actual present
         Pal::Result palResult = pPresentQueue->PresentSwapChain(presentInfo);
 
-        result = NotifyFlipMetadataAfterPresent(presentationDeviceIdx, pPresentQueue, &presentInfo);
+        result = NotifyFlipMetadataAfterPresent(presentationDeviceIdx, &presentInfo);
 
         if (result != VK_SUCCESS)
         {
