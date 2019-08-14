@@ -96,8 +96,11 @@ private:
         return static_cast<const TemplateUpdateInfo*>(Util::VoidPtrInc(this, sizeof(*this)));
     }
 
-    template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, size_t bufferDescSize,
-        uint32_t numPalDevices>
+    template <size_t imageDescSize,
+              size_t fmaskDescSize,
+              size_t samplerDescSize,
+              size_t bufferDescSize,
+              uint32_t numPalDevices>
     static PfnUpdateEntry GetUpdateEntryFunc(
         const Device*                           pDevice,
         VkDescriptorType                        descriptorType,

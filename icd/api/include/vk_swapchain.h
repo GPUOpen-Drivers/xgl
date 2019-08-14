@@ -150,6 +150,8 @@ public:
 
     void MarkAsDeprecated();
 
+    bool IsSuboptimal(uint32_t  deviceIdx);
+
 protected:
 
     SwapChain(

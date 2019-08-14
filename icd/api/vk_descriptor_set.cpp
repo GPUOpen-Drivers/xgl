@@ -315,8 +315,12 @@ void DescriptorUpdate::WriteInlineUniformBlock(
 
 // =====================================================================================================================
 // Write to descriptor sets using the provided descriptors for resources
-template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, size_t bufferDescSize,
-          bool fmaskBasedMsaaReadEnabled, uint32_t numPalDevices>
+template <size_t imageDescSize,
+          size_t fmaskDescSize,
+          size_t samplerDescSize,
+          size_t bufferDescSize,
+          bool fmaskBasedMsaaReadEnabled,
+          uint32_t numPalDevices>
 void DescriptorUpdate::WriteDescriptorSets(
     const Device*                pDevice,
     uint32_t                     deviceIdx,
@@ -340,7 +344,7 @@ void DescriptorUpdate::WriteDescriptorSets(
         // Determine whether the binding has immutable sampler descriptors.
         bool hasImmutableSampler = (destBinding.imm.dwSize != 0);
 
-        switch (params.descriptorType)
+        switch (static_cast<uint32_t>(params.descriptorType))
         {
         case VK_DESCRIPTOR_TYPE_SAMPLER:
             if (hasImmutableSampler)
@@ -652,7 +656,11 @@ void DescriptorUpdate::CopyDescriptorSets(
 }
 
 // =====================================================================================================================
-template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, size_t bufferDescSize, uint32_t numPalDevices,
+template <size_t imageDescSize,
+          size_t fmaskDescSize,
+          size_t samplerDescSize,
+          size_t bufferDescSize,
+          uint32_t numPalDevices,
           bool fmaskBasedMsaaReadEnabled>
 VKAPI_ATTR void VKAPI_CALL DescriptorUpdate::UpdateDescriptorSets(
     VkDevice                                    device,
@@ -666,7 +674,8 @@ VKAPI_ATTR void VKAPI_CALL DescriptorUpdate::UpdateDescriptorSets(
     for (uint32_t deviceIdx = 0; deviceIdx < numPalDevices; deviceIdx++)
     {
         WriteDescriptorSets<
-            imageDescSize, fmaskDescSize, samplerDescSize, bufferDescSize, fmaskBasedMsaaReadEnabled, numPalDevices>(
+            imageDescSize, fmaskDescSize, samplerDescSize, bufferDescSize,
+            fmaskBasedMsaaReadEnabled, numPalDevices>(
                             pDevice,
                             deviceIdx,
                             descriptorWriteCount,
@@ -736,7 +745,6 @@ PFN_vkUpdateDescriptorSets DescriptorUpdate::GetUpdateDescriptorSetsFunc(
     const size_t fmaskDescSize      = pDevice->GetProperties().descriptorSizes.fmaskView;
     const size_t samplerDescSize    = pDevice->GetProperties().descriptorSizes.sampler;
     const size_t bufferDescSize     = pDevice->GetProperties().descriptorSizes.bufferView;
-
     PFN_vkUpdateDescriptorSets pFunc = nullptr;
 
     if ((imageDescSize == 32) &&
@@ -744,7 +752,13 @@ PFN_vkUpdateDescriptorSets DescriptorUpdate::GetUpdateDescriptorSetsFunc(
         (samplerDescSize == 16) &&
         (bufferDescSize == 16))
     {
-        pFunc = &UpdateDescriptorSets<32, 32, 16, 16, numPalDevices, fmaskBasedMsaaReadEnabled>;
+        pFunc = &UpdateDescriptorSets<
+            32,
+            32,
+            16,
+            16,
+            numPalDevices,
+            fmaskBasedMsaaReadEnabled>;
     }
     else
     {

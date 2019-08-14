@@ -1224,6 +1224,9 @@ void CmdBuffer::ResetPipelineState()
     m_state.allGpuState.viewport.vertClipRatio    = FLT_MAX;
     m_state.allGpuState.viewport.horzDiscardRatio = 1.0f;
     m_state.allGpuState.viewport.vertDiscardRatio = 1.0f;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 524
+    m_state.allGpuState.viewport.depthRange       = Pal::DepthRange::ZeroToOne;
+#endif
 
     const uint32_t numPalDevices = m_pDevice->NumPalDevices();
     uint32_t deviceIdx           = 0;

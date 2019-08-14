@@ -251,36 +251,37 @@ VkResult PalQueryPool::GetResults(
     VkDeviceSize        stride,
     VkQueryResultFlags  flags)
 {
-    VK_ASSERT(queryCount * stride <= dataSize);
-
-    VkResult           result               = VK_SUCCESS;
-    void*              pQueryData           = pData;
-    VkQueryResultFlags queryFlags           = flags;
-    size_t             queryDataSize        = dataSize;
-    VkDeviceSize       queryDataStride      = stride;
-
-    const bool availability = flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT;
-
-    // HW will returns two 64-bits integers for the query of transform feedback, they are written primitives and the
-    // number of needed primitives. And if the flag VK_QUERY_RESULT_WITH_AVAILABILITY_BIT is set, an extra integer
-    // which indicates the availability state needs to be written.
-    const uint32_t numXfbQueryDataElems = availability ? 3 : 2;
-
-    // Vulkan supports 32-bit unsigned integer values data of transform feedback query, but Pal supports 64-bit only.
-    // So the query data is stored into xfbQueryData first.
-    Util::AutoBuffer<uint64_t, 4, PalAllocator> xfbQueryData(queryCount * numXfbQueryDataElems,
-                                                             pDevice->VkInstance()->Allocator());
-
-    if (m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
-    {
-        pQueryData      = &xfbQueryData[0];
-        queryDataStride = sizeof(uint64_t) * numXfbQueryDataElems;
-        queryDataSize   = sizeof(uint64_t) * numXfbQueryDataElems * queryCount;
-        queryFlags      |= VK_QUERY_RESULT_64_BIT;
-    }
+    VkResult result = VK_SUCCESS;
 
     if (queryCount > 0)
     {
+        VK_ASSERT(queryCount * stride <= dataSize);
+
+        void*              pQueryData           = pData;
+        VkQueryResultFlags queryFlags           = flags;
+        size_t             queryDataSize        = dataSize;
+        VkDeviceSize       queryDataStride      = stride;
+
+        const bool availability = flags & VK_QUERY_RESULT_WITH_AVAILABILITY_BIT;
+
+        // HW will returns two 64-bits integers for the query of transform feedback, they are written primitives and the
+        // number of needed primitives. And if the flag VK_QUERY_RESULT_WITH_AVAILABILITY_BIT is set, an extra integer
+        // which indicates the availability state needs to be written.
+        const uint32_t numXfbQueryDataElems = availability ? 3 : 2;
+
+        // Vulkan supports 32-bit unsigned integer values data of transform feedback query, but Pal supports 64-bit only.
+        // So the query data is stored into xfbQueryData first.
+        Util::AutoBuffer<uint64_t, 4, PalAllocator> xfbQueryData(queryCount * numXfbQueryDataElems,
+                                                                 pDevice->VkInstance()->Allocator());
+
+        if (m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
+        {
+            pQueryData      = &xfbQueryData[0];
+            queryDataStride = sizeof(uint64_t) * numXfbQueryDataElems;
+            queryDataSize   = sizeof(uint64_t) * numXfbQueryDataElems * queryCount;
+            queryFlags      |= VK_QUERY_RESULT_64_BIT;
+        }
+
         Pal::Result palResult = m_pPalQueryPool[DefaultDeviceIndex]->GetResults(
             VkToPalQueryResultFlags(queryFlags),
             m_palQueryType,
@@ -292,45 +293,52 @@ VkResult PalQueryPool::GetResults(
             static_cast<size_t>(queryDataStride));
 
         result = PalToVkResult(palResult);
-    }
 
-    if (m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT)
-    {
-        stride = (stride == 0) ? queryDataStride : stride;
-
-        for (size_t i = 0; i < queryCount; i++)
+        if ((m_queryType == VK_QUERY_TYPE_TRANSFORM_FEEDBACK_STREAM_EXT) &&
+            ((result == VK_SUCCESS) || (result == VK_NOT_READY)))
         {
-            uint64_t* pXfbQueryData = static_cast<uint64_t*>(&xfbQueryData[i * numXfbQueryDataElems]);
+            stride = (stride == 0) ? queryDataStride : stride;
 
-            // The number of written primitives and the number of needed primitives are in reverse order in Pal.
-            if ((flags & VK_QUERY_RESULT_64_BIT) == 0)
+            for (size_t i = 0; i < queryCount; i++)
             {
-                uint32_t* pPrimitivesCount = static_cast<uint32_t*>(pData);
+                uint64_t* pXfbQueryData = static_cast<uint64_t*>(&xfbQueryData[i * numXfbQueryDataElems]);
 
-                pPrimitivesCount[0] = static_cast<uint32_t>(pXfbQueryData[1]);
-                pPrimitivesCount[1] = static_cast<uint32_t>(pXfbQueryData[0]);
-
-                if (availability)
+                // The number of written primitives and the number of needed primitives are in reverse order in Pal.
+                if ((flags & VK_QUERY_RESULT_64_BIT) == 0)
                 {
-                    // Set the availability state to the last slot.
-                    pPrimitivesCount[2] = static_cast<uint32_t>(pXfbQueryData[2]);
+                    uint32_t* pPrimitivesCount = static_cast<uint32_t*>(pData);
+
+                    if ((result == VK_SUCCESS) || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
+                    {
+                        pPrimitivesCount[0] = static_cast<uint32_t>(pXfbQueryData[1]);
+                        pPrimitivesCount[1] = static_cast<uint32_t>(pXfbQueryData[0]);
+                    }
+
+                    if (availability)
+                    {
+                        // Set the availability state to the last slot.
+                        pPrimitivesCount[2] = static_cast<uint32_t>(pXfbQueryData[2]);
+                    }
                 }
-            }
-            else
-            {
-                uint64_t* pPrimitivesCount = static_cast<uint64_t*>(pData);
-
-                pPrimitivesCount[0] = pXfbQueryData[1];
-                pPrimitivesCount[1] = pXfbQueryData[0];
-
-                if (availability)
+                else
                 {
-                    // Set the availability state to the last slot.
-                    pPrimitivesCount[2] = pXfbQueryData[2];
-                }
-            }
+                    uint64_t* pPrimitivesCount = static_cast<uint64_t*>(pData);
 
-            pData = Util::VoidPtrInc(pData, static_cast<size_t>(stride));
+                    if ((result == VK_SUCCESS) || (flags & VK_QUERY_RESULT_PARTIAL_BIT))
+                    {
+                        pPrimitivesCount[0] = pXfbQueryData[1];
+                        pPrimitivesCount[1] = pXfbQueryData[0];
+                    }
+
+                    if (availability)
+                    {
+                        // Set the availability state to the last slot.
+                        pPrimitivesCount[2] = pXfbQueryData[2];
+                    }
+                }
+
+                pData = Util::VoidPtrInc(pData, static_cast<size_t>(stride));
+            }
         }
     }
 

@@ -49,7 +49,6 @@ endif()
 ### Cached Project Options #############################################################################################
 option(VK_INTERNAL_DEVELOPER "Build Internal Developer Build?" OFF)
 
-option(ICD_OPEN_SOURCE "Build open source Vulkan?" ON)
 option(ICD_BUILD_LLPC "Build LLPC?" ON)
 option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
 option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)

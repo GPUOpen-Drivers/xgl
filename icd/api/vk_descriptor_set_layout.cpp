@@ -158,7 +158,6 @@ uint32_t DescriptorSetLayout::GetSingleDescStaticSize(const Device* pDevice, VkD
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
         size = props.descriptorSizes.bufferView;
         break;
-
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
         // Currently we don't use any storage in the static section of descriptor sets for dynamic buffer descriptors
@@ -311,6 +310,7 @@ void DescriptorSetLayout::ConvertBindingInfo(
         {
             pSectionInfo->numRsrcMapNodes++;
         }
+
     }
 }
 

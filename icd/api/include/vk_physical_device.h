@@ -289,9 +289,6 @@ public:
     void GetDeviceProperties2(
         VkPhysicalDeviceProperties2*                pProperties);
 
-    void GetPhysicalDeviceFeatures2(
-        VkPhysicalDeviceFeatures2*                  pFeatures);
-
     VkResult GetImageFormatProperties2(
         const VkPhysicalDeviceImageFormatInfo2*     pImageFormatInfo,
         VkImageFormatProperties2*                   pImageFormatProperties);

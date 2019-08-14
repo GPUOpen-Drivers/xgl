@@ -257,8 +257,6 @@ protected:
 
     ~GraphicsPipeline();
 
-    // Creation info parameters for all the necessary PAL/LLPC/SCPC state objects encapsulated
-    // by the Vulkan graphics pipeline.
     struct CreateInfo
     {
         Pal::GraphicsPipelineCreateInfo             pipeline;

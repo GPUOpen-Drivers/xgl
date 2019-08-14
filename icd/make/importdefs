@@ -1,7 +1,7 @@
 # This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
 # that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.  It must
 # be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-ICD_PAL_CLIENT_MAJOR_VERSION = 518
+ICD_PAL_CLIENT_MAJOR_VERSION = 525
 ICD_PAL_CLIENT_MINOR_VERSION = 0
 
 # This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.  It describes
@@ -9,9 +9,11 @@ ICD_PAL_CLIENT_MINOR_VERSION = 0
 ICD_GPUOPEN_CLIENT_MAJOR_VERSION = 39
 ICD_GPUOPEN_CLIENT_MINOR_VERSION = 0
 
+#if ICD_BUILD_SCPC
 # This will become the value of SCPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_SCPC=1.  It describes the version of the
 # interface version of SCPC (currently part of PAL) that the ICD supports.
 ICD_SCPC_CLIENT_MAJOR_VERSION = 49
+#endif
 
 # This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.  It describes the version of the
 # interface version of LLPC (currently part of PAL) that the ICD supports.

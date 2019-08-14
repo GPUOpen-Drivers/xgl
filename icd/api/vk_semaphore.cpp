@@ -246,9 +246,8 @@ VkResult Semaphore::ImportSemaphore(
 
     palOpenInfo.externalSemaphore  = importInfo.handle;
     palOpenInfo.flags.crossProcess = true;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 517
     palOpenInfo.flags.timeline     = m_palCreateInfo.flags.timeline;
-#endif
+
     PAL_ASSERT((handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
                (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT));
     palOpenInfo.flags.isReference  = (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
@@ -385,9 +384,7 @@ VkResult Semaphore::GetSemaphoreCounterValue(
         {
             pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
         }
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         palResult = pPalSemaphore->QuerySemaphoreValue(pValue);
-#endif
     }
 
     return PalToVkResult(palResult);
@@ -416,9 +413,7 @@ VkResult Semaphore::WaitSemaphoreValue(
         {
             pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
         }
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         palResult = pPalSemaphore->WaitSemaphoreValue(value, timeout);
-#endif
     }
 
     return PalToVkResult(palResult);
@@ -443,9 +438,7 @@ VkResult Semaphore::SignalSemaphoreValue(
         {
             pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
         }
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         palResult = pPalSemaphore->SignalSemaphoreValue(value);
-#endif
     }
 
     return PalToVkResult(palResult);

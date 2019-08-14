@@ -313,7 +313,7 @@ Llpc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
     VkDescriptorType descriptorType)
 {
     auto nodeType = Llpc::ResourceMappingNodeType::Unknown;
-    switch(descriptorType)
+    switch(static_cast<uint32_t>(descriptorType))
     {
     case VK_DESCRIPTOR_TYPE_SAMPLER:
         nodeType = Llpc::ResourceMappingNodeType::DescriptorSampler;

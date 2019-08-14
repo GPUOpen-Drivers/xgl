@@ -217,7 +217,7 @@ uint32_t PhysicalDeviceManager::GetDeviceGroupIndices(
             Pal::Result result = pPalDevice->GetMultiGpuCompatibility(*deviceGroupPalDevice[groupIdx], &compatInfo);
             PAL_ALERT(result != Pal::Result::Success);
 
-            if ((compatInfo.flags.gpuFeatures == 1) && (compatInfo.flags.peerTransfer == 1))
+            if ((compatInfo.flags.gpuFeatures == 1) && (compatInfo.flags.peerTransferWrite == 1))
             {
                 if (pDeviceGroupIndices != nullptr)
                 {

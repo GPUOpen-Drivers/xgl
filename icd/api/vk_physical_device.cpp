@@ -3060,6 +3060,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_UNIFORM_BUFFER_STANDARD_LAYOUT));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SUBGROUP_SIZE_CONTROL));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGELESS_FRAMEBUFFER));
 
     return availableExtensions;
@@ -3714,7 +3716,6 @@ void PhysicalDevice::GetFeatures2(
 
                 break;
             }
-
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES_KHR:
             {
                 VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR* pUniformBufferStandardLayoutFeatures =
@@ -3886,6 +3887,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDevicePCIBusInfoPropertiesEXT*                 pPCIBusInfoProperties;
         VkPhysicalDeviceTransformFeedbackPropertiesEXT*          pFeedbackProperties;
         VkPhysicalDeviceDepthStencilResolvePropertiesKHR*        pDepthStencilResolveProperties;
+        VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*        pSubgroupSizeControlProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -4146,6 +4148,20 @@ void PhysicalDevice::GetDeviceProperties2(
                                                                            VK_RESOLVE_MODE_MAX_BIT_KHR;
             pDepthStencilResolveProperties->independentResolveNone       = VK_TRUE;
             pDepthStencilResolveProperties->independentResolve           = VK_TRUE;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT:
+        {
+            pSubgroupSizeControlProperties->minSubgroupSize = m_properties.gfxipProperties.shaderCore.minWavefrontSize;
+            pSubgroupSizeControlProperties->maxSubgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
+
+            // No limits on the maximum number of subgroups allowed within a workgroup.
+            pSubgroupSizeControlProperties->maxComputeWorkgroupSubgroups = UINT32_MAX;
+
+            // Do not support setting a required subgroup size in any stage.
+            pSubgroupSizeControlProperties->requiredSubgroupSizeStages = 0;
+
             break;
         }
 

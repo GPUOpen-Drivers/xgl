@@ -546,6 +546,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetBufferDeviceAddressEXT                     );
 
     INIT_DISPATCH_ENTRY(vkResetQueryPoolEXT                             );
+
 }
 
 // =====================================================================================================================

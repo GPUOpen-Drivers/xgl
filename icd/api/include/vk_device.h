@@ -403,10 +403,7 @@ public:
     VK_INLINE const VkPhysicalDeviceFeatures& GetEnabledFeatures() const
         { return m_enabledFeatures;}
 
-    bool IsVirtualRemappingSupported() const;
-
     Pal::PrtFeatureFlags GetPrtFeatures() const;
-    Pal::gpusize GetVirtualAllocAlignment() const;
 
     VK_INLINE void* AllocApiObject(
         size_t                       size,

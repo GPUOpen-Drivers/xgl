@@ -299,8 +299,12 @@ private:
     template <uint32_t numPalDevices, bool fmaskBasedMsaaReadEnabled>
     static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
 
-    template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, size_t bufferDescSize,
-              uint32_t numPalDevices, bool fmaskBasedMsaaReadEnabled>
+    template <size_t imageDescSize,
+              size_t fmaskDescSize,
+              size_t samplerDescSize,
+              size_t bufferDescSize,
+              uint32_t numPalDevices,
+              bool fmaskBasedMsaaReadEnabled>
     static VKAPI_ATTR void VKAPI_CALL UpdateDescriptorSets(
         VkDevice                                    device,
         uint32_t                                    descriptorWriteCount,
@@ -308,8 +312,12 @@ private:
         uint32_t                                    descriptorCopyCount,
         const VkCopyDescriptorSet*                  pDescriptorCopies);
 
-    template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, size_t bufferDescSize,
-              bool fmaskBasedMsaaReadEnabled, uint32_t numPalDevices>
+    template <size_t imageDescSize,
+              size_t fmaskDescSize,
+              size_t samplerDescSize,
+              size_t bufferDescSize,
+              bool fmaskBasedMsaaReadEnabled,
+              uint32_t numPalDevices>
     static void WriteDescriptorSets(
         const Device*                pDevice,
         uint32_t                     deviceIdx,

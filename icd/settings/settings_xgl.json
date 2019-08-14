@@ -1,16 +1,4 @@
 {
-  "Copyright": [
-    "***********************************************************************************************************************",
-    "*",
-    "*  Trade secret of Advanced Micro Devices, Inc.",
-    "*  Copyright (c) 2019, Advanced Micro Devices, Inc., (unpublished)",
-    "*",
-    "*  All rights reserved. This notice is intended as a precaution against inadvertent publication and does not imply",
-    "*  publication or any waiver of confidentiality. The year included in the foregoing notice is the year of creation of",
-    "*  the work.",
-    "*",
-    "***********************************************************************************************************************"
-  ],
   "ComponentName": "Vulkan",
   "Tags": [
     "Render Passes",
@@ -129,6 +117,11 @@
           "Name": "OptRenderStateCacheStaticAnisoLodCompensation",
           "Value": 16384,
           "Description": "Aniso LOD compensation state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateCacheStaticLineStipple",
+          "Value": 32768,
+          "Description": "Line stipple state (only when marked static)"
         }
       ]
     },
@@ -832,6 +825,19 @@
       "Scope": "Driver",
       "Type": "bool",
       "VariableName": "enableMailboxPresentMode"
+    },
+    {
+      "Name": "EnableAcquireBeforeSignal",
+      "Description": "Allows acquiring of swap chain images while present is still active",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableAcquireBeforeSignal"
     },
     {
       "Description": "Enable pipeline dump, pipeline is stored with .pipe format. You must set AMD_DEBUG_DIR and make sure $AMD_DEBUG_DIR + pipelineDumpDir is  an available directory.",
@@ -1634,12 +1640,12 @@
     },
     {
       "Name": "AllowExternalPipelineCacheObject",
-      "Description": "Controls whether a pipeline cache object is allowed to be created via vkCreatePipelineCache in addition to the cache residing within the pipeline compiler. (Default: TRUE)",
+      "Description": "Controls whether a pipeline cache object is allowed to be created via vkCreatePipelineCache in addition to the cache residing within the pipeline compiler. (Default: FALSE)",
       "Tags": [
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Type": "bool",
       "VariableName": "allowExternalPipelineCacheObject",

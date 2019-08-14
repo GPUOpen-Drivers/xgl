@@ -43,10 +43,16 @@ VkResult BufferView::Create(
     const VkAllocationCallbacks*       pAllocator,
     VkBufferView*                      pBufferView)
 {
+    VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_BUFFER_VIEW_CREATE_INFO);
+
     // Allocate memory for the buffer view
     const size_t apiSize = sizeof(BufferView);
-    const size_t srdSize = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.srdSizes.bufferView;
-    const size_t objSize = apiSize + (srdSize * pDevice->NumPalDevices());
+    const size_t bufferSrdSize =
+        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties.srdSizes.bufferView;
+    size_t srdSize = bufferSrdSize;
+
+    const size_t objSize = apiSize +
+        (srdSize * pDevice->NumPalDevices());
 
     void* pMemory = pAllocator->pfnAllocation(
         pAllocator->pUserData,
@@ -96,7 +102,7 @@ VkResult BufferView::Create(
                 1, &info, Util::VoidPtrInc(pSrdMemory, srdSize * deviceIdx));
         }
 
-        VK_ASSERT(srdSize ==
+        VK_ASSERT(srdSize >=
                   pDevice->VkPhysicalDevice(deviceIdx)->PalProperties().gfxipProperties.srdSizes.bufferView);
     }
 

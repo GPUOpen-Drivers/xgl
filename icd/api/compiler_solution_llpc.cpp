@@ -92,11 +92,9 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
     const void*  pInitialData,
     size_t       initialDataSize,
     void*        pShaderCacheMem,
-    bool         isScpcInternalCache,
     ShaderCache* pShaderCache)
 {
     VK_IGNORE(pShaderCacheMem);
-    VK_IGNORE(isScpcInternalCache);
     VkResult result = VK_SUCCESS;
     ShaderCache::ShaderCachePtr shaderCachePtr = {};
 
@@ -427,6 +425,9 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
 
     // NOTE: For testing consistency, these options should be kept the same as those of
     // "amdllpc" (Init()).
+    // WARNING: Do not conditionally add options based on GFXIP version as these will
+    // break support for systems with a mixture of ASICs. GFXIP dependent options
+    // should be subtarget features or handled in LLVM backend.
     llpcOptions[numOptions++] = "-unroll-max-percent-threshold-boost=1000";
     llpcOptions[numOptions++] = "-unroll-partial-threshold=700";
     llpcOptions[numOptions++] = "-pragma-unroll-threshold=1000";
@@ -434,7 +435,7 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
 
-    if ((m_gfxIp.major < 10) && (appProfile != AppProfile::ThreeKingdoms))
+    if (appProfile != AppProfile::ThreeKingdoms)
     {
         llpcOptions[numOptions++] = "-amdgpu-atomic-optimizations";
     }

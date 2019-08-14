@@ -203,6 +203,7 @@ void ResourceOptimizer::BuildAppProfile()
 
     // TODO: These need to be auto-generated from source JSON but for now we write profile programmatically
 
+    // Resource parameters based on app profile should go here...
 }
 
 #if ICD_RUNTIME_APP_PROFILE

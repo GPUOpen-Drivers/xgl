@@ -930,7 +930,6 @@ VkResult Device::Initialize(
     m_properties.descriptorSizes.imageView  = deviceProps.gfxipProperties.srdSizes.imageView;
     m_properties.descriptorSizes.fmaskView  = deviceProps.gfxipProperties.srdSizes.fmaskView;
     m_properties.descriptorSizes.sampler    = deviceProps.gfxipProperties.srdSizes.sampler;
-
     // Size of combined image samplers is the sum of the image and sampler SRD sizes (8DW + 4DW)
     m_properties.descriptorSizes.combinedImageSampler =
         m_properties.descriptorSizes.imageView +
@@ -1745,20 +1744,6 @@ Pal::PrtFeatureFlags Device::GetPrtFeatures() const
 }
 
 // =====================================================================================================================
-Pal::gpusize Device::GetVirtualAllocAlignment() const
-{
-    const Pal::gpusize virtualAllocAlignment =
-                m_perGpu[0].pPhysicalDevice->PalProperties().gpuMemoryProperties.virtualMemAllocGranularity;
-
-    for (uint32_t deviceIdx = 1; deviceIdx < NumPalDevices(); deviceIdx++)
-    {
-        VK_ASSERT(virtualAllocAlignment ==
-            (m_perGpu[deviceIdx].pPhysicalDevice->PalProperties().gpuMemoryProperties.virtualMemAllocGranularity));
-    }
-    return virtualAllocAlignment;
-}
-
-// =====================================================================================================================
 VkResult Device::WaitForFences(
     uint32_t       fenceCount,
     const VkFence* pFences,
@@ -2053,7 +2038,7 @@ void Device::GetDeviceGroupPeerMemoryFeatures(
 
         enabledFeatures |= VK_PEER_MEMORY_FEATURE_COPY_DST_BIT;
 
-        switch(palHeap)
+        switch (palHeap)
         {
             case Pal::GpuHeapLocal:
             case Pal::GpuHeapInvisible:

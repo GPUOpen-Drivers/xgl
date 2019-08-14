@@ -632,7 +632,8 @@ void GraphicsPipeline::BuildRasterizationState(
             {
                 pInfo->pipeline.rsState.depthClampDisable = (pRs->depthClampEnable == VK_FALSE);
                 // When depth clamping is enabled, depth clipping should be disabled, and vice versa
-                pInfo->immedInfo.triangleRasterState.fillMode  = VkToPalFillMode(pRs->polygonMode);
+                pInfo->immedInfo.triangleRasterState.frontFillMode = VkToPalFillMode(pRs->polygonMode);
+                pInfo->immedInfo.triangleRasterState.backFillMode  = VkToPalFillMode(pRs->polygonMode);
                 pInfo->immedInfo.triangleRasterState.cullMode  = VkToPalCullMode(pRs->cullMode);
                 pInfo->immedInfo.triangleRasterState.frontFace = VkToPalFaceOrientation(pRs->frontFace);
                 pInfo->immedInfo.triangleRasterState.flags.depthBiasEnable = pRs->depthBiasEnable;
@@ -917,6 +918,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
 
             bool multisampleEnable     = (pMs->rasterizationSamples != 1);
+
             bool customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
                                           (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
 

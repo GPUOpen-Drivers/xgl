@@ -235,6 +235,7 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.nggSubgroupSizing   = NggSubgroupExplicit;
         m_settings.nggVertsPerSubgroup = 254;
         m_settings.nggPrimsPerSubgroup = 128;
+
     }
 
     if (appProfile == AppProfile::WorldWarZ)

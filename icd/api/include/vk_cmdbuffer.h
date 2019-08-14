@@ -179,8 +179,8 @@ struct AllGpuRenderState
     // the same PAL pipeline bind point.
     PipelineBind            palToApiPipeline[static_cast<size_t>(Pal::PipelineBindPoint::Count)];
 
-    Pal::ScissorRectParams  scissor;
-    Pal::ViewportParams     viewport;
+    Pal::ScissorRectParams       scissor;
+    Pal::ViewportParams          viewport;
 };
 
 // This structure describes current render state within a command buffer during its building.

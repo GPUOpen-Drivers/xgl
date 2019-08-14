@@ -265,6 +265,8 @@ VkResult SwapChain::Create(
     swapChainCreateInfo.imageArraySize      = 1;
     swapChainCreateInfo.swapChainMode       = VkToPalSwapChainMode(pCreateInfo->presentMode);
 
+    swapChainCreateInfo.flags.canAcquireBeforeSignaling = pDevice->GetRuntimeSettings().enableAcquireBeforeSignal;
+
     if (properties.displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
     {
         swapChainCreateInfo.pScreen = properties.displayableInfo.pScreen;
@@ -796,6 +798,11 @@ VkResult SwapChain::AcquireNextImage(
         if (result == VK_SUCCESS)
         {
             m_appOwnedImageCount++;
+
+            if (IsSuboptimal(presentationDeviceIdx))
+            {
+                result = VK_SUBOPTIMAL_KHR;
+            }
         }
     }
     else
@@ -935,6 +942,37 @@ Pal::IQueue* SwapChain::PrePresent(
     }
 
     return pPalQueue;
+}
+
+// =====================================================================================================================
+// Check if surface properties of a device have changed since the swapchain's creation.
+bool SwapChain::IsSuboptimal(uint32_t  deviceIdx)
+{
+    bool                     suboptimal          = false;
+    VkSurfaceCapabilitiesKHR surfaceCapabilities = {};
+    Pal::OsDisplayHandle     displayHandle = 0;
+
+    VK_ASSERT(m_properties.pSurface != nullptr);
+
+    const VkResult result = m_pDevice->VkPhysicalDevice(deviceIdx)->GetSurfaceCapabilities(
+        Surface::HandleFromObject(m_properties.pSurface),
+        displayHandle,
+        &surfaceCapabilities);
+
+    if (result == VK_SUCCESS)
+    {
+        // Magic width/height value meaning that the surface is resized to match the swapchain's extent.
+        constexpr uint32_t SwapchainBasedSize = 0xFFFFFFFF;
+
+        if ((surfaceCapabilities.currentExtent.width  != SwapchainBasedSize) ||
+            (surfaceCapabilities.currentExtent.height != SwapchainBasedSize))
+        {
+            suboptimal = ((surfaceCapabilities.currentExtent.width  != m_properties.imageCreateInfo.extent.width) ||
+                          (surfaceCapabilities.currentExtent.height != m_properties.imageCreateInfo.extent.height));
+        }
+    }
+
+    return suboptimal;
 }
 
 // =====================================================================================================================

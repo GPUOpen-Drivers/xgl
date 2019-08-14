@@ -111,7 +111,11 @@ VkResult DescriptorUpdateTemplate::Create(
 }
 
 // =====================================================================================================================
-template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, size_t bufferDescSize, uint32_t numPalDevices>
+template <size_t imageDescSize,
+          size_t fmaskDescSize,
+          size_t samplerDescSize,
+          size_t bufferDescSize,
+          uint32_t numPalDevices>
 DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntryFunc(
     const Device*                           pDevice,
     VkDescriptorType                        descriptorType,
@@ -119,7 +123,7 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
 {
     PfnUpdateEntry pFunc = NULL;
 
-    switch (descriptorType)
+    switch (static_cast<uint32_t>(descriptorType))
     {
     case VK_DESCRIPTOR_TYPE_SAMPLER:
         pFunc = &UpdateEntrySampler<samplerDescSize, numPalDevices>;
@@ -207,8 +211,14 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
         (fmaskDescSize == 32) &&
         (samplerDescSize == 16) &&
         (bufferDescSize == 16))
+
     {
-        pFunc = GetUpdateEntryFunc<32, 32, 16, 16, numPalDevices>(pDevice, descriptorType, dstBinding);
+        pFunc = GetUpdateEntryFunc<
+            32,
+            32,
+            16,
+            16,
+            numPalDevices>(pDevice, descriptorType, dstBinding);
     }
     else
     {

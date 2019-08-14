@@ -114,7 +114,6 @@ public:
         const void*  pInitialData,
         size_t       initialDataSize,
         void*        pShaderCacheMem,
-        bool         isScpcInternalCache,
         ShaderCache* pShaderCache) = 0;
 
     virtual VkResult BuildShaderModule(

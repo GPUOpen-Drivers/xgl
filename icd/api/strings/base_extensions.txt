@@ -105,3 +105,4 @@ VK_EXT_separate_stencil_usage
 VK_KHR_uniform_buffer_standard_layout
 VK_KHR_imageless_framebuffer
 VK_EXT_shader_demote_to_helper_invocation
+VK_EXT_subgroup_size_control

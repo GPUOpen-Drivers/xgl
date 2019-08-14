@@ -171,7 +171,7 @@ target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 ### XGL Subprojects ####################################################################################################
 ### PAL ########################################################################
 # For Open source, MSVC build is for amdllpc only which does not depend on pal.
-if(ICD_OPEN_SOURCE AND (NOT "${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC"))
+if(NOT "${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
     add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
 endif()
 ### XGL Sources ########################################################################################################
@@ -281,9 +281,7 @@ add_custom_target(
 
 add_dependencies(xgl RunVKStringsGenerator)
 
-if(ICD_OPEN_SOURCE)
     target_sources(xgl PRIVATE api/strings/strings.cpp)
-endif()
 
 # Or for a separate lib: icdapi
 # add_subdirectory(${XGL_API_PATH} ${PROJECT_BINARY_DIR}/api)

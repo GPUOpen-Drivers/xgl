@@ -418,6 +418,12 @@ VkResult Instance::Init(
         deviceCount = 0;
     }
 
+    if ((status == VK_SUCCESS) && (deviceCount == 0))
+    {
+        // Prevent an instance from ever being created without any devices present.
+        status = VK_ERROR_INITIALIZATION_FAILED;
+    }
+
     // Late-initialize the developer mode manager.  Needs to be called after settings are committed but BEFORE
     // physical devices are late-initialized (below).
     if ((status == VK_SUCCESS) && (m_pDevModeMgr != nullptr))
@@ -439,7 +445,7 @@ VkResult Instance::Init(
         PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(devices[DefaultDeviceIndex]);
         Pal::DeviceProperties info;
         pPhysicalDevice->PalDevice()->GetProperties(&info);
-        if ((pPhysicalDevice->GetRuntimeSettings().enableSPP) && (info.gfxipProperties.flags.supportSpp))
+        if (pPhysicalDevice->GetRuntimeSettings().enableSPP && info.gfxipProperties.flags.supportSpp)
         {
             char executableName[PATH_MAX];
             char executablePath[PATH_MAX];

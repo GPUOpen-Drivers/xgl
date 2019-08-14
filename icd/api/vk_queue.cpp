@@ -477,11 +477,7 @@ VkResult Queue::PalSignalSemaphores(
             {
                 pPalSemaphore = pVkSemaphore->PalTemporarySemaphore(deviceIdx);
             }
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
             palResult = PalQueue(deviceIdx)->SignalQueueSemaphore(pPalSemaphore, pointValue);
-#else
-            palResult = PalQueue(deviceIdx)->SignalQueueSemaphore(pPalSemaphore);
-#endif
         }
         else
         {
@@ -567,11 +563,7 @@ VkResult Queue::PalWaitSemaphores(
         {
             if (timedQueueEvents == false)
             {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
                 palResult = PalQueue(deviceIdx)->WaitQueueSemaphore(pPalSemaphore, pointValue);
-#else
-                palResult = PalQueue(deviceIdx)->WaitQueueSemaphore(pPalSemaphore);
-#endif
             }
             else
             {
@@ -753,6 +745,11 @@ VkResult Queue::Present(
 #endif
 
         VkResult curResult = PalToVkResult(palResult);
+
+        if ((curResult == VK_SUCCESS) && pSwapChain->IsSuboptimal(presentationDeviceIdx))
+        {
+            curResult = VK_SUBOPTIMAL_KHR;
+        }
 
         if (pPresentInfo->pResults)
         {

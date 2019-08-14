@@ -143,7 +143,9 @@ VkResult PipelineCompiler::CreateShaderCache(
 
     {
         result = m_compilerSolutionLlpc.CreateShaderCache(pInitialData,
-            initialDataSize, pShaderCacheMem, false, pShaderCache);
+                                                          initialDataSize,
+                                                          pShaderCacheMem,
+                                                          pShaderCache);
     }
 
     return result;
@@ -1101,6 +1103,13 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                                   &pShaderInfo->options
                                   );
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 31
+        if ((pStage->flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
+        {
+            pShaderInfo->options.allowVaryWaveSize = true;
+        }
+#endif
+
         ApplyProfileOptions(pDevice,
                             static_cast<ShaderStage>(stage),
                             pShaderModule,
@@ -1243,6 +1252,13 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
     pCreateInfo->pipelineInfo.cs.entryStage          = Llpc::ShaderStageCompute;
+#endif
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 31
+    if ((pIn->stage.flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
+    {
+        pCreateInfo->pipelineInfo.cs.options.allowVaryWaveSize = true;
+    }
 #endif
 
     // Build the resource mapping description for LLPC.  This data contains things about how shader
