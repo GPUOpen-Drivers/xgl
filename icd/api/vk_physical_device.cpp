@@ -276,6 +276,7 @@ PhysicalDevice::PhysicalDevice(
         m_memoryVkIndexToPalHeap[i] = Pal::GpuHeapCount; // invalid index
     }
     memset(&m_memoryUsageTracker, 0, sizeof(m_memoryUsageTracker));
+    memset(&m_pipelineCacheUUID, 0, VK_UUID_SIZE);
 
     for (uint32_t i = 0; i < VkMemoryHeapNum; ++i)
     {
@@ -650,6 +651,42 @@ VkResult PhysicalDevice::Initialize()
 
         VK_ASSERT(m_memoryProperties.memoryTypeCount <= VK_MAX_MEMORY_TYPES);
         VK_ASSERT(m_memoryProperties.memoryHeapCount <= Pal::GpuHeapCount);
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        // Get properties from PAL
+        const Pal::DeviceProperties& palProps = PalProperties();
+
+        // This UUID identifies whether a previously created pipeline cache is compatible with the currently installed
+        // device/driver.
+        constexpr uint16_t PalMajorVersion  = PAL_INTERFACE_MAJOR_VERSION;
+        constexpr uint8_t  PalMinorVersion  = PAL_INTERFACE_MINOR_VERSION;
+
+        constexpr char timestamp[]    = __DATE__ __TIME__;
+        const uint32_t timestampHash  = Util::HashLiteralString<sizeof(timestamp)>(timestamp);
+
+        memset(m_pipelineCacheUUID, 0, VK_UUID_SIZE);
+
+        Util::SystemInfo systemInfo = {};
+
+        result = Util::QuerySystemInfo(&systemInfo);
+        if (result == Pal::Result::Success)
+        {
+            Util::MetroHash128 hash = {};
+            hash.Update(timestampHash);
+            hash.Update(palProps.vendorId);
+            hash.Update(palProps.deviceId);
+            hash.Update(PalMajorVersion);
+            hash.Update(PalMinorVersion);
+            hash.Update(systemInfo.cpuType);
+            hash.Update(systemInfo.cpuVendorString[0]);
+            hash.Update(systemInfo.cpuBrandString[0]);
+            hash.Update(systemInfo.cpuLogicalCoreCount);
+            hash.Update(systemInfo.cpuPhysicalCoreCount);
+            hash.Update(systemInfo.totalSysMemSize);
+            hash.Finalize(m_pipelineCacheUUID);
+        }
     }
 
     // Collect properties for perf experiments (this call can fail; we just don't report support for
@@ -1506,6 +1543,53 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     }
 }
 
+VkResult PhysicalDevice::GetPhysicalDeviceCalibrateableTimeDomainsEXT(
+    uint32_t*                           pTimeDomainCount,
+    VkTimeDomainEXT*                    pTimeDomains)
+{
+    Pal::DeviceProperties deviceProperties = {};
+    VkResult result = PalToVkResult(m_pPalDevice->GetProperties(&deviceProperties));
+    VK_ASSERT(result == VK_SUCCESS);
+
+    uint32_t timeDomainCount = Util::CountSetBits(deviceProperties.osProperties.timeDomains.u32All);
+
+    if (pTimeDomains == nullptr)
+    {
+        *pTimeDomainCount = timeDomainCount;
+    }
+    else
+    {
+        *pTimeDomainCount = Util::Min(timeDomainCount, *pTimeDomainCount);
+
+        uint32_t i = 0;
+
+        if (deviceProperties.osProperties.timeDomains.supportDevice && (i < *pTimeDomainCount))
+        {
+            pTimeDomains[i] = VK_TIME_DOMAIN_DEVICE_EXT;
+            ++i;
+        }
+        if (deviceProperties.osProperties.timeDomains.supportClockMonotonic && (i < *pTimeDomainCount))
+        {
+            pTimeDomains[i] = VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT;
+            ++i;
+        }
+        if (deviceProperties.osProperties.timeDomains.supportClockMonotonicRaw && (i < *pTimeDomainCount))
+        {
+            pTimeDomains[i] = VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT;
+            ++i;
+        }
+        if (deviceProperties.osProperties.timeDomains.supportQueryPerformanceCounter && (i < *pTimeDomainCount))
+        {
+            pTimeDomains[i] = VK_TIME_DOMAIN_QUERY_PERFORMANCE_COUNTER_EXT;
+            ++i;
+        }
+
+        result = ((timeDomainCount == *pTimeDomainCount) ? VK_SUCCESS : VK_INCOMPLETE);
+    }
+
+    return result;
+}
+
 // =====================================================================================================================
 // Returns the API version supported by this device.
 uint32_t PhysicalDevice::GetSupportedAPIVersion() const
@@ -1566,40 +1650,7 @@ VkResult PhysicalDevice::GetDeviceProperties(
     pProperties->sparseProperties.residencyNonResidentStrict =
         GetPrtFeatures() & Pal::PrtFeatureStrictNull ? VK_TRUE : VK_FALSE;
 
-    // This UUID identifies whether a previously created pipeline cache is compatible with the currently installed
-    // device/driver.  The UUID below is probably not accurate enough and needs to be re-evaluated once we actually
-    // implement serialization support.
-    constexpr uint16_t PalMajorVersion  = PAL_INTERFACE_MAJOR_VERSION;
-    constexpr uint8_t  PalMinorVersion  = PAL_INTERFACE_MINOR_VERSION;
-    constexpr uint8_t  UuidVersion      = 1;
-
-    constexpr char timestamp[]    = __DATE__ __TIME__;
-    const uint32_t timestampHash  = Util::HashLiteralString<sizeof(timestamp)>(timestamp);
-
-    const uint8_t* pVendorId      = reinterpret_cast<const uint8_t*>(&palProps.vendorId);
-    const uint8_t* pDeviceId      = reinterpret_cast<const uint8_t*>(&palProps.deviceId);
-    const uint8_t* pPalMajor      = reinterpret_cast<const uint8_t*>(&PalMajorVersion);
-    const uint8_t* pTimestampHash = reinterpret_cast<const uint8_t*>(&timestampHash);
-
-    pProperties->pipelineCacheUUID[0] = pVendorId[0];
-    pProperties->pipelineCacheUUID[1] = pVendorId[1];
-    pProperties->pipelineCacheUUID[2] = pVendorId[2];
-    pProperties->pipelineCacheUUID[3] = pVendorId[3];
-
-    pProperties->pipelineCacheUUID[4] = pDeviceId[0];
-    pProperties->pipelineCacheUUID[5] = pDeviceId[1];
-    pProperties->pipelineCacheUUID[6] = pDeviceId[2];
-    pProperties->pipelineCacheUUID[7] = pDeviceId[3];
-
-    pProperties->pipelineCacheUUID[8]  = pPalMajor[0];
-    pProperties->pipelineCacheUUID[9]  = pPalMajor[1];
-    pProperties->pipelineCacheUUID[10] = PalMinorVersion;
-    pProperties->pipelineCacheUUID[11] = UuidVersion;
-
-    pProperties->pipelineCacheUUID[12] = pTimestampHash[0];
-    pProperties->pipelineCacheUUID[13] = pTimestampHash[1];
-    pProperties->pipelineCacheUUID[14] = pTimestampHash[2];
-    pProperties->pipelineCacheUUID[15] = pTimestampHash[3];
+    memcpy(pProperties->pipelineCacheUUID, m_pipelineCacheUUID, VK_UUID_SIZE);
 
     return VK_SUCCESS;
 }
@@ -2013,7 +2064,7 @@ void PhysicalDevice::PopulateLimits()
     // buffers.  When a buffer view is created for a buffer which was created with
     // VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT or VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT set in the usage member
     // of the VkBufferCreateInfo structure, the offset must be an integer multiple of this limit.
-    m_limits.minTexelBufferOffsetAlignment = 1;
+    m_limits.minTexelBufferOffsetAlignment = 4;
 
     // NOTE: The buffers above are formatted buffers (i.e. typed buffers in PAL terms).  Their offset additionally must
     // be aligned on element size boundaries, and that is not reflected in the above limit.
@@ -2461,7 +2512,6 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
                 vkMetadata.whitePoint.x              = static_cast<float>(colorGamut.chromaticityWhitePointX * scale);
                 vkMetadata.whitePoint.y              = static_cast<float>(colorGamut.chromaticityWhitePointY * scale);
                 vkMetadata.minLuminance              = static_cast<float>(colorGamut.minLuminance            * scale);
-
                 vkMetadata.maxLuminance              = static_cast<float>(colorGamut.maxLuminance);
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 512
                 vkMetadata.maxFrameAverageLightLevel = static_cast<float>(colorGamut.maxFrameAverageLightLevel);
@@ -3726,6 +3776,16 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT:
+            {
+                VkPhysicalDeviceSubgroupSizeControlFeaturesEXT* pSubgroupSizeControlFeatures =
+                    reinterpret_cast<VkPhysicalDeviceSubgroupSizeControlFeaturesEXT *>(pHeader);
+
+                pSubgroupSizeControlFeatures->subgroupSizeControl  = VK_TRUE;
+                pSubgroupSizeControlFeatures->computeFullSubgroups = VK_FALSE;
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES_KHR:
             {
                 VkPhysicalDeviceImagelessFramebufferFeaturesKHR* pImagelessFramebufferFeatures =
@@ -4018,7 +4078,7 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES2_AMD:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD:
         {
             const Pal::DeviceProperties& props = PalProperties();
 
@@ -5800,6 +5860,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilities2EXT(
 {
     return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetSurfaceCapabilities2EXT(surface,
                                                                                            pSurfaceCapabilities);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pTimeDomainCount,
+    VkTimeDomainEXT*                            pTimeDomains)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetPhysicalDeviceCalibrateableTimeDomainsEXT(pTimeDomainCount,
+                                                                                                             pTimeDomains);
 }
 
 }

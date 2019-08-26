@@ -250,7 +250,10 @@ VkResult ComputePipeline::Create(
     // Retain a copy of the pipeline binary if an extension that can query it is enabled
     PipelineBinaryInfo* pBinary = nullptr;
 
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) && (result == VK_SUCCESS))
+    if ((pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
+        (pDevice->IsExtensionEnabled(DeviceExtensions::KHR_PIPELINE_EXECUTABLE_PROPERTIES)  &&
+        ((pCreateInfo->flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) != 0))) &&
+        (result == VK_SUCCESS))
     {
         pBinary = PipelineBinaryInfo::Create(pipelineBinarySizes[DefaultDeviceIndex],
                                              pPipelineBinaries[DefaultDeviceIndex],

@@ -35,6 +35,8 @@ endif()
 ### CMake Includes #####################################################################################################
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/../pal/cmake/Modules)
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/icd/imported/pal/cmake/Modules)
+set(GLOBAL_ROOT_SRC_DIR ${PROJECT_SOURCE_DIR}/../../ CACHE PATH "" FORCE)
+
 include(CMakeDependentOption)
 include(AmdCmakeHelper)
 include(SetupAmdGlobalRoots)
@@ -173,6 +175,13 @@ endif()
 set(PERL_CMD ${PERL_EXECUTABLE})
 
 ### Add Subdirectories #################################################################################################
+
+### Metrohash ##########################################################
+set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../third_party/metrohash CACHE PATH "The path of metrohash.")
+
+if(EXISTS ${XGL_METROHASH_PATH} AND NOT TARGET metrohash)
+    add_subdirectory(${XGL_METROHASH_PATH} ${PROJECT_BINARY_DIR}/metrohash)
+endif()
 
 ### LLPC ###############################################################
 set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is read-only.")

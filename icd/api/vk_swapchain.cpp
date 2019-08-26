@@ -539,38 +539,44 @@ Pal::ICmdBuffer* SwapChain::BuildPresentCmdBuffer(
     // Get a per swap chain image command buffer for post processing.
     InitPresentCmdBuffers(deviceIdx, queueFamilyIndex);
 
-    Pal::ICmdBuffer* pPresentCmdBuffer = nullptr;
+    auto pCmdBuffer = m_ppPresentCmdBuffers[deviceIdx][imageIndex];
+    bool hasWork    = false;
 
-    if (m_ppPresentCmdBuffers[deviceIdx][imageIndex] != nullptr)
+    if (pCmdBuffer != nullptr)
     {
         Pal::CmdBufferBuildInfo buildInfo = {};
         buildInfo.flags.optimizeExclusiveSubmit = 1;
 
-        Pal::Result palResult = m_ppPresentCmdBuffers[deviceIdx][imageIndex]->Begin(buildInfo);
+        Pal::Result palResult = pCmdBuffer->Begin(buildInfo);
 
         if (palResult == Pal::Result::Success)
         {
+
             Pal::CmdPostProcessFrameInfo frameInfo       = {};
             bool                         wasGpuWorkAdded = false;
 
             frameInfo.pSrcImage = presentInfo.pSrcImage;
 
-            m_ppPresentCmdBuffers[deviceIdx][imageIndex]->CmdPostProcessFrame(frameInfo, &wasGpuWorkAdded);
+            pCmdBuffer->CmdPostProcessFrame(frameInfo, &wasGpuWorkAdded);
 
-            palResult = m_ppPresentCmdBuffers[deviceIdx][imageIndex]->End();
+            palResult = pCmdBuffer->End();
 
-            // If nothing was added by PAL, return a nullptr to avoid potentially triggering an unnecessary submit.
-            if (wasGpuWorkAdded && (palResult == Pal::Result::Success))
+            if (palResult != Pal::Result::Success)
             {
-                pPresentCmdBuffer = m_ppPresentCmdBuffers[deviceIdx][imageIndex];
+                // Give up with post processing, but don't fail the present.
+                VK_NEVER_CALLED();
+
+                hasWork = false;
+            }
+            else if (wasGpuWorkAdded)
+            {
+                hasWork = true;
             }
         }
-
-        // Give up with post processing, but don't fail the present.
-        VK_ASSERT(palResult == Pal::Result::Success);
     }
 
-    return pPresentCmdBuffer;
+    // If nothing was added, return a nullptr to avoid potentially triggering an unnecessary submit.
+    return hasWork ? pCmdBuffer : nullptr;
 }
 
 // =====================================================================================================================
@@ -881,9 +887,12 @@ Pal::IQueue* SwapChain::PrePresent(
 {
     // Get swap chain properties
     pPresentInfo->pSwapChain  = m_pPalSwapChain;
-    pPresentInfo->pSrcImage   = GetPresentableImage(imageIndex)->PalImage(deviceIdx);
     pPresentInfo->presentMode = m_properties.imagePresentSupport;
     pPresentInfo->imageIndex  = imageIndex;
+
+    {
+        pPresentInfo->pSrcImage = GetPresentableImage(imageIndex)->PalImage(deviceIdx);
+    }
 
     // Let the fullscreen manager override some of this present information in case it has enabled
     // fullscreen presents.
@@ -964,8 +973,9 @@ bool SwapChain::IsSuboptimal(uint32_t  deviceIdx)
         // Magic width/height value meaning that the surface is resized to match the swapchain's extent.
         constexpr uint32_t SwapchainBasedSize = 0xFFFFFFFF;
 
-        if ((surfaceCapabilities.currentExtent.width  != SwapchainBasedSize) ||
-            (surfaceCapabilities.currentExtent.height != SwapchainBasedSize))
+        if (((surfaceCapabilities.currentExtent.width  != SwapchainBasedSize) ||
+             (surfaceCapabilities.currentExtent.height != SwapchainBasedSize))
+            )
         {
             suboptimal = ((surfaceCapabilities.currentExtent.width  != m_properties.imageCreateInfo.extent.width) ||
                           (surfaceCapabilities.currentExtent.height != m_properties.imageCreateInfo.extent.height));

@@ -53,7 +53,6 @@
 
 // Internal (under development) extension definitions
 
-#include "devext/vk_amd_shader_core_properties2.h"
 #include "devext/vk_amd_gpa_interface.h"
 
 #include "devext/vk_amd_device_coherent_memory.h"

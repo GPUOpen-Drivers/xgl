@@ -267,6 +267,10 @@ public:
         uint32_t*                                       pPropertyCount,
         utils::ArrayView<VkSparseImageFormatProperties> properties) const;
 
+    VkResult GetPhysicalDeviceCalibrateableTimeDomainsEXT(
+        uint32_t*                           pTimeDomainCount,
+        VkTimeDomainEXT*                    pTimeDomains);
+
     void GetExternalBufferProperties(
         const VkPhysicalDeviceExternalBufferInfo*   pExternalBufferInfo,
         VkExternalBufferProperties*                 pExternalBufferProperties);
@@ -582,6 +586,8 @@ protected:
         Pal::gpusize allocatedMemorySize[Pal::GpuHeap::GpuHeapCount]; // Number of bytes allocated per heap
         Pal::gpusize totalMemorySize[Pal::GpuHeap::GpuHeapCount];     // The total memory (in bytes) per heap
     } m_memoryUsageTracker;
+
+    uint8_t                          m_pipelineCacheUUID[VK_UUID_SIZE];
 };
 
 VK_DEFINE_DISPATCHABLE(PhysicalDevice);
@@ -850,6 +856,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceCapabilities2EXT(
     VkPhysicalDevice                            physicalDevice,
     VkSurfaceKHR                                surface,
     VkSurfaceCapabilities2EXT*                  pSurfaceCapabilities);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(
+    VkPhysicalDevice                            physicalDevice,
+    uint32_t*                                   pTimeDomainCount,
+    VkTimeDomainEXT*                            pTimeDomains);
 
 } // namespace entry
 

@@ -16,5 +16,5 @@ ICD_SCPC_CLIENT_MAJOR_VERSION = 49
 #endif
 
 # This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.  It describes the version of the
-# interface version of LLPC (currently part of PAL) that the ICD supports.
-ICD_LLPC_CLIENT_MAJOR_VERSION = 28
+# interface version of LLPC that the ICD supports.
+ICD_LLPC_CLIENT_MAJOR_VERSION = 31

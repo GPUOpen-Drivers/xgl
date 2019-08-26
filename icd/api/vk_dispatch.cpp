@@ -542,11 +542,16 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateDebugUtilsMessengerEXT                  );
     INIT_DISPATCH_ENTRY(vkDestroyDebugUtilsMessengerEXT                 );
     INIT_DISPATCH_ENTRY(vkSubmitDebugUtilsMessageEXT                    );
+    INIT_DISPATCH_ENTRY(vkGetPipelineExecutablePropertiesKHR             );
+    INIT_DISPATCH_ENTRY(vkGetPipelineExecutableStatisticsKHR             );
+    INIT_DISPATCH_ENTRY(vkGetPipelineExecutableInternalRepresentationsKHR);
 
     INIT_DISPATCH_ENTRY(vkGetBufferDeviceAddressEXT                     );
 
     INIT_DISPATCH_ENTRY(vkResetQueryPoolEXT                             );
 
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );
+    INIT_DISPATCH_ENTRY(vkGetCalibratedTimestampsEXT                    );
 }
 
 // =====================================================================================================================

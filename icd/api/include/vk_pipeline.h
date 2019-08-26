@@ -138,6 +138,13 @@ public:
     VK_INLINE bool ContainsStaticState(DynamicStatesInternal dynamicState) const
         { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0); }
 
+    VkResult GetShaderDisassembly(
+        const Device*         pDevice,
+        const Pal::IPipeline* pPalPipeline,
+        Pal::ShaderType       shaderType,
+        size_t*               pBufferSize,
+        void*                 pBuffer) const;
+
 protected:
     Pipeline(
         Device* const         pDevice,
@@ -183,6 +190,24 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
     VkShaderInfoTypeAMD                         infoType,
     size_t*                                     pBufferSize,
     void*                                       pBuffer);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutablePropertiesKHR(
+    VkDevice                                    device,
+    const VkPipelineInfoKHR*                    pPipelineInfo,
+    uint32_t*                                   pExecutableCount,
+    VkPipelineExecutablePropertiesKHR*          pProperties);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableStatisticsKHR(
+    VkDevice                                    device,
+    const VkPipelineExecutableInfoKHR*          pExecutableInfo,
+    uint32_t*                                   pStatisticCount,
+    VkPipelineExecutableStatisticKHR*           pStatistics);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR(
+    VkDevice                                       device,
+    const VkPipelineExecutableInfoKHR*             pExecutableInfo,
+    uint32_t*                                      pInternalRepresentationCount,
+    VkPipelineExecutableInternalRepresentationKHR* pInternalRepresentations);
 
 };
 

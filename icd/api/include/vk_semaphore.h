@@ -90,13 +90,13 @@ public:
         return m_pPalTemporarySemaphores[deviceIdx];
     }
 
-    VK_FORCEINLINE void ClearPalTemporarySemaphore()
+    VK_FORCEINLINE void ClearTemporarySemaphore()
     {
         memset(m_pPalTemporarySemaphores, 0, sizeof(m_pPalTemporarySemaphores));
-        m_sharedSemaphoreTempHandle = 0;
+
     }
 
-    VK_FORCEINLINE void SetPalTemporarySemaphore(
+    VK_FORCEINLINE void SetTemporarySemaphore(
         Pal::IQueueSemaphore* pPalTemporarySemaphore[],
         int32_t               semaphoreCount,
         Pal::OsExternalHandle tempHandle)
@@ -155,7 +155,7 @@ private:
             m_pPalSemaphores[i] = nullptr;
         }
 
-        ClearPalTemporarySemaphore();
+        ClearTemporarySemaphore();
     }
 
     Pal::IQueueSemaphore*           m_pPalSemaphores[MaxPalDevices];

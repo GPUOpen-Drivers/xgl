@@ -153,7 +153,6 @@ public:
     bool IsSuboptimal(uint32_t  deviceIdx);
 
 protected:
-
     SwapChain(
         Device*             pDevice,
         const Properties&   properties,

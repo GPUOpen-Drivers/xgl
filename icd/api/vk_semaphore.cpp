@@ -277,9 +277,6 @@ VkResult Semaphore::ImportSemaphore(
 
             if (palResult == Pal::Result::Success)
             {
-                m_palCreateInfo.flags.externalOpened    = 1;
-                m_palCreateInfo.flags.sharedViaNtHandle = palOpenInfo.flags.sharedViaNtHandle;
-
                 int32_t semaphoreCount = 1;
 
                 result = PopulateInDeviceGroup(pDevice, pPalSemaphores, &semaphoreCount);
@@ -288,7 +285,7 @@ VkResult Semaphore::ImportSemaphore(
                 {
                     if ((importInfo.importFlags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT))
                     {
-                        SetPalTemporarySemaphore(pPalSemaphores, semaphoreCount, palOpenInfo.externalSemaphore);
+                        SetTemporarySemaphore(pPalSemaphores, semaphoreCount, palOpenInfo.externalSemaphore);
                     }
                     else
                     {
@@ -336,6 +333,8 @@ VkResult Semaphore::Destroy(
     const Device*                   pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+
+    ClearTemporarySemaphore();
 
     m_pPalSemaphores[0]->Destroy();
 
@@ -407,7 +406,7 @@ VkResult Semaphore::WaitSemaphoreValue(
         if (pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex) != nullptr)
         {
             pPalSemaphore = pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex);
-            pSemaphore->ClearPalTemporarySemaphore();
+            pSemaphore->ClearTemporarySemaphore();
         }
         else
         {

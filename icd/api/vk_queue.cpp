@@ -552,7 +552,7 @@ VkResult Queue::PalWaitSemaphores(
         if (pSemaphore->PalTemporarySemaphore(deviceIdx) != nullptr)
         {
             pPalSemaphore = pSemaphore->PalTemporarySemaphore(deviceIdx);
-            pSemaphore->ClearPalTemporarySemaphore();
+            pSemaphore->ClearTemporarySemaphore();
         }
         else
         {

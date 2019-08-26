@@ -1512,6 +1512,7 @@ VkResult Device::CreateInternalComputePipeline(
         pShaderInfo->pModuleData         = shaderModule.pLlpcShaderModule;
         pShaderInfo->pSpecializationInfo = nullptr;
         pShaderInfo->pEntryTarget        = "main";
+        pShaderInfo->entryStage          = Llpc::ShaderStageCompute;
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
 
@@ -2222,6 +2223,49 @@ VkResult Device::BindImageMemory(
 }
 
 // =====================================================================================================================
+
+// =====================================================================================================================
+VkResult Device::GetCalibratedTimestamps(
+    uint32_t                            timestampCount,
+    const VkCalibratedTimestampInfoEXT* pTimestampInfos,
+    uint64_t*                           pTimestamps,
+    uint64_t*                           pMaxDeviation)
+{
+    Pal::CalibratedTimestamps calibratedTimestamps = {};
+
+    Pal::Result palResult = PalDevice(DefaultDeviceIndex)->GetCalibratedTimestamps(&calibratedTimestamps);
+    VkResult result = PalToVkResult(palResult);
+
+    if (result == VK_SUCCESS)
+    {
+        for (uint32_t i = 0; i < timestampCount; ++i)
+        {
+            switch (pTimestampInfos[i].timeDomain)
+            {
+            case VK_TIME_DOMAIN_DEVICE_EXT:
+                pTimestamps[i] = calibratedTimestamps.gpuTimestamp;
+                break;
+            case VK_TIME_DOMAIN_CLOCK_MONOTONIC_EXT:
+                pTimestamps[i] = calibratedTimestamps.cpuClockMonotonicTimestamp;
+                break;
+            case VK_TIME_DOMAIN_CLOCK_MONOTONIC_RAW_EXT:
+                pTimestamps[i] = calibratedTimestamps.cpuClockMonotonicRawTimestamp;
+                break;
+            case VK_TIME_DOMAIN_QUERY_PERFORMANCE_COUNTER_EXT:
+                pTimestamps[i] = calibratedTimestamps.cpuQueryPerfCounterTimestamp;
+                break;
+            default:
+                // An invalid time domain value was specified.  Return error.
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                break;
+            }
+        }
+
+        *pMaxDeviation = calibratedTimestamps.maxDeviation;
+    }
+
+    return result;
+}
 
 // =====================================================================================================================
 VkResult Device::CreateSampler(
@@ -3172,6 +3216,21 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
 }
 
 // =====================================================================================================================
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkGetCalibratedTimestampsEXT(
+    VkDevice                                    device,
+    uint32_t                                    timestampCount,
+    const VkCalibratedTimestampInfoEXT*         pTimestampInfos,
+    uint64_t*                                   pTimestamps,
+    uint64_t*                                   pMaxDeviation)
+{
+    return ApiDevice::ObjectFromHandle(device)->GetCalibratedTimestamps(
+        timestampCount,
+        pTimestampInfos,
+        pTimestamps,
+        pMaxDeviation);
+}
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(

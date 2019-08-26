@@ -435,10 +435,8 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
 
-    if (appProfile != AppProfile::ThreeKingdoms)
-    {
-        llpcOptions[numOptions++] = "-amdgpu-atomic-optimizations";
-    }
+    llpcOptions[numOptions++] = "-amdgpu-atomic-optimizations";
+    llpcOptions[numOptions++] = "-use-gpu-divergence-analysis";
 
     if ((appProfile == AppProfile::Talos) ||
         (appProfile == AppProfile::WolfensteinII)) {
@@ -448,8 +446,7 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     }
 
     ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
-    if ((appProfile == AppProfile::Talos) ||
-        (appProfile == AppProfile::MadMax) ||
+    if ((appProfile == AppProfile::MadMax) ||
         (appProfile == AppProfile::SeriousSamFusion) ||
         (appProfile == AppProfile::SedpEngine) ||
         (appProfile == AppProfile::ThronesOfBritannia))

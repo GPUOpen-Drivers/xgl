@@ -518,6 +518,12 @@ public:
         VkExternalMemoryHandleTypeFlagBits handleType,
         const void*                        pExternalPtr) const;
 
+    VkResult GetCalibratedTimestamps(
+        uint32_t                            timestampCount,
+        const VkCalibratedTimestampInfoEXT* pTimestampInfos,
+        uint64_t*                           pTimestamps,
+        uint64_t*                           pMaxDeviation);
+
     VK_FORCEINLINE const DispatchTable& GetDispatchTable() const
         { return m_dispatchTable; }
 
@@ -909,6 +915,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetDescriptorSetLayoutSupport(
     VkDevice                                    device,
     const VkDescriptorSetLayoutCreateInfo*      pCreateInfo,
     VkDescriptorSetLayoutSupport*               pSupport);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetCalibratedTimestampsEXT(
+    VkDevice                                    device,
+    uint32_t                                    timestampCount,
+    const VkCalibratedTimestampInfoEXT*         pTimestampInfos,
+    uint64_t*                                   pTimestamps,
+    uint64_t*                                   pMaxDeviation);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     VkDevice                                    device,

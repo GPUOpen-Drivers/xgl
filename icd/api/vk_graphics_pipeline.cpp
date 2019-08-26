@@ -1352,7 +1352,10 @@ VkResult GraphicsPipeline::Create(
 
     PipelineBinaryInfo* pBinaryInfo = nullptr;
 
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) && (result == VK_SUCCESS))
+    if ((pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
+        (pDevice->IsExtensionEnabled(DeviceExtensions::KHR_PIPELINE_EXECUTABLE_PROPERTIES) &&
+        ((pCreateInfo->flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) != 0))) &&
+        (result == VK_SUCCESS))
     {
         pBinaryInfo = PipelineBinaryInfo::Create(
             pipelineBinarySizes[DefaultDeviceIndex],

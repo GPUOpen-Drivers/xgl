@@ -15,6 +15,7 @@
     "Chill",
     "Shader Tuning",
     "Resource Tuning",
+    "Radeon Image Sharpening",
     "Public CCC Options"
   ],
   "Enums": [
@@ -1632,7 +1633,7 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Type": "bool",
       "VariableName": "usePalPipelineCaching",
@@ -1645,7 +1646,7 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "VariableName": "allowExternalPipelineCacheObject",

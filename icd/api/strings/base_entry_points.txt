@@ -330,3 +330,10 @@ vkResetQueryPoolEXT                                 @device     @dext(EXT_host_q
 vkGetBufferDeviceAddressEXT                         @device     @dext(EXT_buffer_device_address)
 
 vkSetHdrMetadataEXT                                 @device     @dext(EXT_hdr_metadata)
+
+vkGetPhysicalDeviceCalibrateableTimeDomainsEXT      @device     @dext(EXT_calibrated_timestamps)
+vkGetCalibratedTimestampsEXT                        @device     @dext(EXT_calibrated_timestamps)
+
+vkGetPipelineExecutablePropertiesKHR                @device     @dext(KHR_pipeline_executable_properties)
+vkGetPipelineExecutableStatisticsKHR                @device     @dext(KHR_pipeline_executable_properties)
+vkGetPipelineExecutableInternalRepresentationsKHR   @device     @dext(KHR_pipeline_executable_properties)
