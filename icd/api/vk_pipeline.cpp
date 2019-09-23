@@ -45,19 +45,20 @@
 namespace vk
 {
 
-// ShaderType to string conversion table.
-const char* ApiShaderTypeStrings[] =
+// The names of hardware shader stages used in PAL metadata, in Util::Abi::HardwareStage order.
+static const char* HwStageNames[] =
 {
-    "CS",
-    "VS",
-    "HS",
-    "DS",
-    "GS",
-    "PS",
+    ".ls",
+    ".hs",
+    ".es",
+    ".gs",
+    ".vs",
+    ".ps",
+    ".cs"
 };
 
-static_assert(VK_ARRAY_SIZE(ApiShaderTypeStrings) == Pal::NumShaderTypes,
-    "Number of PAL/API shader types should match.");
+static_assert(VK_ARRAY_SIZE(HwStageNames) == static_cast<uint32_t>(Util::Abi::HardwareStage::Count),
+    "Number of HwStageNames and PAL HW stages should match.");
 
 // The number of executable statistics to return through
 // the vkGetPipelineExecutableStatisticsKHR function
@@ -276,6 +277,9 @@ VkResult Pipeline::GetShaderDisassembly(
                     {
                         // Copy disassemble code
                         memcpy(pBuffer, pSymbolBase, symbolSize);
+
+                        // Null terminate the last char
+                        static_cast<char*>(pBuffer)[symbolSize - 1] = '\0';
                     }
                 }
                 else
@@ -499,6 +503,124 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
 }
 
 // =====================================================================================================================
+static void BuildPipelineNameDescription(
+    char*                    pName,
+    char*                    pDescription,
+    Util::Abi::HardwareStage hwStage,
+    uint32_t                 palShaderMask)
+{
+    // Build a name and description string for the HW Shader
+    const char* apiString = HwStageNames[static_cast<uint32_t>(hwStage)];
+    strncpy(pName, apiString, VK_MAX_DESCRIPTION_SIZE);
+
+    // Build the description string using the VkShaderStageFlagBits
+    // that correspond to the HW Shader
+    char shaderDescription[VK_MAX_DESCRIPTION_SIZE];
+
+    // Beginning of the description
+    Util::Strncpy(shaderDescription, "Executable handles following Vulkan stages: ", VK_MAX_DESCRIPTION_SIZE);
+
+    if (palShaderMask & Pal::ApiShaderStageCompute)
+    {
+        Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_COMPUTE_BIT ");
+    }
+
+    if (palShaderMask & Pal::ApiShaderStageVertex)
+    {
+        Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_VERTEX_BIT ");
+    }
+
+    if (palShaderMask & Pal::ApiShaderStageHull)
+    {
+        Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT ");
+    }
+
+    if (palShaderMask & Pal::ApiShaderStageDomain)
+    {
+        Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT ");
+    }
+
+    if (palShaderMask & Pal::ApiShaderStageGeometry)
+    {
+        Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_GEOMETRY_BIT ");
+    }
+
+    if (palShaderMask & Pal::ApiShaderStagePixel)
+    {
+        Util::Strncat(shaderDescription, VK_MAX_DESCRIPTION_SIZE, " VK_SHADER_STAGE_FRAGMENT_BIT ");
+    }
+
+    // Copy built string to the description with remainder of the string \0 filled.
+    // Having the \0 to VK_MAX_DESCRIPTION_SIZE is a requirement to get the cts tests to pass.
+    strncpy(pDescription, shaderDescription, VK_MAX_DESCRIPTION_SIZE);
+}
+
+// =====================================================================================================================
+static uint32_t CountNumberOfHWStages(
+    uint32_t*                            pHwStageMask,
+    const Util::Abi::ApiHwShaderMapping& apiToHwShader)
+{
+    VK_ASSERT(pHwStageMask != nullptr);
+
+    *pHwStageMask = 0;
+    for (uint32_t i = 0; i < static_cast<uint32_t>(Util::Abi::ApiShaderType::Count); i++)
+    {
+         uint32_t hwStage = 0;
+         if (Util::BitMaskScanForward(&hwStage, apiToHwShader.apiShaders[static_cast<uint32_t>(i)]))
+         {
+             *pHwStageMask |= (1 << hwStage);
+         }
+    }
+
+    // The number of bits set in the HW Mask is the number HW shaders used
+    return Util::CountSetBits(*pHwStageMask);
+}
+
+// =====================================================================================================================
+// Get HW Stage for executable index
+static Util::Abi::HardwareStage GetHwStageForExecutableIndex(
+    uint32_t executableIndex,
+    uint32_t hwStageMask)
+{
+    uint32_t hwStage = 0;
+    for (uint32_t i = 0; i <= executableIndex; ++i)
+    {
+        Util::BitMaskScanForward(&hwStage, hwStageMask);
+        hwStageMask &= ~(1 << hwStage);
+    }
+
+    // HW Stage should never exceed number of available HW Stages
+    VK_ASSERT(hwStage < static_cast<uint32_t>(Util::Abi::HardwareStage::Count));
+
+    return static_cast<Util::Abi::HardwareStage>(hwStage);
+}
+
+// =====================================================================================================================
+// Convert from the HW Shader stage back to the corresponding API Stage
+static Pal::ShaderType GetApiShaderFromHwShader(
+    Util::Abi::HardwareStage             hwStage,
+    const Util::Abi::ApiHwShaderMapping& apiToHwShader)
+{
+    Pal::ShaderType apiShaderType = Pal::ShaderType::Compute;
+    for (uint32_t i = 0; i < static_cast<uint32_t>(Util::Abi::ApiShaderType::Count); ++i)
+    {
+        uint32_t apiHWStage = 0;
+        Util::BitMaskScanForward(&apiHWStage, apiToHwShader.apiShaders[i]);
+
+        if (apiToHwShader.apiShaders[i] & (1 << static_cast<uint32_t>(hwStage)))
+        {
+            apiShaderType = static_cast<Pal::ShaderType>(i);
+            break;
+        }
+    }
+
+    // API shaders should never exceed number of shader types
+    VK_ASSERT(static_cast<uint32_t>(apiShaderType) < static_cast<uint32_t>(Pal::NumShaderTypes));
+
+    return apiShaderType;
+}
+
+// =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutablePropertiesKHR(
     VkDevice                                    device,
     const VkPipelineInfoKHR*                    pPipelineInfo,
@@ -509,59 +631,62 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutablePropertiesKHR(
     const Pal::IPipeline*               pPalPipeline  = pPipeline->PalPipeline(DefaultDeviceIndex);
     const Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
 
-    uint32_t numStages = 0;
-    for (uint32 i = 0; i < static_cast<uint32_t>(Util::Abi::ApiShaderType::Count); i++)
-    {
-        numStages += (apiToHwShader.apiShaders[i] != 0) ? 1 : 0;
-    }
+    // Count the number of hardware stages that are used in this pipeline
+    uint32_t hwStageMask = 0;
+    uint32_t numHWStages = CountNumberOfHWStages(&hwStageMask, apiToHwShader);
 
+    // If pProperties == nullptr the call to this function is just ment to return the number of executables
+    // in the pipeline
     if (pProperties == nullptr)
     {
-        *pExecutableCount = numStages;
+        *pExecutableCount = numHWStages;
         return VK_SUCCESS;
     }
 
-    uint32_t outputCount = 0;
+    VkShaderStatisticsInfoAMD  vkShaderStats = {};
+    Pal::ShaderStats           palStats      = {};
+    uint32_t                   outputCount   = 0;
+
+    // Return the name / description for the pExecutableCount number of executables.
     for (uint32 i = 0;
-         ((i < static_cast<uint32_t>(Util::Abi::ApiShaderType::Count)) && (outputCount < *pExecutableCount));
-         i++)
+          Util::BitMaskScanForward(&i, hwStageMask);
+          (hwStageMask &= ~(1 << i)) && (outputCount < *pExecutableCount))
     {
-        if (apiToHwShader.apiShaders[i] != 0)
-        {
-            VkShaderStatisticsInfoAMD  vkShaderStats = {};
-            Pal::ShaderStats           palStats      = {};
+        // Get an api shader type for the corresponding HW Shader
+        Pal::ShaderType shaderType = GetApiShaderFromHwShader(static_cast<Util::Abi::HardwareStage>(i), apiToHwShader);
 
-            Pal::Result palResult = pPalPipeline->GetShaderStats(
-                static_cast<Pal::ShaderType>(i),
-                &palStats,
-                true);
+        // Get the shader stats from the shader in the pipeline
+        Pal::Result palResult = pPalPipeline->GetShaderStats(shaderType, &palStats, true);
 
-            ConvertShaderInfoStatistics(palStats, &vkShaderStats);
+        // Covert to the pal statistics to VkShaderStatisticsInfoAMD
+        ConvertShaderInfoStatistics(palStats, &vkShaderStats);
 
-            // API String
-            const char* apiString = ApiShaderTypeStrings[static_cast<uint32_t>(i)];
-            strncpy(pProperties[outputCount].name,        apiString, VK_MAX_DESCRIPTION_SIZE);
-            strncpy(pProperties[outputCount].description, apiString, VK_MAX_DESCRIPTION_SIZE);
+        // Set VkShaderStageFlagBits as an output property
+        pProperties[outputCount].stages = vkShaderStats.shaderStageMask;
 
-            // Set VkShaderStageFlagBits
-            pProperties[outputCount].stages = vkShaderStats.shaderStageMask;
+        // Build the name and description of the output property
+        BuildPipelineNameDescription(
+            pProperties[outputCount].name,
+            pProperties[outputCount].description,
+            static_cast<Util::Abi::HardwareStage>(i),
+            palStats.shaderStageMask);
 
-            // Add subgroup size for Compute
-            if (vkShaderStats.shaderStageMask & VK_SHADER_STAGE_COMPUTE_BIT)
-            {
-                pProperties[outputCount].subgroupSize = vkShaderStats.computeWorkGroupSize[0] *
-                                                        vkShaderStats.computeWorkGroupSize[1] *
-                                                        vkShaderStats.computeWorkGroupSize[2];
-            }
+         // If this is a compute shader, report the workgroup size
+         if (vkShaderStats.shaderStageMask & VK_SHADER_STAGE_COMPUTE_BIT)
+         {
+             pProperties[outputCount].subgroupSize = vkShaderStats.computeWorkGroupSize[0] *
+                                                     vkShaderStats.computeWorkGroupSize[1] *
+                                                     vkShaderStats.computeWorkGroupSize[2];
+         }
 
-            outputCount++;
-        }
-    }
+         outputCount++;
+     }
 
     // Write out the number of stages written
     *pExecutableCount = outputCount;
 
-    return (*pExecutableCount < numStages) ? VK_INCOMPLETE : VK_SUCCESS;
+    // If the requested number of executables was less than the available number of hw stages, return Incomplete
+    return (*pExecutableCount < numHWStages) ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
 // =====================================================================================================================
@@ -575,37 +700,40 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableStatisticsKHR(
     const Pal::IPipeline*               pPalPipeline  = pPipeline->PalPipeline(DefaultDeviceIndex);
     const Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
 
+    // If pStatisticCount == nullptr the call to this function is just ment to return the number of statistics
+    // for an executable in a pipeline.
     if (pStatistics == nullptr)
     {
-        // Returning to statics value per shader executable
         *pStatisticCount = ExecutableStatisticsCount;
         return VK_SUCCESS;
     }
 
-    uint32_t index = 0;
-    uint32_t apiStages[static_cast<uint32_t>(Util::Abi::ApiShaderType::Count)] = {};
-    for (uint32 i = 0; i < static_cast<uint32_t>(Util::Abi::ApiShaderType::Count); i++)
-    {
-        if (apiToHwShader.apiShaders[i] != 0)
-        {
-            apiStages[index] = i;
-            index++;
-        }
-    }
+    // Count the number of hardware stages that are used in this pipeline
+    uint32_t hwStageMask = 0;
+    uint32_t numHWStages = CountNumberOfHWStages(&hwStageMask, apiToHwShader);
 
+    // The executable index should be less than the number of HW Stages.
+    VK_ASSERT(pExecutableInfo->executableIndex < numHWStages);
+
+    // Get hwStage for executable index
+    Util::Abi::HardwareStage hwStage = GetHwStageForExecutableIndex(pExecutableInfo->executableIndex, hwStageMask);
+
+    // Get an api shader type for the corresponding HW Shader
+    Pal::ShaderType shaderType = GetApiShaderFromHwShader(hwStage, apiToHwShader);
+
+    // Get the shader stats for the corresponding API stage
     VkShaderStatisticsInfoAMD  vkShaderStats = {};
     Pal::ShaderStats           palStats      = {};
 
-    Pal::Result palResult = pPalPipeline->GetShaderStats(
-        static_cast<Pal::ShaderType>(apiStages[pExecutableInfo->executableIndex]),
-        &palStats,
-        true);
+    Pal::Result palResult = pPalPipeline->GetShaderStats(shaderType, &palStats, true);
 
+    // Return error is the there are now statics for stage.
     if (palResult != Pal::Result::Success)
     {
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    // Convert from PAL to VK statistics
     ConvertShaderInfoStatistics(palStats, &vkShaderStats);
 
     VkPipelineExecutableStatisticKHR executableStatics[ExecutableStatisticsCount] =
@@ -643,6 +771,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableStatisticsKHR(
     // Copy pStatisticCount number of statistics
     memcpy(pStatistics, executableStatics, (sizeof(VkPipelineExecutableStatisticKHR) * (*pStatisticCount)));
 
+    // If the requested number of statistics was less than the available number of statics,
+    // return Incomplete
     return ((*pStatisticCount) < ExecutableStatisticsCount) ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
@@ -669,32 +799,37 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
         return VK_INCOMPLETE;
     }
 
-    uint32_t index = 0;
-    uint32_t apiStages[static_cast<uint32_t>(Util::Abi::ApiShaderType::Count)] = {};
-    for (uint32 i = 0; i < static_cast<uint32_t>(Util::Abi::ApiShaderType::Count); i++)
-    {
-        if (apiToHwShader.apiShaders[i] != 0)
-        {
-            apiStages[index] = i;
-            index++;
-        }
-    }
+    // Count the number of hardware stages that are used in this pipeline
+    uint32_t hwStageMask = 0;
+    uint32_t numHWStages = CountNumberOfHWStages(&hwStageMask, apiToHwShader);
 
-    // Get the ABI HW Shader
-    uint32_t vkStage = apiStages[pExecutableInfo->executableIndex];
+    // Get hwStage for executable index
+    Util::Abi::HardwareStage hwStage = GetHwStageForExecutableIndex(pExecutableInfo->executableIndex, hwStageMask);
 
-    // API String
-    const char* apiString = ApiShaderTypeStrings[static_cast<uint32_t>(vkStage)];
-    strncpy(pInternalRepresentations[0].name,        apiString, VK_MAX_DESCRIPTION_SIZE);
-    strncpy(pInternalRepresentations[0].description, apiString, VK_MAX_DESCRIPTION_SIZE);
-    pInternalRepresentations[0].isText = VK_TRUE;
+    // Convert from the HW Shader stage back to the corresponding API Stage
+    Pal::ShaderType apiShaderType = GetApiShaderFromHwShader(hwStage, apiToHwShader);
 
+    // Get the shader stats from the shader in the pipeline
+    Pal::ShaderStats palStats  = {};
+    Pal::Result      palResult = pPalPipeline->GetShaderStats(apiShaderType, &palStats, true);
+
+    // Build the name and description of the output property
+    BuildPipelineNameDescription(
+        pInternalRepresentations[0].name,
+        pInternalRepresentations[0].description,
+        static_cast<Util::Abi::HardwareStage>(hwStage),
+        palStats.shaderStageMask);
+
+    // Get the text based disassembly of the shader
     VkResult result = pPipeline->GetShaderDisassembly(
         pDevice,
         pPalPipeline,
-        static_cast<Pal::ShaderType>(vkStage),
+        apiShaderType,
         &(pInternalRepresentations[0].dataSize),
         pInternalRepresentations[0].pData);
+
+    // Mark that the output disassembly is text formated
+    pInternalRepresentations[0].isText = VK_TRUE;
 
     // Update the number of representations written
     *pInternalRepresentationCount = 1;

@@ -74,6 +74,7 @@ enum class AppProfile : uint32_t
     WorldWarZ,             // WorldWarZ
     ThreeKingdoms,         // Three Kingdoms by Feral3D
     DiRT4,                 // DiRT4 by Feral3D
+    DxvkEliteDangerous,    // Elite Dangerous by Frontier Developments
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)

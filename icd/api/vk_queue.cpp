@@ -473,10 +473,6 @@ VkResult Queue::PalSignalSemaphores(
 
         if (timedQueueEvents == false)
         {
-            if (pVkSemaphore->PalTemporarySemaphore(deviceIdx))
-            {
-                pPalSemaphore = pVkSemaphore->PalTemporarySemaphore(deviceIdx);
-            }
             palResult = PalQueue(deviceIdx)->SignalQueueSemaphore(pPalSemaphore, pointValue);
         }
         else
@@ -548,16 +544,9 @@ VkResult Queue::PalWaitSemaphores(
 
         VK_ASSERT(deviceIdx < m_pDevice->NumPalDevices());
 
-        // Wait for the temporary semaphore.
-        if (pSemaphore->PalTemporarySemaphore(deviceIdx) != nullptr)
-        {
-            pPalSemaphore = pSemaphore->PalTemporarySemaphore(deviceIdx);
-            pSemaphore->ClearTemporarySemaphore();
-        }
-        else
-        {
-            pPalSemaphore = pSemaphore->PalSemaphore(deviceIdx);
-        }
+        // Wait for the semaphore.
+        pPalSemaphore = pSemaphore->PalSemaphore(deviceIdx);
+        pSemaphore->RestoreSemaphore();
 
         if (pPalSemaphore != nullptr)
         {
@@ -577,7 +566,6 @@ VkResult Queue::PalWaitSemaphores(
 #endif
             }
         }
-
     }
 
     return PalToVkResult(palResult);
@@ -642,7 +630,7 @@ VkResult Queue::Present(
 
         for (pVkPresentInfoKHR = pPresentInfo; pHeader != nullptr; pHeader = pHeader->pNext)
         {
-            switch (static_cast<int32_t>(pHeader->sType))
+            switch (static_cast<uint32_t>(pHeader->sType))
             {
             case VK_STRUCTURE_TYPE_PRESENT_INFO_KHR:
                 pVkInfo = pVkPresentInfoKHR;

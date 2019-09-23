@@ -190,6 +190,9 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
         // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
         // can't do any better than returning a non-null function pointer for them.
         m_settings.lenientInstanceFuncQuery = true;
+
+        // This works around a crash at app startup.
+        m_settings.ignoreSuboptimalSwapchainSize = true;
     }
 
     if (appProfile == AppProfile::WolfensteinII)
@@ -246,6 +249,7 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
 
         m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
 
+        m_settings.usePalPipelineCaching = true;
         if (info.revision == Pal::AsicRevision::Vega20)
         {
             m_settings.dccBitsPerPixelThreshold = 16;
@@ -284,6 +288,9 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
 
         m_settings.prefetchShaders = true;
         m_settings.disableMsaaStencilShaderRead = true;
+
+        // Dota 2 will be the pilot for pal pipeline caching.
+        m_settings.usePalPipelineCaching = true;
 
         m_settings.shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
     }
@@ -363,6 +370,20 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
         }
     }
 
+    if (appProfile == AppProfile::DxvkEliteDangerous)
+    {
+        m_settings.disableSkipFceOptimization = true;
+    }
+
+    // By allowing the enable/disable to be set by environment variable, any third party platform owners can enable or
+    // disable the feature based on their internal feedback and not have to wait for a driver update to catch issues
+
+    const char* pPipelineCacheEnvVar = getenv(m_settings.pipelineCachingEnvironmentVariable);
+
+    if (pPipelineCacheEnvVar != nullptr)
+    {
+        m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
+    }
 }
 
 // =====================================================================================================================
@@ -541,9 +562,7 @@ void VulkanSettingsLoader::UpdatePalSettings()
         pPalSettings->enableGpuEventMultiSlot = m_settings.enableGpuEventMultiSlot;
     }
 
-    // Setting disableSkipFceOptimization to false enables an optimization in PAL that disregards the FCE in a transition
-    // if one of the built in clear colors are used (white/black) and the image is TCC compatible.
-    pPalSettings->disableSkipFceOptimization = false;
+    pPalSettings->disableSkipFceOptimization = m_settings.disableSkipFceOptimization;
 
 }
 

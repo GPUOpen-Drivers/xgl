@@ -66,39 +66,6 @@ namespace
 {
 
 // =====================================================================================================================
-// This finds the subset of an images subres ranges that need to be transitioned based changes between the source and
-// destination layouts.  In the event that no layout transitions are required, a single transition is still returned
-// to handle cache syncs.
-void FindDepthStencilLayoutTransitionRanges(
-    const Pal::ImageLayout  oldLayouts[MaxPalDepthAspectsPerMask],
-    const Pal::ImageLayout  newLayouts[MaxPalDepthAspectsPerMask],
-    uint32_t*               pStartRange,
-    uint32_t*               pNumRangeTransitions)
-{
-    // Assume the default case that both transitions are required.
-    uint32_t startRange = 0;
-    uint32_t numTransitions = MaxPalDepthAspectsPerMask;
-
-    if ((oldLayouts[0].usages  == newLayouts[0].usages) &&
-        (oldLayouts[0].engines == newLayouts[0].engines))
-    {
-        // Skip the depth transition
-        numTransitions--;
-
-        startRange++;
-    }
-    else if ((oldLayouts[1].usages  == newLayouts[1].usages) &&
-             (oldLayouts[1].engines == newLayouts[1].engines))
-    {
-        // Skip the stencil transition
-        numTransitions--;
-    }
-
-    *pStartRange = startRange;
-    *pNumRangeTransitions = numTransitions;
-}
-
-// =====================================================================================================================
 // Creates a compatible PAL "clear box" structure from attachment + render area for a renderpass clear.
 Pal::Box BuildClearBox(
     const Pal::Rect&               renderArea,
@@ -3190,6 +3157,7 @@ void CmdBuffer::ExecuteBarriers(
 
         pNextMain->imageInfo.pImage = nullptr;
 
+        uint32_t         layoutIdx     = 0;
         uint32_t         palRangeIdx   = 0;
         uint32_t         palRangeCount = 0;
         Pal::SubresRange palRanges[MaxPalAspectsPerMask];
@@ -3202,25 +3170,28 @@ void CmdBuffer::ExecuteBarriers(
             palRanges,
             &palRangeCount);
 
-        bool hasDepthAndStencil = ((pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) &&
-                                   (pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT));
-
-        // If image has a depth/stencil format with both depth and stencil components, then aspectMask member of
-        // subresourceRange must include both VK_IMAGE_ASPECT_DEPTH_BIT and VK_IMAGE_ASPECT_STENCIL_BIT
-        VK_ASSERT(hasDepthAndStencil == pImage->HasDepthAndStencil());
-
-        if (layoutChanging && hasDepthAndStencil)
+        if (layoutChanging && Formats::HasStencil(format))
         {
-            // With both depth and stencil, there should be two ranges
-            VK_ASSERT(palRangeCount == MaxPalDepthAspectsPerMask);
+            if (palRangeCount == MaxPalDepthAspectsPerMask)
+            {
+                // Find the subset of an images subres ranges that need to be transitioned based changes between the
+                // source and destination layouts.
+                if ((oldLayouts[0].usages  == newLayouts[0].usages) &&
+                    (oldLayouts[0].engines == newLayouts[0].engines))
+                {
+                    // Skip the depth transition
+                    palRangeCount--;
 
-            // Combined depth and stencil images may transition independently based on their layouts, so determine
-            // the appropriate subset of ranges to transition in case one can be skipped.
-            FindDepthStencilLayoutTransitionRanges(
-                oldLayouts,
-                newLayouts,
-                &palRangeIdx,
-                &palRangeCount);
+                    palRangeIdx++;
+                    layoutIdx++;
+                }
+                else if ((oldLayouts[1].usages  == newLayouts[1].usages) &&
+                         (oldLayouts[1].engines == newLayouts[1].engines))
+                {
+                    // Skip the stencil transition
+                    palRangeCount--;
+                }
+            }
         }
 
         VK_ASSERT(palRangeCount > 0 && palRangeCount <= MaxPalAspectsPerMask);
@@ -3257,8 +3228,8 @@ void CmdBuffer::ExecuteBarriers(
                 pDestTransition[transitionIdx].dstCacheMask          = barrierTransition.dstCacheMask;
                 pDestTransition[transitionIdx].imageInfo.pImage      = pImage->PalImage(DefaultDeviceIndex);
                 pDestTransition[transitionIdx].imageInfo.subresRange = palRanges[palRangeIdx];
-                pDestTransition[transitionIdx].imageInfo.oldLayout   = oldLayouts[transitionIdx];
-                pDestTransition[transitionIdx].imageInfo.newLayout   = newLayouts[transitionIdx];
+                pDestTransition[transitionIdx].imageInfo.oldLayout   = oldLayouts[layoutIdx];
+                pDestTransition[transitionIdx].imageInfo.newLayout   = newLayouts[layoutIdx];
 
                 if (pSampleLocationsInfoEXT == nullptr)
                 {
@@ -3274,6 +3245,7 @@ void CmdBuffer::ExecuteBarriers(
                     pDestTransition[transitionIdx].imageInfo.pQuadSamplePattern = &pLocations[locationIndex];
                 }
 
+                layoutIdx++;
                 palRangeIdx++;
             }
 
@@ -4462,8 +4434,7 @@ void CmdBuffer::RPSyncPoint(
     const RPSyncPointInfo& syncPoint,
     VirtualStackFrame*     pVirtStack)
 {
-    const uint32_t barrierOptions = m_pDevice->GetRuntimeSettings().resourceBarrierOptions;
-    const auto&    rpBarrier      = syncPoint.barrier;
+    const auto& rpBarrier = syncPoint.barrier;
 
     Pal::BarrierInfo barrier = {};
 
@@ -4508,8 +4479,11 @@ void CmdBuffer::RPSyncPoint(
             {
                 const Pal::ImageAspect aspect = attachment.subresRange[sr].startSubres.aspect;
 
+                const RPImageLayout nextLayout =
+                                                            tr.nextLayout;
+
                 const Pal::ImageLayout newLayout = attachment.pImage->GetAttachmentLayout(
-                    tr.nextLayout,
+                    nextLayout,
                     aspect,
                     this);
 
@@ -5598,6 +5572,43 @@ void CmdBuffer::DrawIndirectByteCount(
 }
 
 // =====================================================================================================================
+void CmdBuffer::SetLineStippleEXT(
+    const Pal::LineStippleStateParams& params,
+    uint32_t                           staticToken)
+{
+    m_state.allGpuState.lineStipple = params;
+
+    utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
+    while (deviceGroup.Iterate())
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+        PalCmdBuffer(deviceIdx)->CmdSetLineStippleState(m_state.allGpuState.lineStipple);
+    }
+
+    m_state.allGpuState.staticTokens.lineStippleState = staticToken;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetLineStippleEXT(
+    uint32_t lineStippleFactor,
+    uint16_t lineStipplePattern)
+{
+    // The line stipple factor is adjusted by one (carried over from OpenGL)
+    m_state.allGpuState.lineStipple.lineStippleScale = (lineStippleFactor - 1);
+
+    // The bit field to describe the stipple pattern
+    m_state.allGpuState.lineStipple.lineStippleValue = lineStipplePattern;
+
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    while (deviceGroup.Iterate())
+    {
+        PalCmdBuffer(deviceGroup.Index())->CmdSetLineStippleState(m_state.allGpuState.lineStipple);
+    }
+
+    m_state.allGpuState.staticTokens.lineStippleState = DynamicRenderStateToken;
+}
+
+// =====================================================================================================================
 RenderPassInstanceState::RenderPassInstanceState(
     PalAllocator* pAllocator)
     :
@@ -6501,6 +6512,17 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectByteCountEXT(
                                                                          counterBufferOffset,
                                                                          counterOffset,
                                                                          vertexStride);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    lineStippleFactor,
+    uint16_t                                    lineStipplePattern)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetLineStippleEXT(
+        lineStippleFactor,
+        lineStipplePattern);
 }
 
 } // namespace entry

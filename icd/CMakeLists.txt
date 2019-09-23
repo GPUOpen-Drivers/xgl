@@ -85,9 +85,6 @@ target_compile_definitions(xgl PRIVATE ${TARGET_ARCHITECTURE_ENDIANESS}ENDIAN_CP
 target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
 
 # Internal developer build
-if(VK_INTERNAL_DEVELOPER)
-    target_compile_definitions(xgl PRIVATE VK_INTERNAL_DEVELOPER)
-endif()
 
 if(ICD_BUILD_LLPC)
     target_compile_definitions(xgl PRIVATE ICD_BUILD_LLPC)
@@ -189,6 +186,7 @@ target_sources(xgl PRIVATE
     api/gpu_event_mgr.cpp
     api/internal_mem_mgr.cpp
     api/pipeline_compiler.cpp
+    api/pipeline_binary_cache.cpp
     api/shader_cache.cpp
     api/stencil_ops_combiner.cpp
     api/vert_buf_binding_mgr.cpp
@@ -236,6 +234,8 @@ target_sources(xgl PRIVATE
     api/vk_descriptor_update_template.cpp
     api/appopt/barrier_filter_layer.cpp
     api/appopt/strange_brigade_layer.cpp
+    api/appopt/async_layer.cpp
+    api/appopt/async_shader_module.cpp
     api/render_state_cache.cpp
     api/renderpass/renderpass_builder.cpp
     api/renderpass/renderpass_logger.cpp
@@ -246,6 +246,21 @@ target_sources(xgl PRIVATE
 if(XGL_BUILD_GFX10)
     target_sources(xgl PRIVATE api/appopt/wolfenstein2_layer.cpp)
 endif()
+
+# vk_physical_device.cpp uses the __DATE__ and __TIME__ macros to generate a pipelineCacheUUID.
+# The following rule forces vk_physical_device.cpp to be re-compiled on every build, so that
+# an up-to-date time/date is always used regardless of which files were touched since the last build.
+add_custom_command(
+    OUTPUT "vk_physical_device.g"
+    COMMAND ${CMAKE_COMMAND} -E touch ${CMAKE_CURRENT_SOURCE_DIR}/api/vk_physical_device.cpp
+)
+
+add_custom_target(
+    RebuildVkPhysicalDevice
+    DEPENDS "vk_physical_device.g"
+)
+
+add_dependencies(xgl RebuildVkPhysicalDevice)
 
 ### ICD Auto-generated String Files ####################################################################################
 set(ICD_STRING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/strings)
@@ -401,10 +416,15 @@ if (UNIX)
             else()
                 target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/metrohash/libmetrohash.a -Wl,--no-whole-archive)
             endif()
+            target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/gpuopen/core/libddCore.a -Wl,--no-whole-archive)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/gpuopen/libgpuopen.a -Wl,--no-whole-archive)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/vam/libvam.a -Wl,--no-whole-archive)
             target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/addrlib/libaddrlib.a -Wl,--no-whole-archive)
-            target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/cwpack/libcwpack.a -Wl,--no-whole-archive)
+            if(EXISTS ${XGL_CWPACK_PATH})
+                target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/cwpack/libcwpack.a -Wl,--no-whole-archive)
+            else()
+                target_link_libraries(xgl PUBLIC -Wl,--whole-archive ${PROJECT_BINARY_DIR}/pal/cwpack/libcwpack.a -Wl,--no-whole-archive)
+            endif()
         endif()
     endif()
 

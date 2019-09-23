@@ -213,6 +213,7 @@ protected:
         Pal::DepthBiasParams                  depthBiasParams;
         Pal::DepthBoundsParams                depthBoundParams;
         Pal::PointLineRasterStateParams       pointLineRasterParams;
+        Pal::LineStippleStateParams           lineStippleParams;
         Pal::ViewportParams                   viewportParams;
         Pal::ScissorRectParams                scissorRectParams;
         Pal::StencilRefMaskParams             stencilRefMasks;
@@ -226,6 +227,7 @@ protected:
             uint32_t inputAssemblyState;
             uint32_t triangleRasterState;
             uint32_t pointLineRasterState;
+            uint32_t lineStippleState;
             uint32_t depthBias;
             uint32_t blendConst;
             uint32_t depthBounds;
@@ -269,6 +271,7 @@ protected:
         uint32_t                                    sampleCoverage;
         VkShaderStageFlagBits                       activeStages;
         uint32_t                                    rasterizationStream;
+        bool                                        bresenhamEnable;
     };
 
     static void ConvertGraphicsPipelineInfo(

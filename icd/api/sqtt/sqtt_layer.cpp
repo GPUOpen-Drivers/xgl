@@ -41,6 +41,7 @@
 #include "include/vk_physical_device.h"
 #include "include/vk_queue.h"
 #include "include/vk_instance.h"
+#include "include/vk_extensions.h"
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
 
@@ -2276,7 +2277,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
 } // namespace entry
 
 #define SQTT_OVERRIDE_ALIAS(entry_name, func_name) \
-    pDispatchTable->OverrideEntryPoints()->entry_name = vk::entry::sqtt::func_name
+    if (pDispatchTable->entry_name##_condition) \
+    { \
+        pDispatchTable->OverrideEntryPoints()->entry_name = vk::entry::sqtt::func_name; \
+    }
 
 #define SQTT_OVERRIDE_ENTRY(entry_name) SQTT_OVERRIDE_ALIAS(entry_name, entry_name)
 

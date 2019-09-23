@@ -52,6 +52,8 @@ RenderStateCache::RenderStateCache(
     m_triangleRasterStateNextId(FirstStaticRenderStateToken),
     m_pointLineRasterState(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_pointLineRasterStateNextId(FirstStaticRenderStateToken),
+    m_lineStippleState(NumStateBuckets, pDevice->VkInstance()->Allocator()),
+    m_lineStippleStateNextId(FirstStaticRenderStateToken),
     m_depthBias(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_depthBiasNextId(FirstStaticRenderStateToken),
     m_blendConst(NumStateBuckets, pDevice->VkInstance()->Allocator()),
@@ -97,6 +99,11 @@ VkResult RenderStateCache::Init()
     if (result == Pal::Result::Success)
     {
         result = m_pointLineRasterState.Init();
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        result = m_lineStippleState.Init();
     }
 
     if (result == Pal::Result::Success)
@@ -1106,6 +1113,29 @@ void RenderStateCache::DestroyComputeWaveLimits(
         waveLimits,
         token,
         &m_computeWaveLimits);
+}
+
+// =====================================================================================================================
+uint32_t RenderStateCache::CreateLineStipple(
+    const Pal::LineStippleStateParams& params)
+{
+    return CreateStaticParamsState(
+        OptRenderStateCacheStaticLineStipple,
+        params,
+        &m_lineStippleState,
+        &m_lineStippleStateNextId);
+}
+
+// =====================================================================================================================
+void RenderStateCache::DestroyLineStipple(
+    const Pal::LineStippleStateParams& params,
+    uint32_t                           token)
+{
+    return DestroyStaticParamsState(
+        OptRenderStateCacheStaticLineStipple,
+        params,
+        token,
+        &m_lineStippleState);
 }
 
 };

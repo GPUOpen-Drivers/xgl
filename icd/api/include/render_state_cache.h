@@ -146,6 +146,9 @@ public:
     uint32_t CreateComputeWaveLimits(const Pal::DynamicComputeShaderInfo& waveLimits);
     void DestroyComputeWaveLimits(const Pal::DynamicComputeShaderInfo& waveLimits, uint32_t token);
 
+    uint32_t CreateLineStipple(const Pal::LineStippleStateParams& params);
+    void DestroyLineStipple(const Pal::LineStippleStateParams& params, uint32_t token);
+
     void Destroy();
 
 private:
@@ -273,6 +276,11 @@ private:
                   StaticParamState,
                   PalAllocator>                   m_pointLineRasterState;
     uint32_t                                      m_pointLineRasterStateNextId;
+
+    Util::HashMap<Pal::LineStippleStateParams,
+                  StaticParamState,
+                  PalAllocator>                   m_lineStippleState;
+    uint32_t                                      m_lineStippleStateNextId;
 
     Util::HashMap<Pal::DepthBiasParams,
                   StaticParamState,

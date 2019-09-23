@@ -49,7 +49,6 @@ if(UNIX)
 endif()
 
 ### Cached Project Options #############################################################################################
-option(VK_INTERNAL_DEVELOPER "Build Internal Developer Build?" OFF)
 
 option(ICD_BUILD_LLPC "Build LLPC?" ON)
 option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
@@ -181,6 +180,13 @@ set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../third_party/metrohash CACHE PATH
 
 if(EXISTS ${XGL_METROHASH_PATH} AND NOT TARGET metrohash)
     add_subdirectory(${XGL_METROHASH_PATH} ${PROJECT_BINARY_DIR}/metrohash)
+endif()
+
+### cwpack #############################################################
+set(XGL_CWPACK_PATH ${PROJECT_SOURCE_DIR}/../third_party/cwpack CACHE PATH "The path of cwpack.")
+
+if(EXISTS ${XGL_CWPACK_PATH} AND NOT TARGET cwpack)
+    add_subdirectory(${XGL_CWPACK_PATH} ${PROJECT_BINARY_DIR}/cwpack)
 endif()
 
 ### LLPC ###############################################################

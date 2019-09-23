@@ -69,6 +69,8 @@
 #include "sqtt/sqtt_mgr.h"
 #include "sqtt/sqtt_rgp_annotations.h"
 
+#include "appopt/async_layer.h"
+
 #include "appopt/barrier_filter_layer.h"
 #include "appopt/strange_brigade_layer.h"
 
@@ -218,6 +220,7 @@ Device::Device(
     m_enabledExtensions(enabledExtensions),
     m_dispatchTable(DispatchTable::Type::DEVICE, m_pInstance, this),
     m_pSqttMgr(nullptr),
+    m_pAsyncLayer(nullptr),
     m_pAppOptLayer(nullptr),
     m_pBarrierFilterLayer(nullptr),
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
@@ -359,7 +362,7 @@ VkResult Device::Create(
     {
         if (!DeviceExtensions::EnableExtensions(pCreateInfo->ppEnabledExtensionNames,
                                                 pCreateInfo->enabledExtensionCount,
-                                                pPhysicalDevice->GetSupportedExtensions(),
+                                                pPhysicalDevice->GetAllowedExtensions(),
                                                 enabledDeviceExtensions))
         {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
@@ -501,6 +504,47 @@ VkResult Device::Create(
 
             break;
         }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceInlineUniformBlockFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceInlineUniformBlockFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceScalarBlockLayoutFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeaturesEXT*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTransformFeedbackFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceTransformFeedbackFeaturesEXT*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVulkanMemoryModelFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceVulkanMemoryModelFeaturesKHR*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT*>(pHeader));
+
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR:
         {
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderAtomicInt64FeaturesKHR>(
@@ -514,6 +558,76 @@ VkResult Device::Create(
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceMemoryPriorityFeaturesEXT>(
                 pPhysicalDevice,
                 reinterpret_cast<const VkPhysicalDeviceMemoryPriorityFeaturesEXT*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_CLIP_ENABLE_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceDepthClipEnableFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceDepthClipEnableFeaturesEXT*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceHostQueryResetFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceHostQueryResetFeaturesEXT*>(pHeader));
+
+            break;
+            }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_ADDRESS_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceBufferAddressFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceBufferAddressFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceLineRasterizationFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceLineRasterizationFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceSubgroupSizeControlFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceSubgroupSizeControlFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceImagelessFramebufferFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceImagelessFramebufferFeaturesKHR*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR*>(pHeader));
 
             break;
         }
@@ -1065,6 +1179,19 @@ VkResult Device::Initialize(
         }
     }
 
+    if ((result == VK_SUCCESS) && m_settings.enableAsyncCompile)
+    {
+        void* pMemory = VkInstance()->AllocMem(sizeof(AsyncLayer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+
+        if (pMemory != nullptr)
+        {
+            m_pAsyncLayer = VK_PLACEMENT_NEW(pMemory) AsyncLayer(this);
+        }
+        else
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+    }
     if (result == VK_SUCCESS)
     {
         result = PalToVkResult(m_memoryMutex.Init());
@@ -1179,6 +1306,12 @@ void Device::InitDispatchTable()
     if (m_pBarrierFilterLayer != nullptr)
     {
         m_pBarrierFilterLayer->OverrideDispatchTable(&m_dispatchTable);
+    }
+
+    // Install the async compile layer if needed
+    if (m_pAsyncLayer != nullptr)
+    {
+        m_pAsyncLayer->OverrideDispatchTable(&m_dispatchTable);
     }
 }
 
@@ -1398,6 +1531,13 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
         VkInstance()->FreeMem(m_pAppOptLayer);
     }
 
+    if (m_pAsyncLayer != nullptr)
+    {
+        Util::Destructor(m_pAsyncLayer);
+
+        VkInstance()->FreeMem(m_pAsyncLayer);
+    }
+
     for (uint32_t i = 0; i < Queue::MaxQueueFamilies; ++i)
     {
         for (uint32_t j = 0; (j < Queue::MaxQueuesPerFamily) && (m_pQueues[i][j] != nullptr); ++j)
@@ -1500,6 +1640,7 @@ VkResult Device::CreateInternalComputePipeline(
     // Build shader module
     result = pCompiler->BuildShaderModule(
         this,
+        0,
         codeByteSize,
         pCode,
         &shaderModule);
@@ -2257,6 +2398,8 @@ VkResult Device::GetCalibratedTimestamps(
             default:
                 // An invalid time domain value was specified.  Return error.
                 result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                pTimestamps[i] = 0;
+                VK_NEVER_CALLED();
                 break;
             }
         }

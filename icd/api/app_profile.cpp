@@ -131,6 +131,12 @@ constexpr AppProfilePatternEntry AppEngineSource2 =
     "source2"
 };
 
+constexpr AppProfilePatternEntry AppEngineDXVK =
+{
+    PatternEngineNameLower,
+    "dxvk"
+};
+
 constexpr AppProfilePatternEntry AppNameTalosWin32Bit =
 {
     PatternAppNameLower,
@@ -273,6 +279,12 @@ constexpr AppProfilePatternEntry AppNameDiRT4 =
 {
     PatternAppNameLower,
     "dirt4"
+};
+
+constexpr AppProfilePatternEntry AppNameEliteDangerous =
+{
+    PatternAppNameLower,
+    "elitedangerous64.exe"
 };
 
 constexpr AppProfilePatternEntry PatternEnd = {};
@@ -480,6 +492,15 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameDiRT4,
             AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::DxvkEliteDangerous,
+        {
+            AppNameEliteDangerous,
+            AppEngineDXVK,
             PatternEnd
         }
     },

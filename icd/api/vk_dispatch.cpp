@@ -550,8 +550,11 @@ void DispatchTable::Init()
 
     INIT_DISPATCH_ENTRY(vkResetQueryPoolEXT                             );
 
+    INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
+
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );
     INIT_DISPATCH_ENTRY(vkGetCalibratedTimestampsEXT                    );
+
 }
 
 // =====================================================================================================================

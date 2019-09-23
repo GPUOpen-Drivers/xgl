@@ -192,6 +192,32 @@
           "Description": "'Enable' enables pipeline binning."
         }
       ]
+    },
+    {
+      "Name": "GraphicsPipelineType",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "GraphicsPipelineTypeVsFs",
+          "Value": 1,
+          "Description": "VS PS pipelines"
+        },
+        {
+          "Name": "GraphicsPipelineTypeGs",
+          "Value": 2,
+          "Description": "VS GS PS pipelines"
+        },
+        {
+          "Name": "GraphicsPipelineTypeTess",
+          "Value": 4,
+          "Description": "Tess pipelines without GS"
+        },
+        {
+          "Name": "GraphicsPipelineTypeTessGs",
+          "Value": 8,
+          "Description": "Tess pipeline with GS"
+        }
+      ]
     }
   ],
   "Settings": [
@@ -841,6 +867,19 @@
       "VariableName": "enableAcquireBeforeSignal"
     },
     {
+      "Name": "IgnoreSuboptimalSwapchainSize",
+      "Description": "When true, no check is done to see if the swapchain surface size has changed since creation.",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "ignoreSuboptimalSwapchainSize"
+    },
+    {
       "Description": "Enable pipeline dump, pipeline is stored with .pipe format. You must set AMD_DEBUG_DIR and make sure $AMD_DEBUG_DIR + pipelineDumpDir is  an available directory.",
       "Tags": [
         "SPIRV Options"
@@ -1134,14 +1173,21 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Enable NGG mode, use an implicit primitive shader. Use this instead of PAL setting, NggEnableMode.",
+      "Description": "Enable NGG mode, use an implicit primitive shader on a per-pipeline type basis. Use this instead of PAL setting, NggEnableMode.",
       "Tags": [
         "SPIRV Options"
       ],
-      "Defaults": {
-        "Default": true
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
       },
-      "Type": "bool",
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "ValidValues": {
+        "Name": "GraphicsPipelineType"
+      },
+      "Type": "uint32",
       "VariableName": "enableNgg",
       "Name": "EnableNgg",
       "Scope": "Driver"
@@ -1192,7 +1238,7 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": "NggCompactSubgroup"
+        "Default": "NggCompactVertices"
       },
       "Type": "enum",
       "VariableName": "nggCompactionMode",
@@ -2285,42 +2331,6 @@
       "Name": "DbgBarrierPreCacheDstMask"
     },
     {
-      "Name": "VulkanOverlayEnable",
-      "Description": "Enable specific channels of the Vulkan debug overlay through a bitmask.  Only takes effect for drivers compiled with the .intdev target (VK_INTERNAL_DEVELOPER=1).",
-      "Tags": [
-        "General"
-      ],
-      "Flags": {
-        "IsHex": true,
-        "IsBitmask": true
-      },
-      "Defaults": {
-        "Default": 0
-      },
-      "ValidValues": {
-        "Values": [
-          {
-            "Name": "OverlayPresentInfo",
-            "Value": 1,
-            "Description": "Enable information about presents"
-          },
-          {
-            "Name": "OverlayBarrierInfo",
-            "Value": 2,
-            "Description": "Enable information about barriers"
-          },
-          {
-            "Name": "OverlayBarrierFiltering",
-            "Value": 4,
-            "Description": "Barrier filter layer debugging information"
-          }
-        ]
-      },
-      "Type": "uint32",
-      "VariableName": "overlayEnable",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Instanced vertex buffer table ring size.",
       "Tags": [
         "General"
@@ -2456,7 +2466,7 @@
       "VariableName": "barrierFilterOptions"
     },
     {
-      "Description": "Path to a file that contains application-specific barrier filter profiles. The contents are read on startup and used if BarrierFilterOptions SkipWithAppProfile, SkipWithAppProfileRegen, or SkipWithIntDevOverlay are set. On exit, an updated profile is written to this same file. This setting only triggers on debug builds or builds made with the VK_INTERNAL_DEVELOPER=1 option.",
+      "Description": "Path to a file that contains application-specific barrier filter profiles. The contents are read on startup and used if BarrierFilterOptions SkipWithAppProfile, SkipWithAppProfileRegen, or SkipWithIntDevOverlay are set. On exit, an updated profile is written to this same file. This setting only triggers on debug builds.",
       "Tags": [
         "General"
       ],
@@ -2602,6 +2612,22 @@
       "Scope": "Driver",
       "Type": "uint32",
       "VariableName": "asyncComputeQueueLimit"
+    },
+    {
+      "Name": "LimitSampleCounts",
+      "Description": "Mask the sample counts returned in vkPhysicalDeviceLimits and vkGetPhysicalDeviceImageProperties (OriginalValue & ThisValue). This setting does not actually affect support for sample counts, only what is returned to the application. This value should be a combination of VKSampleCountFlags",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 4294967295
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "limitSampleCounts"
     },
     {
       "Description": "Custom device allocation count limitation, when larger than 0.",
@@ -3523,6 +3549,32 @@
       "VariableName": "enableMlModelForWaveSize"
     },
     {
+      "Description": "Enable async compile for shader module and pipelines.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableAsyncCompile",
+      "Name": "EnableAsyncCompile"
+    },
+    {
+      "Description": "Setting to false enables an optimization in PAL that disregards the FCE in a transition if one of the built in clear colors are used (white/black) and the image is TCC compatible.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "disableSkipFceOptimization",
+      "Name": "DisableSkipFceOptimization"
+    },
+    {
       "Description": "Determines the pipeline binary max size limit (in KB) used by the PipelineUriService when injecting pipeline binaries back into the driver. The limit is 256KB by default.",
       "Tags": [
         "Developer Mode"
@@ -3655,7 +3707,7 @@
           },
           {
             "Value": 128,
-            "Description": "Write bound shader hashes as user event markers (requires VK_INTERNAL_DEVELOPER)"
+            "Description": "Write bound shader hashes as user event markers"
           },
           {
             "Value": 256,
@@ -3759,74 +3811,6 @@
       "Type": "string",
       "VariableName": "devModeSqttInternalUserEventPrefix",
       "Size": 512
-    },
-    {
-      "Description": "If true, driver will insert user event strings of renderpass instances into RGP traces.  Requires internal developer build (VK_INTERNAL_DEVELOPER).",
-      "Tags": [
-        "Developer Mode"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "devModeSqttMarkRenderPasses",
-      "Name": "DevModeSqttMarkRenderPasses"
-    },
-    {
-      "Description": "If true, driver will insert user event strings when pipelines are bound (including shader hashes).  Requires internal developer build (VK_INTERNAL_DEVELOPER).",
-      "Tags": [
-        "Developer Mode"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "devModeSqttMarkPipelineBinds",
-      "Name": "DevModeSqttMarkPipelineBinds"
-    },
-    {
-      "Description": "If true, driver will insert user event strings when color/depth targets are bound.  Requires internal developer build (VK_INTERNAL_DEVELOPER).",
-      "Tags": [
-        "Developer Mode"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "devModeSqttMarkTargetBinds",
-      "Name": "DevModeSqttMarkTargetBinds"
-    },
-    {
-      "Description": "If true, driver will insert user event strings when pipeline barriers happen.  Requires internal developer build (VK_INTERNAL_DEVELOPER).",
-      "Tags": [
-        "Developer Mode"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "devModeSqttMarkPipelineBarriers",
-      "Name": "DevModeSqttMarkPipelineBarriers"
-    },
-    {
-      "Description": "Track metadata for object types (each bit in the mask corresponds with enum value of VkDebugReportObjectTypeEXT).  Set to all f's to track all types. Setting this will cause any debug names to be included with any of the other internal markings such as pipeline binds.  Requires internal developer build (VK_INTERNAL_DEVELOPER).  WARNING: Will likely interfere with multithreaded command buffer recording concurrency.",
-      "Tags": [
-        "Developer Mode"
-      ],
-      "Flags": {
-        "IsHex": true
-      },
-      "Defaults": {
-        "Default": 0
-      },
-      "Scope": "Driver",
-      "Type": "uint64",
-      "VariableName": "devModeSqttTrackObjectMetaData",
-      "Name": "DevModeSqttObjectMetaData"
     },
     {
       "Description": "If TRUE, DevModeSqttTrace[Begin|End]TagValues are used to override trace parameter begin/end command buffer debug object tag values. This is mainly used for debugging.",

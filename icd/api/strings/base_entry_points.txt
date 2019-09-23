@@ -337,3 +337,6 @@ vkGetCalibratedTimestampsEXT                        @device     @dext(EXT_calibr
 vkGetPipelineExecutablePropertiesKHR                @device     @dext(KHR_pipeline_executable_properties)
 vkGetPipelineExecutableStatisticsKHR                @device     @dext(KHR_pipeline_executable_properties)
 vkGetPipelineExecutableInternalRepresentationsKHR   @device     @dext(KHR_pipeline_executable_properties)
+
+vkCmdSetLineStippleEXT                              @device     @dext(EXT_line_rasterization)
+

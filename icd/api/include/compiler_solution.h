@@ -79,6 +79,7 @@ struct GraphicsPipelineCreateInfo
     VkFormat                               dbFormat;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
+    bool                                   elfWasCached;
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
 };
@@ -92,6 +93,7 @@ struct ComputePipelineCreateInfo
     size_t                                 tempBufferStageSize;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
+    bool                                   elfWasCached;
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
 };
@@ -118,6 +120,7 @@ public:
 
     virtual VkResult BuildShaderModule(
         const Device*                pDevice,
+        VkShaderModuleCreateFlags    flags,
         size_t                       codeSize,
         const void*                  pCode,
         ShaderModuleHandle*          pShaderModule,

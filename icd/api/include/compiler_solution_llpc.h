@@ -59,6 +59,7 @@ public:
 
     virtual VkResult BuildShaderModule(
         const Device*                pDevice,
+        VkShaderModuleCreateFlags    flags,
         size_t                       codeSize,
         const void*                  pCode,
         ShaderModuleHandle*          pShaderModule,

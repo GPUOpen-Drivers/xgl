@@ -207,12 +207,11 @@ Image::Image(
 }
 
 // =====================================================================================================================
-static VkResult ConvertImageCreateInfo(
+static void ConvertImageCreateInfo(
     const Device*            pDevice,
     const VkImageCreateInfo* pCreateInfo,
     Pal::ImageCreateInfo*    pPalCreateInfo)
 {
-    VkResult               result     = VK_SUCCESS;
     VkImageUsageFlags      imageUsage = pCreateInfo->usage;
     const RuntimeSettings& settings   = pDevice->GetRuntimeSettings();
 
@@ -270,7 +269,6 @@ static VkResult ConvertImageCreateInfo(
     // regarding DCC.
     pPalCreateInfo->flags.perSubresInit = 1;
 
-    return result;
 }
 
 // =====================================================================================================================
@@ -449,6 +447,7 @@ VkResult Image::Create(
 
     const uint32_t numDevices = pDevice->NumPalDevices();
     const bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
+    const bool     hasDepthStencilAspect = Formats::IsDepthStencilFormat(pCreateInfo->format);
     VkResult       result     = VkResult::VK_SUCCESS;
 
     // It indicates the stencil aspect will be read by shader, so it is only meaningful if the image contains the
@@ -478,7 +477,11 @@ VkResult Image::Create(
         {
             VK_ASSERT(pCreateInfo == pVkImageCreateInfo);
             pImageCreateInfo = pVkImageCreateInfo;
-            result = ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo);
+            ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo);
+
+            // Fail image creation if the sample count is not supported based on the setting
+            result = ((settings.limitSampleCounts & pImageCreateInfo->samples) != 0) ? VK_SUCCESS
+                                                                                     : VK_ERROR_OUT_OF_HOST_MEMORY;
 
             // The setting of stencilShaderRead will be overrode, if
             // VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT exists.
@@ -559,6 +562,16 @@ VkResult Image::Create(
             // Skip any unknown extension structures
             break;
         }
+    }
+
+    // When the VK image is sharable, the depthStencil PAL usage flag must be set in order for the underlying
+    // surface to be depth/stencil (and not color). Otherwise, the image cannot be shared with OpenGL. Core
+    // OpenGL does not allow for texture usage to be specified, thus all textures with a depth/stencil aspect
+    // result in depth/stencil surfaces.
+    if ((hasDepthStencilAspect && imageFlags.externallyShareable) &&
+        (imageFlags.externalD3DHandle == false))
+    {
+        palCreateInfo.usageFlags.depthStencil = true;
     }
 
     Util::AutoBuffer<Pal::SwizzledFormat, 16, PalAllocator> palFormatList(
@@ -664,7 +677,7 @@ VkResult Image::Create(
     VK_ASSERT(((pImageCreateInfo->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) == 0) ||
                (pImageCreateInfo->imageType == VK_IMAGE_TYPE_3D));
 
-    if (imageFlags.androidPresentable)
+    if ((result == VK_SUCCESS) && (imageFlags.androidPresentable))
     {
         VkDeviceMemory    pDeviceMemory = {};
         result = Image::CreatePresentableImage(

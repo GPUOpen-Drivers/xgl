@@ -61,6 +61,7 @@
 #include "palMsaaState.h"
 #include "palScreen.h"
 #include "palHashLiteralString.h"
+#include <string>
 #include <vector>
 
 #undef max
@@ -257,6 +258,7 @@ PhysicalDevice::PhysicalDevice(
     m_appProfile(appProfile),
     m_prtOnDmaSupported(true),
     m_supportedExtensions(),
+    m_allowedExtensions(),
     m_compiler(this)
 {
     memset(&m_limits, 0, sizeof(m_limits));
@@ -376,7 +378,17 @@ static void GetFormatFeatureFlags(
         }
     }
 
-    if (!Formats::IsDepthStencilFormat(format))
+    if (Formats::IsDepthStencilFormat(format))
+    {
+        if (imageTiling == VK_IMAGE_TILING_LINEAR)
+        {
+            retFlags = static_cast<VkFormatFeatureFlags>(0);
+        }
+
+        retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
+        retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+    }
+    else
     {
         retFlags &= ~VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT;
     }
@@ -649,6 +661,39 @@ VkResult PhysicalDevice::Initialize()
             }
         }
 
+        // Add device coherent memory type based on memory types which have been added in m_memoryProperties.memoryTypes
+        // In PAL, uncached device memory, which is always device coherent, will be allocated.
+        if (m_properties.gfxipProperties.flags.supportGl2Uncached)
+        {
+            uint32_t currentTypeCount = m_memoryProperties.memoryTypeCount;
+            for (uint32_t memoryTypeIndex = 0; memoryTypeIndex < currentTypeCount; ++memoryTypeIndex)
+            {
+                VkMemoryType& currentmemoryType = m_memoryProperties.memoryTypes[memoryTypeIndex];
+                VkMemoryType& lastMemoryType    = m_memoryProperties.memoryTypes[m_memoryProperties.memoryTypeCount];
+
+                // Add device coherent memory type based on below type:
+                // 1. Visible and host coherent
+                // 2. Invisible
+                if (((currentmemoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
+                     (currentmemoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) ||
+                    (currentmemoryType.propertyFlags == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+                {
+                    lastMemoryType.heapIndex     = currentmemoryType.heapIndex;
+                    lastMemoryType.propertyFlags = currentmemoryType.propertyFlags |
+                                                   VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD |
+                                                   VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD;
+
+                    m_memoryVkIndexToPalHeap[m_memoryProperties.memoryTypeCount] =
+                        m_memoryVkIndexToPalHeap[memoryTypeIndex];
+                    m_memoryPalHeapToVkIndexBits[m_memoryVkIndexToPalHeap[m_memoryProperties.memoryTypeCount]] |=
+                        (1UL << memoryTypeIndex);
+
+                    m_memoryTypeMask |= 1 << m_memoryProperties.memoryTypeCount;
+                    ++m_memoryProperties.memoryTypeCount;
+                }
+            }
+        }
+
         VK_ASSERT(m_memoryProperties.memoryTypeCount <= VK_MAX_MEMORY_TYPES);
         VK_ASSERT(m_memoryProperties.memoryHeapCount <= Pal::GpuHeapCount);
     }
@@ -826,6 +871,8 @@ void PhysicalDevice::PopulateFormatProperties()
 void PhysicalDevice::PopulateExtensions()
 {
     m_supportedExtensions = GetAvailableExtensions(VkInstance(), this);
+    m_allowedExtensions = m_supportedExtensions;
+
 }
 
 // =====================================================================================================================
@@ -1066,6 +1113,7 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     memset(pImageFormatProperties, 0, sizeof(VkImageFormatProperties));
 
     const auto& imageProps = PalProperties().imageProperties;
+    const RuntimeSettings& settings = m_pSettingsLoader->GetSettings();
 
     Pal::SwizzledFormat palFormat = VkToPalFormat(format);
 
@@ -1275,7 +1323,8 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     }
     else
     {
-        pImageFormatProperties->sampleCounts = MaxSampleCountToSampleCountFlags(Pal::MaxMsaaFragments);
+        pImageFormatProperties->sampleCounts = MaxSampleCountToSampleCountFlags(Pal::MaxMsaaFragments) &
+                                               settings.limitSampleCounts;
     }
 
     pImageFormatProperties->maxExtent.width  = imageProps.maxDimensions.width;
@@ -2195,6 +2244,12 @@ void PhysicalDevice::PopulateLimits()
                                             VK_SAMPLE_COUNT_4_BIT |
                                             VK_SAMPLE_COUNT_8_BIT;
 
+    // framebufferColorSampleCounts, framebufferDepthSampleCounts, framebufferStencilSampleCounts and
+    // framebufferNoAttachmentSampleCounts are already clamped by the setting in GetImageFormatProperties() in
+    // GetMaxFormatSampleCount() above. However, because the value of framebufferColorSampleCounts is
+    // hardcoded above, we are limiting it according to the setting again.
+    m_limits.framebufferColorSampleCounts &= settings.limitSampleCounts;
+
     m_sampleLocationSampleCounts = m_limits.framebufferColorSampleCounts;
 
     if (m_properties.gfxipProperties.flags.support1xMsaaSampleLocations == false)
@@ -2264,10 +2319,11 @@ void PhysicalDevice::PopulateLimits()
         minStorageCount        = (minStorageCount        == UINT_MAX) ? 0 : minStorageCount;
 
         // This is a sanity check on the above logic.
-        VK_ASSERT(minSampledCount == 8);
-        VK_ASSERT(minSampledIntCount == 8);
-        VK_ASSERT(minSampledDepthCount == 8);
-        VK_ASSERT(minSampledStencilCount == 8);
+        // Make sure that the sample count masks in the settings were not set when checking this.
+        VK_ASSERT((settings.limitSampleCounts != 0xFFFFFFFF) || minSampledCount == 8);
+        VK_ASSERT((settings.limitSampleCounts != 0xFFFFFFFF) || minSampledIntCount == 8);
+        VK_ASSERT((settings.limitSampleCounts != 0xFFFFFFFF) || minSampledDepthCount == 8);
+        VK_ASSERT((settings.limitSampleCounts != 0xFFFFFFFF) || minSampledStencilCount == 8);
 
         // Sample counts supported for all non-integer, integer, depth, and stencil sampled images, respectively
         m_limits.sampledImageColorSampleCounts      = MaxSampleCountToSampleCountFlags(minSampledCount);
@@ -3022,6 +3078,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CREATE_RENDERPASS2));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CALIBRATED_TIMESTAMPS));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HDR_METADATA));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_INFO));
 
@@ -3108,9 +3166,17 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HOST_QUERY_RESET));
 
+    if ((pPhysicalDevice == nullptr) ||
+        (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportGl2Uncached))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DEVICE_COHERENT_MEMORY));
+    }
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_UNIFORM_BUFFER_STANDARD_LAYOUT));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SUBGROUP_SIZE_CONTROL));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_LINE_RASTERIZATION));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGELESS_FRAMEBUFFER));
 
@@ -3307,7 +3373,6 @@ VkResult PhysicalDevice::EnumerateExtensionProperties(
     ) const
 {
     VkResult result = VK_SUCCESS;
-
     const DeviceExtensions::Supported& supportedExtensions = GetSupportedExtensions();
     const uint32_t extensionCount = supportedExtensions.GetExtensionCount();
 
@@ -3447,6 +3512,194 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
 }
 
 // =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceMaintenance3Properties(
+    uint32_t*     pMaxPerSetDescriptors,
+    VkDeviceSize* pMaxMemoryAllocationSize
+    ) const
+{
+    // We don't have limits on number of desc sets
+    *pMaxPerSetDescriptors    = UINT32_MAX;
+
+    // Return 2GB in bytes as max allocation size
+    *pMaxMemoryAllocationSize = 2u * 1024u * 1024u * 1024u;
+}
+
+// ====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceMultiviewProperties(
+    uint32_t* pMaxMultiviewViewCount,
+    uint32_t* pMaxMultiviewInstanceIndex
+    ) const
+{
+    *pMaxMultiviewViewCount     = Pal::MaxViewInstanceCount;
+    *pMaxMultiviewInstanceIndex = UINT_MAX;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDevicePointClippingProperties(
+    VkPointClippingBehavior* pPointClippingBehavior
+    ) const
+{
+    // Points are clipped when their centers fall outside the clip volume, i.e. the desktop GL behavior.
+    *pPointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceProtectedMemoryProperties(
+    VkBool32* pProtectedNoFault
+    ) const
+{
+    *pProtectedNoFault = VK_FALSE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
+    uint32_t*               pSubgroupSize,
+    VkShaderStageFlags*     pSupportedStages,
+    VkSubgroupFeatureFlags* pSupportedOperations,
+    VkBool32*               pQuadOperationsInAllStages
+    ) const
+{
+    *pSubgroupSize        = GetSubgroupSize();
+
+    *pSupportedStages     = VK_SHADER_STAGE_VERTEX_BIT |
+                            VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
+                            VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
+                            VK_SHADER_STAGE_GEOMETRY_BIT |
+                            VK_SHADER_STAGE_FRAGMENT_BIT |
+                            VK_SHADER_STAGE_COMPUTE_BIT;
+
+    *pSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
+                            VK_SUBGROUP_FEATURE_VOTE_BIT |
+                            VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
+                            VK_SUBGROUP_FEATURE_BALLOT_BIT |
+                            VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
+                            VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
+                            VK_SUBGROUP_FEATURE_QUAD_BIT;
+
+    *pQuadOperationsInAllStages = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceDriverProperties(
+    VkDriverIdKHR*           pDriverID,
+    char*                    pDriverName,
+    char*                    pDriverInfo,
+    VkConformanceVersionKHR* pConformanceVersion
+    ) const
+{
+    *pDriverID = VULKAN_DRIVER_ID;
+
+    Util::Strncpy(pDriverName, VULKAN_DRIVER_NAME_STR, VK_MAX_DRIVER_NAME_SIZE_KHR);
+    Util::Strncpy(pDriverInfo, VULKAN_DRIVER_INFO_STR, VK_MAX_DRIVER_INFO_SIZE_KHR);
+
+    pConformanceVersion->major     = CTS_VERSION_MAJOR;
+    pConformanceVersion->minor     = CTS_VERSION_MINOR;
+    pConformanceVersion->subminor  = CTS_VERSION_SUBMINOR;
+    pConformanceVersion->patch     = CTS_VERSION_PATCH;
+}
+
+// =====================================================================================================================
+template<typename T>
+void PhysicalDevice::GetPhysicalDeviceFloatControlsProperties(
+    T pFloatControlsProperties
+    ) const
+{
+    pFloatControlsProperties->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE_KHR;
+    pFloatControlsProperties->roundingModeIndependence   = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE_KHR;
+
+    pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat32  = VK_TRUE;
+    pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat64  = VK_TRUE;
+
+    pFloatControlsProperties->shaderDenormPreserveFloat32            = VK_TRUE;
+    pFloatControlsProperties->shaderDenormPreserveFloat64            = VK_TRUE;
+
+    pFloatControlsProperties->shaderDenormFlushToZeroFloat32         = VK_TRUE;
+    pFloatControlsProperties->shaderDenormFlushToZeroFloat64         = VK_TRUE;
+
+    pFloatControlsProperties->shaderRoundingModeRTEFloat32           = VK_TRUE;
+    pFloatControlsProperties->shaderRoundingModeRTEFloat64           = VK_TRUE;
+
+    pFloatControlsProperties->shaderRoundingModeRTZFloat32           = VK_TRUE;
+    pFloatControlsProperties->shaderRoundingModeRTZFloat64           = VK_TRUE;
+
+    if (PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions)
+    {
+        pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat16  = VK_TRUE;
+        pFloatControlsProperties->shaderDenormPreserveFloat16            = VK_TRUE;
+        pFloatControlsProperties->shaderDenormFlushToZeroFloat16         = VK_TRUE;
+        pFloatControlsProperties->shaderRoundingModeRTEFloat16           = VK_TRUE;
+        pFloatControlsProperties->shaderRoundingModeRTZFloat16           = VK_TRUE;
+    }
+    else
+    {
+        pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat16  = VK_FALSE;
+        pFloatControlsProperties->shaderDenormPreserveFloat16            = VK_FALSE;
+        pFloatControlsProperties->shaderDenormFlushToZeroFloat16         = VK_FALSE;
+        pFloatControlsProperties->shaderRoundingModeRTEFloat16           = VK_FALSE;
+        pFloatControlsProperties->shaderRoundingModeRTZFloat16           = VK_FALSE;
+    }
+}
+
+// =====================================================================================================================
+template<typename T>
+void PhysicalDevice::GetPhysicalDeviceDescriptorIndexingProperties(
+    T pDescriptorIndexingProperties
+    ) const
+{
+    pDescriptorIndexingProperties->maxUpdateAfterBindDescriptorsInAllPools              = UINT32_MAX;
+    pDescriptorIndexingProperties->shaderUniformBufferArrayNonUniformIndexingNative     = VK_FALSE;
+    pDescriptorIndexingProperties->shaderSampledImageArrayNonUniformIndexingNative      = VK_FALSE;
+    pDescriptorIndexingProperties->shaderStorageBufferArrayNonUniformIndexingNative     = VK_FALSE;
+    pDescriptorIndexingProperties->shaderStorageImageArrayNonUniformIndexingNative      = VK_FALSE;
+    pDescriptorIndexingProperties->shaderInputAttachmentArrayNonUniformIndexingNative   = VK_FALSE;
+    pDescriptorIndexingProperties->robustBufferAccessUpdateAfterBind                    = VK_FALSE;
+    pDescriptorIndexingProperties->quadDivergentImplicitLod                             = VK_FALSE;
+    pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindSamplers         = UINT32_MAX;
+    pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindUniformBuffers   = UINT32_MAX;
+    pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindStorageBuffers   = UINT32_MAX;
+    pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindSampledImages    = UINT32_MAX;
+    pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindStorageImages    = UINT32_MAX;
+    pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindInputAttachments = UINT32_MAX;
+    pDescriptorIndexingProperties->maxPerStageUpdateAfterBindResources                  = UINT32_MAX;
+    pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindSamplers              = UINT32_MAX;
+    pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindUniformBuffers        = UINT32_MAX;
+    pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = MaxDynamicUniformDescriptors;
+    pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindStorageBuffers        = UINT32_MAX;
+    pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = MaxDynamicStorageDescriptors;
+    pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindSampledImages         = UINT32_MAX;
+    pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindStorageImages         = UINT32_MAX;
+    pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindInputAttachments      = UINT32_MAX;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceDepthStencilResolveProperties(
+    VkResolveModeFlagsKHR* pSupportedDepthResolveModes,
+    VkResolveModeFlagsKHR* pSupportedStencilResolveModes,
+    VkBool32*              pIndependentResolveNone,
+    VkBool32*              pIndependentResolve
+    ) const
+{
+    *pSupportedDepthResolveModes   = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
+                                     VK_RESOLVE_MODE_MIN_BIT_KHR |
+                                     VK_RESOLVE_MODE_MAX_BIT_KHR;
+    *pSupportedStencilResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
+                                     VK_RESOLVE_MODE_MIN_BIT_KHR |
+                                     VK_RESOLVE_MODE_MAX_BIT_KHR;
+    *pIndependentResolveNone       = VK_TRUE;
+    *pIndependentResolve           = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceSamplerFilterMinmaxProperties(
+    VkBool32* pFilterMinmaxSingleComponentFormats,
+    VkBool32* pFilterMinmaxImageComponentMapping
+    ) const
+{
+    *pFilterMinmaxSingleComponentFormats = VK_TRUE;
+    *pFilterMinmaxImageComponentMapping  = IsPerChannelMinMaxFilteringSupported();
+}
+
+// =====================================================================================================================
 VkResult PhysicalDevice::GetExternalMemoryProperties(
     bool                                    isSparse,
     VkExternalMemoryHandleTypeFlagBits      handleType,
@@ -3493,6 +3746,216 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
 }
 
 // =====================================================================================================================
+void PhysicalDevice::GetPhysicalDevice16BitStorageFeatures(
+    VkBool32* pStorageBuffer16BitAccess,
+    VkBool32* pUniformAndStorageBuffer16BitAccess,
+    VkBool32* pStoragePushConstant16,
+    VkBool32* pStorageInputOutput16
+    ) const
+{
+    // We support 16-bit buffer load/store on all ASICs
+    *pStorageBuffer16BitAccess           = VK_TRUE;
+    *pUniformAndStorageBuffer16BitAccess = VK_TRUE;
+
+    // We don't plan to support 16-bit push constants
+    *pStoragePushConstant16              = VK_FALSE;
+
+    // Currently we seem to only support 16-bit inputs/outputs on ASICs supporting
+    // 16-bit ALU. It's unclear at this point whether we can do any better.
+    if (PalProperties().gfxipProperties.flags.support16BitInstructions &&
+        ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
+         (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)))
+    {
+        *pStorageInputOutput16           = VK_TRUE;
+    }
+    else
+    {
+        *pStorageInputOutput16           = VK_FALSE;
+    }
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceMultiviewFeatures(
+    VkBool32* pMultiview,
+    VkBool32* pMultiviewGeometryShader,
+    VkBool32* pMultiviewTessellationShader
+    ) const
+{
+    *pMultiview                   = VK_TRUE;
+    *pMultiviewGeometryShader     = VK_FALSE;
+    *pMultiviewTessellationShader = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceVariablePointerFeatures(
+    VkBool32* pVariablePointersStorageBuffer,
+    VkBool32* pVariablePointers
+    ) const
+{
+    *pVariablePointers = VK_TRUE;
+    *pVariablePointersStorageBuffer = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceProtectedMemoryFeatures(
+    VkBool32* pProtectedMemory
+    ) const
+{
+    *pProtectedMemory = VK_FALSE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceSamplerYcbcrConversionFeatures(
+    VkBool32* pSamplerYcbcrConversion
+    ) const
+{
+    *pSamplerYcbcrConversion = VK_FALSE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceShaderDrawParameterFeatures(
+    VkBool32* pShaderDrawParameters
+    ) const
+{
+    *pShaderDrawParameters = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDevice8BitStorageFeatures(
+    VkBool32* pStorageBuffer8BitAccess,
+    VkBool32* pUniformAndStorageBuffer8BitAccess,
+    VkBool32* pStoragePushConstant8
+    ) const
+{
+    *pStorageBuffer8BitAccess           = VK_TRUE;
+    *pUniformAndStorageBuffer8BitAccess = VK_TRUE;
+
+    // We don't plan to support 8-bit push constants
+    *pStoragePushConstant8              = VK_FALSE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceShaderAtomicInt64Features(
+    VkBool32* pShaderBufferInt64Atomics,
+    VkBool32* pShaderSharedInt64Atomics
+    ) const
+{
+    *pShaderBufferInt64Atomics = VK_TRUE;
+    *pShaderSharedInt64Atomics = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceFloat16Int8Features(
+    VkBool32* pShaderFloat16,
+    VkBool32* pShaderInt8
+    ) const
+{
+    *pShaderFloat16 = PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions ? VK_TRUE : VK_FALSE;
+    *pShaderInt8    = VK_TRUE;
+}
+
+// =====================================================================================================================
+template<typename T>
+void PhysicalDevice::GetPhysicalDeviceDescriptorIndexingFeatures(
+    T pDescriptorIndexingFeatures
+    ) const
+{
+    pDescriptorIndexingFeatures->shaderInputAttachmentArrayDynamicIndexing           = VK_FALSE;
+    pDescriptorIndexingFeatures->shaderUniformTexelBufferArrayDynamicIndexing        = VK_TRUE;
+    pDescriptorIndexingFeatures->shaderStorageTexelBufferArrayDynamicIndexing        = VK_TRUE;
+    pDescriptorIndexingFeatures->shaderUniformBufferArrayNonUniformIndexing          = VK_TRUE;
+    pDescriptorIndexingFeatures->shaderSampledImageArrayNonUniformIndexing           = VK_TRUE;
+    pDescriptorIndexingFeatures->shaderStorageBufferArrayNonUniformIndexing          = VK_TRUE;
+    pDescriptorIndexingFeatures->shaderStorageImageArrayNonUniformIndexing           = VK_TRUE;
+    pDescriptorIndexingFeatures->shaderInputAttachmentArrayNonUniformIndexing        = VK_FALSE;
+    pDescriptorIndexingFeatures->shaderUniformTexelBufferArrayNonUniformIndexing     = VK_TRUE;
+    pDescriptorIndexingFeatures->shaderStorageTexelBufferArrayNonUniformIndexing     = VK_TRUE;
+    pDescriptorIndexingFeatures->descriptorBindingUniformBufferUpdateAfterBind       = VK_TRUE;
+    pDescriptorIndexingFeatures->descriptorBindingSampledImageUpdateAfterBind        = VK_TRUE;
+    pDescriptorIndexingFeatures->descriptorBindingStorageImageUpdateAfterBind        = VK_TRUE;
+    pDescriptorIndexingFeatures->descriptorBindingStorageBufferUpdateAfterBind       = VK_TRUE;
+    pDescriptorIndexingFeatures->descriptorBindingUniformTexelBufferUpdateAfterBind  = VK_TRUE;
+    pDescriptorIndexingFeatures->descriptorBindingStorageTexelBufferUpdateAfterBind  = VK_TRUE;
+    pDescriptorIndexingFeatures->descriptorBindingUpdateUnusedWhilePending           = VK_TRUE;
+    pDescriptorIndexingFeatures->descriptorBindingPartiallyBound                     = VK_TRUE;
+    pDescriptorIndexingFeatures->descriptorBindingVariableDescriptorCount            = VK_TRUE;
+    pDescriptorIndexingFeatures->runtimeDescriptorArray                              = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceScalarBlockLayoutFeatures(
+    VkBool32* pScalarBlockLayout
+    ) const
+{
+    *pScalarBlockLayout = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceImagelessFramebufferFeatures(
+    VkBool32* pImagelessFramebuffer
+    ) const
+{
+    *pImagelessFramebuffer = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceUniformBufferStandardLayoutFeatures(
+    VkBool32* pUniformBufferStandardLayout
+    ) const
+{
+    *pUniformBufferStandardLayout = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceSubgroupExtendedTypesFeatures(
+    VkBool32* pShaderSubgroupExtendedTypes
+    ) const
+{
+    *pShaderSubgroupExtendedTypes = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(
+    VkBool32* pSeparateDepthStencilLayouts
+    ) const
+{
+    *pSeparateDepthStencilLayouts = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceHostQueryResetFeatures(
+    VkBool32* pHostQueryReset
+    ) const
+{
+    *pHostQueryReset = VK_TRUE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceBufferAddressFeatures(
+    VkBool32* pBufferDeviceAddress,
+    VkBool32* pBufferDeviceAddressCaptureReplay,
+    VkBool32* pBufferDeviceAddressMultiDevice
+    ) const
+{
+    *pBufferDeviceAddress              = VK_TRUE;
+    *pBufferDeviceAddressCaptureReplay = VK_FALSE;
+    *pBufferDeviceAddressMultiDevice   = VK_FALSE;
+}
+
+// =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceVulkanMemoryModelFeatures(
+    VkBool32* pVulkanMemoryModel,
+    VkBool32* pVulkanMemoryModelDeviceScope,
+    VkBool32* pVulkanMemoryModelAvailabilityVisibilityChains
+) const
+{
+    *pVulkanMemoryModel                             = VK_TRUE;
+    *pVulkanMemoryModelDeviceScope                  = VK_TRUE;
+    *pVulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
+
+}
+
+// =====================================================================================================================
 // Retrieve device feature support. Called in response to vkGetPhysicalDeviceFeatures2
 // NOTE: Don't memset here.  Otherwise, VerifyRequestedPhysicalDeviceFeatures needs to compare member by member
 void PhysicalDevice::GetFeatures2(
@@ -3518,25 +3981,11 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDevice16BitStorageFeatures* pStorageFeatures =
                     reinterpret_cast<VkPhysicalDevice16BitStorageFeatures*>(pHeader);
 
-                // We support 16-bit buffer load/store on all ASICs
-                pStorageFeatures->storageBuffer16BitAccess           = VK_TRUE;
-                pStorageFeatures->uniformAndStorageBuffer16BitAccess = VK_TRUE;
-
-                // We don't plan to support 16-bit push constants
-                pStorageFeatures->storagePushConstant16              = VK_FALSE;
-
-                // Currently we seem to only support 16-bit inputs/outputs on ASICs supporting
-                // 16-bit ALU. It's unclear at this point whether we can do any better.
-                if (PalProperties().gfxipProperties.flags.support16BitInstructions &&
-                    ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false) ||
-                     (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)))
-                {
-                    pStorageFeatures->storageInputOutput16               = VK_TRUE;
-                }
-                else
-                {
-                    pStorageFeatures->storageInputOutput16               = VK_FALSE;
-                }
+                GetPhysicalDevice16BitStorageFeatures(
+                    &pStorageFeatures->storageBuffer16BitAccess,
+                    &pStorageFeatures->uniformAndStorageBuffer16BitAccess,
+                    &pStorageFeatures->storagePushConstant16,
+                    &pStorageFeatures->storageInputOutput16);
 
                 break;
             }
@@ -3544,11 +3993,11 @@ void PhysicalDevice::GetFeatures2(
             {
                 VkPhysicalDevice8BitStorageFeaturesKHR* pStorageFeatures =
                     reinterpret_cast<VkPhysicalDevice8BitStorageFeaturesKHR*>(pHeader);
-                pStorageFeatures->storageBuffer8BitAccess           = VK_TRUE;
-                pStorageFeatures->uniformAndStorageBuffer8BitAccess = VK_TRUE;
 
-                // We don't plan to support 8-bit push constants
-                pStorageFeatures->storagePushConstant8              = VK_FALSE;
+                GetPhysicalDevice8BitStorageFeatures(
+                    &pStorageFeatures->storageBuffer8BitAccess,
+                    &pStorageFeatures->uniformAndStorageBuffer8BitAccess,
+                    &pStorageFeatures->storagePushConstant8);
 
                 break;
             }
@@ -3558,8 +4007,9 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceShaderAtomicInt64FeaturesKHR* pShaderAtomicInt64Features =
                     reinterpret_cast<VkPhysicalDeviceShaderAtomicInt64FeaturesKHR*>(pHeader);
 
-                pShaderAtomicInt64Features->shaderBufferInt64Atomics = VK_TRUE;
-                pShaderAtomicInt64Features->shaderSharedInt64Atomics = VK_TRUE;
+                GetPhysicalDeviceShaderAtomicInt64Features(
+                    &pShaderAtomicInt64Features->shaderBufferInt64Atomics,
+                    &pShaderAtomicInt64Features->shaderSharedInt64Atomics);
 
                 break;
             }
@@ -3581,7 +4031,8 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceSamplerYcbcrConversionFeatures* pSamplerYcbcrConversionFeatures =
                     reinterpret_cast<VkPhysicalDeviceSamplerYcbcrConversionFeatures*>(pHeader);
 
-                pSamplerYcbcrConversionFeatures->samplerYcbcrConversion = VK_FALSE;
+                GetPhysicalDeviceSamplerYcbcrConversionFeatures(
+                    &pSamplerYcbcrConversionFeatures->samplerYcbcrConversion);
 
                 break;
             }
@@ -3591,8 +4042,10 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceVariablePointerFeatures* pVariablePointerFeatures =
                     reinterpret_cast<VkPhysicalDeviceVariablePointerFeatures*>(pHeader);
 
-                pVariablePointerFeatures->variablePointers = VK_TRUE;
-                pVariablePointerFeatures->variablePointersStorageBuffer = VK_TRUE;
+                GetPhysicalDeviceVariablePointerFeatures(
+                    &pVariablePointerFeatures->variablePointersStorageBuffer,
+                    &pVariablePointerFeatures->variablePointers);
+
                 break;
             }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_FEATURES:
@@ -3600,7 +4053,7 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceProtectedMemoryFeatures* pProtectedMemory =
                     reinterpret_cast<VkPhysicalDeviceProtectedMemoryFeatures*>(pHeader);
 
-                pProtectedMemory->protectedMemory = VK_FALSE;
+                GetPhysicalDeviceProtectedMemoryFeatures(&pProtectedMemory->protectedMemory);
 
                 break;
             }
@@ -3610,9 +4063,10 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceMultiviewFeatures* pMultiviewFeatures =
                     reinterpret_cast<VkPhysicalDeviceMultiviewFeatures*>(pHeader);
 
-                pMultiviewFeatures->multiview                   = VK_TRUE;
-                pMultiviewFeatures->multiviewGeometryShader     = VK_FALSE;
-                pMultiviewFeatures->multiviewTessellationShader = VK_TRUE;
+                GetPhysicalDeviceMultiviewFeatures(
+                    &pMultiviewFeatures->multiview,
+                    &pMultiviewFeatures->multiviewGeometryShader,
+                    &pMultiviewFeatures->multiviewTessellationShader);
 
                 break;
             }
@@ -3622,36 +4076,18 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceShaderDrawParameterFeatures* pShaderDrawParameterFeatures =
                     reinterpret_cast<VkPhysicalDeviceShaderDrawParameterFeatures*>(pHeader);
 
-                pShaderDrawParameterFeatures->shaderDrawParameters = VK_TRUE;
+                GetPhysicalDeviceShaderDrawParameterFeatures(
+                    &pShaderDrawParameterFeatures->shaderDrawParameters);
 
                 break;
             }
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT:
             {
-                VkPhysicalDeviceDescriptorIndexingFeaturesEXT * pDescIndexingFeatures =
-                    reinterpret_cast<VkPhysicalDeviceDescriptorIndexingFeaturesEXT *>(pHeader);
+                VkPhysicalDeviceDescriptorIndexingFeaturesEXT* pDescIndexingFeatures =
+                    reinterpret_cast<VkPhysicalDeviceDescriptorIndexingFeaturesEXT*>(pHeader);
 
-                pDescIndexingFeatures->shaderInputAttachmentArrayDynamicIndexing           = VK_FALSE;
-                pDescIndexingFeatures->shaderUniformTexelBufferArrayDynamicIndexing        = VK_TRUE;
-                pDescIndexingFeatures->shaderStorageTexelBufferArrayDynamicIndexing        = VK_TRUE;
-                pDescIndexingFeatures->shaderUniformBufferArrayNonUniformIndexing          = VK_TRUE;
-                pDescIndexingFeatures->shaderSampledImageArrayNonUniformIndexing           = VK_TRUE;
-                pDescIndexingFeatures->shaderStorageBufferArrayNonUniformIndexing          = VK_TRUE;
-                pDescIndexingFeatures->shaderStorageImageArrayNonUniformIndexing           = VK_TRUE;
-                pDescIndexingFeatures->shaderInputAttachmentArrayNonUniformIndexing        = VK_FALSE;
-                pDescIndexingFeatures->shaderUniformTexelBufferArrayNonUniformIndexing     = VK_TRUE;
-                pDescIndexingFeatures->shaderStorageTexelBufferArrayNonUniformIndexing     = VK_TRUE;
-                pDescIndexingFeatures->descriptorBindingUniformBufferUpdateAfterBind       = VK_TRUE;
-                pDescIndexingFeatures->descriptorBindingSampledImageUpdateAfterBind        = VK_TRUE;
-                pDescIndexingFeatures->descriptorBindingStorageImageUpdateAfterBind        = VK_TRUE;
-                pDescIndexingFeatures->descriptorBindingStorageBufferUpdateAfterBind       = VK_TRUE;
-                pDescIndexingFeatures->descriptorBindingUniformTexelBufferUpdateAfterBind  = VK_TRUE;
-                pDescIndexingFeatures->descriptorBindingStorageTexelBufferUpdateAfterBind  = VK_TRUE;
-                pDescIndexingFeatures->descriptorBindingUpdateUnusedWhilePending           = VK_TRUE;
-                pDescIndexingFeatures->descriptorBindingPartiallyBound                     = VK_TRUE;
-                pDescIndexingFeatures->descriptorBindingVariableDescriptorCount            = VK_TRUE;
-                pDescIndexingFeatures->runtimeDescriptorArray                              = VK_TRUE;
+                GetPhysicalDeviceDescriptorIndexingFeatures(pDescIndexingFeatures);
 
                 break;
             }
@@ -3661,9 +4097,10 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceFloat16Int8FeaturesKHR* pFloat16Int8Features =
                     reinterpret_cast<VkPhysicalDeviceFloat16Int8FeaturesKHR*>(pHeader);
 
-                pFloat16Int8Features->shaderFloat16 =
-                    PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions ? VK_TRUE : VK_FALSE;
-                pFloat16Int8Features->shaderInt8    = VK_TRUE;
+                GetPhysicalDeviceFloat16Int8Features(
+                    &pFloat16Int8Features->shaderFloat16,
+                    &pFloat16Int8Features->shaderInt8);
+
                 break;
             }
 
@@ -3683,7 +4120,7 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceScalarBlockLayoutFeaturesEXT* pScalarBlockLayoutFeatures =
                     reinterpret_cast<VkPhysicalDeviceScalarBlockLayoutFeaturesEXT*>(pHeader);
 
-                pScalarBlockLayoutFeatures->scalarBlockLayout = VK_TRUE;
+                GetPhysicalDeviceScalarBlockLayoutFeatures(&pScalarBlockLayoutFeatures->scalarBlockLayout);
 
                 break;
             }
@@ -3703,9 +4140,10 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceVulkanMemoryModelFeaturesKHR* pMemoryModel =
                     reinterpret_cast<VkPhysicalDeviceVulkanMemoryModelFeaturesKHR*>(pHeader);
 
-                pMemoryModel->vulkanMemoryModel = VK_TRUE;
-                pMemoryModel->vulkanMemoryModelDeviceScope = VK_TRUE;
-                pMemoryModel->vulkanMemoryModelAvailabilityVisibilityChains = VK_FALSE;
+                GetPhysicalDeviceVulkanMemoryModelFeatures(
+                    &pMemoryModel->vulkanMemoryModel,
+                    &pMemoryModel->vulkanMemoryModelDeviceScope,
+                    &pMemoryModel->vulkanMemoryModelAvailabilityVisibilityChains);
 
                 break;
             }
@@ -3739,8 +4177,9 @@ void PhysicalDevice::GetFeatures2(
             {
                 VkPhysicalDeviceHostQueryResetFeaturesEXT* pHostQueryReset =
                     reinterpret_cast<VkPhysicalDeviceHostQueryResetFeaturesEXT *>(pHeader);
-                pHostQueryReset->hostQueryReset =
-                    IsExtensionSupported(DeviceExtensions::EXT_HOST_QUERY_RESET) ? VK_TRUE : VK_FALSE;
+
+                GetPhysicalDeviceHostQueryResetFeatures(&pHostQueryReset->hostQueryReset);
+
                 break;
             }
 
@@ -3751,6 +4190,8 @@ void PhysicalDevice::GetFeatures2(
 
                 bool deviceCoherentMemoryEnabled = false;
 
+                deviceCoherentMemoryEnabled = PalProperties().gfxipProperties.flags.supportGl2Uncached;
+
                 pDeviceCoherentMemory->deviceCoherentMemory = deviceCoherentMemoryEnabled;
                 break;
             }
@@ -3760,18 +4201,36 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceBufferAddressFeaturesEXT* pBufferAddressFeatures =
                     reinterpret_cast<VkPhysicalDeviceBufferAddressFeaturesEXT*>(pHeader);
 
-                pBufferAddressFeatures->bufferDeviceAddress              = VK_TRUE;
-                pBufferAddressFeatures->bufferDeviceAddressCaptureReplay = VK_FALSE;
-                pBufferAddressFeatures->bufferDeviceAddressMultiDevice   = VK_FALSE;
+                GetPhysicalDeviceBufferAddressFeatures(
+                    &pBufferAddressFeatures->bufferDeviceAddress,
+                    &pBufferAddressFeatures->bufferDeviceAddressCaptureReplay,
+                    &pBufferAddressFeatures->bufferDeviceAddressMultiDevice);
 
                 break;
             }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
+            {
+                VkPhysicalDeviceLineRasterizationFeaturesEXT* pPhysicalDeviceLineRasterizationFeaturesEXT =
+                    reinterpret_cast<VkPhysicalDeviceLineRasterizationFeaturesEXT*>(pHeader);
+                pPhysicalDeviceLineRasterizationFeaturesEXT->rectangularLines = VK_FALSE;
+                pPhysicalDeviceLineRasterizationFeaturesEXT->bresenhamLines   = VK_TRUE;
+                pPhysicalDeviceLineRasterizationFeaturesEXT->smoothLines      = VK_FALSE;
+
+                pPhysicalDeviceLineRasterizationFeaturesEXT->stippledRectangularLines = VK_FALSE;
+                pPhysicalDeviceLineRasterizationFeaturesEXT->stippledBresenhamLines   = VK_TRUE;
+                pPhysicalDeviceLineRasterizationFeaturesEXT->stippledSmoothLines      = VK_FALSE;
+
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES_KHR:
             {
                 VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR* pUniformBufferStandardLayoutFeatures =
                     reinterpret_cast<VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR*>(pHeader);
 
-                pUniformBufferStandardLayoutFeatures->uniformBufferStandardLayout = VK_TRUE;
+                GetPhysicalDeviceUniformBufferStandardLayoutFeatures(
+                    &pUniformBufferStandardLayoutFeatures->uniformBufferStandardLayout);
 
                 break;
             }
@@ -3791,7 +4250,17 @@ void PhysicalDevice::GetFeatures2(
                 VkPhysicalDeviceImagelessFramebufferFeaturesKHR* pImagelessFramebufferFeatures =
                     reinterpret_cast<VkPhysicalDeviceImagelessFramebufferFeaturesKHR *>(pHeader);
 
-                pImagelessFramebufferFeatures->imagelessFramebuffer = VK_TRUE;
+                GetPhysicalDeviceImagelessFramebufferFeatures(&pImagelessFramebufferFeatures->imagelessFramebuffer);
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_EXECUTABLE_PROPERTIES_FEATURES_KHR:
+            {
+                VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR* pPipelineExecutablePropertiesFeatures =
+                    reinterpret_cast<VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR*>(pHeader);
+
+                pPipelineExecutablePropertiesFeatures->pipelineExecutableInfo = VK_TRUE;
                 break;
             }
 
@@ -3943,11 +4412,13 @@ void PhysicalDevice::GetDeviceProperties2(
 
         VkPhysicalDeviceDriverPropertiesKHR*                     pDriverProperties;
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
+        VkPhysicalDeviceFloatControlsPropertiesKHR*              pFloatControlsProperties;
         VkPhysicalDeviceInlineUniformBlockPropertiesEXT*         pInlineUniformBlockProperties;
         VkPhysicalDevicePCIBusInfoPropertiesEXT*                 pPCIBusInfoProperties;
         VkPhysicalDeviceTransformFeedbackPropertiesEXT*          pFeedbackProperties;
         VkPhysicalDeviceDepthStencilResolvePropertiesKHR*        pDepthStencilResolveProperties;
         VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*        pSubgroupSizeControlProperties;
+        VkPhysicalDeviceLineRasterizationPropertiesEXT*          pLineRasterizationProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -3956,8 +4427,7 @@ void PhysicalDevice::GetDeviceProperties2(
         {
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES:
         {
-            // Points are clipped when their centers fall outside the clip volume, i.e. the desktop GL behavior.
-            pPointClippingProperties->pointClippingBehavior = VK_POINT_CLIPPING_BEHAVIOR_ALL_CLIP_PLANES;
+            GetPhysicalDevicePointClippingProperties(&pPointClippingProperties->pointClippingBehavior);
             break;
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES:
@@ -3989,56 +4459,41 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES:
         {
-            // We don't have limits on number of desc sets
-            pMaintenance3Properties->maxPerSetDescriptors    = UINT32_MAX;
-
-            // Return 2GB in bytes as max allocation size
-            pMaintenance3Properties->maxMemoryAllocationSize = 2u * 1024u * 1024u * 1024u;
+            GetPhysicalDeviceMaintenance3Properties(
+                &pMaintenance3Properties->maxPerSetDescriptors,
+                &pMaintenance3Properties->maxMemoryAllocationSize);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES:
         {
-            pProtectedMemoryProperties->protectedNoFault = VK_FALSE;
+            GetPhysicalDeviceProtectedMemoryProperties(&pProtectedMemoryProperties->protectedNoFault);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES:
         {
-            pMultiviewProperties->maxMultiviewViewCount     = Pal::MaxViewInstanceCount;
-            pMultiviewProperties->maxMultiviewInstanceIndex = UINT_MAX;
-
+            GetPhysicalDeviceMultiviewProperties(
+                &pMultiviewProperties->maxMultiviewViewCount,
+                &pMultiviewProperties->maxMultiviewInstanceIndex);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES:
         {
-            pSubgroupProperties->subgroupSize        = GetSubgroupSize();
-
-            pSubgroupProperties->supportedStages     = VK_SHADER_STAGE_VERTEX_BIT |
-                                                       VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT |
-                                                       VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
-                                                       VK_SHADER_STAGE_GEOMETRY_BIT |
-                                                       VK_SHADER_STAGE_FRAGMENT_BIT |
-                                                       VK_SHADER_STAGE_COMPUTE_BIT;
-
-            pSubgroupProperties->supportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
-                                                       VK_SUBGROUP_FEATURE_VOTE_BIT |
-                                                       VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
-                                                       VK_SUBGROUP_FEATURE_BALLOT_BIT |
-                                                       VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
-                                                       VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
-                                                       VK_SUBGROUP_FEATURE_QUAD_BIT;
-
-            pSubgroupProperties->quadOperationsInAllStages = VK_TRUE;
-
+            GetPhysicalDeviceSubgroupProperties(
+                &pSubgroupProperties->subgroupSize,
+                &pSubgroupProperties->supportedStages,
+                &pSubgroupProperties->supportedOperations,
+                &pSubgroupProperties->quadOperationsInAllStages);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT:
         {
-            pMinMaxProperties->filterMinmaxImageComponentMapping  = IsPerChannelMinMaxFilteringSupported();
-            pMinMaxProperties->filterMinmaxSingleComponentFormats = VK_TRUE;
+            GetPhysicalDeviceSamplerFilterMinmaxProperties(
+                &pMinMaxProperties->filterMinmaxSingleComponentFormats,
+                &pMinMaxProperties->filterMinmaxImageComponentMapping);
             break;
         }
 
@@ -4098,28 +4553,7 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES_EXT:
         {
-            pDescriptorIndexingProperties->maxUpdateAfterBindDescriptorsInAllPools                  = UINT32_MAX;
-            pDescriptorIndexingProperties->shaderUniformBufferArrayNonUniformIndexingNative         = VK_FALSE;
-            pDescriptorIndexingProperties->shaderSampledImageArrayNonUniformIndexingNative          = VK_FALSE;
-            pDescriptorIndexingProperties->shaderStorageBufferArrayNonUniformIndexingNative         = VK_FALSE;
-            pDescriptorIndexingProperties->shaderStorageImageArrayNonUniformIndexingNative          = VK_FALSE;
-            pDescriptorIndexingProperties->shaderInputAttachmentArrayNonUniformIndexingNative       = VK_FALSE;
-            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindSamplers             = UINT32_MAX;
-            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindUniformBuffers       = UINT32_MAX;
-            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindStorageBuffers       = UINT32_MAX;
-            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindSampledImages        = UINT32_MAX;
-            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindStorageImages        = UINT32_MAX;
-            pDescriptorIndexingProperties->maxPerStageDescriptorUpdateAfterBindInputAttachments     = UINT32_MAX;
-            pDescriptorIndexingProperties->maxPerStageUpdateAfterBindResources                      = UINT32_MAX;
-            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindSamplers                  = UINT32_MAX;
-            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindUniformBuffers            = UINT32_MAX;
-            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindUniformBuffersDynamic     = MaxDynamicUniformDescriptors;
-            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindStorageBuffers            = UINT32_MAX;
-            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindStorageBuffersDynamic     = MaxDynamicStorageDescriptors;
-            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindSampledImages             = UINT32_MAX;
-            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindStorageImages             = UINT32_MAX;
-            pDescriptorIndexingProperties->maxDescriptorSetUpdateAfterBindInputAttachments          = UINT32_MAX;
-
+            GetPhysicalDeviceDescriptorIndexingProperties(pDescriptorIndexingProperties);
             break;
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT:
@@ -4139,22 +4573,23 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES_KHR:
         {
-            pDriverProperties->driverID = VULKAN_DRIVER_ID;
-
-            Util::Strncpy(pDriverProperties->driverName, VULKAN_DRIVER_NAME_STR, VK_MAX_DRIVER_NAME_SIZE_KHR);
-            Util::Strncpy(pDriverProperties->driverInfo, VULKAN_DRIVER_INFO_STR, VK_MAX_DRIVER_INFO_SIZE_KHR);
-
-            pDriverProperties->conformanceVersion.major     = CTS_VERSION_MAJOR;
-            pDriverProperties->conformanceVersion.minor     = CTS_VERSION_MINOR;
-            pDriverProperties->conformanceVersion.subminor  = CTS_VERSION_SUBMINOR;
-            pDriverProperties->conformanceVersion.patch     = CTS_VERSION_PATCH;
-
+            GetPhysicalDeviceDriverProperties(
+                &pDriverProperties->driverID,
+                pDriverProperties->driverName,
+                pDriverProperties->driverInfo,
+                &pDriverProperties->conformanceVersion);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
         {
             pVertexAttributeDivisorProperties->maxVertexAttribDivisor = UINT32_MAX;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES_KHR:
+        {
+            GetPhysicalDeviceFloatControlsProperties(pFloatControlsProperties);
             break;
         }
 
@@ -4200,14 +4635,11 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES_KHR:
         {
-            pDepthStencilResolveProperties->supportedDepthResolveModes   = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
-                                                                           VK_RESOLVE_MODE_MIN_BIT_KHR |
-                                                                           VK_RESOLVE_MODE_MAX_BIT_KHR;
-            pDepthStencilResolveProperties->supportedStencilResolveModes = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR |
-                                                                           VK_RESOLVE_MODE_MIN_BIT_KHR |
-                                                                           VK_RESOLVE_MODE_MAX_BIT_KHR;
-            pDepthStencilResolveProperties->independentResolveNone       = VK_TRUE;
-            pDepthStencilResolveProperties->independentResolve           = VK_TRUE;
+            GetPhysicalDeviceDepthStencilResolveProperties(
+                &pDepthStencilResolveProperties->supportedDepthResolveModes,
+                &pDepthStencilResolveProperties->supportedStencilResolveModes,
+                &pDepthStencilResolveProperties->independentResolveNone,
+                &pDepthStencilResolveProperties->independentResolve);
             break;
         }
 
@@ -4222,6 +4654,12 @@ void PhysicalDevice::GetDeviceProperties2(
             // Do not support setting a required subgroup size in any stage.
             pSubgroupSizeControlProperties->requiredSubgroupSizeStages = 0;
 
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_EXT:
+        {
+            pLineRasterizationProperties->lineSubPixelPrecisionBits = Pal::SubPixelBits;
             break;
         }
 

@@ -228,6 +228,7 @@ void GraphicsPipeline::GenerateHashFromRasterizationStateCreateInfo(
             const VkPipelineRasterizationStateRasterizationOrderAMD*     pRasterizationOrder;
             const VkPipelineRasterizationStateStreamCreateInfoEXT*       pStreamCreateInfo;
             const VkPipelineRasterizationDepthClipStateCreateInfoEXT*    pRsDepthClip;
+            const VkPipelineRasterizationLineStateCreateInfoEXT*         pLineState;
         };
 
         pInfo = static_cast<const VkStructHeader*>(desc.pNext);
@@ -258,6 +259,14 @@ void GraphicsPipeline::GenerateHashFromRasterizationStateCreateInfo(
                 pBaseHasher->Update(pRsDepthClip->depthClipEnable);
 
                 break;
+            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT:
+                pBaseHasher->Update(pLineState->lineRasterizationMode);
+                pBaseHasher->Update(pLineState->stippledLineEnable);
+                pBaseHasher->Update(pLineState->lineStippleFactor);
+                pBaseHasher->Update(pLineState->lineStipplePattern);
+
+                break;
+
             default:
                 break;
             }
@@ -614,6 +623,7 @@ void GraphicsPipeline::BuildRasterizationState(
         const VkPipelineRasterizationStateRasterizationOrderAMD*        pRsOrder;
         const VkPipelineRasterizationConservativeStateCreateInfoEXT*    pRsConservative;
         const VkPipelineRasterizationStateStreamCreateInfoEXT*          pRsStream;
+        const VkPipelineRasterizationLineStateCreateInfoEXT*            pRsRasterizationLine;
     };
 
     // By default rasterization is disabled, unless rasterization creation info is present
@@ -716,6 +726,34 @@ void GraphicsPipeline::BuildRasterizationState(
                     pInfo->rasterizationStream = pRsStream->rasterizationStream;
                 }
                 break;
+            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT:
+                {
+                    pInfo->bresenhamEnable =
+                        (pRsRasterizationLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT);
+
+                    // Bresenham Lines need axis aligned end caps
+                    if (pInfo->bresenhamEnable)
+                    {
+                        pInfo->pipeline.rsState.perpLineEndCapsEnable = false;
+                    }
+                    else if (pRsRasterizationLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT)
+                    {
+                        pInfo->pipeline.rsState.perpLineEndCapsEnable = true;
+                    }
+
+                    pInfo->msaa.flags.enableLineStipple                   = pRsRasterizationLine->stippledLineEnable;
+
+                    pInfo->immedInfo.lineStippleParams.lineStippleScale   = (pRsRasterizationLine->lineStippleFactor - 1);
+                    pInfo->immedInfo.lineStippleParams.lineStippleValue   = pRsRasterizationLine->lineStipplePattern;
+
+                    if (pRsRasterizationLine->stippledLineEnable &&
+                       (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::LINE_STIPPLE_EXT)] == false))
+                    {
+                        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::LINE_STIPPLE_EXT);
+                    }
+                }
+                break;
+
             default:
                 // Skip any unknown extension structures
                 break;
@@ -825,6 +863,10 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                         dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT)] = true;
                         break;
 
+                    case VK_DYNAMIC_STATE_LINE_STIPPLE_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::LINE_STIPPLE_EXT)] = true;
+                        break;
+
                     default:
                         // skip unknown dynamic state
                         break;
@@ -917,7 +959,8 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                 PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
 
-            bool multisampleEnable     = (pMs->rasterizationSamples != 1);
+            bool multisampleEnable     = (pMs->rasterizationSamples != 1) &&
+                                         (pInfo->bresenhamEnable == false);
 
             bool customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
                                           (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
@@ -1298,6 +1341,39 @@ VkResult GraphicsPipeline::Create(
                     Util::VoidPtrInc(pSystemMem, palOffset),
                     &pPalPipeline[deviceIdx]);
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
+                // Temporarily reinject post Pal pipeline creation (when the internal pipeline hash is available).
+                // The reinjection cache layer can be linked back into the pipeline cache chain once the
+                // Vulkan pipeline cache key can be stored (and read back) inside the ELF as metadata.
+                if ((pDevice->VkInstance()->GetDevModeMgr() != nullptr) &&
+                    (palResult == Util::Result::Success))
+                {
+                    const auto& info = pPalPipeline[deviceIdx]->GetInfo();
+
+                    palResult = pDevice->GetCompiler(deviceIdx)->RegisterAndLoadReinjectionBinary(
+                        &info.internalPipelineHash,
+                        &cacheId[deviceIdx],
+                        &localPipelineInfo.pipeline.pipelineBinarySize,
+                        &localPipelineInfo.pipeline.pPipelineBinary,
+                        pPipelineCache);
+
+                    if (palResult == Util::Result::Success)
+                    {
+                        pPalPipeline[deviceIdx]->Destroy();
+
+                        palResult = pPalDevice->CreateGraphicsPipeline(
+                            localPipelineInfo.pipeline,
+                            Util::VoidPtrInc(pSystemMem, palOffset),
+                            &pPalPipeline[deviceIdx]);
+                    }
+                    else if (palResult == Util::Result::NotFound)
+                    {
+                        // If a replacement was not found, proceed with the original
+                        palResult = Util::Result::Success;
+                    }
+                }
+#endif
+
                 VK_ASSERT(palSize == pPalDevice->GetGraphicsPipelineSize(localPipelineInfo.pipeline, nullptr));
                 palOffset += palSize;
             }
@@ -1488,6 +1564,7 @@ void GraphicsPipeline::CreateStaticState()
     pStaticTokens->scissorRect                = DynamicRenderStateToken;
     pStaticTokens->samplePattern              = DynamicRenderStateToken;
     pStaticTokens->waveLimits                 = DynamicRenderStateToken;
+    pStaticTokens->lineStippleState           = DynamicRenderStateToken;
 
     if (ContainsStaticState(DynamicStatesInternal::LINE_WIDTH))
     {
@@ -1523,6 +1600,11 @@ void GraphicsPipeline::CreateStaticState()
     if (ContainsStaticState(DynamicStatesInternal::SAMPLE_LOCATIONS_EXT))
     {
         pStaticTokens->samplePattern = pCache->CreateSamplePattern(m_info.samplePattern);
+    }
+
+    if (ContainsStaticState(DynamicStatesInternal::LINE_STIPPLE_EXT))
+    {
+        pStaticTokens->lineStippleState = pCache->CreateLineStipple(m_info.lineStippleParams);
     }
 
 }
@@ -1696,6 +1778,13 @@ void GraphicsPipeline::BindToCmdBuffer(
         {
             pPalCmdBuf->CmdSetPointLineRasterState(m_info.pointLineRasterParams);
             pRenderState->allGpuState.staticTokens.pointLineRasterState = newTokens.pointLineRasterState;
+        }
+
+        if (ContainsStaticState(DynamicStatesInternal::LINE_STIPPLE_EXT) &&
+            CmdBuffer::IsStaticStateDifferent(oldTokens.lineStippleState, newTokens.lineStippleState))
+        {
+            pPalCmdBuf->CmdSetLineStippleState(m_info.lineStippleParams);
+            pRenderState->allGpuState.staticTokens.lineStippleState = newTokens.lineStippleState;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::DEPTH_BIAS) &&

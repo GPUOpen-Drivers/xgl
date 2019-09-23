@@ -42,6 +42,8 @@
 #include "palFile.h"
 #include "palHashSetImpl.h"
 
+#include "include/pipeline_binary_cache.h"
+
 #include "palPipelineAbiProcessorImpl.h"
 
 #include <inttypes.h>
@@ -57,13 +59,46 @@ PipelineCompiler::PipelineCompiler(
     :
     m_pPhysicalDevice(pPhysicalDevice)
     , m_compilerSolutionLlpc(pPhysicalDevice)
+    , m_pBinaryCache(nullptr)
+    , m_cacheAttempts(0)
+    , m_cacheHits(0)
+    , m_totalBinaries(0)
+    , m_totalTimeSpent(0)
 {
 
 }
 
 // =====================================================================================================================
+// Dump pipeline elf cache metrics to a string
+void PipelineCompiler::GetElfCacheMetricString(
+    char*   pOutStr,
+    size_t  outStrSize)
+{
+    const int64_t freq = Util::GetPerfFrequency();
+
+    const int64_t avgUs = ((m_totalTimeSpent / m_totalBinaries) * 1000000) / freq;
+    const double  avgMs = avgUs / 1000.0;
+
+    const int64_t totalUs = (m_totalTimeSpent * 1000000) / freq;
+    const double  totalMs = totalUs / 1000.0;
+
+    const double  hitRate = m_cacheAttempts > 0 ?
+        (static_cast<double>(m_cacheHits) / static_cast<double>(m_cacheAttempts)) :
+        0.0;
+
+    static constexpr char metricFmtString[] =
+        "Cache hit rate - %0.1f%%\n"
+        "Total request count - %d\n"
+        "Total time spent - %0.1f ms\n"
+        "Average time spent per request - %0.3f ms\n";
+
+    Util::Snprintf(pOutStr, outStrSize, metricFmtString, hitRate * 100, m_totalBinaries, totalMs, avgMs);
+}
+
+// =====================================================================================================================
 PipelineCompiler::~PipelineCompiler()
 {
+    VK_ASSERT(m_pBinaryCache == nullptr);
 }
 
 // =====================================================================================================================
@@ -119,6 +154,17 @@ VkResult PipelineCompiler::Initialize()
         result = m_compilerSolutionLlpc.Initialize();
     }
 
+    if ((result == VK_SUCCESS) &&
+        ((settings.usePalPipelineCaching) ||
+         (m_pPhysicalDevice->VkInstance()->GetDevModeMgr() != nullptr)))
+    {
+        m_pBinaryCache = PipelineBinaryCache::Create(
+                m_pPhysicalDevice->VkInstance(), 0, nullptr, true, m_gfxIp, m_pPhysicalDevice);
+
+        // This isn't a terminal failure, the device can continue without the pipeline cache if need be.
+        VK_ALERT(m_pBinaryCache == nullptr);
+    }
+
     return result;
 }
 
@@ -127,6 +173,13 @@ VkResult PipelineCompiler::Initialize()
 void PipelineCompiler::Destroy()
 {
     m_compilerSolutionLlpc.Destroy();
+
+    if (m_pBinaryCache)
+    {
+        m_pBinaryCache->Destroy();
+        m_pPhysicalDevice->VkInstance()->FreeMem(m_pBinaryCache);
+        m_pBinaryCache = nullptr;
+    }
 
 }
 
@@ -207,10 +260,11 @@ bool PipelineCompiler::LoadReplaceShaderBinary(
 // =====================================================================================================================
 // Builds shader module from SPIR-V binary code.
 VkResult PipelineCompiler::BuildShaderModule(
-    const Device*       pDevice,
-    size_t              codeSize,
-    const void*         pCode,
-    ShaderModuleHandle* pShaderModule)
+    const Device*               pDevice,
+    VkShaderModuleCreateFlags   flags,
+    size_t                      codeSize,
+    const void*                 pCode,
+    ShaderModuleHandle*         pShaderModule)
 {
     const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
@@ -235,7 +289,7 @@ VkResult PipelineCompiler::BuildShaderModule(
 
     if (compilerMask & (1 << PipelineCompilerTypeLlpc))
     {
-        result = m_compilerSolutionLlpc.BuildShaderModule(pDevice, codeSize, pCode, pShaderModule, hash);
+        result = m_compilerSolutionLlpc.BuildShaderModule(pDevice, flags, codeSize, pCode, pShaderModule, hash);
     }
 
     if (findReplaceShader)
@@ -314,7 +368,7 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
 
         if (LoadReplaceShaderBinary(hash64, &codeSize, &pCode))
         {
-            VkResult result = BuildShaderModule(pDevice, codeSize, pCode, pShaderModule);
+            VkResult result = BuildShaderModule(pDevice, 0, codeSize, pCode, pShaderModule);
             if (result == VK_SUCCESS)
             {
                 pShaderInfo->pModuleData = ShaderModule::GetShaderData(compilerType, pShaderModule);
@@ -566,12 +620,119 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 #endif
     }
 
+    // PAL Pipeline caching
+    Util::Result                 cacheResult = Util::Result::Success;
+
+    int64_t cacheTime   = 0;
+
+    bool isUserCacheHit     = false;
+    bool isInternalCacheHit = false;
+
+    PipelineBinaryCache* pPipelineBinaryCache = nullptr;
+
+    if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
+    {
+        pPipelineBinaryCache = pPipelineCache->GetPipelineCache();
+    }
+
+    if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
+    {
+        int64_t startTime = Util::GetPerfCpuTime();
+        Util::MetroHash128 hash = {};
+        hash.Update(pipelineHash);
+        hash.Update(pCreateInfo->pipelineInfo.vs.options);
+        hash.Update(pCreateInfo->pipelineInfo.tes.options);
+        hash.Update(pCreateInfo->pipelineInfo.tcs.options);
+        hash.Update(pCreateInfo->pipelineInfo.gs.options);
+        hash.Update(pCreateInfo->pipelineInfo.fs.options);
+        hash.Update(pCreateInfo->pipelineInfo.options);
+        hash.Update(pCreateInfo->pipelineInfo.nggState);
+        hash.Update(pCreateInfo->flags);
+        hash.Update(pCreateInfo->dbFormat);
+        hash.Update(pCreateInfo->pipelineProfileKey);
+        hash.Update(deviceIdx);
+        hash.Update(pCreateInfo->compilerType);
+        hash.Finalize(pCacheId->bytes);
+
+        const void* pPipelineBinary = nullptr;
+
+        if (pPipelineBinaryCache != nullptr)
+        {
+            cacheResult = pPipelineBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, &pPipelineBinary);
+            if (cacheResult == Util::Result::Success)
+            {
+                isUserCacheHit = true;
+                pCreateInfo->pipelineFeedback.hitApplicationCache = true;
+                *ppPipelineBinary = pPipelineBinary;
+            }
+        }
+        m_cacheAttempts++;
+
+        if (m_pBinaryCache != nullptr)
+        {
+            // If user cache is already hit, we just need query if it is in internal cache,
+            // don't need heavy loading work.
+            if (isUserCacheHit)
+            {
+                Util::QueryResult query  = {};
+                cacheResult = m_pBinaryCache->QueryPipelineBinary(pCacheId, &query);
+            }
+            else
+            {
+                cacheResult = m_pBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, &pPipelineBinary);
+            }
+            if (cacheResult == Util::Result::Success)
+            {
+                isInternalCacheHit = true;
+                if (!isUserCacheHit)
+                {
+                    *ppPipelineBinary = pPipelineBinary;
+                }
+            }
+        }
+        if (isUserCacheHit || isInternalCacheHit)
+        {
+            pCreateInfo->elfWasCached = true;
+            shouldCompile             = false;
+            m_cacheHits++;
+        }
+
+        cacheTime = Util::GetPerfCpuTime() - startTime;
+    }
+
     if ((pCreateInfo->compilerType == PipelineCompilerTypeLlpc) && shouldCompile)
     {
         result = m_compilerSolutionLlpc.CreateGraphicsPipelineBinary(pDevice, deviceIdx, pPipelineCache, pCreateInfo,
             pPipelineBinarySize, ppPipelineBinary, rasterizationStream, shaderInfos, pPipelineDumpHandle,
             pipelineHash, &compileTime);
     }
+
+    if ((pPipelineBinaryCache != nullptr) &&
+        (isUserCacheHit == false) &&
+        (result == VK_SUCCESS))
+    {
+        cacheResult = pPipelineBinaryCache->StorePipelineBinary(
+            pCacheId,
+            *pPipelineBinarySize,
+            *ppPipelineBinary);
+
+        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
+    }
+
+    if ((m_pBinaryCache != nullptr) &&
+        (isInternalCacheHit == false) &&
+        (result == VK_SUCCESS))
+    {
+        cacheResult = m_pBinaryCache->StorePipelineBinary(
+            pCacheId,
+            *pPipelineBinarySize,
+            *ppPipelineBinary);
+
+        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
+    }
+
+    m_totalTimeSpent += pCreateInfo->elfWasCached ? cacheTime : compileTime;
+    m_totalBinaries++;
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
@@ -671,12 +832,112 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         }
     }
 
+    // PAL Pipeline caching
+    Util::Result                 cacheResult = Util::Result::Success;
+
+    int64_t cacheTime   = 0;
+
+    bool isUserCacheHit     = false;
+    bool isInternalCacheHit = false;
+
+    PipelineBinaryCache* pPipelineBinaryCache = nullptr;
+
+    if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
+    {
+        pPipelineBinaryCache = pPipelineCache->GetPipelineCache();
+    }
+
+    if (shouldCompile && ((pPipelineBinaryCache != nullptr) || (m_pBinaryCache != nullptr)))
+    {
+        int64_t startTime = Util::GetPerfCpuTime();
+        Util::MetroHash128 hash = {};
+        hash.Update(pipelineHash);
+        hash.Update(pCreateInfo->pipelineInfo.cs.options);
+        hash.Update(pCreateInfo->pipelineInfo.options);
+        hash.Update(pCreateInfo->flags);
+        hash.Update(pCreateInfo->pipelineProfileKey);
+        hash.Update(deviceIdx);
+        hash.Update(pCreateInfo->compilerType);
+        hash.Finalize(pCacheId->bytes);
+
+        const void* pPipelineBinary = nullptr;
+
+        if (pPipelineBinaryCache != nullptr)
+        {
+            cacheResult = pPipelineBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, &pPipelineBinary);
+            if (cacheResult == Util::Result::Success)
+            {
+                isUserCacheHit = true;
+                pCreateInfo->pipelineFeedback.hitApplicationCache = true;
+                *ppPipelineBinary = pPipelineBinary;
+            }
+        }
+        m_cacheAttempts++;
+
+        if (m_pBinaryCache != nullptr)
+        {
+            // If user cache is already hit, we just need query if it is in internal cache,
+            // don't need heavy loading work.
+            if (isUserCacheHit)
+            {
+                Util::QueryResult query  = {};
+                cacheResult = m_pBinaryCache->QueryPipelineBinary(pCacheId, &query);
+            }
+            else
+            {
+                cacheResult = m_pBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, &pPipelineBinary);
+            }
+            if (cacheResult == Util::Result::Success)
+            {
+                isInternalCacheHit = true;
+                if (!isUserCacheHit)
+                {
+                    *ppPipelineBinary = pPipelineBinary;
+                }
+            }
+        }
+        if (isUserCacheHit || isInternalCacheHit)
+        {
+            pCreateInfo->elfWasCached = true;
+            shouldCompile             = false;
+            m_cacheHits++;
+        }
+
+        cacheTime = Util::GetPerfCpuTime() - startTime;
+    }
+
     if ((pCreateInfo->compilerType == PipelineCompilerTypeLlpc) && shouldCompile)
     {
         result = m_compilerSolutionLlpc.CreateComputePipelineBinary(pDevice, deviceIdx, pPipelineCache, pCreateInfo,
             pPipelineBinarySize, ppPipelineBinary, pPipelineDumpHandle, pipelineHash, &compileTime);
     }
 
+    if ((pPipelineBinaryCache != nullptr) &&
+        (isUserCacheHit == false) &&
+        (result == VK_SUCCESS))
+    {
+        cacheResult = pPipelineBinaryCache->StorePipelineBinary(
+            pCacheId,
+            *pPipelineBinarySize,
+            *ppPipelineBinary);
+
+        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
+    }
+
+    if ((m_pBinaryCache != nullptr) &&
+        (isInternalCacheHit == false) &&
+        (result == VK_SUCCESS))
+    {
+        cacheResult = m_pBinaryCache->StorePipelineBinary(
+            pCacheId,
+            *pPipelineBinarySize,
+            *ppPipelineBinary);
+
+        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
+    }
+
+    m_totalTimeSpent += pCreateInfo->elfWasCached ? cacheTime : compileTime;
+    m_totalBinaries++;
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
         ReplacePipelineIsaCode(pDevice, pipelineHash, *ppPipelineBinary, *pPipelineBinarySize);
@@ -771,7 +1032,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     VkResult               result    = VK_SUCCESS;
     const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-
+    auto                   flags     = pIn->flags;
     EXTRACT_VK_STRUCTURES_0(
         gfxPipeline,
         GraphicsPipelineCreateInfo,
@@ -966,7 +1227,14 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     if (m_gfxIp.major >= 10)
     {
-        pCreateInfo->pipelineInfo.nggState.enableNgg                  = settings.enableNgg;
+        const bool                 hasGs        = pStageInfos[ShaderStageGeometry] != nullptr;
+        const bool                 hasTess      = pStageInfos[ShaderStageTessControl] != nullptr;
+        const GraphicsPipelineType pipelineType =
+            hasTess ? (hasGs ? GraphicsPipelineTypeTessGs : GraphicsPipelineTypeTess) :
+                      (hasGs ? GraphicsPipelineTypeGs : GraphicsPipelineTypeVsFs);
+
+        pCreateInfo->pipelineInfo.nggState.enableNgg                  =
+            Util::TestAnyFlagSet(settings.enableNgg, pipelineType);
         pCreateInfo->pipelineInfo.nggState.enableGsUse                = settings.nggEnableGsUse;
         pCreateInfo->pipelineInfo.nggState.forceNonPassthrough        = settings.nggForceNonPassthrough;
         pCreateInfo->pipelineInfo.nggState.alwaysUsePrimShaderTable   = settings.nggAlwaysUsePrimShaderTable;
@@ -995,25 +1263,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.nggState.vertsPerSubgroup           = settings.nggVertsPerSubgroup;
     }
 
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
-    {
-        pCreateInfo->pipelineInfo.options.includeDisassembly = true;
-        pCreateInfo->pipelineInfo.options.includeIr = true;
-#if (LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25) && (LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 27)
-        pCreateInfo->pipelineInfo.options.includeIrBinary = true;
-#endif
-    }
-
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))
-    {
-        pCreateInfo->pipelineInfo.options.scalarBlockLayout = true;
-    }
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 23
-    if (pDevice->GetEnabledFeatures().robustBufferAccess)
-    {
-        pCreateInfo->pipelineInfo.options.robustBufferAccess = true;
-    }
-#endif
+    ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options);
 
     if (pLayout != nullptr)
     {
@@ -1133,6 +1383,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pShaderInfo->pModuleData = pShaderModule->GetShaderData(pCreateInfo->compilerType);
     }
 
+    pCreateInfo->elfWasCached = false;
+
     return result;
 }
 
@@ -1176,6 +1428,36 @@ uint32_t PipelineCompiler::GetCompilerCollectionMask()
 }
 
 // =====================================================================================================================
+void PipelineCompiler::ApplyPipelineOptions(
+    const Device*            pDevice,
+    VkPipelineCreateFlags    flags,
+    Llpc::PipelineOptions*   pOptions)
+{
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
+        (pDevice->IsExtensionEnabled(DeviceExtensions::KHR_PIPELINE_EXECUTABLE_PROPERTIES) &&
+        ((flags & VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR) != 0)))
+    {
+        pOptions->includeDisassembly = true;
+        pOptions->includeIr = true;
+#if (LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25) && (LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 27)
+        pOptions->includeIrBinary = true;
+#endif
+    }
+
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))
+    {
+        pOptions->scalarBlockLayout = true;
+    }
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 23
+    if (pDevice->GetEnabledFeatures().robustBufferAccess)
+    {
+        pOptions->robustBufferAccess = true;
+    }
+#endif
+}
+
+// =====================================================================================================================
 // Converts Vulkan compute pipeline parameters to an internal structure
 VkResult PipelineCompiler::ConvertComputePipelineInfo(
     Device*                                         pDevice,
@@ -1198,26 +1480,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
         pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
     pCreateInfo->flags  = pIn->flags;
-
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO))
-    {
-        pCreateInfo->pipelineInfo.options.includeDisassembly = true;
-        pCreateInfo->pipelineInfo.options.includeIr = true;
-#if (LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25) && (LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 27)
-        pCreateInfo->pipelineInfo.options.includeIrBinary = true;
-#endif
-    }
-
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))
-    {
-        pCreateInfo->pipelineInfo.options.scalarBlockLayout = true;
-    }
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 23
-    if (pDevice->GetEnabledFeatures().robustBufferAccess)
-    {
-        pCreateInfo->pipelineInfo.options.robustBufferAccess = true;
-    }
-#endif
+    ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
 
     if (pLayout != nullptr)
     {
@@ -1378,6 +1641,11 @@ void PipelineCompiler::FreeComputePipelineBinary(
     const void*                pPipelineBinary,
     size_t                     binarySize)
 {
+    if (pCreateInfo->elfWasCached)
+    {
+        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+    }
+    else
     {
         if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
         {
@@ -1394,6 +1662,11 @@ void PipelineCompiler::FreeGraphicsPipelineBinary(
     const void*                 pPipelineBinary,
     size_t                      binarySize)
 {
+    if (pCreateInfo->elfWasCached)
+    {
+        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
+    }
+    else
     {
         if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
         {
@@ -1430,5 +1703,52 @@ void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
         pCreateInfo->pMappingBuffer = nullptr;
     }
 }
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
+Util::Result PipelineCompiler::RegisterAndLoadReinjectionBinary(
+    const Pal::PipelineHash*     pInternalPipelineHash,
+    const Util::MetroHash::Hash* pCacheId,
+    size_t*                      pBinarySize,
+    const void**                 ppPipelineBinary,
+    PipelineCache*               pPipelineCache)
+{
+    Util::Result result = Util::Result::NotFound;
+
+    PipelineBinaryCache* pPipelineBinaryCache = m_pBinaryCache;
+
+    if ((pPipelineCache != nullptr) && (pPipelineCache->GetPipelineCache() != nullptr))
+    {
+        pPipelineBinaryCache = pPipelineCache->GetPipelineCache();
+    }
+
+    if (pPipelineBinaryCache != nullptr)
+    {
+        pPipelineBinaryCache->RegisterHashMapping(
+            pInternalPipelineHash,
+            pCacheId);
+
+        static_assert(sizeof(Pal::PipelineHash) == sizeof(PipelineBinaryCache::CacheId), "Structure size mismatch");
+
+        if (m_pBinaryCache != nullptr)
+        {
+            result = m_pBinaryCache->LoadReinjectionBinary(
+                reinterpret_cast<const PipelineBinaryCache::CacheId*>(pInternalPipelineHash),
+                pBinarySize,
+                ppPipelineBinary);
+        }
+
+        if ((result == Util::Result::NotFound) &&
+            (pPipelineBinaryCache != m_pBinaryCache))
+        {
+            result = pPipelineBinaryCache->LoadReinjectionBinary(
+                reinterpret_cast<const PipelineBinaryCache::CacheId*>(pInternalPipelineHash),
+                pBinarySize,
+                ppPipelineBinary);
+        }
+    }
+
+    return result;
+}
+#endif
 
 }

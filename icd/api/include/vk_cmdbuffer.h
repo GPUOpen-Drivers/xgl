@@ -151,6 +151,7 @@ struct AllGpuRenderState
         uint32_t inputAssemblyState;
         uint32_t triangleRasterState;
         uint32_t pointLineRasterState;
+        uint32_t lineStippleState;
         uint32_t depthBiasState;
         uint32_t blendConst;
         uint32_t depthBounds;
@@ -181,6 +182,7 @@ struct AllGpuRenderState
 
     Pal::ScissorRectParams       scissor;
     Pal::ViewportParams          viewport;
+    Pal::LineStippleStateParams  lineStipple;
 };
 
 // This structure describes current render state within a command buffer during its building.
@@ -424,6 +426,10 @@ public:
         const Pal::ScissorRectParams&               params,
         uint32_t                                    staticToken);
 
+    void SetLineStippleEXT(
+        const Pal::LineStippleStateParams&          params,
+        uint32_t                                    staticToken);
+
     void SetLineWidth(
         float                                       lineWidth);
 
@@ -565,6 +571,10 @@ public:
         VkDeviceSize    counterBufferOffset,
         uint32_t        counterOffset,
         uint32_t        vertexStride);
+
+    void SetLineStippleEXT(
+        uint32_t        lineStippleFactor,
+        uint16_t        lineStipplePattern);
 
     VK_INLINE void SetDeviceMask(uint32_t deviceMask)
     {

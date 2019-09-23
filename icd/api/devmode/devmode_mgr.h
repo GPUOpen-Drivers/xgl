@@ -107,6 +107,7 @@ class Pipeline;
 class Queue;
 class SqttCmdBufferState;
 class CmdBuffer;
+class PipelineBinaryCache;
 };
 
 namespace vk
@@ -147,8 +148,7 @@ public:
     void StartInstructionTrace(CmdBuffer* pCmdBuffer);
     void StopInstructionTrace(CmdBuffer* pCmdBuffer);
 
-    VK_INLINE bool IsTracingEnabled() const
-        { VK_ASSERT(m_finalized); return m_tracingEnabled; }
+    bool IsTracingEnabled() const;
 
     Pal::Result TimedQueueSubmit(
         uint32_t               deviceIdx,
@@ -175,6 +175,19 @@ public:
     VK_INLINE bool IsQueueTimingActive(const Device* pDevice) const;
     VK_INLINE bool GetTraceFrameBeginTag(uint64_t* pTag) const;
     VK_INLINE bool GetTraceFrameEndTag(uint64_t* pTag) const;
+
+    Util::Result RegisterPipelineCache(
+        PipelineBinaryCache* pPipelineCache,
+        uint32_t             postSizeLimit);
+
+    void DeregisterPipelineCache(
+        PipelineBinaryCache* pPipelineCache);
+
+    VK_INLINE Util::ListIterator<PipelineBinaryCache*, PalAllocator> GetPipelineCacheListIterator()
+        { return m_pipelineCaches.Begin(); }
+
+    VK_INLINE Util::RWLock* GetPipelineReinjectionLock()
+        { return &m_pipelineReinjectionLock; }
 
 private:
     // Steps that an RGP trace goes through
@@ -309,7 +322,6 @@ private:
     bool                                m_rgpServerSupportsTracing; // True if gpuopen protocol successfully enabled
                                                                     // tracing
     bool                                m_finalized;
-    bool                                m_tracingEnabled;           // True if tracing is currently enabled (master flag)
     uint32_t                            m_numPrepFrames;
     uint32_t                            m_traceGpuMemLimit;
     bool                                m_enableInstTracing;        // Enable instruction-level SQTT tokens
@@ -322,6 +334,11 @@ private:
     uint32_t                            m_traceFrameBeginIndex;
     uint32_t                            m_traceFrameEndIndex;
     uint64_t                            m_targetApiPsoHash;
+
+    using PipelineCacheList = Util::List<PipelineBinaryCache*, PalAllocator>;
+
+    PipelineCacheList                   m_pipelineCaches;
+    Util::RWLock                        m_pipelineReinjectionLock;
 
     PAL_DISALLOW_DEFAULT_CTOR(DevModeMgr);
     PAL_DISALLOW_COPY_AND_ASSIGN(DevModeMgr);

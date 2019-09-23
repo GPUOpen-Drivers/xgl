@@ -117,10 +117,11 @@ public:
         m_table[index] = func;
     }
 
-protected:
     bool CheckAPIVersion(uint32_t apiVersion);
     bool CheckInstanceExtension(InstanceExtensions::ExtensionId id);
     bool CheckDeviceExtension(DeviceExtensions::ExtensionId id);
+
+protected:
 
     union
     {

@@ -242,6 +242,38 @@ VkResult ComputePipeline::Create(
                 Util::VoidPtrInc(pPalMem, deviceIdx * pipelineSize),
                 &pPalPipeline[deviceIdx]);
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
+            // Temporarily reinject post Pal pipeline creation (when the internal pipeline hash is available).
+            // The reinjection cache layer can be linked back into the pipeline cache chain once the
+            // Vulkan pipeline cache key can be stored (and read back) inside the ELF as metadata.
+            if ((pDevice->VkInstance()->GetDevModeMgr() != nullptr) &&
+                (palResult == Util::Result::Success))
+            {
+                const auto& info = pPalPipeline[deviceIdx]->GetInfo();
+
+                palResult = pDevice->GetCompiler(deviceIdx)->RegisterAndLoadReinjectionBinary(
+                    &info.internalPipelineHash,
+                    &cacheId[deviceIdx],
+                    &localPipelineInfo.pipeline.pipelineBinarySize,
+                    &localPipelineInfo.pipeline.pPipelineBinary,
+                    pPipelineCache);
+
+                if (palResult == Util::Result::Success)
+                {
+                    pPalPipeline[deviceIdx]->Destroy();
+
+                    palResult = pDevice->PalDevice(deviceIdx)->CreateComputePipeline(
+                        localPipelineInfo.pipeline,
+                        Util::VoidPtrInc(pPalMem, deviceIdx * pipelineSize),
+                        &pPalPipeline[deviceIdx]);
+                }
+                else if (palResult == Util::Result::NotFound)
+                {
+                    // If a replacement was not found, proceed with the original
+                    palResult = Util::Result::Success;
+                }
+            }
+#endif
         }
 
         result = PalToVkResult(palResult);

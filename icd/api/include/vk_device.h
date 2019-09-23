@@ -89,6 +89,7 @@ class Queue;
 class SqttMgr;
 class SwapChain;
 class ChillMgr;
+class AsyncLayer;
 
 // =====================================================================================================================
 // Specifies properties for importing a semaphore, it's an encapsulation of VkImportSemaphoreFdInfoKHR and
@@ -498,6 +499,10 @@ public:
     VK_INLINE BarrierFilterLayer* GetBarrierFilterLayer()
         { return m_pBarrierFilterLayer; }
 
+    VK_INLINE AsyncLayer* GetAsyncLayer()
+    {
+        return m_pAsyncLayer;
+    }
     VK_INLINE Util::Mutex* GetMemoryMutex()
         { return &m_memoryMutex; }
 
@@ -604,6 +609,7 @@ protected:
     const DeviceExtensions::Enabled     m_enabledExtensions;    // Enabled device extensions
     DispatchTable                       m_dispatchTable;        // Device dispatch table
     SqttMgr*                            m_pSqttMgr;             // Manager for developer mode SQ thread tracing
+    AsyncLayer*                         m_pAsyncLayer;          // State for async compiler layer, otherwise null
     OptLayer*                           m_pAppOptLayer;         // State for an app-specific layer, otherwise null
     BarrierFilterLayer*                 m_pBarrierFilterLayer;  // State for enabling barrier filtering, otherwise null
     Util::Mutex                         m_memoryMutex;          // Shared mutex used occasionally by memory objects
@@ -936,6 +942,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
 VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(
     VkDevice                                    device,
     const VkDebugUtilsObjectTagInfoEXT*         pTagInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    lineStippleFactor,
+    uint16_t                                    lineStipplePattern);
 
 } // namespace entry
 

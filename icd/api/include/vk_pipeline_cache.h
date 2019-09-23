@@ -77,9 +77,11 @@ public:
 
     VkResult Merge(uint32_t srcCacheCount, const PipelineCache** ppSrcCaches);
 
+    VK_INLINE PipelineBinaryCache* GetPipelineCache() { return m_pBinaryCache; }
 protected:
     PipelineCache(const Device*  pDevice,
-            ShaderCache*         pShaderCaches
+            ShaderCache*         pShaderCaches,
+            PipelineBinaryCache* pBinaryCache
             );
 
     virtual ~PipelineCache();
@@ -87,6 +89,7 @@ protected:
     const Device*const  m_pDevice;
     ShaderCache         m_shaderCaches[MaxPalDevices];
 
+    PipelineBinaryCache* m_pBinaryCache;       // Pipeline binary cache object
 };
 
 namespace entry

@@ -182,8 +182,12 @@ private:
 
     Pal::Result BuildSamplePatternMemoryStore(uint32_t attachment);
     Pal::Result BuildEndState();
-    Pal::Result TrackAttachmentUsage(uint32_t subpass, AttachRefType refType, uint32_t attachment,
-        RPImageLayout layout, SyncPointState* pSync);
+    Pal::Result TrackAttachmentUsage(
+        uint32_t             subpass,
+        AttachRefType        refType,
+        uint32_t             attachment,
+        RPImageLayout        layout,
+        SyncPointState*      pSync);
     void WaitForResolves(SyncPointState* pSync);
     void WaitForResolvesFromSubpass(uint32_t subpass, SyncPointState* pSync);
 

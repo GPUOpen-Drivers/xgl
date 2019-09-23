@@ -32,16 +32,20 @@
 #include "include/vk_pipeline_cache.h"
 #include "palAutoBuffer.h"
 
+#include "include/pipeline_binary_cache.h"
+
 namespace vk
 {
 
 // =====================================================================================================================
 PipelineCache::PipelineCache(
     const Device*           pDevice,
-    ShaderCache*            pShaderCaches
+    ShaderCache*            pShaderCaches,
+    PipelineBinaryCache*    pBinaryCache
     )
     :
-    m_pDevice(pDevice)
+    m_pDevice(pDevice),
+    m_pBinaryCache(pBinaryCache)
 {
     memcpy(m_shaderCaches, pShaderCaches, sizeof(m_shaderCaches[0]) * pDevice->NumPalDevices());
     memset(m_shaderCaches + pDevice->NumPalDevices(),
@@ -174,7 +178,19 @@ VkResult PipelineCache::Create(
 
         if (result == VK_SUCCESS)
         {
-            PipelineCache* pCache = VK_PLACEMENT_NEW(pMemory) PipelineCache(pDevice, shaderCaches);
+            PipelineBinaryCache* pBinaryCache = nullptr;
+            if (((settings.usePalPipelineCaching) ||
+                 (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->GetDevModeMgr() != nullptr)) &&
+                (settings.allowExternalPipelineCacheObject))
+            {
+                pBinaryCache = PipelineBinaryCache::Create(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance(),
+                    pCreateInfo->initialDataSize, pCreateInfo->pInitialData, false,
+                    pDevice->GetCompiler(DefaultDeviceIndex)->GetGfxIp(), pDevice->VkPhysicalDevice(DefaultDeviceIndex));
+
+                // This isn't a terminal failure, the device can continue without the pipeline cache if need be.
+                VK_ALERT(pBinaryCache == nullptr);
+            }
+            PipelineCache* pCache = VK_PLACEMENT_NEW(pMemory) PipelineCache(pDevice, shaderCaches, pBinaryCache);
             *pPipelineCache = PipelineCache::HandleFromVoidPointer(pMemory);
         }
         else
@@ -191,6 +207,12 @@ VkResult PipelineCache::Destroy(
     const Device*                   pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+    if (m_pBinaryCache)
+    {
+        m_pBinaryCache->Destroy();
+        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->FreeMem(m_pBinaryCache);
+        m_pBinaryCache = nullptr;
+    }
 
     this->~PipelineCache();
 

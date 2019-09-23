@@ -124,6 +124,7 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
 // Builds shader module from SPIR-V binary code.
 VkResult CompilerSolutionLlpc::BuildShaderModule(
     const Device*                pDevice,
+    VkShaderModuleCreateFlags    flags,
     size_t                       codeSize,
     const void*                  pCode,
     ShaderModuleHandle*          pShaderModule,
@@ -144,6 +145,10 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     moduleInfo.pUserData      = &pShaderMemory;
     moduleInfo.shaderBin.pCode    = pCode;
     moduleInfo.shaderBin.codeSize = codeSize;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 32
+    PipelineCompiler::ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions);
+    moduleInfo.options.enableOpt = (flags & VK_SHADER_MODULE_ENABLE_OPT_BIT) ? true : false;
+#endif
 
     Llpc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
 
@@ -447,7 +452,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
 
     ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
     if ((appProfile == AppProfile::MadMax) ||
-        (appProfile == AppProfile::SeriousSamFusion) ||
         (appProfile == AppProfile::SedpEngine) ||
         (appProfile == AppProfile::ThronesOfBritannia))
     {
@@ -456,6 +460,13 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
         // disable the effect of that pass by limiting clause length to 1.
         llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
     }
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 33
+    if (appProfile == AppProfile::DawnOfWarIII)
+    {
+        llpcOptions[numOptions++] = "-enable-load-scalarizer";
+    }
+#endif
 
     // Force enable cache to disk to improve user experience
     if ((shaderCacheMode == ShaderCacheEnableRuntimeOnly) &&

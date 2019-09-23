@@ -63,16 +63,16 @@ struct RPAttachmentReference
 // Describes information about an automatic layout transition happening inside a render pass instance.
 struct RPTransitionInfo
 {
-    uint32_t      attachment;           // Attachment being transitioned
-    RPImageLayout prevLayout;           // Previous layout
-    RPImageLayout nextLayout;           // Next layout
+    uint32_t      attachment;        // Attachment being transitioned
+    RPImageLayout prevLayout;        // Previous layout
+    RPImageLayout nextLayout;        // Next layout
 
     union
     {
         struct
         {
             uint32_t isInitialLayoutTransition :  1;
-            uint32_t reserved                  : 30;
+            uint32_t reserved                  : 31;
         };
         uint32_t u32All;
     } flags;
@@ -82,7 +82,6 @@ struct RPTransitionInfo
 struct RPLoadOpClearInfo
 {
     uint32_t           attachment; // Attachment to be cleared
-    RPImageLayout      layout;     // Layout the attachment is currently in and will be used in after the clear
     VkImageAspectFlags aspect;     // Which image aspects are to be cleared
 };
 

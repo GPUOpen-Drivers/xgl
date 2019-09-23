@@ -173,13 +173,17 @@ private:
     // Image needs to be a friend class to be able to create wrapper API memory objects
     friend class Image;
 
-    bool         m_allocationCounted;
-    uint32_t     m_sizeAccountedForDeviceMask;
-    Pal::IImage* m_pExternalPalImage;
-    uint32_t     m_primaryDeviceIndex;
+    bool                  m_allocationCounted;
+    uint32_t              m_sizeAccountedForDeviceMask;
+    Pal::IImage*          m_pExternalPalImage;
+    uint32_t              m_primaryDeviceIndex;
 
     // Cache the handle of GPU memory which is on the first device, if the Gpumemory can be inter-process sharing.
     Pal::OsExternalHandle m_sharedGpuMemoryHandle;
+    // m_handleCloseNeeded indicates if m_sharedGpuMemoryHandle should be closed.
+    // m_handleCloseNeeded is true in two cases :
+    // 1. When m_sharedGpuMemoryHandle is shared via NtHandle and is not externally opended;
+    // Or 2. When m_sharedGpuMemoryHandle is imported based on a name rather than a handle;
 
     // Marks that the logical device's allocation count is incremented and needs to be decremented during the
     // destruction of this memory object.

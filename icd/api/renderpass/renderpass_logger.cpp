@@ -220,7 +220,7 @@ void RenderPassLogger::LogAttachmentReference(
     const AttachmentReference& reference)
 {
     LogAttachment(reference.attachment);
-    Log(" in %s", ImageLayoutString(reference.layout, false));
+    Log(" in %s, %s", ImageLayoutString(reference.layout, false), ImageLayoutString(reference.stencilLayout, false));
     Log(" aspectMask ");
     LogImageAspectMask(reference.aspectMask, false);
 }
@@ -229,7 +229,11 @@ void RenderPassLogger::LogAttachmentReference(
 void RenderPassLogger::LogAttachmentReference(
     const RPAttachmentReference& reference)
 {
-    LogAttachment(reference.attachment); Log(" in "); LogImageLayout(reference.layout);
+    LogAttachment(reference.attachment);
+    Log(" in ");
+    LogImageLayout(reference.layout);
+    Log(", ");
+    LogImageLayout(reference.stencilLayout);
 }
 
 // =====================================================================================================================
@@ -576,15 +580,15 @@ void RenderPassLogger::LogRenderPassCreateInfo(
         const AttachmentDescription& desc = info.pAttachments[i];
 
         Log("info.pAttachments[%d] = {\n", i);
-        Log("   .flags          = 0x%x\n", desc.flags);
-        Log("   .format         = ");    LogFormat(desc.format, false); Log("\n");
-        Log("   .samples        = 0x%x\n", desc.samples);
-        Log("   .loadOp         = %s\n", LoadOpString(desc.loadOp));
-        Log("   .storeOp        = %s\n", StoreOpString(desc.storeOp));
-        Log("   .stencilLoadOp  = %s\n", LoadOpString(desc.stencilLoadOp));
-        Log("   .stencilStoreOp = %s\n", StoreOpString(desc.stencilStoreOp));
-        Log("   .initialLayout  = %s\n", ImageLayoutString(desc.initialLayout, false));
-        Log("   .finalLayout    = %s\n", ImageLayoutString(desc.finalLayout, false));
+        Log("   .flags                = 0x%x\n", desc.flags);
+        Log("   .format               = ");    LogFormat(desc.format, false); Log("\n");
+        Log("   .samples              = 0x%x\n", desc.samples);
+        Log("   .loadOp               = %s\n", LoadOpString(desc.loadOp));
+        Log("   .storeOp              = %s\n", StoreOpString(desc.storeOp));
+        Log("   .stencilLoadOp        = %s\n", LoadOpString(desc.stencilLoadOp));
+        Log("   .stencilStoreOp       = %s\n", StoreOpString(desc.stencilStoreOp));
+        Log("   .initialLayout        = %s\n", ImageLayoutString(desc.initialLayout, false));
+        Log("   .finalLayout          = %s\n", ImageLayoutString(desc.finalLayout, false));
         Log("}\n");
     }
 
@@ -863,7 +867,6 @@ void RenderPassLogger::LogExecuteRPLoadOpClear(
 
         Log("%s[%d]:\n", pVar, i);
         Log("    .attachment = %u\n", clear.attachment);
-        Log("    .layout     = "); LogImageLayout(clear.layout); Log("\n");
         Log("    .aspect     = ");
 
         if (clear.aspect == VK_IMAGE_ASPECT_COLOR_BIT)
@@ -974,9 +977,9 @@ void RenderPassLogger::LogExecuteRPSyncPoint(
         const VkFormat format = m_pInfo->pAttachments[attachment].format;
 
         Log(    "%s.pTransitions[%d]:\n", pName, i);
-        Log(    "    .attachment = ");  LogAttachment(attachment); Log("\n");
-        Log(    "    .prevLayout = "); LogImageLayout(tr.prevLayout); Log("\n");
-        Log(    "    .nextLayout = "); LogImageLayout(tr.nextLayout); Log("\n");
+        Log(    "    .attachment        = "); LogAttachment(attachment); Log("\n");
+        Log(    "    .prevLayout        = "); LogImageLayout(tr.prevLayout); Log("\n");
+        Log(    "    .nextLayout        = "); LogImageLayout(tr.nextLayout); Log("\n");
     }
 
     LogEndSource();

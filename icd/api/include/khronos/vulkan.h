@@ -55,8 +55,6 @@
 
 #include "devext/vk_amd_gpa_interface.h"
 
-#include "devext/vk_amd_device_coherent_memory.h"
-
 enum class DynamicStatesInternal : uint32_t {
     VIEWPORT = 0,
     SCISSOR,
@@ -70,6 +68,7 @@ enum class DynamicStatesInternal : uint32_t {
     VIEWPORT_W_SCALING_NV,
     DISCARD_RECTANGLE_EXT,
     SAMPLE_LOCATIONS_EXT,
+    LINE_STIPPLE_EXT,
     DynamicStatesInternalCount
 };
 

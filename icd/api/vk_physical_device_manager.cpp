@@ -395,6 +395,8 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
         std::vector<PerfIndex> sortedList;
         sortedList.reserve(deviceCount);
 
+        constexpr float memPerfFactor = 0.1f;
+
         // Populate the list with the physical device handles, sorted by gfxipPerfRating and other criteria.
         for (uint32_t currentDeviceIndex = 0; currentDeviceIndex < deviceCount; ++currentDeviceIndex)
         {
@@ -407,8 +409,9 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
             PerfIndex perf;
 
             perf.gpuIndex            = info.gpuIndex;
-            perf.perfRating          = info.gfxipProperties.performance.gfxipPerfRating *
-                                       info.gfxipProperties.shaderCore.numShaderEngines;
+            perf.perfRating          = info.gfxipProperties.performance.gfxipPerfRating +
+                                       static_cast<uint32_t>(info.gpuMemoryProperties.performance.memPerfRating * memPerfFactor);
+
             perf.presentMode         = 0;
             perf.hasAttachedScreens  = info.attachedScreenCount > 0;
             perf.device              = deviceList[currentDeviceIndex];

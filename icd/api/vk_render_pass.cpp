@@ -165,69 +165,69 @@ static uint64_t GenerateRenderPassHash(
 // =====================================================================================================================
 AttachmentReference::AttachmentReference()
     :
-    attachment  (VK_ATTACHMENT_UNUSED),
-    layout      (VK_IMAGE_LAYOUT_UNDEFINED),
-    aspectMask  (VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM)
+    attachment   (VK_ATTACHMENT_UNUSED),
+    layout       (VK_IMAGE_LAYOUT_UNDEFINED),
+    aspectMask   (VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM)
 {
 }
 
 // =====================================================================================================================
 void AttachmentReference::Init(const VkAttachmentReference& attachRef)
 {
-    attachment  = attachRef.attachment;
-    layout      = attachRef.layout;
-    aspectMask  = VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM;
+    attachment    = attachRef.attachment;
+    layout        = attachRef.layout;
+    aspectMask    = VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM;
 }
 
 // =====================================================================================================================
 void AttachmentReference::Init(const VkAttachmentReference2KHR& attachRef)
 {
-    attachment  = attachRef.attachment;
-    layout      = attachRef.layout;
-    aspectMask  = attachRef.aspectMask;
+    attachment    = attachRef.attachment;
+    layout        = attachRef.layout;
+    aspectMask    = attachRef.aspectMask;
 }
 
 // =====================================================================================================================
 AttachmentDescription::AttachmentDescription()
     :
-    flags           (0),
-    format          (VK_FORMAT_UNDEFINED),
-    samples         (VK_SAMPLE_COUNT_1_BIT),
-    loadOp          (VK_ATTACHMENT_LOAD_OP_DONT_CARE),
-    storeOp         (VK_ATTACHMENT_STORE_OP_DONT_CARE),
-    stencilLoadOp   (VK_ATTACHMENT_LOAD_OP_DONT_CARE),
-    stencilStoreOp  (VK_ATTACHMENT_STORE_OP_DONT_CARE),
-    initialLayout   (VK_IMAGE_LAYOUT_UNDEFINED),
-    finalLayout     (VK_IMAGE_LAYOUT_UNDEFINED)
+    flags               (0),
+    format              (VK_FORMAT_UNDEFINED),
+    samples             (VK_SAMPLE_COUNT_1_BIT),
+    loadOp              (VK_ATTACHMENT_LOAD_OP_DONT_CARE),
+    storeOp             (VK_ATTACHMENT_STORE_OP_DONT_CARE),
+    stencilLoadOp       (VK_ATTACHMENT_LOAD_OP_DONT_CARE),
+    stencilStoreOp      (VK_ATTACHMENT_STORE_OP_DONT_CARE),
+    initialLayout       (VK_IMAGE_LAYOUT_UNDEFINED),
+    finalLayout         (VK_IMAGE_LAYOUT_UNDEFINED)
 {
 }
 
 // =====================================================================================================================
 void AttachmentDescription::Init(const VkAttachmentDescription& attachDesc)
 {
-    flags           = attachDesc.flags;
-    format          = attachDesc.format;
-    samples         = attachDesc.samples;
-    loadOp          = attachDesc.loadOp;
-    storeOp         = attachDesc.storeOp;
-    stencilLoadOp   = attachDesc.stencilLoadOp;
-    stencilStoreOp  = attachDesc.stencilStoreOp;
-    initialLayout   = attachDesc.initialLayout;
-    finalLayout     = attachDesc.finalLayout;
+    flags                = attachDesc.flags;
+    format               = attachDesc.format;
+    samples              = attachDesc.samples;
+    loadOp               = attachDesc.loadOp;
+    storeOp              = attachDesc.storeOp;
+    stencilLoadOp        = attachDesc.stencilLoadOp;
+    stencilStoreOp       = attachDesc.stencilStoreOp;
+    initialLayout        = attachDesc.initialLayout;
+    finalLayout          = attachDesc.finalLayout;
 }
 
 // =====================================================================================================================
 void AttachmentDescription::Init(const VkAttachmentDescription2KHR& attachDesc)
 {
-    flags           = attachDesc.flags;
-    format          = attachDesc.format;
-    samples         = attachDesc.samples;
-    loadOp          = attachDesc.loadOp;
-    storeOp         = attachDesc.storeOp;
-    stencilLoadOp   = attachDesc.stencilLoadOp;
-    stencilStoreOp  = attachDesc.stencilStoreOp;
-    initialLayout   = attachDesc.initialLayout;
-    finalLayout     = attachDesc.finalLayout;
+    flags                = attachDesc.flags;
+    format               = attachDesc.format;
+    samples              = attachDesc.samples;
+    loadOp               = attachDesc.loadOp;
+    storeOp              = attachDesc.storeOp;
+    stencilLoadOp        = attachDesc.stencilLoadOp;
+    stencilStoreOp       = attachDesc.stencilStoreOp;
+    initialLayout        = attachDesc.initialLayout;
+    finalLayout          = attachDesc.finalLayout;
 }
 
 // =====================================================================================================================

@@ -51,6 +51,8 @@ class PipelineCompiler;
 struct VbBindingInfo;
 struct ShaderModuleHandle;
 
+class PipelineBinaryCache;
+
 // =====================================================================================================================
 class PipelineCompiler
 {
@@ -73,11 +75,17 @@ public:
 
     PipelineCompilerType GetShaderCacheType();
 
+    static void ApplyPipelineOptions(
+        const Device*          pDevice,
+        VkPipelineCreateFlags  flags,
+        Llpc::PipelineOptions* pOptions);
+
     VkResult BuildShaderModule(
-        const Device*       pDevice,
-        size_t              codeSize,
-        const void*         pCode,
-        ShaderModuleHandle* pModule);
+        const Device*             pDevice,
+        VkShaderModuleCreateFlags flags,
+        size_t                    codeSize,
+        const void*               pCode,
+        ShaderModuleHandle*       pModule);
 
     VkResult CreateGraphicsPipelineBinary(
         Device*                             pDevice,
@@ -131,6 +139,15 @@ public:
 
     void FreeGraphicsPipelineCreateInfo(GraphicsPipelineCreateInfo* pCreateInfo);
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    Util::Result RegisterAndLoadReinjectionBinary(
+        const Pal::PipelineHash*     pInternalPipelineHash,
+        const Util::MetroHash::Hash* pCacheId,
+        size_t*                      pBinarySize,
+        const void**                 ppPipelineBinary,
+        PipelineCache*               pPipelineCache = nullptr);
+#endif
+
     template<class PipelineBuildInfo>
     PipelineCompilerType CheckCompilerType(const PipelineBuildInfo* pPipelineBuildInfo);
 
@@ -153,6 +170,8 @@ private:
         PipelineOptimizerKey*        pProfileKey
         , Llpc::NggState*            pNggState
     );
+
+    void GetElfCacheMetricString(char* pOutStr, size_t outStrSize);
 
     template<class PipelineBuildInfo>
     bool ReplacePipelineBinary(
@@ -188,6 +207,17 @@ private:
     Llpc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by LLPC
 
     CompilerSolutionLlpc m_compilerSolutionLlpc;
+
+    // PipelineBinaryCache is only available for closed source at this time.
+    // PipelineBinaryCache is only enabled for Windows at this time.
+    PipelineBinaryCache* m_pBinaryCache;       // Pipeline binary cache object
+
+    // Metrics
+    uint32_t             m_cacheAttempts;      // Number of attempted cache loads
+    uint32_t             m_cacheHits;          // Number of cache hits
+    uint32_t             m_totalBinaries;      // Total number of binaries compiled or fetched
+    int64_t              m_totalTimeSpent;     // Accumulation of time spent either loading or compiling pipeline
+                                               // binaries
 
     void GetPipelineCreationInfoNext(
         const VkStructHeader*                             pHeader,

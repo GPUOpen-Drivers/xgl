@@ -961,24 +961,26 @@ bool SwapChain::IsSuboptimal(uint32_t  deviceIdx)
     VkSurfaceCapabilitiesKHR surfaceCapabilities = {};
     Pal::OsDisplayHandle     displayHandle = 0;
 
-    VK_ASSERT(m_properties.pSurface != nullptr);
-
-    const VkResult result = m_pDevice->VkPhysicalDevice(deviceIdx)->GetSurfaceCapabilities(
-        Surface::HandleFromObject(m_properties.pSurface),
-        displayHandle,
-        &surfaceCapabilities);
-
-    if (result == VK_SUCCESS)
+    if (m_pDevice->GetRuntimeSettings().ignoreSuboptimalSwapchainSize == false)
     {
-        // Magic width/height value meaning that the surface is resized to match the swapchain's extent.
-        constexpr uint32_t SwapchainBasedSize = 0xFFFFFFFF;
+        VK_ASSERT(m_properties.pSurface != nullptr);
 
-        if (((surfaceCapabilities.currentExtent.width  != SwapchainBasedSize) ||
-             (surfaceCapabilities.currentExtent.height != SwapchainBasedSize))
-            )
+        const VkResult result = m_pDevice->VkPhysicalDevice(deviceIdx)->GetSurfaceCapabilities(
+            Surface::HandleFromObject(m_properties.pSurface),
+            displayHandle,
+            &surfaceCapabilities);
+
+        if (result == VK_SUCCESS)
         {
-            suboptimal = ((surfaceCapabilities.currentExtent.width  != m_properties.imageCreateInfo.extent.width) ||
-                          (surfaceCapabilities.currentExtent.height != m_properties.imageCreateInfo.extent.height));
+            // Magic width/height value meaning that the surface is resized to match the swapchain's extent.
+            constexpr uint32_t SwapchainBasedSize = 0xFFFFFFFF;
+
+            if ((surfaceCapabilities.currentExtent.width  != SwapchainBasedSize) ||
+                (surfaceCapabilities.currentExtent.height != SwapchainBasedSize))
+            {
+                suboptimal = ((surfaceCapabilities.currentExtent.width  != m_properties.imageCreateInfo.extent.width) ||
+                              (surfaceCapabilities.currentExtent.height != m_properties.imageCreateInfo.extent.height));
+            }
         }
     }
 

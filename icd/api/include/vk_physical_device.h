@@ -238,12 +238,56 @@ public:
         return Util::WideBitfieldIsSet(m_formatFeatureMsaaTarget, formatIndex);
     }
 
-    void  GetPhysicalDeviceIDProperties(
-        uint8_t*            pDeviceUUID,
-        uint8_t*            pDriverUUID,
-        uint8_t*            pDeviceLUID,
-        uint32_t*           pDeviceNodeMask,
-        VkBool32*           pDeviceLUIDValid) const;
+    VK_INLINE void GetPhysicalDeviceIDProperties(
+        uint8_t*                 pDeviceUUID,
+        uint8_t*                 pDriverUUID,
+        uint8_t*                 pDeviceLUID,
+        uint32_t*                pDeviceNodeMask,
+        VkBool32*                pDeviceLUIDValid) const;
+
+    VK_INLINE void GetPhysicalDeviceMaintenance3Properties(
+        uint32_t*                pMaxPerSetDescriptors,
+        VkDeviceSize*            pMaxMemoryAllocationSize) const;
+
+    VK_INLINE void GetPhysicalDeviceMultiviewProperties(
+        uint32_t*                pMaxMultiviewViewCount,
+        uint32_t*                pMaxMultiviewInstanceIndex) const;
+
+    VK_INLINE void GetPhysicalDevicePointClippingProperties(
+        VkPointClippingBehavior* pPointClippingBehavior) const;
+
+    VK_INLINE void GetPhysicalDeviceProtectedMemoryProperties(
+        VkBool32*                pProtectedNoFault) const;
+
+    VK_INLINE void GetPhysicalDeviceSubgroupProperties(
+        uint32_t*                pSubgroupSize,
+        VkShaderStageFlags*      pSupportedStages,
+        VkSubgroupFeatureFlags*  pSupportedOperations,
+        VkBool32*                pQuadOperationsInAllStages) const;
+
+    VK_INLINE void GetPhysicalDeviceDriverProperties(
+        VkDriverIdKHR*           pDriverID,
+        char*                    pDriverName,
+        char*                    pDriverInfo,
+        VkConformanceVersionKHR* pConformanceVersion) const;
+
+    template<typename T>
+    VK_INLINE void GetPhysicalDeviceFloatControlsProperties(
+        T                        pFloatControlsProperties) const;
+
+    template<typename T>
+    VK_INLINE void GetPhysicalDeviceDescriptorIndexingProperties(
+        T                        pDescriptorIndexingProperties) const;
+
+    VK_INLINE void GetPhysicalDeviceDepthStencilResolveProperties(
+        VkResolveModeFlagsKHR*   pSupportedDepthResolveModes,
+        VkResolveModeFlagsKHR*   pSupportedStencilResolveModes,
+        VkBool32*                pIndependentResolveNone,
+        VkBool32*                pIndependentResolve) const;
+
+    VK_INLINE void GetPhysicalDeviceSamplerFilterMinmaxProperties(
+        VkBool32*                pFilterMinmaxSingleComponentFormats,
+        VkBool32*                pFilterMinmaxImageComponentMapping) const;
 
     VkResult GetExternalMemoryProperties(
         bool                               isSparse,
@@ -266,6 +310,75 @@ public:
         VkImageTiling                                   tiling,
         uint32_t*                                       pPropertyCount,
         utils::ArrayView<VkSparseImageFormatProperties> properties) const;
+
+    VK_INLINE void GetPhysicalDevice16BitStorageFeatures(
+        VkBool32* pStorageBuffer16BitAccess,
+        VkBool32* pUniformAndStorageBuffer16BitAccess,
+        VkBool32* pStoragePushConstant16,
+        VkBool32* pStorageInputOutput16) const;
+
+    VK_INLINE void GetPhysicalDeviceMultiviewFeatures(
+        VkBool32* pMultiview,
+        VkBool32* pMultiviewGeometryShader,
+        VkBool32* pMultiviewTessellationShader) const;
+
+    VK_INLINE void GetPhysicalDeviceVariablePointerFeatures(
+        VkBool32* pVariablePointersStorageBuffer,
+        VkBool32* pVariablePointers) const;
+
+    VK_INLINE void GetPhysicalDeviceProtectedMemoryFeatures(
+        VkBool32* pProtectedMemory) const;
+
+    VK_INLINE void GetPhysicalDeviceSamplerYcbcrConversionFeatures(
+        VkBool32* pSamplerYcbcrConversion) const;
+
+    VK_INLINE void GetPhysicalDeviceShaderDrawParameterFeatures(
+        VkBool32* pShaderDrawParameters) const;
+
+    VK_INLINE void GetPhysicalDevice8BitStorageFeatures(
+        VkBool32* pStorageBuffer8BitAccess,
+        VkBool32* pUniformAndStorageBuffer8BitAccess,
+        VkBool32* pStoragePushConstant8) const;
+
+    VK_INLINE void GetPhysicalDeviceShaderAtomicInt64Features(
+        VkBool32* pShaderBufferInt64Atomics,
+        VkBool32* pShaderSharedInt64Atomics) const;
+
+    VK_INLINE void GetPhysicalDeviceFloat16Int8Features(
+        VkBool32* pShaderFloat16,
+        VkBool32* pShaderInt8) const;
+
+    template<typename T>
+    VK_INLINE void GetPhysicalDeviceDescriptorIndexingFeatures(
+        T         pDescriptorIndexingFeatures) const;
+
+    VK_INLINE void GetPhysicalDeviceScalarBlockLayoutFeatures(
+        VkBool32* pScalarBlockLayout) const;
+
+    VK_INLINE void GetPhysicalDeviceImagelessFramebufferFeatures(
+        VkBool32* pImagelessFramebuffer) const;
+
+    VK_INLINE void GetPhysicalDeviceUniformBufferStandardLayoutFeatures(
+        VkBool32* pUniformBufferStandardLayout) const;
+
+    VK_INLINE void GetPhysicalDeviceSubgroupExtendedTypesFeatures(
+        VkBool32* pShaderSubgroupExtendedTypes) const;
+
+    VK_INLINE void GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(
+        VkBool32* pSeparateDepthStencilLayouts) const;
+
+    VK_INLINE void GetPhysicalDeviceHostQueryResetFeatures(
+        VkBool32* pHostQueryReset) const;
+
+    VK_INLINE void GetPhysicalDeviceBufferAddressFeatures(
+        VkBool32* pBufferDeviceAddress,
+        VkBool32* pBufferDeviceAddressCaptureReplay,
+        VkBool32* pBufferDeviceAddressMultiDevice) const;
+
+    VK_INLINE void GetPhysicalDeviceVulkanMemoryModelFeatures(
+        VkBool32* pVulkanMemoryModel,
+        VkBool32* pVulkanMemoryModelDeviceScope,
+        VkBool32* pVulkanMemoryModelAvailabilityVisibilityChains) const;
 
     VkResult GetPhysicalDeviceCalibrateableTimeDomainsEXT(
         uint32_t*                           pTimeDomainCount,
@@ -480,6 +593,9 @@ public:
     VK_INLINE const DeviceExtensions::Supported& GetSupportedExtensions() const
         { return m_supportedExtensions; }
 
+    VK_INLINE const DeviceExtensions::Supported& GetAllowedExtensions() const
+        { return m_allowedExtensions; }
+
     VK_INLINE bool IsExtensionSupported(DeviceExtensions::ExtensionId id) const
         { return m_supportedExtensions.IsExtensionSupported(id); }
 
@@ -574,6 +690,7 @@ protected:
     bool                             m_prtOnDmaSupported;
 
     DeviceExtensions::Supported      m_supportedExtensions;
+    DeviceExtensions::Supported      m_allowedExtensions;
 
     // Device properties related to the VK_AMD_gpu_perf_api_interface extension
     PhysicalDeviceGpaProperties      m_gpaProps;

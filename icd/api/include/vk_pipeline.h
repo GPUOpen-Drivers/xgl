@@ -82,7 +82,8 @@ struct UserDataLayout
 };
 
 // Structure containing information about a retrievable pipeline binary.  These are only retained by Pipeline objects
-// when specific device extensions (VK_AMD_shader_info) that can query them are enabled.
+// when specific device extensions (VK_AMD_shader_info/VK_KHR_pipeline_executable_properties) that can query them are
+// enabled.
 struct PipelineBinaryInfo
 {
     static PipelineBinaryInfo* Create(size_t size, const void* pBinary, const VkAllocationCallbacks* pAllocator);

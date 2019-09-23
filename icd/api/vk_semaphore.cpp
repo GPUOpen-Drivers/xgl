@@ -38,10 +38,10 @@ namespace vk
 VkResult Semaphore::PopulateInDeviceGroup(
     Device*                         pDevice,
     Pal::IQueueSemaphore*           pPalSemaphores[MaxPalDevices],
-    int32_t*                        pSemaphoreCount)
+    uint32_t*                       pSemaphoreCount)
 {
     Pal::Result palResult = Pal::Result::Success;
-    int32_t count = 1;
+    uint32_t count = 1;
     // Linux don't support LDA chain. The semaphore allocated from one device cannot be used directly
     // on Peer devices.
     // In order to support that, we have to create the semaphore in the first device and import the payload
@@ -119,10 +119,10 @@ VkResult Semaphore::PopulateInDeviceGroup(
 // =====================================================================================================================
 // Creates a new queue semaphore object.
 VkResult Semaphore::Create(
-    Device*                         pDevice,
-    const VkSemaphoreCreateInfo*    pCreateInfo,
-    const VkAllocationCallbacks*    pAllocator,
-    VkSemaphore*                    pSemaphore)
+    Device*                       pDevice,
+    const VkSemaphoreCreateInfo*  pCreateInfo,
+    const VkAllocationCallbacks*  pAllocator,
+    VkSemaphore*                  pSemaphore)
 {
     Pal::QueueSemaphoreCreateInfo palCreateInfo = {};
     palCreateInfo.maxCount = 1;
@@ -130,6 +130,7 @@ VkResult Semaphore::Create(
     Pal::QueueSemaphoreExportInfo exportInfo = {};
 
     // Allocate sufficient memory
+    VkResult vkResult = VK_SUCCESS;
     Pal::Result palResult;
     const size_t palSemaphoreSize = pDevice->PalDevice(DefaultDeviceIndex)->GetQueueSemaphoreSize(palCreateInfo, &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
@@ -144,15 +145,15 @@ VkResult Semaphore::Create(
         switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO:
-            {
-                break;
-            }
+        {
+            break;
+        }
         case VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO:
-            {
-                // mark this semaphore as shareable.
-                palCreateInfo.flags.shareable         = 1;
-                break;
-            }
+        {
+            // mark this semaphore as shareable.
+            palCreateInfo.flags.shareable = 1;
+            break;
+        }
         default:
             break;
         }
@@ -160,59 +161,69 @@ VkResult Semaphore::Create(
     if (pDevice->NumPalDevices() > 1)
     {
         // mark this semaphore as shareable.
-        palCreateInfo.flags.shareable         = 1;
+        palCreateInfo.flags.shareable = 1;
     }
-
-    void* pMemory = pAllocator->pfnAllocation(
+    // Allocate memory for VK_Semaphore and palSemaphore separately
+    void* pVKSemaphoreMemory = pAllocator->pfnAllocation(
         pAllocator->pUserData,
-        sizeof(Semaphore) + palSemaphoreSize,
+        sizeof(Semaphore),
         VK_DEFAULT_MEM_ALIGN,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
-    if (pMemory == nullptr)
+        void* pPalSemaphoreMemory = pDevice->VkInstance()->AllocMem(
+        palSemaphoreSize,
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if ((pVKSemaphoreMemory != nullptr) && (pPalSemaphoreMemory != nullptr))
     {
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
+        // Allocation Succeed. Create the PAL object
+        Pal::IQueueSemaphore* pPalSemaphores[MaxPalDevices] = { nullptr };
 
-    size_t palOffset = sizeof(Semaphore);
-
-    // Create the PAL object
-    Pal::IQueueSemaphore* pPalSemaphores[MaxPalDevices] = {nullptr};
-
-    if (palResult == Pal::Result::Success)
-    {
-        palResult = pDevice->PalDevice(DefaultDeviceIndex)->CreateQueueSemaphore(
-            palCreateInfo,
-            Util::VoidPtrInc(pMemory, palOffset),
-            &pPalSemaphores[0]);
-    }
-
-    if (palResult == Pal::Result::Success)
-    {
-        int32_t   semaphoreCount = 1;
-
-        VkResult result = PopulateInDeviceGroup(pDevice, pPalSemaphores, &semaphoreCount);
-
-        if (result == VK_SUCCESS)
+        if (palResult == Pal::Result::Success)
         {
-            Pal::OsExternalHandle handle = 0;
-            // On success, construct the API object and return to the caller
-            VK_PLACEMENT_NEW(pMemory) Semaphore(pPalSemaphores, semaphoreCount, palCreateInfo, handle);
-
-            *pSemaphore = Semaphore::HandleFromVoidPointer(pMemory);
-
-            return VK_SUCCESS;
+            palResult = pDevice->PalDevice(DefaultDeviceIndex)->CreateQueueSemaphore(
+                palCreateInfo,
+                pPalSemaphoreMemory,
+                &pPalSemaphores[0]);
         }
-        else
+
+        if (palResult == Pal::Result::Success)
         {
-            palResult = Pal::Result::ErrorOutOfGpuMemory;
+            uint32_t   semaphoreCount = 1;
+
+            vkResult = PopulateInDeviceGroup(pDevice, pPalSemaphores, &semaphoreCount);
+
+            if (vkResult == VK_SUCCESS)
+            {
+                Pal::OsExternalHandle handle = 0;
+                // On success, construct the API object and return to the caller
+                VK_PLACEMENT_NEW(pVKSemaphoreMemory) Semaphore(pPalSemaphores, semaphoreCount, palCreateInfo, handle);
+                *pSemaphore = Semaphore::HandleFromVoidPointer(pVKSemaphoreMemory);
+
+                vkResult = VK_SUCCESS;
+            }
+            else
+            {
+                vkResult = PalToVkResult(Pal::Result::ErrorOutOfGpuMemory);
+            }
         }
     }
 
-    // Something broke. Free the memory and return error.
-    pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+    else
+    {
+        //Allocation Failed.
+        vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
-    return PalToVkResult(palResult);
+    if (vkResult != VK_SUCCESS)
+    {
+        // Something broke. Free the memory.
+        pAllocator->pfnFree(pAllocator->pUserData, pVKSemaphoreMemory);
+        pDevice->VkInstance()->FreeMem(pPalSemaphoreMemory);
+    }
+
+    return vkResult;
 }
 
 // =====================================================================================================================
@@ -238,8 +249,8 @@ VkResult Semaphore::ImportSemaphore(
     Device*                     pDevice,
     const ImportSemaphoreInfo&  importInfo)
 {
-    VkResult result       = VK_SUCCESS;
-    Pal::Result palResult = Pal::Result::Success;
+    VkResult vkResult       = VK_SUCCESS;
+    Pal::Result palResult   = Pal::Result::Success;
 
     Pal::ExternalQueueSemaphoreOpenInfo palOpenInfo = {};
     VkExternalSemaphoreHandleTypeFlags handleType   = importInfo.handleType;
@@ -277,35 +288,22 @@ VkResult Semaphore::ImportSemaphore(
 
             if (palResult == Pal::Result::Success)
             {
-                int32_t semaphoreCount = 1;
+                uint32_t semaphoreCount = 1;
 
-                result = PopulateInDeviceGroup(pDevice, pPalSemaphores, &semaphoreCount);
+                vkResult = PopulateInDeviceGroup(pDevice, pPalSemaphores, &semaphoreCount);
 
-                if (result == VK_SUCCESS)
+                if (vkResult == VK_SUCCESS)
                 {
+                    DestroyTemporarySemaphore(pDevice);
                     if ((importInfo.importFlags & VK_SEMAPHORE_IMPORT_TEMPORARY_BIT))
                     {
+                        m_useTempSemaphore = true;
                         SetTemporarySemaphore(pPalSemaphores, semaphoreCount, palOpenInfo.externalSemaphore);
                     }
                     else
                     {
-                        m_pPalSemaphores[0]->Destroy();
-                        m_pPalSemaphores[0]         = pPalSemaphores[0];
-                        m_sharedSemaphoreTempHandle = palOpenInfo.externalSemaphore;
-
-                        for (uint32_t deviceIdx = 1; deviceIdx < pDevice->NumPalDevices(); deviceIdx ++)
-                        {
-                            if (m_pPalSemaphores[deviceIdx] != nullptr)
-                            {
-                                m_pPalSemaphores[deviceIdx]->Destroy();
-                                pDevice->VkInstance()->FreeMem(m_pPalSemaphores[deviceIdx]);
-                                m_pPalSemaphores[deviceIdx] = pPalSemaphores[deviceIdx];
-                            }
-                            else
-                            {
-                                break;
-                            }
-                        }
+                        DestroySemaphore(pDevice);
+                        SetSemaphore(pPalSemaphores, semaphoreCount, palOpenInfo.externalSemaphore);
                     }
                 }
                 else
@@ -315,53 +313,93 @@ VkResult Semaphore::ImportSemaphore(
             }
             else
             {
-                result = PalToVkResult(palResult);
+                vkResult = PalToVkResult(palResult);
                 pDevice->VkInstance()->FreeMem(pMemory);
             }
         }
         else
         {
-            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
     }
-    return result;
+
+    return vkResult;
 }
 
 // =====================================================================================================================
 // vkDestroyObject entry point for queue semaphore objects.
-VkResult Semaphore::Destroy(
+void Semaphore::Destroy(
     const Device*                   pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+    DestroyTemporarySemaphore(pDevice);
+    DestroySemaphore(pDevice);
+    Util::Destructor(this);
+    pAllocator->pfnFree(pAllocator->pUserData, this);
+}
 
-    ClearTemporarySemaphore();
+// =====================================================================================================================
+// Copy imported semaphore into m_pPalTemporarySemaphores
+void Semaphore::SetTemporarySemaphore(
+    Pal::IQueueSemaphore* pPalImportedSemaphore[],
+    uint32_t              semaphoreCount,
+    Pal::OsExternalHandle importedHandle)
+{
+    for (uint32_t i = 0; i < semaphoreCount; i++)
+    {
+        m_pPalTemporarySemaphores[i] = pPalImportedSemaphore[i];
+    }
 
-    m_pPalSemaphores[0]->Destroy();
+    m_sharedSemaphoreTempHandle = importedHandle;
+}
 
-    for (uint32_t deviceIdx = 1; deviceIdx < pDevice->NumPalDevices(); deviceIdx ++)
+// =====================================================================================================================
+// Copy imported semaphore into m_pPalSemaphores
+void Semaphore::SetSemaphore(
+    Pal::IQueueSemaphore* pPalImportedSemaphore[],
+    uint32_t              semaphoreCount,
+    Pal::OsExternalHandle importedHandle)
+{
+    for (uint32_t i = 0; i < semaphoreCount; i++)
+    {
+        m_pPalSemaphores[i] = pPalImportedSemaphore[i];
+    }
+
+    m_sharedSemaphoreHandle = importedHandle;
+}
+
+// =====================================================================================================================
+// Calling destructor, freeing memory and closing handle for temporary semaphore
+void Semaphore::DestroyTemporarySemaphore(
+    const Device*                pDevice)
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+    {
+        if (m_pPalTemporarySemaphores[deviceIdx] != nullptr)
+        {
+            m_pPalTemporarySemaphores[deviceIdx]->Destroy();
+            pDevice->VkInstance()->FreeMem(m_pPalTemporarySemaphores[deviceIdx]);
+            m_pPalTemporarySemaphores[deviceIdx] = nullptr;
+        }
+    }
+
+}
+
+// =====================================================================================================================
+// Calling destructor, freeing memory and closing handle for semaphore
+void Semaphore::DestroySemaphore(
+    const Device*                pDevice)
+{
+    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
         if (m_pPalSemaphores[deviceIdx] != nullptr)
         {
             m_pPalSemaphores[deviceIdx]->Destroy();
             pDevice->VkInstance()->FreeMem(m_pPalSemaphores[deviceIdx]);
-        }
-        else
-        {
-            break;
+            m_pPalSemaphores[deviceIdx] = nullptr;
         }
     }
 
-    // the sempahore is imported from external
-    if (Util::VoidPtrInc(this,sizeof(Semaphore)) != m_pPalSemaphores[0])
-    {
-        pDevice->VkInstance()->FreeMem(m_pPalSemaphores[0]);
-    }
-
-    Util::Destructor(this);
-
-    pAllocator->pfnFree(pAllocator->pUserData, this);
-
-    return VK_SUCCESS;
 }
 
 // =====================================================================================================================
@@ -375,14 +413,7 @@ VkResult Semaphore::GetSemaphoreCounterValue(
 
     if (pSemaphore != nullptr)
     {
-        if (pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex) != nullptr)
-        {
-            pPalSemaphore = pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex);
-        }
-        else
-        {
-            pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
-        }
+        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
         palResult = pPalSemaphore->QuerySemaphoreValue(pValue);
     }
 
@@ -397,21 +428,13 @@ VkResult Semaphore::WaitSemaphoreValue(
     uint64_t                        timeout)
 {
     Pal::Result palResult = Pal::Result::Success;
-
     Pal::IQueueSemaphore* pPalSemaphore = nullptr;
 
     if (pSemaphore != nullptr)
     {
         VK_ASSERT(pSemaphore->IsTimelineSemaphore());
-        if (pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex) != nullptr)
-        {
-            pPalSemaphore = pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex);
-            pSemaphore->ClearTemporarySemaphore();
-        }
-        else
-        {
-            pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
-        }
+        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
+        pSemaphore->RestoreSemaphore();
         palResult = pPalSemaphore->WaitSemaphoreValue(value, timeout);
     }
 
@@ -429,14 +452,7 @@ VkResult Semaphore::SignalSemaphoreValue(
 
     if (pSemaphore != nullptr)
     {
-        if (pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex) != nullptr)
-        {
-            pPalSemaphore = pSemaphore->PalTemporarySemaphore(DefaultDeviceIndex);
-        }
-        else
-        {
-            pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
-        }
+        pPalSemaphore = pSemaphore->PalSemaphore(DefaultDeviceIndex);
         palResult = pPalSemaphore->SignalSemaphoreValue(value);
     }
 

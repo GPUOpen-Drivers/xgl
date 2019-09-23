@@ -39,6 +39,7 @@
 #include "include/vk_physical_device.h"
 #include "include/vk_utils.h"
 #include "include/vk_conv.h"
+#include "include/pipeline_binary_cache.h"
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
 
@@ -128,6 +129,188 @@ static Pal::Result DevDriverToPalResult(
 }
 
 // =====================================================================================================================
+// Callback method for providing hashes and sizes for tracked pipelines to the PipelineUriService
+static DevDriver::Result GetPipelineHashes(
+    DevDriver::PipelineUriService* pService,
+    void*                          pUserData,
+    DevDriver::ExclusionFlags      /*flags*/)
+{
+    DevModeMgr* pDevModeMgr = static_cast<DevModeMgr*>(pUserData);
+
+    DevDriver::Result result = DevDriver::Result::NotReady;
+
+    Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> cacheListLock(pDevModeMgr->GetPipelineReinjectionLock());
+
+    auto                 pipelineCacheIter = pDevModeMgr->GetPipelineCacheListIterator();
+
+    while (pipelineCacheIter.Get() != nullptr)
+    {
+        result = DevDriver::Result::Success;
+
+        PipelineBinaryCache* pPipelineCache = *pipelineCacheIter.Get();
+
+        Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> hashMappingLock(pPipelineCache->GetHashMappingLock());
+
+        auto hashMappingIter   = pPipelineCache->GetHashMappingIterator();
+
+        while (hashMappingIter.Get() != nullptr)
+        {
+            const Pal::PipelineHash&            internalPipelineHash = hashMappingIter.Get()->key;
+            const PipelineBinaryCache::CacheId& cacheId              = hashMappingIter.Get()->value;
+
+            Util::QueryResult query = {};
+
+            // Do not throw an error if entry is not found in cache (in case it was evicted)
+            if (pPipelineCache->QueryPipelineBinary(&cacheId, &query) == Util::Result::Success)
+            {
+                pService->AddHash(internalPipelineHash, query.dataSize);
+            }
+
+            hashMappingIter.Next();
+        }
+
+        pipelineCacheIter.Next();
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Callback method for providing binaries for tracked pipelines to the PipelineUriService
+static DevDriver::Result GetPipelineCodeObjects(
+    DevDriver::PipelineUriService* pService,
+    void*                          pUserData,
+    DevDriver::ExclusionFlags      /*flags*/,
+    const DevDriver::PipelineHash* pPipelineHashes,
+    size_t                         numHashes)
+{
+    DevModeMgr* pDevModeMgr = static_cast<DevModeMgr*>(pUserData);
+
+    DevDriver::Result result = DevDriver::Result::NotReady;
+
+    Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> cacheListLock(pDevModeMgr->GetPipelineReinjectionLock());
+
+    auto                 pipelineCacheIter = pDevModeMgr->GetPipelineCacheListIterator();
+
+    while (pipelineCacheIter.Get() != nullptr)
+    {
+        result = DevDriver::Result::Success;
+
+        PipelineBinaryCache* pPipelineCache = *pipelineCacheIter.Get();
+
+        if (pPipelineHashes != nullptr)
+        {
+            // A specific list of hashes were requested
+            for (uint32_t i = 0; i < numHashes; i += 1)
+            {
+                DevDriver::PipelineRecord record = {};
+                record.header.hash = pPipelineHashes[i];
+
+                size_t            binarySize = 0u;
+                const void*       pBinary = nullptr;
+
+                static_assert(sizeof(Pal::PipelineHash) == sizeof(record.header.hash), "Structure size mismatch");
+
+                PipelineBinaryCache::CacheId* pCacheId =
+                    pPipelineCache->GetCacheIdForPipeline(reinterpret_cast<Pal::PipelineHash*>(&record.header.hash));
+
+                if ((pCacheId != nullptr) &&
+                    (pPipelineCache->LoadPipelineBinary(pCacheId, &binarySize, &pBinary) == Util::Result::Success))
+                {
+                    record.pBinary = pBinary;
+                    record.header.size = binarySize;
+                }
+
+                // Empty record is written if hash is not found
+                pService->AddPipeline(record);
+            }
+        }
+        else
+        {
+            Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> hashMappingLock(pPipelineCache->GetHashMappingLock());
+
+            auto hashMappingIter   = pPipelineCache->GetHashMappingIterator();
+
+            while (hashMappingIter.Get() != nullptr)
+            {
+                Pal::PipelineHash&            internalPipelineHash = hashMappingIter.Get()->key;
+                PipelineBinaryCache::CacheId& cacheId              = hashMappingIter.Get()->value;
+
+                size_t binarySize = 0u;
+                const void* pBinary = nullptr;
+
+                if (pPipelineCache->LoadPipelineBinary(&cacheId, &binarySize, &pBinary) == Util::Result::Success)
+                {
+                    DevDriver::PipelineRecord record = {};
+                    record.pBinary = pBinary;
+                    record.header.size = binarySize;
+                    record.header.hash = DevDriver::PipelineHash{ internalPipelineHash };
+
+                    pService->AddPipeline(record);
+                }
+
+                hashMappingIter.Next();
+            }
+        }
+
+        pipelineCacheIter.Next();
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Callback method for reinjecting binaries back into the cache
+static DevDriver::Result InjectPipelineCodeObjects(
+    void*                               pUserData,
+    DevDriver::PipelineRecordsIterator& pipelineIter)
+{
+    DevModeMgr* pDevModeMgr = static_cast<DevModeMgr*>(pUserData);
+
+    DevDriver::Result result = DevDriver::Result::NotReady;
+
+    uint32_t replacedCount = 0u;
+    DevDriver::PipelineRecord record;
+
+    Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> cacheListLock(pDevModeMgr->GetPipelineReinjectionLock());
+
+    auto pipelineCacheIter = pDevModeMgr->GetPipelineCacheListIterator();
+
+    while (pipelineCacheIter.Get() != nullptr)
+    {
+        result = DevDriver::Result::Success;
+
+        PipelineBinaryCache* pPipelineCache = *pipelineCacheIter.Get();
+
+        while (pipelineIter.Get(&record))
+        {
+            static_assert(sizeof(PipelineBinaryCache::CacheId) == sizeof(record.header.hash), "Structure size mismatch");
+
+            size_t                              binarySize            = static_cast<size_t>(record.header.size);
+            const PipelineBinaryCache::CacheId* pInternalPipelineHash =
+                reinterpret_cast<PipelineBinaryCache::CacheId*>(&record.header.hash);
+
+            if (pPipelineCache->StoreReinjectionBinary(pInternalPipelineHash, binarySize, record.pBinary) == Util::Result::Success)
+            {
+                replacedCount++;
+            }
+
+            pipelineIter.Next();
+        }
+
+        pipelineCacheIter.Next();
+    }
+
+    if ((result == DevDriver::Result::Success) &&
+        (replacedCount == 0u))
+    {
+        result = DevDriver::Result::Error;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 DevModeMgr::DevModeMgr(Instance* pInstance)
     :
     m_pInstance(pInstance),
@@ -140,7 +323,6 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_hardwareSupportsTracing(false),
     m_rgpServerSupportsTracing(false),
     m_finalized(false),
-    m_tracingEnabled(false),
     m_numPrepFrames(0),
     m_traceGpuMemLimit(0),
     m_enableInstTracing(false),
@@ -150,7 +332,8 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_globalFrameIndex(1), // Must start from 1 according to RGP spec
     m_traceFrameBeginTag(0),
     m_traceFrameEndTag(0),
-    m_targetApiPsoHash(0)
+    m_targetApiPsoHash(0),
+    m_pipelineCaches(pInstance->Allocator())
 {
     memset(&m_trace, 0, sizeof(m_trace));
 }
@@ -214,6 +397,11 @@ Pal::Result DevModeMgr::Init()
         }
     }
 
+    if (result == Pal::Result::Success)
+    {
+        m_pipelineReinjectionLock.Init();
+    }
+
     return result;
 }
 
@@ -263,9 +451,7 @@ void DevModeMgr::Finalize(
     // Finalize the devmode manager
     m_pDevDriverServer->Finalize();
 
-    // Figure out if tracing support should be enabled or not
     m_finalized      = true;
-    m_tracingEnabled = (m_pRGPServer != nullptr) && m_pRGPServer->TracesEnabled();
 }
 
 // =====================================================================================================================
@@ -298,7 +484,7 @@ void DevModeMgr::NotifyFrameEnd(
     bool         actualPresent)
 {
     // Get the RGP message server
-    if ((m_pRGPServer != nullptr) && m_pRGPServer->TracesEnabled())
+    if (IsTracingEnabled())
     {
         // Only act if this present is coming from the same device that started the trace
         if (m_trace.status != TraceStatus::Idle)
@@ -578,7 +764,7 @@ void DevModeMgr::NotifyFrameBegin(
     // Wait for the driver to be resumed in case it's been paused.
     WaitForDriverResume();
 
-    if ((m_pRGPServer != nullptr) && m_pRGPServer->TracesEnabled())
+    if (IsTracingEnabled())
     {
         // Check for pending traces here also in case the application presents before submitting any work.  This
         // may transition Idle to Pending which we will handle immediately below
@@ -1027,7 +1213,7 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
     const Queue* pQueue)
 {
     VK_ASSERT(pState->status == TraceStatus::Preparing);
-    VK_ASSERT(m_tracingEnabled);
+    VK_ASSERT(IsTracingEnabled());
 
     // We can only trace using a single device at a time currently, so recreate RGP trace
     // resources against this new one if the device is changing.
@@ -1804,7 +1990,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
 
     Pal::Result result = Pal::Result::Success;
 
-    if ((m_tracingEnabled == false) ||  // Tracing is globally disabled
+    if ((IsTracingEnabled() == false) ||  // Tracing is globally disabled
         (m_pRGPServer == nullptr) ||    // There is no RGP server (this should never happen)
         (pDevice->NumPalDevices() > 1)) // MGPU device group tracing is not currently supported
     {
@@ -1998,8 +2184,6 @@ Pal::Result DevModeMgr::InitRGPTracing(
         if (m_pRGPServer != nullptr)
         {
             m_pRGPServer->DisableTraces();
-
-            m_tracingEnabled = false;
         }
 
         // Clean up if we failed
@@ -2147,6 +2331,21 @@ Pal::Result DevModeMgr::TimedWaitQueueSemaphore(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+bool DevModeMgr::IsTracingEnabled() const
+{
+    VK_ASSERT(m_finalized);
+
+    if (m_finalized)
+    {
+        return (m_pRGPServer != nullptr) && m_pRGPServer->TracesEnabled();
+    }
+    else
+    {
+        return false;
+    }
 }
 
 // =====================================================================================================================
@@ -2361,6 +2560,88 @@ void DevModeMgr::CleanupEtwClient()
     }
 }
 #endif
+
+// =====================================================================================================================
+// Registers a pipeline binary cache object with the pipeline URI service and initializes the pipeline URI service
+// the first time a pipeline binary cache object is registered
+Util::Result DevModeMgr::RegisterPipelineCache(
+    PipelineBinaryCache* pPipelineCache,
+    uint32_t             postSizeLimit)
+{
+    Util::Result result = Util::Result::Success;
+
+    if (m_pPipelineUriService == nullptr)
+    {
+        void* pStorage = m_pInstance->AllocMem(sizeof(DevDriver::PipelineUriService), VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+
+        if (pStorage != nullptr)
+        {
+            m_pPipelineUriService = VK_PLACEMENT_NEW(pStorage) DevDriver::PipelineUriService();
+        }
+        else
+        {
+            result = Util::Result::ErrorOutOfMemory;
+        }
+
+        if (result == Util::Result::Success)
+        {
+            DevDriver::PipelineUriService::DriverInfo driverInfo;
+            driverInfo.pUserData = static_cast<void*>(this);
+            driverInfo.pfnGetPipelineHashes = &GetPipelineHashes;
+            driverInfo.pfnGetPipelineCodeObjects = &GetPipelineCodeObjects;
+            driverInfo.pfnInjectPipelineCodeObjects = &InjectPipelineCodeObjects;
+            driverInfo.postSizeLimit = postSizeLimit * 1024;
+
+            DevDriver::Result devDriverResult = m_pPipelineUriService->Init(driverInfo);
+
+            if (devDriverResult == DevDriver::Result::Success)
+            {
+                devDriverResult = m_pDevDriverServer->GetMessageChannel()->RegisterService(m_pPipelineUriService);
+            }
+
+            if (devDriverResult != DevDriver::Result::Success)
+            {
+                result = Util::Result::ErrorUnavailable;
+            }
+        }
+    }
+
+    if (result == Util::Result::Success)
+    {
+        Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> readWriteLock(&m_pipelineReinjectionLock);
+
+        result = m_pipelineCaches.PushBack(pPipelineCache);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Deregisters a pipeline binary cache with the pipeline URI service
+void DevModeMgr::DeregisterPipelineCache(
+    PipelineBinaryCache* pPipelineCache)
+{
+    Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> readWriteLock(&m_pipelineReinjectionLock);
+
+    auto it = m_pipelineCaches.Begin();
+
+    while (it.Get() != nullptr)
+    {
+        PipelineBinaryCache* element = *it.Get();
+
+        if (pPipelineCache == element)
+        {
+            m_pipelineCaches.Erase(&it);
+
+            // Each element should only be in the list once; break out of loop once found
+            break;
+        }
+        else
+        {
+            it.Next();
+        }
+    }
+}
 
 }; // namespace vk
 

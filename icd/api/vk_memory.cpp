@@ -633,7 +633,8 @@ VkResult Memory::OpenExternalSharedImage(
     palOpenInfo.resourceInfo.flags.ntHandle    = importInfo.isNtHandle;
 
     Pal::Result palResult = Pal::Result::Success;
-    if (importInfo.handle == 0)
+    const bool openedViaName = (importInfo.handle == 0);
+    if (openedViaName)
     {
     }
 
@@ -749,7 +750,8 @@ Memory::Memory(
     m_allocationCounted(false),
     m_sizeAccountedForDeviceMask(0),
     m_pExternalPalImage(nullptr),
-    m_primaryDeviceIndex(primaryIndex)
+    m_primaryDeviceIndex(primaryIndex),
+    m_sharedGpuMemoryHandle(0)
 {
     // PAL info is not available for memory objects allocated for presentable images
     memset(&m_info, 0, sizeof(m_info));
@@ -843,7 +845,9 @@ VkResult Memory::OpenExternalMemory(
     VK_ASSERT(ppMemory != nullptr);
 
     const uint32_t allocationMask = (1 << DefaultMemoryInstanceIdx);
-    if (importInfo.handle == 0)
+    const bool openedViaName      = (importInfo.handle == 0);
+
+    if (openedViaName)
     {
     }
     else

@@ -36,6 +36,9 @@
 
 namespace Pal { enum class ResourceMappingNodeType : Pal::uint32; }
 
+// NOTE: Internal shader module create flag, please modify it if it conflict with vulkan header files.
+#define VK_SHADER_MODULE_ENABLE_OPT_BIT    0x40000000u
+
 namespace vk
 {
 
@@ -78,7 +81,7 @@ public:
 
 protected:
     ShaderModule(size_t codeSize, const void* pCode);
-    VkResult Init(const Device* pDevice);
+    VkResult Init(const Device* pDevice, VkShaderModuleCreateFlags flags);
 
     size_t                     m_codeSize;
     const void*                m_pCode;
