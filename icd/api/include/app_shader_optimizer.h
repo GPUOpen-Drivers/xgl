@@ -115,6 +115,7 @@ struct ShaderTuningOptions
     uint32_t useSiScheduler;
     uint32_t reconfigWorkgroupLayout;
     bool enableLoadScalarizer;
+    uint32_t disableLicm;
 };
 
 struct ShaderProfileAction

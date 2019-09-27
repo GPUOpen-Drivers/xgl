@@ -142,6 +142,12 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pOptions->enableLoadScalarizer = true;
                 }
 #endif
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 35
+                if (shaderCreate.tuningOptions.disableLicm)
+                {
+                    options.pOptions->disableLicm = true;
+                }
+#endif
 
                 if (shaderCreate.apply.waveSize)
                 {
@@ -1535,6 +1541,7 @@ static bool ParseJsonProfileActionShader(
         "nggEnableSmallPrimFilter",
         "enableSubvector",
         "enableSubvectorSharedVgprs",
+        "disableLicm"
     };
 
     success &= CheckValidKeys(pJson, VK_ARRAY_SIZE(ValidKeys), ValidKeys);
@@ -1751,6 +1758,13 @@ static bool ParseJsonProfileActionShader(
         if (pItem->integerValue != 0)
         {
             pActions->shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
+        }
+    }
+    if ((pItem = utils::JsonGetValue(pJson, "disableLicm")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.tuningOptions.disableLicm = true;
         }
     }
 
