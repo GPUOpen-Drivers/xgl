@@ -77,7 +77,7 @@ public:
 
     VkResult Merge(uint32_t srcCacheCount, const PipelineCache** ppSrcCaches);
 
-    VK_INLINE PipelineBinaryCache* GetPipelineCache() { return m_pBinaryCache; }
+    VK_INLINE PipelineBinaryCache* GetPipelineCache() const { return m_pBinaryCache; }
 protected:
     PipelineCache(const Device*  pDevice,
             ShaderCache*         pShaderCaches,

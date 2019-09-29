@@ -116,11 +116,10 @@ if(ICD_MEMTRACK)
 endif()
 
 # Configure Vulkan SDK version definitions
-if(USE_NEXT_SDK)
-    target_compile_definitions(xgl PRIVATE VKI_SDK_1_2=1)
-else()
-    target_compile_definitions(xgl PRIVATE VKI_SDK_1_1=1)
-endif()
+
+set(SDK VKI_SDK_1_1)
+
+target_compile_definitions(xgl PRIVATE ${SDK}=1)
 
 # Enable relevant GPUOpen preprocessor definitions
 if(ICD_GPUOPEN_DEVMODE_BUILD)
@@ -183,7 +182,6 @@ target_sources(xgl PRIVATE
     api/barrier_policy.cpp
     api/color_space_helper.cpp
     api/compiler_solution.cpp
-    api/gpu_event_mgr.cpp
     api/internal_mem_mgr.cpp
     api/pipeline_compiler.cpp
     api/pipeline_binary_cache.cpp

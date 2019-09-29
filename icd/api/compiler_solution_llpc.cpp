@@ -54,9 +54,11 @@ CompilerSolutionLlpc::~CompilerSolutionLlpc()
 
 // =====================================================================================================================
 // Initialize CompilerSolutionLlpc class
-VkResult CompilerSolutionLlpc::Initialize()
+VkResult CompilerSolutionLlpc::Initialize(
+    Llpc::GfxIpVersion gfxIp,
+    Pal::GfxIpLevel    gfxIpLevel)
 {
-    VkResult result = CompilerSolution::Initialize();
+    VkResult result = CompilerSolution::Initialize(gfxIp, gfxIpLevel);
 
     if (result == VK_SUCCESS)
     {

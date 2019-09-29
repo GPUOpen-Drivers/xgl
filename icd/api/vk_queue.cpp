@@ -409,13 +409,16 @@ VkResult Queue::WaitIdle(void)
 {
     VK_ASSERT(m_pPalQueues != nullptr);
 
-    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    Pal::Result palResult = Pal::Result::Success;
+
+    for (uint32_t deviceIdx = 0;
+        (deviceIdx < m_pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
+        deviceIdx++)
     {
-        PalQueue(deviceIdx)->WaitIdle();
+        palResult = PalQueue(deviceIdx)->WaitIdle();
     }
 
-    // Pal::IQueue::WaitIdle returns void. We have no errors to produce here.
-    return VK_SUCCESS;
+    return PalToVkResult(palResult);
 }
 
 // =====================================================================================================================

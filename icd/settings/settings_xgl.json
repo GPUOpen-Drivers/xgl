@@ -1455,7 +1455,7 @@
             "Value": 0
           },
           {
-            "Description": " Enable for vertex shaders",
+            "Description": "Enable for vertex shaders",
             "Value": 1
           },
           {
@@ -1603,6 +1603,204 @@
       "Name": "SkipUnsupportedOpCode"
     },
     {
+      "Description": "Force vertex shaders' optimization IR mode selection.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Let the compiler choose the IR mode.",
+            "Value": 0
+          },
+          {
+            "Description": "Force the compiler to use Old IR.",
+            "Value": 1
+          },
+          {
+            "Description": "Force the compiler to use New IR with retry mechanism.",
+            "Value": 2
+          },
+          {
+            "Description": "Force the compiler to use New IR with error mechanism.",
+            "Value": 3
+          }
+        ]
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "vsIrMode",
+      "Name": "VsIrMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force tessellation control shaders' optimization IR mode selection.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Let the compiler choose the IR mode.",
+            "Value": 0
+          },
+          {
+            "Description": "Force the compiler to use Old IR.",
+            "Value": 1
+          },
+          {
+            "Description": "Force the compiler to use New IR with retry mechanism.",
+            "Value": 2
+          },
+          {
+            "Description": "Force the compiler to use New IR with error mechanism.",
+            "Value": 3
+          }
+        ]
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "tcsIrMode",
+      "Name": "TcsIrMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force tessellation evaluation shaders' optimization IR mode selection.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Let the compiler choose the IR mode.",
+            "Value": 0
+          },
+          {
+            "Description": "Force the compiler to use Old IR.",
+            "Value": 1
+          },
+          {
+            "Description": "Force the compiler to use New IR with retry mechanism.",
+            "Value": 2
+          },
+          {
+            "Description": "Force the compiler to use New IR with error mechanism.",
+            "Value": 3
+          }
+        ]
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "tesIrMode",
+      "Name": "TesIrMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force geometry shaders' optimization IR mode selection.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Let the compiler choose the IR mode.",
+            "Value": 0
+          },
+          {
+            "Description": "Force the compiler to use Old IR.",
+            "Value": 1
+          },
+          {
+            "Description": "Force the compiler to use New IR with retry mechanism.",
+            "Value": 2
+          },
+          {
+            "Description": "Force the compiler to use New IR with error mechanism.",
+            "Value": 3
+          }
+        ]
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "gsIrMode",
+      "Name": "GsIrMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force fragment shaders' optimization IR mode selection.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Let the compiler choose the IR mode.",
+            "Value": 0
+          },
+          {
+            "Description": "Force the compiler to use Old IR.",
+            "Value": 1
+          },
+          {
+            "Description": "Force the compiler to use New IR with retry mechanism.",
+            "Value": 2
+          },
+          {
+            "Description": "Force the compiler to use New IR with error mechanism.",
+            "Value": 3
+          }
+        ]
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "fsIrMode",
+      "Name": "FsIrMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Force compute shaders' optimization IR mode selection.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Let the compiler choose the IR mode.",
+            "Value": 0
+          },
+          {
+            "Description": "Force the compiler to use Old IR.",
+            "Value": 1
+          },
+          {
+            "Description": "Force the compiler to use New IR with retry mechanism.",
+            "Value": 2
+          },
+          {
+            "Description": "Force the compiler to use New IR with error mechanism.",
+            "Value": 3
+          }
+        ]
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "csIrMode",
+      "Name": "CsIrMode",
+      "Scope": "Driver"
+    },
+    {
       "Description": "[LLPC ONLY] LLPC general options. Max length of the option is 256. for example: Disable Loop unroll: -pragma-unroll-threshold=1 Enable si-scheduler: -enable-si-scheduler Please see amdllpc -help or -help-hidden for detail",
       "Tags": [
         "SPIRV Options"
@@ -1687,7 +1885,7 @@
     },
     {
       "Name": "AllowExternalPipelineCacheObject",
-      "Description": "Controls whether a pipeline cache object is allowed to be created via vkCreatePipelineCache in addition to the cache residing within the pipeline compiler. (Default: FALSE)",
+      "Description": "Controls whether a pipeline cache object is allowed to be created via vkCreatePipelineCache in addition to the cache residing within the pipeline compiler. (Default: TRUE)",
       "Tags": [
         "SPIRV Options"
       ],
@@ -3925,150 +4123,6 @@
       "Type": "uint32",
       "VariableName": "devModeSqttPrepareFrameCount",
       "Name": "DevModeSqttPrepareFrameCount"
-    },
-    {
-      "Description": "Allow chill to run. Chill is a user interaction dependent FPS limiter,  used for power saving. ",
-      "Tags": [
-        "Chill"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Type": "bool",
-      "VariableName": "allowChill",
-      "Name": "AllowChill",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "If per-app chill profile settings is enabled. ",
-      "Tags": [
-        "Chill"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "chillProfileEnable",
-      "Name": "Chill_ProfileEnable"
-    },
-    {
-      "ValidValues": {
-        "IsEnum": true,
-        "Values": [
-          {
-            "Name": "IcdChillLevelDisable",
-            "Value": 0,
-            "Description": "Disable"
-          },
-          {
-            "Name": "IcdChillLevelSubtle",
-            "Value": 1,
-            "Description": "Subtle"
-          },
-          {
-            "Name": "IcdChillLevelMedium",
-            "Value": 2,
-            "Description": "Medium"
-          },
-          {
-            "Name": "IcdChillLevelFull",
-            "Value": 3,
-            "Description": "Full"
-          }
-        ],
-        "Name": "IcdChillLevelMode"
-      },
-      "Description": "Chill level setting, default is medium.",
-      "Tags": [
-        "Chill"
-      ],
-      "Defaults": {
-        "Default": "IcdChillLevelMedium"
-      },
-      "Flags": {
-        "IsHex": true
-      },
-      "Scope": "Driver",
-      "Type": "enum",
-      "VariableName": "chillLevel",
-      "Name": "Chill_ChillLevel"
-    },
-    {
-      "ValidValues": {
-        "Values": [
-          {
-            "LogicOp": "GreaterThanOrEqual",
-            "Value": 30
-          },
-          {
-            "LogicOp": "LessThanOrEqual",
-            "Value": 300
-          }
-        ]
-      },
-      "Description": "Min chill frame rate; valid range is 30-300fps.",
-      "Tags": [
-        "Chill"
-      ],
-      "Defaults": {
-        "Default": 70
-      },
-      "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "chillMinFrameRate",
-      "Name": "Chill_MinFramerate"
-    },
-    {
-      "ValidValues": {
-        "Values": [
-          {
-            "LogicOp": "GreaterThanOrEqual",
-            "Value": 30
-          },
-          {
-            "LogicOp": "LessThanOrEqual",
-            "Value": 300
-          }
-        ]
-      },
-      "Description": "Max chill frame rate; valid range is 30-300fps.",
-      "Tags": [
-        "Chill"
-      ],
-      "Defaults": {
-        "Default": 144
-      },
-      "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "chillMaxFrameRate",
-      "Name": "Chill_MaxFramerate"
-    },
-    {
-      "Description": "The threshold number of draw calls per frame used to distinguish between loading screens and gameplay.",
-      "Tags": [
-        "Chill"
-      ],
-      "Defaults": {
-        "Default": 150
-      },
-      "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "chillLoadingScreenDrawsThresh",
-      "Name": "Chill_LoadingScreenDrawsThresh"
-    },
-    {
-      "Description": "When true, we will not disable chill based on KMD workstation flag  or Big Software version.",
-      "Tags": [
-        "Chill"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "chillIgnoreBaseDriverRestrictions",
-      "Name": "Chill_IgnoreBaseDriverRestrictions"
     },
     {
       "Name": "OverrideShaderParams",

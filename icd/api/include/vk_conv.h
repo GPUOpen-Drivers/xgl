@@ -2766,14 +2766,14 @@ VK_INLINE void VkToPalScissorRect(
 VK_INLINE Pal::QueuePriority VkToPalGlobalPriority(
     VkQueueGlobalPriorityEXT vkPriority)
 {
-    Pal::QueuePriority palPriority = Pal::QueuePriority::Low;
+    Pal::QueuePriority palPriority = Pal::QueuePriority::Normal;
     switch (static_cast<int32_t>(vkPriority))
     {
     case VK_QUEUE_GLOBAL_PRIORITY_LOW_EXT:
-        palPriority = Pal::QueuePriority::VeryLow;
+        palPriority = Pal::QueuePriority::Idle;
         break;
     case VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT:
-        palPriority = Pal::QueuePriority::Low;
+        palPriority = Pal::QueuePriority::Normal;
         break;
     case VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT:
         palPriority = Pal::QueuePriority::Medium;
@@ -2782,7 +2782,7 @@ VK_INLINE Pal::QueuePriority VkToPalGlobalPriority(
         palPriority = Pal::QueuePriority::High;
         break;
     default:
-        palPriority = Pal::QueuePriority::Low;
+        palPriority = Pal::QueuePriority::Normal;
         break;
     }
 

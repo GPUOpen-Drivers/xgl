@@ -45,7 +45,7 @@ public:
 
 public:
     // Overidded functions
-    virtual VkResult Initialize();
+    virtual VkResult Initialize(Llpc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel);
 
     virtual void Destroy();
 

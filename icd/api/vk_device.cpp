@@ -294,22 +294,37 @@ static void ConstructQueueCreateInfo(
     {
         VK_ASSERT(queuePriority == VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT);
 
-        pQueueCreateInfo->engineType    = Pal::EngineType::EngineTypeExclusiveCompute;
+        pQueueCreateInfo->engineType    = Pal::EngineType::EngineTypeCompute;
         pQueueCreateInfo->engineIndex   = rtCuHighComputeSubEngineIndex;
         pQueueCreateInfo->numReservedCu = dedicatedComputeUnits;
     }
-    else if ((palQueuePriority > Pal::QueuePriority::Low)       &&
-             (palQueueType == Pal::QueueType::QueueTypeCompute) &&
-             (vrHighPriorityIndex != UINT32_MAX))
+    else if (palQueueType == Pal::QueueType::QueueTypeCompute)
     {
-        pQueueCreateInfo->engineType     = Pal::EngineType::EngineTypeExclusiveCompute;
-        pQueueCreateInfo->engineIndex    = vrHighPriorityIndex;
+        pQueueCreateInfo->engineType = Pal::EngineType::EngineTypeCompute;
+
+        if ((palQueuePriority > Pal::QueuePriority::Idle) &&
+            (vrHighPriorityIndex != UINT32_MAX))
+        {
+            pQueueCreateInfo->engineIndex    = vrHighPriorityIndex;
+        }
+        else
+        {
+            pQueueCreateInfo->engineIndex   = pPhysicalDevices[deviceIdx]->GetCompQueueEngineIndex(queueIndex);
+        }
     }
     else
     {
         pQueueCreateInfo->engineType  =
             pPhysicalDevices[deviceIdx]->GetQueueFamilyPalEngineType(queueFamilyIndex);
-        pQueueCreateInfo->engineIndex = queueIndex;
+
+        if (palQueueType == Pal::QueueType::QueueTypeUniversal)
+        {
+            pQueueCreateInfo->engineIndex = pPhysicalDevices[deviceIdx]->GetUniversalQueueEngineIndex(queueIndex);
+        }
+        else
+        {
+            pQueueCreateInfo->engineIndex = queueIndex;
+        }
     }
 
     pQueueCreateInfo->queueType = palQueueType;
@@ -638,6 +653,17 @@ VkResult Device::Create(
                 reinterpret_cast<const VkDeviceMemoryOverallocationCreateInfoAMD*>(pHeader);
 
             overallocationBehavior = pMemoryOverallocationCreateInfo->overallocationBehavior;
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT*>(pHeader));
+
+            break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COHERENT_MEMORY_FEATURES_AMD:
@@ -1146,7 +1172,7 @@ VkResult Device::Initialize(
         }
         case AppProfile::WolfensteinII:
             // This application optimization layer is currently GFX10-specific
-            if (deviceProps.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+            if (deviceProps.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
                 void* pMemory = VkInstance()->AllocMem(sizeof(Wolfenstein2Layer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
 
@@ -1820,15 +1846,19 @@ void Device::DestroyInternalPipelines()
 // Wait for device idle. Punts to PAL device.
 VkResult Device::WaitIdle(void)
 {
-    for (uint32_t i = 0; i < Queue::MaxQueueFamilies; ++i)
+    VkResult result = VK_SUCCESS;
+
+    for (uint32_t i = 0; (i < Queue::MaxQueueFamilies) && (result == VK_SUCCESS); ++i)
     {
-        for (uint32_t j = 0; (j < Queue::MaxQueuesPerFamily) && (m_pQueues[i][j] != nullptr); ++j)
+        for (uint32_t j = 0;
+            (j < Queue::MaxQueuesPerFamily) && (m_pQueues[i][j] != nullptr) && (result == VK_SUCCESS);
+            ++j)
         {
-            (*m_pQueues[i][j])->WaitIdle();
+            result = (*m_pQueues[i][j])->WaitIdle();
         }
     }
 
-    return VK_SUCCESS;
+    return result;
 }
 
 // =====================================================================================================================

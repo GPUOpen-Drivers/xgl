@@ -106,7 +106,7 @@ public:
     CompilerSolution(PhysicalDevice* pPhysicalDevice);
     virtual ~CompilerSolution();
 
-    virtual VkResult Initialize() = 0;
+    virtual VkResult Initialize(Llpc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel) = 0;
 
     virtual void Destroy() = 0;
 

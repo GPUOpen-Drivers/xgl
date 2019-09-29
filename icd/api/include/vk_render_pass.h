@@ -48,7 +48,6 @@ namespace vk
 class Device;
 class CmdBuffer;
 class Framebuffer;
-class GpuEvents;
 class RenderPassCmdList;
 
 struct RenderPassExtCreateInfo

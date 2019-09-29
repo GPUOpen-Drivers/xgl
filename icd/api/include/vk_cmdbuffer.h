@@ -43,7 +43,6 @@
 #include "include/vk_render_pass.h"
 #include "include/vk_utils.h"
 
-#include "include/gpu_event_mgr.h"
 #include "include/internal_mem_mgr.h"
 #include "include/stencil_ops_combiner.h"
 #include "include/vert_buf_binding_mgr.h"
@@ -643,8 +642,6 @@ public:
 
     VK_FORCEINLINE VirtualStackAllocator* GetStackAllocator() { return m_pStackAllocator; }
 
-    void RequestRenderPassEvents(uint32_t eventCount, GpuEvents*** pppGpuEvents);
-
     void PalCmdBarrier(
         const Pal::BarrierInfo& info,
         uint32_t                deviceMask);
@@ -995,7 +992,6 @@ private:
     VkShaderStageFlags            m_validShaderStageFlags;
     Pal::ICmdBuffer*              m_pPalCmdBuffers[MaxPalDevices];
     VirtualStackAllocator*        m_pStackAllocator;
-    GpuEventMgr*                  m_pGpuEventMgr;
 
     CmdBufferRenderState          m_state; // Render state tracked during command buffer building
 

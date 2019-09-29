@@ -114,6 +114,7 @@ struct ShaderTuningOptions
     uint32_t waveBreakSize;
     uint32_t useSiScheduler;
     uint32_t reconfigWorkgroupLayout;
+    bool enableLoadScalarizer;
 };
 
 struct ShaderProfileAction

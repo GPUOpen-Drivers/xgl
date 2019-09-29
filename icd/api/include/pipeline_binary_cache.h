@@ -44,6 +44,18 @@ class IPlatformKey;
 namespace vk
 {
 
+struct BinaryCacheEntry
+{
+    Util::MetroHash::Hash hashId;
+    size_t                dataSize;
+};
+
+constexpr size_t SHA_DIGEST_LENGTH = 20;
+struct PipelineBinaryCachePrivateHeader
+{
+    uint8_t  hashId[SHA_DIGEST_LENGTH];
+};
+
 // Unified pipeline cache interface
 class PipelineBinaryCache
 {
@@ -58,10 +70,13 @@ public:
         const Llpc::GfxIpVersion& gfxIp,
         const PhysicalDevice*     pPhysicalDevice);
 
-    VkResult Initialize(
+    static bool IsValidBlob(
         const PhysicalDevice* pPhysicalDevice,
-        size_t                initDataSize,
-        const void*           pInitData);
+        size_t dataSize,
+        const void* pData);
+
+    VkResult Initialize(
+        const PhysicalDevice* pPhysicalDevice);
 
     Util::Result QueryPipelineBinary(
         const CacheId*     pCacheId,
@@ -70,12 +85,20 @@ public:
     Util::Result LoadPipelineBinary(
         const CacheId*  pCacheId,
         size_t*         pPipelineBinarySize,
-        const void**    ppPipelineBinary);
+        const void**    ppPipelineBinary) const;
 
     Util::Result StorePipelineBinary(
         const CacheId*  pCacheId,
         size_t          pipelineBinarySize,
         const void*     pPipelineBinary);
+
+    VkResult Serialize(
+        void*   pBlob,
+        size_t* pSize);
+
+    VkResult Merge(
+        uint32_t                    srcCacheCount,
+        const PipelineBinaryCache** ppSrcCaches);
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
     Util::Result LoadReinjectionBinary(
@@ -132,8 +155,6 @@ private:
 
     VkResult InitLayers(
         const PhysicalDevice*  pPhysicalDevice,
-        size_t                 initDataSize,
-        const void*            pInitData,
         bool                   internal,
         const RuntimeSettings& settings);
 
@@ -152,6 +173,7 @@ private:
         const PhysicalDevice*  pPhysicalDevice,
         const RuntimeSettings& settings);
 
+    Util::ICacheLayer*  GetMemoryLayer() const { return m_pMemoryLayer; }
     Util::IArchiveFile* OpenReadOnlyArchive(const char* path, const char* fileName, size_t bufferSize);
     Util::IArchiveFile* OpenWritableArchive(const char* path, const char* fileName, size_t bufferSize);
     Util::ICacheLayer*  CreateFileLayer(Util::IArchiveFile* pFile);
@@ -171,7 +193,9 @@ private:
     Llpc::GfxIpVersion      m_gfxIp;                    // Compared against e_flags of reinjected elf files
 
     Instance* const         m_pInstance;                // Allocator for use when interacting with the cache
-    Util::IPlatformKey*     m_pPlatformKey;             // Platform identifying key
+
+    const Util::IPlatformKey*     m_pPlatformKey;       // Platform identifying key
+
     Util::ICacheLayer*      m_pTopLayer;                // Top layer of the cache chain where queries are submitted
 
 #if ICD_GPUOPEN_DEVMODE_BUILD

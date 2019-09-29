@@ -151,7 +151,7 @@ VkResult PipelineCompiler::Initialize()
 
     if (result == VK_SUCCESS)
     {
-        result = m_compilerSolutionLlpc.Initialize();
+        result = m_compilerSolutionLlpc.Initialize(m_gfxIp, info.gfxLevel);
     }
 
     if ((result == VK_SUCCESS) &&

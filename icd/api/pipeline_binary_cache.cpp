@@ -66,6 +66,76 @@ const uint32_t PipelineBinaryCache::ElfType     = Util::HashString(ElfTypeString
 static Util::Hash128 ParseHash128(const char* str);
 #endif
 
+static Util::Result CalculateHashId(
+    Instance*                   pInstance,
+    const Util::IPlatformKey*   pPlatformKey,
+    const void*                 pData,
+    size_t                      dataSize,
+    uint8_t*                    pHashId)
+{
+    Util::Result        result          = Util::Result::Success;
+    Util::IHashContext* pContext        = nullptr;
+    size_t              contextSize     = pPlatformKey->GetKeyContext()->GetDuplicateObjectSize();
+    void*               pContextMem     = pInstance->AllocMem(
+                                            contextSize,
+                                            VK_DEFAULT_MEM_ALIGN,
+                                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if (pContextMem != nullptr)
+    {
+        result = pPlatformKey->GetKeyContext()->Duplicate(pContextMem, &pContext);
+    }
+    if (result == Util::Result::Success)
+    {
+        result = pContext->AddData(pData, dataSize);
+    }
+    if (result == Util::Result::Success)
+    {
+        result = pContext->Finish(pHashId);
+    }
+    if (pContext != nullptr)
+    {
+        pContext->Destroy();
+    }
+    if (pContextMem != nullptr)
+    {
+        pInstance->FreeMem(pContextMem);
+    }
+
+    return result;
+}
+
+bool PipelineBinaryCache::IsValidBlob(
+    const PhysicalDevice* pPhysicalDevice,
+    size_t dataSize,
+    const void* pData)
+{
+    bool     isValid            = false;
+    size_t   blobSize           = dataSize;
+    auto pBinaryPrivateHeader   = static_cast<const PipelineBinaryCachePrivateHeader*>(pData);
+    uint8_t  hashId[SHA_DIGEST_LENGTH];
+
+    pData         = Util::VoidPtrInc(pData, sizeof(PipelineBinaryCachePrivateHeader));
+    blobSize     -= sizeof(PipelineBinaryCachePrivateHeader);
+
+    if (pPhysicalDevice->GetPlatformKey() != nullptr)
+    {
+        Util::Result        result          = CalculateHashId(
+                                                pPhysicalDevice->Manager()->VkInstance(),
+                                                pPhysicalDevice->GetPlatformKey(),
+                                                pData,
+                                                blobSize,
+                                                hashId);
+
+        if (result == Util::Result::Success)
+        {
+            isValid = (memcmp(hashId, pBinaryPrivateHeader->hashId, SHA_DIGEST_LENGTH) == 0);
+        }
+    }
+
+    return isValid;
+}
+
 // =====================================================================================================================
 // Allocate and initialize a PipelineBinaryCache object
 PipelineBinaryCache* PipelineBinaryCache::Create(
@@ -82,11 +152,43 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
     {
         pObj = VK_PLACEMENT_NEW(pMem) PipelineBinaryCache(pInstance, gfxIp, internal);
 
-        if (pObj->Initialize(pPhysicalDevice, initDataSize, pInitData) != VK_SUCCESS)
+        if (pObj->Initialize(pPhysicalDevice) != VK_SUCCESS)
         {
             pObj->Destroy();
             pInstance->FreeMem(pMem);
             pObj = nullptr;
+        }
+        else if ((pInitData != nullptr) &&
+                 (initDataSize > (sizeof(BinaryCacheEntry) + sizeof(PipelineBinaryCachePrivateHeader))))
+        {
+            const void* pBlob           = pInitData;
+            size_t   blobSize           = initDataSize;
+            constexpr size_t EntrySize  = sizeof(BinaryCacheEntry);
+
+            pBlob         = Util::VoidPtrInc(pBlob, sizeof(PipelineBinaryCachePrivateHeader));
+            blobSize     -= sizeof(PipelineBinaryCachePrivateHeader);
+            while (blobSize > EntrySize)
+            {
+                const BinaryCacheEntry* pEntry  = static_cast<const BinaryCacheEntry*>(pBlob);
+                const void*             pData   = Util::VoidPtrInc(pBlob, sizeof(BinaryCacheEntry));
+                const size_t entryAndDataSize   = pEntry->dataSize + sizeof(BinaryCacheEntry);
+
+                if (blobSize >= entryAndDataSize)
+                {
+                    //add to cache
+                    Util::Result result = pObj->StorePipelineBinary(&pEntry->hashId, pEntry->dataSize, pData);
+                    if (result != Util::Result::Success)
+                    {
+                        break;
+                    }
+                    pBlob = Util::VoidPtrInc(pBlob, entryAndDataSize);
+                    blobSize -= entryAndDataSize;
+                }
+                else
+                {
+                    break;
+                }
+            }
         }
     }
     return pObj;
@@ -109,22 +211,17 @@ PipelineBinaryCache::PipelineBinaryCache(
     m_pArchiveLayer    { nullptr },
     m_openFiles        { pInstance->Allocator() },
     m_archiveLayers    { pInstance->Allocator() },
-    m_isInternalCache    { internal }
+    m_isInternalCache  { internal }
 {
     // Without copy constructor, a class type variable can't be initialized in initialization list with gcc 4.8.5.
     // Initialize m_gfxIp here instead to make gcc 4.8.5 work.
     m_gfxIp = gfxIp;
+
 }
 
 // =====================================================================================================================
 PipelineBinaryCache::~PipelineBinaryCache()
 {
-    if (m_pPlatformKey != nullptr)
-    {
-        m_pPlatformKey->Destroy();
-        m_pInstance->FreeMem(m_pPlatformKey);
-    }
-
     for (FileVector::Iter i = m_openFiles.Begin(); i.IsValid(); i.Next())
     {
         i.Get()->Destroy();
@@ -171,7 +268,7 @@ Util::Result PipelineBinaryCache::QueryPipelineBinary(
 Util::Result PipelineBinaryCache::LoadPipelineBinary(
     const CacheId* pCacheId,
     size_t*        pPipelineBinarySize,
-    const void**   ppPipelineBinary)
+    const void**   ppPipelineBinary) const
 {
     VK_ASSERT(m_pTopLayer != nullptr);
 
@@ -347,9 +444,7 @@ void PipelineBinaryCache::FreePipelineBinary(
 // =====================================================================================================================
 // Build the cache layer chain
 VkResult PipelineBinaryCache::Initialize(
-    const PhysicalDevice* pPhysicalDevice,
-    size_t                initDataSize,
-    const void*           pInitData)
+    const PhysicalDevice* pPhysicalDevice)
 {
     VkResult result = VK_SUCCESS;
 
@@ -357,12 +452,17 @@ VkResult PipelineBinaryCache::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        result = InitializePlatformKey(pPhysicalDevice, settings);
+        m_pPlatformKey = pPhysicalDevice->GetPlatformKey();
+    }
+
+    if (m_pPlatformKey == nullptr)
+    {
+        result = VK_ERROR_INITIALIZATION_FAILED;
     }
 
     if (result == VK_SUCCESS)
     {
-        result = InitLayers(pPhysicalDevice, initDataSize, pInitData, m_isInternalCache, settings);
+        result = InitLayers(pPhysicalDevice, m_isInternalCache, settings);
     }
 
     if (result == VK_SUCCESS)
@@ -398,52 +498,6 @@ VkResult PipelineBinaryCache::Initialize(
         }
     }
 #endif
-
-    return result;
-}
-
-// =====================================================================================================================
-// Generate our platform key
-VkResult PipelineBinaryCache::InitializePlatformKey(
-    const PhysicalDevice*  pPhysicalDevice,
-    const RuntimeSettings& settings)
-{
-    static constexpr Util::HashAlgorithm KeyAlgorithm = Util::HashAlgorithm::Sha1;
-
-    struct
-    {
-        VkPhysicalDeviceProperties properties;
-        char*                      timestamp[sizeof(__TIMESTAMP__)];
-    } initialData;
-
-    memset(&initialData, 0, sizeof(initialData));
-
-    VkResult result = pPhysicalDevice->GetDeviceProperties(&initialData.properties);
-
-    if (result == VK_SUCCESS)
-    {
-        size_t memSize = Util::GetPlatformKeySize(KeyAlgorithm);
-        void*  pMem    = m_pInstance->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-
-        if (pMem == nullptr)
-        {
-            result = VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
-        else
-        {
-            if (settings.markPipelineCacheWithBuildTimestamp)
-            {
-                memcpy(initialData.timestamp, __TIMESTAMP__, sizeof(__TIMESTAMP__));
-            }
-
-            if (Util::CreatePlatformKey(KeyAlgorithm, &initialData, sizeof(initialData), pMem, &m_pPlatformKey) !=
-                Util::Result::Success)
-            {
-                m_pInstance->FreeMem(pMem);
-                result = VK_ERROR_INITIALIZATION_FAILED;
-            }
-        }
-    }
 
     return result;
 }
@@ -1033,8 +1087,6 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
 // Initialize layers (a single layer that supports storage for binaries needs to succeed)
 VkResult PipelineBinaryCache::InitLayers(
     const PhysicalDevice*  pPhysicalDevice,
-    size_t                 initDataSize,
-    const void*            pInitData,
     bool                   internal,
     const RuntimeSettings& settings)
 {
@@ -1118,6 +1170,151 @@ VkResult PipelineBinaryCache::OrderLayers(
         // The cache is not very useful if no layers are available.
         result = VK_ERROR_INITIALIZATION_FAILED;
     }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Copies the pipeline cache data to the memory blob provided by the calling function.
+//
+// NOTE: It is expected that the calling function has not used this pipeline cache since querying the size
+VkResult PipelineBinaryCache::Serialize(
+    void*   pBlob,    // [out] System memory pointer where the serialized data should be placed
+    size_t* pSize)    // [in,out] Size of the memory pointed to by pBlob. If the value stored in pSize is zero then no
+                      // data will be copied and instead the size required for serialization will be returned in pSize
+{
+    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 534
+    if (m_pMemoryLayer != nullptr)
+    {
+        if (*pSize == 0)
+        {
+            size_t curCount, curDataSize;
+
+            result = PalToVkResult(Util::GetMemoryCacheLayerCurSize(m_pMemoryLayer, &curCount, &curDataSize));
+            if (result == VK_SUCCESS)
+            {
+                *pSize = curCount * sizeof(BinaryCacheEntry) + curDataSize + sizeof(PipelineBinaryCachePrivateHeader);
+            }
+        }
+        else
+        {
+            size_t curCount, curDataSize;
+
+            result = PalToVkResult(Util::GetMemoryCacheLayerCurSize(m_pMemoryLayer, &curCount, &curDataSize));
+            if (result == VK_SUCCESS)
+            {
+                if (*pSize > (sizeof(BinaryCacheEntry) + sizeof(PipelineBinaryCachePrivateHeader)))
+                {
+                    Util::AutoBuffer<Util::Hash128, 8, PalAllocator> cacheIds(curCount, m_pInstance->Allocator());
+                    size_t remainingSpace    = *pSize - sizeof(PipelineBinaryCachePrivateHeader);
+
+                    result = PalToVkResult(Util::GetMemoryCacheLayerHashIds(m_pMemoryLayer, curCount, &cacheIds[0]));
+                    if (result == VK_SUCCESS)
+                    {
+                        void* pDataDst = pBlob;
+
+                        // reserved for privateHeader
+                        pDataDst = Util::VoidPtrInc(pDataDst, sizeof(PipelineBinaryCachePrivateHeader));
+
+                        for (uint32_t i = 0; i < curCount && remainingSpace > sizeof(BinaryCacheEntry); i++)
+                        {
+                            size_t           dataSize;
+                            const void*      pBinaryCacheData;
+
+                            result = PalToVkResult(LoadPipelineBinary(&cacheIds[i], &dataSize, &pBinaryCacheData));
+                            if (result == VK_SUCCESS)
+                            {
+                                if (remainingSpace >= (sizeof(BinaryCacheEntry) + dataSize))
+                                {
+                                    BinaryCacheEntry* pEntry =  static_cast<BinaryCacheEntry*>(pDataDst);
+
+                                    pEntry->hashId    = cacheIds[i];
+                                    pEntry->dataSize  = dataSize;
+
+                                    pDataDst = Util::VoidPtrInc(pDataDst, sizeof(BinaryCacheEntry));
+                                    memcpy(pDataDst, pBinaryCacheData, dataSize);
+                                    pDataDst = Util::VoidPtrInc(pDataDst, dataSize);
+                                    remainingSpace -= (sizeof(BinaryCacheEntry) + dataSize);
+                                }
+                                m_pInstance->FreeMem(const_cast<void*>(pBinaryCacheData));
+                            }
+                        }
+                    }
+                    if (*pSize < (sizeof(BinaryCacheEntry) * curCount + curDataSize + sizeof(PipelineBinaryCachePrivateHeader)))
+                    {
+                        result = VK_INCOMPLETE;
+                    }
+                    *pSize -= remainingSpace;
+
+                    auto pBinaryPrivateHeader = static_cast<PipelineBinaryCachePrivateHeader*>(pBlob);
+                    void* pData               = Util::VoidPtrInc(pBlob, sizeof(PipelineBinaryCachePrivateHeader));
+
+                    result = PalToVkResult(CalculateHashId(
+                                                m_pInstance,
+                                                m_pPlatformKey,
+                                                pData,
+                                                *pSize - sizeof(PipelineBinaryCachePrivateHeader),
+                                                pBinaryPrivateHeader->hashId));
+                }
+                else
+                {
+                    result = VK_ERROR_INITIALIZATION_FAILED;
+                }
+            }
+        }
+    }
+#endif
+    return result;
+}
+
+// =====================================================================================================================
+// Merge the pipeline cache data into one
+//
+VkResult PipelineBinaryCache::Merge(
+    uint32_t                    srcCacheCount,
+    const PipelineBinaryCache** ppSrcCaches)
+{
+    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 534
+    if (m_pMemoryLayer != nullptr)
+    {
+        for (uint32_t i = 0; i < srcCacheCount; i++)
+        {
+            Util::ICacheLayer* pMemoryLayer = ppSrcCaches[i]->GetMemoryLayer();
+            size_t curCount, curDataSize;
+
+            result = PalToVkResult(Util::GetMemoryCacheLayerCurSize(pMemoryLayer, &curCount, &curDataSize));
+            if ((result == VK_SUCCESS) && (curCount > 0))
+            {
+                Util::AutoBuffer<Util::Hash128, 8, PalAllocator> cacheIds(curCount, m_pInstance->Allocator());
+
+                result = PalToVkResult(Util::GetMemoryCacheLayerHashIds(pMemoryLayer, curCount, &cacheIds[0]));
+                if (result == VK_SUCCESS)
+                {
+                    for (uint32_t j = 0; j < curCount; j++)
+                    {
+                        size_t           dataSize;
+                        const void*      pBinaryCacheData;
+
+                        result = PalToVkResult(ppSrcCaches[i]->LoadPipelineBinary(&cacheIds[j], &dataSize, &pBinaryCacheData));
+                        if (result == VK_SUCCESS)
+                        {
+                            result = PalToVkResult(StorePipelineBinary(&cacheIds[j], dataSize, pBinaryCacheData));
+                            m_pInstance->FreeMem(const_cast<void*>(pBinaryCacheData));
+                            if (result != VK_SUCCESS)
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+#endif
 
     return result;
 }

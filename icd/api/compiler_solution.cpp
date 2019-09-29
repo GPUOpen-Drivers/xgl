@@ -49,49 +49,12 @@ CompilerSolution::~CompilerSolution()
 
 // =====================================================================================================================
 // Initialize CompilerSolution class
-VkResult CompilerSolution::Initialize()
+VkResult CompilerSolution::Initialize(
+    Llpc::GfxIpVersion gfxIp,
+    Pal::GfxIpLevel    gfxIpLevel)
 {
-    Pal::IDevice* pPalDevice = m_pPhysicalDevice->PalDevice();
-    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
-
-    // Initialize GfxIp informations per PAL device properties
-    Pal::DeviceProperties info;
-    pPalDevice->GetProperties(&info);
-
-    switch (info.gfxLevel)
-    {
-    case Pal::GfxIpLevel::GfxIp6:
-        m_gfxIp.major = 6;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp7:
-        m_gfxIp.major = 7;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8:
-        m_gfxIp.major = 8;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp8_1:
-        m_gfxIp.major = 8;
-        m_gfxIp.minor = 1;
-        break;
-    case Pal::GfxIpLevel::GfxIp9:
-        m_gfxIp.major = 9;
-        m_gfxIp.minor = 0;
-        break;
-    case Pal::GfxIpLevel::GfxIp10_1:
-        m_gfxIp.major = 10;
-        m_gfxIp.minor = 1;
-        break;
-
-    default:
-        VK_NEVER_CALLED();
-        break;
-    }
-
-    m_gfxIp.stepping = info.gfxStepping;
-    m_gfxIpLevel     = info.gfxLevel;
+    m_gfxIp      = gfxIp;
+    m_gfxIpLevel = gfxIpLevel;
 
     return VK_SUCCESS;
 }

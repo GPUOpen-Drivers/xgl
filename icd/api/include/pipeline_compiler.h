@@ -39,8 +39,6 @@
 
 #include "include/vk_shader_code.h"
 
-#define ICD_BUILD_MULTI_COMPILER 0
-
 namespace vk
 {
 

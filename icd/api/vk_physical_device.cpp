@@ -59,6 +59,7 @@
 #include "palLib.h"
 #include "palMath.h"
 #include "palMsaaState.h"
+#include "palPlatformKey.h"
 #include "palScreen.h"
 #include "palHashLiteralString.h"
 #include <string>
@@ -259,7 +260,8 @@ PhysicalDevice::PhysicalDevice(
     m_prtOnDmaSupported(true),
     m_supportedExtensions(),
     m_allowedExtensions(),
-    m_compiler(this)
+    m_compiler(this),
+    m_pPlatformKey(nullptr)
 {
     memset(&m_limits, 0, sizeof(m_limits));
     memset(m_formatFeatureMsaaTarget, 0, sizeof(m_formatFeatureMsaaTarget));
@@ -445,6 +447,44 @@ void PhysicalDevice::DecreaseAllocatedMemorySize(
 }
 
 // =====================================================================================================================
+// Generate our platform key
+void PhysicalDevice::InitializePlatformKey(
+    const RuntimeSettings& settings)
+{
+    static constexpr Util::HashAlgorithm KeyAlgorithm = Util::HashAlgorithm::Sha1;
+
+    struct
+    {
+        VkPhysicalDeviceProperties properties;
+        char*                      timestamp[sizeof(__TIMESTAMP__)];
+    } initialData;
+
+    memset(&initialData, 0, sizeof(initialData));
+
+    VkResult result = GetDeviceProperties(&initialData.properties);
+
+    if (result == VK_SUCCESS)
+    {
+        size_t memSize = Util::GetPlatformKeySize(KeyAlgorithm);
+        void*  pMem    = VkInstance()->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        if (pMem != nullptr)
+        {
+            if (settings.markPipelineCacheWithBuildTimestamp)
+            {
+                memcpy(initialData.timestamp, __TIMESTAMP__, sizeof(__TIMESTAMP__));
+            }
+
+            if (Util::CreatePlatformKey(KeyAlgorithm, &initialData, sizeof(initialData), pMem, &m_pPlatformKey) !=
+                Util::Result::Success)
+            {
+                VkInstance()->FreeMem(pMem);
+            }
+        }
+    }
+}
+
+// =====================================================================================================================
 VkResult PhysicalDevice::Initialize()
 {
     const bool nullGpu = VkInstance()->IsNullGpuModeEnabled();
@@ -466,14 +506,8 @@ VkResult PhysicalDevice::Initialize()
         {
             for (uint32_t idx = 0; idx < Pal::EngineTypeCount; ++idx)
             {
-                // We do not currently create a high priority universal queue, so we don't need that engine.
-                // In order to support global priority, we still need exclusive compute engine to be initialized
-                // but this engine can only be selected according to the global priority set by application
-                if (idx != static_cast<uint32_t>(Pal::EngineTypeHighPriorityUniversal))
-                {
-                    const auto& engineProps = m_properties.engineProperties[idx];
-                    finalizeInfo.requestedEngineCounts[idx].engines = ((1 << engineProps.engineCount) - 1);
-                }
+                const auto& engineProps = m_properties.engineProperties[idx];
+                finalizeInfo.requestedEngineCounts[idx].engines = ((1 << engineProps.engineCount) - 1);
             }
         }
 
@@ -742,8 +776,10 @@ VkResult PhysicalDevice::Initialize()
     }
 
     VkResult vkResult = PalToVkResult(result);
+
     if (vkResult == VK_SUCCESS)
     {
+        InitializePlatformKey(settings);
         vkResult = m_compiler.Initialize();
     }
 
@@ -895,6 +931,12 @@ void PhysicalDevice::LateInitialize()
 // =====================================================================================================================
 VkResult PhysicalDevice::Destroy(void)
 {
+    if (m_pPlatformKey != nullptr)
+    {
+        m_pPlatformKey->Destroy();
+        VkInstance()->FreeMem(m_pPlatformKey);
+    }
+
     m_compiler.Destroy();
 
     this->~PhysicalDevice();
@@ -1033,8 +1075,10 @@ VkResult PhysicalDevice::GetFeatures(
     pFeatures->shaderStorageImageArrayDynamicIndexing   = VK_TRUE;
     pFeatures->shaderClipDistance                       = VK_TRUE;
     pFeatures->shaderCullDistance                       = VK_TRUE;
-    pFeatures->shaderFloat64                            = VK_TRUE;
-    pFeatures->shaderInt64                              = VK_TRUE;
+    pFeatures->shaderFloat64                            =
+        (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
+    pFeatures->shaderInt64                              =
+        (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
 
     if ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
         ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false)      ||
@@ -3202,16 +3246,11 @@ void PhysicalDevice::PopulateQueueFamilies()
         VK_QUEUE_COMPUTE_BIT |
         VK_QUEUE_TRANSFER_BIT |
         VK_QUEUE_SPARSE_BINDING_BIT,
-        // Pal::EngineTypeExclusiveCompute
-        0,
         // Pal::EngineTypeDma
         VK_QUEUE_TRANSFER_BIT |
         VK_QUEUE_SPARSE_BINDING_BIT,
         // Pal::EngineTypeTimer
         0,
-        // Pal::EngineTypeHighPriorityUniversal
-        0,
-
     };
 
     // While it's possible for an engineType to support multiple queueTypes,
@@ -3220,10 +3259,8 @@ void PhysicalDevice::PopulateQueueFamilies()
     {
         Pal::QueueTypeUniversal,
         Pal::QueueTypeCompute,
-        Pal::QueueTypeCompute,
         Pal::QueueTypeDma,
         Pal::QueueTypeTimer,
-        Pal::QueueTypeUniversal,
 
     };
 
@@ -3231,11 +3268,9 @@ void PhysicalDevice::PopulateQueueFamilies()
                   (VK_ARRAY_SIZE(palQueueTypes) == Pal::EngineTypeCount) &&
                   (Pal::EngineTypeUniversal        == 0) &&
                   (Pal::EngineTypeCompute          == 1) &&
-                  (Pal::EngineTypeExclusiveCompute == 2) &&
-                  (Pal::EngineTypeDma              == 3) &&
-                  (Pal::EngineTypeTimer            == 4) &&
-                  (Pal::EngineTypeHighPriorityUniversal == 0x5),
-        "PAL engine types have changed, need to update the tables above");
+                  (Pal::EngineTypeDma              == 2) &&
+                  (Pal::EngineTypeTimer            == 3)
+        , "PAL engine types have changed, need to update the tables above");
 
     // Always enable core queue flags.  Final determination of support will be done on a per-engine basis.
     uint32_t enabledQueueFlags =
@@ -3244,17 +3279,48 @@ void PhysicalDevice::PopulateQueueFamilies()
         VK_QUEUE_TRANSFER_BIT |
         VK_QUEUE_SPARSE_BINDING_BIT;
 
-    // find out the sub engine index of VrHighPriority.
-    const auto& exclusiveComputeProps = m_properties.engineProperties[Pal::EngineTypeExclusiveCompute];
-    for (uint32_t subEngineIndex = 0; subEngineIndex < exclusiveComputeProps.engineCount; subEngineIndex++)
+    const uint32 queueSupportPriority = Pal::QueuePrioritySupport::SupportQueuePriorityNormal |
+        Pal::QueuePrioritySupport::SupportQueuePriorityIdle;
+
+    // find out the sub engine index of VrHighPriority and indices for compute engines that aren't exclusive.
     {
-        if (exclusiveComputeProps.engineSubType[subEngineIndex] == Pal::EngineSubType::VrHighPriority)
+        const auto& computeProps = m_properties.engineProperties[Pal::EngineTypeCompute];
+        uint32_t engineIndex = 0u;
+        for (uint32_t subEngineIndex = 0; subEngineIndex < computeProps.engineCount; subEngineIndex++)
         {
-            m_vrHighPrioritySubEngineIndex = subEngineIndex;
+            if (computeProps.capabilities[subEngineIndex].flags.exclusive == 1)
+            {
+                if (computeProps.capabilities[subEngineIndex].queuePrioritySupport &
+                         Pal::QueuePrioritySupport::SupportQueuePriorityRealtime)
+                {
+                    m_RtCuHighComputeSubEngineIndex = subEngineIndex;
+                }
+                else if (computeProps.capabilities[subEngineIndex].queuePrioritySupport &
+                    Pal::QueuePrioritySupport::SupportQueuePriorityHigh)
+                {
+                    m_vrHighPrioritySubEngineIndex = subEngineIndex;
+                }
+            }
+            else if ((computeProps.capabilities[subEngineIndex].queuePrioritySupport == queueSupportPriority) ||
+                    (computeProps.capabilities[subEngineIndex].queuePrioritySupport == 0u))
+            {
+                m_compQueueEnginesNdx[engineIndex++] = subEngineIndex;
+            }
         }
-        else if (exclusiveComputeProps.engineSubType[subEngineIndex] == Pal::EngineSubType::RtCuHighCompute)
+    }
+
+    // find out universal engines that aren't exclusive.
+    {
+        const auto& universalProps = m_properties.engineProperties[Pal::EngineTypeUniversal];
+        uint32_t engineIndex = 0u;
+        for (uint32_t subEngineIndex = 0; subEngineIndex < universalProps.engineCount; subEngineIndex++)
         {
-            m_RtCuHighComputeSubEngineIndex = subEngineIndex;
+            if ((universalProps.capabilities[subEngineIndex].flags.exclusive == 0) &&
+                ((universalProps.capabilities[subEngineIndex].queuePrioritySupport == queueSupportPriority) ||
+                 (universalProps.capabilities[subEngineIndex].queuePrioritySupport == 0u)))
+            {
+                m_universalQueueEnginesNdx[engineIndex++] = subEngineIndex;
+            }
         }
     }
 
@@ -3302,8 +3368,6 @@ void PhysicalDevice::PopulateQueueFamilies()
                 break;
             case Pal::EngineTypeCompute:
                 pComputeQueueFamilyProperties = &m_queueFamilies[m_queueFamilyCount].properties;
-                // fallthrough
-            case Pal::EngineTypeExclusiveCompute:
                 palImageLayoutFlag            = Pal::LayoutComputeEngine;
                 transferGranularityOverride   = settings.transferGranularityComputeOverride;
                 m_queueFamilies[m_queueFamilyCount].validShaderStages |= VK_SHADER_STAGE_COMPUTE_BIT;
@@ -3327,9 +3391,21 @@ void PhysicalDevice::PopulateQueueFamilies()
             VkQueueFamilyProperties* pQueueFamilyProps     = &m_queueFamilies[m_queueFamilyCount].properties;
 
             pQueueFamilyProps->queueFlags                  = (vkQueueFlags[engineType] & supportedQueueFlags);
-            pQueueFamilyProps->queueCount                  = (engineType == Pal::EngineTypeCompute)
-                                                             ? Util::Min(settings.asyncComputeQueueLimit, engineProps.engineCount)
-                                                             : engineProps.engineCount;
+            pQueueFamilyProps->queueCount                  = 0u;
+
+            for (uint32 engineNdx = 0u; engineNdx < engineProps.engineCount; ++engineNdx)
+            {
+                if ((engineProps.capabilities[engineNdx].flags.exclusive == 0) &&
+                    ((engineProps.capabilities[engineNdx].queuePrioritySupport == queueSupportPriority) ||
+                     (engineProps.capabilities[engineNdx].queuePrioritySupport == 0u)))
+                {
+                    pQueueFamilyProps->queueCount++;
+                }
+            }
+            pQueueFamilyProps->queueCount = (engineType == Pal::EngineTypeCompute)
+                ? Util::Min(settings.asyncComputeQueueLimit, pQueueFamilyProps->queueCount)
+                : pQueueFamilyProps->queueCount;
+
             pQueueFamilyProps->timestampValidBits          = (engineProps.flags.supportsTimestamps != 0) ? 64 : 0;
             pQueueFamilyProps->minImageTransferGranularity = PalToVkExtent3d(engineProps.minTiledImageCopyAlignment);
 
@@ -3498,17 +3574,17 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
     *pDeviceLUIDValid = VK_FALSE;
 
 #if defined(INTEROP_DRIVER_UUID)
-    const char* pDriverUuidString = INTEROP_DRIVER_UUID;
+    const char driverUuidString[] = INTEROP_DRIVER_UUID;
 #else
-    const char* pDriverUuidString = "AMD-LINUX-DRV";
+    const char driverUuidString[] = "AMD-LINUX-DRV";
 #endif
 
-    static_assert(VK_UUID_SIZE >= sizeof(pDriverUuidString),
+    static_assert(VK_UUID_SIZE >= sizeof(driverUuidString),
                   "The driver UUID string has changed and now exceeds the maximum length permitted by Vulkan");
 
     memcpy(pDriverUUID,
-           pDriverUuidString,
-           strlen(pDriverUuidString));
+           driverUuidString,
+           strlen(driverUuidString));
 }
 
 // =====================================================================================================================
@@ -3608,19 +3684,10 @@ void PhysicalDevice::GetPhysicalDeviceFloatControlsProperties(
     pFloatControlsProperties->roundingModeIndependence   = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE_KHR;
 
     pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat32  = VK_TRUE;
-    pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat64  = VK_TRUE;
-
     pFloatControlsProperties->shaderDenormPreserveFloat32            = VK_TRUE;
-    pFloatControlsProperties->shaderDenormPreserveFloat64            = VK_TRUE;
-
     pFloatControlsProperties->shaderDenormFlushToZeroFloat32         = VK_TRUE;
-    pFloatControlsProperties->shaderDenormFlushToZeroFloat64         = VK_TRUE;
-
     pFloatControlsProperties->shaderRoundingModeRTEFloat32           = VK_TRUE;
-    pFloatControlsProperties->shaderRoundingModeRTEFloat64           = VK_TRUE;
-
     pFloatControlsProperties->shaderRoundingModeRTZFloat32           = VK_TRUE;
-    pFloatControlsProperties->shaderRoundingModeRTZFloat64           = VK_TRUE;
 
     if (PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions)
     {
@@ -3637,6 +3704,23 @@ void PhysicalDevice::GetPhysicalDeviceFloatControlsProperties(
         pFloatControlsProperties->shaderDenormFlushToZeroFloat16         = VK_FALSE;
         pFloatControlsProperties->shaderRoundingModeRTEFloat16           = VK_FALSE;
         pFloatControlsProperties->shaderRoundingModeRTZFloat16           = VK_FALSE;
+    }
+
+    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
+    {
+        pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat64 = VK_TRUE;
+        pFloatControlsProperties->shaderDenormPreserveFloat64           = VK_TRUE;
+        pFloatControlsProperties->shaderDenormFlushToZeroFloat64        = VK_TRUE;
+        pFloatControlsProperties->shaderRoundingModeRTEFloat64          = VK_TRUE;
+        pFloatControlsProperties->shaderRoundingModeRTZFloat64          = VK_TRUE;
+    }
+    else
+    {
+        pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat64 = VK_FALSE;
+        pFloatControlsProperties->shaderDenormPreserveFloat64           = VK_FALSE;
+        pFloatControlsProperties->shaderDenormFlushToZeroFloat64        = VK_FALSE;
+        pFloatControlsProperties->shaderRoundingModeRTEFloat64          = VK_FALSE;
+        pFloatControlsProperties->shaderRoundingModeRTZFloat64          = VK_FALSE;
     }
 }
 
@@ -3840,8 +3924,16 @@ void PhysicalDevice::GetPhysicalDeviceShaderAtomicInt64Features(
     VkBool32* pShaderSharedInt64Atomics
     ) const
 {
-    *pShaderBufferInt64Atomics = VK_TRUE;
-    *pShaderSharedInt64Atomics = VK_TRUE;
+    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
+    {
+        *pShaderBufferInt64Atomics = VK_TRUE;
+        *pShaderSharedInt64Atomics = VK_TRUE;
+    }
+    else
+    {
+        *pShaderBufferInt64Atomics = VK_FALSE;
+        *pShaderSharedInt64Atomics = VK_FALSE;
+    }
 }
 
 // =====================================================================================================================
@@ -4179,6 +4271,17 @@ void PhysicalDevice::GetFeatures2(
                     reinterpret_cast<VkPhysicalDeviceHostQueryResetFeaturesEXT *>(pHeader);
 
                 GetPhysicalDeviceHostQueryResetFeatures(&pHostQueryReset->hostQueryReset);
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_FEATURES_EXT:
+            {
+                VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT* pVertexAttributeDivisorFeatures =
+                    reinterpret_cast<VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT*>(pHeader);
+
+                pVertexAttributeDivisorFeatures->vertexAttributeInstanceRateDivisor     = VK_TRUE;
+                pVertexAttributeDivisorFeatures->vertexAttributeInstanceRateZeroDivisor = VK_FALSE;
 
                 break;
             }

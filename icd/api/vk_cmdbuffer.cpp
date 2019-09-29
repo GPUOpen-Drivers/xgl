@@ -352,7 +352,6 @@ CmdBuffer::CmdBuffer(
     m_cbBeginDeviceMask(0),
     m_validShaderStageFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetValidShaderStages(queueFamilyIndex)),
     m_pStackAllocator(nullptr),
-    m_pGpuEventMgr(nullptr),
     m_vbMgr(pDevice),
     m_is2ndLvl(false),
     m_isRecording(false),
@@ -1088,24 +1087,7 @@ VkResult CmdBuffer::Begin(
         }
     }
 
-    // Get a GPU event manager if we don't already have one
-    if (m_pGpuEventMgr == nullptr)
-    {
-        m_pGpuEventMgr = m_pCmdPool->AcquireGpuEventMgr();
-
-        if (m_pGpuEventMgr == nullptr)
-        {
-            result = Pal::Result::ErrorOutOfMemory;
-        }
-    }
-
-    // Notify the GPU event manager we're starting a new command buffer
-    if (m_pGpuEventMgr != nullptr)
-    {
-        m_pGpuEventMgr->BeginCmdBuf(this, cmdInfo);
-
-        m_isRecording = true;
-    }
+    m_isRecording = true;
 
     if (m_is2ndLvl && pRenderPass) // secondary VkCommandBuffer will be used inside VkRenderPass
     {
@@ -1224,11 +1206,6 @@ void CmdBuffer::ResetState()
     ResetPipelineState();
 
     m_curDeviceMask = InvalidPalDeviceMask;
-
-    if (m_pGpuEventMgr != nullptr)
-    {
-        m_pGpuEventMgr->ResetCmdBuf(this);
-    }
 
     m_renderPassInstance.pExecuteInfo = nullptr;
     m_renderPassInstance.subpass      = VK_SUBPASS_EXTERNAL;
@@ -1567,13 +1544,6 @@ void CmdBuffer::ReleaseResources()
 
         m_renderPassInstance.pSamplePatterns = nullptr;
         m_renderPassInstance.maxSubpassCount = 0;
-    }
-
-    // Release the GPU event manager back to the command pool
-    if (m_pGpuEventMgr != nullptr)
-    {
-        m_pCmdPool->ReleaseGpuEventMgr(m_pGpuEventMgr);
-        m_pGpuEventMgr = nullptr;
     }
 
     if (m_pStackAllocator != nullptr)
@@ -2705,12 +2675,6 @@ void CmdBuffer::PalCmdResetEvent(
 }
 
 // =====================================================================================================================
-// Instantiate the template function
-template void CmdBuffer::PalCmdResetEvent<GpuEvents>(
-    GpuEvents*              pEvent,
-    Pal::HwPipePoint        resetPoint);
-
-// =====================================================================================================================
 template <typename EventContainer_T>
 void CmdBuffer::PalCmdSetEvent(
     EventContainer_T*       pEvent,
@@ -2724,12 +2688,6 @@ void CmdBuffer::PalCmdSetEvent(
         PalCmdBuffer(deviceIdx)->CmdSetEvent(*pEvent->PalEvent(deviceIdx), setPoint);
     }
 }
-
-// =====================================================================================================================
-// Instantiate the template function
-template void CmdBuffer::PalCmdSetEvent<GpuEvents>(
-    GpuEvents*              pEvent,
-    Pal::HwPipePoint        resetPoint);
 
 // =====================================================================================================================
 template<bool regionPerDevice>
@@ -5033,28 +4991,6 @@ void CmdBuffer::PushConstants(
     }
 
     DbgBarrierPostCmd(DbgBarrierBindSetsPushConstants);
-}
-
-// =====================================================================================================================
-void CmdBuffer::RequestRenderPassEvents(
-    uint32_t     eventCount,
-    GpuEvents*** pppGpuEvents)
-{
-    VK_ASSERT(m_pGpuEventMgr != nullptr);
-
-    // This function may fail if we've run out of system/video memory.  There is no way to return "out of memory"
-    // during command buffer building -- the function is just expected to succeed.  Under these extreme conditions,
-    // the render pass logic will fall back to using a hard pipeline barrier between every node.
-    VkResult result = m_pGpuEventMgr->RequestEvents(this, eventCount, pppGpuEvents);
-
-    if (result != VK_SUCCESS)
-    {
-        // This situation should be so rare that it's worth asserting here.  If we actually ever hit this condition,
-        // we are probably leaking GPU memory somewhere.
-        VK_ALERT("Failed to create GPU events for render passes.");
-
-        *pppGpuEvents = nullptr;
-    }
 }
 
 // =====================================================================================================================

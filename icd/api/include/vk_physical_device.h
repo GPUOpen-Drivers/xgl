@@ -58,6 +58,11 @@ class IDevice;
 
 } // namespace Pal
 
+namespace Util
+{
+class IPlatformKey;
+} // namespace Util
+
 namespace vk
 {
 
@@ -190,6 +195,18 @@ public:
         uint32_t queueFamilyIndex) const
     {
         return m_queueFamilies[queueFamilyIndex].palEngineType;
+    }
+
+    VK_INLINE uint32_t GetCompQueueEngineIndex(
+        const uint32_t queueIndex) const
+    {
+        return m_compQueueEnginesNdx[queueIndex];
+    }
+
+    VK_INLINE uint32_t GetUniversalQueueEngineIndex(
+        const uint32_t queueIndex) const
+    {
+        return m_universalQueueEnginesNdx[queueIndex];
     }
 
     VK_INLINE uint32_t GetQueueFamilyPalImageLayoutFlag(
@@ -637,6 +654,8 @@ public:
     VK_INLINE bool ShouldAddRemoteBackupHeap(uint32_t vkIndex) const
         { return m_memoryVkIndexAddRemoteBackupHeap[vkIndex]; }
 
+    Util::IPlatformKey* GetPlatformKey() const { return m_pPlatformKey; }
+
 protected:
     PhysicalDevice(PhysicalDeviceManager* pPhysicalDeviceManager,
                    Pal::IDevice*          pPalDevice,
@@ -648,6 +667,8 @@ protected:
     void PopulateLimits();
     void PopulateExtensions();
     void PopulateGpaProperties();
+
+    void InitializePlatformKey(const RuntimeSettings& settings);
 
     VK_FORCEINLINE bool IsPerChannelMinMaxFilteringSupported() const
     {
@@ -686,6 +707,12 @@ protected:
         VkQueueFamilyProperties      properties;
     } m_queueFamilies[Queue::MaxQueueFamilies];
 
+    // List of indices for compute engines that aren't exclusive.
+    uint32_t m_compQueueEnginesNdx[Queue::MaxQueuesPerFamily];
+
+    // List of indices for universal engines that aren't exclusive.
+    uint32_t m_universalQueueEnginesNdx[Queue::MaxQueuesPerFamily];
+
     const AppProfile                 m_appProfile;
     bool                             m_prtOnDmaSupported;
 
@@ -705,6 +732,8 @@ protected:
     } m_memoryUsageTracker;
 
     uint8_t                          m_pipelineCacheUUID[VK_UUID_SIZE];
+
+    Util::IPlatformKey*              m_pPlatformKey;             // Platform identifying key
 };
 
 VK_DEFINE_DISPATCHABLE(PhysicalDevice);

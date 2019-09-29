@@ -109,3 +109,4 @@ VK_EXT_subgroup_size_control
 VK_EXT_calibrated_timestamps
 VK_KHR_pipeline_executable_properties
 VK_EXT_line_rasterization
+VK_EXT_post_depth_coverage

@@ -220,7 +220,7 @@ void RenderPassLogger::LogAttachmentReference(
     const AttachmentReference& reference)
 {
     LogAttachment(reference.attachment);
-    Log(" in %s, %s", ImageLayoutString(reference.layout, false), ImageLayoutString(reference.stencilLayout, false));
+    Log(" in %s", ImageLayoutString(reference.layout, false));
     Log(" aspectMask ");
     LogImageAspectMask(reference.aspectMask, false);
 }
@@ -232,8 +232,6 @@ void RenderPassLogger::LogAttachmentReference(
     LogAttachment(reference.attachment);
     Log(" in ");
     LogImageLayout(reference.layout);
-    Log(", ");
-    LogImageLayout(reference.stencilLayout);
 }
 
 // =====================================================================================================================

@@ -154,7 +154,7 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
 
     // In general, DCC is very beneficial for color attachments. If this is completely offset, maybe by increased
     // shader read latency or partial writes of DCC blocks, it should be debugged on a case by case basis.
-    if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+    if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
     {
         m_settings.forceDccForColorAttachments = true;
     }
@@ -214,7 +214,7 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
                                               ForceImageSharingModeExclusive;
         }
 
-        if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
         {
             m_settings.asyncComputeQueueLimit = 1;
         }
@@ -232,7 +232,7 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
 
     if (((appProfile == AppProfile::WolfensteinII) ||
          (appProfile == AppProfile::Doom)) &&
-        (info.gfxLevel > Pal::GfxIpLevel::GfxIp9))
+        (info.gfxLevel == Pal::GfxIpLevel::GfxIp10_1))
     {
         m_settings.asyncComputeQueueMaxWavesPerCu = 40;
         m_settings.nggSubgroupSizing   = NggSubgroupExplicit;
@@ -256,10 +256,11 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
         }
 
         // WWZ performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-        if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
         {
             m_settings.forceDccForColorAttachments = false;
         }
+
     }
 
     if (appProfile == AppProfile::IdTechEngine)
@@ -329,6 +330,10 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
     }
 
+    if (appProfile == AppProfile::StrangeBrigade)
+    {
+    }
+
     if (appProfile == AppProfile::MadMax)
     {
         m_settings.preciseAnisoMode  = DisablePreciseAnisoAll;
@@ -341,7 +346,7 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.prefetchShaders = true;
 
         // F1 2017 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-        if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
         {
             m_settings.forceDccForColorAttachments = false;
         }
@@ -355,7 +360,7 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::DiRT4)
     {
         // DiRT 4 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-        if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
         {
             m_settings.forceDccForColorAttachments = false;
         }
@@ -364,7 +369,7 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::WarHammerII)
     {
         // WarHammer II performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-        if (info.gfxLevel > Pal::GfxIpLevel::GfxIp9)
+        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
         {
             m_settings.forceDccForColorAttachments = false;
         }

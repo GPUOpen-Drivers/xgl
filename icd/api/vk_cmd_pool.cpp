@@ -218,33 +218,11 @@ VkResult CmdPool::Destroy(
         pAllocator->pfnFree(pAllocator->pUserData, m_pPalCmdAllocators[DefaultDeviceIndex]);
     }
 
-    DestroyGpuEventMgrs();
-
     Util::Destructor(this);
 
     pAllocator->pfnFree(pAllocator->pUserData, this);
 
     return VK_SUCCESS;
-}
-
-// =====================================================================================================================
-void CmdPool::DestroyGpuEventMgrs()
-{
-    while (m_freeEventMgrs.IsEmpty() == false)
-    {
-        VK_ASSERT(m_totalEventMgrCount > 0);
-
-        m_totalEventMgrCount--;
-
-        GpuEventMgr::List::Iter it = m_freeEventMgrs.Begin();
-        GpuEventMgr* pEventMgr = it.Get();
-        m_freeEventMgrs.Erase(&it);
-
-        pEventMgr->Destroy();
-        m_pDevice->VkInstance()->FreeMem(pEventMgr);
-    }
-
-    VK_ASSERT(m_totalEventMgrCount == 0);
 }
 
 // =====================================================================================================================
@@ -306,48 +284,6 @@ Pal::Result CmdPool::RegisterCmdBuffer(CmdBuffer* pCmdBuffer)
 void CmdPool::UnregisterCmdBuffer(CmdBuffer* pCmdBuffer)
 {
     m_cmdBufferRegistry.Erase(pCmdBuffer);
-}
-
-// =====================================================================================================================
-GpuEventMgr* CmdPool::AcquireGpuEventMgr()
-{
-    GpuEventMgr* pEventMgr = nullptr;
-
-    if (!m_freeEventMgrs.IsEmpty())
-    {
-        GpuEventMgr::List::Iter it = m_freeEventMgrs.Begin();
-
-        pEventMgr = it.Get();
-
-        m_freeEventMgrs.Erase(&it);
-    }
-
-    if (pEventMgr == nullptr)
-    {
-        void* pMemory = m_pDevice->VkInstance()->AllocMem(
-            sizeof(GpuEventMgr),
-            VK_DEFAULT_MEM_ALIGN,
-            VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-
-        if (pMemory != nullptr)
-        {
-            pEventMgr = VK_PLACEMENT_NEW(pMemory) GpuEventMgr(m_pDevice);
-
-            m_totalEventMgrCount++;
-        }
-    }
-
-    return pEventMgr;
-}
-
-// =====================================================================================================================
-void CmdPool::ReleaseGpuEventMgr(GpuEventMgr* pGpuEventMgr)
-{
-    VK_ASSERT(pGpuEventMgr->ListNode()->InList() == false);
-
-    pGpuEventMgr->ResetEvents();
-
-    m_freeEventMgrs.PushBack(pGpuEventMgr->ListNode());
 }
 
 /**

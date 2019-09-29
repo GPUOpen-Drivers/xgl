@@ -29,7 +29,6 @@
  ***********************************************************************************************************************
  */
 
-#include "include/gpu_event_mgr.h"
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_event.h"
