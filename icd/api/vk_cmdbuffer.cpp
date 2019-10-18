@@ -960,9 +960,9 @@ VkResult CmdBuffer::Begin(
 
     union
     {
-        const VkStructHeader*                      pHeader;
-        const VkCommandBufferBeginInfo*            pInfo;
-        const VkDeviceGroupCommandBufferBeginInfo* pDeviceGroupInfo;
+        const VkStructHeader*                       pHeader;
+        const VkCommandBufferBeginInfo*             pInfo;
+        const VkDeviceGroupCommandBufferBeginInfo*  pDeviceGroupInfo;
     };
 
     RenderPass*  pRenderPass = nullptr;
@@ -981,7 +981,7 @@ VkResult CmdBuffer::Begin(
     uint32_t currentSubPass = 0;
     for (pInfo = pBeginInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
-        switch (pHeader->sType)
+        switch (static_cast<uint32_t>(pHeader->sType))
         {
             // Convert Vulkan flags to PAL flags.
         case VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO:
@@ -2028,7 +2028,7 @@ void CmdBuffer::CopyImage(
                    (palRegionCount <= (regionBatch - MaxPalAspectsPerMask)))
             {
                 VkToPalImageCopyRegion(pRegions[regionIdx], srcFormat.format, dstFormat.format,
-                    pPalRegions, palRegionCount);
+                    pPalRegions, &palRegionCount);
 
                 ++regionIdx;
             }
@@ -2096,7 +2096,7 @@ void CmdBuffer::BlitImage(
                    (palCopyInfo.regionCount <= (regionBatch - MaxPalAspectsPerMask)))
             {
                 VkToPalImageScaledCopyRegion(pRegions[regionIdx], srcFormat.format, dstFormat.format,
-                    pPalRegions, palCopyInfo.regionCount);
+                    pPalRegions, &palCopyInfo.regionCount);
 
                 ++regionIdx;
             }
@@ -2927,7 +2927,7 @@ void CmdBuffer::ResolveImage(
                 // We expect MSAA images to never have mipmaps
                 VK_ASSERT(pRects[rectIdx].srcSubresource.mipLevel == 0);
 
-                VkToPalImageResolveRegion(pRects[rectIdx], srcFormat.format, dstFormat.format, pPalRegions, palRegionCount);
+                VkToPalImageResolveRegion(pRects[rectIdx], srcFormat.format, dstFormat.format, pPalRegions, &palRegionCount);
 
                 ++rectIdx;
             }

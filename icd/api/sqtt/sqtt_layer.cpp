@@ -654,6 +654,8 @@ void SqttCmdBufferState::WriteBarrierEndMarker(
 
         marker.numLayoutTransitions = m_currentBarrier.numLayoutTransitions;
 
+        marker.invalGl1             = operations.caches.invalGl1;
+
         WriteMarker(&marker, sizeof(marker));
     }
 }

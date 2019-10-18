@@ -320,8 +320,6 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
     m_pEtwClient(nullptr),
 #endif
-    m_hardwareSupportsTracing(false),
-    m_rgpServerSupportsTracing(false),
     m_finalized(false),
     m_numPrepFrames(0),
     m_traceGpuMemLimit(0),
@@ -388,15 +386,6 @@ Pal::Result DevModeMgr::Init()
         m_pRGPServer = m_pDevDriverServer->GetRGPServer();
     }
 
-    // Tell RGP that the server (i.e. the driver) supports tracing if requested.
-    if (result == Pal::Result::Success)
-    {
-        if (m_pRGPServer != nullptr)
-        {
-            m_rgpServerSupportsTracing = (m_pRGPServer->EnableTraces() == DevDriver::Result::Success);
-        }
-    }
-
     if (result == Pal::Result::Success)
     {
         m_pipelineReinjectionLock.Init();
@@ -411,41 +400,27 @@ Pal::Result DevModeMgr::Init()
 // This finalizes the developer driver manager.
 void DevModeMgr::Finalize(
     uint32_t              deviceCount,
-    Pal::IDevice**        ppDevices,
     VulkanSettingsLoader* settingsLoaders[])
 {
-    // Figure out if the gfxip supports tracing.  We decide tracing if there is at least one enumerated GPU
-    // that can support tracing.  Since we don't yet know if that GPU will be picked as the target of an eventual
-    // VkDevice, this check is imperfect.  In mixed-GPU situations where an unsupported GPU is picked for tracing,
-    // trace capture will fail with an error.
-    m_hardwareSupportsTracing = false;
-
-    if (m_rgpServerSupportsTracing)
+    if (m_pRGPServer != nullptr)
     {
+        bool tracingForceDisabledForAllGpus = true;
+
         for (uint32_t gpu = 0; gpu < deviceCount; ++gpu)
         {
-            // This is technically a violation of the PAL interface: we are not allowed to query PAL device properties
-            // prior to calling CommitSettingsAndInit().  However, doing so is (a) safe for some properties and (b)
-            // the only way to do this currently as we need to know this information prior to calling Finalize() on
-            // the device and devdriver manager and (c) it also matches DXCP behavior for the same reasons.
-            Pal::DeviceProperties props = {};
-
-            if (ppDevices[gpu]->GetProperties(&props) == Pal::Result::Success)
+            if (settingsLoaders[gpu]->GetSettings().devModeSqttForceDisable == false)
             {
-                if (GpuSupportsTracing(props, settingsLoaders[gpu]->GetSettings()))
-                {
-                    m_hardwareSupportsTracing = true;
+                tracingForceDisabledForAllGpus = false;
 
-                    break;
-                }
+                break;
             }
         }
-    }
 
-    // If no GPU supports tracing, inform the RGP server to disable tracing
-    if ((m_pRGPServer != nullptr) && (m_hardwareSupportsTracing == false))
-    {
-        m_pRGPServer->DisableTraces();
+        // If tracing is force disabled for all GPUs, inform the RGP server to disable tracing
+        if (tracingForceDisabledForAllGpus)
+        {
+            m_pRGPServer->DisableTraces();
+        }
     }
 
     // Finalize the devmode manager
@@ -470,8 +445,7 @@ void DevModeMgr::WaitForDriverResume()
     auto* pDriverControlServer = m_pDevDriverServer->GetDriverControlServer();
 
     VK_ASSERT(pDriverControlServer != nullptr);
-
-    pDriverControlServer->WaitForDriverResume();
+    pDriverControlServer->DriverTick();
 }
 
 // =====================================================================================================================
@@ -1971,16 +1945,6 @@ Pal::Result DevModeMgr::InitTraceQueueFamilyResources(
 }
 
 // =====================================================================================================================
-// Returns true if the given device properties/settings support tracing.
-bool DevModeMgr::GpuSupportsTracing(
-    const Pal::DeviceProperties& props,
-    const RuntimeSettings&       settings)
-{
-    return props.gfxipProperties.flags.supportRgpTraces &&
-           (settings.devModeSqttForceDisable == false);
-}
-
-// =====================================================================================================================
 // Initializes device-persistent RGP resources
 Pal::Result DevModeMgr::InitRGPTracing(
     TraceState* pState,
@@ -2002,7 +1966,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
     //
     // It's necessary to check this during RGP tracing init in addition to devmode init because during the earlier
     // devmode init we may be in a situation where some enumerated physical devices support tracing and others do not.
-    if (GpuSupportsTracing(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties(), pDevice->GetRuntimeSettings()) == false)
+    if (pDevice->GetRuntimeSettings().devModeSqttForceDisable)
     {
         result = Pal::Result::ErrorInitializationFailed;
     }
@@ -2212,11 +2176,7 @@ void DevModeMgr::PostDeviceCreate(Device* pDevice)
     // information to decide when it's reasonable to make certain requests of the driver through protocol functions.
     if (pDriverControlServer->IsDriverInitialized() == false)
     {
-#if GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION < GPUOPEN_DRIVER_CONTROL_CLEANUP_VERSION
-        pDriverControlServer->FinishDriverInitialization();
-#else
         pDriverControlServer->FinishDeviceInit();
-#endif
     }
 }
 

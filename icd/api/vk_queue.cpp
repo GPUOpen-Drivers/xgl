@@ -656,6 +656,22 @@ VkResult Queue::Present(
 
     VkResult result = VK_SUCCESS;
 
+    // Query driver feature settings that could change from frame to frame.
+    uint32_t rsFeaturesChangedMask = 0;
+    {
+        uint32_t rsFeaturesQueriedMask = 0;
+
+        Pal::Result palResult = m_pDevice->PalDevice(DefaultDeviceIndex)->DidRsFeatureSettingsChange(
+            rsFeaturesQueriedMask,
+            &rsFeaturesChangedMask);
+
+        if ((palResult == Pal::Result::Success) && (rsFeaturesChangedMask != 0))
+        {
+            // Update the feature settings from the app profile or the global settings.
+            m_pDevice->UpdateFeatureSettings();
+        }
+    }
+
     if (pPresentInfo == nullptr)
     {
         return VK_ERROR_INITIALIZATION_FAILED;
@@ -705,8 +721,11 @@ VkResult Queue::Present(
         bool syncFlip = false;
         bool postFrameTimerSubmission = false;
         bool needFramePacing = NeedPacePresent(&presentInfo, pSwapChain, &syncFlip, &postFrameTimerSubmission);
-        const Pal::IGpuMemory* pGpuMemory =
-            pSwapChain->GetPresentableImageMemory(imageIndex)->PalMemory(DefaultDeviceIndex);
+
+        const Pal::IGpuMemory* pGpuMemory = nullptr;
+        {
+            pGpuMemory = pSwapChain->GetPresentableImageMemory(imageIndex)->PalMemory(DefaultDeviceIndex);
+        }
 
         result = NotifyFlipMetadataBeforePresent(presentationDeviceIdx, &presentInfo, pPresentCmdBuffer, pGpuMemory);
         if (result != VK_SUCCESS)

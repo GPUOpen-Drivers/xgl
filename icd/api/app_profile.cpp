@@ -818,9 +818,8 @@ void ProcessProfileEntry(
     const char*        entryName,
     uint32_t           dataSize,
     const void*        data,
-    RuntimeSettings*   pRuntimeSettings,
-    ChillSettings*     pChillSettings,
-    TurboSyncSettings* pTurboSyncSettings,
+    ProfileSettings*   pProfileSettings,
+    uint32_t           appGpuID,
     bool               isUser3DAreaFormat)
 {
     // Skip if the data is empty
@@ -829,24 +828,24 @@ void ProcessProfileEntry(
         const wchar_t* wcharData      = reinterpret_cast<const wchar_t *>(data);
         bool*          pBoolSetting   = nullptr;
         uint32_t*      pUint32Setting = nullptr;
+        float*         pFloatSetting  = nullptr;
         bool           assertOnZero   = false;
         bool           doNotSetOnZero = false;
-        uint32_t       appGpuID       = 0u;
 
-        if (pRuntimeSettings != nullptr)
+        if (strcmp(entryName, "TFQ") == 0)
         {
-            appGpuID = pRuntimeSettings->appGpuID;
-
-            if (strcmp(entryName, "TFQ") == 0 && (pRuntimeSettings != nullptr))
-            {
-                pUint32Setting = reinterpret_cast<uint32_t*>(&(pRuntimeSettings->vulkanTexFilterQuality));
-            }
+            pUint32Setting = &(pProfileSettings->texFilterQuality);
         }
 
         if (pBoolSetting != nullptr)
         {
             uint32_t dataValue = ParseProfileDataToUint32(wcharData, isUser3DAreaFormat, appGpuID);
             *pBoolSetting = dataValue ? true : false;
+        }
+        else if (pFloatSetting != nullptr)
+        {
+            uint32_t dataValue = ParseProfileDataToUint32(wcharData, isUser3DAreaFormat, appGpuID);
+            *pFloatSetting = static_cast<float>(dataValue);
         }
         else if (pUint32Setting != nullptr)
         {
@@ -863,7 +862,6 @@ void ProcessProfileEntry(
                 *pUint32Setting = dataValue;
             }
         }
-
     }
 }
 
@@ -873,9 +871,8 @@ void ProcessProfileEntry(
 // Return true if a profile is present.
 static bool QueryPalProfile(
     Instance*                     pInstance,
-    RuntimeSettings*              pRuntimeSettings,
-    ChillSettings*                pChillSettings,
-    TurboSyncSettings*            pTurboSyncSettings,
+    ProfileSettings*              pProfileSettings,
+    uint32_t                      appGpuID,
     Pal::ApplicationProfileClient client,
     char*                         exeOrCdnName) // This is the game EXE name or Content Distribution Network name.
 {
@@ -895,9 +892,8 @@ static bool QueryPalProfile(
             ProcessProfileEntry(iterator.GetName(),
                                 iterator.GetDataSize(),
                                 iterator.GetData(),
-                                pRuntimeSettings,
-                                pChillSettings,
-                                pTurboSyncSettings,
+                                pProfileSettings,
+                                appGpuID,
                                 isUser3DAreaFormat);
             iterator.Next();
         }
@@ -909,15 +905,13 @@ static bool QueryPalProfile(
 // =====================================================================================================================
 // Queries PAL for app profile settings
 void ReloadAppProfileSettings(
-    Instance*             pInstance,
-    VulkanSettingsLoader* pSettingsLoader,
-    ChillSettings*        pChillSettings,
-    TurboSyncSettings*    pTurboSyncSettings)
+    Instance*               pInstance,
+    ProfileSettings*        pProfileSettings,
+    uint32_t                appGpuID)
 {
     size_t exeNameLength = 0;
     char* pExeName = GetExecutableName(&exeNameLength, true);
     char* pExeNameLower = nullptr;
-    RuntimeSettings* pRuntimeSettings = nullptr;
 
     if (pExeName != nullptr)
     {
@@ -927,19 +921,13 @@ void ReloadAppProfileSettings(
         free(pExeName);
     }
 
-    if (pSettingsLoader != nullptr)
-    {
-        pRuntimeSettings = pSettingsLoader->GetSettingsPtr();
-    }
-
     if (pExeNameLower != nullptr)
     {
         bool foundProfile = false;
         // User 3D has highest priority, so query it first
         foundProfile = QueryPalProfile(pInstance,
-                                       pRuntimeSettings,
-                                       pChillSettings,
-                                       pTurboSyncSettings,
+                                       pProfileSettings,
+                                       appGpuID,
                                        Pal::ApplicationProfileClient::User3D,
                                        pExeNameLower);
 
@@ -955,22 +943,11 @@ void ReloadAppProfileSettings(
             if (hasValidCdnName == true)
             {
                 foundProfile = QueryPalProfile(pInstance,
-                                               pRuntimeSettings,
-                                               pChillSettings,
-                                               pTurboSyncSettings,
+                                               pProfileSettings,
+                                               appGpuID,
                                                Pal::ApplicationProfileClient::User3D,
                                                cdnApplicationId);
             }
-        }
-
-        if (foundProfile == false)
-        {
-            QueryPalProfile(pInstance,
-                            pRuntimeSettings,
-                            pChillSettings,
-                            pTurboSyncSettings,
-                            Pal::ApplicationProfileClient::Chill, //CHILL area
-                            pExeNameLower);
         }
 
         free(pExeNameLower);

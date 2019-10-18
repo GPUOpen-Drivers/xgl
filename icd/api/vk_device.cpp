@@ -1282,6 +1282,9 @@ VkResult Device::Initialize(
         // Finalize the device settings after driver intitalization is done
         // This essentially generates settings hash
         pPhysicalDevice->GetSettingsLoader()->FinalizeSettings();
+
+        // Get the current values of driver features, from an app profile or global settings.
+        UpdateFeatureSettings();
     }
 
     if (result == VK_SUCCESS)
@@ -2574,6 +2577,18 @@ uint32_t Device::GetPinnedSystemMemoryTypes() const
     return memoryTypes;
 }
 
+uint32_t Device::GetPinnedHostMappedForeignMemoryTypes() const
+{
+    uint32_t memoryTypes = 0;
+    uint32_t gartIndexBits;
+
+    if (GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeapGartUswc, &gartIndexBits))
+    {
+        memoryTypes |= gartIndexBits;
+    }
+
+    return memoryTypes;
+}
 // =====================================================================================================================
 // Returns the memory type bit-mask that is compatible to be used as pinned memory types for the given external
 // host pointer
@@ -2587,6 +2602,10 @@ uint32_t Device::GetExternalHostMemoryTypes(
     if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
     {
         memoryTypes = GetPinnedSystemMemoryTypes();
+    }
+    else if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT)
+    {
+        memoryTypes = GetPinnedHostMappedForeignMemoryTypes();
     }
     return memoryTypes;
 }
@@ -2780,6 +2799,27 @@ Pal::IQueue* Device::PerformSwCompositing(
     }
 
     return pPresentQueue;
+}
+
+// =====================================================================================================================
+// Return true if Big Software Release 6.0 is supported.
+bool Device::BigSW60Supported() const
+{
+    const Pal::DeviceProperties&       deviceProps      = VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+    const Pal::BigSoftwareReleaseInfo* pBigSwInfo       = &(deviceProps.bigSoftwareReleaseInfo);
+
+    return ((pBigSwInfo->majorVersion > 2019) ||
+           ((pBigSwInfo->majorVersion == 2019) && (pBigSwInfo->minorVersion >= 1)));
+}
+
+// =====================================================================================================================
+// Update driver feature settings for this device based on an app profile and global settings.
+void Device::UpdateFeatureSettings()
+{
+    ProfileSettings profileSettings = {};
+
+    ReloadAppProfileSettings(m_pInstance, &profileSettings);
+
 }
 
 /**

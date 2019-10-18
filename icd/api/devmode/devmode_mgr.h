@@ -130,7 +130,6 @@ public:
 
     void Finalize(
         uint32_t              deviceCount,
-        Pal::IDevice**        ppDevices,
         VulkanSettingsLoader* settingsLoaders[]);
 
     void Destroy();
@@ -301,7 +300,6 @@ private:
     void DestroyTraceQueueFamilyResources(TraceQueueFamilyState* pState);
     TraceQueueState* FindTraceQueueState(TraceState* pState, const Queue* pQueue);
     bool QueueSupportsTiming(uint32_t deviceIdx, const Queue* pQueue);
-    static bool GpuSupportsTracing(const Pal::DeviceProperties& props, const RuntimeSettings& settings);
 
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
     Pal::Result InitEtwClient();
@@ -318,9 +316,6 @@ private:
 #endif
     Util::Mutex                         m_traceMutex;
     TraceState                          m_trace;
-    bool                                m_hardwareSupportsTracing;  // True if gfxip supports tracing
-    bool                                m_rgpServerSupportsTracing; // True if gpuopen protocol successfully enabled
-                                                                    // tracing
     bool                                m_finalized;
     uint32_t                            m_numPrepFrames;
     uint32_t                            m_traceGpuMemLimit;

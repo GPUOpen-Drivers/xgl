@@ -319,17 +319,18 @@ struct RgpSqttMarkerBarrierEnd
         struct
         {
             uint32_t syncCpDma            : 1;  // Issue dummy CP-DMA command to confirm all prior CP-DMAs have completed.
-            uint32_t invalTcp             : 1;  // Invalidate the L1 vector caches.
+            uint32_t invalTcp             : 1;  // Invalidate the TCP vector caches.
             uint32_t invalSqI             : 1;  // Invalidate the SQ instruction caches
-            uint32_t invalSqK             : 1;  // Invalidate the SQ constant caches (i.e. L1 scalar caches)
-            uint32_t flushTcc             : 1;  // Flush L2
-            uint32_t invalTcc             : 1;  // Invalidate L2
+            uint32_t invalSqK             : 1;  // Invalidate the SQ constant caches.
+            uint32_t flushTcc             : 1;  // Flush L2.
+            uint32_t invalTcc             : 1;  // Flush L2.
             uint32_t flushCb              : 1;  // Flush CB caches (including DCC, cmask, fmask)
             uint32_t invalCb              : 1;  // Invalidate CB caches (including DCC, cmask, fmask)
             uint32_t flushDb              : 1;  // Flush DB caches (including htile)
             uint32_t invalDb              : 1;  // Invalidate DB caches (including htile)
             uint32_t numLayoutTransitions : 16; // Number of layout transitions following this packet
-            uint32_t reserved             : 6;  // Reserved for future expansion.  Always 0
+            uint32_t invalGl1             : 1;  // Invalidate L1.
+            uint32_t reserved             : 5;  // Reserved for future expansion. Always 0
         };
 
         uint32_t  dword02;                // The second dword

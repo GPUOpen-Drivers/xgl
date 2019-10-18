@@ -218,7 +218,13 @@ VkResult Memory::Create(
                     VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_EXTERNAL_MEMORY_HOST));
 
                     VK_ASSERT(pImportMemoryInfo->handleType &
-                        (VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT));
+                        (VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT |
+                        VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT));
+
+                    if (pImportMemoryInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT)
+                    {
+                        isHostMappedForeign = true;
+                    }
 
                     pPinnedHostPtr = pImportMemoryInfo->pHostPointer;
                 }
@@ -514,7 +520,6 @@ VkResult Memory::CreateGpuPinnedMemory(
     pinnedInfo.pSysMem   = pPinnedHostPtr;
     pinnedInfo.vaRange   = Pal::VaRange::Default;
     pinnedInfo.alignment = createInfo.alignment;
-
     gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetPinnedGpuMemorySize(
         pinnedInfo, &palResult);
 

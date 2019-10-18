@@ -163,7 +163,6 @@ VkResult Sampler::Create(
             samplerInfo.flags.prtBlendZeroMode         = 0;
             samplerInfo.flags.seamlessCubeMapFiltering = 1;
             break;
-
         case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
             samplerInfo.filterMode = VkToPalTexFilterMode(pVkSamplerReductionModeCreateInfoEXT->reductionMode);
             break;

@@ -547,9 +547,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableInternalRepresentationsKHR);
 
     INIT_DISPATCH_ENTRY(vkGetBufferDeviceAddressEXT                     );
-
     INIT_DISPATCH_ENTRY(vkResetQueryPoolEXT                             );
-
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
 
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );

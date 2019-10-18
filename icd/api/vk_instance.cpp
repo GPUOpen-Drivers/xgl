@@ -98,10 +98,6 @@ Instance::Instance(
 {
     m_flags.u32All = 0;
 
-    // Disable TurboSync and Chill by default
-    m_turboSyncSettings.turboSyncEnable = false;
-    m_chillSettings.chillProfileEnable  = false;
-
     memset(m_screens, 0, sizeof(m_screens));
 
 }
@@ -363,6 +359,10 @@ VkResult Instance::Init(
         m_nullGpuId                       = createInfo.nullGpuId;
     }
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    createInfo.flags.supportRgpTraces = 1;
+#endif
+
     Pal::Result palResult = Pal::CreatePlatform(createInfo, pPalMemory, &m_pPalPlatform);
 
     if (palResult != Pal::Result::ErrorUnknown)
@@ -591,15 +591,13 @@ VkResult Instance::LoadAndCommitSettings(
         {
             settingsLoaders[deviceIdx]->ProcessSettings(m_appVersion, &pAppProfiles[deviceIdx]);
 
-            // Overlay the application profile from Radeon Settings
-            QueryApplicationProfile(ppDevices[deviceIdx], settingsLoaders[deviceIdx]);
+            UpdateSettingsWithAppProfile(settingsLoaders[deviceIdx]->GetSettingsPtr());
 
             // Make sure the final settings have legal values and update dependant parameters
             settingsLoaders[deviceIdx]->ValidateSettings();
 
             // Update PAL settings based on runtime settings and desired driver defaults if needed
             settingsLoaders[deviceIdx]->UpdatePalSettings();
-
         }
     }
 
@@ -607,7 +605,7 @@ VkResult Instance::LoadAndCommitSettings(
     // Inform developer mode manager of settings.  This also finalizes the developer mode manager.
     if (m_pDevModeMgr != nullptr)
     {
-        m_pDevModeMgr->Finalize(deviceCount, ppDevices, settingsLoaders);
+        m_pDevModeMgr->Finalize(deviceCount, settingsLoaders);
     }
 #endif
 
@@ -618,6 +616,24 @@ VkResult Instance::LoadAndCommitSettings(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Overlay the application profile settings on top of the default settings.
+void Instance::UpdateSettingsWithAppProfile(
+    RuntimeSettings*    pSettings)
+{
+    ProfileSettings profileSettings = {};
+
+    // Set the default values
+    profileSettings.texFilterQuality = pSettings->vulkanTexFilterQuality;
+
+    ReloadAppProfileSettings(this,
+                            &profileSettings,
+                            pSettings->appGpuID);
+
+    pSettings->vulkanTexFilterQuality =
+        static_cast<TextureFilterOptimizationSettings>(profileSettings.texFilterQuality);
 }
 
 // =====================================================================================================================
@@ -1067,25 +1083,6 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
     if (pInstance->IsTracingSupportEnabled())
     {
         SqttMgr::PalDeveloperCallback(pInstance, deviceIndex, type, pCbData);
-    }
-}
-
-// =====================================================================================================================
-// Query dynamic application profile settings
-void Instance::QueryApplicationProfile(
-    Pal::IDevice*         pPalDevice,
-    VulkanSettingsLoader* pSettingsLoader)
-{
-    ReloadAppProfileSettings(this, pSettingsLoader, &m_chillSettings, &m_turboSyncSettings);
-
-    if (m_turboSyncSettings.turboSyncEnable == false)
-    {
-        // Read TurboSync global key
-        pPalDevice->ReadSetting("TurboSync",
-                                Pal::SettingScope::Global,
-                                Util::ValueType::Boolean,
-                                &m_turboSyncSettings.turboSyncEnable,
-                                sizeof(m_turboSyncSettings.turboSyncEnable));
     }
 }
 

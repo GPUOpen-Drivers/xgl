@@ -1305,7 +1305,7 @@ VK_INLINE void VkToPalImageCopyRegion(
     Pal::ChNumFormat        srcFormat,
     Pal::ChNumFormat        dstFormat,
     Pal::ImageCopyRegion*   pPalRegions,
-    uint32_t&               palRegionIndex)
+    uint32_t*               pPalRegionIndex)
 {
     Pal::ImageCopyRegion region = {};
 
@@ -1347,9 +1347,11 @@ VK_INLINE void VkToPalImageCopyRegion(
 
     do
     {
+        VK_ASSERT(pPalRegionIndex != nullptr);
+
         region.srcSubres.aspect = VkToPalImageAspectExtract(srcFormat, &srcAspectMask);
         region.dstSubres.aspect = VkToPalImageAspectExtract(dstFormat, &dstAspectMask);
-        pPalRegions[palRegionIndex++] = region;
+        pPalRegions[(*pPalRegionIndex)++] = region;
     }
     while (srcAspectMask != 0 || dstAspectMask != 0);
 }
@@ -1361,7 +1363,7 @@ VK_INLINE void VkToPalImageScaledCopyRegion(
     Pal::ChNumFormat            srcFormat,
     Pal::ChNumFormat            dstFormat,
     Pal::ImageScaledCopyRegion* pPalRegions,
-    uint32_t&                   palRegionIndex)
+    uint32_t*                   pPalRegionIndex)
 {
     Pal::ImageScaledCopyRegion region = {};
 
@@ -1380,7 +1382,7 @@ VK_INLINE void VkToPalImageScaledCopyRegion(
     VK_ASSERT(imageBlit.srcSubresource.layerCount == imageBlit.dstSubresource.layerCount);
     VK_ASSERT(region.srcExtent.depth == region.srcExtent.depth);
 
-    region.numSlices = Util::Max<uint32_t>(region.srcExtent.depth, imageBlit.srcSubresource.layerCount);
+    region.numSlices = imageBlit.srcSubresource.layerCount;
 
     // PAL expects all dimensions to be in blocks for compressed formats so let's handle that here
     if (Pal::Formats::IsBlockCompressed(srcFormat))
@@ -1408,8 +1410,10 @@ VK_INLINE void VkToPalImageScaledCopyRegion(
 
     do
     {
+        VK_ASSERT(pPalRegionIndex != nullptr);
+
         region.srcSubres.aspect = region.dstSubres.aspect = VkToPalImageAspectExtract(srcFormat, &aspectMask);
-        pPalRegions[palRegionIndex++] = region;
+        pPalRegions[(*pPalRegionIndex)++] = region;
     }
     while (aspectMask != 0);
 }
@@ -1501,7 +1505,7 @@ VK_INLINE void VkToPalImageResolveRegion(
     Pal::ChNumFormat            srcFormat,
     Pal::ChNumFormat            dstFormat,
     Pal::ImageResolveRegion*    pPalRegions,
-    uint32_t&                   palRegionIndex)
+    uint32_t*                   pPalRegionIndex)
 {
     Pal::ImageResolveRegion region = {};
 
@@ -1530,8 +1534,10 @@ VK_INLINE void VkToPalImageResolveRegion(
 
     do
     {
+        VK_ASSERT(pPalRegionIndex != nullptr);
+
         region.srcAspect = region.dstAspect = VkToPalImageAspectExtract(srcFormat, &aspectMask);
-        pPalRegions[palRegionIndex++] = region;
+        pPalRegions[(*pPalRegionIndex)++] = region;
     }
     while (aspectMask != 0);
 }

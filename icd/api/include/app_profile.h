@@ -45,8 +45,6 @@ namespace Pal
 namespace vk
 {
 class Instance;
-class VulkanSettingsLoader;
-struct RuntimeSettings;
 };
 
 namespace vk
@@ -84,31 +82,18 @@ enum class AppProfile : uint32_t
     NitrousEngine,         // Nitrous Engine by Oxide (Default)
 };
 
-// Struct describing dynamic CHILL settings
-struct ChillSettings
+struct ProfileSettings
 {
-    bool      chillProfileEnable;  // If per-app chill profile settings is enabled
-    uint32_t  chillLevel;          // Chill level and flags
-    uint32_t  chillMinFrameRate;   // Min chill frame rate; valid range is 30-300fps.
-    uint32_t  chillMaxFrameRate;   // Max chill frame rate; valid range is 30-300fps.
-    uint32_t  chillLoadingScreenDrawsThresh;  // The threshold number of draw calls per frame used to distinguish
-                                              // between loading screens and gameplay.
-};
+    uint32_t    texFilterQuality;      // TextureFilterOptimizationSettings
 
-// Struct describing dynamic TurboSync settings
-struct TurboSyncSettings
-{
-    bool      turboSyncEnable;  // If per-app TurboSync profile settings is enabled
 };
 
 extern AppProfile ScanApplicationProfile(const VkInstanceCreateInfo& instanceInfo);
 
-void ReloadAppProfileSettings(
-    Instance*             pInstance,
-    VulkanSettingsLoader* pSettingsLoader,
-    ChillSettings*        pChillSettings,
-    TurboSyncSettings*    pTurboSyncSettings);
+void ReloadAppProfileSettings(Instance*         pInstance,
+                              ProfileSettings*  pProfileSettings,
+                              uint32_t          appGpuID = 0u);
 
 };
 
-#endif /* __GPU_EVENT_MGR_H__ */
+#endif /* __APP_PROFILE_H__ */

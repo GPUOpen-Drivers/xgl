@@ -389,6 +389,8 @@ static void GetFormatFeatureFlags(
 
         retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT;
         retFlags &= ~VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT;
+
+        retFlags &= ~VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT;
     }
     else
     {
@@ -1355,10 +1357,10 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     //         a- color attachment.
     //         b- depth/stencil attachment.
     //         c- storage image.
-    if ((FormatSupportsMsaa(format) == false)                                       ||
-        (type != VK_IMAGE_TYPE_2D)                                                  ||
-        (tiling == VK_IMAGE_TILING_LINEAR)                                          ||
-        ((flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) != 0)                        ||
+    if ((FormatSupportsMsaa(format) == false)                                           ||
+        (type != VK_IMAGE_TYPE_2D)                                                      ||
+        (tiling == VK_IMAGE_TILING_LINEAR)                                              ||
+        ((flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) != 0)                            ||
         ((supportedFeatures & (VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT    |
                                VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) == 0))
@@ -2532,6 +2534,19 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
     return result;
 }
 
+// Instantiate the template for the linker.
+template
+VkResult PhysicalDevice::GetSurfaceCapabilities<VkSurfaceCapabilitiesKHR*>(
+    VkSurfaceKHR              surface,
+    Pal::OsDisplayHandle      displayHandle,
+    VkSurfaceCapabilitiesKHR* pSurfaceCapabilities) const;
+
+template
+VkResult PhysicalDevice::GetSurfaceCapabilities<VkSurfaceCapabilities2EXT*>(
+    VkSurfaceKHR              surface,
+    Pal::OsDisplayHandle      displayHandle,
+    VkSurfaceCapabilities2EXT* pSurfaceCapabilities) const;
+
 // =====================================================================================================================
 VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
     const VkPhysicalDeviceSurfaceInfo2KHR*  pSurfaceInfo,
@@ -3664,6 +3679,9 @@ void PhysicalDevice::GetPhysicalDeviceDriverProperties(
     ) const
 {
     *pDriverID = VULKAN_DRIVER_ID;
+
+    memset(pDriverName, 0, VK_MAX_DRIVER_NAME_SIZE_KHR);
+    memset(pDriverInfo, 0, VK_MAX_DRIVER_INFO_SIZE_KHR);
 
     Util::Strncpy(pDriverName, VULKAN_DRIVER_NAME_STR, VK_MAX_DRIVER_NAME_SIZE_KHR);
     Util::Strncpy(pDriverInfo, VULKAN_DRIVER_INFO_STR, VK_MAX_DRIVER_INFO_SIZE_KHR);

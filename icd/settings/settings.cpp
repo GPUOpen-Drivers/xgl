@@ -389,6 +389,7 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
     {
         m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
     }
+
 }
 
 // =====================================================================================================================

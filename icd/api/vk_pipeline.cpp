@@ -188,18 +188,36 @@ VkResult Pipeline::GetShaderDisassembly(
     {
         bool symbolValid = false;
         Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
+        Util::Abi::ApiShaderType      apiShaderType;
 
-        static_assert(((static_cast<uint32_t>(Util::Abi::ApiShaderType::Cs) == static_cast<uint32_t>(Pal::ShaderType::Compute)) &&
-            (static_cast<uint32_t>(Util::Abi::ApiShaderType::Vs) == static_cast<uint32_t>(Pal::ShaderType::Vertex)) &&
-            (static_cast<uint32_t>(Util::Abi::ApiShaderType::Hs) == static_cast<uint32_t>(Pal::ShaderType::Hull)) &&
-            (static_cast<uint32_t>(Util::Abi::ApiShaderType::Ds) == static_cast<uint32_t>(Pal::ShaderType::Domain)) &&
-            (static_cast<uint32_t>(Util::Abi::ApiShaderType::Gs) == static_cast<uint32_t>(Pal::ShaderType::Geometry)) &&
-            (static_cast<uint32_t>(Util::Abi::ApiShaderType::Ps) == static_cast<uint32_t>(Pal::ShaderType::Pixel)) &&
-            (static_cast<uint32_t>(Util::Abi::ApiShaderType::Count) == Pal::NumShaderTypes)),
-            "Util::Abi::ApiShaderType to Pal::ShaderType mapping does not match!");
+        switch (shaderType)
+        {
+        case Pal::ShaderType::Compute:
+            apiShaderType = Util::Abi::ApiShaderType::Cs;
+            break;
+        case Pal::ShaderType::Vertex:
+            apiShaderType = Util::Abi::ApiShaderType::Vs;
+            break;
+        case Pal::ShaderType::Hull:
+            apiShaderType = Util::Abi::ApiShaderType::Hs;
+            break;
+        case Pal::ShaderType::Domain:
+            apiShaderType = Util::Abi::ApiShaderType::Ds;
+            break;
+        case Pal::ShaderType::Geometry:
+            apiShaderType = Util::Abi::ApiShaderType::Gs;
+            break;
+        case Pal::ShaderType::Pixel:
+            apiShaderType = Util::Abi::ApiShaderType::Ps;
+            break;
+        default:
+            // Pal::ShaderType mapping to Util::Abi::ApiShaderType does not match!
+            VK_NEVER_CALLED();
+            break;
+        }
 
         uint32_t hwStage = 0;
-        if (Util::BitMaskScanForward(&hwStage, apiToHwShader.apiShaders[static_cast<uint32_t>(shaderType)]))
+        if (Util::BitMaskScanForward(&hwStage, apiToHwShader.apiShaders[static_cast<uint32_t>(apiShaderType)]))
         {
             Util::Abi::PipelineSymbolEntry symbol = {};
             const void* pDisassemblySection = nullptr;
@@ -609,13 +627,34 @@ static Pal::ShaderType GetApiShaderFromHwShader(
 
         if (apiToHwShader.apiShaders[i] & (1 << static_cast<uint32_t>(hwStage)))
         {
-            apiShaderType = static_cast<Pal::ShaderType>(i);
+            switch (static_cast<Util::Abi::ApiShaderType>(i))
+            {
+            case Util::Abi::ApiShaderType::Cs:
+                apiShaderType = Pal::ShaderType::Compute;
+                break;
+            case Util::Abi::ApiShaderType::Vs:
+                apiShaderType = Pal::ShaderType::Vertex;
+                break;
+            case Util::Abi::ApiShaderType::Hs:
+                apiShaderType = Pal::ShaderType::Hull;
+                break;
+            case Util::Abi::ApiShaderType::Ds:
+                apiShaderType = Pal::ShaderType::Domain;
+                break;
+            case Util::Abi::ApiShaderType::Gs:
+                apiShaderType = Pal::ShaderType::Geometry;
+                break;
+            case Util::Abi::ApiShaderType::Ps:
+                apiShaderType = Pal::ShaderType::Pixel;
+                break;
+            default:
+                // Util::Abi::ApiShaderType mapping to Pal::ShaderType does not match!
+                VK_NEVER_CALLED();
+                break;
+            }
             break;
         }
     }
-
-    // API shaders should never exceed number of shader types
-    VK_ASSERT(static_cast<uint32_t>(apiShaderType) < static_cast<uint32_t>(Pal::NumShaderTypes));
 
     return apiShaderType;
 }

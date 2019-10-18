@@ -145,17 +145,19 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
 
     // Update strides for each binding used by the graphics pipeline.  Rebuild SRD data for those bindings
     // whose strides changed.
-
-    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    utils::IterateMask deviceGroup(pCmdBuf->GetDeviceMask());
+    while (deviceGroup.Iterate())
     {
+        uint32_t deviceIdx = deviceGroup.Index();
+
         uint32_t firstChanged = UINT_MAX;
         uint32_t lastChanged = 0;
 
         for (uint32_t bindex = 0; bindex < bindingInfo.bindingCount; ++bindex)
         {
-            const uint32_t slot                 = bindingInfo.bindings[bindex].slot;
-            const uint32_t byteStride           = bindingInfo.bindings[bindex].byteStride;
-            Pal::BufferViewInfo*const  pBinding = &m_bindings[deviceIdx][slot];
+            const uint32_t slot                  = bindingInfo.bindings[bindex].slot;
+            const uint32_t byteStride            = bindingInfo.bindings[bindex].byteStride;
+            Pal::BufferViewInfo*const  pBinding  = &m_bindings[deviceIdx][slot];
 
             if (pBinding->stride != byteStride)
             {
@@ -176,6 +178,5 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
         }
     }
 }
-
 }//namespace vk
 

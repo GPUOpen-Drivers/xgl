@@ -66,6 +66,8 @@ class PhysicalDeviceManager;
 class VirtualStackMgr;
 class VulkanSettingsLoader;
 
+struct RuntimeSettings;
+
 // =====================================================================================================================
 // Represents the per-Vulkan instance data as seen by the applicaton.
 class Instance
@@ -218,10 +220,6 @@ public:
         VulkanSettingsLoader* settingsLoaders[],
         AppProfile*           pAppProfiles);
 
-    void QueryApplicationProfile(
-        Pal::IDevice*         pPalDevice,
-        VulkanSettingsLoader* pSettingsLoader = nullptr);
-
     VkResult RegisterDebugCallback(
         DebugReportCallback* pCallback);
 
@@ -284,6 +282,8 @@ private:
         const char* pFormat,
         va_list     args);
 
+    void UpdateSettingsWithAppProfile(RuntimeSettings* pSettings);
+
     Pal::IPlatform*                     m_pPalPlatform;             // Pal Platform object.
     VkAllocationCallbacks               m_allocCallbacks;
 
@@ -329,9 +329,7 @@ private:
     ScreenObject    m_screens[Pal::MaxScreens];
     void*           m_pScreenStorage;
 
-    DevModeMgr*       m_pDevModeMgr;       // GPUOpen Developer Mode manager.
-    ChillSettings     m_chillSettings;     // Dynamic chill settings structure
-    TurboSyncSettings m_turboSyncSettings; // Dynamic TurboSync settings structure
+    DevModeMgr*     m_pDevModeMgr;      // GPUOpen Developer Mode manager.
 
     Util::List<DebugReportCallback*, PalAllocator>  m_debugReportCallbacks;             // List of registered Debug
                                                                                         // Report Callbacks

@@ -519,6 +519,8 @@ public:
 
     uint32_t GetPinnedSystemMemoryTypes() const;
 
+    uint32_t GetPinnedHostMappedForeignMemoryTypes() const;
+
     uint32_t GetExternalHostMemoryTypes(
         VkExternalMemoryHandleTypeFlagBits handleType,
         const void*                        pExternalPtr) const;
@@ -553,6 +555,10 @@ public:
         Pal::ICmdBuffer* pCommandBuffer,
         Pal::QueueType   cmdBufferQueueType,
         const Queue*     pQueue);
+
+    bool BigSW60Supported() const;
+
+    void UpdateFeatureSettings();
 
 protected:
     Device(
