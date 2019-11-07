@@ -38,7 +38,6 @@
 #include "palAutoBuffer.h"
 #include "palInlineFuncs.h"
 #include "palPipeline.h"
-#include "palPipelineAbi.h"
 #include "palPipelineAbiProcessorImpl.h"
 #include "palMetroHash.h"
 
@@ -56,6 +55,30 @@ static const char* HwStageNames[] =
     ".ps",
     ".cs"
 };
+
+// The names of api shader stages
+static const char* ApiStageNames[] =
+{
+    ".cs",
+    ".vs",
+    ".hs",
+    ".ds",
+    ".gs",
+    ".ps"
+};
+
+static const Pal::ShaderStageFlagBits IndexPalShaderStages[] =
+{
+    Pal::ApiShaderStageCompute,
+    Pal::ApiShaderStageVertex,
+    Pal::ApiShaderStageHull,
+    Pal::ApiShaderStageDomain,
+    Pal::ApiShaderStageGeometry,
+    Pal::ApiShaderStagePixel
+};
+
+static constexpr char shaderPreNameIntermediate[] = "Intermediate";
+static constexpr char shaderPreNameISA[]          = "ISA";
 
 static_assert(VK_ARRAY_SIZE(HwStageNames) == static_cast<uint32_t>(Util::Abi::HardwareStage::Count),
     "Number of HwStageNames and PAL HW stages should match.");
@@ -160,11 +183,12 @@ VkResult Pipeline::Destroy(
 
 // =====================================================================================================================
 VkResult Pipeline::GetShaderDisassembly(
-    const Device*         pDevice,
-    const Pal::IPipeline* pPalPipeline,
-    Pal::ShaderType       shaderType,
-    size_t*               pBufferSize,
-    void*                 pBuffer) const
+    const Device*                 pDevice,
+    const Pal::IPipeline*         pPalPipeline,
+    Util::Abi::PipelineSymbolType pipelineSymbolType,
+    Pal::ShaderType               shaderType,
+    size_t*                       pBufferSize,
+    void*                         pBuffer) const
 {
     // To extract the shader code, we can re-parse the saved ELF binary and lookup the shader's program
     // instructions by examining the symbol table entry for that shader's entrypoint.
@@ -216,6 +240,10 @@ VkResult Pipeline::GetShaderDisassembly(
             break;
         }
 
+        // Support returing AMDIL/LLVM-IR and ISA
+        VK_ASSERT((pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly) ||
+                  (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderAmdIl));
+
         uint32_t hwStage = 0;
         if (Util::BitMaskScanForward(&hwStage, apiToHwShader.apiShaders[static_cast<uint32_t>(apiShaderType)]))
         {
@@ -223,13 +251,33 @@ VkResult Pipeline::GetShaderDisassembly(
             const void* pDisassemblySection = nullptr;
             size_t      disassemblySectionLen = 0;
 
-            symbolValid = abiProcessor.HasPipelineSymbolEntry(
-                Util::Abi::GetSymbolForStage(
-                    Util::Abi::PipelineSymbolType::ShaderDisassembly,
-                    static_cast<Util::Abi::HardwareStage>(hwStage)),
-                &symbol);
+            if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly)
+            {
+                symbolValid = abiProcessor.HasPipelineSymbolEntry(
+                    Util::Abi::GetSymbolForStage(
+                        Util::Abi::PipelineSymbolType::ShaderDisassembly,
+                        static_cast<Util::Abi::HardwareStage>(hwStage)),
+                    &symbol);
 
-            abiProcessor.GetDisassembly(&pDisassemblySection, &disassemblySectionLen);
+                abiProcessor.GetDisassembly(&pDisassemblySection, &disassemblySectionLen);
+            }
+            else if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderAmdIl)
+            {
+                symbolValid = abiProcessor.HasPipelineSymbolEntry(
+                    Util::Abi::GetSymbolForStage(
+                        Util::Abi::PipelineSymbolType::ShaderAmdIl,
+                        apiShaderType),
+                    &symbol);
+
+                if (symbolValid)
+                {
+                    abiProcessor.GetAmdIl(&pDisassemblySection, &disassemblySectionLen);
+                }
+                else
+                {
+                    abiProcessor.GetLlvmIr(&pDisassemblySection, &disassemblySectionLen);
+                }
+            }
 
             if (symbolValid)
             {
@@ -266,6 +314,9 @@ VkResult Pipeline::GetShaderDisassembly(
                         static_cast<Util::Abi::HardwareStage>(hwStage)))];
                 const size_t symbolNameLength = strlen(pSymbolName);
                 const char* ShaderSymbolPrefix = "_amdgpu_";
+                const char* ShaderSymbolSuffix =
+                    (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly) ?
+                        "_amdgpu_" : "; Function Attrs";
 
                 VK_ASSERT(strncmp(pSymbolName, ShaderSymbolPrefix, strlen(ShaderSymbolPrefix)) == 0);
                 VK_ASSERT(strlen(pDisassembly) + 1 == disassemblySectionLen);
@@ -275,7 +326,7 @@ VkResult Pipeline::GetShaderDisassembly(
                 {
                     // Search the end of disassemble code
                     const char* pSymbolBody = pSymbolBase + symbolNameLength;
-                    const char* pSymbolEnd = strstr(pSymbolBody, ShaderSymbolPrefix);
+                    const char* pSymbolEnd  = strstr(pSymbolBody, ShaderSymbolSuffix);
 
                     size_t symbolSize = (pSymbolEnd == nullptr) ?
                         disassemblySectionLen - (pSymbolBase - pDisassembly) :
@@ -485,6 +536,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
             result = pPipeline->GetShaderDisassembly(
                 pDevice,
                 pPalPipeline,
+                Util::Abi::PipelineSymbolType::ShaderDisassembly,
                 shaderType,
                 pBufferSize,
                 pBuffer);
@@ -522,14 +574,18 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
 
 // =====================================================================================================================
 static void BuildPipelineNameDescription(
+    const char*              pPreName,
+    const char*              pShaderName,
     char*                    pName,
     char*                    pDescription,
     Util::Abi::HardwareStage hwStage,
     uint32_t                 palShaderMask)
 {
     // Build a name and description string for the HW Shader
-    const char* apiString = HwStageNames[static_cast<uint32_t>(hwStage)];
-    strncpy(pName, apiString, VK_MAX_DESCRIPTION_SIZE);
+    char shaderName[VK_MAX_DESCRIPTION_SIZE];
+    Util::Strncpy(shaderName, pPreName, VK_MAX_DESCRIPTION_SIZE);
+    Util::Strncat(shaderName, VK_MAX_DESCRIPTION_SIZE, pShaderName);
+    strncpy(pName, shaderName, VK_MAX_DESCRIPTION_SIZE);
 
     // Build the description string using the VkShaderStageFlagBits
     // that correspond to the HW Shader
@@ -682,9 +738,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutablePropertiesKHR(
         return VK_SUCCESS;
     }
 
-    VkShaderStatisticsInfoAMD  vkShaderStats = {};
-    Pal::ShaderStats           palStats      = {};
-    uint32_t                   outputCount   = 0;
+    VkShaderStatisticsInfoAMD  vkShaderStats   = {};
+    Pal::ShaderStats           palStats        = {};
+    uint32_t                   outputCount     = 0;
+    constexpr char             shaderPreName[] = "ShaderProperties";
 
     // Return the name / description for the pExecutableCount number of executables.
     for (uint32 i = 0;
@@ -703,11 +760,17 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutablePropertiesKHR(
         // Set VkShaderStageFlagBits as an output property
         pProperties[outputCount].stages = vkShaderStats.shaderStageMask;
 
+        // Convert HW Stage to API String Name
+        Util::Abi::HardwareStage hwStage    = static_cast<Util::Abi::HardwareStage>(i);
+        const char*              pHwStageString = HwStageNames[static_cast<uint32_t>(hwStage)];
+
         // Build the name and description of the output property
         BuildPipelineNameDescription(
+            shaderPreName,
+            pHwStageString,
             pProperties[outputCount].name,
             pProperties[outputCount].description,
-            static_cast<Util::Abi::HardwareStage>(i),
+            hwStage,
             palStats.shaderStageMask);
 
          // If this is a compute shader, report the workgroup size
@@ -827,17 +890,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
     const Pal::IPipeline*               pPalPipeline  = pPipeline->PalPipeline(DefaultDeviceIndex);
     const Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
 
-    if (pInternalRepresentations == nullptr)
-    {
-        *pInternalRepresentationCount = 1;
-        return VK_SUCCESS;
-    }
-
-    if (*pInternalRepresentationCount == 0)
-    {
-        return VK_INCOMPLETE;
-    }
-
     // Count the number of hardware stages that are used in this pipeline
     uint32_t hwStageMask = 0;
     uint32_t numHWStages = CountNumberOfHWStages(&hwStageMask, apiToHwShader);
@@ -852,28 +904,85 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
     Pal::ShaderStats palStats  = {};
     Pal::Result      palResult = pPalPipeline->GetShaderStats(apiShaderType, &palStats, true);
 
-    // Build the name and description of the output property
-    BuildPipelineNameDescription(
-        pInternalRepresentations[0].name,
-        pInternalRepresentations[0].description,
-        static_cast<Util::Abi::HardwareStage>(hwStage),
-        palStats.shaderStageMask);
+    // Return (Number of Intermediate Shaders) + Number of HW ISA shaders
+    uint32_t numberOfInternalRepresentations = Util::CountSetBits(palStats.shaderStageMask) + 1;
 
-    // Get the text based disassembly of the shader
-    VkResult result = pPipeline->GetShaderDisassembly(
-        pDevice,
-        pPalPipeline,
-        apiShaderType,
-        &(pInternalRepresentations[0].dataSize),
-        pInternalRepresentations[0].pData);
+    if (pInternalRepresentations == nullptr)
+    {
+        *pInternalRepresentationCount = numberOfInternalRepresentations;
+        return VK_SUCCESS;
+    }
 
-    // Mark that the output disassembly is text formated
-    pInternalRepresentations[0].isText = VK_TRUE;
+    // Output the Intermediate API Shaders
+    uint32_t outputCount   = 0;
+    uint32_t apiShaderMask = palStats.shaderStageMask;
 
-    // Update the number of representations written
-    *pInternalRepresentationCount = 1;
+    uint32_t i = 0;
+    while((Util::BitMaskScanForward(&i, apiShaderMask)) &&
+          (outputCount < *pInternalRepresentationCount))
+    {
+         // Build the name and description of the output property for IL
+         const char*              pApiString    = ApiStageNames[i];
+         Pal::ShaderStageFlagBits palShaderMask = IndexPalShaderStages[i];
 
-    return result;
+         BuildPipelineNameDescription(
+             shaderPreNameIntermediate,
+             pApiString,
+             pInternalRepresentations[outputCount].name,
+             pInternalRepresentations[outputCount].description,
+             static_cast<Util::Abi::HardwareStage>(i),
+             static_cast<uint32_t>(palShaderMask));
+
+         // Get the text based IL disassembly of the shader
+         pPipeline->GetShaderDisassembly(
+             pDevice,
+             pPalPipeline,
+             Util::Abi::PipelineSymbolType::ShaderAmdIl,
+             apiShaderType,
+             &(pInternalRepresentations[outputCount].dataSize),
+             pInternalRepresentations[outputCount].pData);
+
+         // Mark that the output IL disassembly is text formated
+         pInternalRepresentations[outputCount].isText = VK_TRUE;
+
+        apiShaderMask &= ~(1 << i);
+        outputCount++;
+    }
+
+    // Output the ISA shaders
+    if (outputCount < *pInternalRepresentationCount)
+    {
+        // Build the name and description of the output property for ISA Shader
+        const char* pApiString = HwStageNames[static_cast<uint32_t>(hwStage)];
+
+        BuildPipelineNameDescription(
+            shaderPreNameISA,
+            pApiString,
+            pInternalRepresentations[outputCount].name,
+            pInternalRepresentations[outputCount].description,
+            static_cast<Util::Abi::HardwareStage>(hwStage),
+            palStats.shaderStageMask);
+
+        // Get the text based ISA disassembly of the shader
+        pPipeline->GetShaderDisassembly(
+            pDevice,
+            pPalPipeline,
+            Util::Abi::PipelineSymbolType::ShaderDisassembly,
+            apiShaderType,
+            &(pInternalRepresentations[outputCount].dataSize),
+            pInternalRepresentations[outputCount].pData);
+
+        // Mark that the output ISA disassembly is text formated
+        pInternalRepresentations[outputCount].isText = VK_TRUE;
+
+        outputCount++;
+    }
+
+    // Write out the number of shader ouputs.
+    *pInternalRepresentationCount = outputCount;
+
+    // If the requested number of executables was less than the available number of hw stages, return Incomplete
+    return (*pInternalRepresentationCount < numberOfInternalRepresentations) ? VK_INCOMPLETE : VK_SUCCESS;
 }
 
 } // namespace entry

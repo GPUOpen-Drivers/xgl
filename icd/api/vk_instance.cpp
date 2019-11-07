@@ -346,7 +346,11 @@ VkResult Instance::Init(
 
     createInfo.pLogInfo = &callbackInfo;
 
+#if defined(__unix__)
     createInfo.pSettingsPath = "/etc/amd";
+#else
+    createInfo.pSettingsPath = "Vulkan";
+#endif
 
     // We use shadow descriptors to support FMASK based MSAA reads so we need to request support from PAL.
     createInfo.flags.requestShadowDescriptorVaRange = 1;
@@ -718,6 +722,7 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
     if (!supportedExtensionsPopulated)
     {
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_SURFACE));
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XCB_KHR
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_XCB_SURFACE));
 #endif
@@ -726,6 +731,7 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
 #endif
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_WAYLAND_SURFACE));
+#endif
 #endif
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_PHYSICAL_DEVICE_PROPERTIES2));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_EXTERNAL_MEMORY_CAPABILITIES));
@@ -739,6 +745,7 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_REPORT));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DEBUG_UTILS));
 
+#if defined(__unix__)
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_DISPLAY));
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DISPLAY_SURFACE_COUNTER));
 
@@ -748,6 +755,7 @@ const InstanceExtensions::Supported& Instance::GetSupportedExtensions()
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(KHR_GET_DISPLAY_PROPERTIES2));
 
         supportedExtensions.AddExtension(VK_INSTANCE_EXTENSION(EXT_DIRECT_MODE_DISPLAY));
+#endif
         supportedExtensionsPopulated = true;
     }
 
@@ -907,6 +915,7 @@ VkResult Instance::FindScreens(
     return result;
 }
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
 // =====================================================================================================================
 Pal::IScreen* Instance::FindScreenFromRandrOutput(
@@ -940,6 +949,7 @@ Pal::IScreen* Instance::FindScreenFromRandrOutput(
     }
     return pScreen;
 }
+#endif
 #endif
 // =====================================================================================================================
 // Finds the PAL screen (if any) associated with the given window handle

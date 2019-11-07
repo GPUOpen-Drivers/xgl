@@ -47,8 +47,12 @@
 #include <type_traits>
 #include <malloc.h>
 
+#if defined(__unix__)
 #include <unistd.h>
 #include <linux/limits.h>
+#else
+#define PATH_MAX 512
+#endif
 
 // Reuse some PAL macros here
 #define VK_ASSERT PAL_ASSERT
@@ -223,6 +227,14 @@ VK_INLINE int StrCmpCaseInsensitive(
         a++;
         b++;
     }
+}
+
+// =====================================================================================================================
+// Return true if Big Software Release 6.0 is supported.
+VK_INLINE bool BigSW60Supported(const Pal::BigSoftwareReleaseInfo& bigSwInfo)
+{
+    return ((bigSwInfo.majorVersion > 2019) ||
+            ((bigSwInfo.majorVersion == 2019) && (bigSwInfo.minorVersion >= 1)));
 }
 
 // =====================================================================================================================

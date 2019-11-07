@@ -238,6 +238,7 @@ Device::Device(
         m_perGpu[deviceIdx].pSwCompositingMemory    = nullptr;
         m_perGpu[deviceIdx].pSwCompositingQueue     = nullptr;
         m_perGpu[deviceIdx].pSwCompositingSemaphore = nullptr;
+
     }
 
     if (pFeatures != nullptr)
@@ -278,16 +279,21 @@ static void ConstructQueueCreateInfo(
     Pal::QueueCreateInfo*       pQueueCreateInfo,
     bool                        useComputeAsTransferQueue)
 {
-    const Pal::QueueType palQueueType =
-        pPhysicalDevices[deviceIdx]->GetQueueFamilyPalQueueType(queueFamilyIndex);
-
     const Pal::QueuePriority palQueuePriority =
         VkToPalGlobalPriority(queuePriority);
 
     // Get the sub engine index of vr high priority
     // UINT32_MAX is returned if the required vr high priority sub engine is not available
-    uint32_t vrHighPriorityIndex           = pPhysicalDevices[deviceIdx]->GetVrHighPrioritySubEngineIndex();
-    uint32_t rtCuHighComputeSubEngineIndex = pPhysicalDevices[deviceIdx]->GetRtCuHighComputeSubEngineIndex();
+    const uint32_t vrHighPriorityIndex           = pPhysicalDevices[deviceIdx]->GetVrHighPrioritySubEngineIndex();
+    const uint32_t rtCuHighComputeSubEngineIndex = pPhysicalDevices[deviceIdx]->GetRtCuHighComputeSubEngineIndex();
+
+    Pal::QueueType palQueueType =
+        pPhysicalDevices[deviceIdx]->GetQueueFamilyPalQueueType(queueFamilyIndex);
+
+    if ((palQueueType == Pal::QueueType::QueueTypeDma) && useComputeAsTransferQueue)
+    {
+        palQueueType = Pal::QueueType::QueueTypeCompute;
+    }
 
     if ((dedicatedComputeUnits > 0) &&
         (rtCuHighComputeSubEngineIndex != UINT32_MAX))
@@ -329,12 +335,6 @@ static void ConstructQueueCreateInfo(
 
     pQueueCreateInfo->queueType = palQueueType;
     pQueueCreateInfo->priority  = palQueuePriority;
-
-    if ((pQueueCreateInfo->queueType == Pal::QueueType::QueueTypeDma) && useComputeAsTransferQueue)
-    {
-        pQueueCreateInfo->queueType  = Pal::QueueType::QueueTypeCompute;
-        pQueueCreateInfo->engineType = Pal::EngineType::EngineTypeCompute;
-    }
 
 #if defined(__unix__) && (PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 479)
     pQueueCreateInfo->enableGpuMemoryPriorities = 1;
@@ -593,15 +593,6 @@ VkResult Device::Create(
             break;
             }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_ADDRESS_FEATURES_EXT:
-        {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceBufferAddressFeaturesEXT>(
-                pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceBufferAddressFeaturesEXT*>(pHeader));
-
-            break;
-        }
-
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
         {
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceLineRasterizationFeaturesEXT>(
@@ -616,6 +607,24 @@ VkResult Device::Create(
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR>(
                 pPhysicalDevice,
                 reinterpret_cast<const VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderClockFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceShaderClockFeaturesKHR*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR*>(pHeader));
 
             break;
         }
@@ -646,7 +655,13 @@ VkResult Device::Create(
 
             break;
         }
-
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTimelineSemaphoreFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceTimelineSemaphoreFeaturesKHR*>(pHeader));
+            break;
+        }
         case VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD:
         {
             const VkDeviceMemoryOverallocationCreateInfoAMD* pMemoryOverallocationCreateInfo =
@@ -1607,6 +1622,7 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
             VkInstance()->FreeMem(m_perGpu[deviceIdx].pSwCompositingMemory);
         }
+
     }
 
     m_renderStateCache.Destroy();
@@ -2470,6 +2486,55 @@ VkResult Device::CreateQueryPool(
     return QueryPool::Create(this, pCreateInfo, pAllocator, pQueryPool);
 }
 
+// =====================================================================================================================
+VkResult Device::GetSemaphoreCounterValueKHR(
+    VkSemaphore                                 semaphore,
+    uint64_t*                                   pValue)
+{
+    Semaphore* pSemaphore = Semaphore::ObjectFromHandle(semaphore);
+
+    return pSemaphore->GetSemaphoreCounterValue(this, pSemaphore, pValue);
+}
+
+// =====================================================================================================================
+VkResult Device::WaitSemaphoresKHR(
+    const VkSemaphoreWaitInfoKHR*               pWaitInfo,
+    uint64_t                                    timeout)
+{
+    Pal::Result palResult = Pal::Result::Success;
+    uint32_t flags = 0;
+
+    Pal::IQueueSemaphore** ppPalSemaphores = static_cast<Pal::IQueueSemaphore**>(VK_ALLOC_A(
+                sizeof(Pal::IQueueSemaphore*) * pWaitInfo->semaphoreCount));
+
+    for (uint32_t i = 0; i < pWaitInfo->semaphoreCount; ++i)
+    {
+        Semaphore* currentSemaphore = Semaphore::ObjectFromHandle(pWaitInfo->pSemaphores[i]);
+        ppPalSemaphores[i] = currentSemaphore->PalSemaphore(DefaultDeviceIndex);
+        currentSemaphore->RestoreSemaphore();
+    }
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 508
+    if (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT_KHR)
+    {
+        flags |= Pal::HostWaitFlags::HostWaitAny;
+    }
+    palResult = PalDevice(DefaultDeviceIndex)->WaitForSemaphores(pWaitInfo->semaphoreCount, ppPalSemaphores,
+            pWaitInfo->pValues, flags, timeout);
+#endif
+    return PalToVkResult(palResult);
+}
+
+// =====================================================================================================================
+VkResult Device::SignalSemaphoreKHR(
+    VkSemaphore                                 semaphore,
+    uint64_t                                    value)
+{
+    Semaphore* pSemaphore = Semaphore::ObjectFromHandle(semaphore);
+
+    return pSemaphore->SignalSemaphoreValue(this, pSemaphore, value);
+}
+
 VkResult Device::ImportSemaphore(
     VkSemaphore                 semaphore,
     const ImportSemaphoreInfo&  importInfo)
@@ -2805,11 +2870,7 @@ Pal::IQueue* Device::PerformSwCompositing(
 // Return true if Big Software Release 6.0 is supported.
 bool Device::BigSW60Supported() const
 {
-    const Pal::DeviceProperties&       deviceProps      = VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
-    const Pal::BigSoftwareReleaseInfo* pBigSwInfo       = &(deviceProps.bigSoftwareReleaseInfo);
-
-    return ((pBigSwInfo->majorVersion > 2019) ||
-           ((pBigSwInfo->majorVersion == 2019) && (pBigSwInfo->minorVersion >= 1)));
+    return utils::BigSW60Supported(VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().bigSoftwareReleaseInfo);
 }
 
 // =====================================================================================================================
@@ -3232,6 +3293,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(
     return pDevice->AllocMemory(pAllocateInfo, pAllocCB, pMemory);
 }
 
+#if defined(__unix__)
 VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
     VkDevice device,
     const VkImportSemaphoreFdInfoKHR* pImportSemaphoreFdInfo)
@@ -3243,6 +3305,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
 
     return ApiDevice::ObjectFromHandle(device)->ImportSemaphore(pImportSemaphoreFdInfo->semaphore, importInfo);
 }
+#endif
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkBindBufferMemory2(
@@ -3443,6 +3506,35 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetCalibratedTimestampsEXT(
         pTimestampInfos,
         pTimestamps,
         pMaxDeviation);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreCounterValueKHR(
+    VkDevice                                    device,
+    VkSemaphore                                 semaphore,
+    uint64_t*                                   pValue)
+{
+    return ApiDevice::ObjectFromHandle(device)->GetSemaphoreCounterValueKHR(
+        semaphore,
+        pValue);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkWaitSemaphoresKHR(
+    VkDevice                                    device,
+    const VkSemaphoreWaitInfoKHR*               pWaitInfo,
+    uint64_t                                    timeout)
+{
+    return ApiDevice::ObjectFromHandle(device)->WaitSemaphoresKHR(
+        pWaitInfo,
+        timeout);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkSignalSemaphoreKHR(
+    VkDevice                                    device,
+    const VkSemaphoreSignalInfoKHR*             pSignalInfo)
+{
+    return ApiDevice::ObjectFromHandle(device)->SignalSemaphoreKHR(
+        pSignalInfo->semaphore,
+        pSignalInfo->value);
 }
 
 // =====================================================================================================================

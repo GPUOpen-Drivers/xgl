@@ -519,24 +519,27 @@ void PipelineCompiler::ReplacePipelineIsaCode(
     char codeOffset[256] = {};
     while ((isaCodeFile.ReadLine(codeLine, sizeof(char) * 256, nullptr) == Util::Result::Success))
     {
-        const char* offsetEnd = strchr(codeLine, ':');
-        strncpy(codeOffset, codeLine, offsetEnd - codeLine);
-        codeOffset[offsetEnd - codeLine] = '\0';
-        uint32_t offset = strtoul(codeOffset, nullptr, 10);
-        bool inRange = false;
-        for (const auto& simboEntry : shaderStageSymbols)
+        const char* pOffsetEnd = strchr(codeLine, ':');
+        if (pOffsetEnd != nullptr)
         {
-            if ((offset >= simboEntry.value) && (offset < simboEntry.value + simboEntry.size))
+            strncpy(codeOffset, codeLine, pOffsetEnd - codeLine);
+            codeOffset[pOffsetEnd - codeLine] = '\0';
+            uint32_t offset = strtoul(codeOffset, nullptr, 10);
+            bool inRange = false;
+            for (const auto& simboEntry : shaderStageSymbols)
             {
-                inRange = true;
-                break;
+                if ((offset >= simboEntry.value) && (offset < simboEntry.value + simboEntry.size))
+                {
+                    inRange = true;
+                    break;
+                }
             }
+            VK_ASSERT(inRange);
+            pOffsetEnd++;
+            uint8_t* pCode = pFirstInstruction + offset;
+            uint32_t replaceCode = strtoul(pOffsetEnd, nullptr, 16);
+            *reinterpret_cast<uint32_t*>(pCode) = replaceCode;
         }
-        VK_ASSERT(inRange);
-        offsetEnd++;
-        uint8_t* pCode = pFirstInstruction + offset;
-        uint32_t replaceCode = strtoul(offsetEnd, nullptr, 16);
-        *reinterpret_cast<uint32_t*>(pCode) = replaceCode;
     }
 
 }

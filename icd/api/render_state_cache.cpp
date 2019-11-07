@@ -71,11 +71,7 @@ RenderStateCache::RenderStateCache(
     m_colorBlendStates(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_colorBlendRefs(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_depthStencilStates(NumStateBuckets, pDevice->VkInstance()->Allocator()),
-    m_depthStencilRefs(NumStateBuckets, pDevice->VkInstance()->Allocator()),
-    m_graphicsWaveLimits(NumStateBuckets, pDevice->VkInstance()->Allocator()),
-    m_graphicsWaveLimitsNextId(FirstStaticRenderStateToken),
-    m_computeWaveLimits(NumStateBuckets, pDevice->VkInstance()->Allocator()),
-    m_computeWaveLimitsNextId(FirstStaticRenderStateToken)
+    m_depthStencilRefs(NumStateBuckets, pDevice->VkInstance()->Allocator())
 {
 
 }
@@ -164,16 +160,6 @@ VkResult RenderStateCache::Init()
     if (result == Pal::Result::Success)
     {
         result = m_depthStencilRefs.Init();
-    }
-
-    if (result == Pal::Result::Success)
-    {
-        result = m_graphicsWaveLimits.Init();
-    }
-
-    if (result == Pal::Result::Success)
-    {
-        result = m_computeWaveLimits.Init();
     }
 
     return PalToVkResult(result);
@@ -1067,52 +1053,6 @@ void RenderStateCache::DestroySamplePattern(
         samplePattern,
         token,
         &m_samplePattern);
-}
-
-// =====================================================================================================================
-uint32_t RenderStateCache::CreateGraphicsWaveLimits(
-    const Pal::DynamicGraphicsShaderInfos& waveLimits)
-{
-    return CreateStaticParamsState(
-        OptRenderStateCacheStaticGraphicsWaveLimits,
-        waveLimits,
-        &m_graphicsWaveLimits,
-        &m_graphicsWaveLimitsNextId);
-}
-
-// =====================================================================================================================
-void RenderStateCache::DestroyGraphicsWaveLimits(
-    const Pal::DynamicGraphicsShaderInfos& waveLimits,
-    uint32_t                               token)
-{
-    return DestroyStaticParamsState(
-        OptRenderStateCacheStaticGraphicsWaveLimits,
-        waveLimits,
-        token,
-        &m_graphicsWaveLimits);
-}
-
-// =====================================================================================================================
-uint32_t RenderStateCache::CreateComputeWaveLimits(
-    const Pal::DynamicComputeShaderInfo& waveLimits)
-{
-    return CreateStaticParamsState(
-        OptRenderStateCacheStaticComputeWaveLimits,
-        waveLimits,
-        &m_computeWaveLimits,
-        &m_computeWaveLimitsNextId);
-}
-
-// =====================================================================================================================
-void RenderStateCache::DestroyComputeWaveLimits(
-    const Pal::DynamicComputeShaderInfo& waveLimits,
-    uint32_t                             token)
-{
-    return DestroyStaticParamsState(
-        OptRenderStateCacheStaticComputeWaveLimits,
-        waveLimits,
-        token,
-        &m_computeWaveLimits);
 }
 
 // =====================================================================================================================

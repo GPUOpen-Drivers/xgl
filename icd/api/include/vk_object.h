@@ -48,4 +48,5 @@ extern bool NeedGetObjectInfoData(
 
 };
 
+
 #endif /* __VK_OBJECT_H__ */

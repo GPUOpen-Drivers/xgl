@@ -191,6 +191,7 @@ VkResult Fence::GetStatus(void)
     return result;
 }
 
+#if defined(__unix__)
 // =====================================================================================================================
 VkResult Fence::ImportFenceFd(
     Device*                         pDevice,
@@ -260,6 +261,7 @@ VkResult Fence::GetFenceFd(
 
     return VkResult::VK_SUCCESS;
 }
+#endif
 
 // =====================================================================================================================
 
@@ -307,6 +309,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyFence(
     }
 }
 
+#if defined(__unix__)
 VKAPI_ATTR VkResult VKAPI_CALL vkImportFenceFdKHR(
     VkDevice                                    device,
     const VkImportFenceFdInfoKHR*               pImportFenceFdInfo)
@@ -325,6 +328,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetFenceFdKHR(
 
     return Fence::ObjectFromHandle(pGetFdInfo->fence)->GetFenceFd(pDevice, pGetFdInfo, pFd);
 }
+#endif
 
 } // namespace entry
 

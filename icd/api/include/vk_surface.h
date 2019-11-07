@@ -47,6 +47,7 @@ public:
         const VkAllocationCallbacks*    pAllocator,
         VkSurfaceKHR*                   pSurface);
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XCB_KHR
         VkIcdSurfaceXcb*     GetXcbSurface() { return &m_xcbSurface; }
 #endif
@@ -57,6 +58,7 @@ public:
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         VkIcdSurfaceWayland*  GetWaylandSurface() { return &m_waylandSurface; }
 #endif
+#endif
 
     void Destroy(
         Instance*                            pInstance,
@@ -65,6 +67,7 @@ public:
 protected:
     virtual ~Surface() {}
 
+#if defined(__unix__)
     Surface(Instance*               pInstance,
         const VkIcdSurfaceDisplay&  displaySurface)
         :
@@ -116,6 +119,7 @@ protected:
         VkIcdSurfaceWayland m_waylandSurface;
 #endif
     };
+#endif
 
     Instance*            m_pInstance;
 };
@@ -123,6 +127,7 @@ protected:
 namespace entry
 {
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VKAPI_ATTR VkResult VKAPI_CALL vkCreateXcbSurfaceKHR(
         VkInstance                                  instance,
@@ -145,6 +150,7 @@ namespace entry
         const VkWaylandSurfaceCreateInfoKHR*           pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
         VkSurfaceKHR*                               pSurface);
+#endif
 #endif
 
     VKAPI_ATTR VkResult VKAPI_CALL vkCreateDisplayPlaneSurfaceKHR(

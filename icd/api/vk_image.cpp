@@ -1038,6 +1038,7 @@ VkResult Image::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
         if (m_perGpu[deviceIdx].pPalImage != nullptr)

@@ -65,6 +65,7 @@ public:
         const Device*                   pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
+#if defined(__unix__)
     VkResult ImportFenceFd(
         Device*                         pDevice,
         const VkImportFenceFdInfoKHR*   pImportFenceFdInfo);
@@ -73,6 +74,7 @@ public:
         Device*                         pDevice,
         const VkFenceGetFdInfoKHR*      pGetFdInfo,
         int*                            pFd);
+#endif
 
     VkResult RestoreFence(const Device* pDevice);
 
@@ -143,6 +145,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFenceProperties(
     const VkPhysicalDeviceExternalFenceInfo*    pExternalFenceInfo,
     VkExternalFenceProperties*                  pExternalFenceProperties);
 
+#if defined(__unix__)
 VKAPI_ATTR VkResult VKAPI_CALL vkImportFenceFdKHR(
     VkDevice                                    device,
     const VkImportFenceFdInfoKHR*               pImportFenceFdInfo);
@@ -151,6 +154,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetFenceFdKHR(
     VkDevice                                    device,
     const VkFenceGetFdInfoKHR*                  pGetFdInfo,
     int*                                        pFd);
+#endif
 
 } // namespace entry
 

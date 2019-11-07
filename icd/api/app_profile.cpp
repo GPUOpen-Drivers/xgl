@@ -38,8 +38,10 @@
 #include <memory>
 #include <string.h>
 
+#if defined(__unix__)
 #include <unistd.h>
 #include <linux/limits.h>
+#endif
 
 #include "include/vk_instance.h"
 #include "include/vk_device.h"
@@ -599,6 +601,7 @@ AppProfile ScanApplicationProfile(
 
     AppProfile profile = AppProfile::Default;
 
+
     // Generate hashes for all of the tested pattern entries
     Util::MetroHash::Hash hashes[PatternCount] = {};
     char* texts[PatternCount] = {};
@@ -743,14 +746,14 @@ static char* GetExecutableName(
 }
 
 // =====================================================================================================================
-// Parse profile data to uint32_t
-static uint32_t ParseProfileDataToUint32(
+// Get a pointer to a profile data string
+static const wchar_t* FindProfileData(
     const wchar_t* wcharData,
     bool           isUser3DAreaFormat,
-    const uint32_t targetAppGpuID = 0u)
+    uint32_t       targetAppGpuID)
 {
-    uint32_t dataValue;
-    bool     haveGoodData = false;
+    const wchar_t* pDataPosition;
+    bool           haveGoodData = false;
 
     if (isUser3DAreaFormat == true)
     {
@@ -769,7 +772,7 @@ static uint32_t ParseProfileDataToUint32(
                 (pMiddle != nullptr) &&
                 (pStart < pMiddle))
             {
-                appGpuID = wcstoul(pStart, NULL, 0);;
+                appGpuID = wcstoul(pStart, NULL, 0);
             }
 
             if (((appGpuID == targetAppGpuID) || ignoreGpuID) &&
@@ -779,7 +782,7 @@ static uint32_t ParseProfileDataToUint32(
                 ((pMiddle + 2) < pEnd))
             {
                 pMiddle += 2;  // Move past the first 2 ':' characters
-                dataValue = wcstoul(pMiddle, NULL, 0);
+                pDataPosition = pMiddle;
 
                 haveGoodData = true;
             }
@@ -806,10 +809,32 @@ static uint32_t ParseProfileDataToUint32(
 
     if (haveGoodData == false)
     {
-        dataValue = wcstoul(wcharData, NULL, 0);
+        pDataPosition = wcharData;
     }
 
-    return dataValue;
+    return pDataPosition;
+}
+
+// =====================================================================================================================
+static uint32_t ParseProfileDataToUint32(
+    const wchar_t* wcharData,
+    bool           isUser3DAreaFormat,
+    uint32_t       targetAppGpuID)
+{
+    auto pData = FindProfileData(wcharData, isUser3DAreaFormat, targetAppGpuID);
+
+    return wcstoul(pData, NULL, 0);
+}
+
+// =====================================================================================================================
+static float ParseProfileDataToFloat(
+    const wchar_t* wcharData,
+    bool           isUser3DAreaFormat,
+    uint32_t       targetAppGpuID)
+{
+    auto pData = FindProfileData(wcharData, isUser3DAreaFormat, targetAppGpuID);
+
+    return wcstof(pData, NULL);
 }
 
 // =====================================================================================================================
@@ -844,8 +869,7 @@ void ProcessProfileEntry(
         }
         else if (pFloatSetting != nullptr)
         {
-            uint32_t dataValue = ParseProfileDataToUint32(wcharData, isUser3DAreaFormat, appGpuID);
-            *pFloatSetting = static_cast<float>(dataValue);
+            *pFloatSetting = ParseProfileDataToFloat(wcharData, isUser3DAreaFormat, appGpuID);
         }
         else if (pUint32Setting != nullptr)
         {

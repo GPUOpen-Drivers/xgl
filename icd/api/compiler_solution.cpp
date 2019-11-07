@@ -59,4 +59,28 @@ VkResult CompilerSolution::Initialize(
     return VK_SUCCESS;
 }
 
+// =====================================================================================================================
+// Gets the name string of shader stage.
+const char* CompilerSolution::GetShaderStageName(
+    ShaderStage shaderStage)
+{
+    const char* pName = nullptr;
+
+    VK_ASSERT(shaderStage < ShaderStageCount);
+
+    static const char* ShaderStageNames[] =
+    {
+        "Vertex  ",
+        "Tessellation control",
+        "Tessellation evaluation",
+        "Geometry",
+        "Fragment",
+        "Compute ",
+    };
+
+    pName = ShaderStageNames[static_cast<uint32_t>(shaderStage)];
+
+    return pName;
+}
+
 }

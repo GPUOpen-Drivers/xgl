@@ -164,6 +164,7 @@ protected:
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
     Llpc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by LLPC
     Pal::GfxIpLevel    m_gfxIpLevel;           // Graphics IP level
+    static const char* GetShaderStageName(ShaderStage shaderStage);
 };
 
 }

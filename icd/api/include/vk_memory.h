@@ -265,6 +265,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryCommitment(
     VkDeviceMemory                              memory,
     VkDeviceSize*                               pCommittedMemoryInBytes);
 
+#if defined(__unix__)
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryFDAMD(
     VkDevice                                device,
     VkDeviceMemory                          memory,
@@ -280,6 +281,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdPropertiesKHR(
     VkExternalMemoryHandleTypeFlagBits      handleType,
     int                                     fd,
     VkMemoryFdPropertiesKHR*                pMemoryFdProperties);
+#endif
 
 } // namespace entry
 

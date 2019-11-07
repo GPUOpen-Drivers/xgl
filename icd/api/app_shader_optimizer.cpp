@@ -503,6 +503,21 @@ void ShaderOptimizer::BuildTuningProfile()
 
     action.shaderCreate.apply.allowReZ = m_settings.overrideAllowReZ;
 
+    if (m_settings.overrideDisableLoopUnrolls)
+    {
+        action.shaderCreate.apply.disableLoopUnrolls = true;
+    }
+
+    if (m_settings.overrideUseSiScheduler)
+    {
+        action.shaderCreate.tuningOptions.useSiScheduler = true;
+    }
+
+    if (m_settings.overrideReconfigWorkgroupLayout)
+    {
+        action.shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
+    }
+
     switch (m_settings.overrideWaveSize)
     {
     case ShaderWaveSize::WaveSizeAuto:
@@ -1200,6 +1215,170 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x0EBEFF2CBF131944;
         m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x8648E5203943C0B0;
         m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.enableLoadScalarizer = true;
+    }
+    else if (appProfile == AppProfile::RiseOfTheTombra)
+    {
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x67F3B02E8A7707129396E9EF9FF3F616, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x9396E9EF9FF3F616;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x67F3B02E8A770712;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xA1BAD82B65AB576032661ABEE21C5880, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x32661ABEE21C5880;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xA1BAD82B65AB5760;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x349F0CB03A54D3FB849A89C60B8D27F6, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x849A89C60B8D27F6;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x349F0CB03A54D3FB;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xB0F626077CDBD932B1372DAD4EC698E7, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xB1372DAD4EC698E7;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xB0F626077CDBD932;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xD33A2617087D2E05DC3E0E358DBE7EC8, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xDC3E0E358DBE7EC8;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xD33A2617087D2E05;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x88E3517DBB964D7F2AE8021F616DA377, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x2AE8021F616DA377;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x88E3517DBB964D7F;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xC7A986985A693F84406B42FB06DA1DB4, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x406B42FB06DA1DB4;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xC7A986985A693F84;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xAB7E77553A4790F75213D389B1F5F611, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x5213D389B1F5F611;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xAB7E77553A4790F7;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x579F291BA16E852607C84A20ECE7A38D, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x07C84A20ECE7A38D;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x579F291BA16E8526;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xF8D297EBB07612CD476E6779BD4275FD, CS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0x476E6779BD4275FD;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xF8D297EBB07612CD;
+        m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x6CFA095297E1EBD9C5503C7ADCB99118, CS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xC5503C7ADCB99118;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0x6CFA095297E1EBD9;
+        m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x8A53595F143C1D121A19414C76783DF3, VS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.lower = 0x1A19414C76783DF3;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.upper = 0x8A53595F143C1D12;
+        m_appProfile.entries[i].action.shaders[ShaderStageVertex].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x77C34B1C08B3C185BE3C260D6EC230AF, VS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.lower = 0xBE3C260D6EC230AF;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.upper = 0x77C34B1C08B3C185;
+        m_appProfile.entries[i].action.shaders[ShaderStageVertex].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x86C9BAF4D3389204601E54D3F386CDB8, VS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.lower = 0x601E54D3F386CDB8;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.upper = 0x86C9BAF4D3389204;
+        m_appProfile.entries[i].action.shaders[ShaderStageVertex].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xB396D24454277733EFC9AABA5E5EA0E9, VS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.lower = 0xEFC9AABA5E5EA0E9;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.upper = 0xB396D24454277733;
+        m_appProfile.entries[i].action.shaders[ShaderStageVertex].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x59790C4419A57854C5D36B08C4B35CB7, VS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.lower = 0xC5D36B08C4B35CB7;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.upper = 0x59790C4419A57854;
+        m_appProfile.entries[i].action.shaders[ShaderStageVertex].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xCA6C4EC171D01EC11436591682E49AA4, VS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.lower = 0x1436591682E49AA4;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.upper = 0xCA6C4EC171D01EC1;
+        m_appProfile.entries[i].action.shaders[ShaderStageVertex].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x6AA53B86573DCB393FD5A53E2881BCAA, VS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.lower = 0x3FD5A53E2881BCAA;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.upper = 0x6AA53B86573DCB39;
+        m_appProfile.entries[i].action.shaders[ShaderStageVertex].shaderCreate.tuningOptions.useSiScheduler = true;
     }
 }
 

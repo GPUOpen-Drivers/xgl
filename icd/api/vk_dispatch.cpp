@@ -293,6 +293,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateShaderModule                            );
     INIT_DISPATCH_ENTRY(vkCreateSwapchainKHR                            );
     INIT_DISPATCH_ENTRY(vkDestroySurfaceKHR                             );
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XCB_KHR
     INIT_DISPATCH_ENTRY(vkCreateXcbSurfaceKHR                           );
 #endif
@@ -316,6 +317,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetRandROutputDisplayEXT                      );
 #endif
     INIT_DISPATCH_ENTRY(vkReleaseDisplayEXT                             );
+#endif
     INIT_DISPATCH_ENTRY(vkDestroyBuffer                                 );
     INIT_DISPATCH_ENTRY(vkDestroyBufferView                             );
     INIT_DISPATCH_ENTRY(vkFreeCommandBuffers                            );
@@ -400,12 +402,14 @@ void DispatchTable::Init()
 
     INIT_DISPATCH_ALIAS(vkGetPhysicalDeviceExternalSemaphorePropertiesKHR,
                         vkGetPhysicalDeviceExternalSemaphoreProperties  );
+#if defined(__unix__)
     INIT_DISPATCH_ENTRY(vkGetMemoryFdPropertiesKHR                      );
     INIT_DISPATCH_ENTRY(vkGetMemoryFdKHR                                );
     INIT_DISPATCH_ENTRY(vkImportSemaphoreFdKHR                          );
     INIT_DISPATCH_ENTRY(vkGetSemaphoreFdKHR                             );
     INIT_DISPATCH_ENTRY(vkGetFenceFdKHR                                 );
     INIT_DISPATCH_ENTRY(vkImportFenceFdKHR                              );
+#endif
 
     INIT_DISPATCH_ALIAS(vkBindBufferMemory2KHR                          ,
                         vkBindBufferMemory2                             );
@@ -511,8 +515,12 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateDebugReportCallbackEXT                  );
     INIT_DISPATCH_ENTRY(vkDestroyDebugReportCallbackEXT                 );
     INIT_DISPATCH_ENTRY(vkDebugReportMessageEXT                         );
+    INIT_DISPATCH_ENTRY(vkGetSemaphoreCounterValueKHR                   );
+    INIT_DISPATCH_ENTRY(vkWaitSemaphoresKHR                             );
+    INIT_DISPATCH_ENTRY(vkSignalSemaphoreKHR                            );
     INIT_DISPATCH_ENTRY(vkCmdWriteBufferMarkerAMD                       );
     INIT_DISPATCH_ENTRY(vkGetMemoryHostPointerPropertiesEXT             );
+#if defined(__unix__)
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayPropertiesKHR         );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceDisplayPlanePropertiesKHR    );
     INIT_DISPATCH_ENTRY(vkGetDisplayPlaneSupportedDisplaysKHR           );
@@ -525,6 +533,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetDisplayModeProperties2KHR                  );
     INIT_DISPATCH_ENTRY(vkGetDisplayPlaneCapabilities2KHR               );
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceSurfaceCapabilities2EXT      );
+#endif
     INIT_DISPATCH_ENTRY(vkCmdBindTransformFeedbackBuffersEXT            );
     INIT_DISPATCH_ENTRY(vkCmdBeginTransformFeedbackEXT                  );
     INIT_DISPATCH_ENTRY(vkCmdEndTransformFeedbackEXT                    );
@@ -545,8 +554,6 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutablePropertiesKHR             );
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableStatisticsKHR             );
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableInternalRepresentationsKHR);
-
-    INIT_DISPATCH_ENTRY(vkGetBufferDeviceAddressEXT                     );
     INIT_DISPATCH_ENTRY(vkResetQueryPoolEXT                             );
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
 

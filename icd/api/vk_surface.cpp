@@ -44,6 +44,7 @@ VkResult Surface::Create(
     VkSurfaceKHR*                       pSurfaceHandle)
 {
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XCB_KHR
     VkIcdSurfaceXcb  xcbSurface  = {};
 #endif
@@ -54,10 +55,12 @@ VkResult Surface::Create(
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
     VkIcdSurfaceWayland waylandSurface = {};
 #endif
+#endif
 
     union
     {
         const VkStructHeader*                    pHeader;
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XCB_KHR
         const VkXcbSurfaceCreateInfoKHR*             pVkXcbSurfaceCreateInfoKHR;
 #endif
@@ -68,6 +71,7 @@ VkResult Surface::Create(
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         const VkWaylandSurfaceCreateInfoKHR*     pVkWaylandSurfaceCreateInfoKHR;
 #endif
+#endif
     };
 
     VkResult result = VK_SUCCESS;
@@ -77,6 +81,7 @@ VkResult Surface::Create(
         switch (static_cast<uint32_t>(pHeader->sType))
         {
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XCB_KHR
         case VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR:
         {
@@ -119,6 +124,7 @@ VkResult Surface::Create(
             break;
         }
 #endif
+#endif
         default:
             break;
         };
@@ -144,6 +150,7 @@ VkResult Surface::Create(
     {
         Surface* pSurface = nullptr;
 
+#if defined(__unix__)
         if (displaySurface.base.platform == VK_ICD_WSI_PLATFORM_DISPLAY)
         {
             pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, displaySurface);
@@ -166,6 +173,7 @@ VkResult Surface::Create(
             pSurface = VK_PLACEMENT_NEW(pMemory) Surface(pInstance, xlibSurface);
         }
 #endif
+#endif
         *pSurfaceHandle = Surface::HandleFromObject(pSurface);
     }
 
@@ -183,6 +191,7 @@ void Surface::Destroy(
 namespace entry
 {
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XCB_KHR
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateXcbSurfaceKHR(
@@ -220,6 +229,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateWaylandSurfaceKHR(
     return Surface::Create(Instance::ObjectFromHandle(instance),
         reinterpret_cast<const VkStructHeader*>(pCreateInfo), pAllocator, pSurface);
 }
+#endif
 #endif
 
 // =====================================================================================================================

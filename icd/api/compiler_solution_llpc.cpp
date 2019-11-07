@@ -33,6 +33,8 @@
 #include "include/vk_shader.h"
 #include "include/vk_pipeline_cache.h"
 
+#include <inttypes.h>
+
 namespace vk
 {
 
@@ -202,7 +204,6 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 {
     VK_IGNORE(pDevice);
     VK_IGNORE(rasterizationStream);
-    VK_IGNORE(ppShadersInfo);
     VK_IGNORE(pipelineHash);
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
@@ -221,13 +222,18 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
     pPipelineBuildInfo->iaState.deviceIndex = deviceIdx;
 
-    if ((pPipelineCache != nullptr) &&
-        (settings.shaderCacheMode != ShaderCacheDisable))
+    // By default the client hash provided to PAL is more accurate than the one used by pipeline
+    // profiles.
+    //
+    // Optionally (based on panel setting), these can be set to temporarily match by devs.  This
+    // can be useful when other tools (such as PAL's profiling layer) are used to measure shaders
+    // while building a pipeline profile which uses the profile hash.
+    if (settings.pipelineUseProfileHashAsClientHash)
     {
-        if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCompilerTypeLlpc)
+        for (uint32_t stage = 0; stage < ShaderGfxStageCount; ++stage)
         {
-            pPipelineBuildInfo->pShaderCache =
-                pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
+            ppShadersInfo[stage]->options.clientHash.lower = pCreateInfo->pipelineProfileKey.shaders[stage].codeHash.lower;
+            ppShadersInfo[stage]->options.clientHash.upper = pCreateInfo->pipelineProfileKey.shaders[stage].codeHash.upper;
         }
     }
 
@@ -243,6 +249,33 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
         *ppPipelineBinary   = pipelineOut.pipelineBin.pCode;
         *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
     }
+
+    if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
+    {
+        if (result == VK_SUCCESS)
+        {
+            char extraInfo[256];
+            ShaderOptimizerKey* pShaderKey = &pCreateInfo->pipelineProfileKey.shaders[0];
+            Util::Snprintf(extraInfo, sizeof(extraInfo), "\n;PipelineOptimizer\n");
+            Llpc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+            for (uint32_t i = 0; i < ShaderStageCount; i++)
+            {
+                if (pShaderKey[i].codeHash.upper || pShaderKey[i].codeHash.lower)
+                {
+                    const char* pName = GetShaderStageName(static_cast<ShaderStage>(i));
+                    Util::Snprintf(
+                        extraInfo,
+                        sizeof(extraInfo),
+                        ";%s Shader Profile Key: 0x%016" PRIX64 "%016" PRIX64 ",\n",
+                        pName,
+                        pShaderKey[i].codeHash.upper,
+                        pShaderKey[i].codeHash.lower);
+                    Llpc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+                }
+            }
+        }
+    }
+
     *pCompileTime = Util::GetPerfCpuTime() - startTime;
 
     return result;
@@ -291,14 +324,16 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     }
 #endif
 
-    if ((pPipelineCache != nullptr) &&
-        (settings.shaderCacheMode != ShaderCacheDisable))
+    // By default the client hash provided to PAL is more accurate than the one used by pipeline
+    // profiles.
+    //
+    // Optionally (based on panel setting), these can be set to temporarily match by devs.  This
+    // can be useful when other tools (such as PAL's profiling layer) are used to measure shaders
+    // while building a pipeline profile which uses the profile hash.
+    if (settings.pipelineUseProfileHashAsClientHash)
     {
-        if (pPipelineCache->GetShaderCache(deviceIdx).GetCacheType() == PipelineCompilerTypeLlpc)
-        {
-            pPipelineBuildInfo->pShaderCache =
-                pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
-        }
+        pPipelineBuildInfo->cs.options.clientHash.lower = pCreateInfo->pipelineProfileKey.shaders[ShaderStageCompute].codeHash.lower;
+        pPipelineBuildInfo->cs.options.clientHash.upper = pCreateInfo->pipelineProfileKey.shaders[ShaderStageCompute].codeHash.upper;
     }
 
     // Build pipline binary
@@ -322,6 +357,30 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
         *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
     }
     VK_ASSERT(*ppPipelineBinary == pLlpcPipelineBuffer);
+
+    if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
+    {
+        if (result == VK_SUCCESS)
+        {
+            char extraInfo[256];
+            ShaderOptimizerKey* pShaderKey = &pCreateInfo->pipelineProfileKey.shaders[static_cast<ShaderStage>(ShaderStageCompute)];
+            Util::Snprintf(extraInfo, sizeof(extraInfo), "\n\n;PipelineOptimizer\n");
+            Llpc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+
+            if (pShaderKey->codeHash.upper || pShaderKey->codeHash.lower)
+            {
+                const char* pName = GetShaderStageName(static_cast<ShaderStage>(ShaderStageCompute));
+                Util::Snprintf(
+                    extraInfo,
+                    sizeof(extraInfo),
+                    ";%s Shader Profile Key: 0x%016" PRIX64 "%016" PRIX64 ",\n",
+                    pName,
+                    pShaderKey->codeHash.upper,
+                    pShaderKey->codeHash.lower);
+                Llpc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+            }
+        }
+    }
 
     *pCompileTime = Util::GetPerfCpuTime() - startTime;
 

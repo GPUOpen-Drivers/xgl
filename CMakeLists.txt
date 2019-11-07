@@ -57,6 +57,10 @@ option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)
 option(XGL_BUILD_LIT "Build with Lit test?" OFF)
 option(XGL_BUILD_GFX10 "Build open source vulkan for GFX10" ON)
 
+#if VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES
+option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
+#endif
+
 option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 option(ICD_BUILD_SPVONLY "Build SPV Only?" OFF)
 

@@ -42,6 +42,7 @@ VkResult Semaphore::PopulateInDeviceGroup(
 {
     Pal::Result palResult = Pal::Result::Success;
     uint32_t count = 1;
+#if defined(__unix__)
     // Linux don't support LDA chain. The semaphore allocated from one device cannot be used directly
     // on Peer devices.
     // In order to support that, we have to create the semaphore in the first device and import the payload
@@ -110,6 +111,7 @@ VkResult Semaphore::PopulateInDeviceGroup(
         }
     }
     else
+#endif
     {
         *pSemaphoreCount = count;
     }
@@ -138,6 +140,7 @@ VkResult Semaphore::Create(
     {
         const VkStructHeader*                pHeader;
         const VkSemaphoreCreateInfo*         pInfo;
+        const VkSemaphoreTypeCreateInfoKHR*  pTypeInfo;
         const VkExportSemaphoreCreateInfo*   pExportSemaphoreCreateInfo;
     };
     for (pInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -146,6 +149,14 @@ VkResult Semaphore::Create(
         {
         case VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO:
         {
+            break;
+        }
+        case VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO_KHR:
+        {
+            // mark this semaphore is timeline or not
+            palCreateInfo.flags.timeline = (pTypeInfo->semaphoreType == VK_SEMAPHORE_TYPE_TIMELINE_KHR);
+            palCreateInfo.initialCount   = pTypeInfo->initialValue;
+
             break;
         }
         case VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO:
@@ -158,11 +169,13 @@ VkResult Semaphore::Create(
             break;
         }
     }
+#if defined(__unix__)
     if (pDevice->NumPalDevices() > 1)
     {
         // mark this semaphore as shareable.
         palCreateInfo.flags.shareable = 1;
     }
+#endif
     // Allocate memory for VK_Semaphore and palSemaphore separately
     void* pVKSemaphoreMemory = pAllocator->pfnAllocation(
         pAllocator->pUserData,
@@ -233,12 +246,14 @@ VkResult Semaphore::GetShareHandle(
     VkExternalSemaphoreHandleTypeFlagBits       handleType,
     Pal::OsExternalHandle*                      pHandle)
 {
+#if defined(__unix__)
     PAL_ASSERT((handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
                (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT));
 
     Pal::QueueSemaphoreExportInfo palExportInfo = {};
     palExportInfo.flags.isReference = (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
     *pHandle = m_pPalSemaphores[0]->ExportExternalHandle(palExportInfo);
+#endif
 
     return VK_SUCCESS;
 }
@@ -259,9 +274,11 @@ VkResult Semaphore::ImportSemaphore(
     palOpenInfo.flags.crossProcess = true;
     palOpenInfo.flags.timeline     = m_palCreateInfo.flags.timeline;
 
+#if defined(__unix__)
     PAL_ASSERT((handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
                (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT));
     palOpenInfo.flags.isReference  = (handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT);
+#endif
 
     //Todo: Check whether pDevice is the same as the one created the semaphore.
 
@@ -475,6 +492,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroySemaphore(
     }
 }
 
+#if defined(__unix__)
 VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreFdKHR(
     VkDevice                                    device,
     const VkSemaphoreGetFdInfoKHR*              pGetFdInfo,
@@ -485,6 +503,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreFdKHR(
         pGetFdInfo->handleType,
         reinterpret_cast<Pal::OsExternalHandle*>(pFd));
 }
+#endif
 
 } // namespace entry
 

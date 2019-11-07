@@ -179,7 +179,6 @@ private:
     Pal::Result BuildDepthStencilAttachmentReferences(uint32_t subpass, const SubpassDescription& desc);
     Pal::Result BuildInputAttachmentReferences(uint32_t subpass, const SubpassDescription& desc);
     Pal::Result BuildResolveAttachmentReferences(uint32_t subpass);
-
     Pal::Result BuildSamplePatternMemoryStore(uint32_t attachment);
     Pal::Result BuildEndState();
     Pal::Result TrackAttachmentUsage(

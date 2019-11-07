@@ -1877,7 +1877,9 @@
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": false
+        "Default": false,
+        "WinDefault": true,
+        "LnxDefault": false
       },
       "Type": "bool",
       "VariableName": "usePalPipelineCaching",
@@ -2257,7 +2259,7 @@
         "Values": [
           {
             "Value": 0,
-            "Description": "HwPipeTop (heavyweight option)"
+            "Description": "HwPipeTop"
           },
           {
             "Value": 1,
@@ -2281,7 +2283,7 @@
           },
           {
             "Value": 7,
-            "Description": "HwPipeBottom"
+            "Description": "HwPipeBottom (heavyweight option)"
           }
         ]
       },
@@ -3038,6 +3040,19 @@
       "Type": "uint32",
       "VariableName": "heapBudgetRatioOfHeapSizeNonlocal",
       "Name": "HeapBudgetRatioOfHeapSizeNonlocal"
+    },
+    {
+      "Description": "Whether driver should perform sparse resource unmap at resource destroy time under wddm1.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "isSparseUnmapBeforeDestroyEnabled",
+      "Name": "IsSparseUnmapBeforeDestroyEnabled"
     },
     {
       "Description": "Override reported minImageTransferGranularity field for graphics queue families.  This is encoded as a hex string of the form 0xb000zzyyxx, where 'xx', 'yy', and 'zz' are the reported transfer granularities in the X, Y and Z extents respectively, and 'b' is a control flag: if 'b' is non-zero, this override is applies; otherwise the standard transfer granularity is used. ",
@@ -4392,6 +4407,45 @@
       },
       "Type": "enum",
       "VariableName": "overrideWgpMode",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override default setting to disable loop unrolls",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideDisableLoopUnrolls",
+      "Name": "OverrideDisableLoopUnrolls",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Use LLVM backend's SI Scheduler instead of the default scheduler",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseSiScheduler",
+      "Name": "OverrideUseSiScheduler",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Allow automatic workgroup reconfigure to take place on compute shaders",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideReconfigWorkgroupLayout",
+      "Name": "OverrideReconfigWorkgroupLayout",
       "Scope": "Driver"
     },
     {

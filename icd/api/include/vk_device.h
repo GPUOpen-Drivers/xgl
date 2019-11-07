@@ -281,6 +281,18 @@ public:
         const VkAllocationCallbacks*                pAllocator,
         VkPipelineCache*                            pPipelineCache);
 
+    VkResult GetSemaphoreCounterValueKHR(
+        VkSemaphore                                 semaphore,
+        uint64_t*                                   pValue);
+
+    VkResult WaitSemaphoresKHR(
+        const VkSemaphoreWaitInfoKHR*               pWaitInfo,
+        uint64_t                                    timeout);
+
+    VkResult SignalSemaphoreKHR(
+        VkSemaphore                                 semaphore,
+        uint64_t                                    value);
+
     VkResult CreateSwapchain(
         const VkSwapchainCreateInfoKHR*             pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
@@ -652,6 +664,7 @@ protected:
         void*                  pSwCompositingMemory;    // Internal memory for the below PAL objects (master and slave)
         Pal::IQueue*           pSwCompositingQueue;     // Internal present queue (master) or transfer queue (slave)
         Pal::IQueueSemaphore*  pSwCompositingSemaphore; // Internal semaphore (master and slave)
+
     };
 
     // Compute size required for the object.  One copy of PerGpuInfo is included in the object and we need
@@ -915,9 +928,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectNameEXT(
     VkDevice                                    device,
     const VkDebugMarkerObjectNameInfoEXT*       pNameInfo);
 
+#if defined(__unix__)
 VKAPI_ATTR VkResult VKAPI_CALL vkImportSemaphoreFdKHR(
     VkDevice                                    device,
     const VkImportSemaphoreFdInfoKHR*           pImportSemaphoreFdInfo);
+#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkSetGpaDeviceClockModeAMD(
     VkDevice                                    device,
@@ -934,6 +949,20 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetCalibratedTimestampsEXT(
     const VkCalibratedTimestampInfoEXT*         pTimestampInfos,
     uint64_t*                                   pTimestamps,
     uint64_t*                                   pMaxDeviation);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreCounterValueKHR(
+    VkDevice                                    device,
+    VkSemaphore                                 semaphore,
+    uint64_t*                                   pValue);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkWaitSemaphoresKHR(
+    VkDevice                                    device,
+    const VkSemaphoreWaitInfoKHR*               pWaitInfo,
+    uint64_t                                    timeout);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkSignalSemaphoreKHR(
+    VkDevice                                    device,
+    const VkSemaphoreSignalInfoKHR*             pSignalInfo);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     VkDevice                                    device,

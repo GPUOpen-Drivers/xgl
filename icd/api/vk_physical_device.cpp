@@ -211,6 +211,68 @@ static bool VerifyFormatSupport(
 }
 
 // =====================================================================================================================
+// Returns true if the given physical device supports the minimum required compressed texture formats to report ETC2
+// support
+static bool VerifyEtc2FormatSupport(
+    const PhysicalDevice& dev)
+{
+    // Based on vulkan spec Table 67: Mandatory format support: ETC2 and EAC compressed formats with VkImageType
+    // VK_IMAGE_TYPE_2D
+    const bool etc2Support =
+        VerifyFormatSupport(dev, VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ETC2_R8G8B8_SRGB_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ETC2_R8G8B8A1_UNORM_BLOCK, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ETC2_R8G8B8A1_SRGB_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ETC2_R8G8B8A8_UNORM_BLOCK, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ETC2_R8G8B8A8_SRGB_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_EAC_R11_UNORM_BLOCK,       1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_EAC_R11_SNORM_BLOCK,       1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_EAC_R11G11_UNORM_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_EAC_R11G11_SNORM_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    return etc2Support;
+}
+
+// =====================================================================================================================
+// Returns true if the given physical device supports the minimum required compressed texture formats to report ASTC-LDR
+// support
+static bool VerifyAstcLdrFormatSupport(
+    const PhysicalDevice& dev)
+{
+    // Based on vulkan spec Table 68: Mandatory format support: ASTC LDR compressed formats with VkImageType
+    // VK_IMAGE_TYPE_2D
+    const bool astcLdrSupport =
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_4x4_UNORM_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_4x4_SRGB_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_5x4_UNORM_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_5x4_SRGB_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_5x5_UNORM_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_5x5_SRGB_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_6x5_UNORM_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_6x5_SRGB_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_6x6_UNORM_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_6x6_SRGB_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_8x5_UNORM_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_8x5_SRGB_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_8x6_UNORM_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_8x6_SRGB_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_8x8_UNORM_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_8x8_SRGB_BLOCK,    1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x5_UNORM_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x5_SRGB_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x6_UNORM_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x6_SRGB_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x8_UNORM_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x8_SRGB_BLOCK,   1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x10_UNORM_BLOCK, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_10x10_SRGB_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_12x10_UNORM_BLOCK, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_12x10_SRGB_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_12x12_UNORM_BLOCK, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0) &&
+        VerifyFormatSupport(dev, VK_FORMAT_ASTC_12x12_SRGB_BLOCK,  1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+    return astcLdrSupport;
+}
+
+// =====================================================================================================================
 // Returns true if the given physical device supports the minimum required BC compressed texture format
 // requirements
 static bool VerifyBCFormatSupport(
@@ -900,8 +962,8 @@ void PhysicalDevice::PopulateFormatProperties()
         }
     }
 
-    // We should always support BC formats
-    VK_ASSERT(VerifyBCFormatSupport(*this));
+    // We should always support some kind of compressed format
+    VK_ASSERT(VerifyBCFormatSupport(*this) || VerifyEtc2FormatSupport(*this) || VerifyAstcLdrFormatSupport(*this));
 }
 
 // =====================================================================================================================
@@ -1056,9 +1118,9 @@ VkResult PhysicalDevice::GetFeatures(
     pFeatures->alphaToOne                               = VK_FALSE;
     pFeatures->multiViewport                            = VK_TRUE;
     pFeatures->samplerAnisotropy                        = VK_TRUE;
-    pFeatures->textureCompressionETC2                   = VK_FALSE;
-    pFeatures->textureCompressionASTC_LDR               = VK_FALSE;
-    pFeatures->textureCompressionBC                     = VK_TRUE;
+    pFeatures->textureCompressionETC2                   = VerifyEtc2FormatSupport(*this);
+    pFeatures->textureCompressionASTC_LDR               = VerifyAstcLdrFormatSupport(*this);
+    pFeatures->textureCompressionBC                     = VerifyBCFormatSupport(*this);
     pFeatures->occlusionQueryPrecise                    = VK_TRUE;
     pFeatures->pipelineStatisticsQuery                  = VK_TRUE;
     pFeatures->vertexPipelineStoresAndAtomics           = VK_TRUE;
@@ -1707,10 +1769,11 @@ VkResult PhysicalDevice::GetDeviceProperties(
 
     pProperties->apiVersion    = GetSupportedAPIVersion();
 
-    // Radeon Settings UI diplays driverVersion using sizes 10.10.12 like apiVersion, but our driverVersion uses 10.22.
-    // If this assert ever triggers, verify that it and other driver info tools that parse the raw value have been
-    // updated to avoid any confusion.
-    VK_ASSERT(VULKAN_ICD_BUILD_VERSION < (1 << 12));
+    static_assert(VULKAN_ICD_BUILD_VERSION < (1 << 12), "Radeon Settings UI diplays driverVersion using sizes 10.10.12 "
+                                                        "like apiVersion, but our driverVersion uses 10.22. If this"
+                                                        "assert ever triggers, verify that it and other driver info "
+                                                        "tools that parse the raw value have been updated to avoid "
+                                                        "any confusion.");
     pProperties->driverVersion = (VULKAN_ICD_MAJOR_VERSION << 22) | (VULKAN_ICD_BUILD_VERSION & ((1 << 22) - 1));
 
     // Convert PAL properties to Vulkan
@@ -1871,6 +1934,7 @@ void PhysicalDevice::PopulateLimits()
     // Maximum number of layers (arrayLayers) for an image.
     m_limits.maxImageArrayLayers = imageProps.maxArraySlices;
 
+
     // Maximum number of addressable texels for a buffer view created on a buffer which was created with the
     // VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT or VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT set in the usage member of
     // the VkBufferCreateInfo structure.
@@ -1890,8 +1954,12 @@ void PhysicalDevice::PopulateLimits()
     m_limits.maxPushConstantsSize = MaxPushConstants;
 
     // Maximum number of device memory allocations, as created by vkAllocMemory, that can exist simultaneously.
+#if defined(__unix__)
     // relax the limitation on Linux since there is no real limitation from OS's perspective.
     m_limits.maxMemoryAllocationCount = UINT_MAX;
+#else
+    m_limits.maxMemoryAllocationCount = 4096;
+#endif
     if (settings.memoryCustomDeviceAllocationCountLimit > 0)
     {
         m_limits.maxMemoryAllocationCount = settings.memoryCustomDeviceAllocationCountLimit;
@@ -1955,10 +2023,12 @@ void PhysicalDevice::PopulateLimits()
 
     // OGL: SI_MAX_VP_VARYING_COMPONENTS
 
+
     // Maximum tessellation generation level supported by the fixed function tessellation primitive generator.
     m_limits.maxTessellationGenerationLevel = 64;
 
     // OGL: SI_MAX_TESS_FACTOR
+
 
     // Maximum patch size, in vertices, of patches that can be processed by the tessellation primitive generator.
     // This is specified by the patchControlPoints of the VkPipelineTessellationStateCreateInfo structure.
@@ -1966,11 +2036,13 @@ void PhysicalDevice::PopulateLimits()
 
     // OGL: pHpCaps->maxVertexCountPerPatch = SI_MAX_VERTEX_COUNT_PER_PATCH;
 
+
     // Maximum number of components of input variables which may be provided as per-vertex inputs to the tessellation
     // control shader stage.
     m_limits.maxTessellationControlPerVertexInputComponents = 128;
 
     // OGL: pHpCaps->maxTessControlInputComponents = SI_MAX_TESS_CONTROL_INPUT_COMPONENTS;
+
 
     // Maximum number of components of per-vertex output variables which may be output from the tessellation control
     // shader stage.
@@ -1978,11 +2050,13 @@ void PhysicalDevice::PopulateLimits()
 
     // OGL: pHpCaps->maxHullVaryingComponents = SI_MAX_TESS_CONTROL_INPUT_COMPONENTS;
 
+
     // Maximum number of components of per-patch output variables which may be output from the tessellation control
     // shader stage.
     m_limits.maxTessellationControlPerPatchOutputComponents = 120;
 
     // OGL: pHpCaps->maxTessControlPatchComponents = SI_MAX_TESS_CONTROL_PATCH_COMPONENTS;
+
 
     // Maximum total number of components of per-vertex and per-patch output variables which may be output from the
     // tessellation control shader stage.  (The total number of components of active per-vertex and per-patch outputs is
@@ -1992,11 +2066,13 @@ void PhysicalDevice::PopulateLimits()
 
     // OGL: pHpCaps->maxTessControlTotalOutputComponents = SI_MAX_TESS_CONTROL_TOTAL_OUTPUT_COMPONENTS;
 
+
     // Maximum number of components of input variables which may be provided as per-vertex inputs to the tessellation
     // evaluation shader stage.
     m_limits.maxTessellationEvaluationInputComponents = 128;
 
     // OGL: pDpCaps->maxTessEvaluationInputComponents = SI_MAX_TESS_CONTROL_INPUT_COMPONENTS [sic]
+
 
     // Maximum number of components of per-vertex output variables which may be output from the tessellation evaluation
     // shader stage
@@ -2004,25 +2080,31 @@ void PhysicalDevice::PopulateLimits()
 
     // OGL: pDpCaps->maxDomainVaryingComponents = SI_MAX_TESS_CONTROL_INPUT_COMPONENTS [sic]
 
+
     // Maximum invocation count (per input primitive) supported for an instanced geometry shader.
     m_limits.maxGeometryShaderInvocations = 127;
 
     // OGL: pGpCaps->maxGeometryInvocations = SI_MAX_GP_INVOCATIONS
+
 
     // Maximum number of components of input variables which may be provided as inputs to the geometry shader stage
     m_limits.maxGeometryInputComponents = 128;
 
     // OGL: pGpCaps->maxGeometryVaryingComponents = SI_MAX_GP_VARYING_COMPONENTS
 
+
     // Maximum number of components of output variables which may be output from the geometry shader stage.
     m_limits.maxGeometryOutputComponents = 128;
 
     // OGL: pGpCaps->maxGeometryVaryingComponents = SI_MAX_GP_VARYING_COMPONENTS; (NOTE: Not a separate cap)
 
+
     // Maximum number of vertices which may be emitted by any geometry shader.
     m_limits.maxGeometryOutputVertices = 1024;
 
+
     // OGL: pGpCaps->maxGeometryOutputVertices = SI_MAX_GP_OUTPUT_VERTICES;
+
 
     // Maximum total number of components of output, across all emitted vertices, which may be output from the geometry
     // shader stage.
@@ -2030,10 +2112,12 @@ void PhysicalDevice::PopulateLimits()
 
     // OGL: pGpCaps->maxGeometryTotalOutputComponents = SI_MAX_GP_TOTAL_OUTPUT_COMPONENTS;
 
+
     // Maximum number of components of input variables which may be provided as inputs to the fragment shader stage.
     m_limits.maxFragmentInputComponents = 128;
 
     // OGL: pFpCaps->maxFragmentInputComponents = SI_MAX_VP_VARYING_COMPONENTS;
+
 
     // Maximum number of output attachments which may be written to by the fragment shader stage.
     m_limits.maxFragmentOutputAttachments = Pal::MaxColorTargets;
@@ -2049,6 +2133,7 @@ void PhysicalDevice::PopulateLimits()
     // reports only 1 dual source attachment though, and I think DX API spec locks you into a single dual source
     // attachment also, (which means more than 1 is actually not fully tested by any driver), so for safety we
     // conservatively also only report 1 dual source attachment.
+
 
     // The total number of storage buffers, storage images, and output buffers which may be used in the fragment
     // shader stage.
@@ -2067,6 +2152,7 @@ void PhysicalDevice::PopulateLimits()
     m_limits.maxComputeWorkGroupCount[0] = 65535;
     m_limits.maxComputeWorkGroupCount[1] = 65535;
     m_limits.maxComputeWorkGroupCount[2] = 65535;
+
 
     // OGL: pCpCaps->maxComputeWorkGroupCount[i] = SI_MAX_WORK_GROUP_COUNT;
 
@@ -2088,10 +2174,13 @@ void PhysicalDevice::PopulateLimits()
     // NOTE: We support higher sub-pixel precisions but not for arbitrary sized viewports (or specifically
     // guardbands).  PAL always uses the minimum 8-bit sub-pixel precision at the moment.
 
+
     // The number of bits of precision in the division along an axis of a texture used for minification and
     // magnification filters. 2^subTexelPrecisionBits is the actual number of divisions along each axis of the texture
     // represented.  The filtering hardware will snap to these locations when computing the filtered results.
     m_limits.subTexelPrecisionBits = 8;
+
+
 
     // The number of bits of division that the LOD calculation for mipmap fetching get snapped to when determining the
     // contribution from each miplevel to the mip filtered results. 2 ^ mipmapPrecisionBits is the actual number of
@@ -2099,6 +2188,8 @@ void PhysicalDevice::PopulateLimits()
     // contribute: 0%, 33%, 66%, or 100% (note this is just an example and the amount of contribution should be covered
     // by different equations in the spec).
     m_limits.mipmapPrecisionBits = 8;
+
+
 
     // Maximum index value that may be used for indexed draw calls when using 32-bit indices. This excludes the
     // primitive restart index value of 0xFFFFFFFF
@@ -2114,8 +2205,10 @@ void PhysicalDevice::PopulateLimits()
 
     // NOTE: LOD_BIAS SRD field has a 5.8 signed fixed format so the maximum positive value is 0xFFF
 
+
     // Maximum degree of sampler anisotropy
     m_limits.maxSamplerAnisotropy = 16.0f;
+
 
     // Maximum number of active viewports. The value of the viewportCount member of the
     // VkPipelineViewportStateCreateInfo structure that is provided at pipeline creation must be less than or equal to
@@ -2133,11 +2226,13 @@ void PhysicalDevice::PopulateLimits()
     m_limits.maxViewportDimensions[0] = 16384;
     m_limits.maxViewportDimensions[1] = 16384;
 
+
     // Viewport bounds range [minimum,maximum]. The location of a viewport's upper-left corner are clamped to be
     // within the range defined by these limits.
 
     m_limits.viewportBoundsRange[0] = -32768;
     m_limits.viewportBoundsRange[1] = 32767;
+
 
     // Number of bits of subpixel precision for viewport bounds.The subpixel precision that floating - point viewport
     // bounds are interpreted at is given by this limit.
@@ -2148,12 +2243,14 @@ void PhysicalDevice::PopulateLimits()
     // the offset and scale, the VTE converts the screen-space position to subpixel precision, so that is why we report
     // the same limit here.
 
+
     // Minimum required alignment, in bytes, of pointers returned by vkMapMemory. Subtracting offset bytes from the
     // returned pointer will always produce a multiple of the value of this limit.
     m_limits.minMemoryMapAlignment = 64;
 
     // NOTE: The WDDM lock function will always map at page boundaries, but for safety let's just stick with the
     // limit required.
+
 
     // Minimum required alignment, in bytes, for the offset member of the VkBufferViewCreateInfo structure for texel
     // buffers.  When a buffer view is created for a buffer which was created with
@@ -2225,6 +2322,8 @@ void PhysicalDevice::PopulateLimits()
     // NOTE: These values are currently match OGL gfx6 values and they are probably overly conservative.  Need to
     // compare CB/DB limits and test with attachmentless framebuffers for proper limits.
 
+
+
     // Framebuffer sample count support determination
     {
         uint32_t maxColorSampleCount    = 0;
@@ -2284,11 +2383,13 @@ void PhysicalDevice::PopulateLimits()
     // having a larger number of raster samples to color/depth fragments, but it never seems to explicitly prohibit
     // it either.
 
+
     // Supported sample counts for attachment-less framebuffers
     m_limits.framebufferColorSampleCounts = VK_SAMPLE_COUNT_1_BIT |
                                             VK_SAMPLE_COUNT_2_BIT |
                                             VK_SAMPLE_COUNT_4_BIT |
                                             VK_SAMPLE_COUNT_8_BIT;
+
 
     // framebufferColorSampleCounts, framebufferDepthSampleCounts, framebufferStencilSampleCounts and
     // framebufferNoAttachmentSampleCounts are already clamped by the setting in GetImageFormatProperties() in
@@ -2397,6 +2498,8 @@ void PhysicalDevice::PopulateLimits()
     m_limits.maxClipDistances = 8;
     m_limits.maxCullDistances = 8;
 
+
+
     // Maximum combined number of clip and cull distances that can be written to via the ClipDistance and CullDistances
     // shader built-ins in a single shader stage
     m_limits.maxCombinedClipAndCullDistances = 8;
@@ -2415,6 +2518,7 @@ void PhysicalDevice::PopulateLimits()
     m_limits.pointSizeRange[1] = Util::Math::UFixedToFloat(PointSizeMaxRegValue, PointSizeIntBits,
         PointSizeFracBits) * 2.0f;
 
+
     // The range[minimum, maximum] of supported widths for lines.  Values specified by the lineWidth member of the
     // VkPipelineRasterStateCreateInfo or the lineWidth parameter to vkCmdSetLineWidth are clamped to this range.
     constexpr uint32_t LineWidthMaxRegValue = 0xffff;
@@ -2427,6 +2531,7 @@ void PhysicalDevice::PopulateLimits()
 
     // NOTE: The same 12.4 half-size encoding is used for line widths as well.
 
+
     // The granularity of supported point sizes. Not all point sizes in the range defined by pointSizeRange are
     // supported. The value of this limit specifies the granularity (or increment) between successive supported point
     // sizes.
@@ -2434,16 +2539,19 @@ void PhysicalDevice::PopulateLimits()
 
     // NOTE: Numerator is 2 here instead of 1 because points are represented as half-sizes and not the diameter.
 
+
     // The granularity of supported line widths.Not all line widths in the range defined by lineWidthRange are
     // supported.  The value of this limit specifies the granularity(or increment) between successive supported line
     // widths.
     m_limits.lineWidthGranularity = 2.0f / (1 << LineWidthFracBits);
+
 
     // Tells whether lines are rasterized according to the preferred method of rasterization. If set to ename:VK_FALSE,
     // lines may: be rasterized under a relaxed set of rules. If set to ename:VK_TRUE, lines are rasterized as per the
     // strict definition.
 
     m_limits.strictLines = VK_FALSE;
+
 
     // Tells whether rasterization uses the standard sample locations. If set to VK_TRUE, the implementation uses the
     // documented sample locations. If set to VK_FALSE, the implementation may: use different sample locations.
@@ -2452,8 +2560,10 @@ void PhysicalDevice::PopulateLimits()
     // Optimal buffer offset alignment in bytes for vkCmdCopyBufferToImage and vkCmdCopyImageToBuffer.
     m_limits.optimalBufferCopyOffsetAlignment = 1;
 
+
     // Optimal buffer row pitch alignment in bytes for vkCmdCopyBufferToImage and vkCmdCopyImageToBuffer.
     m_limits.optimalBufferCopyRowPitchAlignment = 1;
+
 
     // The size and alignment in bytes that bounds concurrent access to host-mapped device memory.
     m_limits.nonCoherentAtomSize = 128;
@@ -2484,12 +2594,14 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
         }
 
         Pal::SwapChainProperties swapChainProperties = {};
+#if defined(__unix__)
         if (displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY)
         {
             VkIcdSurfaceDisplay* pDisplaySurface     = pSurface->GetDisplaySurface();
             swapChainProperties.currentExtent.width  = pDisplaySurface->imageExtent.width;
             swapChainProperties.currentExtent.height = pDisplaySurface->imageExtent.height;
         }
+#endif
         result = PalToVkResult(m_pPalDevice->GetSwapChainInfo(
             displayableInfo.displayHandle,
             displayableInfo.windowHandle,
@@ -2752,6 +2864,7 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
 {
     VkResult result = VK_SUCCESS;
 
+#if defined(__unix__)
     if (pSurface->GetDisplaySurface()->base.platform == VK_ICD_WSI_PLATFORM_DISPLAY)
     {
         VkIcdSurfaceDisplay* pDisplaySurface = pSurface->GetDisplaySurface();
@@ -2798,6 +2911,7 @@ VkResult PhysicalDevice::UnpackDisplayableSurface(
     {
         result = VK_ERROR_SURFACE_LOST_KHR;
     }
+#endif
 
     return result;
 }
@@ -2937,6 +3051,7 @@ VkResult PhysicalDevice::GetSurfaceFormats(
     {
         // Windowed Presents
 
+#if defined(__unix__)
         // The w/a here will be removed once more presentable format is supported on base driver side.
         const VkSurfaceFormatKHR formatList[] = {
             { VK_FORMAT_B8G8R8A8_UNORM, VK_COLORSPACE_SRGB_NONLINEAR_KHR },
@@ -2964,6 +3079,7 @@ VkResult PhysicalDevice::GetSurfaceFormats(
 
             *pSurfaceFormatCount = count;
         }
+#endif
     }
 
     return result;
@@ -3110,16 +3226,20 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DEDICATED_ALLOCATION));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DESCRIPTOR_UPDATE_TEMPLATE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_MEMORY));
+#if defined(__unix__)
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_MEMORY_FD));
+#endif
 
     if (pInstance->IsExtensionSupported(InstanceExtensions::KHR_EXTERNAL_SEMAPHORE_CAPABILITIES))
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_SEMAPHORE));
+#if defined(__unix__)
         if ((pPhysicalDevice == nullptr) ||
             (pPhysicalDevice->PalProperties().osProperties.supportOpaqueFdSemaphore))
         {
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_SEMAPHORE_FD));
         }
+#endif
     }
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_GET_MEMORY_REQUIREMENTS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE1));
@@ -3209,7 +3329,18 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONSERVATIVE_RASTERIZATION));
     }
 
+#if defined(__unix__)
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PCI_BUS_INFO));
+#endif
+    if ((pPhysicalDevice == nullptr) ||
+         pPhysicalDevice->PalProperties().osProperties.timelineSemaphore.support)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_TIMELINE_SEMAPHORE));
+    }
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_CLOCK));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SPIRV_1_4));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
@@ -3233,11 +3364,15 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_UNIFORM_BUFFER_STANDARD_LAYOUT));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_EXTENDED_TYPES));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SUBGROUP_SIZE_CONTROL));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_LINE_RASTERIZATION));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGELESS_FRAMEBUFFER));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PIPELINE_EXECUTABLE_PROPERTIES));
 
     return availableExtensions;
 }
@@ -3503,6 +3638,7 @@ VkResult PhysicalDevice::EnumerateExtensionProperties(
     return result;
 }
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
 // =====================================================================================================================
 VkResult PhysicalDevice::AcquireXlibDisplay(
@@ -3547,6 +3683,8 @@ VkResult PhysicalDevice::ReleaseDisplay(
     return PalToVkResult(pScreen->ReleaseScreenAccess());
 }
 
+#endif
+
 // =====================================================================================================================
 // Retrieving the UUID of device/driver as well as the LUID if it is for windows platform.
 // - DeviceUUID
@@ -3558,10 +3696,12 @@ VkResult PhysicalDevice::ReleaseDisplay(
 //   it is used on Windows only. If the LUID is valid, the deviceLUID can be casted to LUID object and must equal to the
 //   locally unique identifier of a IDXGIAdapter1 object that corresponding to physicalDevice.
 // It seems better to call into Pal to get those information filled since it might be OS specific.
+#if defined(__unix__)
 #include <dlfcn.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 void  PhysicalDevice::GetPhysicalDeviceIDProperties(
     uint8_t*            pDeviceUUID,
     uint8_t*            pDriverUUID,
@@ -3684,7 +3824,8 @@ void PhysicalDevice::GetPhysicalDeviceDriverProperties(
     memset(pDriverInfo, 0, VK_MAX_DRIVER_INFO_SIZE_KHR);
 
     Util::Strncpy(pDriverName, VULKAN_DRIVER_NAME_STR, VK_MAX_DRIVER_NAME_SIZE_KHR);
-    Util::Strncpy(pDriverInfo, VULKAN_DRIVER_INFO_STR, VK_MAX_DRIVER_INFO_SIZE_KHR);
+
+        Util::Strncpy(pDriverInfo, VULKAN_DRIVER_INFO_STR, VK_MAX_DRIVER_INFO_SIZE_KHR);
 
     pConformanceVersion->major     = CTS_VERSION_MAJOR;
     pConformanceVersion->minor     = CTS_VERSION_MINOR;
@@ -3802,6 +3943,14 @@ void PhysicalDevice::GetPhysicalDeviceSamplerFilterMinmaxProperties(
 }
 
 // =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceTimelineSemaphoreProperties(
+    uint64_t* pMaxTimelineSemaphoreValueDifference
+    ) const
+{
+    *pMaxTimelineSemaphoreValueDifference = UINT32_MAX;
+}
+
+// =====================================================================================================================
 VkResult PhysicalDevice::GetExternalMemoryProperties(
     bool                                    isSparse,
     VkExternalMemoryHandleTypeFlagBits      handleType,
@@ -3818,12 +3967,14 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
     if (isSparse == false)
     {
         const Pal::DeviceProperties& props = PalProperties();
+#if defined(__unix__)
         if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT)
         {
             pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT |
                                                                 VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT     |
                                                                 VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
         }
+#endif
         else if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
         {
             pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
@@ -4041,6 +4192,14 @@ void PhysicalDevice::GetPhysicalDeviceHostQueryResetFeatures(
 }
 
 // =====================================================================================================================
+void PhysicalDevice::GetPhysicalDeviceTimelineSemaphoreFeatures(
+    VkBool32* pTimelineSemaphore
+    ) const
+{
+    *pTimelineSemaphore = PalProperties().osProperties.timelineSemaphore.support;
+}
+
+// =====================================================================================================================
 void PhysicalDevice::GetPhysicalDeviceBufferAddressFeatures(
     VkBool32* pBufferDeviceAddress,
     VkBool32* pBufferDeviceAddressCaptureReplay,
@@ -4133,6 +4292,15 @@ void PhysicalDevice::GetFeatures2(
                 pGpaFeatures->perfCounters          = m_gpaProps.features.perfCounters;
                 pGpaFeatures->sqThreadTracing       = m_gpaProps.features.sqThreadTracing;
                 pGpaFeatures->streamingPerfCounters = m_gpaProps.features.streamingPerfCounters;
+
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR:
+            {
+                VkPhysicalDeviceTimelineSemaphoreFeaturesKHR* pTimelineSemaphoreFeatures =
+                    reinterpret_cast<VkPhysicalDeviceTimelineSemaphoreFeaturesKHR*>(pHeader);
+
+                GetPhysicalDeviceTimelineSemaphoreFeatures(&pTimelineSemaphoreFeatures->timelineSemaphore);
 
                 break;
             }
@@ -4317,19 +4485,6 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_ADDRESS_FEATURES_EXT:
-            {
-                VkPhysicalDeviceBufferAddressFeaturesEXT* pBufferAddressFeatures =
-                    reinterpret_cast<VkPhysicalDeviceBufferAddressFeaturesEXT*>(pHeader);
-
-                GetPhysicalDeviceBufferAddressFeatures(
-                    &pBufferAddressFeatures->bufferDeviceAddress,
-                    &pBufferAddressFeatures->bufferDeviceAddressCaptureReplay,
-                    &pBufferAddressFeatures->bufferDeviceAddressMultiDevice);
-
-                break;
-            }
-
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
             {
                 VkPhysicalDeviceLineRasterizationFeaturesEXT* pPhysicalDeviceLineRasterizationFeaturesEXT =
@@ -4356,13 +4511,37 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR:
+            {
+                VkPhysicalDeviceShaderClockFeaturesKHR* pPhysicalDeviceShaderClockFeatures =
+                    reinterpret_cast<VkPhysicalDeviceShaderClockFeaturesKHR*>(pHeader);
+
+                pPhysicalDeviceShaderClockFeatures->shaderSubgroupClock =
+                    PalProperties().gfxipProperties.flags.supportShaderSubgroupClock;
+                pPhysicalDeviceShaderClockFeatures->shaderDeviceClock   =
+                    PalProperties().gfxipProperties.flags.supportShaderDeviceClock;
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES_KHR:
+            {
+                VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR* pSubgroupExtendedTypesFeatures =
+                    reinterpret_cast<VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR *>(pHeader);
+
+                GetPhysicalDeviceSubgroupExtendedTypesFeatures(
+                    &pSubgroupExtendedTypesFeatures->shaderSubgroupExtendedTypes);
+
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES_EXT:
             {
                 VkPhysicalDeviceSubgroupSizeControlFeaturesEXT* pSubgroupSizeControlFeatures =
                     reinterpret_cast<VkPhysicalDeviceSubgroupSizeControlFeaturesEXT *>(pHeader);
 
                 pSubgroupSizeControlFeatures->subgroupSizeControl  = VK_TRUE;
-                pSubgroupSizeControlFeatures->computeFullSubgroups = VK_FALSE;
+                pSubgroupSizeControlFeatures->computeFullSubgroups = VK_TRUE;
                 break;
             }
 
@@ -4514,32 +4693,33 @@ void PhysicalDevice::GetDeviceProperties2(
 
     union
     {
-        const VkStructHeader*                                    pHeader;
-        VkPhysicalDeviceProperties2*                             pProp;
-        VkPhysicalDevicePointClippingProperties*                 pPointClippingProperties;
-        VkPhysicalDeviceIDProperties*                            pIDProperties;
-        VkPhysicalDeviceSampleLocationsPropertiesEXT*            pSampleLocationsPropertiesEXT;
-        VkPhysicalDeviceGpaPropertiesAMD*                        pGpaProperties;
-        VkPhysicalDeviceMaintenance3Properties*                  pMaintenance3Properties;
-        VkPhysicalDeviceMultiviewProperties*                     pMultiviewProperties;
-        VkPhysicalDeviceProtectedMemoryProperties*               pProtectedMemoryProperties;
-        VkPhysicalDeviceSubgroupProperties*                      pSubgroupProperties;
-        VkPhysicalDeviceExternalMemoryHostPropertiesEXT*         pExternalMemoryHostProperties;
-        VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*        pMinMaxProperties;
-        VkPhysicalDeviceShaderCorePropertiesAMD*                 pShaderCoreProperties;
-        VkPhysicalDeviceShaderCoreProperties2AMD*                pShaderCoreProperties2;
-        VkPhysicalDeviceDescriptorIndexingPropertiesEXT*         pDescriptorIndexingProperties;
-        VkPhysicalDeviceConservativeRasterizationPropertiesEXT*  pConservativeRasterizationProperties;
+        const VkStructHeader*                                     pHeader;
+        VkPhysicalDeviceProperties2*                              pProp;
+        VkPhysicalDevicePointClippingProperties*                  pPointClippingProperties;
+        VkPhysicalDeviceIDProperties*                             pIDProperties;
+        VkPhysicalDeviceSampleLocationsPropertiesEXT*             pSampleLocationsPropertiesEXT;
+        VkPhysicalDeviceGpaPropertiesAMD*                         pGpaProperties;
+        VkPhysicalDeviceMaintenance3Properties*                   pMaintenance3Properties;
+        VkPhysicalDeviceMultiviewProperties*                      pMultiviewProperties;
+        VkPhysicalDeviceProtectedMemoryProperties*                pProtectedMemoryProperties;
+        VkPhysicalDeviceSubgroupProperties*                       pSubgroupProperties;
+        VkPhysicalDeviceExternalMemoryHostPropertiesEXT*          pExternalMemoryHostProperties;
+        VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT*         pMinMaxProperties;
+        VkPhysicalDeviceShaderCorePropertiesAMD*                  pShaderCoreProperties;
+        VkPhysicalDeviceShaderCoreProperties2AMD*                 pShaderCoreProperties2;
+        VkPhysicalDeviceDescriptorIndexingPropertiesEXT*          pDescriptorIndexingProperties;
+        VkPhysicalDeviceConservativeRasterizationPropertiesEXT*   pConservativeRasterizationProperties;
 
-        VkPhysicalDeviceDriverPropertiesKHR*                     pDriverProperties;
-        VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*     pVertexAttributeDivisorProperties;
-        VkPhysicalDeviceFloatControlsPropertiesKHR*              pFloatControlsProperties;
-        VkPhysicalDeviceInlineUniformBlockPropertiesEXT*         pInlineUniformBlockProperties;
-        VkPhysicalDevicePCIBusInfoPropertiesEXT*                 pPCIBusInfoProperties;
-        VkPhysicalDeviceTransformFeedbackPropertiesEXT*          pFeedbackProperties;
-        VkPhysicalDeviceDepthStencilResolvePropertiesKHR*        pDepthStencilResolveProperties;
-        VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*        pSubgroupSizeControlProperties;
-        VkPhysicalDeviceLineRasterizationPropertiesEXT*          pLineRasterizationProperties;
+        VkPhysicalDeviceDriverPropertiesKHR*                      pDriverProperties;
+        VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*      pVertexAttributeDivisorProperties;
+        VkPhysicalDeviceFloatControlsPropertiesKHR*               pFloatControlsProperties;
+        VkPhysicalDeviceInlineUniformBlockPropertiesEXT*          pInlineUniformBlockProperties;
+        VkPhysicalDevicePCIBusInfoPropertiesEXT*                  pPCIBusInfoProperties;
+        VkPhysicalDeviceTransformFeedbackPropertiesEXT*           pFeedbackProperties;
+        VkPhysicalDeviceDepthStencilResolvePropertiesKHR*         pDepthStencilResolveProperties;
+        VkPhysicalDeviceTimelineSemaphorePropertiesKHR*           pTimelineSemaphoreProperties;
+        VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*         pSubgroupSizeControlProperties;
+        VkPhysicalDeviceLineRasterizationPropertiesEXT*           pLineRasterizationProperties;
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -4764,6 +4944,13 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES_KHR:
+        {
+            GetPhysicalDeviceTimelineSemaphoreProperties(
+                &pTimelineSemaphoreProperties->maxTimelineSemaphoreValueDifference);
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT:
         {
             pSubgroupSizeControlProperties->minSubgroupSize = m_properties.gfxipProperties.shaderCore.minWavefrontSize;
@@ -4888,6 +5075,7 @@ void PhysicalDevice::GetExternalSemaphoreProperties(
     pExternalSemaphoreProperties->externalSemaphoreFeatures     = 0;
     const Pal::DeviceProperties& props                          = PalProperties();
 
+#if defined(__unix__)
     if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_SEMAPHORE_FD))
     {
         if (pExternalSemaphoreInfo->handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_OPAQUE_FD_BIT)
@@ -4902,6 +5090,7 @@ void PhysicalDevice::GetExternalSemaphoreProperties(
                                                                       VK_EXTERNAL_SEMAPHORE_FEATURE_IMPORTABLE_BIT;
         }
     }
+#endif
 
     if (pExternalSemaphoreProperties->externalSemaphoreFeatures == 0)
     {
@@ -4924,6 +5113,7 @@ void PhysicalDevice::GetExternalFenceProperties(
     pExternalFenceProperties->externalFenceFeatures         = 0;
     const Pal::DeviceProperties& props                      = PalProperties();
 
+#if defined(__unix__)
     if (IsExtensionSupported(DeviceExtensions::KHR_EXTERNAL_FENCE_FD))
     {
         if ((pExternalFenceInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT) ||
@@ -4936,6 +5126,7 @@ void PhysicalDevice::GetExternalFenceProperties(
             }
         }
     }
+#endif
 
     if (pExternalFenceProperties->externalFenceFeatures == 0)
     {
@@ -5404,10 +5595,12 @@ static void VerifyRequiredFormats(
               VerifyFormatSupport(dev, VK_FORMAT_D32_SFLOAT_S8_UINT,       0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0));
 
     // Table 30.20.
-    VK_ASSERT(VerifyBCFormatSupport(dev) || (features.textureCompressionBC == VK_FALSE));
+    VK_ASSERT(VerifyBCFormatSupport(dev)      || (features.textureCompressionBC       == VK_FALSE));
+    VK_ASSERT(VerifyEtc2FormatSupport(dev)    || (features.textureCompressionETC2     == VK_FALSE));
+    VK_ASSERT(VerifyAstcLdrFormatSupport(dev) || (features.textureCompressionASTC_LDR == VK_FALSE));
 
     // Table 30.20. Mandatory support of at least one texture compression scheme (BC, ETC2, or ASTC)
-    VK_ASSERT(features.textureCompressionBC);
+    VK_ASSERT(features.textureCompressionBC || features.textureCompressionETC2 || features.textureCompressionASTC_LDR);
 }
 
 // =====================================================================================================================
@@ -6189,6 +6382,8 @@ VKAPI_ATTR void VKAPI_CALL vkTrimCommandPool(
 {
 }
 
+#if defined(__unix__)
+
 #ifdef VK_USE_PLATFORM_XCB_KHR
 #include <xcb/xcb.h>
 
@@ -6274,6 +6469,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkReleaseDisplayEXT(
 {
     return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->ReleaseDisplay(display);
 }
+
+#endif
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(

@@ -48,7 +48,9 @@
 
 namespace vk
 {
+#if defined(__unix__)
 #define _MAX_FNAME NAME_MAX
+#endif
 
 constexpr char   PipelineBinaryCache::EnvVarPath[];
 constexpr char   PipelineBinaryCache::EnvVarFileName[];

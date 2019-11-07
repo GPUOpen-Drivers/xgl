@@ -153,6 +153,7 @@ VkResult Memory::Create(
                 }
 
                 break;
+#if defined(__unix__)
             case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
                 {
                     const VkImportMemoryFdInfoKHR* pImportMemoryFdInfo =
@@ -162,11 +163,14 @@ VkResult Memory::Create(
                     isExternal = true;
                 }
                 break;
+#endif
             case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO:
             {
                 const VkExportMemoryAllocateInfo* pExportMemory =
                     reinterpret_cast<const VkExportMemoryAllocateInfo *>(pHeader);
+#if defined(__unix__)
                     VK_ASSERT(pExportMemory->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
+#endif
                     createInfo.flags.interprocess = 1;
                     // Todo: we'd better to pass in the handleTypes to the Pal as well.
                     // The supported handleType should also be provided by Pal as Device Capabilities.
@@ -252,10 +256,12 @@ VkResult Memory::Create(
     {
         if (isExternal)
         {
+#if defined(__unix__)
             ImportMemoryInfo importInfo = {};
             importInfo.handle       = handle;
             importInfo.isNtHandle   = sharedViaNtHandle;
             vkResult = OpenExternalMemory(pDevice, importInfo, &pMemory);
+#endif
         }
         else
         {
@@ -1247,6 +1253,8 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryCommitment(
     Memory::ObjectFromHandle(memory)->GetCommitment(pCommittedMemoryInBytes);
 }
 
+#if defined(__unix__)
+
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdKHR(
     VkDevice                                device,
     const VkMemoryGetFdInfoKHR*             pGetFdInfo,
@@ -1267,6 +1275,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdPropertiesKHR(
 {
     return VK_SUCCESS;
 }
+#endif
 
 } // namespace entry
 

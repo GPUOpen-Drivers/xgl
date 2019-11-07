@@ -36,7 +36,9 @@
 
 #include <new>
 
+#if defined(__unix__)
 #include <unistd.h>
+#endif
 
 namespace vk
 {

@@ -140,12 +140,6 @@ public:
     uint32_t CreateSamplePattern(const SamplePattern& samplePattern);
     void DestroySamplePattern(const SamplePattern& samplePattern, uint32_t token);
 
-    uint32_t CreateGraphicsWaveLimits(const Pal::DynamicGraphicsShaderInfos& waveLimits);
-    void DestroyGraphicsWaveLimits(const Pal::DynamicGraphicsShaderInfos& waveLimits, uint32_t token);
-
-    uint32_t CreateComputeWaveLimits(const Pal::DynamicComputeShaderInfo& waveLimits);
-    void DestroyComputeWaveLimits(const Pal::DynamicComputeShaderInfo& waveLimits, uint32_t token);
-
     uint32_t CreateLineStipple(const Pal::LineStippleStateParams& params);
     void DestroyLineStipple(const Pal::LineStippleStateParams& params, uint32_t token);
 
@@ -367,16 +361,6 @@ private:
     Util::HashMap<Pal::IDepthStencilState*,
         StaticDepthStencilState*,
         PalAllocator>                                 m_depthStencilRefs;
-
-    Util::HashMap<Pal::DynamicGraphicsShaderInfos,
-        StaticParamState,
-        PalAllocator>                                 m_graphicsWaveLimits;
-    uint32_t                                          m_graphicsWaveLimitsNextId;
-
-    Util::HashMap<Pal::DynamicComputeShaderInfo,
-        StaticParamState,
-        PalAllocator>                                 m_computeWaveLimits;
-    uint32_t                                          m_computeWaveLimitsNextId;
 
 };
 

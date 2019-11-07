@@ -85,4 +85,5 @@ bool NeedGetObjectInfoData(
     return (pData != nullptr);
 }
 
+
 } // namespace vk

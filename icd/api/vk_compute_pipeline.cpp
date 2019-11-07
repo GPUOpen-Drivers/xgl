@@ -125,10 +125,6 @@ void ComputePipeline::CreateStaticState()
 void ComputePipeline::DestroyStaticState(
     const VkAllocationCallbacks* pAllocator)
 {
-    RenderStateCache* pCache = m_pDevice->GetRenderStateCache();
-
-    pCache->DestroyComputeWaveLimits(m_info.computeWaveLimitParams,
-        m_info.staticTokens.waveLimits);
 }
 
 // =====================================================================================================================

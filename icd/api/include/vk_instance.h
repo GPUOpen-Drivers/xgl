@@ -185,11 +185,13 @@ public:
         Pal::OsWindowHandle     windowHandle,
         Pal::OsDisplayHandle    monitorHandle) const;
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
     Pal::IScreen* FindScreenFromRandrOutput(
         const Pal::IDevice* pDevice,
         Display*            pDpy,
         uint32_t            randrOutput) const;
+#endif
 #endif
 
     VkResult GetScreenModeList(

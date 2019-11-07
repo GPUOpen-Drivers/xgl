@@ -274,11 +274,13 @@ VkResult Queue::Submit(
         {
             const VkSubmitInfo& submitInfo = pSubmits[submitIdx];
             const VkDeviceGroupSubmitInfo* pDeviceGroupInfo = nullptr;
+            const VkTimelineSemaphoreSubmitInfoKHR* pTimelineSemaphoreInfo = nullptr;
             {
                 union
                 {
                     const VkStructHeader*                          pHeader;
                     const VkSubmitInfo*                            pVkSubmitInfo;
+                    const VkTimelineSemaphoreSubmitInfoKHR*        pVkTimelineSemaphoreSubmitInfo;
                     const VkDeviceGroupSubmitInfo*                 pVkDeviceGroupSubmitInfo;
                 };
 
@@ -289,6 +291,9 @@ VkResult Queue::Submit(
                     case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO:
                         pDeviceGroupInfo = pVkDeviceGroupSubmitInfo;
                         break;
+                    case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR:
+                        pTimelineSemaphoreInfo = pVkTimelineSemaphoreSubmitInfo;
+                        break;
                     default:
                         // Skip any unknown extension structures
                         break;
@@ -298,10 +303,12 @@ VkResult Queue::Submit(
 
             if ((result == VK_SUCCESS) && (submitInfo.waitSemaphoreCount > 0))
             {
+                VK_ASSERT((pTimelineSemaphoreInfo == nullptr) ||
+                          (submitInfo.waitSemaphoreCount == pTimelineSemaphoreInfo->waitSemaphoreValueCount));
                 result = PalWaitSemaphores(
                     submitInfo.waitSemaphoreCount,
                     submitInfo.pWaitSemaphores,
-                    nullptr,
+                    ((pTimelineSemaphoreInfo != nullptr) ? pTimelineSemaphoreInfo->pWaitSemaphoreValues : nullptr),
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->waitSemaphoreCount          : 0),
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pWaitSemaphoreDeviceIndices : nullptr));
             }
@@ -390,10 +397,12 @@ VkResult Queue::Submit(
 
             if ((result == VK_SUCCESS) && (submitInfo.signalSemaphoreCount > 0))
             {
+                VK_ASSERT((pTimelineSemaphoreInfo == nullptr) ||
+                          (submitInfo.signalSemaphoreCount == pTimelineSemaphoreInfo->signalSemaphoreValueCount));
                 result = PalSignalSemaphores(
                     submitInfo.signalSemaphoreCount,
                     submitInfo.pSignalSemaphores,
-                    nullptr,
+                    ((pTimelineSemaphoreInfo != nullptr) ? pTimelineSemaphoreInfo->pSignalSemaphoreValues : nullptr),
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->signalSemaphoreCount          : 0),
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pSignalSemaphoreDeviceIndices : nullptr));
             }
@@ -1057,15 +1066,16 @@ End:
 
 // =====================================================================================================================
 // Peek the resource and memory device indices from a chained VkDeviceGroupBindSparseInfo structure.
-static void PeekDeviceGroupBindSparseDeviceIndices(
+static void PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(
     const VkBindSparseInfo& bindInfo,
     uint32_t*               pResourceDeviceIndex,
-    uint32_t*               pMemoryDeviceIndex)
-
+    uint32_t*               pMemoryDeviceIndex,
+    const VkTimelineSemaphoreSubmitInfoKHR** ppTimelineSemaphoreInfo)
 {
     union
     {
         const VkStructHeader*               pHeader;
+        const VkTimelineSemaphoreSubmitInfoKHR* pSemaphoreInfo;
         const VkDeviceGroupBindSparseInfo*  pDeviceGroupBindSparseInfo;
     };
 
@@ -1086,6 +1096,11 @@ static void PeekDeviceGroupBindSparseDeviceIndices(
                     *pMemoryDeviceIndex = pDeviceGroupBindSparseInfo->memoryDeviceIndex;
                 }
 
+                break;
+            }
+            case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR:
+            {
+                *ppTimelineSemaphoreInfo = pSemaphoreInfo;
                 break;
             }
             default:
@@ -1134,22 +1149,28 @@ VkResult Queue::BindSparse(
         uint32_t    resourceDeviceIndex     = DefaultDeviceIndex;
         uint32_t    memoryDeviceIndex       = DefaultDeviceIndex;
         uint32_t    nextResourceDeviceIndex = DefaultDeviceIndex;
-        PeekDeviceGroupBindSparseDeviceIndices(bindInfo, &resourceDeviceIndex, &memoryDeviceIndex);
+        const VkTimelineSemaphoreSubmitInfoKHR* pTimelineSemaphoreInfo = nullptr;
+        const VkTimelineSemaphoreSubmitInfoKHR* pNextTimelineSemaphoreInfo = nullptr;
+
+        PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(bindInfo, &resourceDeviceIndex, &memoryDeviceIndex,
+                                                               &pTimelineSemaphoreInfo);
 
         if (!lastEntry)
         {
-            PeekDeviceGroupBindSparseDeviceIndices(pBindInfo[i + 1], &nextResourceDeviceIndex, nullptr);
+            PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(pBindInfo[i + 1], &nextResourceDeviceIndex, nullptr,
+                                                                   &pNextTimelineSemaphoreInfo);
         }
-
         // Keep track of the PAL devices that need to signal the fence
         signalFenceDeviceMask |= (1 << resourceDeviceIndex);
 
         if (bindInfo.waitSemaphoreCount > 0)
         {
+            VK_ASSERT((pTimelineSemaphoreInfo == nullptr) ||
+                      (bindInfo.waitSemaphoreCount == pTimelineSemaphoreInfo->waitSemaphoreValueCount));
             result = PalWaitSemaphores(
                     bindInfo.waitSemaphoreCount,
                     bindInfo.pWaitSemaphores,
-                    nullptr,
+                    ((pTimelineSemaphoreInfo != nullptr) ? pTimelineSemaphoreInfo->pWaitSemaphoreValues : nullptr),
                     1,  // number of device indices
                     &resourceDeviceIndex);
         }
@@ -1183,10 +1204,12 @@ VkResult Queue::BindSparse(
             // Signal any semaphores depending on the preceding remap operations
             if (result == VK_SUCCESS)
             {
+                VK_ASSERT((pTimelineSemaphoreInfo == nullptr) ||
+                          (bindInfo.signalSemaphoreCount == pTimelineSemaphoreInfo->signalSemaphoreValueCount));
                 result = PalSignalSemaphores(
                     bindInfo.signalSemaphoreCount,
                     bindInfo.pSignalSemaphores,
-                    nullptr,
+                    ((pTimelineSemaphoreInfo != nullptr) ? pTimelineSemaphoreInfo->pSignalSemaphoreValues : nullptr),
                     1,  // number of device indices
                     &resourceDeviceIndex);
             }

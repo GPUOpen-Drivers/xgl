@@ -35,6 +35,7 @@
 #include "include/internal_mem_mgr.h"
 
 #include "palFile.h"
+#include "palPipelineAbi.h"
 
 namespace Pal
 {
@@ -140,11 +141,12 @@ public:
         { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0); }
 
     VkResult GetShaderDisassembly(
-        const Device*         pDevice,
-        const Pal::IPipeline* pPalPipeline,
-        Pal::ShaderType       shaderType,
-        size_t*               pBufferSize,
-        void*                 pBuffer) const;
+        const Device*                 pDevice,
+        const Pal::IPipeline*         pPalPipeline,
+        Util::Abi::PipelineSymbolType pipelineSymbolType,
+        Pal::ShaderType               shaderType,
+        size_t*                       pBufferSize,
+        void*                         pBuffer) const;
 
 protected:
     Pipeline(

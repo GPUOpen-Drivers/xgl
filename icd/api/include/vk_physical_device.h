@@ -306,6 +306,9 @@ public:
         VkBool32*                pFilterMinmaxSingleComponentFormats,
         VkBool32*                pFilterMinmaxImageComponentMapping) const;
 
+    VK_INLINE void GetPhysicalDeviceTimelineSemaphoreProperties(
+        uint64_t*                pMaxTimelineSemaphoreValueDifference) const;
+
     VkResult GetExternalMemoryProperties(
         bool                               isSparse,
         VkExternalMemoryHandleTypeFlagBits handleType,
@@ -386,6 +389,9 @@ public:
 
     VK_INLINE void GetPhysicalDeviceHostQueryResetFeatures(
         VkBool32* pHostQueryReset) const;
+
+    VK_INLINE void GetPhysicalDeviceTimelineSemaphoreFeatures(
+        VkBool32* pTimelineSemaphore) const;
 
     VK_INLINE void GetPhysicalDeviceBufferAddressFeatures(
         VkBool32* pBufferDeviceAddress,
@@ -590,6 +596,7 @@ public:
     void GetMemoryBudgetProperties(
         VkPhysicalDeviceMemoryBudgetPropertiesEXT* pMemBudgetProps);
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
     VkResult AcquireXlibDisplay(
         Display*        dpy,
@@ -602,6 +609,7 @@ public:
 #endif
 
     VkResult ReleaseDisplay(VkDisplayKHR display);
+#endif
 
     static DeviceExtensions::Supported GetAvailableExtensions(
         const Instance*       pInstance,
@@ -890,6 +898,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetPhysicalDeviceExternalFenceProperties(
     const VkPhysicalDeviceExternalFenceInfo*    pExternalFenceInfo,
     VkExternalFenceProperties*                  pExternalFenceProperties);
 
+#if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XCB_KHR
 VKAPI_ATTR VkBool32 VKAPI_CALL vkGetPhysicalDeviceXcbPresentationSupportKHR(
     VkPhysicalDevice                            physicalDevice,
@@ -929,6 +938,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetRandROutputDisplayEXT(
 VKAPI_ATTR VkResult VKAPI_CALL vkReleaseDisplayEXT(
     VkPhysicalDevice                            physicalDevice,
     VkDisplayKHR                                display);
+#endif
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDevicePresentRectanglesKHR(
     VkPhysicalDevice                            physicalDevice,

@@ -236,6 +236,7 @@ VkResult Buffer::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
         Pal::IGpuMemory* pMemoryObj = m_perGpu[deviceIdx].pGpuMemory;
@@ -434,19 +435,6 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
             }
         }
     }
-}
-
-// =====================================================================================================================
-VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressEXT(
-    VkDevice                                    device,
-    const VkBufferDeviceAddressInfoEXT* const   pInfo)
-{
-    const Device* const pDevice = ApiDevice::ObjectFromHandle(device);
-    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_BUFFER_DEVICE_ADDRESS));
-
-    Buffer* const pBuffer = Buffer::ObjectFromHandle(pInfo->buffer);
-
-    return pBuffer->GpuVirtAddr(DefaultDeviceIndex);
 }
 
 } // namespace entry

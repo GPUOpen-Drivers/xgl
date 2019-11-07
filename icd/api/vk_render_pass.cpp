@@ -504,7 +504,6 @@ void SubpassDescription::Init(
                 pDepthStencilResolveCreateInfo->pDepthStencilResolveAttachment[subpassIndex]);
             break;
         }
-
         default:
             break;
         }

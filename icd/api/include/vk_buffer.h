@@ -150,6 +150,37 @@ private:
     PerGpuInfo              m_perGpu[1];
 };
 
+// =====================================================================================================================
+VK_INLINE Pal::gpusize GetBufferAddress(
+    uint32_t     deviceIndex,
+    VkBuffer     buffer,
+    VkDeviceSize offset)
+{
+    if (buffer != VK_NULL_HANDLE)
+    {
+        return Buffer::ObjectFromHandle(buffer)->GpuVirtAddr(deviceIndex) + Pal::gpusize(offset);
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+// =====================================================================================================================
+VK_INLINE Pal::gpusize GetBufferSize(
+    VkBuffer     buffer,
+    VkDeviceSize offset)
+{
+    if (buffer != VK_NULL_HANDLE)
+    {
+        return Buffer::ObjectFromHandle(buffer)->GetSize() - Pal::gpusize(offset);
+    }
+    else
+    {
+        return 0;
+    }
+}
+
 namespace entry
 {
 
@@ -173,10 +204,6 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
     VkDevice                                    device,
     const VkBufferMemoryRequirementsInfo2*      pInfo,
     VkMemoryRequirements2*                      pMemoryRequirements);
-
-VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressEXT(
-    VkDevice                                    device,
-    const VkBufferDeviceAddressInfoEXT*         pInfo);
 
 } // namespace entry
 

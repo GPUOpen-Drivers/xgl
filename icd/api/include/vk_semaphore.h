@@ -107,7 +107,11 @@ public:
 
     VK_FORCEINLINE Pal::IQueueSemaphore* PalSemaphore(uint32_t deviceIdx) const
     {
+#if defined(__unix__)
         return m_useTempSemaphore ? m_pPalTemporarySemaphores[deviceIdx] : m_pPalSemaphores[deviceIdx];
+#else
+        return m_useTempSemaphore ? m_pPalTemporarySemaphores[0] : m_pPalSemaphores[0];
+#endif
     }
 
     VK_FORCEINLINE Pal::OsExternalHandle GetHandle() const
@@ -180,10 +184,12 @@ VKAPI_ATTR void VKAPI_CALL vkDestroySemaphore(
     VkSemaphore                                 semaphore,
     const VkAllocationCallbacks*                pAllocator);
 
+#if defined(__unix__)
 VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreFdKHR(
     VkDevice                                    device,
     const VkSemaphoreGetFdInfoKHR*              pGetFdInfo,
     int*                                        pFd);
+#endif
 } // namespace entry
 
 } // namespace vk

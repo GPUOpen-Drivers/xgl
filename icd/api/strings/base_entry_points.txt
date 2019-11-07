@@ -340,3 +340,7 @@ vkGetPipelineExecutableInternalRepresentationsKHR   @device     @dext(KHR_pipeli
 
 vkCmdSetLineStippleEXT                              @device     @dext(EXT_line_rasterization)
 
+vkGetSemaphoreCounterValueKHR                       @device     @dext(KHR_timeline_semaphore)
+vkWaitSemaphoresKHR                                 @device     @dext(KHR_timeline_semaphore)
+vkSignalSemaphoreKHR                                @device     @dext(KHR_timeline_semaphore)
+

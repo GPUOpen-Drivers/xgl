@@ -292,8 +292,6 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
 
         // Dota 2 will be the pilot for pal pipeline caching.
         m_settings.usePalPipelineCaching = true;
-
-        m_settings.shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
     }
 
     if (appProfile == AppProfile::Source2Engine)
@@ -549,6 +547,7 @@ void VulkanSettingsLoader::ValidateSettings()
     // Internal semaphore queue timing is always enabled when ETW is not available
     m_settings.devModeSemaphoreQueueTimingEnable = true;
 #endif
+
 }
 
 // =====================================================================================================================
