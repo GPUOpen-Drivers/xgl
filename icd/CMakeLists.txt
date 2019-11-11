@@ -70,7 +70,6 @@ if(UNIX)
             endif()
         endif()
 
-        set(ICD_USE_GCC TRUE)
         #message(STATUS "Configured ${PROJECT_NAME} compiler options for GCC.")
     elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
         #message(STATUS "Configured compiler options for Clang.")
@@ -381,7 +380,7 @@ if (UNIX)
 
     target_link_libraries(xgl PRIVATE c stdc++ ${CMAKE_DL_LIBS} pthread)
 
-    if(NOT ICD_USE_GCC)
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
         message(WARNING "Intel ICC untested in CMake.")
         target_link_libraries(xgl PRIVATE -fabi-version=0 -static-intel)
     endif()
