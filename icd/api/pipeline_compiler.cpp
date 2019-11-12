@@ -649,7 +649,9 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         hash.Update(pCreateInfo->pipelineInfo.gs.options);
         hash.Update(pCreateInfo->pipelineInfo.fs.options);
         hash.Update(pCreateInfo->pipelineInfo.options);
+#if LLPC_BUILD_GFX10
         hash.Update(pCreateInfo->pipelineInfo.nggState);
+#endif
         hash.Update(pCreateInfo->flags);
         hash.Update(pCreateInfo->dbFormat);
         hash.Update(pCreateInfo->pipelineProfileKey);
@@ -1228,6 +1230,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         }
     }
 
+#if LLPC_BUILD_GFX10
     if (m_gfxIp.major >= 10)
     {
         const bool                 hasGs        = pStageInfos[ShaderStageGeometry] != nullptr;
@@ -1265,6 +1268,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.nggState.primsPerSubgroup           = settings.nggPrimsPerSubgroup;
         pCreateInfo->pipelineInfo.nggState.vertsPerSubgroup           = settings.nggVertsPerSubgroup;
     }
+#endif
 
     ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options);
 
@@ -1369,7 +1373,9 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                             &pCreateInfo->pipelineInfo.options,
                             pShaderInfo,
                             &pCreateInfo->pipelineProfileKey
+#if LLPC_BUILD_GFX10
                             , &pCreateInfo->pipelineInfo.nggState
+#endif
                             );
     }
 
@@ -1554,7 +1560,9 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
                         nullptr,
                         &pCreateInfo->pipelineInfo.cs,
                         &pCreateInfo->pipelineProfileKey
+#if LLPC_BUILD_GFX10
                       , nullptr
+#endif
                         );
 
     return result;
@@ -1567,6 +1575,7 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
     Llpc::PipelineShaderOptions* pShaderOptions
     ) const
 {
+#if LLPC_BUILD_GFX10
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
 
     switch (stage)
@@ -1595,7 +1604,7 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
 
     pShaderOptions->wgpMode       = ((settings.enableWgpMode & (1 << stage)) != 0);
     pShaderOptions->waveBreakSize = static_cast<Llpc::WaveBreakSize>(settings.waveBreakSize);
-
+#endif
 }
 
 // =====================================================================================================================
@@ -1607,14 +1616,18 @@ void PipelineCompiler::ApplyProfileOptions(
     Llpc::PipelineOptions*       pPipelineOptions,
     Llpc::PipelineShaderInfo*    pShaderInfo,
     PipelineOptimizerKey*        pProfileKey
+#if LLPC_BUILD_GFX10
     , Llpc::NggState*            pNggState
+#endif
     )
 {
     auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
     PipelineShaderOptionsPtr options = {};
     options.pPipelineOptions = pPipelineOptions;
     options.pOptions     = &pShaderInfo->options;
+#if LLPC_BUILD_GFX10
     options.pNggState    = pNggState;
+#endif
 
     auto& shaderKey = pProfileKey->shaders[stage];
     if (settings.pipelineUseShaderHashAsProfileHash)

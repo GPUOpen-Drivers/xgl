@@ -166,7 +166,9 @@ private:
         Llpc::PipelineOptions*       pPipelineOptions,
         Llpc::PipelineShaderInfo*    pShaderInfo,
         PipelineOptimizerKey*        pProfileKey
+#if LLPC_BUILD_GFX10
         , Llpc::NggState*            pNggState
+#endif
     );
 
     void GetElfCacheMetricString(char* pOutStr, size_t outStrSize);

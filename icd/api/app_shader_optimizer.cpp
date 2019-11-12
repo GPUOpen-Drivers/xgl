@@ -143,6 +143,7 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 }
 #endif
 
+#if LLPC_BUILD_GFX10
                 if (shaderCreate.apply.waveSize)
                 {
                     options.pOptions->waveSize = shaderCreate.tuningOptions.waveSize;
@@ -198,8 +199,8 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pNggState->enableSmallPrimFilter = true;
                 }
+#endif
             }
-
         }
     }
 }

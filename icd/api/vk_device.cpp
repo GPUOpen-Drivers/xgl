@@ -1186,6 +1186,7 @@ VkResult Device::Initialize(
             break;
         }
         case AppProfile::WolfensteinII:
+#if LLPC_BUILD_GFX10
             // This application optimization layer is currently GFX10-specific
             if (deviceProps.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
@@ -1200,6 +1201,7 @@ VkResult Device::Initialize(
                     result = VK_ERROR_OUT_OF_HOST_MEMORY;
                 }
             }
+#endif
             break;
         default:
             break;

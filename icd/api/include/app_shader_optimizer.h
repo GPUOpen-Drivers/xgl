@@ -241,7 +241,9 @@ struct PipelineShaderOptionsPtr
 {
     Llpc::PipelineOptions*       pPipelineOptions;
     Llpc::PipelineShaderOptions* pOptions;
+#if LLPC_BUILD_GFX10
     Llpc::NggState*              pNggState;
+#endif
 };
 
 // =====================================================================================================================
