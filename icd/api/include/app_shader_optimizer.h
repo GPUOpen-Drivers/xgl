@@ -116,6 +116,7 @@ struct ShaderTuningOptions
     uint32_t reconfigWorkgroupLayout;
     uint32_t forceLoopUnrollCount;
     bool enableLoadScalarizer;
+    uint32_t unrollThreshold;
 };
 
 struct ShaderProfileAction

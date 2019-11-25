@@ -146,6 +146,10 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->forceLoopUnrollCount = shaderCreate.tuningOptions.forceLoopUnrollCount;
                 }
+                if (shaderCreate.tuningOptions.unrollThreshold != 0)
+                {
+                    options.pOptions->unrollThreshold = shaderCreate.tuningOptions.unrollThreshold;
+                }
 
                 if (shaderCreate.apply.waveSize)
                 {
@@ -1579,6 +1583,7 @@ static bool ParseJsonProfileActionShader(
         "reconfigWorkgroupLayout",
         "forceLoopUnrollCount",
         "enableLoadScalarizer",
+        "unrollThreshold",
         "waveSize",
         "wgpMode",
         "waveBreakSize",
@@ -1822,6 +1827,13 @@ static bool ParseJsonProfileActionShader(
         if (pItem->integerValue != 0)
         {
             pActions->shaderCreate.tuningOptions.enableLoadScalarizer = true;
+        }
+    }
+    if ((pItem = utils::JsonGetValue(pJson, "unrollThreshold")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.tuningOptions.unrollThreshold = static_cast<uint32_t>(pItem->integerValue);
         }
     }
 
