@@ -1228,7 +1228,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkFlushMappedMemoryRanges(
     uint32_t                                    memoryRangeCount,
     const VkMappedMemoryRange*                  pMemoryRanges)
 {
-    Util::FlushCpuWrites();
+    // All of our host visible memory heaps are coherent.
 
     return VK_SUCCESS;
 }
@@ -1239,7 +1239,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkInvalidateMappedMemoryRanges(
     uint32_t                                    memoryRangeCount,
     const VkMappedMemoryRange*                  pMemoryRanges)
 {
-    Util::FlushCpuWrites();
+    // All of our host visible memory heaps are coherent.
 
     return VK_SUCCESS;
 }

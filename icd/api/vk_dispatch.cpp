@@ -57,6 +57,7 @@
 #include "include/vk_queue.h"
 #include "include/vk_render_pass.h"
 #include "include/vk_sampler.h"
+#include "include/vk_sampler_ycbcr_conversion.h"
 #include "include/vk_semaphore.h"
 #include "include/vk_shader.h"
 #include "include/vk_surface.h"

@@ -103,6 +103,9 @@ if(XGL_BUILD_GFX10)
     target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX10)
     target_compile_definitions(xgl PRIVATE LLPC_BUILD_GFX10)
 endif()
+if(XGL_BUILD_NAVI14)
+    target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI14=1)
+endif()
 
 if(TARGET_ARCHITECTURE_BITS EQUAL 32)
     target_compile_definitions(xgl PRIVATE ICD_X86_BUILD)
@@ -129,6 +132,7 @@ endif()
 
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
 target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION_SUPPORTS_SHADER_CACHE_EXPECTED_ENTRIES=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
+target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MINOR_VERSION=${PAL_CLIENT_INTERFACE_MINOR_VERSION})
 
 target_compile_definitions(xgl PRIVATE LLPC_CLIENT_INTERFACE_MAJOR_VERSION=${LLPC_CLIENT_INTERFACE_MAJOR_VERSION})
 
@@ -224,6 +228,7 @@ target_sources(xgl PRIVATE
     api/vk_queue.cpp
     api/vk_render_pass.cpp
     api/vk_sampler.cpp
+    api/vk_sampler_ycbcr_conversion.cpp
     api/vk_semaphore.cpp
     api/vk_shader.cpp
     api/vk_swapchain.cpp

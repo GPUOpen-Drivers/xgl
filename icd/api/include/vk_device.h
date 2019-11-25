@@ -266,6 +266,11 @@ public:
         const VkAllocationCallbacks*                pAllocator,
         VkSampler*                                  pSampler);
 
+    VkResult CreateSamplerYcbcrConversion(
+        const VkSamplerYcbcrConversionCreateInfo*   pCreateInfo,
+        const VkAllocationCallbacks*                pAllocator,
+        VkSamplerYcbcrConversion*                   pYcbcrConversion);
+
    VkResult CreateCommandPool(
         const VkCommandPoolCreateInfo*              pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
@@ -871,11 +876,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSamplerYcbcrConversion(
     const VkSamplerYcbcrConversionCreateInfo*   pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkSamplerYcbcrConversion*                   pYcbcrConversion);
-
-VKAPI_ATTR void VKAPI_CALL vkDestroySamplerYcbcrConversion(
-    VkDevice                                    device,
-    VkSamplerYcbcrConversion                    ycbcrConversion,
-    const VkAllocationCallbacks*                pAllocator);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkCreateSwapchainKHR(
     VkDevice                                    device,

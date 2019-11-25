@@ -238,7 +238,6 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
         m_settings.nggSubgroupSizing   = NggSubgroupExplicit;
         m_settings.nggVertsPerSubgroup = 254;
         m_settings.nggPrimsPerSubgroup = 128;
-
     }
 
     if (appProfile == AppProfile::WorldWarZ)
@@ -312,6 +311,8 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
     {
         m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
         m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+        m_settings.forceDepthClampBasedOnZExport = true;
     }
 
     if (appProfile == AppProfile::SeriousSamFusion)
@@ -362,6 +363,8 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.forceDccForColorAttachments = false;
         }
+
+        m_settings.forceDepthClampBasedOnZExport = true;
     }
 
     if (appProfile == AppProfile::WarHammerII)
@@ -376,6 +379,11 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
     if (appProfile == AppProfile::DxvkEliteDangerous)
     {
         m_settings.disableSkipFceOptimization = true;
+    }
+
+    if (appProfile == AppProfile::SaschaWillemsExamples)
+    {
+        m_settings.forceDepthClampBasedOnZExport = true;
     }
 
     // By allowing the enable/disable to be set by environment variable, any third party platform owners can enable or
@@ -568,6 +576,12 @@ void VulkanSettingsLoader::UpdatePalSettings()
     }
 
     pPalSettings->disableSkipFceOptimization = m_settings.disableSkipFceOptimization;
+
+#if VK_IS_PAL_VERSION_AT_LEAST(548, 1)
+    // For vulkan driver, forceDepthClampBasedOnZExport should be false by default, this is required to pass depth_range_unrestricted CTS tests
+    // Set it to true for applications that have perf drops
+    pPalSettings->depthClampBasedOnZExport = m_settings.forceDepthClampBasedOnZExport;
+#endif
 
 }
 

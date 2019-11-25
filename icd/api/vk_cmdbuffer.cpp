@@ -3150,6 +3150,14 @@ void CmdBuffer::ExecuteBarriers(
                     palRangeCount--;
                 }
             }
+            else if (pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT)
+            {
+                VK_ASSERT((pImageMemoryBarriers[i].subresourceRange.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) == 0);
+
+                // Always use the second layout for stencil transitions. It is the only valid one for combined depth
+                // stencil layouts, and LayoutUsageHelper replicates stencil-only layouts to all aspects.
+                layoutIdx++;
+            }
         }
 
         VK_ASSERT(palRangeCount > 0 && palRangeCount <= MaxPalAspectsPerMask);
@@ -4162,6 +4170,9 @@ void CmdBuffer::BeginRenderPass(
                 VK_ASSERT((firstAspect == Pal::ImageAspect::Depth) ||
                             (firstAspect == Pal::ImageAspect::Stencil));
 
+                const RPImageLayout initialStencilLayout =
+                { m_state.allGpuState.pRenderPass->GetAttachmentDesc(a).stencilInitialLayout, 0 };
+
                 RPSetAttachmentLayout(a, Pal::ImageAspect::Color, NullLayout);
 
                 RPSetAttachmentLayout(
@@ -4172,7 +4183,7 @@ void CmdBuffer::BeginRenderPass(
                 RPSetAttachmentLayout(
                     a,
                     Pal::ImageAspect::Stencil,
-                    attachment.pImage->GetAttachmentLayout(initialLayout, Pal::ImageAspect::Stencil, this));
+                    attachment.pImage->GetAttachmentLayout(initialStencilLayout, Pal::ImageAspect::Stencil, this));
             }
         }
 
@@ -4438,6 +4449,7 @@ void CmdBuffer::RPSyncPoint(
                 const Pal::ImageAspect aspect = attachment.subresRange[sr].startSubres.aspect;
 
                 const RPImageLayout nextLayout =
+                    (aspect == Pal::ImageAspect::Stencil) ? tr.nextStencilLayout :
                                                             tr.nextLayout;
 
                 const Pal::ImageLayout newLayout = attachment.pImage->GetAttachmentLayout(

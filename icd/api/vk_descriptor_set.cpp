@@ -512,8 +512,9 @@ void DescriptorUpdate::WriteDescriptorSets(
                 pDestAddr,
                 params.descriptorCount,
                 params.dstArrayElement / 4);
-        }
+
             break;
+        }
 
         default:
             VK_ASSERT(!"Unexpected descriptor type");

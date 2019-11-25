@@ -142,6 +142,10 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pOptions->enableLoadScalarizer = true;
                 }
 #endif
+                if (shaderCreate.tuningOptions.forceLoopUnrollCount != 0)
+                {
+                    options.pOptions->forceLoopUnrollCount = shaderCreate.tuningOptions.forceLoopUnrollCount;
+                }
 
                 if (shaderCreate.apply.waveSize)
                 {
@@ -1116,22 +1120,36 @@ void ShaderOptimizer::BuildAppProfileLlpc()
     }
     else if (appProfile == AppProfile::WarHammerII)
     {
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // 0x730EEEB82E6434A876D57AACBD824DBD, PS
-        i = m_appProfile.entryCount++;
-        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
-        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x76D57AACBD824DBD;
-        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x730EEEB82E6434A8;
-        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.disableLoopUnrolls = true;
-        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
-        // 0xE449709F7ED22376A6DA0F40D4C8B54F, PS
-        i = m_appProfile.entryCount++;
-        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
-        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
-        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xA6DA0F40D4C8B54F;
-        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xE449709F7ED22376;
-        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.disableLoopUnrolls = true;
+        if (Pal::GfxIpLevel::GfxIp9 >= gfxIpLevel)
+        {
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0x730EEEB82E6434A876D57AACBD824DBD, PS
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x76D57AACBD824DBD;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x730EEEB82E6434A8;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.disableLoopUnrolls = true;
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0xE449709F7ED22376A6DA0F40D4C8B54F, PS
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0xA6DA0F40D4C8B54F;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xE449709F7ED22376;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.disableLoopUnrolls = true;
+        }
+        else
+        {
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0x730EEEB82E6434A876D57AACBD824DBD, PS
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x76D57AACBD824DBD;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x730EEEB82E6434A8;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.forceLoopUnrollCount = 2;
+        }
     }
     else if (appProfile == AppProfile::StrangeBrigade)
     {
@@ -1380,6 +1398,44 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         m_appProfile.entries[i].pattern.shaders[ShaderStageVertex].codeHash.upper = 0x6AA53B86573DCB39;
         m_appProfile.entries[i].action.shaders[ShaderStageVertex].shaderCreate.tuningOptions.useSiScheduler = true;
     }
+    else if (appProfile == AppProfile::DiRT4)
+    {
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xE4EB5EA3FB70EEB72989E44BA02788A8, CS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0x2989E44BA02788A8;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xE4EB5EA3FB70EEB7;
+        m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.disableLoopUnrolls = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x86BB99062EADF83958DDFE449FC0B3D8, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x58DDFE449FC0B3D8;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x86BB99062EADF839;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0x5A0E57337FE9533E52BFE4AF6F91CA9E, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x52BFE4AF6F91CA9E;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x5A0E57337FE9533E;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+
+        ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+        // 0xDCDD10E03921B0659F8DE289B463BEA5, PS
+        i = m_appProfile.entryCount++;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x9F8DE289B463BEA5;
+        m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xDCDD10E03921B065;
+        m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.useSiScheduler = true;
+    }
 }
 
 #if PAL_ENABLE_PRINTS_ASSERTS
@@ -1521,6 +1577,7 @@ static bool ParseJsonProfileActionShader(
         "enableSelectiveInline",
         "useSiScheduler",
         "reconfigWorkgroupLayout",
+        "forceLoopUnrollCount",
         "enableLoadScalarizer",
         "waveSize",
         "wgpMode",
@@ -1753,7 +1810,13 @@ static bool ParseJsonProfileActionShader(
             pActions->shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
         }
     }
-
+    if ((pItem = utils::JsonGetValue(pJson, "forceLoopUnrollCount")) != nullptr)
+    {
+        if (pItem->integerValue != 0)
+        {
+            pActions->shaderCreate.tuningOptions.forceLoopUnrollCount = static_cast<uint32_t>(pItem->integerValue);
+        }
+    }
     if ((pItem = utils::JsonGetValue(pJson, "enableLoadScalarizer")) != nullptr)
     {
         if (pItem->integerValue != 0)

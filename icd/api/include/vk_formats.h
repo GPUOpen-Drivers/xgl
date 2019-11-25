@@ -53,6 +53,10 @@ struct Formats
     VK_INLINE static bool IsYuvFormat(VkFormat format);
     VK_INLINE static bool IsYuvPlanar(VkFormat format);
     VK_INLINE static bool IsYuvPacked(VkFormat format);
+    VK_INLINE static bool IsYuvTileOptimal(VkFormat format);
+    VK_INLINE static bool IsYuvXChromaSubsampled(VkFormat format);
+    VK_INLINE static bool IsYuvYChromaSubsampled(VkFormat format);
+    VK_INLINE static uint32_t GetYuvPlaneCounts(VkFormat format);
     VK_INLINE static bool HasDepth(VkFormat format);
     VK_INLINE static bool HasStencil(VkFormat format);
     VK_INLINE static VkFormat GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask);
@@ -64,11 +68,13 @@ struct Formats
     static Pal::Formats::NumericSupportFlags GetNumberFormat(VkFormat format);
 };
 
-#define VK_YUV_FORMAT_START VK_FORMAT_G8B8G8R8_422_UNORM
-#define VK_YUV_FORMAT_END VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM
+#define VK_YUV_FORMAT_START         VK_FORMAT_G8B8G8R8_422_UNORM
+#define VK_YUV_FORMAT_END           VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM
 
 // Number of formats supported by the driver.
-#define VK_SUPPORTED_FORMAT_COUNT     (VK_FORMAT_RANGE_SIZE + (VK_YUV_FORMAT_END - VK_YUV_FORMAT_START + 1))
+#define VK_YUV_IMAGE_FORMAT_COUNT     (VK_YUV_FORMAT_END     - VK_YUV_FORMAT_START       + 1)
+
+#define VK_SUPPORTED_FORMAT_COUNT     (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT)
 
 // =====================================================================================================================
 // Get a linear index for a format (used to address tables indirectly indexed by formats).
@@ -100,7 +106,7 @@ VkFormat Formats::FromIndex(uint32_t index)
         return static_cast<VkFormat>(index);
     }
     else if ((index >= VK_FORMAT_RANGE_SIZE) &&
-             (index <= (VK_FORMAT_RANGE_SIZE + VK_YUV_FORMAT_END - VK_YUV_FORMAT_START)))
+             (index < (VK_FORMAT_RANGE_SIZE + VK_YUV_IMAGE_FORMAT_COUNT)))
     {
         return static_cast<VkFormat>(VK_YUV_FORMAT_START + index - VK_FORMAT_RANGE_SIZE);
     }
@@ -238,6 +244,127 @@ bool Formats::IsYuvPacked(VkFormat format)
            (VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16 == format) ||
            (VK_FORMAT_G16B16G16R16_422_UNORM                 == format) ||
            (VK_FORMAT_B16G16R16G16_422_UNORM                 == format);
+}
+
+// =====================================================================================================================
+// Returns the planes counts if the given format is a yuv format.
+uint32_t Formats::GetYuvPlaneCounts(VkFormat format)
+{
+    switch (format)
+    {
+    case VK_FORMAT_G8B8G8R8_422_UNORM:
+    case VK_FORMAT_B8G8R8G8_422_UNORM:
+    case VK_FORMAT_R10X6_UNORM_PACK16:
+    case VK_FORMAT_R12X4_UNORM_PACK16:
+    case VK_FORMAT_G16B16G16R16_422_UNORM:
+    case VK_FORMAT_B16G16R16G16_422_UNORM:
+    case VK_FORMAT_R10X6G10X6_UNORM_2PACK16:
+    case VK_FORMAT_R12X4G12X4_UNORM_2PACK16:
+    case VK_FORMAT_R10X6G10X6B10X6A10X6_UNORM_4PACK16:
+    case VK_FORMAT_R12X4G12X4B12X4A12X4_UNORM_4PACK16:
+    case VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16:
+    case VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16:
+    case VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16:
+    case VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16:
+        return 1;
+    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+    case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+    case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+        return 2;
+    case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+    case VK_FORMAT_G8_B8_R8_3PLANE_444_UNORM:
+    case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+    case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+    case VK_FORMAT_G16_B16_R16_3PLANE_444_UNORM:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_444_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_444_UNORM_3PACK16:
+        return 3;
+    default:
+        VK_NEVER_CALLED();
+        return 1;
+    }
+}
+
+// =====================================================================================================================
+// Returns ture if the given format is a yuv format which could be tiling optimal.
+bool Formats::IsYuvTileOptimal(VkFormat format)
+{
+    switch (format)
+    {
+    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// =====================================================================================================================
+// Returns ture if the given format is a yuv format which is X chroma subsampled.
+bool Formats::IsYuvXChromaSubsampled(VkFormat format)
+{
+    switch (format)
+    {
+    case VK_FORMAT_G8B8G8R8_422_UNORM:
+    case VK_FORMAT_B8G8R8G8_422_UNORM:
+    case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8_R8_3PLANE_422_UNORM:
+    case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
+    case VK_FORMAT_G10X6B10X6G10X6R10X6_422_UNORM_4PACK16:
+    case VK_FORMAT_B10X6G10X6R10X6G10X6_422_UNORM_4PACK16:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G12X4B12X4G12X4R12X4_422_UNORM_4PACK16:
+    case VK_FORMAT_B12X4G12X4R12X4G12X4_422_UNORM_4PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
+    case VK_FORMAT_G16B16G16R16_422_UNORM:
+    case VK_FORMAT_B16G16R16G16_422_UNORM:
+    case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+    case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+    case VK_FORMAT_G16_B16_R16_3PLANE_422_UNORM:
+    case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
+        return true;
+    default:
+        return false;
+    }
+}
+
+// =====================================================================================================================
+// Returns ture if the given format is a yuv format which is Y chroma subsampled.
+bool Formats::IsYuvYChromaSubsampled(VkFormat format)
+{
+    switch (format)
+    {
+    case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:
+    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
+    case VK_FORMAT_G10X6_B10X6_R10X6_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4_R12X4_3PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
+    case VK_FORMAT_G16_B16_R16_3PLANE_420_UNORM:
+    case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
+        return true;
+    default:
+        return false;
+    }
 }
 
 // =====================================================================================================================

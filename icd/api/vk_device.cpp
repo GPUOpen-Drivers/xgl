@@ -61,6 +61,7 @@
 #include "include/vk_semaphore.h"
 #include "include/vk_shader.h"
 #include "include/vk_sampler.h"
+#include "include/vk_sampler_ycbcr_conversion.h"
 #include "include/vk_swapchain.h"
 #include "include/vk_utils.h"
 #include "include/vk_conv.h"
@@ -568,6 +569,7 @@ VkResult Device::Create(
 
             break;
         }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT:
         {
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceMemoryPriorityFeaturesEXT>(
@@ -607,6 +609,15 @@ VkResult Device::Create(
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR>(
                 pPhysicalDevice,
                 reinterpret_cast<const VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR*>(pHeader));
 
             break;
         }
@@ -1698,7 +1709,9 @@ VkResult Device::CreateInternalComputePipeline(
         pShaderInfo->pModuleData         = shaderModule.pLlpcShaderModule;
         pShaderInfo->pSpecializationInfo = nullptr;
         pShaderInfo->pEntryTarget        = "main";
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
         pShaderInfo->entryStage          = Llpc::ShaderStageCompute;
+#endif
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
 
@@ -2233,6 +2246,24 @@ void Device::GetDeviceGroupPeerMemoryFeatures(
         {
             case Pal::GpuHeapLocal:
             case Pal::GpuHeapInvisible:
+                {
+                    Pal::GpuCompatibilityInfo compatInfo       = {};
+                    Pal::IDevice*             pLocalPalDevice  = VkPhysicalDevice(localDeviceIndex)->PalDevice();
+                    Pal::IDevice*             pRemotePalDevice = VkPhysicalDevice(remoteDeviceIndex)->PalDevice();
+
+                    Pal::Result result = pLocalPalDevice->GetMultiGpuCompatibility(*pRemotePalDevice, &compatInfo);
+
+                    if ((result == Pal::Result::Success) && compatInfo.flags.peerTransferRead)
+                    {
+                        // Expose peer reads for XGMI
+                        enabledFeatures |= VK_PEER_MEMORY_FEATURE_COPY_SRC_BIT;
+                        enabledFeatures |= VK_PEER_MEMORY_FEATURE_GENERIC_SRC_BIT;
+
+                        // Peer writes are always supported but not expected to be performant without XGMI
+                        VK_ASSERT(compatInfo.flags.peerTransferWrite);
+                        enabledFeatures |= VK_PEER_MEMORY_FEATURE_GENERIC_DST_BIT;
+                    }
+                }
                 break;
             case Pal::GpuHeapGartUswc:
             case Pal::GpuHeapGartCacheable:
@@ -2466,6 +2497,15 @@ VkResult Device::CreateSampler(
     VkSampler*                                  pSampler)
 {
     return Sampler::Create(this, pCreateInfo, pAllocator, pSampler);
+}
+
+// =====================================================================================================================
+VkResult Device::CreateSamplerYcbcrConversion(
+    const VkSamplerYcbcrConversionCreateInfo*   pCreateInfo,
+    const VkAllocationCallbacks*                pAllocator,
+    VkSamplerYcbcrConversion*                   pYcbcrConversion)
+{
+    return SamplerYcbcrConversion::Create(this, pCreateInfo, pAllocator, pYcbcrConversion);
 }
 
 // =====================================================================================================================
@@ -3220,18 +3260,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateSamplerYcbcrConversion(
     const VkAllocationCallbacks*                pAllocator,
     VkSamplerYcbcrConversion*                   pYcbcrConversion)
 {
-    VK_NOT_IMPLEMENTED;
+    Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
+    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
-    return VK_SUCCESS;
-}
-
-// =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkDestroySamplerYcbcrConversion(
-    VkDevice                                    device,
-    VkSamplerYcbcrConversion                    ycbcrConversion,
-    const VkAllocationCallbacks*                pAllocator)
-{
-    VK_NOT_IMPLEMENTED;
+    return pDevice->CreateSamplerYcbcrConversion(pCreateInfo, pAllocCB, pYcbcrConversion);
 }
 
 // =====================================================================================================================

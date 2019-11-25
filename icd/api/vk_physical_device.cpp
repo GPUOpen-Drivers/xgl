@@ -1079,7 +1079,6 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
                     pQueueProps->queueFamilyProperties = m_queueFamilies[i].properties;
                     break;
                 }
-
                 default:
                     // Skip any unknown extension structures
                     break;
@@ -3308,7 +3307,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE_FD));
-
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MULTIVIEW));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));
@@ -3354,6 +3352,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VULKAN_MEMORY_MODEL));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HOST_QUERY_RESET));
 
     if ((pPhysicalDevice == nullptr) ||
@@ -3372,9 +3372,21 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_IMAGELESS_FRAMEBUFFER));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_CREATION_FEEDBACK));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PIPELINE_EXECUTABLE_PROPERTIES));
 
     return availableExtensions;
+}
+
+// =====================================================================================================================
+// Is the queue suitable for normal use (i.e. non-exclusive and no elevated priority).
+template<class T>
+VK_INLINE static bool IsNormalQueue(const T& engineCapabilities)
+{
+    return ((engineCapabilities.flags.exclusive == 0) &&
+            (((engineCapabilities.queuePrioritySupport & Pal::QueuePrioritySupport::SupportQueuePriorityNormal) != 0) ||
+             (engineCapabilities.queuePrioritySupport == 0)));
 }
 
 // =====================================================================================================================
@@ -3429,9 +3441,6 @@ void PhysicalDevice::PopulateQueueFamilies()
         VK_QUEUE_TRANSFER_BIT |
         VK_QUEUE_SPARSE_BINDING_BIT;
 
-    const uint32 queueSupportPriority = Pal::QueuePrioritySupport::SupportQueuePriorityNormal |
-        Pal::QueuePrioritySupport::SupportQueuePriorityIdle;
-
     // find out the sub engine index of VrHighPriority and indices for compute engines that aren't exclusive.
     {
         const auto& computeProps = m_properties.engineProperties[Pal::EngineTypeCompute];
@@ -3451,8 +3460,7 @@ void PhysicalDevice::PopulateQueueFamilies()
                     m_vrHighPrioritySubEngineIndex = subEngineIndex;
                 }
             }
-            else if ((computeProps.capabilities[subEngineIndex].queuePrioritySupport == queueSupportPriority) ||
-                    (computeProps.capabilities[subEngineIndex].queuePrioritySupport == 0u))
+            else if (IsNormalQueue(computeProps.capabilities[subEngineIndex]))
             {
                 m_compQueueEnginesNdx[engineIndex++] = subEngineIndex;
             }
@@ -3465,9 +3473,7 @@ void PhysicalDevice::PopulateQueueFamilies()
         uint32_t engineIndex = 0u;
         for (uint32_t subEngineIndex = 0; subEngineIndex < universalProps.engineCount; subEngineIndex++)
         {
-            if ((universalProps.capabilities[subEngineIndex].flags.exclusive == 0) &&
-                ((universalProps.capabilities[subEngineIndex].queuePrioritySupport == queueSupportPriority) ||
-                 (universalProps.capabilities[subEngineIndex].queuePrioritySupport == 0u)))
+            if (IsNormalQueue(universalProps.capabilities[subEngineIndex]))
             {
                 m_universalQueueEnginesNdx[engineIndex++] = subEngineIndex;
             }
@@ -3545,9 +3551,7 @@ void PhysicalDevice::PopulateQueueFamilies()
 
             for (uint32 engineNdx = 0u; engineNdx < engineProps.engineCount; ++engineNdx)
             {
-                if ((engineProps.capabilities[engineNdx].flags.exclusive == 0) &&
-                    ((engineProps.capabilities[engineNdx].queuePrioritySupport == queueSupportPriority) ||
-                     (engineProps.capabilities[engineNdx].queuePrioritySupport == 0u)))
+                if (IsNormalQueue(engineProps.capabilities[engineNdx]))
                 {
                     pQueueFamilyProps->queueCount++;
                 }
@@ -3839,16 +3843,14 @@ void PhysicalDevice::GetPhysicalDeviceFloatControlsProperties(
     T pFloatControlsProperties
     ) const
 {
-    pFloatControlsProperties->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE_KHR;
-    pFloatControlsProperties->roundingModeIndependence   = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_NONE_KHR;
-
     pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat32  = VK_TRUE;
     pFloatControlsProperties->shaderDenormPreserveFloat32            = VK_TRUE;
     pFloatControlsProperties->shaderDenormFlushToZeroFloat32         = VK_TRUE;
     pFloatControlsProperties->shaderRoundingModeRTEFloat32           = VK_TRUE;
     pFloatControlsProperties->shaderRoundingModeRTZFloat32           = VK_TRUE;
 
-    if (PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions)
+    bool supportFloat16 = PalProperties().gfxipProperties.flags.supportDoubleRate16BitInstructions;
+    if (supportFloat16)
     {
         pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat16  = VK_TRUE;
         pFloatControlsProperties->shaderDenormPreserveFloat16            = VK_TRUE;
@@ -3865,7 +3867,8 @@ void PhysicalDevice::GetPhysicalDeviceFloatControlsProperties(
         pFloatControlsProperties->shaderRoundingModeRTZFloat16           = VK_FALSE;
     }
 
-    if (PalProperties().gfxipProperties.flags.support64BitInstructions)
+    bool supportFloat64 = PalProperties().gfxipProperties.flags.support64BitInstructions;
+    if (supportFloat64)
     {
         pFloatControlsProperties->shaderSignedZeroInfNanPreserveFloat64 = VK_TRUE;
         pFloatControlsProperties->shaderDenormPreserveFloat64           = VK_TRUE;
@@ -3880,6 +3883,18 @@ void PhysicalDevice::GetPhysicalDeviceFloatControlsProperties(
         pFloatControlsProperties->shaderDenormFlushToZeroFloat64        = VK_FALSE;
         pFloatControlsProperties->shaderRoundingModeRTEFloat64          = VK_FALSE;
         pFloatControlsProperties->shaderRoundingModeRTZFloat64          = VK_FALSE;
+    }
+
+    if (supportFloat16 && supportFloat64)
+    {
+        // Float controls of float16 and float64 are determined by the same hardware register fields (not independent).
+        pFloatControlsProperties->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY_KHR;
+        pFloatControlsProperties->roundingModeIndependence   = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_32_BIT_ONLY_KHR;
+    }
+    else
+    {
+        pFloatControlsProperties->denormBehaviorIndependence = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL_KHR;
+        pFloatControlsProperties->roundingModeIndependence   = VK_SHADER_FLOAT_CONTROLS_INDEPENDENCE_ALL_KHR;
     }
 }
 
@@ -4430,9 +4445,7 @@ void PhysicalDevice::GetFeatures2(
             {
                 VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT* pShaderDemoteToHelperInvocation =
                     reinterpret_cast<VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT*>(pHeader);
-
-                pShaderDemoteToHelperInvocation->shaderDemoteToHelperInvocation = VK_FALSE;
-
+                pShaderDemoteToHelperInvocation->shaderDemoteToHelperInvocation = VK_TRUE;
                 break;
             }
 
@@ -4511,6 +4524,17 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES_KHR:
+            {
+                VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR* pPhysicalDeviceSeparateDepthStencilLayouts =
+                    reinterpret_cast<VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR*>(pHeader);
+
+                GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(
+                    &pPhysicalDeviceSeparateDepthStencilLayouts->separateDepthStencilLayouts);
+
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CLOCK_FEATURES_KHR:
             {
                 VkPhysicalDeviceShaderClockFeaturesKHR* pPhysicalDeviceShaderClockFeatures =
@@ -4584,12 +4608,13 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     VK_ASSERT(pImageFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2);
 
     const VkStructHeader*                                   pHeader;
-    const VkPhysicalDeviceExternalImageFormatInfo*          pExternalImageFormatInfo           = nullptr;
-    const VkImageStencilUsageCreateInfoEXT*                 pImageStencilUsageCreateInfo       = nullptr;
+    const VkPhysicalDeviceExternalImageFormatInfo*          pExternalImageFormatInfo                     = nullptr;
+    const VkImageStencilUsageCreateInfoEXT*                 pImageStencilUsageCreateInfo                 = nullptr;
 
     VkStructHeaderNonConst*                                 pHeader2;
-    VkExternalImageFormatProperties*                        pExternalImageProperties           = nullptr;
-    VkTextureLODGatherFormatPropertiesAMD*                  pTextureLODGatherFormatProperties  = nullptr;
+    VkExternalImageFormatProperties*                        pExternalImageProperties                     = nullptr;
+    VkTextureLODGatherFormatPropertiesAMD*                  pTextureLODGatherFormatProperties            = nullptr;
+    VkSamplerYcbcrConversionImageFormatProperties*          pSamplerYcbcrConversionImageFormatProperties = nullptr;
 
     for (pHeader = reinterpret_cast<const VkStructHeader*>(pImageFormatInfo->pNext);
          pHeader != nullptr;
@@ -4629,6 +4654,14 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
             pTextureLODGatherFormatProperties = reinterpret_cast<VkTextureLODGatherFormatPropertiesAMD*>(pHeader2);
             break;
         }
+
+        case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
+        {
+            pSamplerYcbcrConversionImageFormatProperties = reinterpret_cast<VkSamplerYcbcrConversionImageFormatProperties*>(pHeader2);
+            pSamplerYcbcrConversionImageFormatProperties->combinedImageSamplerDescriptorCount = 1;
+            break;
+        }
+
         default:
             break;
         }

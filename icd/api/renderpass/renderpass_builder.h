@@ -85,6 +85,7 @@ public:
         uint32_t                       finalUseSubpass;             // Subpass that lasts references this attachment
 
         RPImageLayout                  prevReferenceLayout;         // Layout used by previous reference
+        RPImageLayout                  prevReferenceStencilLayout;  // Stencil layout used by previous reference if any
         uint32_t                       prevReferenceSubpass;        // Previously-referencing subpass index
         uint32_t                       accumulatedRefMask;          // Accumulating mask of what kinds of AttachRef*
                                                                     // flags have so far referenced this attachment.
@@ -186,6 +187,7 @@ private:
         AttachRefType        refType,
         uint32_t             attachment,
         RPImageLayout        layout,
+        const RPImageLayout* pStencilLayout,
         SyncPointState*      pSync);
     void WaitForResolves(SyncPointState* pSync);
     void WaitForResolvesFromSubpass(uint32_t subpass, SyncPointState* pSync);

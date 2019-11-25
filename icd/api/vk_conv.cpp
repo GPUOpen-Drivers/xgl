@@ -714,6 +714,10 @@ const char* PalResultName(
         resultName = "ErrorPrivateScreenNotEnabled";
         break;
 
+    case Pal::Result::ErrorGpuPageFaultDetected:
+        resultName = "ErrorGpuPageFaultDetected";
+        break;
+
     default:
         VK_NOT_IMPLEMENTED;
         resultName = "??";

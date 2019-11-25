@@ -290,6 +290,8 @@ RenderPassBuilder::AttachmentState::AttachmentState(
 {
     prevReferenceLayout.layout            = pDesc->initialLayout;
     prevReferenceLayout.extraUsage        = 0;
+    prevReferenceStencilLayout.layout     = pDesc->stencilInitialLayout;
+    prevReferenceStencilLayout.extraUsage = 0;
 }
 
 // =====================================================================================================================
@@ -522,7 +524,12 @@ Pal::Result RenderPassBuilder::BuildColorAttachmentReferences(
 
             if ((result == Pal::Result::Success) && (reference.attachment != VK_ATTACHMENT_UNUSED))
             {
-                result = TrackAttachmentUsage(subpass, AttachRefColor, reference.attachment, layout,
+                result = TrackAttachmentUsage(
+                    subpass,
+                    AttachRefColor,
+                    reference.attachment,
+                    layout,
+                    nullptr,
                     &pSubpass->syncTop);
             }
         }
@@ -543,6 +550,8 @@ Pal::Result RenderPassBuilder::BuildDepthStencilAttachmentReferences(
     pSubpass->bindTargets.depthStencil.attachment               = VK_ATTACHMENT_UNUSED;
     pSubpass->bindTargets.depthStencil.layout.layout            = VK_IMAGE_LAYOUT_UNDEFINED;
     pSubpass->bindTargets.depthStencil.layout.extraUsage        = 0;
+    pSubpass->bindTargets.depthStencil.stencilLayout.layout     = VK_IMAGE_LAYOUT_UNDEFINED;
+    pSubpass->bindTargets.depthStencil.stencilLayout.extraUsage = 0;
 
     if (desc.depthStencilAttachment.attachment != VK_ATTACHMENT_UNUSED)
     {
@@ -551,12 +560,19 @@ Pal::Result RenderPassBuilder::BuildDepthStencilAttachmentReferences(
         if (reference.attachment != VK_ATTACHMENT_UNUSED)
         {
             RPImageLayout layout        = { reference.layout, 0 };
+            RPImageLayout stencilLayout = { reference.stencilLayout, 0 };
 
-            result = TrackAttachmentUsage(subpass, AttachRefDepthStencil, reference.attachment, layout,
+            result = TrackAttachmentUsage(
+                subpass,
+                AttachRefDepthStencil,
+                reference.attachment,
+                layout,
+                &stencilLayout,
                 &pSubpass->syncTop);
 
             pSubpass->bindTargets.depthStencil.attachment    = reference.attachment;
             pSubpass->bindTargets.depthStencil.layout        = layout;
+            pSubpass->bindTargets.depthStencil.stencilLayout = stencilLayout;
         }
     }
 
@@ -586,8 +602,14 @@ Pal::Result RenderPassBuilder::BuildInputAttachmentReferences(
             if (reference.attachment != VK_ATTACHMENT_UNUSED)
             {
                 RPImageLayout layout        = { reference.layout, 0 };
+                RPImageLayout stencilLayout = { reference.stencilLayout, 0 };
 
-                result = TrackAttachmentUsage(subpass, AttachRefInput, reference.attachment, layout,
+                result = TrackAttachmentUsage(
+                    subpass,
+                    AttachRefInput,
+                    reference.attachment,
+                    layout,
+                    &stencilLayout,
                     &pSubpass->syncTop);
             }
         }
@@ -620,12 +642,21 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
 
             if ((dst.attachment != VK_ATTACHMENT_UNUSED) && (src.attachment != VK_ATTACHMENT_UNUSED))
             {
-                result = TrackAttachmentUsage(subpass, AttachRefResolveSrc, src.attachment, srcLayout,
+                result = TrackAttachmentUsage(subpass,
+                    AttachRefResolveSrc,
+                    src.attachment,
+                    srcLayout,
+                    nullptr,
                     &pSubpass->syncPreResolve);
 
                 if (result == Pal::Result::Success)
                 {
-                    result = TrackAttachmentUsage(subpass, AttachRefResolveDst, dst.attachment, dstLayout,
+                    result = TrackAttachmentUsage(
+                        subpass,
+                        AttachRefResolveDst,
+                        dst.attachment,
+                        dstLayout,
+                        nullptr,
                         &pSubpass->syncPreResolve);
                 }
 
@@ -659,8 +690,15 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
 
         const RPImageLayout srcLayout        = { src.layout, Pal::LayoutResolveSrc };
         const RPImageLayout dstLayout        = { dst.layout, Pal::LayoutResolveDst };
+        const RPImageLayout srcStencilLayout = { src.stencilLayout, Pal::LayoutResolveSrc };
+        const RPImageLayout dstStencilLayout = { dst.stencilLayout, Pal::LayoutResolveDst };
 
-            result = TrackAttachmentUsage(subpass, AttachRefResolveSrc, src.attachment, srcLayout,
+            result = TrackAttachmentUsage(
+                subpass,
+                AttachRefResolveSrc,
+                src.attachment,
+                srcLayout,
+                &srcStencilLayout,
                 &pSubpass->syncPreResolve);
 
             if (result == Pal::Result::Success)
@@ -674,7 +712,12 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
 
                 // If depth stencil resovle attachment will be cleared, using top sync point to guarantee metadata init before clear.
                 SyncPointState* pSync = hasClearOp ? &pSubpass->syncTop : &pSubpass->syncPreResolve;
-                result = TrackAttachmentUsage(subpass, AttachRefResolveDst, dst.attachment, dstLayout,
+                result = TrackAttachmentUsage(
+                    subpass,
+                    AttachRefResolveDst,
+                    dst.attachment,
+                    dstLayout,
+                    &dstStencilLayout,
                     pSync);
             }
 
@@ -684,9 +727,11 @@ Pal::Result RenderPassBuilder::BuildResolveAttachmentReferences(
 
                 resolve.src.attachment    = src.attachment;
                 resolve.src.layout        = m_pAttachments[src.attachment].prevReferenceLayout;
+                resolve.src.stencilLayout = m_pAttachments[src.attachment].prevReferenceStencilLayout;
 
                 resolve.dst.attachment    = dst.attachment;
                 resolve.dst.layout        = m_pAttachments[dst.attachment].prevReferenceLayout;
+                resolve.dst.stencilLayout = m_pAttachments[dst.attachment].prevReferenceStencilLayout;
 
                 result = pSubpass->resolves.PushBack(resolve);
 
@@ -721,12 +766,14 @@ Pal::Result RenderPassBuilder::BuildEndState()
     for (uint32_t a = 0; (a < m_attachmentCount) && (result == Pal::Result::Success); ++a)
     {
         const RPImageLayout finalLayout        = { m_pAttachments[a].pDesc->finalLayout, 0 };
+        const RPImageLayout stencilFinalLayout = { m_pAttachments[a].pDesc->stencilFinalLayout, 0 };
 
         result = TrackAttachmentUsage(
             VK_SUBPASS_EXTERNAL,
             AttachRefExternalPostInstance,
             a,
             finalLayout,
+            &stencilFinalLayout,
             &m_endState.syncEnd);
     }
 
@@ -989,6 +1036,7 @@ Pal::Result RenderPassBuilder::TrackAttachmentUsage(
     AttachRefType        refType,
     uint32_t             attachment,
     RPImageLayout        layout,
+    const RPImageLayout* pStencilLayout,
     SyncPointState*      pSync)
 {
     Pal::Result result = Pal::Result::Success;
@@ -1007,14 +1055,20 @@ Pal::Result RenderPassBuilder::TrackAttachmentUsage(
 
     // Detect if an automatic layout transition is needed and insert one to the given sync point if so.  Note that
     // these happen before load ops are triggered (below).
-    if ((pAttachment->prevReferenceLayout != layout)
-        )
+    if ((pAttachment->prevReferenceLayout != layout) ||
+        ((pStencilLayout != nullptr) && (pAttachment->prevReferenceStencilLayout != *pStencilLayout)))
     {
         RPTransitionInfo transition = {};
 
         transition.attachment = attachment;
         transition.prevLayout = pAttachment->prevReferenceLayout;
         transition.nextLayout = layout;
+
+        if (pStencilLayout != nullptr)
+        {
+            transition.prevStencilLayout = pAttachment->prevReferenceStencilLayout;
+            transition.nextStencilLayout = *pStencilLayout;
+        }
 
         if ((subpass != VK_SUBPASS_EXTERNAL) && (pAttachment->firstUseSubpass == subpass))
         {
@@ -1026,6 +1080,11 @@ Pal::Result RenderPassBuilder::TrackAttachmentUsage(
 
         // Track the current layout of this attachment
         pAttachment->prevReferenceLayout = layout;
+
+        if (pStencilLayout != nullptr)
+        {
+            pAttachment->prevReferenceStencilLayout = *pStencilLayout;
+        }
     }
 
     // Track how this attachment was last used

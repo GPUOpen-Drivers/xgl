@@ -70,6 +70,7 @@ struct AttachmentReference
 
     uint32_t              attachment;
     VkImageLayout         layout;
+    VkImageLayout         stencilLayout;
     VkImageAspectFlags    aspectMask;
 };
 
@@ -89,6 +90,8 @@ struct AttachmentDescription
     VkAttachmentStoreOp             stencilStoreOp;
     VkImageLayout                   initialLayout;
     VkImageLayout                   finalLayout;
+    VkImageLayout                   stencilInitialLayout;
+    VkImageLayout                   stencilFinalLayout;
 };
 
 struct SubpassSampleCount

@@ -80,6 +80,7 @@ enum class AppProfile : uint32_t
     SedpEngine,            // Serious Engine (Default)
     Source2Engine,         // Source 2 Engine (Default)
     NitrousEngine,         // Nitrous Engine by Oxide (Default)
+    SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
 };
 
 struct ProfileSettings

@@ -70,7 +70,6 @@ VkResult Fence::Create(
         }
         case VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO:
         {
-            // We don't need to check the handleTypes here.
             break;
         }
         default:

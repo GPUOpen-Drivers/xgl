@@ -712,6 +712,10 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectSingle(
     {
         switch (aspectMask)
         {
+        // VK_FORMAT_G8B8G8R8_422_UNORM|VK_FORMAT_B8G8R8G8_422_UNORM
+        case VK_IMAGE_ASPECT_COLOR_BIT:
+            return Pal::ImageAspect::YCbCr;
+        // Multi Plane Images
         case VK_IMAGE_ASPECT_PLANE_0_BIT:
         case VK_IMAGE_ASPECT_PLANE_1_BIT:
         case VK_IMAGE_ASPECT_PLANE_2_BIT:
@@ -972,6 +976,7 @@ VK_TO_PAL_ENTRY_X(  COMPONENT_SWIZZLE_A,                      ChannelSwizzle::W 
 // such as one returned by VkToPalFormat() function.
 VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
     Pal::SwizzledFormat       format,
+    Pal::SubresRange          subresRange,
     const VkComponentMapping& mapping)
 {
     using Pal::ChannelSwizzle;
@@ -988,7 +993,117 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
     // Copy the unswizzled format
     Pal::SwizzledFormat newFormat = format;
 
-    if (format.format != Pal::ChNumFormat::Undefined)
+    // As spec says, the remapping must be identity for any VkImageView used with a combined image sampler that
+    // enables sampler YCbCr conversion, thus we could totally ignore the setting in VkComponentMapping.
+    // For YCbCr conversions, the remapping is settled in VkSamplerYcbcrConversionCreateInfo, and happens when
+    // the conversion finishes.
+    // Note: AYUV && NV11 are not available in VK_KHR_sampler_ycbcr_conversion extension.
+    if ((format.format >= Pal::ChNumFormat::AYUV) &&
+        (format.format <= Pal::ChNumFormat::P010))
+    {
+        switch (format.format)
+        {
+        case Pal::ChNumFormat::UYVY:
+            newFormat.format = Pal::ChNumFormat::X8Y8_Z8Y8_Unorm;
+            newFormat.swizzle.r = ChannelSwizzle::Z;
+            newFormat.swizzle.g = ChannelSwizzle::Y;
+            newFormat.swizzle.b = ChannelSwizzle::X;
+            newFormat.swizzle.a = ChannelSwizzle::One;
+            break;
+        case Pal::ChNumFormat::VYUY:
+            newFormat.format = Pal::ChNumFormat::X8Y8_Z8Y8_Unorm;
+            newFormat.swizzle.r = ChannelSwizzle::X;
+            newFormat.swizzle.g = ChannelSwizzle::Y;
+            newFormat.swizzle.b = ChannelSwizzle::Z;
+            newFormat.swizzle.a = ChannelSwizzle::One;
+            break;
+        case Pal::ChNumFormat::YUY2:
+            newFormat.format = Pal::ChNumFormat::Y8X8_Y8Z8_Unorm;
+            newFormat.swizzle.r = ChannelSwizzle::Z;
+            newFormat.swizzle.g = ChannelSwizzle::Y;
+            newFormat.swizzle.b = ChannelSwizzle::X;
+            newFormat.swizzle.a = ChannelSwizzle::One;
+            break;
+        case Pal::ChNumFormat::YVY2:
+            newFormat.format = Pal::ChNumFormat::Y8X8_Y8Z8_Unorm;
+            newFormat.swizzle.r = ChannelSwizzle::X;
+            newFormat.swizzle.g = ChannelSwizzle::Y;
+            newFormat.swizzle.b = ChannelSwizzle::Z;
+            newFormat.swizzle.a = ChannelSwizzle::One;
+            break;
+        case Pal::ChNumFormat::YV12:
+            newFormat.format = Pal::ChNumFormat::X8_Unorm;
+            if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
+            {
+                newFormat.swizzle.r = ChannelSwizzle::Zero;
+                newFormat.swizzle.g = ChannelSwizzle::X;
+                newFormat.swizzle.b = ChannelSwizzle::Zero;
+            }
+            else if (subresRange.startSubres.aspect == Pal::ImageAspect::Cb)
+            {
+                newFormat.swizzle.r = ChannelSwizzle::Zero;
+                newFormat.swizzle.g = ChannelSwizzle::Zero;
+                newFormat.swizzle.b = ChannelSwizzle::X;
+            }
+            else if (subresRange.startSubres.aspect == Pal::ImageAspect::Cr)
+            {
+                newFormat.swizzle.r = ChannelSwizzle::X;
+                newFormat.swizzle.g = ChannelSwizzle::Zero;
+                newFormat.swizzle.b = ChannelSwizzle::Zero;
+            }
+            newFormat.swizzle.a = ChannelSwizzle::One;
+            break;
+        case Pal::ChNumFormat::NV12:
+        case Pal::ChNumFormat::NV21:
+            if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
+            {
+                newFormat.format = Pal::ChNumFormat::X8_Unorm;
+                newFormat.swizzle.r = ChannelSwizzle::Zero;
+                newFormat.swizzle.g = ChannelSwizzle::X;
+                newFormat.swizzle.b = ChannelSwizzle::Zero;
+                newFormat.swizzle.a = ChannelSwizzle::One;
+            }
+            else if (subresRange.startSubres.aspect == Pal::ImageAspect::CbCr)
+            {
+                newFormat.format = Pal::ChNumFormat::X8Y8_Unorm;
+                if (format.format == Pal::ChNumFormat::NV12)
+                {
+                    newFormat.swizzle.r = ChannelSwizzle::Y;
+                    newFormat.swizzle.b = ChannelSwizzle::X;
+                }
+                else
+                {
+                    newFormat.swizzle.r = ChannelSwizzle::X;
+                    newFormat.swizzle.b = ChannelSwizzle::Y;
+                }
+                newFormat.swizzle.g = ChannelSwizzle::Zero;
+                newFormat.swizzle.a = ChannelSwizzle::Zero;
+            }
+            break;
+        case Pal::ChNumFormat::P016:
+        case Pal::ChNumFormat::P010:
+            if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
+            {
+                newFormat.format = Pal::ChNumFormat::X16_Unorm;
+                newFormat.swizzle.r = ChannelSwizzle::Zero;
+                newFormat.swizzle.g = ChannelSwizzle::X;
+                newFormat.swizzle.b = ChannelSwizzle::Zero;
+                newFormat.swizzle.a = ChannelSwizzle::One;
+            }
+            else if (subresRange.startSubres.aspect == Pal::ImageAspect::CbCr)
+            {
+                newFormat.format = Pal::ChNumFormat::X16Y16_Unorm;
+                newFormat.swizzle.r = ChannelSwizzle::Y;
+                newFormat.swizzle.g = ChannelSwizzle::Zero;
+                newFormat.swizzle.b = ChannelSwizzle::X;
+                newFormat.swizzle.a = ChannelSwizzle::One;
+            }
+            break;
+        default:
+            break;
+        }
+    }
+    else if (format.format != Pal::ChNumFormat::Undefined)
     {
         // PAL expects a single swizzle which combines the user-defined VkComponentMapping and the format-defined
         // swizzle together.  In Vulkan these are separate, so we must combine them by building the lookup table below

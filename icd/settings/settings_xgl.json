@@ -580,40 +580,6 @@
       "Scope": "Driver"
     },
     {
-      "Name": "PipelineLinkTimeOptMode",
-      "Description": "Controls how PAL's link-time pipeline optimizations are enabled.",
-      "Tags": [
-        "Pipeline Options"
-      ],
-      "Defaults": {
-        "Default": "PipelineLinkTimeOptApiControlled"
-      },
-      "ValidValues": {
-        "IsEnum": true,
-        "Values": [
-          {
-            "Name": "PipelineLinkTimeOptApiControlled",
-            "Value": 0,
-            "Description": "Enabled unless VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT is set."
-          },
-          {
-            "Name": "PipelineLinkTimeOptAlwaysEnabled",
-            "Value": 1,
-            "Description": "Optimizations always enabled."
-          },
-          {
-            "Name": "PipelineLinkTimeOptAlwaysDisabled",
-            "Value": 2,
-            "Description": "Optimizations always disabled."
-          }
-        ],
-        "Name": "PipelineLinkTimeOptMode"
-      },
-      "Scope": "Driver",
-      "Type": "enum",
-      "VariableName": "pipelineLinkTimeOptMode"
-    },
-    {
       "Name": "PipelineFastCompileMode",
       "Description": "Controls how SC 'fast compile mode' (disable optimizations) is enabled",
       "Tags": [
@@ -628,17 +594,17 @@
           {
             "Name": "PipelineFastCompileApiControlled",
             "Value": 0,
-            "Description": "'Fast compile' disabled unless VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT is set"
+            "Description": "'Fast compile' disabled (SC fast optimizations enabled) if VK_PIPELINE_CREATE_DISABLE_OPTIMIZATION_BIT is set."
           },
           {
-            "Name": "PipelineFastCompileAlwaysFast",
+            "Name": "PipelineFastCompileNeverOptimized",
             "Value": 1,
             "Description": "'Fast compile' always enabled (disables SC shader optimization)."
           },
           {
             "Name": "PipelineFastCompileAlwaysOptimized",
             "Value": 2,
-            "Description": "'Fast compile' always disabled (SC default optimizations enabled)."
+            "Description": "'Fast compile' always disabled (SC fast optimizations enabled)."
           }
         ],
         "Name": "PipelineFastCompileMode"
@@ -773,6 +739,19 @@
       },
       "Type": "bool",
       "VariableName": "disableEmbedConstArrays",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ForceDepthClampBasedOnZExport",
+      "Description": "This setting can be used to force depth clamping to be based on Z_EXPORT_ENABLE. It directly affects DISABLE_VIEWPORT_CLAMP bit in h/w register. It should be set only for applications that have perf drops with normal depth clamping beahvior",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "forceDepthClampBasedOnZExport",
       "Scope": "Driver"
     },
     {
@@ -1423,6 +1402,32 @@
       "VariableName": "nggEnableCullDistanceCulling",
       "Name": "NggEnableCullDistanceCulling",
       "Scope": "Driver"
+    },
+    {
+      "Name": "NggDisableCullingVmemInstrThreshold",
+      "Description": "Control the NGG culling hueristic's allowed ratio of VMEM instructions that can be duplicated because of culling. 0 is the compiler's default, not none",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0.0
+      },
+      "Scope": "Driver",
+      "Type": "float",
+      "VariableName": "nggDisableCullingVmemInstrThreshold"
+    },
+    {
+      "Name": "NggDisableCullingValuInstrThreshold",
+      "Description": "Control the NGG culling hueristic's allowed ratio of VALU instructions that can be duplicated because of culling. 0 is the compiler's default, not none",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 0.0
+      },
+      "Scope": "Driver",
+      "Type": "float",
+      "VariableName": "nggDisableCullingValuInstrThreshold"
     },
     {
       "Description": "Force HW to guarantee forward progress per wave on GFX10 0x00000000 - Disable (default) 0x00000001 - Enable for vertex shaders 0x00000002 - Enable for tessellation control shaders 0x00000004 - Enable for tessellation evaluation shaders 0x00000008 - Enable for geometry shaders 0x00000010 - Enable for fragment shaders 0x00000020 - Enable for compute shaders ",
@@ -4280,6 +4285,45 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Override default setting to disable loop unrolls",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideDisableLoopUnrolls",
+      "Name": "OverrideDisableLoopUnrolls",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Use LLVM backend's SI Scheduler instead of the default scheduler",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseSiScheduler",
+      "Name": "OverrideUseSiScheduler",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Allow automatic workgroup reconfigure to take place on compute shaders",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideReconfigWorkgroupLayout",
+      "Name": "OverrideReconfigWorkgroupLayout",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Set the thread-group per CU limit for compute shaders.",
       "Tags": [
         "Shader Tuning"
@@ -4407,45 +4451,6 @@
       },
       "Type": "enum",
       "VariableName": "overrideWgpMode",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Override default setting to disable loop unrolls",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "VariableName": "overrideDisableLoopUnrolls",
-      "Name": "OverrideDisableLoopUnrolls",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "[LLPC ONLY] Use LLVM backend's SI Scheduler instead of the default scheduler",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "VariableName": "overrideUseSiScheduler",
-      "Name": "OverrideUseSiScheduler",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "[LLPC ONLY] Allow automatic workgroup reconfigure to take place on compute shaders",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "VariableName": "overrideReconfigWorkgroupLayout",
-      "Name": "OverrideReconfigWorkgroupLayout",
       "Scope": "Driver"
     },
     {

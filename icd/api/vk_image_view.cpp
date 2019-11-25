@@ -82,7 +82,7 @@ void ImageView::BuildImageSrds(
     Pal::ImageViewInfo info = {};
 
     info.viewType         = VkToPalImageViewType(pCreateInfo->viewType);
-    info.swizzledFormat   = RemapFormatComponents(viewFormat, pCreateInfo->components);
+    info.swizzledFormat   = RemapFormatComponents(viewFormat, subresRange, pCreateInfo->components);
     info.samplePatternIdx = Device::GetDefaultSamplePatternIndex(pImage->GetImageSamples());
     info.texOptLevel      = VkToPalTexFilterQuality(pDevice->GetRuntimeSettings().vulkanTexFilterQuality);
 
@@ -280,6 +280,7 @@ VkResult ImageView::Create(
     {
         const VkStructHeader*                pHeader;
         const VkImageViewUsageCreateInfo*    pUsageInfo;
+        const VkSamplerYcbcrConversionInfo*  pVkSamplerYcbcrConversionInfo;
     };
 
     VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);

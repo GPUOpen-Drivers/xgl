@@ -189,14 +189,20 @@ VkResult ComputePipeline::Create(
             nullptr);
     }
 
+    // Get the pipeline and shader size from PAL and allocate memory.
     size_t pipelineSize = 0;
     void*  pSystemMem   = nullptr;
 
+    Pal::Result palResult = Pal::Result::Success;
+
     if (result == VK_SUCCESS)
     {
-        // Get the pipeline and shader size from PAL and allocate memory.
+        localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[DefaultDeviceIndex];
+        localPipelineInfo.pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex];
+
         pipelineSize =
-            pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, nullptr);
+            pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, &palResult);
+        VK_ASSERT(palResult == Pal::Result::Success);
 
         pSystemMem = pAllocator->pfnAllocation(
             pAllocator->pUserData,
@@ -215,8 +221,7 @@ VkResult ComputePipeline::Create(
 
     if (result == VK_SUCCESS)
     {
-        Pal::Result palResult = Pal::Result::Success;
-        void*       pPalMem   = Util::VoidPtrInc(pSystemMem, sizeof(ComputePipeline));
+        void* pPalMem = Util::VoidPtrInc(pSystemMem, sizeof(ComputePipeline));
 
         for (uint32_t deviceIdx = 0;
             ((deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success));

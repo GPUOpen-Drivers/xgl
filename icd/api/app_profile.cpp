@@ -289,6 +289,18 @@ constexpr AppProfilePatternEntry AppNameEliteDangerous =
     "elitedangerous64.exe"
 };
 
+constexpr AppProfilePatternEntry AppNameSaschaWillemsExamples =
+{
+    PatternAppNameLower,
+    "vulkanexample"
+};
+
+constexpr AppProfilePatternEntry AppEngineSaschaWillemsExamples =
+{
+    PatternEngineNameLower,
+    "vulkanexample"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -554,6 +566,15 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameWWZ,
             AppEngineHusky,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::SaschaWillemsExamples,
+        {
+            AppNameSaschaWillemsExamples,
+            AppEngineSaschaWillemsExamples,
             PatternEnd
         }
     },
@@ -947,6 +968,7 @@ void ReloadAppProfileSettings(
 
     if (pExeNameLower != nullptr)
     {
+
         bool foundProfile = false;
         // User 3D has highest priority, so query it first
         foundProfile = QueryPalProfile(pInstance,

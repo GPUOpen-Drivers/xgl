@@ -194,13 +194,6 @@ VkResult PipelineCompiler::CreateShaderCache(
     VkResult                     result         = VK_SUCCESS;
     PipelineCompilerType         cacheType      = GetShaderCacheType();
 
-    {
-        result = m_compilerSolutionLlpc.CreateShaderCache(pInitialData,
-                                                          initialDataSize,
-                                                          pShaderCacheMem,
-                                                          pShaderCache);
-    }
-
     return result;
 }
 

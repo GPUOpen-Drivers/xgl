@@ -58,6 +58,7 @@ struct RPAttachmentReference
 {
     uint32_t           attachment;
     RPImageLayout      layout;
+    RPImageLayout      stencilLayout;
 };
 
 // Describes information about an automatic layout transition happening inside a render pass instance.
@@ -66,6 +67,8 @@ struct RPTransitionInfo
     uint32_t      attachment;        // Attachment being transitioned
     RPImageLayout prevLayout;        // Previous layout
     RPImageLayout nextLayout;        // Next layout
+    RPImageLayout prevStencilLayout; // Previous stencil layout
+    RPImageLayout nextStencilLayout; // Next stencil layout
 
     union
     {

@@ -198,6 +198,14 @@ static const char* ImageLayoutString(
             return compact ? "PREINIT" : "PREINITIALIZED";
         case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
             return compact ? "PRESENT_SRC" : "PRESENT_SRC_KHR";
+        case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR:
+            return compact ? "D_OPT" : "DEPTH_ATTACHMENT_OPTIMAL";
+        case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR:
+            return compact ? "D_RD_OPT" : "DEPTH_READ_ONLY_OPTIMAL";
+        case VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR:
+            return compact ? "S_OPT" : "STENCIL_ATTACHMENT_OPTIMAL";
+        case VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR:
+            return compact ? "S_RD_OPT" : "STENCIL_READ_ONLY_OPTIMAL";
         default:
             VK_NEVER_CALLED();
             return "<unknown image layout>";
@@ -220,7 +228,7 @@ void RenderPassLogger::LogAttachmentReference(
     const AttachmentReference& reference)
 {
     LogAttachment(reference.attachment);
-    Log(" in %s", ImageLayoutString(reference.layout, false));
+    Log(" in %s, %s", ImageLayoutString(reference.layout, false), ImageLayoutString(reference.stencilLayout, false));
     Log(" aspectMask ");
     LogImageAspectMask(reference.aspectMask, false);
 }
@@ -232,6 +240,8 @@ void RenderPassLogger::LogAttachmentReference(
     LogAttachment(reference.attachment);
     Log(" in ");
     LogImageLayout(reference.layout);
+    Log(", ");
+    LogImageLayout(reference.stencilLayout);
 }
 
 // =====================================================================================================================
@@ -587,6 +597,8 @@ void RenderPassLogger::LogRenderPassCreateInfo(
         Log("   .stencilStoreOp       = %s\n", StoreOpString(desc.stencilStoreOp));
         Log("   .initialLayout        = %s\n", ImageLayoutString(desc.initialLayout, false));
         Log("   .finalLayout          = %s\n", ImageLayoutString(desc.finalLayout, false));
+        Log("   .stencilInitialLayout = %s\n", ImageLayoutString(desc.stencilInitialLayout, false));
+        Log("   .stencilFinalLayout   = %s\n", ImageLayoutString(desc.stencilFinalLayout, false));
         Log("}\n");
     }
 
@@ -978,6 +990,8 @@ void RenderPassLogger::LogExecuteRPSyncPoint(
         Log(    "    .attachment        = "); LogAttachment(attachment); Log("\n");
         Log(    "    .prevLayout        = "); LogImageLayout(tr.prevLayout); Log("\n");
         Log(    "    .nextLayout        = "); LogImageLayout(tr.nextLayout); Log("\n");
+        Log(    "    .prevStencilLayout = "); LogImageLayout(tr.prevStencilLayout); Log("\n");
+        Log(    "    .nextStencilLayout = "); LogImageLayout(tr.nextStencilLayout); Log("\n");
     }
 
     LogEndSource();

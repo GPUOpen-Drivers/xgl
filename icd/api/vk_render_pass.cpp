@@ -55,6 +55,8 @@ static void GenerateHashFromAttachmentDescription(
     pHasher->Update(desc.stencilStoreOp);
     pHasher->Update(desc.initialLayout);
     pHasher->Update(desc.finalLayout);
+    pHasher->Update(desc.stencilInitialLayout);
+    pHasher->Update(desc.stencilFinalLayout);
 }
 
 // =====================================================================================================================
@@ -64,6 +66,7 @@ static void GenerateHashFromAttachmentReference(
 {
     pHasher->Update(desc.attachment);
     pHasher->Update(desc.layout);
+    pHasher->Update(desc.stencilLayout);
     pHasher->Update(desc.aspectMask);
 }
 
@@ -167,6 +170,7 @@ AttachmentReference::AttachmentReference()
     :
     attachment   (VK_ATTACHMENT_UNUSED),
     layout       (VK_IMAGE_LAYOUT_UNDEFINED),
+    stencilLayout(VK_IMAGE_LAYOUT_UNDEFINED),
     aspectMask   (VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM)
 {
 }
@@ -176,6 +180,7 @@ void AttachmentReference::Init(const VkAttachmentReference& attachRef)
 {
     attachment    = attachRef.attachment;
     layout        = attachRef.layout;
+    stencilLayout = attachRef.layout;
     aspectMask    = VK_IMAGE_ASPECT_FLAG_BITS_MAX_ENUM;
 }
 
@@ -185,6 +190,27 @@ void AttachmentReference::Init(const VkAttachmentReference2KHR& attachRef)
     attachment    = attachRef.attachment;
     layout        = attachRef.layout;
     aspectMask    = attachRef.aspectMask;
+    stencilLayout = attachRef.layout;
+
+    union
+    {
+        const VkStructHeader*                        pHeader;
+        const VkAttachmentReference2KHR*             pAttachmentReference;
+        const VkAttachmentReferenceStencilLayoutKHR* pStencilLayout;
+    };
+
+    for (pAttachmentReference = &attachRef; pHeader != nullptr; pHeader = pHeader->pNext)
+    {
+        switch (static_cast<uint32_t>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT_KHR:
+            stencilLayout = pStencilLayout->stencilLayout;
+            break;
+        default:
+            // Skip any unknown extension structures.
+            break;
+        }
+    }
 }
 
 // =====================================================================================================================
@@ -198,7 +224,9 @@ AttachmentDescription::AttachmentDescription()
     stencilLoadOp       (VK_ATTACHMENT_LOAD_OP_DONT_CARE),
     stencilStoreOp      (VK_ATTACHMENT_STORE_OP_DONT_CARE),
     initialLayout       (VK_IMAGE_LAYOUT_UNDEFINED),
-    finalLayout         (VK_IMAGE_LAYOUT_UNDEFINED)
+    finalLayout         (VK_IMAGE_LAYOUT_UNDEFINED),
+    stencilInitialLayout(VK_IMAGE_LAYOUT_UNDEFINED),
+    stencilFinalLayout  (VK_IMAGE_LAYOUT_UNDEFINED)
 {
 }
 
@@ -214,6 +242,8 @@ void AttachmentDescription::Init(const VkAttachmentDescription& attachDesc)
     stencilStoreOp       = attachDesc.stencilStoreOp;
     initialLayout        = attachDesc.initialLayout;
     finalLayout          = attachDesc.finalLayout;
+    stencilInitialLayout = attachDesc.initialLayout;
+    stencilFinalLayout   = attachDesc.finalLayout;
 }
 
 // =====================================================================================================================
@@ -228,6 +258,29 @@ void AttachmentDescription::Init(const VkAttachmentDescription2KHR& attachDesc)
     stencilStoreOp       = attachDesc.stencilStoreOp;
     initialLayout        = attachDesc.initialLayout;
     finalLayout          = attachDesc.finalLayout;
+    stencilInitialLayout = attachDesc.initialLayout;
+    stencilFinalLayout   = attachDesc.finalLayout;
+
+    union
+    {
+        const VkStructHeader*                          pHeader;
+        const VkAttachmentDescription2KHR*             pAttachmentDescription;
+        const VkAttachmentDescriptionStencilLayoutKHR* pStencilLayout;
+    };
+
+    for (pAttachmentDescription = &attachDesc; pHeader != nullptr; pHeader = pHeader->pNext)
+    {
+        switch (static_cast<uint32_t>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT_KHR:
+            stencilInitialLayout = pStencilLayout->stencilInitialLayout;
+            stencilFinalLayout   = pStencilLayout->stencilFinalLayout;
+            break;
+        default:
+            // Skip any unknown extension structures.
+            break;
+        }
+    }
 }
 
 // =====================================================================================================================

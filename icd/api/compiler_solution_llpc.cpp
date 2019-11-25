@@ -29,6 +29,7 @@
 ***********************************************************************************************************************
 */
 #include "include/compiler_solution_llpc.h"
+#include "include/vk_device.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_shader.h"
 #include "include/vk_pipeline_cache.h"
@@ -108,6 +109,7 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
     llpcCacheCreateInfo.pInitialData    = pInitialData;
     llpcCacheCreateInfo.initialDataSize = initialDataSize;
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 38
     Llpc::Result llpcResult = m_pLlpc->CreateShaderCache(
         &llpcCacheCreateInfo,
         &shaderCachePtr.pLlpcShaderCache);
@@ -120,6 +122,9 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
     {
         result = VK_ERROR_INITIALIZATION_FAILED;
     }
+#else
+    result = VK_ERROR_INITIALIZATION_FAILED;
+#endif
 
     return result;
 }
@@ -505,9 +510,21 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     llpcOptions[numOptions++] = "-use-gpu-divergence-analysis";
 
     if ((appProfile == AppProfile::Talos) ||
-        (appProfile == AppProfile::WolfensteinII)) {
+        (appProfile == AppProfile::WolfensteinII))
+    {
         llpcOptions[numOptions++] = "-unroll-threshold=2150";
-    } else {
+    }
+    else if (appProfile == AppProfile::WarHammerII)
+    {
+        llpcOptions[numOptions++] = "-unroll-threshold=1150";
+    }
+    else if ((appProfile == AppProfile::SeriousSamFusion) ||
+               (appProfile == AppProfile::Doom))
+    {
+        llpcOptions[numOptions++] = "-unroll-threshold=800";
+    }
+    else
+    {
         llpcOptions[numOptions++] = "-unroll-threshold=700";
     }
 

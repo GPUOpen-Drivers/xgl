@@ -57,6 +57,8 @@ option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)
 option(XGL_BUILD_LIT "Build with Lit test?" OFF)
 option(XGL_BUILD_GFX10 "Build open source vulkan for GFX10" ON)
 
+cmake_dependent_option(XGL_BUILD_NAVI14 "Build open source vulkan for Navi14" ON "XGL_BUILD_GFX10" OFF)
+
 #if VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES
 option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
 #endif
@@ -119,6 +121,18 @@ endif()
 
 set(ICD_LLPC_CLIENT_MAJOR_VERSION ${LLPC_MAJOR_VERSION})
 
+# Handle MINOR_VERSION in the same way
+file(STRINGS icd/make/importdefs PAL_MINOR_VERSION REGEX "^ICD_PAL_CLIENT_MINOR_VERSION = [0-9]+")
+
+if(PAL_MINOR_VERSION STREQUAL "")
+    message(STATUS "Failed to find ICD_PAL_CLIENT_MINOR_VERSION")
+else()
+    string(REGEX REPLACE "ICD_PAL_CLIENT_MINOR_VERSION = " "" PAL_MINOR_VERSION ${PAL_MINOR_VERSION})
+    message(STATUS "Detected ICD_PAL_CLIENT_MINOR_VERSION is " ${PAL_MINOR_VERSION})
+endif()
+
+set(ICD_PAL_CLIENT_MINOR_VERSION ${PAL_MINOR_VERSION})
+
 # GPUOPEN
 if(ICD_GPUOPEN_DEVMODE_BUILD)
     file(STRINGS icd/make/importdefs GPUOPEN_MAJOR_VERSION REGEX "^ICD_GPUOPEN_CLIENT_MAJOR_VERSION = [0-9]+")
@@ -136,6 +150,7 @@ endif()
 set(PAL_BUILD_JEMALLOC OFF CACHE BOOL "Force jemalloc off" FORCE)
 set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/../pal CACHE PATH "Specify the path to the PAL project.")
 set(PAL_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_PAL_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
+set(PAL_CLIENT_INTERFACE_MINOR_VERSION ${ICD_PAL_CLIENT_MINOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(PAL_CLIENT "VULKAN" CACHE STRING "${PROJECT_NAME} override." FORCE)
 
 if(ICD_BUILD_SPVONLY)
@@ -148,6 +163,7 @@ set(PAL_BUILD_VIDEO ${ICD_BUILD_VIDEO} CACHE BOOL "${PROJECT_NAME} override." FO
 set(PAL_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(PAL_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 # LLVM
 # LLVM will be switched to llvm monorepo. Check if the new llvm exist first and fallback to
@@ -185,14 +201,22 @@ set(PERL_CMD ${PERL_EXECUTABLE})
 ### Add Subdirectories #################################################################################################
 
 ### Metrohash ##########################################################
-set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../third_party/metrohash CACHE PATH "The path of metrohash.")
+if(EXISTS ${PROJECT_SOURCE_DIR}/../MetroHash)
+    set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../MetroHash CACHE PATH "The path of metrohash.")
+else()
+    set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../third_party/metrohash CACHE PATH "The path of metrohash.")
+endif()
 
 if(EXISTS ${XGL_METROHASH_PATH} AND NOT TARGET metrohash)
     add_subdirectory(${XGL_METROHASH_PATH} ${PROJECT_BINARY_DIR}/metrohash)
 endif()
 
 ### cwpack #############################################################
-set(XGL_CWPACK_PATH ${PROJECT_SOURCE_DIR}/../third_party/cwpack CACHE PATH "The path of cwpack.")
+if(EXISTS ${PROJECT_SOURCE_DIR}/../CWPack)
+    set(XGL_CWPACK_PATH ${PROJECT_SOURCE_DIR}/../CWPack CACHE PATH "The path of cwpack.")
+else()
+    set(XGL_CWPACK_PATH ${PROJECT_SOURCE_DIR}/../third_party/cwpack CACHE PATH "The path of cwpack.")
+endif()
 
 if(EXISTS ${XGL_CWPACK_PATH} AND NOT TARGET cwpack)
     add_subdirectory(${XGL_CWPACK_PATH} ${PROJECT_BINARY_DIR}/cwpack)
@@ -204,6 +228,7 @@ set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to 
 set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(LLPC_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 if(ICD_BUILD_LLPC)
     set(LLVM_ENABLE_ASSERTIONS ${CMAKE_BUILD_TYPE_DEBUG} CACHE BOOL Force)
     set(LLVM_TARGETS_TO_BUILD AMDGPU CACHE STRING Force)

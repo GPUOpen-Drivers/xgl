@@ -39,6 +39,7 @@
 #include "include/vk_cmd_pool.h"
 #include "include/vk_event.h"
 #include "include/vk_dispatch.h"
+#include "include/vk_device.h"
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_render_pass.h"
 #include "include/vk_utils.h"

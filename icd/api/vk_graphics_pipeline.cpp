@@ -1292,14 +1292,18 @@ VkResult GraphicsPipeline::Create(
     RenderStateCache* pRSCache = pDevice->GetRenderStateCache();
 
     // Get the pipeline size from PAL and allocate memory.
-    const size_t palSize =
-        pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(localPipelineInfo.pipeline, &palResult);
-    VK_ASSERT(palResult == Pal::Result::Success);
-
-    void* pSystemMem = nullptr;
+    void*  pSystemMem = nullptr;
+    size_t palSize    = 0;
 
     if (result == VK_SUCCESS)
     {
+        localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[DefaultDeviceIndex];
+        localPipelineInfo.pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex];
+
+        palSize =
+            pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(localPipelineInfo.pipeline, &palResult);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
         pSystemMem = pAllocator->pfnAllocation(
             pAllocator->pUserData,
             sizeof(GraphicsPipeline) + (palSize * numPalDevices),
