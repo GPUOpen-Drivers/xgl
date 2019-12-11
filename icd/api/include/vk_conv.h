@@ -38,6 +38,7 @@
 #include "palCmdBuffer.h"
 #include "palDepthStencilState.h"
 #include "palDevice.h"
+#include "palEventDefs.h"
 #include "palMath.h"
 #include "palImage.h"
 #include "palPipeline.h"
@@ -609,6 +610,14 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
         VK_ASSERT(aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
 
         aspectMask = 0;
+
+        // Formats e.g. VK_FORMAT_G8B8G8R8_422_UNORM or other single plane formats could be
+        // used with Color/YCbCr Aspect, but if it is wrapped with YUY2 expilicitly from pal,
+        // we should redirect COLOR_BIT to YCbCr for compatilble with PAL handling.
+        if (Pal::Formats::IsYuv(format))
+        {
+            return Pal::ImageAspect::YCbCr;
+        }
 
         return Pal::ImageAspect::Color;
     }
@@ -2272,16 +2281,9 @@ VK_INLINE Pal::ImageUsageFlags VkToPalImageUsageFlags(VkImageUsageFlags imageUsa
                                        ((imageUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT) &&
                                         (maskSetShaderWriteForTransferDst & imageUsageFlags)))        ? 1 : 0;
 
-    //    //  Vulkan client driver can set resolveSrc usage flag bit  when msaa image setting Transfer_Src bit. Pal will use
-    //    // resolveSrc and shaderRead flag as well as other conditions to decide whether msaa surface and fmask is tc-compatible.
-    //    palImageUsageFlags.resolveSrc   = ((samples > 1) && (imageUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
-
-    // For some reasons, see CL#1414376, we cannot set resolveSrc flag for all images temporary. However, a resolve
-    // dst flag is essential for Pal to create htile lookup table for depth stencil image on Gfx9. So we set
-    // resolve dst floag for msaa depth-stencil image with VK_IMAGE_USAGE_TRANSFER_SRC_BIT bit set.
-    palImageUsageFlags.resolveSrc = ((samples > 1) &&
-                                    (imageUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT) &&
-                                    Formats::IsDepthStencilFormat(format));
+    // Vulkan client driver can set resolveSrc usage flag bit  when msaa image setting Transfer_Src bit. Pal will use
+    // resolveSrc and shaderRead flag as well as other conditions to decide whether msaa surface and fmask is tc-compatible.
+    palImageUsageFlags.resolveSrc = ((samples > 1) && (imageUsageFlags & VK_IMAGE_USAGE_TRANSFER_SRC_BIT));
 
     palImageUsageFlags.resolveDst   = ((samples == 1) && (imageUsageFlags & VK_IMAGE_USAGE_TRANSFER_DST_BIT));
     palImageUsageFlags.colorTarget  = (imageUsageFlags & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT)         ? 1 : 0;
@@ -2929,6 +2931,57 @@ VK_INLINE Pal::ResolveMode VkToPalResolveMode(
         VK_NEVER_CALLED();
         return Pal::ResolveMode::Average;
     }
+}
+
+VK_INLINE Pal::ResourceDescriptionDescriptorType VkDescriptorTypeToPalDescriptorType(
+    VkDescriptorType vkType)
+{
+    Pal::ResourceDescriptionDescriptorType retType = Pal::ResourceDescriptionDescriptorType::Count;
+    switch (vkType)
+    {
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_SAMPLER:
+            retType = Pal::ResourceDescriptionDescriptorType::Sampler;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
+            retType = Pal::ResourceDescriptionDescriptorType::CombinedImageSampler; break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
+            retType = Pal::ResourceDescriptionDescriptorType::SampledImage;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+            retType = Pal::ResourceDescriptionDescriptorType::StorageImage;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
+            retType = Pal::ResourceDescriptionDescriptorType::UniformTexelBuffer;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
+            retType = Pal::ResourceDescriptionDescriptorType::StorageTexelBuffer;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
+            retType = Pal::ResourceDescriptionDescriptorType::UniformBuffer;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
+            retType = Pal::ResourceDescriptionDescriptorType::StorageBuffer;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            retType = Pal::ResourceDescriptionDescriptorType::UniformBufferDynamic;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+            retType = Pal::ResourceDescriptionDescriptorType::StorageBufferDynamic;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
+            retType = Pal::ResourceDescriptionDescriptorType::InputAttachment;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
+            retType = Pal::ResourceDescriptionDescriptorType::InlineUniformBlock;
+            break;
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+            retType = Pal::ResourceDescriptionDescriptorType::AccelerationStructure;
+            break;
+        default:
+            retType = Pal::ResourceDescriptionDescriptorType::Count;
+            break;
+    }
+    return retType;
 }
 
 } // namespace vk

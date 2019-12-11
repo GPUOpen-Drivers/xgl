@@ -538,6 +538,59 @@ void PipelineCompiler::ReplacePipelineIsaCode(
 }
 
 // =====================================================================================================================
+// Checks PAL Pipeline cache for existing pipeline binary.
+Util::Result PipelineCompiler::GetCachedPipelineBinary(
+    const Util::MetroHash::Hash* pCacheId,
+    const PipelineBinaryCache*   pPipelineBinaryCache,
+    size_t*                      pPipelineBinarySize,
+    const void**                 ppPipelineBinary,
+    bool*                        pIsUserCacheHit,
+    bool*                        pIsInternalCacheHit,
+    bool*                        pElfWasCached,
+    PipelineCreationFeedback*    pPipelineFeedback)
+{
+    Util::Result cacheResult = Util::Result::Success;
+
+    if (pPipelineBinaryCache != nullptr)
+    {
+        cacheResult = pPipelineBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, ppPipelineBinary);
+        if (cacheResult == Util::Result::Success)
+        {
+            *pIsUserCacheHit = true;
+            pPipelineFeedback->hitApplicationCache = true;
+        }
+    }
+    m_cacheAttempts++;
+
+    if (m_pBinaryCache != nullptr)
+    {
+        // If user cache is already hit, we just need query if it is in internal cache,
+        // don't need heavy loading work.
+        if (*pIsUserCacheHit)
+        {
+            Util::QueryResult query = {};
+            cacheResult = m_pBinaryCache->QueryPipelineBinary(pCacheId, &query);
+        }
+        else
+        {
+            cacheResult = m_pBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, ppPipelineBinary);
+        }
+        if (cacheResult == Util::Result::Success)
+        {
+            *pIsInternalCacheHit = true;
+        }
+    }
+    if (*pIsUserCacheHit || *pIsInternalCacheHit)
+    {
+        *pElfWasCached = true;
+        cacheResult = Util::Result::Success;
+        m_cacheHits++;
+    }
+
+    return cacheResult;
+}
+
+// =====================================================================================================================
 // Creates graphics pipeline binary.
 VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     Device*                             pDevice,
@@ -650,47 +703,11 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         hash.Update(pCreateInfo->compilerType);
         hash.Finalize(pCacheId->bytes);
 
-        const void* pPipelineBinary = nullptr;
-
-        if (pPipelineBinaryCache != nullptr)
+        cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
+            &isUserCacheHit, &isInternalCacheHit, &pCreateInfo->elfWasCached, &pCreateInfo->pipelineFeedback);
+        if (cacheResult == Util::Result::Success)
         {
-            cacheResult = pPipelineBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, &pPipelineBinary);
-            if (cacheResult == Util::Result::Success)
-            {
-                isUserCacheHit = true;
-                pCreateInfo->pipelineFeedback.hitApplicationCache = true;
-                *ppPipelineBinary = pPipelineBinary;
-            }
-        }
-        m_cacheAttempts++;
-
-        if (m_pBinaryCache != nullptr)
-        {
-            // If user cache is already hit, we just need query if it is in internal cache,
-            // don't need heavy loading work.
-            if (isUserCacheHit)
-            {
-                Util::QueryResult query  = {};
-                cacheResult = m_pBinaryCache->QueryPipelineBinary(pCacheId, &query);
-            }
-            else
-            {
-                cacheResult = m_pBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, &pPipelineBinary);
-            }
-            if (cacheResult == Util::Result::Success)
-            {
-                isInternalCacheHit = true;
-                if (!isUserCacheHit)
-                {
-                    *ppPipelineBinary = pPipelineBinary;
-                }
-            }
-        }
-        if (isUserCacheHit || isInternalCacheHit)
-        {
-            pCreateInfo->elfWasCached = true;
-            shouldCompile             = false;
-            m_cacheHits++;
+            shouldCompile = false;
         }
 
         cacheTime = Util::GetPerfCpuTime() - startTime;
@@ -856,47 +873,11 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         hash.Update(pCreateInfo->compilerType);
         hash.Finalize(pCacheId->bytes);
 
-        const void* pPipelineBinary = nullptr;
-
-        if (pPipelineBinaryCache != nullptr)
+        cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
+            &isUserCacheHit, &isInternalCacheHit, &pCreateInfo->elfWasCached, &pCreateInfo->pipelineFeedback);
+        if (cacheResult == Util::Result::Success)
         {
-            cacheResult = pPipelineBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, &pPipelineBinary);
-            if (cacheResult == Util::Result::Success)
-            {
-                isUserCacheHit = true;
-                pCreateInfo->pipelineFeedback.hitApplicationCache = true;
-                *ppPipelineBinary = pPipelineBinary;
-            }
-        }
-        m_cacheAttempts++;
-
-        if (m_pBinaryCache != nullptr)
-        {
-            // If user cache is already hit, we just need query if it is in internal cache,
-            // don't need heavy loading work.
-            if (isUserCacheHit)
-            {
-                Util::QueryResult query  = {};
-                cacheResult = m_pBinaryCache->QueryPipelineBinary(pCacheId, &query);
-            }
-            else
-            {
-                cacheResult = m_pBinaryCache->LoadPipelineBinary(pCacheId, pPipelineBinarySize, &pPipelineBinary);
-            }
-            if (cacheResult == Util::Result::Success)
-            {
-                isInternalCacheHit = true;
-                if (!isUserCacheHit)
-                {
-                    *ppPipelineBinary = pPipelineBinary;
-                }
-            }
-        }
-        if (isUserCacheHit || isInternalCacheHit)
-        {
-            pCreateInfo->elfWasCached = true;
-            shouldCompile             = false;
-            m_cacheHits++;
+            shouldCompile = false;
         }
 
         cacheTime = Util::GetPerfCpuTime() - startTime;
@@ -1440,7 +1421,8 @@ void PipelineCompiler::ApplyPipelineOptions(
 #endif
     }
 
-    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT))
+    if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT) ||
+        pDevice->IsScalarBlockLayoutEnabled())
     {
         pOptions->scalarBlockLayout = true;
     }

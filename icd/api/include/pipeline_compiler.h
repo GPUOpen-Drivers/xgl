@@ -199,6 +199,16 @@ private:
         PipelineCompilerType      compilerType,
         Llpc::PipelineShaderInfo* pShaderInfo,
         ShaderModuleHandle*       pShaderModule);
+
+    Util::Result GetCachedPipelineBinary(
+        const Util::MetroHash::Hash* pCacheId,
+        const PipelineBinaryCache*   pPipelineBinaryCache,
+        size_t*                      pPipelineBinarySize,
+        const void**                 ppPipelineBinary,
+        bool*                        pIsUserCacheHit,
+        bool*                        pIsInternalCacheHit,
+        bool*                        pElfWasCached,
+        PipelineCreationFeedback*    pPipelineFeedback);
     // -----------------------------------------------------------------------------------------------------------------
 
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object

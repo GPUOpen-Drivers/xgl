@@ -107,6 +107,18 @@ endif()
 
 set(ICD_PAL_CLIENT_MAJOR_VERSION ${PAL_MAJOR_VERSION})
 
+# Handle MINOR_VERSION in the same way
+file(STRINGS icd/make/importdefs PAL_MINOR_VERSION REGEX "^ICD_PAL_CLIENT_MINOR_VERSION = [0-9]+")
+
+if(PAL_MINOR_VERSION STREQUAL "")
+    message(STATUS "Failed to find ICD_PAL_CLIENT_MINOR_VERSION")
+else()
+    string(REGEX REPLACE "ICD_PAL_CLIENT_MINOR_VERSION = " "" PAL_MINOR_VERSION ${PAL_MINOR_VERSION})
+    message(STATUS "Detected ICD_PAL_CLIENT_MINOR_VERSION is " ${PAL_MINOR_VERSION})
+endif()
+
+set(ICD_PAL_CLIENT_MINOR_VERSION ${PAL_MINOR_VERSION})
+
 # This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the LLPC interface
 # that the ICD supports.  LLPC uses this value to enable backwards-compatibility for older interface versions.  It must
 # be updated on each LLPC promotion after handling all of the interface changes described in llpc.h
@@ -120,18 +132,6 @@ else()
 endif()
 
 set(ICD_LLPC_CLIENT_MAJOR_VERSION ${LLPC_MAJOR_VERSION})
-
-# Handle MINOR_VERSION in the same way
-file(STRINGS icd/make/importdefs PAL_MINOR_VERSION REGEX "^ICD_PAL_CLIENT_MINOR_VERSION = [0-9]+")
-
-if(PAL_MINOR_VERSION STREQUAL "")
-    message(STATUS "Failed to find ICD_PAL_CLIENT_MINOR_VERSION")
-else()
-    string(REGEX REPLACE "ICD_PAL_CLIENT_MINOR_VERSION = " "" PAL_MINOR_VERSION ${PAL_MINOR_VERSION})
-    message(STATUS "Detected ICD_PAL_CLIENT_MINOR_VERSION is " ${PAL_MINOR_VERSION})
-endif()
-
-set(ICD_PAL_CLIENT_MINOR_VERSION ${PAL_MINOR_VERSION})
 
 # GPUOPEN
 if(ICD_GPUOPEN_DEVMODE_BUILD)

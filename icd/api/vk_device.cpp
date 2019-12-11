@@ -226,6 +226,7 @@ Device::Device(
     m_pBarrierFilterLayer(nullptr),
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue)
+    , m_scalarBlockLayoutEnabled(false)
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
 
@@ -399,6 +400,7 @@ VkResult Device::Create(
     const VkPhysicalDeviceFeatures*   pEnabledFeatures                = pCreateInfo->pEnabledFeatures;
     VkMemoryOverallocationBehaviorAMD overallocationBehavior          = VK_MEMORY_OVERALLOCATION_BEHAVIOR_DEFAULT_AMD;
     bool                              deviceCoherentMemoryEnabled     = false;
+    bool                              scalarBlockLayoutEnabled        = false;
 
     for (pDeviceCreateInfo = pCreateInfo; ((pHeader != nullptr) && (vkResult == VK_SUCCESS)); pHeader = pHeader->pNext)
     {
@@ -534,6 +536,12 @@ VkResult Device::Create(
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceScalarBlockLayoutFeaturesEXT>(
                 pPhysicalDevice,
                 reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeaturesEXT*>(pHeader));
+
+            if ((vkResult == VK_SUCCESS) &&
+                reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeaturesEXT*>(pHeader)->scalarBlockLayout)
+            {
+                scalarBlockLayoutEnabled = true;
+            }
 
             break;
         }
@@ -985,7 +993,8 @@ VkResult Device::Create(
                 &pDispatchableQueues[0][0],
                 enabledDeviceExtensions,
                 overallocationBehavior,
-                deviceCoherentMemoryEnabled);
+                deviceCoherentMemoryEnabled,
+                scalarBlockLayoutEnabled);
 
             // If we've failed to Initialize, make sure we destroy anything we might have allocated.
             if (vkResult != VK_SUCCESS)
@@ -1009,7 +1018,8 @@ VkResult Device::Initialize(
     DispatchableQueue**                     pQueues,
     const DeviceExtensions::Enabled&        enabled,
     const VkMemoryOverallocationBehaviorAMD overallocationBehavior,
-    const bool                              deviceCoherentMemoryEnabled)
+    const bool                              deviceCoherentMemoryEnabled,
+    bool                                    scalarBlockLayoutEnabled)
 {
     // Initialize the internal memory manager
     VkResult result = m_internalMemMgr.Init();
@@ -1116,6 +1126,7 @@ VkResult Device::Initialize(
         deviceProps.engineProperties[Pal::EngineTypeUniversal].minTimestampAlignment;
 
     m_deviceCoherentMemoryEnabled = deviceCoherentMemoryEnabled;
+    m_scalarBlockLayoutEnabled = scalarBlockLayoutEnabled;
 
     if (result == VK_SUCCESS)
     {

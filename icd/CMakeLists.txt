@@ -120,10 +120,6 @@ endif()
 
 # Configure Vulkan SDK version definitions
 
-set(SDK VKI_SDK_1_1)
-
-target_compile_definitions(xgl PRIVATE ${SDK}=1)
-
 # Enable relevant GPUOpen preprocessor definitions
 if(ICD_GPUOPEN_DEVMODE_BUILD)
     target_compile_definitions(xgl PRIVATE ICD_GPUOPEN_DEVMODE_BUILD)

@@ -312,7 +312,8 @@ public:
         DispatchableQueue**                         pQueues,
         const DeviceExtensions::Enabled&            enabled,
         const VkMemoryOverallocationBehaviorAMD     overallocationBehavior,
-        const bool                                  deviceCoherentMemoryEnabled);
+        const bool                                  deviceCoherentMemoryEnabled,
+        bool                                        scalarBlockLayoutEnabled);
 
     void InitDispatchTable();
 
@@ -375,6 +376,11 @@ public:
     VK_INLINE uint32_t GetMemoryTypeMask() const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMask();
+    }
+
+    VK_INLINE uint32_t GetMemoryTypeMaskMatching(VkMemoryPropertyFlags flags) const
+    {
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskMatching(flags);
     }
 
     VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
@@ -577,6 +583,11 @@ public:
 
     void UpdateFeatureSettings();
 
+    VK_INLINE bool IsScalarBlockLayoutEnabled() const
+    {
+        return m_scalarBlockLayoutEnabled;
+    }
+
 protected:
     Device(
         uint32_t                         deviceCount,
@@ -678,6 +689,9 @@ protected:
     {
         return baseClassSize + ((numDevices - 1) * sizeof(PerGpuInfo));
     }
+
+    // The state of enabled feature VK_EXT_scalar_block_layout.
+    bool                                m_scalarBlockLayoutEnabled;
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

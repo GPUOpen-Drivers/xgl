@@ -117,6 +117,7 @@ VkResult Sampler::Create(
     Pal::SamplerInfo samplerInfo = {};
     samplerInfo.filterMode       = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
     SamplerYcbcrConversionMetaData* pSamplerYcbcrConversionMetaData;
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
     union
     {
@@ -149,7 +150,13 @@ VkResult Sampler::Create(
             samplerInfo.borderColorType = VkToPalBorderColorType(pSamplerInfo->borderColor);
             samplerInfo.borderColorPaletteIndex = 0;
 
-            switch (pDevice->GetRuntimeSettings().preciseAnisoMode)
+            if ((settings.forceOpaqueToTransparentBorderColor) &&
+                (samplerInfo.borderColorType == Pal::BorderColorType::OpaqueBlack))
+            {
+                samplerInfo.borderColorType = Pal::BorderColorType::TransparentBlack;
+            }
+
+            switch (settings.preciseAnisoMode)
             {
             case EnablePreciseAniso:
                 samplerInfo.flags.preciseAniso = 1;

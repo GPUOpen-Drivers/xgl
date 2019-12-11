@@ -95,12 +95,9 @@ Queue::~Queue()
         m_pDevice->VkInstance()->StackMgr()->ReleaseAllocator(m_pStackAllocator);
     }
 
-    if (m_pPalQueues != nullptr)
+    for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); i++)
     {
-        for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); i++)
-        {
-            PalQueue(i)->Destroy();
-        }
+        PalQueue(i)->Destroy();
     }
 
 }
@@ -416,8 +413,6 @@ VkResult Queue::Submit(
 // Wait for a queue to go idle
 VkResult Queue::WaitIdle(void)
 {
-    VK_ASSERT(m_pPalQueues != nullptr);
-
     Pal::Result palResult = Pal::Result::Success;
 
     for (uint32_t deviceIdx = 0;

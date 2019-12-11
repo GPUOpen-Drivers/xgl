@@ -789,6 +789,7 @@ VkResult Image::Create(
     if (result == VK_SUCCESS)
     {
         imageFlags.internalMemBound = isSparse;
+        imageFlags.linear           = (pImageCreateInfo->tiling == VK_IMAGE_TILING_LINEAR);
 
         // Create barrier policy for the image.
         ImageBarrierPolicy barrierPolicy(pDevice,
@@ -1573,6 +1574,12 @@ VkResult Image::GetMemoryRequirements(
         pReqs->memoryTypeBits &= pDevice->GetPinnedSystemMemoryTypes();
 
         VK_ASSERT(pReqs->memoryTypeBits != 0);
+    }
+    // Optional: if the image is optimally tiled, don't allow it with host visible memory types.
+    if ((m_internalFlags.linear == 0) &&
+        pDevice->GetRuntimeSettings().addHostInvisibleMemoryTypesForOptimalImages)
+    {
+        pReqs->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     }
 
     // Adjust the size to account for internal padding required to align the base address

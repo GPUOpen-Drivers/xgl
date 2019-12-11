@@ -30,6 +30,7 @@
  */
 
 #include "include/vk_descriptor_pool.h"
+#include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_dispatch.h"
 #include "include/vk_object.h"
@@ -41,6 +42,7 @@
 
 #include "palInlineFuncs.h"
 #include "palDevice.h"
+#include "palEventDefs.h"
 #include "palGpuMemory.h"
 
 namespace vk
@@ -163,6 +165,57 @@ VkResult DescriptorPool::Init(
         }
     }
 
+    if (result == VK_SUCCESS)
+    {
+        uint32 memRequired = sizeof(Pal::ResourceDescriptionDescriptorPool) +
+                             (sizeof(Pal::ResourceDescriptionPoolSize) * pCreateInfo->poolSizeCount);
+        void* pMem =
+            m_pDevice->VkInstance()->AllocMem(memRequired, VkSystemAllocationScope::VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        if (pMem != nullptr)
+        {
+            // Log the creation of the descriptor pool and the binding of GPU memory to it
+            Pal::ResourceDescriptionDescriptorPool* pDesc = static_cast<Pal::ResourceDescriptionDescriptorPool*>(pMem);
+
+            Pal::ResourceDescriptionPoolSize* pPoolSizes = static_cast<Pal::ResourceDescriptionPoolSize*>(
+                Util::VoidPtrInc(pMem, sizeof(Pal::ResourceDescriptionDescriptorPool)));
+
+            pDesc->maxSets     = pCreateInfo->maxSets;
+            pDesc->numPoolSize = pCreateInfo->poolSizeCount;
+            pDesc->pPoolSizes  = pPoolSizes;
+
+            for (uint32 i = 0; i < pCreateInfo->poolSizeCount; i++)
+            {
+                pPoolSizes[i].type = VkDescriptorTypeToPalDescriptorType(pCreateInfo->pPoolSizes[i].type);
+                pPoolSizes[i].numDescriptors = pCreateInfo->pPoolSizes[i].descriptorCount;
+            }
+
+            Pal::ResourceCreateEventData data = {};
+            data.type              = Pal::ResourceType::DescriptorPool;
+            data.pResourceDescData = pDesc;
+            data.resourceDescSize  = sizeof(Pal::ResourceDescriptionDescriptorPool);
+            data.pObj              = this;
+
+            pDevice->VkInstance()->PalPlatform()->LogEvent(
+                Pal::PalEvent::GpuMemoryResourceCreate,
+                &data,
+                sizeof(Pal::ResourceCreateEventData));
+
+            m_pDevice->VkInstance()->FreeMem(pMem);
+
+            Pal::GpuMemoryResourceBindEventData bindData = {};
+            bindData.pObj               = this;
+            bindData.pGpuMemory         = m_staticInternalMem.PalMemory(DefaultDeviceIndex);
+            bindData.requiredGpuMemSize = m_staticInternalMem.Size();
+            bindData.offset             = m_staticInternalMem.Offset();
+
+            pDevice->VkInstance()->PalPlatform()->LogEvent(
+                Pal::PalEvent::GpuMemoryResourceBind,
+                &bindData,
+                sizeof(Pal::GpuMemoryResourceBindEventData));
+        }
+    }
+
     return result;
 }
 
@@ -184,6 +237,14 @@ VkResult DescriptorPool::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+    Pal::ResourceDestroyEventData data = {};
+    data.pObj = m_staticInternalMem.PalMemory(DefaultDeviceIndex);
+
+    pDevice->VkInstance()->PalPlatform()->LogEvent(
+        Pal::PalEvent::GpuMemoryResourceDestroy,
+        &data,
+        sizeof(Pal::ResourceDestroyEventData));
+
     // Destroy children heaps
     m_setHeap.Destroy(pDevice);
     m_gpuMemHeap.Destroy(pDevice);

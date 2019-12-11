@@ -38,6 +38,7 @@
 #include "include/vk_utils.h"
 
 #include "palSysMemory.h"
+#include "palEventDefs.h"
 #include "palGpuMemory.h"
 #include "palSysUtil.h"
 
@@ -303,6 +304,40 @@ VkResult Memory::Create(
         pMemory->SetAllocationCounted(allocationMask);
 
         *pMemoryHandle = Memory::HandleFromObject(pMemory);
+
+        Pal::ResourceDescriptionHeap desc = {};
+        desc.size             = createInfo.size;
+        desc.alignment        = createInfo.alignment;
+        desc.preferredGpuHeap = createInfo.heaps[0];
+        desc.flags            = 0;
+
+        Pal::ResourceCreateEventData data = {};
+        data.type              = Pal::ResourceType::Heap;
+        data.pObj              = pMemory;
+        data.pResourceDescData = &desc;
+        data.resourceDescSize  = sizeof(Pal::ResourceDescriptionHeap);
+
+        pDevice->VkInstance()->PalPlatform()->LogEvent(
+            Pal::PalEvent::GpuMemoryResourceCreate,
+            &data,
+            sizeof(Pal::ResourceCreateEventData));
+
+        // @NOTE - This only handles the single GPU case currently.  MGPU is not supported by RMV v1
+        Pal::IGpuMemory* pPalGpuMem = pMemory->PalMemory(DefaultDeviceIndex);
+
+        if (pPalGpuMem != nullptr)
+        {
+            Pal::GpuMemoryResourceBindEventData bindData = {};
+            bindData.pObj               = pMemory;
+            bindData.pGpuMemory         = pPalGpuMem;
+            bindData.requiredGpuMemSize = pMemory->PalInfo().size;
+            bindData.offset             = 0;
+
+            pDevice->VkInstance()->PalPlatform()->LogEvent(
+                Pal::PalEvent::GpuMemoryResourceBind,
+                &bindData,
+                sizeof(Pal::GpuMemoryResourceBindEventData));
+        }
     }
     else if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)
     {
@@ -793,6 +828,14 @@ void Memory::Free(
                 {
                     Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
                     pDevice->RemoveMemReference(pPalDevice, pGpuMemory);
+
+                    Pal::ResourceDestroyEventData data = {};
+                    data.pObj = pGpuMemory;
+
+                    pDevice->VkInstance()->PalPlatform()->LogEvent(
+                        Pal::PalEvent::GpuMemoryResourceDestroy,
+                        &data,
+                        sizeof(Pal::ResourceDestroyEventData));
 
                     // Destroy PAL memory object
                     pGpuMemory->Destroy();

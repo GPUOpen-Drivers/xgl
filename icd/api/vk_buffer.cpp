@@ -34,6 +34,7 @@
 
 #include "palGpuMemory.h"
 #include "palDevice.h"
+#include "palEventDefs.h"
 #include "palQueue.h"
 #include "palInlineFuncs.h"
 
@@ -227,7 +228,114 @@ VkResult Buffer::Create(
         *pBuffer = Buffer::HandleFromVoidPointer(pMemory);
     }
 
+    if (palResult == Pal::Result::Success)
+    {
+        LogBufferCreate(size, pCreateInfo, *pBuffer, pDevice);
+    }
+
     return PalToVkResult(palResult);
+}
+
+// =====================================================================================================================
+// Logs the creation of a new buffer to PAL
+void Buffer::LogBufferCreate(
+    VkDeviceSize              size,
+    const VkBufferCreateInfo* pCreateInfo,
+    VkBuffer                  buffer,
+    const Device*             pDevice)
+{
+    VK_ASSERT(pCreateInfo != nullptr);
+    VK_ASSERT(pDevice != nullptr);
+
+    // The RMT spec copies the Vulkan spec when it comes to create flags and usage flags for buffer creation.
+    // These static asserts are in place to flag any changes to bit position since we copy the full
+    // flags value directly.
+    typedef Pal::ResourceDescriptionBufferCreateFlags PalCreateFlag;
+    static_assert(VK_BUFFER_CREATE_SPARSE_BINDING_BIT ==
+        static_cast<uint32_t>(PalCreateFlag::SparseBinding), "Create Flag Mismatch");
+    static_assert(VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT ==
+        static_cast<uint32_t>(PalCreateFlag::SparseResidency), "Create Flag Mismatch");
+    static_assert(VK_BUFFER_CREATE_SPARSE_ALIASED_BIT ==
+        static_cast<uint32_t>(PalCreateFlag::SparseAliased), "Create Flag Mismatch");
+    static_assert(VK_BUFFER_CREATE_PROTECTED_BIT ==
+        static_cast<uint32_t>(PalCreateFlag::Protected), "Create Flag Mismatch");
+    static_assert(VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT_EXT ==
+        static_cast<uint32_t>(PalCreateFlag::DeviceAddressCaptureReplay), "Create Flag Mismatch");
+
+    typedef Pal::ResourceDescriptionBufferUsageFlags PalUsageFlag;
+    static_assert(VK_BUFFER_USAGE_TRANSFER_SRC_BIT ==
+        static_cast<uint32_t>(PalUsageFlag::TransferSrc), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_TRANSFER_DST_BIT ==
+        static_cast<uint32_t>(PalUsageFlag::TransferDst), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_UNIFORM_TEXEL_BUFFER_BIT ==
+        static_cast<uint32_t>(PalUsageFlag::UniformTexelBuffer), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_STORAGE_TEXEL_BUFFER_BIT ==
+        static_cast<uint32_t>(PalUsageFlag::StorageTexelBuffer), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT ==
+        static_cast<uint32_t>(PalUsageFlag::UniformBuffer), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_STORAGE_BUFFER_BIT ==
+        static_cast<uint32_t>(PalUsageFlag::StorageBuffer), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_INDEX_BUFFER_BIT ==
+        static_cast<uint32_t>(PalUsageFlag::IndexBuffer), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_VERTEX_BUFFER_BIT ==
+        static_cast<uint32_t>(PalUsageFlag::VertexBuffer), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT ==
+        static_cast<uint32_t>(PalUsageFlag::IndirectBuffer), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT ==
+        static_cast<uint32_t>(PalUsageFlag::TransformFeedbackBuffer), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT ==
+        static_cast<uint32_t>(PalUsageFlag::TransformFeedbackCounterBuffer), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT ==
+        static_cast<uint32_t>(PalUsageFlag::ConditionalRendering), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_RAY_TRACING_BIT_NV ==
+        static_cast<uint32_t>(PalUsageFlag::RayTracing), "Usage Flag Mismatch");
+    static_assert(VK_BUFFER_USAGE_SHADER_DEVICE_ADDRESS_BIT_EXT ==
+        static_cast<uint32_t>(PalUsageFlag::ShaderDeviceAddress), "Usage Flag Mismatch");
+
+    Pal::ResourceDescriptionBuffer desc = {};
+    desc.size        = static_cast<Util::uint64>(size);
+    desc.createFlags = pCreateInfo->flags;
+    desc.usageFlags  = pCreateInfo->usage;
+
+    Buffer* pBufferObj = Buffer::ObjectFromHandle(buffer);
+
+    Pal::ResourceCreateEventData data = {};
+    data.type              = Pal::ResourceType::Buffer;
+    data.pResourceDescData = &desc;
+    data.resourceDescSize  = sizeof(Pal::ResourceDescriptionBuffer);
+    data.pObj              = pBufferObj;
+
+    pDevice->VkInstance()->PalPlatform()->LogEvent(
+        Pal::PalEvent::GpuMemoryResourceCreate,
+        &data,
+        sizeof(Pal::ResourceCreateEventData));
+
+    // If there is already memory bound, log it now.
+    // @NOTE - This only handles the single GPU case currently.  MGPU is not supported by RMV v1
+    Pal::IGpuMemory* pPalMemory = pBufferObj->PalMemory(DefaultDeviceIndex);
+    pBufferObj->LogGpuMemoryBind(pDevice, pPalMemory, pBufferObj->MemOffset());
+}
+
+// =====================================================================================================================
+// Logs the binding of GPU Memory to a Buffer.
+void Buffer::LogGpuMemoryBind(
+    const Device*          pDevice,
+    const Pal::IGpuMemory* pPalMemory,
+    VkDeviceSize           memOffset
+    ) const
+{
+    VK_ASSERT(pDevice != nullptr);
+
+    Pal::GpuMemoryResourceBindEventData bindData = {};
+    bindData.pObj               = this;
+    bindData.pGpuMemory         = pPalMemory;
+    bindData.requiredGpuMemSize = m_size;
+    bindData.offset             = memOffset;
+
+    pDevice->VkInstance()->PalPlatform()->LogEvent(
+        Pal::PalEvent::GpuMemoryResourceBind,
+        &bindData,
+        sizeof(Pal::GpuMemoryResourceBindEventData));
 }
 
 // =====================================================================================================================
@@ -237,9 +345,20 @@ VkResult Buffer::Destroy(
     const VkAllocationCallbacks*    pAllocator)
 {
 
+    // @NOTE - This only handles the single GPU case currently.  MGPU is not supported by RMV v1
+    Pal::IGpuMemory* pMemoryObj = m_perGpu[DefaultDeviceIndex].pGpuMemory;
+
+    Pal::ResourceDestroyEventData data = {};
+    data.pObj = pMemoryObj;
+
+    pDevice->VkInstance()->PalPlatform()->LogEvent(
+        Pal::PalEvent::GpuMemoryResourceDestroy,
+        &data,
+        sizeof(Pal::ResourceDestroyEventData));
+
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
-        Pal::IGpuMemory* pMemoryObj = m_perGpu[deviceIdx].pGpuMemory;
+        pMemoryObj = m_perGpu[deviceIdx].pGpuMemory;
 
         if (m_internalFlags.internalMemBound == true)
         {
@@ -287,6 +406,9 @@ VkResult Buffer::BindMemory(
             Pal::IGpuMemory* pPalMemory = pMemory->PalMemory(singleIdx);
             m_perGpu[singleIdx].pGpuMemory  = pPalMemory;
             m_perGpu[singleIdx].gpuVirtAddr = pPalMemory->Desc().gpuVirtAddr + memOffset;
+
+            // @NOTE - This only handles the single GPU case currently.  MGPU is not supported by RMV v1
+            LogGpuMemoryBind(pDevice, pPalMemory, memOffset);
         }
         else
         {

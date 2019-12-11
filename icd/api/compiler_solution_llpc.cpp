@@ -521,7 +521,7 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     else if ((appProfile == AppProfile::SeriousSamFusion) ||
                (appProfile == AppProfile::Doom))
     {
-        llpcOptions[numOptions++] = "-unroll-threshold=800";
+        llpcOptions[numOptions++] = "-unroll-threshold=900";
     }
     else
     {
@@ -538,13 +538,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
         // disable the effect of that pass by limiting clause length to 1.
         llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
     }
-
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 33
-    if (appProfile == AppProfile::DawnOfWarIII)
-    {
-        llpcOptions[numOptions++] = "-enable-load-scalarizer";
-    }
-#endif
 
     // Force enable cache to disk to improve user experience
     if ((shaderCacheMode == ShaderCacheEnableRuntimeOnly) &&

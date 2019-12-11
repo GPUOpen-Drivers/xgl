@@ -254,7 +254,8 @@ private:
             uint32_t sparseResidency        : 1;  // VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT
             uint32_t is2DArrayCompat        : 1;  // VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT
             uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
-            uint32_t reserved               : 16;
+            uint32_t linear                 : 1;  // True if the image has VK_IMAGE_TILING_LINEAR
+            uint32_t reserved               : 15;
         };
         uint32_t     u32All;
     };

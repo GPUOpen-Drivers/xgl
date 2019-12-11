@@ -685,6 +685,9 @@ VkResult PhysicalDevice::Initialize()
         }
         VK_ASSERT(m_memoryProperties.memoryHeapCount <= (Pal::GpuHeapCount - 1));
 
+        // Track that we want to add a matching coherent memory type (VK_AMD_device_coherent_memory)
+        bool memTypeWantsCoherentMemory[VK_MAX_MEMORY_TYPES] = {};
+
         // Initialize memory types
         for (uint32_t orderedHeapIndex = 0; orderedHeapIndex < Pal::GpuHeapCount; ++orderedHeapIndex)
         {
@@ -736,6 +739,19 @@ VkResult PhysicalDevice::Initialize()
                         (heapSize < settings.memoryRemoteBackupHeapMinHeapSize);
                 }
 
+                if (m_properties.gfxipProperties.flags.supportGl2Uncached)
+                {
+                    // Add device coherent memory type based on below type:
+                    // 1. Visible and host coherent
+                    // 2. Invisible
+                    if (((memoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
+                         (memoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) ||
+                        (memoryType.propertyFlags == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+                    {
+                        memTypeWantsCoherentMemory[memoryTypeIndex] = true;
+                    }
+                }
+
                 if (palGpuHeap == Pal::GpuHeapInvisible)
                 {
                     if ((invisHeapSize + localHeapSize) >= settings.memoryAttachmentImageMemoryTypeMinHeapSize)
@@ -756,6 +772,29 @@ VkResult PhysicalDevice::Initialize()
                         m_memoryVkIndexAttachmentImage = memoryTypeIndex;
                     }
                 }
+
+                // Optional: if we have exposed a memory type that is host visible, add a backup
+                // memory type that is not host visible. We will use it for optimally tiled images.
+                if (settings.addHostInvisibleMemoryTypesForOptimalImages &&
+                    ((memoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0)  &&
+                    // Skip host visible+coherent+cached as we won't need it
+                    ((memoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == 0))
+                {
+                    memoryTypeIndex = m_memoryProperties.memoryTypeCount++;
+
+                    m_memoryTypeMask                         |= 1 << memoryTypeIndex;
+                    m_memoryVkIndexToPalHeap[memoryTypeIndex] = palGpuHeap;
+                    m_memoryPalHeapToVkIndexBits[palGpuHeap] |= (1UL << memoryTypeIndex);
+
+                    VkMemoryType& nextMemoryType = m_memoryProperties.memoryTypes[memoryTypeIndex];
+
+                    constexpr VkFlags hostMask = (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT  |
+                                                    VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
+                                                    VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
+
+                    nextMemoryType.heapIndex     = memoryType.heapIndex;
+                    nextMemoryType.propertyFlags = memoryType.propertyFlags & ~hostMask;
+                }
             }
         }
 
@@ -769,12 +808,7 @@ VkResult PhysicalDevice::Initialize()
                 VkMemoryType& currentmemoryType = m_memoryProperties.memoryTypes[memoryTypeIndex];
                 VkMemoryType& lastMemoryType    = m_memoryProperties.memoryTypes[m_memoryProperties.memoryTypeCount];
 
-                // Add device coherent memory type based on below type:
-                // 1. Visible and host coherent
-                // 2. Invisible
-                if (((currentmemoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
-                     (currentmemoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) ||
-                    (currentmemoryType.propertyFlags == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT))
+                if (memTypeWantsCoherentMemory[memoryTypeIndex])
                 {
                     lastMemoryType.heapIndex     = currentmemoryType.heapIndex;
                     lastMemoryType.propertyFlags = currentmemoryType.propertyFlags |
@@ -848,6 +882,22 @@ VkResult PhysicalDevice::Initialize()
     }
 
     return vkResult;
+}
+
+// =====================================================================================================================
+uint32_t PhysicalDevice::GetMemoryTypeMaskMatching(VkMemoryPropertyFlags flags) const
+{
+    uint32_t mask = 0;
+
+    for (uint32_t memoryTypeIndex = 0; memoryTypeIndex < m_memoryProperties.memoryTypeCount; ++memoryTypeIndex)
+    {
+        if ((flags & m_memoryProperties.memoryTypes[memoryTypeIndex].propertyFlags) == flags)
+        {
+            mask |= 1u << memoryTypeIndex;
+        }
+    }
+
+    return mask;
 }
 
 // =====================================================================================================================
@@ -3807,6 +3857,7 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
                             VK_SUBGROUP_FEATURE_VOTE_BIT |
                             VK_SUBGROUP_FEATURE_ARITHMETIC_BIT |
                             VK_SUBGROUP_FEATURE_BALLOT_BIT |
+                            VK_SUBGROUP_FEATURE_CLUSTERED_BIT |
                             VK_SUBGROUP_FEATURE_SHUFFLE_BIT |
                             VK_SUBGROUP_FEATURE_SHUFFLE_RELATIVE_BIT |
                             VK_SUBGROUP_FEATURE_QUAD_BIT;

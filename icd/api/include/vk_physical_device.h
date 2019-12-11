@@ -138,6 +138,8 @@ public:
         return m_memoryTypeMask;
     }
 
+    uint32_t GetMemoryTypeMaskMatching(VkMemoryPropertyFlags flags) const;
+
     VK_INLINE uint32_t GetMemoryTypeForAttachmentImage() const
     {
         return m_memoryVkIndexAttachmentImage;

@@ -36,6 +36,7 @@ VK_KHR_maintenance2
 VK_KHR_relaxed_block_layout
 VK_KHR_sampler_mirror_clamp_to_edge
 VK_KHR_shader_draw_parameters
+VK_KHR_shader_float_controls
 VK_KHR_swapchain
 VK_KHR_image_format_list
 VK_KHR_swapchain_mutable_format

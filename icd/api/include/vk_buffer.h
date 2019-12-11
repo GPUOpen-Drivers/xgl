@@ -140,6 +140,14 @@ private:
         return sizeof(Buffer) + ((pDevice->NumPalDevices() - 1) * sizeof(PerGpuInfo));
     }
 
+    static void LogBufferCreate(
+        VkDeviceSize              size,
+        const VkBufferCreateInfo* pCreateInfo,
+        VkBuffer                  buffer,
+        const Device*             pDevice);
+
+    void LogGpuMemoryBind(const Device* pDevice, const Pal::IGpuMemory* pPalMemory, VkDeviceSize memOffset) const;
+
     const VkDeviceSize      m_size;
     VkDeviceSize            m_memOffset;
     BufferBarrierPolicy     m_barrierPolicy;    // Barrier policy to use for this buffer
