@@ -43,7 +43,7 @@
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
 
-#include "include/vk_layer_all_null_devices.h"
+#include "include/internal_layer_hooks.h"
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
@@ -531,6 +531,7 @@ VkResult Instance::Init(
         {
             FreeMem(pPalMemory);
         }
+
     }
 
     if (status == VK_SUCCESS)

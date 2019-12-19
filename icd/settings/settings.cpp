@@ -376,11 +376,6 @@ void VulkanSettingsLoader::OverrideProfiledSettings(
         }
     }
 
-    if (appProfile == AppProfile::DxvkEliteDangerous)
-    {
-        m_settings.disableSkipFceOptimization = true;
-    }
-
     if (appProfile == AppProfile::SaschaWillemsExamples)
     {
         m_settings.forceDepthClampBasedOnZExport = true;
@@ -575,7 +570,9 @@ void VulkanSettingsLoader::UpdatePalSettings()
         pPalSettings->enableGpuEventMultiSlot = m_settings.enableGpuEventMultiSlot;
     }
 
-    pPalSettings->disableSkipFceOptimization = m_settings.disableSkipFceOptimization;
+    // Setting disableSkipFceOptimization to false enables an optimization in PAL that disregards the FCE in a transition
+    // if one of the built in clear colors are used (white/black) and the image is TCC compatible.
+    pPalSettings->disableSkipFceOptimization = false;
 
 #if VK_IS_PAL_VERSION_AT_LEAST(548, 1)
     // For vulkan driver, forceDepthClampBasedOnZExport should be false by default, this is required to pass depth_range_unrestricted CTS tests

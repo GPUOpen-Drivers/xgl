@@ -65,6 +65,7 @@
 #include "include/vk_swapchain.h"
 #include "include/vk_utils.h"
 #include "include/vk_conv.h"
+#include "include/internal_layer_hooks.h"
 
 #include "sqtt/sqtt_layer.h"
 #include "sqtt/sqtt_mgr.h"
@@ -601,8 +602,15 @@ VkResult Device::Create(
                 reinterpret_cast<const VkPhysicalDeviceHostQueryResetFeaturesEXT*>(pHeader));
 
             break;
-            }
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeaturesKHR*>(pHeader));
 
+            break;
+        }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
         {
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceLineRasterizationFeaturesEXT>(
@@ -676,9 +684,11 @@ VkResult Device::Create(
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR:
         {
+
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTimelineSemaphoreFeaturesKHR>(
                 pPhysicalDevice,
                 reinterpret_cast<const VkPhysicalDeviceTimelineSemaphoreFeaturesKHR*>(pHeader));
+
             break;
         }
         case VK_STRUCTURE_TYPE_DEVICE_MEMORY_OVERALLOCATION_CREATE_INFO_AMD:
@@ -1379,6 +1389,7 @@ void Device::InitDispatchTable()
     {
         m_pAsyncLayer->OverrideDispatchTable(&m_dispatchTable);
     }
+
 }
 
 // =====================================================================================================================

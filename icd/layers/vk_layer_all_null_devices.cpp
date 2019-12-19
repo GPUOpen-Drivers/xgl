@@ -33,7 +33,7 @@
  ***********************************************************************************************************************
  */
 
-#include "include/vk_layer_all_null_devices.h"
+#include "include/internal_layer_hooks.h"
 
 #include "include/vk_dispatch.h"
 #include "include/vk_instance.h"

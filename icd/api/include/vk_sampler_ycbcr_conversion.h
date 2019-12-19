@@ -27,6 +27,7 @@
 
 #pragma once
 
+#include "llpc.h"
 #include "include/khronos/vulkan.h"
 #include "include/vk_defines.h"
 #include "include/vk_dispatch.h"
@@ -40,76 +41,6 @@ namespace vk
 // Forward declare Vulkan classes used in this file
 class Device;
 class DispatchableSampler;
-
-typedef struct
-{
-    union
-    {
-        struct
-        {                                            // e.g R12X4G12X4_UNORM_2PACK16
-            uint32_t channelBitsR               : 5; // channelBitsR = 12
-            uint32_t channelBitsG               : 5; // channelBitsG = 12
-            uint32_t channelBitsB               : 5; // channelBitsB =  0
-            uint32_t                            :17;
-        } bitDepth;
-        struct
-        {
-            uint32_t                            :15; // VkComponentSwizzle, e.g
-            uint32_t swizzleR                   : 3; // swizzleR = VK_COMPONENT_SWIZZLE_R(3)
-            uint32_t swizzleG                   : 3; // swizzleG = VK_COMPONENT_SWIZZLE_G(4)
-            uint32_t swizzleB                   : 3; // swizzleB = VK_COMPONENT_SWIZZLE_B(5)
-            uint32_t swizzleA                   : 3; // swizzleA = VK_COMPONENT_SWIZZLE_A(6)
-            uint32_t                            : 5;
-        } componentMapping;
-        struct
-        {
-            uint32_t                            :27;
-            uint32_t ycbcrModel                 : 3; // RGB_IDENTITY(0), ycbcr_identity(1),
-                                                     // _709(2),_601(3),_2020(4)
-            uint32_t ycbcrRange                 : 1; // ITU_FULL(0), ITU_NARROW(0)
-            uint32_t forceExplicitReconstruct   : 1; // Disable(0), Enable(1)
-        };
-        uint32_t u32All;
-    } word0;
-    union
-    {
-        struct
-        {
-            uint32_t planes                     : 2; // Number of planes, normally from 1 to 3
-            uint32_t lumaFilter                 : 1; // FILTER_NEAREST(0) or FILTER_LINEAR(1)
-            uint32_t chromaFilter               : 1; // FILTER_NEAREST(0) or FILTER_LINEAR(1)
-            uint32_t xChromaOffset              : 1; // COSITED_EVEN(0) or MIDPOINT(1)
-            uint32_t yChromaOffset              : 1; // COSITED_EVEN(0) or MIDPOINT(1)
-            uint32_t xSubSampled                : 1; // true(1) or false(0)
-            uint32_t ySubSampled                : 1; // true(1) or false(0)
-            uint32_t tileOptimal                : 1; // true(1) or false(0)
-            uint32_t dstSelXYZW                 :12;
-            uint32_t undefined                  :11;
-        };
-        uint32_t u32All;
-    } word1;
-    union
-    {
-        // For yuv formats, bitCount may not equal to bitDepth, where bitCount >= bitDepth
-        struct
-        {
-            uint32_t xBitCount                  : 6;
-            uint32_t yBitCount                  : 6;
-            uint32_t zBitCount                  : 6;
-            uint32_t wBitCount                  : 6;
-            uint32_t undefined                  : 8;
-        } bitCount; // Pal Bit Counts
-        uint32_t u32All;
-    } word2;
-    union
-    {
-        struct
-        {
-            uint32_t sqImgRsrcWord1             : 32;
-        };
-        uint32_t u32All;
-    } word3;
-} SamplerYcbcrConversionMetaData;
 
 typedef struct
 {
@@ -132,7 +63,7 @@ public:
         const Device*                               pDevice,
         const VkAllocationCallbacks*                pAllocator);
 
-    SamplerYcbcrConversionMetaData* GetMetaData() {return &m_metaData;}
+    Llpc::SamplerYCbCrConversionMetaData* GetMetaData() {return &m_metaData;}
 
 protected:
     SamplerYcbcrConversion(const VkSamplerYcbcrConversionCreateInfo* pCreateInfo);
@@ -144,7 +75,7 @@ private:
 
     uint32_t GetDstSelXYZW(VkFormat format);
 
-    SamplerYcbcrConversionMetaData m_metaData;
+    Llpc::SamplerYCbCrConversionMetaData m_metaData;
 };
 
 namespace entry

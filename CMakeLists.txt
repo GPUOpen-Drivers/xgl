@@ -37,6 +37,10 @@ SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/../pal/cmake/Mo
 SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/icd/imported/pal/cmake/Modules)
 set(GLOBAL_ROOT_SRC_DIR ${PROJECT_SOURCE_DIR}/../../ CACHE PATH "" FORCE)
 
+# Generate a CompilationDatabase (compile_commands.json file) for our build
+# for intellisense used by VScode, YouCompleteMe, etc
+set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
+
 include(CMakeDependentOption)
 include(AmdCmakeHelper)
 include(SetupAmdGlobalRoots)

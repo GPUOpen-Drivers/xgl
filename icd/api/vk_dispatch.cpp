@@ -555,6 +555,9 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutablePropertiesKHR             );
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableStatisticsKHR             );
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableInternalRepresentationsKHR);
+    INIT_DISPATCH_ENTRY(vkGetBufferDeviceAddressKHR                     );
+    INIT_DISPATCH_ENTRY(vkGetBufferOpaqueCaptureAddressKHR              );
+    INIT_DISPATCH_ENTRY(vkGetDeviceMemoryOpaqueCaptureAddressKHR        );
     INIT_DISPATCH_ENTRY(vkResetQueryPoolEXT                             );
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
 

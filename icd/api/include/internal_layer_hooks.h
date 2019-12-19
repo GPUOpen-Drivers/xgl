@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -24,17 +24,13 @@
  **********************************************************************************************************************/
  /**
  ***********************************************************************************************************************
- * @file  vk_layer_all_null_devices.h
- * @brief When the AMDVLK_NULL_GPU=ALL environment variable is set, this layer will provide a list of all possible
- *        NULL devices to the application. No physical device objects will be exposed to the application because there
- *        is a limit on the number of physical device objects that can be created. VkPhysicalDeviceProperties pointers
- *        are exposed through the VkPhysicalDevice handles in vkEnumeratePhysicalDevices_ND so that
- *        vkGetPhysicalDeviceProperties_ND can expose the properties for the appropriate NULL device.
+ * @file  internal_layer_hooks.h
+ * @brief Contains functions used to copy and modify the Vulkan instance and device dispatch tables
  ***********************************************************************************************************************
  */
 
-#ifndef __VK_LAYER_ALL_NULL_DEVICES_H__
-#define __VK_LAYER_ALL_NULL_DEVICES_H__
+#ifndef __INTERNAL_LAYER_HOOKS_H__
+#define __INTERNAL_LAYER_HOOKS_H__
 
 #pragma once
 
@@ -43,8 +39,9 @@ namespace vk
 
 class DispatchTable;
 
+// vk_layer_all_null_devices
 void OverrideDispatchTable_ND(DispatchTable* pDispatchTable);
 
 } // namespace vk
 
-#endif /* __VK_LAYER_ALL_NULL_DEVICES_H__ */
+#endif /* __INTERNAL_LAYER_HOOKS_H__ */

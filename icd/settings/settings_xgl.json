@@ -2835,19 +2835,6 @@
       "VariableName": "limitSampleCounts"
     },
     {
-      "Name": "ForceOpaqueToTransparentBorderColor",
-      "Description": "Force samplers using border color OpaqueBlack to TransparentBlack",
-      "Tags": [
-        "General"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "forceOpaqueToTransparentBorderColor"
-    },
-    {
       "Description": "Custom device allocation count limitation, when larger than 0.",
       "Tags": [
         "Memory"
@@ -3804,19 +3791,6 @@
       "Type": "bool",
       "VariableName": "enableAsyncCompile",
       "Name": "EnableAsyncCompile"
-    },
-    {
-      "Description": "Setting to false enables an optimization in PAL that disregards the FCE in a transition if one of the built in clear colors are used (white/black) and the image is TCC compatible.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "disableSkipFceOptimization",
-      "Name": "DisableSkipFceOptimization"
     },
     {
       "Description": "Determines the pipeline binary max size limit (in KB) used by the PipelineUriService when injecting pipeline binaries back into the driver. The limit is 256KB by default.",

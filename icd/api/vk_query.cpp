@@ -55,7 +55,9 @@ VkResult QueryPool::Create(
 
     if (pCreateInfo->queryType != VK_QUERY_TYPE_TIMESTAMP)
     {
-        result = PalQueryPool::Create(pDevice, pCreateInfo, pAllocator, &pObject);
+        {
+            result = PalQueryPool::Create(pDevice, pCreateInfo, pAllocator, &pObject);
+        }
     }
     else
     {

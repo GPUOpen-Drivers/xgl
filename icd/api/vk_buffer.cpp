@@ -559,6 +559,28 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
     }
 }
 
+// =====================================================================================================================
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR(
+    VkDevice                                    device,
+    const VkBufferDeviceAddressInfoKHR* const   pInfo)
+{
+    const Device* const pDevice = ApiDevice::ObjectFromHandle(device);
+
+    Buffer* const pBuffer = Buffer::ObjectFromHandle(pInfo->buffer);
+
+    return pBuffer->GpuVirtAddr(DefaultDeviceIndex);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR uint64_t VKAPI_CALL vkGetBufferOpaqueCaptureAddressKHR(
+    VkDevice                                    device,
+    const VkBufferDeviceAddressInfoKHR*         pInfo)
+{
+    // Returning 0 for vkGetBufferOpaqueCaptureAddressKHR, as this function is used by implementations that allocate
+    // VA at buffer creation. Applications should just use vkGetBufferDeviceAddressKHR for our implementation.
+    return 0;
+}
+
 } // namespace entry
 
 } // namespace vk

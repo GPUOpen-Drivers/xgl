@@ -3303,7 +3303,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_8BIT_STORAGE));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_ATOMIC_INT64));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_DRIVER_PROPERTIES));
-
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_FLOAT_CONTROLS));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_CREATE_RENDERPASS2));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CALIBRATED_TIMESTAMPS));
@@ -3381,10 +3381,12 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PCI_BUS_INFO));
 #endif
     if ((pPhysicalDevice == nullptr) ||
-         pPhysicalDevice->PalProperties().osProperties.timelineSemaphore.support)
+        pPhysicalDevice->PalProperties().osProperties.timelineSemaphore.support)
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_TIMELINE_SEMAPHORE));
     }
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_CLOCK));
 
@@ -4272,7 +4274,7 @@ void PhysicalDevice::GetPhysicalDeviceBufferAddressFeatures(
     VkBool32* pBufferDeviceAddressMultiDevice
     ) const
 {
-    *pBufferDeviceAddress              = VK_TRUE;
+    *pBufferDeviceAddress              = VK_FALSE;
     *pBufferDeviceAddressCaptureReplay = VK_FALSE;
     *pBufferDeviceAddressMultiDevice   = VK_FALSE;
 }
@@ -4531,7 +4533,7 @@ void PhysicalDevice::GetFeatures2(
                     reinterpret_cast<VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT*>(pHeader);
 
                 pVertexAttributeDivisorFeatures->vertexAttributeInstanceRateDivisor     = VK_TRUE;
-                pVertexAttributeDivisorFeatures->vertexAttributeInstanceRateZeroDivisor = VK_FALSE;
+                pVertexAttributeDivisorFeatures->vertexAttributeInstanceRateZeroDivisor = VK_TRUE;
 
                 break;
             }
@@ -4548,7 +4550,18 @@ void PhysicalDevice::GetFeatures2(
                 pDeviceCoherentMemory->deviceCoherentMemory = deviceCoherentMemoryEnabled;
                 break;
             }
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR:
+            {
+                VkPhysicalDeviceBufferDeviceAddressFeaturesKHR* pBufferAddressFeatures =
+                    reinterpret_cast<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR*>(pHeader);
 
+                GetPhysicalDeviceBufferAddressFeatures(
+                    &pBufferAddressFeatures->bufferDeviceAddress,
+                    &pBufferAddressFeatures->bufferDeviceAddressCaptureReplay,
+                    &pBufferAddressFeatures->bufferDeviceAddressMultiDevice);
+
+                break;
+            }
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_FEATURES_EXT:
             {
                 VkPhysicalDeviceLineRasterizationFeaturesEXT* pPhysicalDeviceLineRasterizationFeaturesEXT =

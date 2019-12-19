@@ -186,6 +186,10 @@ vkAcquireNextImage2KHR                              @device     @dext(KHR_swapch
 vkBindBufferMemory2KHR                              @device     @dext(KHR_bind_memory2)
 vkBindImageMemory2KHR                               @device     @dext(KHR_bind_memory2)
 
+vkGetBufferDeviceAddressKHR                         @device     @dext(KHR_buffer_device_address)
+vkGetBufferOpaqueCaptureAddressKHR                  @device     @dext(KHR_buffer_device_address)
+vkGetDeviceMemoryOpaqueCaptureAddressKHR            @device     @dext(KHR_buffer_device_address)
+
 vkCreateDescriptorUpdateTemplateKHR                 @device     @dext(KHR_descriptor_update_template)
 vkDestroyDescriptorUpdateTemplateKHR                @device     @dext(KHR_descriptor_update_template)
 vkUpdateDescriptorSetWithTemplateKHR                @device     @dext(KHR_descriptor_update_template)
@@ -326,8 +330,6 @@ vkCmdEndQueryIndexedEXT                             @device     @dext(EXT_transf
 vkCmdDrawIndirectByteCountEXT                       @device     @dext(EXT_transform_feedback)
 
 vkResetQueryPoolEXT                                 @device     @dext(EXT_host_query_reset)
-
-vkGetBufferDeviceAddressEXT                         @device     @dext(EXT_buffer_device_address)
 
 vkSetHdrMetadataEXT                                 @device     @dext(EXT_hdr_metadata)
 

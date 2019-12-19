@@ -640,8 +640,21 @@ void GraphicsPipeline::BuildRasterizationState(
         {
         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO:
             {
-                pInfo->pipeline.rsState.depthClampDisable = (pRs->depthClampEnable == VK_FALSE);
-                // When depth clamping is enabled, depth clipping should be disabled, and vice versa
+                // For optimal performance, depth clamping should be enabled by default. Only disable it if dealing
+                // with depth values outside of [0.0, 1.0] range.
+                // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
+                if ((pRs->depthClampEnable == VK_FALSE) &&
+                    (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_DEPTH_RANGE_UNRESTRICTED)))
+                {
+                    pInfo->pipeline.rsState.depthClampDisable = true;
+                }
+                else
+                {
+                    // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
+                    // Clipping is updated in pipeline compiler.
+                    pInfo->pipeline.rsState.depthClampDisable = false;
+                }
+
                 pInfo->immedInfo.triangleRasterState.frontFillMode = VkToPalFillMode(pRs->polygonMode);
                 pInfo->immedInfo.triangleRasterState.backFillMode  = VkToPalFillMode(pRs->polygonMode);
                 pInfo->immedInfo.triangleRasterState.cullMode  = VkToPalCullMode(pRs->cullMode);

@@ -66,7 +66,7 @@ uint64_t Sampler::BuildApiHash(
         union
         {
             const VkStructHeader*                      pInfo;
-            const VkSamplerYcbcrConversionInfo*        pYcbcrConversionInfo;
+            const VkSamplerYcbcrConversionInfo*        pYCbCrConversionInfo;
             const VkSamplerReductionModeCreateInfoEXT* pReductionModeCreateInfo;
         };
 
@@ -77,13 +77,13 @@ uint64_t Sampler::BuildApiHash(
             switch (static_cast<uint32_t>(pInfo->sType))
             {
             case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
-                hasher.Update(pYcbcrConversionInfo->sType);
-                SamplerYcbcrConversionMetaData* pSamplerYcbcrConversionMetaData;
-                pSamplerYcbcrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pYcbcrConversionInfo->conversion)->GetMetaData();
-                hasher.Update(pSamplerYcbcrConversionMetaData->word0.u32All);
-                hasher.Update(pSamplerYcbcrConversionMetaData->word1.u32All);
-                hasher.Update(pSamplerYcbcrConversionMetaData->word2.u32All);
-                hasher.Update(pSamplerYcbcrConversionMetaData->word3.u32All);
+                hasher.Update(pYCbCrConversionInfo->sType);
+                Llpc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData;
+                pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pYCbCrConversionInfo->conversion)->GetMetaData();
+                hasher.Update(pSamplerYCbCrConversionMetaData->word0.u32All);
+                hasher.Update(pSamplerYCbCrConversionMetaData->word1.u32All);
+                hasher.Update(pSamplerYCbCrConversionMetaData->word2.u32All);
+                hasher.Update(pSamplerYCbCrConversionMetaData->word3.u32All);
 
                 break;
             case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
@@ -116,7 +116,7 @@ VkResult Sampler::Create(
     uint64_t         apiHash     = BuildApiHash(pCreateInfo);
     Pal::SamplerInfo samplerInfo = {};
     samplerInfo.filterMode       = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
-    SamplerYcbcrConversionMetaData* pSamplerYcbcrConversionMetaData;
+    Llpc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData = nullptr;
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
     union
@@ -124,7 +124,7 @@ VkResult Sampler::Create(
         const VkStructHeader*                      pHeader;
         const VkSamplerCreateInfo*                 pSamplerInfo;
         const VkSamplerReductionModeCreateInfoEXT* pVkSamplerReductionModeCreateInfoEXT;
-        const VkSamplerYcbcrConversionInfo*        pVkSamplerYcbcrConversionInfo;
+        const VkSamplerYcbcrConversionInfo*        pVkSamplerYCbCrConversionInfo;
     };
 
     // Parse the creation info.
@@ -149,12 +149,6 @@ VkResult Sampler::Create(
             samplerInfo.maxLod          = pSamplerInfo->maxLod;
             samplerInfo.borderColorType = VkToPalBorderColorType(pSamplerInfo->borderColor);
             samplerInfo.borderColorPaletteIndex = 0;
-
-            if ((settings.forceOpaqueToTransparentBorderColor) &&
-                (samplerInfo.borderColorType == Pal::BorderColorType::OpaqueBlack))
-            {
-                samplerInfo.borderColorType = Pal::BorderColorType::TransparentBlack;
-            }
 
             switch (settings.preciseAnisoMode)
             {
@@ -181,8 +175,8 @@ VkResult Sampler::Create(
             samplerInfo.filterMode = VkToPalTexFilterMode(pVkSamplerReductionModeCreateInfoEXT->reductionMode);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
-            pSamplerYcbcrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pVkSamplerYcbcrConversionInfo->conversion)->GetMetaData();
-            pSamplerYcbcrConversionMetaData->word1.lumaFilter = samplerInfo.filter.minification;
+            pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pVkSamplerYCbCrConversionInfo->conversion)->GetMetaData();
+            pSamplerYCbCrConversionMetaData->word1.lumaFilter = samplerInfo.filter.minification;
             break;
 
         default:

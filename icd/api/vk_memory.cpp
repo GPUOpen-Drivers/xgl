@@ -1320,6 +1320,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdPropertiesKHR(
 }
 #endif
 
+// =====================================================================================================================
+VKAPI_ATTR uint64_t VKAPI_CALL vkGetDeviceMemoryOpaqueCaptureAddressKHR(
+    VkDevice                                         device,
+    const VkDeviceMemoryOpaqueCaptureAddressInfoKHR* pInfo)
+{
+    const Memory* pMemory = Memory::ObjectFromHandle(pInfo->memory);
+
+    return pMemory->PalMemory(DefaultDeviceIndex)->Desc().gpuVirtAddr;
+}
+
 } // namespace entry
 
 } // namespace vk

@@ -523,9 +523,8 @@ public:
         { return m_pBarrierFilterLayer; }
 
     VK_INLINE AsyncLayer* GetAsyncLayer()
-    {
-        return m_pAsyncLayer;
-    }
+        { return m_pAsyncLayer; }
+
     VK_INLINE Util::Mutex* GetMemoryMutex()
         { return &m_memoryMutex; }
 
@@ -638,15 +637,16 @@ protected:
 
     Pal::IMsaaState*                    m_pBltMsaaState[BltMsaaStateCount][MaxPalDevices];
 
-    const DeviceBarrierPolicy           m_barrierPolicy;        // Barrier policy to use for this device
+    const DeviceBarrierPolicy           m_barrierPolicy;           // Barrier policy to use for this device
 
-    const DeviceExtensions::Enabled     m_enabledExtensions;    // Enabled device extensions
-    DispatchTable                       m_dispatchTable;        // Device dispatch table
-    SqttMgr*                            m_pSqttMgr;             // Manager for developer mode SQ thread tracing
-    AsyncLayer*                         m_pAsyncLayer;          // State for async compiler layer, otherwise null
-    OptLayer*                           m_pAppOptLayer;         // State for an app-specific layer, otherwise null
-    BarrierFilterLayer*                 m_pBarrierFilterLayer;  // State for enabling barrier filtering, otherwise null
-    Util::Mutex                         m_memoryMutex;          // Shared mutex used occasionally by memory objects
+    const DeviceExtensions::Enabled     m_enabledExtensions;       // Enabled device extensions
+    DispatchTable                       m_dispatchTable;           // Device dispatch table
+    SqttMgr*                            m_pSqttMgr;                // Manager for developer mode SQ thread tracing
+    AsyncLayer*                         m_pAsyncLayer;             // State for async compiler layer, otherwise null
+    OptLayer*                           m_pAppOptLayer;            // State for an app-specific layer, otherwise null
+    BarrierFilterLayer*                 m_pBarrierFilterLayer;     // State for enabling barrier filtering, otherwise
+                                                                   // null
+    Util::Mutex                         m_memoryMutex;             // Shared mutex used occasionally by memory objects
 
     // The states of m_enabledFeatures are provided by application
     VkPhysicalDeviceFeatures            m_enabledFeatures;

@@ -128,8 +128,13 @@ BitDepth SamplerYcbcrConversion::GetYuvBitDepth(VkFormat format)
         return { 16, 16, 16, 0 };
     default:
         Pal::Formats::FormatInfo yuvFormatInfo;
-        yuvFormatInfo = Pal::Formats::FormatInfoTable[static_cast<size_t>(VkToPalFormat(format).format)];
-        return *(reinterpret_cast<BitDepth*>(const_cast<uint32*>(yuvFormatInfo.bitCount)));
+        yuvFormatInfo = Pal::Formats::FormatInfoTable[static_cast<uint32_t>(VkToPalFormat(format).format)];
+        BitDepth bitDepth;
+        bitDepth.xBitCount = yuvFormatInfo.bitCount[0];
+        bitDepth.yBitCount = yuvFormatInfo.bitCount[1];
+        bitDepth.zBitCount = yuvFormatInfo.bitCount[2];
+        bitDepth.wBitCount = yuvFormatInfo.bitCount[3];
+        return bitDepth;
     }
 }
 
@@ -248,8 +253,8 @@ SamplerYcbcrConversion::SamplerYcbcrConversion(
     m_metaData.word0.componentMapping.swizzleG = pCreateInfo->components.g;
     m_metaData.word0.componentMapping.swizzleB = pCreateInfo->components.b;
     m_metaData.word0.componentMapping.swizzleA = pCreateInfo->components.a;
-    m_metaData.word0.ycbcrModel                = pCreateInfo->ycbcrModel;
-    m_metaData.word0.ycbcrRange                = pCreateInfo->ycbcrRange;
+    m_metaData.word0.yCbCrModel                = pCreateInfo->ycbcrModel;
+    m_metaData.word0.yCbCrRange                = pCreateInfo->ycbcrRange;
     m_metaData.word0.forceExplicitReconstruct  = pCreateInfo->forceExplicitReconstruction;
 
     m_metaData.word1.chromaFilter  = pCreateInfo->chromaFilter;
@@ -261,11 +266,11 @@ SamplerYcbcrConversion::SamplerYcbcrConversion(
     m_metaData.word1.ySubSampled   = Formats::IsYuvYChromaSubsampled(pCreateInfo->format);
     m_metaData.word1.tileOptimal   = Formats::IsYuvTileOptimal(pCreateInfo->format);
 
-    Pal::Formats::FormatInfo yuvFormatInfo = Pal::Formats::FormatInfoTable[static_cast<size_t>(palFormat.format)];
-    m_metaData.word2.bitCount.xBitCount = yuvFormatInfo.bitCount[0];
-    m_metaData.word2.bitCount.yBitCount = yuvFormatInfo.bitCount[1];
-    m_metaData.word2.bitCount.zBitCount = yuvFormatInfo.bitCount[2];
-    m_metaData.word2.bitCount.wBitCount = yuvFormatInfo.bitCount[3];
+    Pal::Formats::FormatInfo yuvFormatInfo = Pal::Formats::FormatInfoTable[static_cast<uint32_t>(palFormat.format)];
+    m_metaData.word2.bitCounts.xBitCount = yuvFormatInfo.bitCount[0];
+    m_metaData.word2.bitCounts.yBitCount = yuvFormatInfo.bitCount[1];
+    m_metaData.word2.bitCounts.zBitCount = yuvFormatInfo.bitCount[2];
+    m_metaData.word2.bitCounts.wBitCount = yuvFormatInfo.bitCount[3];
 
     m_metaData.word3.sqImgRsrcWord1 = GetSqImgRsrcWord1(pCreateInfo->format);
 }
