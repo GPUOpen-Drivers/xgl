@@ -228,7 +228,22 @@ endif()
 
 ### LLPC ###############################################################
 set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is read-only.")
-set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the LLPC.")
+
+# Support the old path and new path of llpc
+# New path - the repo name is llpc instead of compiler
+if (EXISTS ${PROJECT_SOURCE_DIR}/../llpc/llpc)
+    set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc/llpc CACHE PATH "Specify the path to the LLPC.")
+# Old path
+elseif (EXISTS ${PROJECT_SOURCE_DIR}/../llpc)
+    set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the LLPC.")
+# New path
+elseif (EXISTS ${XGL_ICD_PATH}/api/compiler/llpc)
+    set(XGL_LLPC_PATH ${XGL_ICD_PATH}/api/compiler/llpc CACHE PATH "Specify the path to the LLPC.")
+# Old path
+elseif (EXISTS ${XGL_ICD_PATH}/api/llpc)
+    set(XGL_LLPC_PATH ${XGL_ICD_PATH}/api/llpc CACHE PATH "Specify the path to the LLPC.")
+endif()
+
 set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
