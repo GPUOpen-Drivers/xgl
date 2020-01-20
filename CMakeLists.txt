@@ -231,17 +231,17 @@ set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is re
 
 # Support the old path and new path of llpc
 # New path - the repo name is llpc instead of compiler
-if (EXISTS ${PROJECT_SOURCE_DIR}/../llpc/llpc)
-    set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc/llpc CACHE PATH "Specify the path to the LLPC.")
+if (EXISTS ${PROJECT_SOURCE_DIR}/../llpc/llpc/CMakeLists.txt)
+    set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc/llpc CACHE PATH "Specify the path to the LLPC." FORCE)
 # Old path
-elseif (EXISTS ${PROJECT_SOURCE_DIR}/../llpc)
-    set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the LLPC.")
+elseif (EXISTS ${PROJECT_SOURCE_DIR}/../llpc/CMakeLists.txt)
+    set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the LLPC." FORCE)
 # New path
-elseif (EXISTS ${XGL_ICD_PATH}/api/compiler/llpc)
-    set(XGL_LLPC_PATH ${XGL_ICD_PATH}/api/compiler/llpc CACHE PATH "Specify the path to the LLPC.")
+elseif (EXISTS ${XGL_ICD_PATH}/api/compiler/llpc/CMakeLists.txt)
+    set(XGL_LLPC_PATH ${XGL_ICD_PATH}/api/compiler/llpc CACHE PATH "Specify the path to the LLPC." FORCE)
 # Old path
-elseif (EXISTS ${XGL_ICD_PATH}/api/llpc)
-    set(XGL_LLPC_PATH ${XGL_ICD_PATH}/api/llpc CACHE PATH "Specify the path to the LLPC.")
+elseif (EXISTS ${XGL_ICD_PATH}/api/llpc/CMakeLists.txt)
+    set(XGL_LLPC_PATH ${XGL_ICD_PATH}/api/llpc CACHE PATH "Specify the path to the LLPC." FORCE)
 endif()
 
 set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
