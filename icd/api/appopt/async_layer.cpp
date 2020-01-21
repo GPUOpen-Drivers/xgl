@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +30,7 @@
 */
 #include "async_layer.h"
 #include "async_shader_module.h"
+#include "async_partial_pipeline.h"
 
 #include "include/vk_device.h"
 #include "include/vk_shader.h"
@@ -149,37 +150,53 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
 AsyncLayer::AsyncLayer(Device* pDevice)
     :
     m_pDevice(pDevice),
-    m_pTaskThreads(),
-    m_taskId(0)
+    m_pModuleTaskThreads(),
+    m_pPipelineTaskThreads()
 {
     Util::SystemInfo sysInfo = {};
     Util::QuerySystemInfo(&sysInfo);
-    m_activeThreadCount = Util::Min(MaxShaderModuleThreads, sysInfo.cpuLogicalCoreCount / 2);
-    for (uint32_t i = 0; i < m_activeThreadCount; ++i)
+
+    for (uint32_t i = 0; i < MaxTaskType; ++i)
     {
-        m_pTaskThreads[i] = VK_PLACEMENT_NEW(m_taskThreadBuffer[i]) async::TaskThread<ShaderModuleTask>(this, pDevice->VkInstance()->Allocator());
-        m_pTaskThreads[i]->Begin();
+        m_taskId[i] = 0;
+        m_activeThreadCount[i] = Util::Min(MaxThreads, sysInfo.cpuLogicalCoreCount / 2);
+    }
+    for (uint32_t i = 0; i < m_activeThreadCount[0]; ++i)
+    {
+        m_pModuleTaskThreads[i] = VK_PLACEMENT_NEW(m_moduleTaskThreadBuffer[i])
+                                  async::TaskThread<ShaderModuleTask>(this, pDevice->VkInstance()->Allocator());
+        m_pModuleTaskThreads[i]->Begin();
+
+        m_pPipelineTaskThreads[i] = VK_PLACEMENT_NEW(m_pipelineTaskThreadBuffer[i])
+                                    async::TaskThread<PartialPipelineTask>(this, pDevice->VkInstance()->Allocator());
+        m_pPipelineTaskThreads[i]->Begin();
     }
 }
 
 // =====================================================================================================================
 AsyncLayer::~AsyncLayer()
 {
-    for (uint32_t i = 0; i < m_activeThreadCount; ++i)
+    for (uint32_t i = 0; i < m_activeThreadCount[0]; ++i)
     {
-        m_pTaskThreads[i]->SetStop();
-        m_pTaskThreads[i]->Join();
-        Util::Destructor(m_pTaskThreads[i]);
-        m_pTaskThreads[i] = nullptr;
+        m_pModuleTaskThreads[i]->SetStop();
+        m_pModuleTaskThreads[i]->Join();
+        Util::Destructor(m_pModuleTaskThreads[i]);
+        m_pModuleTaskThreads[i] = nullptr;
+
+        m_pPipelineTaskThreads[i]->SetStop();
+        m_pPipelineTaskThreads[i]->Join();
+        Util::Destructor(m_pPipelineTaskThreads[i]);
+        m_pPipelineTaskThreads[i] = nullptr;
     }
 }
 
 // =====================================================================================================================
 void AsyncLayer::SyncAll()
 {
-    for (uint32_t i = 0; i < m_activeThreadCount; ++i)
+    for (uint32_t i = 0; i < m_activeThreadCount[0]; ++i)
     {
-        m_pTaskThreads[i]->SyncAll();
+        m_pModuleTaskThreads[i]->SyncAll();
+        m_pPipelineTaskThreads[i]->SyncAll();
     }
 }
 

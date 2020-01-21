@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -152,7 +152,8 @@ VkResult Queue::NotifyFlipMetadata(
     uint32_t                     deviceIdx,
     Pal::ICmdBuffer*             pPresentCmdBuffer,
     const Pal::IGpuMemory*       pGpuMemory,
-    FullscreenFrameMetadataFlags flags)
+    FullscreenFrameMetadataFlags flags,
+    bool                         forceSubmit)
 {
     VkResult result = VK_SUCCESS;
     if (m_pDummyCmdBuffer[deviceIdx] == nullptr)
@@ -167,7 +168,7 @@ VkResult Queue::NotifyFlipMetadata(
     if (pCmdBuffer != nullptr)
     {
         if ((flags.frameBeginFlag == 1) || (flags.frameEndFlag == 1) || (flags.primaryHandle == 1) ||
-            (pPresentCmdBuffer != nullptr))
+            (pPresentCmdBuffer != nullptr) || forceSubmit)
         {
             Pal::CmdBufInfo cmdBufInfo = {};
             cmdBufInfo.isValid = 1;
@@ -205,11 +206,12 @@ VkResult Queue::NotifyFlipMetadataBeforePresent(
     uint32_t                         deviceIdx,
     const Pal::PresentSwapChainInfo* pPresentInfo,
     Pal::ICmdBuffer*                 pPresentCmdBuffer,
-    const Pal::IGpuMemory*           pGpuMemory)
+    const Pal::IGpuMemory*           pGpuMemory,
+    bool                             forceSubmit)
 {
     FullscreenFrameMetadataFlags flags = {};
 
-    return NotifyFlipMetadata(deviceIdx, pPresentCmdBuffer, pGpuMemory, flags);
+    return NotifyFlipMetadata(deviceIdx, pPresentCmdBuffer, pGpuMemory, flags, forceSubmit);
 }
 
 // =====================================================================================================================
@@ -624,6 +626,7 @@ VkResult Queue::Present(
     const VkPresentInfoKHR* pPresentInfo)
 {
     uint32_t presentationDeviceIdx = 0;
+    bool     needSemaphoreFlush    = false;
 
     const VkPresentInfoKHR* pVkInfo = nullptr;
 
@@ -689,6 +692,13 @@ VkResult Queue::Present(
             nullptr,
             0,
             nullptr);
+
+#if __unix__
+        // On Linux, a submission is required for queuePresent wait semaphore. The present buffer object is implicitly
+        // synced BO, which means its fence must be updated through a submission to ensure the compositing commands are
+        // executed after the rendering.
+        needSemaphoreFlush = (result == VK_SUCCESS) ? true : false;
+#endif
     }
 
     // Get presentable image object
@@ -731,10 +741,18 @@ VkResult Queue::Present(
             pGpuMemory = pSwapChain->GetPresentableImageMemory(imageIndex)->PalMemory(DefaultDeviceIndex);
         }
 
-        result = NotifyFlipMetadataBeforePresent(presentationDeviceIdx, &presentInfo, pPresentCmdBuffer, pGpuMemory);
+        result = NotifyFlipMetadataBeforePresent(presentationDeviceIdx,
+                                                 &presentInfo,
+                                                 pPresentCmdBuffer,
+                                                 pGpuMemory,
+                                                 needSemaphoreFlush);
         if (result != VK_SUCCESS)
         {
             break;
+        }
+        else
+        {
+            needSemaphoreFlush = false;
         }
 
         // Perform the actual present

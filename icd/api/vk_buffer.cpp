@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -59,6 +59,7 @@ Buffer::Buffer(
     m_internalFlags.usageUniformBuffer    = (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
     m_internalFlags.createSparseBinding   = (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
     m_internalFlags.createSparseResidency = (flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
+    // Note: The VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT_KHR is only used in vk_memory objects.
 
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
@@ -313,7 +314,10 @@ void Buffer::LogBufferCreate(
     // If there is already memory bound, log it now.
     // @NOTE - This only handles the single GPU case currently.  MGPU is not supported by RMV v1
     Pal::IGpuMemory* pPalMemory = pBufferObj->PalMemory(DefaultDeviceIndex);
-    pBufferObj->LogGpuMemoryBind(pDevice, pPalMemory, pBufferObj->MemOffset());
+    if (pPalMemory != nullptr)
+    {
+        pBufferObj->LogGpuMemoryBind(pDevice, pPalMemory, pBufferObj->MemOffset());
+    }
 }
 
 // =====================================================================================================================
@@ -564,8 +568,6 @@ VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR(
     VkDevice                                    device,
     const VkBufferDeviceAddressInfoKHR* const   pInfo)
 {
-    const Device* const pDevice = ApiDevice::ObjectFromHandle(device);
-
     Buffer* const pBuffer = Buffer::ObjectFromHandle(pInfo->buffer);
 
     return pBuffer->GpuVirtAddr(DefaultDeviceIndex);

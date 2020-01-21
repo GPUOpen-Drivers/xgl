@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -60,20 +60,24 @@ static const char* HwStageNames[] =
 static const char* ApiStageNames[] =
 {
     ".cs",
+    ".reserved", ///< @internal Reserved for future features.  Do not use!
     ".vs",
     ".hs",
     ".ds",
     ".gs",
+    ".reserved", ///< @internal Reserved for future features.  Do not use!
     ".ps"
 };
 
 static const Pal::ShaderStageFlagBits IndexPalShaderStages[] =
 {
     Pal::ApiShaderStageCompute,
+    static_cast<Pal::ShaderStageFlagBits>(0x0), ///< @internal Reserved for future features.  Do not use!
     Pal::ApiShaderStageVertex,
     Pal::ApiShaderStageHull,
     Pal::ApiShaderStageDomain,
     Pal::ApiShaderStageGeometry,
+    static_cast<Pal::ShaderStageFlagBits>(0x0), ///< @internal Reserved for future features.  Do not use!
     Pal::ApiShaderStagePixel
 };
 

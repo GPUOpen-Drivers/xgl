@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -109,7 +109,6 @@ static char* MakeAbsolutePath(
     VK_ASSERT((pDstPath != nullptr) && (pRootPath != nullptr) && (pSubPath != nullptr));
 
     // '/' works perfectly fine on Windows as file path separator character:
-    // https://msdn.microsoft.com/en-us/library/77859s1t.aspx
     std::ostringstream s;
     s << pRootPath << "/" << pSubPath;
     Strncpy(pDstPath, s.str().c_str(), dstSize);

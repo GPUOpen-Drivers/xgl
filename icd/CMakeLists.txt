@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -119,6 +119,11 @@ if(ICD_MEMTRACK)
 endif()
 
 # Configure Vulkan SDK version definitions
+#if VKI_SDK_1_2
+if (USE_NEXT_SDK)
+    target_compile_definitions(xgl PRIVATE VKI_SDK_1_2=1)
+endif()
+#endif
 
 # Enable relevant GPUOpen preprocessor definitions
 if(ICD_GPUOPEN_DEVMODE_BUILD)
@@ -235,6 +240,7 @@ target_sources(xgl PRIVATE
     api/appopt/strange_brigade_layer.cpp
     api/appopt/async_layer.cpp
     api/appopt/async_shader_module.cpp
+    api/appopt/async_partial_pipeline.cpp
     api/render_state_cache.cpp
     api/renderpass/renderpass_builder.cpp
     api/renderpass/renderpass_logger.cpp

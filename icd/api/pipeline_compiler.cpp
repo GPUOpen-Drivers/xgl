@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -588,6 +588,27 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
     }
 
     return cacheResult;
+}
+
+// =====================================================================================================================
+// Creates partial pipeline binary.
+VkResult PipelineCompiler::CreatePartialPipelineBinary(
+    uint32_t                            deviceIdx,
+    void*                               pShaderModuleData,
+    Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
+    const Llpc::ResourceMappingNode*    pResourceMappingNode,
+    uint32_t                            mappingNodeCount,
+    Llpc::ColorTarget*                  pColorTarget)
+{
+    uint32_t compilerMask = GetCompilerCollectionMask();
+    VkResult result = VK_SUCCESS;
+    if (compilerMask & (1 << PipelineCompilerTypeLlpc))
+    {
+        result = m_compilerSolutionLlpc.CreatePartialPipelineBinary(deviceIdx, pShaderModuleData, pShaderModuleEntryData,
+                pResourceMappingNode, mappingNodeCount, pColorTarget);
+    }
+
+    return result;
 }
 
 // =====================================================================================================================

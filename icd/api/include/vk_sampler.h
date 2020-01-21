@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -62,11 +62,16 @@ public:
     VK_INLINE uint64_t GetApiHash() const
         { return m_apiHash; }
 
+    VK_INLINE bool IsYCbCrSampler() const
+        { return m_isYCbCrSampler; }
+
 protected:
     Sampler(
-        uint64_t apiHash)
+        uint64_t apiHash,
+        bool     isYCbCrSampler)
         :
-        m_apiHash(apiHash)
+        m_apiHash(apiHash),
+        m_isYCbCrSampler(isYCbCrSampler)
     {
     }
 
@@ -74,6 +79,7 @@ protected:
         const VkSamplerCreateInfo* pCreateInfo);
 
     const uint64_t          m_apiHash;
+    const bool              m_isYCbCrSampler;
 };
 
 namespace entry

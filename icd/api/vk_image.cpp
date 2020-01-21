@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -622,8 +622,11 @@ VkResult Image::Create(
     {
         // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
         // compression, another performance optimization.
-        if ((palCreateInfo.extent.width * palCreateInfo.extent.height) >
-            (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize))
+        // Don't force DCC to be enabled for shader write image on pre-gfx10 ASICs as DCC is unsupported in shader write.
+        const Pal::GfxIpLevel gfxLevel = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
+        if (((palCreateInfo.extent.width * palCreateInfo.extent.height) >
+             (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize)) &&
+            ((gfxLevel > Pal::GfxIpLevel::GfxIp9) || (palCreateInfo.usageFlags.shaderWrite == false)))
         {
             // Enable DCC beyond what PAL does by default for color attachments
             if ((settings.forceDccForColorAttachments) && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
@@ -658,7 +661,6 @@ VkResult Image::Create(
         // a. If devs don't enable the extension: can keep DCC enabled for UAVs with mips
         // b. If dev enables the extension: keep DCC enabled for UAVs with <= 4 mips
         // c. Can app-detect un-disable DCC for cases where we know devs don't store to multiple mips
-        Pal::GfxIpLevel gfxLevel = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
         if ((gfxLevel == Pal::GfxIpLevel::GfxIp10_1) &&
             pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_IMAGE_LOAD_STORE_LOD) &&
             (pCreateInfo->mipLevels > 4) && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))

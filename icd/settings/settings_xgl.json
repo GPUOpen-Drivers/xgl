@@ -3793,6 +3793,19 @@
       "Name": "EnableAsyncCompile"
     },
     {
+      "Description": "Enable partial pipeline compile.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enablePartialPipelineCompile",
+      "Name": "EnablePartialPipelineCompile"
+    },
+    {
       "Description": "Determines the pipeline binary max size limit (in KB) used by the PipelineUriService when injecting pipeline binaries back into the driver. The limit is 256KB by default.",
       "Tags": [
         "Developer Mode"

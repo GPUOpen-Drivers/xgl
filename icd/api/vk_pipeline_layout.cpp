@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,7 @@
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_descriptor_set_layout.h"
 #include "include/vk_shader.h"
-
+#include "include/vk_sampler.h"
 #include "palMetroHash.h"
 
 #include "llpc.h"
@@ -388,11 +388,20 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
                 const uint32_t* pImmutableSamplerData = pLayout->Info().imm.pImmutableSamplerData +
                                                         binding.imm.dwOffset;
 
-                pDescriptorRangeValue->type      = Llpc::ResourceMappingNodeType::DescriptorSampler;
-                pDescriptorRangeValue->set       = setIndex;
-                pDescriptorRangeValue->binding   = binding.info.binding;
-                pDescriptorRangeValue->pValue    = pImmutableSamplerData;
-                pDescriptorRangeValue->arraySize = arraySize;
+                if (binding.imm.dwArrayStride == 4)
+                {
+                    pDescriptorRangeValue->type = Llpc::ResourceMappingNodeType::DescriptorSampler;
+                }
+                else
+                {
+                    pNode->type = Llpc::ResourceMappingNodeType::DescriptorYCbCrSampler;
+                    pDescriptorRangeValue->type = Llpc::ResourceMappingNodeType::DescriptorYCbCrSampler;
+                }
+
+                pDescriptorRangeValue->set         = setIndex;
+                pDescriptorRangeValue->binding     = binding.info.binding;
+                pDescriptorRangeValue->pValue      = pImmutableSamplerData;
+                pDescriptorRangeValue->arraySize   = arraySize;
                 ++pDescriptorRangeValue;
                 ++(*pDescriptorRangeCount);
             }

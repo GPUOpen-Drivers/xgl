@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -326,12 +326,35 @@ void DescriptorSetLayout::ConvertImmutableInfo(
          (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)))
     {
         uint32_t descCount = pBindingInfo->descriptorCount;
+        const uint32_t yCbCrMetaDataSizeInDW = sizeof(Llpc::SamplerYCbCrConversionMetaData) / sizeof(uint32_t);
 
         // Dword offset to this binding's immutable data.
-        pBindingSectionInfo->dwOffset = pSectionInfo->numImmutableSamplers * descSizeInDw;
+        pBindingSectionInfo->dwOffset = pSectionInfo->numImmutableSamplers * descSizeInDw +
+                                        pSectionInfo->numImmutableYCbCrMetaData * yCbCrMetaDataSizeInDW;
+
+        // By default, we assume the YCbCr meta data is not included.
+        bool isYCbCrMetaDataIncluded = false;
+
+        // For this binding section, it will be marked if any smapler contains ycbcr meta data,
+        // this is used to control the dw array stride.
+        for (uint32_t i = 0; i < descCount; ++i)
+        {
+            if (Sampler::ObjectFromHandle(pBindingInfo->pImmutableSamplers[i])->IsYCbCrSampler())
+            {
+                isYCbCrMetaDataIncluded = true;
+            }
+        }
 
         // Array stride in dwords.
-        pBindingSectionInfo->dwArrayStride = descSizeInDw;
+        // If YCbCr meta data is included, then the dwArrayStride should contains both desc and ycbcr meta data size
+        if (isYCbCrMetaDataIncluded)
+        {
+            pBindingSectionInfo->dwArrayStride = descSizeInDw + yCbCrMetaDataSizeInDW;
+        }
+        else
+        {
+            pBindingSectionInfo->dwArrayStride = descSizeInDw;
+        }
 
         // Size of the whole array in dwords.
         pBindingSectionInfo->dwSize = descCount * pBindingSectionInfo->dwArrayStride;
@@ -342,16 +365,30 @@ void DescriptorSetLayout::ConvertImmutableInfo(
         {
             // Update the number of immutable samplers.
             pSectionInfo->numImmutableSamplers += descCount;
+
+            if (isYCbCrMetaDataIncluded)
+            {
+                pSectionInfo->numImmutableYCbCrMetaData += descCount;
+            }
+
             ++pSectionInfo->numDescriptorValueNodes;
 
             // Copy the immutable descriptor data.
             uint32_t* pDestAddr = &pSectionInfo->pImmutableSamplerData[pBindingSectionInfo->dwOffset];
 
-            for (uint32_t i = 0; i < descCount; ++i, pDestAddr += descSizeInDw)
+            for (uint32_t i = 0; i < descCount; ++i, pDestAddr += pBindingSectionInfo->dwArrayStride)
             {
                 const void* pSamplerDesc = Sampler::ObjectFromHandle(pBindingInfo->pImmutableSamplers[i])->Descriptor();
 
                 memcpy(pDestAddr, pSamplerDesc, descSizeInDw * sizeof(uint32_t));
+
+                if (Sampler::ObjectFromHandle(pBindingInfo->pImmutableSamplers[i])->IsYCbCrSampler())
+                {
+                    // Copy the YCbCrMetaData
+                    const void* pYCbCrMetaData = Util::VoidPtrInc(pSamplerDesc, descSizeInDw * sizeof(uint32_t));
+                    void* pImmutableYCbCrMetaDataDestAddr = Util::VoidPtrInc(pDestAddr, descSizeInDw * sizeof(uint32_t));
+                    memcpy(pImmutableYCbCrMetaDataDestAddr, pYCbCrMetaData, yCbCrMetaDataSizeInDW * sizeof(uint32_t));
+                }
             }
         }
     }
@@ -387,15 +424,16 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                                                  // currently this flag is only tested for non zero, so
                                                  // setting all flags active makes no difference...
 
-    pOut->varDescStride             = 0;
+    pOut->varDescStride                 = 0;
 
-    pOut->sta.dwSize                = 0;
-    pOut->sta.numRsrcMapNodes       = 0;
+    pOut->sta.dwSize                    = 0;
+    pOut->sta.numRsrcMapNodes           = 0;
 
-    pOut->dyn.dwSize                = 0;
-    pOut->dyn.numRsrcMapNodes       = 0;
+    pOut->dyn.dwSize                    = 0;
+    pOut->dyn.numRsrcMapNodes           = 0;
 
-    pOut->imm.numImmutableSamplers  = 0;
+    pOut->imm.numImmutableYCbCrMetaData = 0;
+    pOut->imm.numImmutableSamplers      = 0;
 
     for (pInfo = pIn; pHeader != nullptr; pHeader = pHeader->pNext)
     {
@@ -514,6 +552,7 @@ VkResult DescriptorSetLayout::Create(
     // each binding.
 
     size_t immSamplerCount  = 0;
+    size_t immYCbCrMetaDataCount = 0;
     uint32_t bindingCount   = 0;
     for (uint32_t i = 0; i < pCreateInfo->bindingCount; ++i)
     {
@@ -524,16 +563,21 @@ VkResult DescriptorSetLayout::Create(
              (desc.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)))
         {
             immSamplerCount += desc.descriptorCount;
+            if (Sampler::ObjectFromHandle(*desc.pImmutableSamplers)->IsYCbCrSampler())
+            {
+                immYCbCrMetaDataCount += desc.descriptorCount;
+            }
         }
 
         bindingCount = Util::Max(bindingCount, desc.binding + 1);
     }
 
-    const size_t bindingInfoAuxSize = bindingCount * sizeof(BindingInfo);
-    const size_t immSamplerAuxSize  = immSamplerCount * pDevice->GetProperties().descriptorSizes.sampler;
+    const size_t bindingInfoAuxSize     = bindingCount          * sizeof(BindingInfo);
+    const size_t immSamplerAuxSize      = immSamplerCount       * pDevice->GetProperties().descriptorSizes.sampler;
+    const size_t immYCbCrMetaDataSize   = immYCbCrMetaDataCount * sizeof(Llpc::SamplerYCbCrConversionMetaData);
 
     const size_t apiSize = sizeof(DescriptorSetLayout);
-    const size_t auxSize = bindingInfoAuxSize + immSamplerAuxSize;
+    const size_t auxSize = bindingInfoAuxSize + immSamplerAuxSize + immYCbCrMetaDataSize;
     const size_t objSize = apiSize + auxSize;
 
     void* pSysMem = pDevice->AllocApiObject(objSize, pAllocator);
@@ -596,7 +640,9 @@ void DescriptorSetLayout::Copy(
     // Copy the immutable sampler data
     void* pImmutableSamplerData = Util::VoidPtrInc(pOutLayout, apiSize + GetBindingInfoArrayByteSize());
 
-    memcpy(pImmutableSamplerData, Util::VoidPtrInc(this, apiSize + GetBindingInfoArrayByteSize()), GetImmSamplerArrayByteSize());
+    memcpy(pImmutableSamplerData,
+           Util::VoidPtrInc(this, apiSize + GetBindingInfoArrayByteSize()),
+           GetImmSamplerArrayByteSize() + GetImmYCbCrMetaDataArrayByteSize());
 
     // Set the base pointer of the immutable sampler data to the appropriate location within the allocated memory
     info.imm.pImmutableSamplerData = reinterpret_cast<uint32_t*>(pImmutableSamplerData);
@@ -609,6 +655,13 @@ void DescriptorSetLayout::Copy(
 uint32_t DescriptorSetLayout::GetImmSamplerArrayByteSize() const
 {
     return m_info.imm.numImmutableSamplers * m_pDevice->GetProperties().descriptorSizes.sampler;
+}
+
+// =====================================================================================================================
+// Get the size in bytes of immutable ycbcr meta data array
+uint32_t DescriptorSetLayout::GetImmYCbCrMetaDataArrayByteSize() const
+{
+    return m_info.imm.numImmutableYCbCrMetaData * sizeof(Llpc::SamplerYCbCrConversionMetaData);
 }
 
 // =====================================================================================================================

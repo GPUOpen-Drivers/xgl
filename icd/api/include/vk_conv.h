@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -803,6 +803,11 @@ VK_INLINE Pal::ImageViewType VkToPalImageViewType(VkImageViewType imgViewType)
 {
     return convert::ImageViewType(imgViewType);
 }
+
+#if VKI_SDK_1_2
+// This is no longer necessary once the below code removes _EXT and uses the core enum.
+#define VK_SAMPLER_REDUCTION_MODE_RANGE_SIZE_EXT VK_SAMPLER_REDUCTION_MODE_RANGE_SIZE
+#endif
 
 // =====================================================================================================================
 VK_TO_PAL_TABLE_I_EXT(  SAMPLER_REDUCTION_MODE, SamplerReductionModeEXT,    TexFilterMode,

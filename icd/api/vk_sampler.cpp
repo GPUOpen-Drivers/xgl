@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -193,11 +193,14 @@ VkResult Sampler::Create(
     const uint32_t apiSize = sizeof(Sampler);
     const uint32_t palSize = props.gfxipProperties.srdSizes.sampler;
 
+    const uint32_t yCbCrMetaDataSize = (pSamplerYCbCrConversionMetaData == nullptr) ?
+                                    0 : sizeof(Llpc::SamplerYCbCrConversionMetaData);
+
     // Allocate system memory. Construct the sampler in memory and then wrap a Vulkan
     // object around it.
     void* pMemory = pAllocator->pfnAllocation(
         pAllocator->pUserData,
-        apiSize + palSize,
+        apiSize + palSize + yCbCrMetaDataSize,
         VK_DEFAULT_MEM_ALIGN,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -212,7 +215,13 @@ VkResult Sampler::Create(
             &samplerInfo,
             Util::VoidPtrInc(pMemory, apiSize));
 
-    VK_PLACEMENT_NEW (pMemory) Sampler(apiHash);
+    if (pSamplerYCbCrConversionMetaData != nullptr)
+    {
+        memcpy(Util::VoidPtrInc(pMemory, apiSize + palSize), pSamplerYCbCrConversionMetaData, yCbCrMetaDataSize);
+    }
+
+    VK_PLACEMENT_NEW (pMemory) Sampler(apiHash,
+                                      (pSamplerYCbCrConversionMetaData != nullptr));
 
     *pSampler = Sampler::HandleFromVoidPointer(pMemory);
 

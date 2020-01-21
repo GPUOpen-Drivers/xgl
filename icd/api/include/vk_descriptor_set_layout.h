@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -86,9 +86,10 @@ public:
     // Information about the immutable section of a descriptor set layout
     struct ImmSectionInfo
     {
-        uint32_t    numDescriptorValueNodes; // The total number descriptor value node in this layout
-        uint32_t    numImmutableSamplers;    // The total number of immutable samplers in the layout
-        uint32_t*   pImmutableSamplerData;   // Pointer to the immutable sampler data
+        uint32_t    numDescriptorValueNodes;   // The total number descriptor value node in this layout
+        uint32_t    numImmutableSamplers;      // The total number of immutable samplers in the layout
+        uint32_t    numImmutableYCbCrMetaData; // The total number of immutable ycbcr meta data in the layout
+        uint32_t*   pImmutableSamplerData;     // Pointer to the immutable sampler data
     };
 
     // Set-wide information about this layout
@@ -128,11 +129,15 @@ public:
 
     uint32_t GetImmSamplerArrayByteSize() const;
 
+    uint32_t GetImmYCbCrMetaDataArrayByteSize() const;
+
     uint32_t GetObjectSize() const
     {
         const uint32_t apiSize = sizeof(DescriptorSetLayout);
 
-        return apiSize + GetBindingInfoArrayByteSize() + GetImmSamplerArrayByteSize();
+        return apiSize + GetBindingInfoArrayByteSize()
+                       + GetImmSamplerArrayByteSize()
+                       + GetImmYCbCrMetaDataArrayByteSize();
     }
 
     const BindingInfo& Binding(uint32_t bindingIndex) const

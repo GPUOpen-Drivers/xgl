@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1059,6 +1059,8 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 }
             }
 
+            // The alpha component of the fragment's first color output is replaced with one if alphaToOneEnable is set.
+            pInfo->pipeline.cbState.target[0].forceAlphaToOne = (pMs->alphaToOneEnable == VK_TRUE);
             pInfo->pipeline.cbState.alphaToCoverageEnable     = (pMs->alphaToCoverageEnable == VK_TRUE);
         }
 

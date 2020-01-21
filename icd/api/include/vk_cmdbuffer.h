@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -575,6 +575,9 @@ public:
     void SetLineStippleEXT(
         uint32_t        lineStippleFactor,
         uint16_t        lineStipplePattern);
+
+    void CmdBeginConditionalRendering(const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin);
+    void CmdEndConditionalRendering();
 
     VK_INLINE void SetDeviceMask(uint32_t deviceMask)
     {
@@ -1583,6 +1586,13 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndDebugUtilsLabelEXT(
 VKAPI_ATTR void VKAPI_CALL vkCmdInsertDebugUtilsLabelEXT(
     VkCommandBuffer                             commandBuffer,
     const VkDebugUtilsLabelEXT*                 pLabelInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginConditionalRenderingEXT(
+    VkCommandBuffer                           commandBuffer,
+    const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdEndConditionalRenderingEXT(
+    VkCommandBuffer                           commandBuffer);
 
 } // namespace entry
 

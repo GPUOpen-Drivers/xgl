@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -81,6 +81,10 @@ VkResult Memory::Create(
     bool isExternal                 = false;
     bool isHostMappedForeign        = false;
     void* pPinnedHostPtr            = nullptr; // If non-null, this memory is allocated as pinned system memory
+    bool isCaptureReplay            = false;
+
+    // If not 0, use this address as the VA address
+    uint64_t baseReplayAddress      = 0;
 
     Pal::GpuMemoryExportInfo exportInfo = {};
 
@@ -191,6 +195,14 @@ VkResult Memory::Create(
 
                     allocationMask = pMemoryAllocateFlags->deviceMask;
                 }
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
+                // Test if capture replay has been specified for the memory allocation
+                if (pMemoryAllocateFlags->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT_KHR)
+                {
+                    createInfo.vaRange = Pal::VaRange::CaptureReplay;
+                }
+#endif
             }
             break;
 
@@ -214,6 +226,23 @@ VkResult Memory::Create(
                 priority = MemoryPriority::FromVkMemoryPriority(pMemPriorityInfo->priority);
             }
             break;
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
+            case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO_KHR:
+            {
+                const VkMemoryOpaqueCaptureAddressAllocateInfoKHR* pMemOpaqueCaptureAddressAllocateInfo =
+                    reinterpret_cast<const VkMemoryOpaqueCaptureAddressAllocateInfoKHR *>(pHeader);
+
+                VkDeviceAddress baseVaAddress = pMemOpaqueCaptureAddressAllocateInfo->opaqueCaptureAddress;
+                if (baseVaAddress != 0)
+                {
+                    // For Replay Specify VA Range and Base Address
+                    createInfo.replayVirtAddr = baseVaAddress;
+                    createInfo.vaRange        = Pal::VaRange::CaptureReplay;
+                }
+            }
+            break;
+#endif
 
             default:
                 switch (static_cast<uint32_t>(pHeader->sType))
@@ -337,6 +366,10 @@ VkResult Memory::Create(
                 Pal::PalEvent::GpuMemoryResourceBind,
                 &bindData,
                 sizeof(Pal::GpuMemoryResourceBindEventData));
+        }
+        else
+        {
+             VK_NEVER_CALLED();
         }
     }
     else if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)

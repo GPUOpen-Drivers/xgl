@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -30,6 +30,7 @@
 */
 #include "async_layer.h"
 #include "async_shader_module.h"
+#include "async_partial_pipeline.h"
 
 #include "include/vk_device.h"
 #include "include/vk_shader.h"
@@ -127,7 +128,8 @@ VkResult ShaderModule::Destroy(
 void ShaderModule::AsyncBuildShaderModule(
     AsyncLayer* pAsyncLayer)
 {
-    auto pTaskThread = pAsyncLayer->GetTaskThread<ShaderModuleTask>();
+    auto pTaskThread = reinterpret_cast<async::TaskThread<ShaderModuleTask>*>
+                       (pAsyncLayer->GetTaskThread(ShaderModuleTaskType));
     if (pTaskThread != nullptr)
     {
         vk::ShaderModule* pNextLayerModule = vk::ShaderModule::ObjectFromHandle(m_immedModule);
@@ -153,6 +155,18 @@ void ShaderModule::Execute(
                                                 &pTask->info,
                                                 nullptr,
                                                 &m_asyncModule);
+    const RuntimeSettings& settings  = pDevice->GetRuntimeSettings();
+    if (settings.enablePartialPipelineCompile)
+    {
+        const VkAllocationCallbacks* pAllocCB = pDevice->VkInstance()->GetAllocCallbacks();
+        auto pPartialPipelineObj = vk::async::PartialPipeline::Create(pDevice, pAllocCB);
+
+        if ((pPartialPipelineObj != nullptr) && (m_asyncModule != VK_NULL_HANDLE))
+        {
+            // Build partial pipeline in async mode
+            pPartialPipelineObj->AsyncBuildPartialPipeline(pDevice->GetAsyncLayer(), m_asyncModule);
+        }
+    }
 }
 
 } // namespace async

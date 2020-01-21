@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -32,6 +32,10 @@
 #ifndef __VK_LAYER_H_PROXY__
 #define __VK_LAYER_H_PROXY__
 
+#if VKI_SDK_1_2
+#include "sdk-1.2/vk_layer.h"
+#else
 #include "sdk-1.1/vk_layer.h"
+#endif
 
 #endif /* __VK_LAYER_H_PROXY__ */

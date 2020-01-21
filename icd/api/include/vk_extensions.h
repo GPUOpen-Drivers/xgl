@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -298,6 +298,7 @@ public:
         EXT_SEPARATE_STENCIL_USAGE,
         KHR_VULKAN_MEMORY_MODEL,
         EXT_MEMORY_PRIORITY,
+        EXT_CONDITIONAL_RENDERING,
         AMD_DEVICE_COHERENT_MEMORY,
         EXT_MEMORY_BUDGET,
         EXT_POST_DEPTH_COVERAGE,
@@ -312,6 +313,7 @@ public:
         EXT_PIPELINE_CREATION_FEEDBACK,
         EXT_CALIBRATED_TIMESTAMPS,
         KHR_PIPELINE_EXECUTABLE_PROPERTIES,
+        KHR_SAMPLER_YCBCR_CONVERSION,
         Count
     };
 };

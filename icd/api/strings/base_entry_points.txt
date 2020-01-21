@@ -172,6 +172,22 @@ vkGetImageSparseMemoryRequirements2                 @device     @core(1.1)
 vkTrimCommandPool                                   @device     @core(1.1)
 vkUpdateDescriptorSetWithTemplate                   @device     @core(1.1)
 
+#if VKI_SDK_1_2
+vkCmdDrawIndexedIndirectCount                       @device     @core(1.2)
+vkCmdDrawIndirectCount                              @device     @core(1.2)
+vkCmdBeginRenderPass2                               @device     @core(1.2)
+vkCmdEndRenderPass2                                 @device     @core(1.2)
+vkCmdNextSubpass2                                   @device     @core(1.2)
+vkCreateRenderPass2                                 @device     @core(1.2)
+vkGetBufferDeviceAddress                            @device     @core(1.2)
+vkGetBufferOpaqueCaptureAddress                     @device     @core(1.2)
+vkGetDeviceMemoryOpaqueCaptureAddress               @device     @core(1.2)
+vkGetSemaphoreCounterValue                          @device     @core(1.2)
+vkResetQueryPool                                    @device     @core(1.2)
+vkSignalSemaphore                                   @device     @core(1.2)
+vkWaitSemaphores                                    @device     @core(1.2)
+#endif
+
 vkEnumeratePhysicalDeviceGroupsKHR                  @instance   @iext(KHR_device_group_creation)
 
 vkGetDeviceGroupPeerMemoryFeaturesKHR               @device     @dext(KHR_device_group)
@@ -345,4 +361,7 @@ vkCmdSetLineStippleEXT                              @device     @dext(EXT_line_r
 vkGetSemaphoreCounterValueKHR                       @device     @dext(KHR_timeline_semaphore)
 vkWaitSemaphoresKHR                                 @device     @dext(KHR_timeline_semaphore)
 vkSignalSemaphoreKHR                                @device     @dext(KHR_timeline_semaphore)
+
+vkCmdBeginConditionalRenderingEXT                   @device     @dext(EXT_conditional_rendering)
+vkCmdEndConditionalRenderingEXT                     @device     @dext(EXT_conditional_rendering)
 

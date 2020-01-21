@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -728,6 +728,41 @@ VkResult Device::Create(
             break;
         }
 
+#if VKI_SDK_1_2
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVulkan11Features>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceVulkan11Features*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVulkan12Features>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceVulkan12Features*>(pHeader));
+
+            if ((vkResult == VK_SUCCESS) &&
+                reinterpret_cast<const VkPhysicalDeviceVulkan12Features*>(pHeader)->scalarBlockLayout)
+            {
+                scalarBlockLayoutEnabled = true;
+            }
+
+            break;
+        }
+#endif
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceConditionalRenderingFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
         default:
             break;
         }
@@ -1272,6 +1307,13 @@ VkResult Device::Initialize(
 
     if (result == VK_SUCCESS)
     {
+        // For apps running on APU, disable allocation size tracking, allocate remote heap instead when local heap is used up.
+        const Pal::DeviceProperties& palProps = pPhysicalDevice->PalProperties();
+        if (palProps.gpuType == Pal::GpuType::Integrated)
+        {
+            m_allocationSizeTracking = false;
+        }
+
         if (m_settings.memoryDeviceOverallocationNonOverridable == false)
         {
             AppProfile profile = GetAppProfile();

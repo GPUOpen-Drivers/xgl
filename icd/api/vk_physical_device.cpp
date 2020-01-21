@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -89,6 +89,13 @@ constexpr VkFormatFeatureFlags AllImgFeatures =
     VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
     VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
     VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT |
+    VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT|
+    VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT|
+    VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT|
+    VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_BIT|
+    VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT|
+    VK_FORMAT_FEATURE_DISJOINT_BIT|
+    VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT|
     VK_FORMAT_FEATURE_BLIT_DST_BIT;
 
 // Vulkan Spec Table 30.12: All features in bufferFeatures
@@ -396,7 +403,6 @@ static void GetFormatFeatureFlags(
     const Pal::MergedFormatPropertiesTable& formatProperties,
     VkFormat                                format,
     VkImageTiling                           imageTiling,
-    const bool                              multiChannelMinMaxFilter,
     VkFormatFeatureFlags*                   pOutFormatFeatureFlags)
 {
     const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(format);
@@ -698,8 +704,9 @@ VkResult PhysicalDevice::Initialize()
             {
                 uint32_t memoryTypeIndex = m_memoryProperties.memoryTypeCount++;
 
-                m_memoryVkIndexToPalHeap[memoryTypeIndex] = palGpuHeap;
-                m_memoryPalHeapToVkIndexBits[palGpuHeap] |= (1UL << memoryTypeIndex);
+                Pal::GpuHeap allocPalGpuHeap = ((palGpuHeap == Pal::GpuHeapInvisible) && (invisHeapSize == 0)) ? Pal::GpuHeapLocal : palGpuHeap;
+                m_memoryVkIndexToPalHeap[memoryTypeIndex] = allocPalGpuHeap;
+                m_memoryPalHeapToVkIndexBits[allocPalGpuHeap] |= (1UL << memoryTypeIndex);
 
                 VkMemoryType& memoryType = m_memoryProperties.memoryTypes[memoryTypeIndex];
 
@@ -959,8 +966,6 @@ void PhysicalDevice::PopulateFormatProperties()
     Pal::MergedFormatPropertiesTable fmtProperties = {};
     m_pPalDevice->GetFormatProperties(&fmtProperties);
 
-    const bool multiChannelMinMaxFilter = IsPerChannelMinMaxFilteringSupported();
-
     for (uint32_t i = 0; i < VK_SUPPORTED_FORMAT_COUNT; i++)
     {
         VkFormat format = Formats::FromIndex(i);
@@ -969,8 +974,8 @@ void PhysicalDevice::PopulateFormatProperties()
         VkFormatFeatureFlags optimalFlags = 0;
         VkFormatFeatureFlags bufferFlags  = 0;
 
-        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_LINEAR, multiChannelMinMaxFilter, &linearFlags);
-        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_OPTIMAL, multiChannelMinMaxFilter, &optimalFlags);
+        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_LINEAR, &linearFlags);
+        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_OPTIMAL, &optimalFlags);
 
         bufferFlags = linearFlags;
 
@@ -992,6 +997,23 @@ void PhysicalDevice::PopulateFormatProperties()
 
              bufferFlags = linearFlags;
           }
+
+        if (Formats::IsYuvFormat(format))
+        {
+            if (IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION))
+            {
+                linearFlags  |= VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT |
+                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT |
+                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT |
+                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT |
+                                VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT;
+                optimalFlags |= VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT |
+                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT |
+                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT |
+                                VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT |
+                                VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT;
+            }
+        }
 
         linearFlags  &= AllImgFeatures;
         optimalFlags &= AllImgFeatures;
@@ -1164,7 +1186,8 @@ VkResult PhysicalDevice::GetFeatures(
     pFeatures->depthBounds                              = VK_TRUE;
     pFeatures->wideLines                                = VK_TRUE;
     pFeatures->largePoints                              = VK_TRUE;
-    pFeatures->alphaToOne                               = VK_FALSE;
+    pFeatures->alphaToOne                               =
+        (PalProperties().gfxipProperties.flags.supportAlphaToOne ? VK_TRUE : VK_FALSE);
     pFeatures->multiViewport                            = VK_TRUE;
     pFeatures->samplerAnisotropy                        = VK_TRUE;
     pFeatures->textureCompressionETC2                   = VerifyEtc2FormatSupport(*this);
@@ -1800,8 +1823,13 @@ VkResult PhysicalDevice::GetPhysicalDeviceCalibrateableTimeDomainsEXT(
 // Returns the API version supported by this device.
 uint32_t PhysicalDevice::GetSupportedAPIVersion() const
 {
+#if VKI_SDK_1_2
+    // Currently all of our HW supports Vulkan 1.2
+    return (VK_API_VERSION_1_2 | VK_HEADER_VERSION);
+#else
     // Currently all of our HW supports Vulkan 1.1
     return (VK_API_VERSION_1_1 | VK_HEADER_VERSION);
+#endif
 }
 
 // =====================================================================================================================
@@ -3223,6 +3251,43 @@ VkResult PhysicalDevice::GetPhysicalDevicePresentRectangles(
 }
 
 // =====================================================================================================================
+static bool IsConditionalRenderingSupported(
+    const PhysicalDevice* pPhysicalDevice)
+{
+    bool isSupported = false;
+
+    if (isSupported && (pPhysicalDevice != nullptr))
+    {
+        // Conditional rendering must be supported on all exposed graphics and compute queue types.
+        for (uint32_t engineType = 0; engineType < Pal::EngineTypeCount; engineType++)
+        {
+            const auto& engineProps = pPhysicalDevice->PalProperties().engineProperties[engineType];
+
+            if ((engineProps.queueSupport & (Pal::SupportQueueTypeUniversal | Pal::SupportQueueTypeCompute)) &&
+                (engineProps.flags.supports32bitMemoryPredication == 0))
+            {
+                isSupported = false;
+                break;
+            }
+        }
+    }
+
+    return isSupported;
+}
+
+// =====================================================================================================================
+static bool IsSingleChannelMinMaxFilteringSupported(
+    const PhysicalDevice* pPhysicalDevice)
+{
+#if VK_IS_PAL_VERSION_AT_LEAST(560, 1)
+    return ((pPhysicalDevice == nullptr) ||
+            pPhysicalDevice->PalProperties().gfxipProperties.flags.supportSingleChannelMinMaxFilter);
+#else
+    return true;
+#endif
+}
+
+// =====================================================================================================================
 // Get available device extensions or populate the specified physical device with the extensions supported by it.
 //
 // If the device pointer is not nullptr, this function returns all extensions supported by that physical device.
@@ -3293,7 +3358,11 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_GET_MEMORY_REQUIREMENTS2));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE2));
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SAMPLER_FILTER_MINMAX));
+
+    if (IsSingleChannelMinMaxFilteringSupported(pPhysicalDevice))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SAMPLER_FILTER_MINMAX));
+    }
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MAINTENANCE3));
 
@@ -3405,6 +3474,11 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VULKAN_MEMORY_MODEL));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION));
+
+    if (IsConditionalRenderingSupported(pPhysicalDevice))
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONDITIONAL_RENDERING));
+    }
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HOST_QUERY_RESET));
 
@@ -4006,8 +4080,8 @@ void PhysicalDevice::GetPhysicalDeviceSamplerFilterMinmaxProperties(
     VkBool32* pFilterMinmaxImageComponentMapping
     ) const
 {
-    *pFilterMinmaxSingleComponentFormats = VK_TRUE;
-    *pFilterMinmaxImageComponentMapping  = IsPerChannelMinMaxFilteringSupported();
+    *pFilterMinmaxSingleComponentFormats = IsSingleChannelMinMaxFilteringSupported(this) ? VK_TRUE : VK_FALSE;
+    *pFilterMinmaxImageComponentMapping  = IsPerChannelMinMaxFilteringSupported() ? VK_TRUE : VK_FALSE;
 }
 
 // =====================================================================================================================
@@ -4275,7 +4349,11 @@ void PhysicalDevice::GetPhysicalDeviceBufferAddressFeatures(
     ) const
 {
     *pBufferDeviceAddress              = VK_FALSE;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
     *pBufferDeviceAddressCaptureReplay = VK_FALSE;
+#else
+    *pBufferDeviceAddressCaptureReplay = VK_FALSE;
+#endif
     *pBufferDeviceAddressMultiDevice   = VK_FALSE;
 }
 
@@ -4652,6 +4730,123 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+#if VKI_SDK_1_2
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
+            {
+                VkPhysicalDeviceVulkan11Features* pVulkan11Features =
+                    reinterpret_cast<VkPhysicalDeviceVulkan11Features*>(pHeader);
+
+                GetPhysicalDevice16BitStorageFeatures(
+                    &pVulkan11Features->storageBuffer16BitAccess,
+                    &pVulkan11Features->uniformAndStorageBuffer16BitAccess,
+                    &pVulkan11Features->storagePushConstant16,
+                    &pVulkan11Features->storageInputOutput16);
+
+                GetPhysicalDeviceMultiviewFeatures(
+                    &pVulkan11Features->multiview,
+                    &pVulkan11Features->multiviewGeometryShader,
+                    &pVulkan11Features->multiviewTessellationShader);
+
+                GetPhysicalDeviceVariablePointerFeatures(
+                    &pVulkan11Features->variablePointersStorageBuffer,
+                    &pVulkan11Features->variablePointers);
+
+                GetPhysicalDeviceProtectedMemoryFeatures(
+                    &pVulkan11Features->protectedMemory);
+
+                GetPhysicalDeviceSamplerYcbcrConversionFeatures(
+                    &pVulkan11Features->samplerYcbcrConversion);
+
+                GetPhysicalDeviceShaderDrawParameterFeatures(
+                    &pVulkan11Features->shaderDrawParameters);
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_FEATURES:
+            {
+                VkPhysicalDeviceVulkan12Features* pVulkan12Features =
+                    reinterpret_cast<VkPhysicalDeviceVulkan12Features*>(pHeader);
+
+                GetPhysicalDevice8BitStorageFeatures(
+                    &pVulkan12Features->storageBuffer8BitAccess,
+                    &pVulkan12Features->uniformAndStorageBuffer8BitAccess,
+                    &pVulkan12Features->storagePushConstant8);
+
+                GetPhysicalDeviceShaderAtomicInt64Features(
+                    &pVulkan12Features->shaderBufferInt64Atomics,
+                    &pVulkan12Features->shaderSharedInt64Atomics);
+
+                GetPhysicalDeviceFloat16Int8Features(
+                    &pVulkan12Features->shaderFloat16,
+                    &pVulkan12Features->shaderInt8);
+
+                GetPhysicalDeviceDescriptorIndexingFeatures(pVulkan12Features);
+
+                GetPhysicalDeviceScalarBlockLayoutFeatures(
+                    &pVulkan12Features->scalarBlockLayout);
+
+                GetPhysicalDeviceImagelessFramebufferFeatures(
+                    &pVulkan12Features->imagelessFramebuffer);
+
+                GetPhysicalDeviceUniformBufferStandardLayoutFeatures(
+                    &pVulkan12Features->uniformBufferStandardLayout);
+
+                GetPhysicalDeviceSubgroupExtendedTypesFeatures(
+                    &pVulkan12Features->shaderSubgroupExtendedTypes);
+
+                GetPhysicalDeviceSeparateDepthStencilLayoutsFeatures(
+                    &pVulkan12Features->separateDepthStencilLayouts);
+
+                GetPhysicalDeviceHostQueryResetFeatures(
+                    &pVulkan12Features->hostQueryReset);
+
+                GetPhysicalDeviceTimelineSemaphoreFeatures(
+                    &pVulkan12Features->timelineSemaphore);
+
+                GetPhysicalDeviceBufferAddressFeatures(
+                    &pVulkan12Features->bufferDeviceAddress,
+                    &pVulkan12Features->bufferDeviceAddressCaptureReplay,
+                    &pVulkan12Features->bufferDeviceAddressMultiDevice);
+
+                GetPhysicalDeviceVulkanMemoryModelFeatures(
+                    &pVulkan12Features->vulkanMemoryModel,
+                    &pVulkan12Features->vulkanMemoryModelDeviceScope,
+                    &pVulkan12Features->vulkanMemoryModelAvailabilityVisibilityChains);
+
+                // These features aren't new to Vulkan 1.2, but the caps just didn't exist in their original extensions.
+                pVulkan12Features->samplerMirrorClampToEdge   = VK_TRUE;
+                pVulkan12Features->drawIndirectCount          = VK_TRUE;
+                pVulkan12Features->descriptorIndexing         = VK_TRUE;
+                pVulkan12Features->samplerFilterMinmax        =
+                    IsSingleChannelMinMaxFilteringSupported(this) ? VK_TRUE : VK_FALSE;
+                pVulkan12Features->shaderOutputViewportIndex  = VK_TRUE;
+                pVulkan12Features->shaderOutputLayer          = VK_TRUE;
+                pVulkan12Features->subgroupBroadcastDynamicId = VK_TRUE;
+
+                break;
+            }
+#endif
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
+            {
+                VkPhysicalDeviceConditionalRenderingFeaturesEXT* pConditionalRenderingFeatures =
+                    reinterpret_cast<VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(pHeader);
+
+                if (IsConditionalRenderingSupported(this))
+                {
+                    pConditionalRenderingFeatures->conditionalRendering          = VK_TRUE;
+                    pConditionalRenderingFeatures->inheritedConditionalRendering = VK_TRUE;
+                }
+                else
+                {
+                    pConditionalRenderingFeatures->conditionalRendering          = VK_FALSE;
+                    pConditionalRenderingFeatures->inheritedConditionalRendering = VK_FALSE;
+                }
+
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -4817,6 +5012,10 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceTimelineSemaphorePropertiesKHR*           pTimelineSemaphoreProperties;
         VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*         pSubgroupSizeControlProperties;
         VkPhysicalDeviceLineRasterizationPropertiesEXT*           pLineRasterizationProperties;
+#if VKI_SDK_1_2
+        VkPhysicalDeviceVulkan11Properties*                       pVulkan11Properties;
+        VkPhysicalDeviceVulkan12Properties*                       pVulkan12Properties;
+#endif
     };
 
     for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -5067,6 +5266,75 @@ void PhysicalDevice::GetDeviceProperties2(
             pLineRasterizationProperties->lineSubPixelPrecisionBits = Pal::SubPixelBits;
             break;
         }
+
+#if VKI_SDK_1_2
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES:
+        {
+            GetPhysicalDeviceIDProperties(
+                &pVulkan11Properties->deviceUUID[0],
+                &pVulkan11Properties->driverUUID[0],
+                &pVulkan11Properties->deviceLUID[0],
+                &pVulkan11Properties->deviceNodeMask,
+                &pVulkan11Properties->deviceLUIDValid);
+
+            GetPhysicalDeviceMaintenance3Properties(
+                &pVulkan11Properties->maxPerSetDescriptors,
+                &pVulkan11Properties->maxMemoryAllocationSize);
+
+            GetPhysicalDeviceMultiviewProperties(
+                &pVulkan11Properties->maxMultiviewViewCount,
+                &pVulkan11Properties->maxMultiviewInstanceIndex);
+
+            GetPhysicalDevicePointClippingProperties(
+                &pVulkan11Properties->pointClippingBehavior);
+
+            GetPhysicalDeviceProtectedMemoryProperties(
+                &pVulkan11Properties->protectedNoFault);
+
+            GetPhysicalDeviceSubgroupProperties(
+                &pVulkan11Properties->subgroupSize,
+                &pVulkan11Properties->subgroupSupportedStages,
+                &pVulkan11Properties->subgroupSupportedOperations,
+                &pVulkan11Properties->subgroupQuadOperationsInAllStages);
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES:
+        {
+            GetPhysicalDeviceDriverProperties(
+                &pVulkan12Properties->driverID,
+                &pVulkan12Properties->driverName[0],
+                &pVulkan12Properties->driverInfo[0],
+                &pVulkan12Properties->conformanceVersion);
+
+            GetPhysicalDeviceFloatControlsProperties(pVulkan12Properties);
+
+            GetPhysicalDeviceDescriptorIndexingProperties(pVulkan12Properties);
+
+            GetPhysicalDeviceDepthStencilResolveProperties(
+                &pVulkan12Properties->supportedDepthResolveModes,
+                &pVulkan12Properties->supportedStencilResolveModes,
+                &pVulkan12Properties->independentResolveNone,
+                &pVulkan12Properties->independentResolve);
+
+            GetPhysicalDeviceSamplerFilterMinmaxProperties(
+                &pVulkan12Properties->filterMinmaxSingleComponentFormats,
+                &pVulkan12Properties->filterMinmaxImageComponentMapping);
+
+            GetPhysicalDeviceTimelineSemaphoreProperties(
+                &pVulkan12Properties->maxTimelineSemaphoreValueDifference);
+
+            pVulkan12Properties->framebufferIntegerColorSampleCounts =
+                (VK_SAMPLE_COUNT_1_BIT |
+                 VK_SAMPLE_COUNT_2_BIT |
+                 VK_SAMPLE_COUNT_4_BIT |
+                 VK_SAMPLE_COUNT_8_BIT) &
+                GetRuntimeSettings().limitSampleCounts;
+
+            break;
+        }
+#endif
 
         default:
             break;
@@ -5736,6 +6004,36 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_VARIABLE_POINTERS));
     }
 
+#if VKI_SDK_1_2
+    if (apiVersion >= VK_API_VERSION_1_2)
+    {
+        VK_ASSERT(dev.IsExtensionSupported(DeviceExtensions::KHR_8BIT_STORAGE)
+//             && dev.IsExtensionSupported(DeviceExtensions::KHR_BUFFER_DEVICE_ADDRESS)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_CREATE_RENDERPASS2)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_DEPTH_STENCIL_RESOLVE)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_DESCRIPTOR_INDEXING)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_DRAW_INDIRECT_COUNT)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_DRIVER_PROPERTIES)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_HOST_QUERY_RESET)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_IMAGE_FORMAT_LIST)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_IMAGELESS_FRAMEBUFFER)
+//             && dev.IsExtensionSupported(DeviceExtensions::EXT_SAMPLER_FILTER_MINMAX)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_SEPARATE_STENCIL_USAGE)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SPIRV_1_4)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SWAPCHAIN_MUTABLE_FORMAT)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_ATOMIC_INT64)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_FLOAT_CONTROLS)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_FLOAT16_INT8)
+               && dev.IsExtensionSupported(DeviceExtensions::EXT_SHADER_VIEWPORT_INDEX_LAYER)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_SUBGROUP_EXTENDED_TYPES)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_TIMELINE_SEMAPHORE)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_UNIFORM_BUFFER_STANDARD_LAYOUT)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_VULKAN_MEMORY_MODEL));
+    }
+#endif
 }
 
 // =====================================================================================================================

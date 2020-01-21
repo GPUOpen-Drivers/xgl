@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -978,6 +978,8 @@ VkResult CmdBuffer::Begin(
         palFlags.prefetchShaders = 1;
     }
 
+    Pal::InheritedStateParams inheritedStateParams = {};
+
     uint32_t currentSubPass = 0;
     for (pInfo = pBeginInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
@@ -1009,6 +1011,10 @@ VkResult CmdBuffer::Begin(
                 pRenderPass = RenderPass::ObjectFromHandle(pInfo->pInheritanceInfo->renderPass);
                 pFramebuffer = Framebuffer::ObjectFromHandle(pInfo->pInheritanceInfo->framebuffer);
                 currentSubPass = pInfo->pInheritanceInfo->subpass;
+                if (pInfo->pInheritanceInfo->occlusionQueryEnable)
+                {
+                    inheritedStateParams.stateFlags.occlusionQuery = 1;
+                }
             }
             break;
 
@@ -1028,8 +1034,6 @@ VkResult CmdBuffer::Begin(
     }
 
     m_curDeviceMask = m_cbBeginDeviceMask;
-
-    Pal::InheritedStateParams inheritedStateParams = {};
 
     if (m_is2ndLvl && pRenderPass) // secondary VkCommandBuffer will be used inside VkRenderPass
     {
@@ -1507,6 +1511,11 @@ VkResult CmdBuffer::Destroy(void)
         Util::Destructor(m_pSqttState);
 
         pInstance->FreeMem(m_pSqttState);
+    }
+
+    if (m_pTransformFeedbackState != nullptr)
+    {
+        pInstance->FreeMem(m_pTransformFeedbackState);
     }
 
     // Unregister this command buffer from the pool
@@ -5377,36 +5386,53 @@ void CmdBuffer::BindTransformFeedbackBuffers(
 
         if (pMemory != nullptr)
         {
-            m_pTransformFeedbackState = VK_PLACEMENT_NEW(pMemory) TransformFeedbackState();
+            m_pTransformFeedbackState = reinterpret_cast<TransformFeedbackState*>(pMemory);
+            memset(m_pTransformFeedbackState, 0, sizeof(TransformFeedbackState));
         }
-        memset(m_pTransformFeedbackState, 0, sizeof(TransformFeedbackState));
-        VK_ASSERT(m_pTransformFeedbackState != nullptr);
+        else
+        {
+            VK_NEVER_CALLED();
+        }
     }
 
-    VK_ASSERT(m_pTransformFeedbackState->enabled == false);
-
-    utils::IterateMask deviceGroup(m_curDeviceMask);
-    while (deviceGroup.Iterate())
+    if (m_pTransformFeedbackState != nullptr)
     {
-        const uint32_t deviceIdx = deviceGroup.Index();
-        for (uint32_t i = firstBinding; i < bindingCount; i++)
+        VK_ASSERT(m_pTransformFeedbackState->enabled == false);
+
+        utils::IterateMask deviceGroup(m_curDeviceMask);
+        while (deviceGroup.Iterate())
         {
-            if (pBuffers[i] != VK_NULL_HANDLE)
+            const uint32_t deviceIdx = deviceGroup.Index();
+            for (uint32_t i = 0; i < bindingCount; i++)
             {
-                Buffer* pFeedbackBuffer = Buffer::ObjectFromHandle(pBuffers[i]);
+                uint32_t slot = i + firstBinding;
+                if (pBuffers[i] != VK_NULL_HANDLE)
+                {
+                    Buffer* pFeedbackBuffer = Buffer::ObjectFromHandle(pBuffers[i]);
 
-                m_pTransformFeedbackState->params.target[i].gpuVirtAddr =
-                    pFeedbackBuffer->GpuVirtAddr(deviceIdx) + pOffsets[i];
+                    VkDeviceSize curSize = 0;
+                    if ((pSizes == nullptr) || (pSizes[i] == VK_WHOLE_SIZE))
+                    {
+                        curSize = pFeedbackBuffer->GetSize() - pOffsets[i];
+                    }
+                    else
+                    {
+                        curSize = pSizes[i];
+                    }
 
-                m_pTransformFeedbackState->params.target[i].size = pSizes[i];
+                    m_pTransformFeedbackState->params.target[slot].gpuVirtAddr =
+                        pFeedbackBuffer->GpuVirtAddr(deviceIdx) + pOffsets[i];
 
-                m_pTransformFeedbackState->bindMask |= 1 << i;
-            }
-            else
-            {
-                m_pTransformFeedbackState->params.target[i].gpuVirtAddr = 0;
-                m_pTransformFeedbackState->params.target[i].size        = 0;
-                m_pTransformFeedbackState->bindMask                     &= ~(1 << i);
+                    m_pTransformFeedbackState->params.target[slot].size = curSize;
+
+                    m_pTransformFeedbackState->bindMask |= 1 << slot;
+                }
+                else
+                {
+                    m_pTransformFeedbackState->params.target[slot].gpuVirtAddr = 0;
+                    m_pTransformFeedbackState->params.target[slot].size        = 0;
+                    m_pTransformFeedbackState->bindMask                        &= ~(1 << slot);
+                }
             }
         }
     }
@@ -5554,6 +5580,55 @@ void CmdBuffer::SetLineStippleEXT(
     }
 
     m_state.allGpuState.staticTokens.lineStippleState = DynamicRenderStateToken;
+}
+
+// =====================================================================================================================
+void CmdBuffer::CmdBeginConditionalRendering(
+    const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin)
+{
+    // Make sure we have a properly aligned buffer offset.
+    VK_ASSERT(Util::IsPow2Aligned(pConditionalRenderingBegin->offset, 4));
+
+    // Conditional rendering discards the commands if the 32-bit value is zero.
+    // Our hardware works in the opposite way, so we have to reverse the polarity flag.
+    // PM4CMDSETPREDICATION:predicationBoolean:
+    // 0 = draw_if_not_visible_or_overflow
+    // 1 = draw_if_visible_or_no_overflow
+    const bool predPolarity = (pConditionalRenderingBegin->flags & VK_CONDITIONAL_RENDERING_INVERTED_BIT_EXT) == 0;
+
+    const Buffer* pBuffer = Buffer::ObjectFromHandle(pConditionalRenderingBegin->buffer);
+
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    while (deviceGroup.Iterate())
+    {
+        PalCmdBuffer(deviceGroup.Index())->CmdSetPredication(
+            nullptr,
+            0,
+            pBuffer->PalMemory(deviceGroup.Index()),
+            pConditionalRenderingBegin->offset,
+            Pal::PredicateType::Boolean32,
+            predPolarity,
+            false,
+            false);
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::CmdEndConditionalRendering()
+{
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    while (deviceGroup.Iterate())
+    {
+        PalCmdBuffer(deviceGroup.Index())->CmdSetPredication(
+            nullptr,
+            0,
+            nullptr,
+            0,
+            Pal::PredicateType::Boolean32,
+            false,
+            false,
+            false);
+    }
 }
 
 // =====================================================================================================================
@@ -6471,6 +6546,19 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetLineStippleEXT(
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetLineStippleEXT(
         lineStippleFactor,
         lineStipplePattern);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBeginConditionalRenderingEXT(
+    VkCommandBuffer                           commandBuffer,
+    const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdBeginConditionalRendering(pConditionalRenderingBegin);
+}
+
+VKAPI_ATTR void VKAPI_CALL vkCmdEndConditionalRenderingEXT(
+    VkCommandBuffer                           commandBuffer)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdEndConditionalRendering();
 }
 
 } // namespace entry

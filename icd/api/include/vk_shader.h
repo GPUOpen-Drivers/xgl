@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -67,6 +67,7 @@ public:
 
     size_t GetCodeSize() const { return m_codeSize; }
     const void* GetCode() const { return m_pCode; }
+    const ShaderModuleHandle* GetShaderModuleHandle() const { return &m_handle; }
 
     Pal::ShaderHash GetCodeHash(const char* pEntryPoint) const;
 

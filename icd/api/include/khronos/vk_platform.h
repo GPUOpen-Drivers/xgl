@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -32,7 +32,11 @@
 #ifndef __VK_PLATFORM_H_PROXY__
 #define __VK_PLATFORM_H_PROXY__
 
+#if VKI_SDK_1_2
+#include "sdk-1.2/vk_platform.h"
+#else
 #include "sdk-1.1/vk_platform.h"
+#endif
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 #ifdef None

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -190,6 +190,84 @@ void CompilerSolutionLlpc::FreeShaderModule(ShaderModuleHandle* pShaderModule)
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
     pInstance->FreeMem(pShaderModule->pLlpcShaderModule);
+}
+
+// =====================================================================================================================
+// Creates partial pipeline binary for compute shader and fragment shader
+VkResult CompilerSolutionLlpc::CreatePartialPipelineBinary(
+    uint32_t                            deviceIdx,
+    void*                               pShaderModuleData,
+    Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
+    const Llpc::ResourceMappingNode*    pResourceMappingNode,
+    uint32_t                            mappingNodeCount,
+    Llpc::ColorTarget*                  pColorTarget)
+{
+    auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
+
+    VkResult result = VK_SUCCESS;
+
+    auto pShaderModuleDataEx = reinterpret_cast<Llpc::ShaderModuleDataEx*>(pShaderModuleData);
+    if (pShaderModuleEntryData->stage == Llpc::ShaderStageCompute)
+    {
+        Llpc::ComputePipelineBuildInfo pipelineBuildInfo = {};
+        Llpc::ComputePipelineBuildOut  pipelineOut = {};
+        void* pLlpcPipelineBuffer = nullptr;
+
+        // Fill pipeline create info for LLPC
+        pipelineBuildInfo.pInstance      = pInstance;
+        pipelineBuildInfo.pfnOutputAlloc = AllocateShaderOutput;
+        pipelineBuildInfo.pUserData      = &pLlpcPipelineBuffer;
+        pipelineBuildInfo.deviceIndex    = deviceIdx;
+        pipelineBuildInfo.cs.pModuleData = pShaderModuleData;
+        pipelineBuildInfo.cs.pUserDataNodes = pResourceMappingNode;
+        pipelineBuildInfo.cs.userDataNodeCount = mappingNodeCount;
+
+        auto llpcResult = m_pLlpc->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut, nullptr);
+        if (llpcResult != Llpc::Result::Success)
+        {
+            // There shouldn't be anything to free for the failure case
+            VK_ASSERT(pLlpcPipelineBuffer == nullptr);
+            result = VK_ERROR_INITIALIZATION_FAILED;
+        }
+        pInstance->FreeMem(const_cast<void*>(pipelineOut.pipelineBin.pCode));
+    }
+    else
+    {
+        Llpc::GraphicsPipelineBuildInfo pipelineBuildInfo = {};
+        // Build the LLPC pipeline
+        Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
+        void* pLlpcPipelineBuffer = nullptr;
+
+        // Fill pipeline create info for LLPC
+        pipelineBuildInfo.pInstance      = pInstance;
+        pipelineBuildInfo.pfnOutputAlloc = AllocateShaderOutput;
+        pipelineBuildInfo.pUserData      = &pLlpcPipelineBuffer;
+        pipelineBuildInfo.iaState.deviceIndex = deviceIdx;
+        pipelineBuildInfo.fs.pModuleData = pShaderModuleData;
+
+        pipelineBuildInfo.fs.pEntryTarget = pShaderModuleEntryData->pEntryName;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
+        pipelineBuildInfo.fs.entryStage = pShaderModuleEntryData->stage;
+#endif
+        pipelineBuildInfo.fs.pUserDataNodes = pResourceMappingNode;
+        pipelineBuildInfo.fs.userDataNodeCount = mappingNodeCount;
+
+        VK_ASSERT(pColorTarget != 0);
+        for (uint32_t i = 0; i < Llpc::MaxColorTargets; ++i)
+        {
+            pipelineBuildInfo.cbState.target[i] = pColorTarget[i];
+        }
+        auto llpcResult = m_pLlpc->BuildGraphicsPipeline(&pipelineBuildInfo, &pipelineOut, nullptr);
+        if (llpcResult != Llpc::Result::Success)
+        {
+            // There shouldn't be anything to free for the failure case
+            VK_ASSERT(pLlpcPipelineBuffer == nullptr);
+            result = VK_ERROR_INITIALIZATION_FAILED;
+        }
+        pInstance->FreeMem(const_cast<void*>(pipelineOut.pipelineBin.pCode));
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -508,6 +586,9 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
 
     llpcOptions[numOptions++] = "-amdgpu-atomic-optimizations";
     llpcOptions[numOptions++] = "-use-gpu-divergence-analysis";
+
+    llpcOptions[numOptions++] = "-enable-load-scalarizer";
+    llpcOptions[numOptions++] = "-scalar-threshold=3";
 
     if ((appProfile == AppProfile::Talos) ||
         (appProfile == AppProfile::WolfensteinII))

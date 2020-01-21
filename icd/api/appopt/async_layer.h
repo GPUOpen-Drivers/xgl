@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2019-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -44,13 +44,28 @@ class Device;
 class AsyncLayer;
 struct PalAllocator;
 
-namespace async { class ShaderModule; }
+namespace async { class ShaderModule; class PartialPipeline; }
 
 // Represents the shader module async compile info
 struct ShaderModuleTask
 {
     VkShaderModuleCreateInfo info;        // Shader module create info
     async::ShaderModule*     pObj;        // Output shader module object
+};
+
+// Represents the pipeline async compile info
+struct PartialPipelineTask
+{
+    VkShaderModule              shaderModuleHandle; // Shader module handle
+    async::PartialPipeline*     pObj;               // Output shader module object
+};
+
+// Thread task type
+enum TaskType : uint32_t
+{
+    ShaderModuleTaskType = 0,
+    PartialPipelineTaskType,
+    MaxTaskType,
 };
 
 // =====================================================================================================================
@@ -65,24 +80,36 @@ public:
 
     VK_INLINE Device* GetDevice() { return m_pDevice; }
 
-    template<class Task>
-    async::TaskThread<Task>* GetTaskThread()
+    void* GetTaskThread(TaskType type)
     {
-        static_assert(sizeof(Task) == sizeof(ShaderModuleTask), "Unexpected type");
-        return (m_activeThreadCount > 0) ? m_pTaskThreads[(m_taskId++) % m_activeThreadCount] : nullptr;
+        VK_ASSERT(type < MaxTaskType);
+        if (type == ShaderModuleTaskType)
+        {
+            return (m_activeThreadCount[type] > 0) ?
+                    m_pModuleTaskThreads[(m_taskId[type]++) % m_activeThreadCount[type]] :
+                    nullptr;
+        }
+        else
+        {
+            return (m_activeThreadCount[type] > 0) ?
+                    m_pPipelineTaskThreads[(m_taskId[type]++) % m_activeThreadCount[type]] :
+                    nullptr;
+        }
     }
 
     void SyncAll();
 
 protected:
-    static constexpr uint32_t        MaxShaderModuleThreads = 8;  // Max thread count for shader module compile
+    static constexpr uint32_t        MaxThreads = 8;  // Max thread count for shader module compile
     Device*                          m_pDevice;                  // Vulkan Device object
-    async::TaskThread<ShaderModuleTask>* m_pTaskThreads[MaxShaderModuleThreads]; // Async compiler threads
-    uint32_t                         m_taskId;                   // Hint to select compile thread
-    uint32_t                         m_activeThreadCount;        // Active thread count
-    // Internal buffer for m_pTaskThreads
-    uint8_t                          m_taskThreadBuffer[MaxShaderModuleThreads]
-                                                       [sizeof(async::TaskThread<ShaderModuleTask>)];
+    async::TaskThread<ShaderModuleTask>* m_pModuleTaskThreads[MaxThreads]; // Async compiler threads
+    async::TaskThread<PartialPipelineTask>* m_pPipelineTaskThreads[MaxThreads]; // Async compiler threads
+    uint32_t                         m_taskId[MaxTaskType];                   // Hint to select compile thread
+    uint32_t                         m_activeThreadCount[MaxTaskType];        // Active thread count
+    // Internal buffer for m_taskThreadBuffer
+    uint8_t                          m_moduleTaskThreadBuffer[MaxThreads][sizeof(async::TaskThread<ShaderModuleTask>)];
+    uint8_t                          m_pipelineTaskThreadBuffer[MaxThreads]
+                                                               [sizeof(async::TaskThread<PartialPipelineTask>)];
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

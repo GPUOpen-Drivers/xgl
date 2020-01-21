@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2015-2019 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2015-2020 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -138,8 +138,13 @@ bool Instance::IsExtensionEnabledByEnv(
 VkResult Instance::EnumerateVersion(
     uint32_t*                       pApiVersion)
 {
+#if VKI_SDK_1_2
+    // Report 1.2 support
+    *pApiVersion = (VK_API_VERSION_1_2 | VK_HEADER_VERSION);
+#else
     // Report 1.1 support
     *pApiVersion = (VK_API_VERSION_1_1 | VK_HEADER_VERSION);
+#endif
 
     return VK_SUCCESS;
 }
