@@ -156,6 +156,21 @@ VkResult InternalMemMgr::Init()
 
     if (result == VK_SUCCESS)
     {
+        m_commonPoolProps[InternalPoolGpuAccess].vaRange = Pal::VaRange::Default;
+
+        m_commonPoolProps[InternalPoolGpuAccess].heapCount = 4;
+        m_commonPoolProps[InternalPoolGpuAccess].heaps[0] = Pal::GpuHeapInvisible;
+        m_commonPoolProps[InternalPoolGpuAccess].heaps[1] = Pal::GpuHeapLocal;
+        m_commonPoolProps[InternalPoolGpuAccess].heaps[2] = Pal::GpuHeapGartUswc;
+        m_commonPoolProps[InternalPoolGpuAccess].heaps[3] = Pal::GpuHeapGartCacheable;
+
+        result = CalcSubAllocationPool(
+            m_commonPoolProps[InternalPoolGpuAccess],
+            &m_pCommonPools[InternalPoolGpuAccess]);
+    }
+
+    if (result == VK_SUCCESS)
+    {
         // For descriptor tables use a GPU-read-only CPU-visible pool with a corresponding VA range.
         // This ensures that the top 32 bits of descriptor table addresses will be a known value to SC thus
         // it's enough to provide a 32-bit descriptor set address with the lower 32 bits through user data.

@@ -142,254 +142,276 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
 // =====================================================================================================================
 // Override defaults based on application profile.  This occurs before any CCC settings or private panel settings are
 // applied.
-void VulkanSettingsLoader::OverrideProfiledSettings(
-    uint32_t           appVersion,
-    AppProfile         appProfile)
+VkResult VulkanSettingsLoader::OverrideProfiledSettings(
+    const VkAllocationCallbacks* pAllocCb,
+    uint32_t                     appVersion,
+    AppProfile                   appProfile)
 {
+    VkResult result = VkResult::VK_SUCCESS;
+
     Pal::PalPublicSettings* pPalSettings = m_pDevice->GetPublicSettings();
 
-    Pal::DeviceProperties info;
-    m_pDevice->GetProperties(&info);
+    Pal::DeviceProperties* pInfo = static_cast<Pal::DeviceProperties*>(
+                                        pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                                                sizeof(Pal::DeviceProperties),
+                                                                VK_DEFAULT_MEM_ALIGN,
+                                                                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE));
 
-    // In general, DCC is very beneficial for color attachments. If this is completely offset, maybe by increased
-    // shader read latency or partial writes of DCC blocks, it should be debugged on a case by case basis.
-    if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+    if (pInfo == nullptr)
     {
-        m_settings.forceDccForColorAttachments = true;
+        result = VkResult::VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    if (appProfile == AppProfile::Doom)
+    if (result == VkResult::VK_SUCCESS)
     {
-        m_settings.enableSpvPerfOptimal = true;
+        memset(pInfo, 0, sizeof(Pal::DeviceProperties));
+        m_pDevice->GetProperties(pInfo);
 
-        m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
-
-        // No gains were seen pre-GFX9
-        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp9)
+        // In general, DCC is very beneficial for color attachments. If this is completely offset, maybe by increased
+        // shader read latency or partial writes of DCC blocks, it should be debugged on a case by case basis.
+        if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
         {
-            m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
-                                              SkipImageLayoutUndefined       |
-                                              SkipDuplicateResourceBarriers  |
-                                              ForceImageSharingModeExclusive;
+            m_settings.forceDccForColorAttachments = true;
         }
 
-        // Vega 20 has better performance on DOOM when DCC is disabled except for the 32 BPP surfaces
-        if (info.revision == Pal::AsicRevision::Vega20)
+        if (appProfile == AppProfile::Doom)
         {
-            m_settings.dccBitsPerPixelThreshold = 32;
+            m_settings.enableSpvPerfOptimal = true;
+
+            m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
+
+            // No gains were seen pre-GFX9
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp9)
+            {
+                m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
+                    SkipImageLayoutUndefined |
+                    SkipDuplicateResourceBarriers |
+                    ForceImageSharingModeExclusive;
+            }
+
+            // Vega 20 has better performance on DOOM when DCC is disabled except for the 32 BPP surfaces
+            if (pInfo->revision == Pal::AsicRevision::Vega20)
+            {
+                m_settings.dccBitsPerPixelThreshold = 32;
+            }
+
+            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+            // can't do any better than returning a non-null function pointer for them.
+            m_settings.lenientInstanceFuncQuery = true;
         }
 
-        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
-        // can't do any better than returning a non-null function pointer for them.
-        m_settings.lenientInstanceFuncQuery = true;
-    }
+        if (appProfile == AppProfile::DoomVFR)
+        {
+            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+            // can't do any better than returning a non-null function pointer for them.
+            m_settings.lenientInstanceFuncQuery = true;
 
-    if (appProfile == AppProfile::DoomVFR)
-    {
-        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
-        // can't do any better than returning a non-null function pointer for them.
-        m_settings.lenientInstanceFuncQuery = true;
-
-        // This works around a crash at app startup.
-        m_settings.ignoreSuboptimalSwapchainSize = true;
-    }
-
-    if (appProfile == AppProfile::WolfensteinII)
-    {
-        m_settings.enableSpvPerfOptimal = true;
+            // This works around a crash at app startup.
+            m_settings.ignoreSuboptimalSwapchainSize = true;
+        }
 
         if (appProfile == AppProfile::WolfensteinII)
         {
-            m_settings.zeroInitIlRegs = true;
+            m_settings.enableSpvPerfOptimal = true;
+
+            if (appProfile == AppProfile::WolfensteinII)
+            {
+                m_settings.zeroInitIlRegs = true;
+            }
+
+            m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
+
+            // No gains were seen pre-GFX9
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp9)
+            {
+                m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
+                    SkipImageLayoutUndefined |
+                    ForceImageSharingModeExclusive;
+            }
+
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.asyncComputeQueueLimit = 1;
+            }
+
+            // The Vega 20 PAL default is slower on Wolfenstein II, so always allow DCC.
+            if (pInfo->revision == Pal::AsicRevision::Vega20)
+            {
+                m_settings.dccBitsPerPixelThreshold = 0;
+            }
+
+            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+            // can't do any better than returning a non-null function pointer for them.
+            m_settings.lenientInstanceFuncQuery = true;
         }
 
-        m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
-
-        // No gains were seen pre-GFX9
-        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp9)
+        if (((appProfile == AppProfile::WolfensteinII) ||
+            (appProfile == AppProfile::Doom)) &&
+            (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1))
         {
-            m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
-                                              SkipImageLayoutUndefined       |
-                                              ForceImageSharingModeExclusive;
+            m_settings.asyncComputeQueueMaxWavesPerCu = 40;
+            m_settings.nggSubgroupSizing = NggSubgroupExplicit;
+            m_settings.nggVertsPerSubgroup = 254;
+            m_settings.nggPrimsPerSubgroup = 128;
         }
 
-        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+        if (appProfile == AppProfile::WorldWarZ)
         {
-            m_settings.asyncComputeQueueLimit = 1;
+            m_settings.robustBufferAccess = FeatureForceEnable;
+
+            m_settings.prefetchShaders = true;
+
+            m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
+
+            m_settings.usePalPipelineCaching = true;
+            if (pInfo->revision == Pal::AsicRevision::Vega20)
+            {
+                m_settings.dccBitsPerPixelThreshold = 16;
+            }
+
+            // WWZ performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.forceDccForColorAttachments = false;
+            }
+
         }
 
-        // The Vega 20 PAL default is slower on Wolfenstein II, so always allow DCC.
-        if (info.revision == Pal::AsicRevision::Vega20)
+        if (appProfile == AppProfile::IdTechEngine)
         {
-            m_settings.dccBitsPerPixelThreshold = 0;
+            m_settings.enableSpvPerfOptimal = true;
+
+            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+            // can't do any better than returning a non-null function pointer for them.
+            m_settings.lenientInstanceFuncQuery = true;
         }
 
-        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
-        // can't do any better than returning a non-null function pointer for them.
-        m_settings.lenientInstanceFuncQuery = true;
-    }
-
-    if (((appProfile == AppProfile::WolfensteinII) ||
-         (appProfile == AppProfile::Doom)) &&
-        (info.gfxLevel == Pal::GfxIpLevel::GfxIp10_1))
-    {
-        m_settings.asyncComputeQueueMaxWavesPerCu = 40;
-        m_settings.nggSubgroupSizing   = NggSubgroupExplicit;
-        m_settings.nggVertsPerSubgroup = 254;
-        m_settings.nggPrimsPerSubgroup = 128;
-    }
-
-    if (appProfile == AppProfile::WorldWarZ)
-    {
-        m_settings.robustBufferAccess = FeatureForceEnable;
-
-        m_settings.prefetchShaders = true;
-
-        m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
-
-        m_settings.usePalPipelineCaching = true;
-        if (info.revision == Pal::AsicRevision::Vega20)
+        if (appProfile == AppProfile::Dota2)
         {
-            m_settings.dccBitsPerPixelThreshold = 16;
+            pPalSettings->useGraphicsFastDepthStencilClear = true;
+
+            //Vega 20 has better performance on Dota 2 when DCC is disabled.
+            if (pInfo->revision == Pal::AsicRevision::Vega20)
+            {
+                m_settings.dccBitsPerPixelThreshold = 128;
+            }
+            m_settings.disableSmallSurfColorCompressionSize = 511;
+
+            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+            m_settings.useAnisoThreshold = true;
+            m_settings.anisoThreshold = 1.0f;
+
+            m_settings.prefetchShaders = true;
+            m_settings.disableMsaaStencilShaderRead = true;
+
+            // Dota 2 will be the pilot for pal pipeline caching.
+            m_settings.usePalPipelineCaching = true;
         }
 
-        // WWZ performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+        if (appProfile == AppProfile::Source2Engine)
         {
-            m_settings.forceDccForColorAttachments = false;
+            pPalSettings->useGraphicsFastDepthStencilClear = true;
+
+            m_settings.disableSmallSurfColorCompressionSize = 511;
+
+            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+            m_settings.useAnisoThreshold = true;
+            m_settings.anisoThreshold = 1.0f;
+
+            m_settings.prefetchShaders = true;
+            m_settings.disableMsaaStencilShaderRead = true;
         }
 
-    }
-
-    if (appProfile == AppProfile::IdTechEngine)
-    {
-        m_settings.enableSpvPerfOptimal = true;
-
-        // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
-        // can't do any better than returning a non-null function pointer for them.
-        m_settings.lenientInstanceFuncQuery = true;
-    }
-
-    if (appProfile == AppProfile::Dota2)
-    {
-        pPalSettings->useGraphicsFastDepthStencilClear = true;
-
-        //Vega 20 has better performance on Dota 2 when DCC is disabled.
-        if (info.revision == Pal::AsicRevision::Vega20)
+        if (appProfile == AppProfile::Talos)
         {
-            m_settings.dccBitsPerPixelThreshold = 128;
+            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+            m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+
+            m_settings.forceDepthClampBasedOnZExport = true;
         }
-        m_settings.disableSmallSurfColorCompressionSize = 511;
 
-        m_settings.preciseAnisoMode  = DisablePreciseAnisoAll;
-        m_settings.useAnisoThreshold = true;
-        m_settings.anisoThreshold    = 1.0f;
-
-        m_settings.prefetchShaders = true;
-        m_settings.disableMsaaStencilShaderRead = true;
-
-        // Dota 2 will be the pilot for pal pipeline caching.
-        m_settings.usePalPipelineCaching = true;
-    }
-
-    if (appProfile == AppProfile::Source2Engine)
-    {
-        pPalSettings->useGraphicsFastDepthStencilClear = true;
-
-        m_settings.disableSmallSurfColorCompressionSize = 511;
-
-        m_settings.preciseAnisoMode  = DisablePreciseAnisoAll;
-        m_settings.useAnisoThreshold = true;
-        m_settings.anisoThreshold    = 1.0f;
-
-        m_settings.prefetchShaders = true;
-        m_settings.disableMsaaStencilShaderRead = true;
-    }
-
-    if (appProfile == AppProfile::Talos)
-    {
-        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-        m_settings.optImgMaskToApplyShaderReadUsageForTransferSrc = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
-
-        m_settings.forceDepthClampBasedOnZExport = true;
-    }
-
-    if (appProfile == AppProfile::SeriousSamFusion)
-    {
-        m_settings.preciseAnisoMode  = DisablePreciseAnisoAll;
-        m_settings.useAnisoThreshold = true;
-        m_settings.anisoThreshold    = 1.0f;
-
-        m_settings.prefetchShaders = true;
-    }
-
-    if (appProfile == AppProfile::SedpEngine)
-    {
-        m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
-    }
-
-    if (appProfile == AppProfile::StrangeBrigade)
-    {
-    }
-
-    if (appProfile == AppProfile::MadMax)
-    {
-        m_settings.preciseAnisoMode  = DisablePreciseAnisoAll;
-        m_settings.useAnisoThreshold = true;
-        m_settings.anisoThreshold    = 1.0f;
-    }
-
-    if (appProfile == AppProfile::F1_2017)
-    {
-        m_settings.prefetchShaders = true;
-
-        // F1 2017 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+        if (appProfile == AppProfile::SeriousSamFusion)
         {
-            m_settings.forceDccForColorAttachments = false;
+            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+            m_settings.useAnisoThreshold = true;
+            m_settings.anisoThreshold = 1.0f;
+
+            m_settings.prefetchShaders = true;
         }
-    }
 
-    if (appProfile == AppProfile::ThronesOfBritannia)
-    {
-        m_settings.disableHtileBasedMsaaRead = true;
-    }
-
-    if (appProfile == AppProfile::DiRT4)
-    {
-        // DiRT 4 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+        if (appProfile == AppProfile::SedpEngine)
         {
-            m_settings.forceDccForColorAttachments = false;
+            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
         }
 
-        m_settings.forceDepthClampBasedOnZExport = true;
-    }
-
-    if (appProfile == AppProfile::WarHammerII)
-    {
-        // WarHammer II performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-        if (info.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+        if (appProfile == AppProfile::StrangeBrigade)
         {
-            m_settings.forceDccForColorAttachments = false;
         }
+
+        if (appProfile == AppProfile::MadMax)
+        {
+            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+            m_settings.useAnisoThreshold = true;
+            m_settings.anisoThreshold = 1.0f;
+        }
+
+        if (appProfile == AppProfile::F1_2017)
+        {
+            m_settings.prefetchShaders = true;
+
+            // F1 2017 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.forceDccForColorAttachments = false;
+            }
+        }
+
+        if (appProfile == AppProfile::ThronesOfBritannia)
+        {
+            m_settings.disableHtileBasedMsaaRead = true;
+        }
+
+        if (appProfile == AppProfile::DiRT4)
+        {
+            // DiRT 4 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.forceDccForColorAttachments = false;
+            }
+
+            m_settings.forceDepthClampBasedOnZExport = true;
+        }
+
+        if (appProfile == AppProfile::WarHammerII)
+        {
+            // WarHammer II performs worse with DCC forced on, so just let the PAL heuristics decide
+            // what's best for now.
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.forceDccForColorAttachments = false;
+            }
+        }
+
+        if (appProfile == AppProfile::SaschaWillemsExamples)
+        {
+            m_settings.forceDepthClampBasedOnZExport = true;
+        }
+
+        // By allowing the enable/disable to be set by environment variable, any third party platform owners
+        // can enable or disable the feature based on their internal feedback and not have to wait for a driver
+        // update to catch issues
+
+        const char* pPipelineCacheEnvVar = getenv(m_settings.pipelineCachingEnvironmentVariable);
+
+        if (pPipelineCacheEnvVar != nullptr)
+        {
+            m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
+        }
+
+        pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
     }
 
-    if (appProfile == AppProfile::SaschaWillemsExamples)
-    {
-        m_settings.forceDepthClampBasedOnZExport = true;
-    }
-
-    // By allowing the enable/disable to be set by environment variable, any third party platform owners can enable or
-    // disable the feature based on their internal feedback and not have to wait for a driver update to catch issues
-
-    const char* pPipelineCacheEnvVar = getenv(m_settings.pipelineCachingEnvironmentVariable);
-
-    if (pPipelineCacheEnvVar != nullptr)
-    {
-        m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
-    }
-
+    return result;
 }
 
 // =====================================================================================================================
@@ -427,44 +449,52 @@ void VulkanSettingsLoader::DumpAppProfileChanges(
 // Processes public and private panel settings for a particular PAL GPU.  Vulkan private settings and public CCC
 // settings are first read and validated to produce the RuntimeSettings structure.  If PAL settings for the given GPU
 // need to be updated based on the Vulkan settings, the PAL structure will also be updated.
-void VulkanSettingsLoader::ProcessSettings(
-    uint32_t           appVersion,
-    AppProfile*        pAppProfile)
+VkResult VulkanSettingsLoader::ProcessSettings(
+    const VkAllocationCallbacks* pAllocCb,
+    uint32_t                     appVersion,
+    AppProfile*                  pAppProfile)
 {
+    VkResult result = VkResult::VK_SUCCESS;
+
     const AppProfile origProfile = *pAppProfile;
     // Override defaults based on application profile
-    OverrideProfiledSettings(appVersion, *pAppProfile);
+    result = OverrideProfiledSettings(pAllocCb, appVersion, *pAppProfile);
 
-    // Read in the public settings from the Catalyst Control Center
-    ReadPublicSettings();
-
-    // Read the rest of the settings from the registry
-    ReadSettings();
-
-    // We need to override debug file paths settings to absolute paths as per system info
-    OverrideSettingsBySystemInfo();
-
-    DumpAppProfileChanges(*pAppProfile);
-
-    if (m_settings.forceAppProfileEnable)
+    if (result == VkResult::VK_SUCCESS)
     {
-        // Update application profile to the one from the panel
-        *pAppProfile = static_cast<AppProfile>(m_settings.forceAppProfileValue);
+        // Read in the public settings from the Catalyst Control Center
+        ReadPublicSettings();
+
+        // Read the rest of the settings from the registry
+        ReadSettings();
+
+        // We need to override debug file paths settings to absolute paths as per system info
+        OverrideSettingsBySystemInfo();
+
+        DumpAppProfileChanges(*pAppProfile);
+
+        if (m_settings.forceAppProfileEnable)
+        {
+            // Update application profile to the one from the panel
+            *pAppProfile = static_cast<AppProfile>(m_settings.forceAppProfileValue);
+        }
+
+        // If we are changing profile via panel setting (i.e. forcing a specific profile), then
+        // reload all settings.  This is because certain app profiles may override the default
+        // values, and this allows the panel-mandated profile to override those defaults as well.
+        if (*pAppProfile != origProfile)
+        {
+            result = ProcessSettings(pAllocCb, appVersion, pAppProfile);
+        }
+        else
+        {
+            // Register with the DevDriver settings service
+            DevDriverRegister();
+            m_state = Pal::SettingsLoaderState::LateInit;
+        }
     }
 
-    // If we are changing profile via panel setting (i.e. forcing a specific profile), then
-    // reload all settings.  This is because certain app profiles may override the default
-    // values, and this allows the panel-mandated profile to override those defaults as well.
-    if (*pAppProfile != origProfile)
-    {
-        ProcessSettings(appVersion, pAppProfile);
-    }
-    else
-    {
-        // Register with the DevDriver settings service
-        DevDriverRegister();
-        m_state = Pal::SettingsLoaderState::LateInit;
-    }
+    return result;
 }
 
 // =====================================================================================================================

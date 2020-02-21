@@ -603,7 +603,7 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
     Pal::ChNumFormat    format,
     VkImageAspectFlags* pAspectMask)
 {
-	VkImageAspectFlags& aspectMask = *pAspectMask;
+    VkImageAspectFlags& aspectMask = *pAspectMask;
     if ((aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
     {
         // No other aspect can be specified in this case.
@@ -2263,6 +2263,36 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
     VK_IGNORE(VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT);
 
     return palImageCreateInfo.flags.u32All;
+}
+
+// =====================================================================================================================
+// Converts  PAL image creation flags to Vulkan image creation flags.
+VK_INLINE VkImageCreateFlags PalToVkImageCreateFlags(Pal::ImageCreateFlags imageCreateFlags)
+{
+    VkImageUsageFlags vkImageCreateFlags = 0;
+
+    if (imageCreateFlags.cubemap == 1)
+    {
+        vkImageCreateFlags |= VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+    }
+
+    if (imageCreateFlags.prt == 1)
+    {
+        vkImageCreateFlags |= VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT;
+    }
+
+    if (imageCreateFlags.invariant == 1)
+    {
+        vkImageCreateFlags |= VK_IMAGE_CREATE_ALIAS_BIT;
+    }
+
+    //TODO: Enable protect flags conversion when adding protect memory/queue support.
+    //if (imageCreateFlags.protected  == 1)
+    //{
+    //    vkImageCreateFlags |= VK_IMAGE_CREATE_PROTECTED_BIT;
+    //}
+
+    return vkImageCreateFlags;
 }
 
 // =====================================================================================================================

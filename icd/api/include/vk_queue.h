@@ -41,6 +41,7 @@
 #include "include/vk_utils.h"
 #include "include/virtual_stack_mgr.h"
 
+#include "palDeque.h"
 #include "palQueue.h"
 
 namespace Pal
@@ -62,6 +63,13 @@ class  SwapChain;
 class  FrtcFramePacer;
 class  TurboSync;
 class  SqttQueueState;
+
+// State of a command buffer.
+struct CmdBufState
+{
+    Pal::ICmdBuffer*    pCmdBuf;     // Command buffer pointer
+    Pal::IFence*        pFence;      // Fence that will be signaled when this fence's submit completes
+};
 
 // =====================================================================================================================
 // A Vulkan queue.
@@ -141,6 +149,11 @@ public:
     SqttQueueState* GetSqttState()
         { return m_pSqttState; }
 
+    VkResult SubmitInternalCmdBuf(
+        uint32_t                   deviceIdx,
+        const Pal::CmdBufInfo&     cmdBufInfo,
+        CmdBufState*               pCmdBufState);
+
 protected:
     // This is a helper structure during a virtual remap (sparse bind) call to batch remaps into
     // as few calls as possible.
@@ -204,17 +217,42 @@ protected:
 
     VkResult CreateDummyCmdBuffer();
 
+    void CreateCmdBufRing(
+        uint32_t                   deviceIdx);
+
+    void DestroyCmdBufRing(
+        uint32_t                   deviceIdx);
+
+    CmdBufState* CreateCmdBufState(
+        uint32_t                   deviceIdx);
+
+    void DestroyCmdBufState(
+        uint32_t                   deviceIdx,
+        CmdBufState*               pCmdBufState);
+
+    CmdBufState* AcquireInternalCmdBuf(
+        uint32_t                   deviceIdx);
+
+    bool BuildPostProcessCommands(
+        uint32_t                         deviceIdx,
+        CmdBufState*                     pCmdBufState,
+        const Pal::IImage*               pImage,
+        const Pal::PresentSwapChainInfo* pPresentInfo,
+        const SwapChain*                 pSwapChain);
+
     VkResult NotifyFlipMetadata(
         uint32_t                     deviceIdx,
-        Pal::ICmdBuffer*             pPresentCmdBuffer,
+        Pal::IQueue*                 pPresentQueue,
+        CmdBufState*                 pCmdBufState,
         const Pal::IGpuMemory*       pGpuMemory,
         FullscreenFrameMetadataFlags flags,
         bool                         forceSubmit = false);
 
     VkResult NotifyFlipMetadataBeforePresent(
         uint32_t                         deviceIdx,
+        Pal::IQueue*                     pPresentQueue,
         const Pal::PresentSwapChainInfo* pPresentInfo,
-        Pal::ICmdBuffer*                 pPresentCmdBuffer,
+        CmdBufState*                     pCmdBufState,
         const Pal::IGpuMemory*           pGpuMemory,
         bool                             forceSubmit);
 
@@ -233,6 +271,8 @@ protected:
     Pal::PerSourceFrameMetadataControl m_palFrameMetadataControl;
     Pal::ICmdBuffer*                   m_pDummyCmdBuffer[MaxPalDevices];
     SqttQueueState*                    m_pSqttState; // Per-queue state for handling SQ thread-tracing annotations
+    typedef Util::Deque<CmdBufState*, PalAllocator> CmdBufRing;
+    CmdBufRing*                        m_pCmdBufRing[MaxPalDevices];
 };
 
 VK_DEFINE_DISPATCHABLE(Queue);

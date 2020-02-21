@@ -58,9 +58,10 @@ public:
 
     virtual Util::Result Init() override;
 
-    void ProcessSettings(
-        uint32_t appVersion,
-        AppProfile* pAppProfile);
+    VkResult ProcessSettings(
+        const VkAllocationCallbacks* pAllocCb,
+        uint32_t                     appVersion,
+        AppProfile*                  pAppProfile);
 
     void ValidateSettings();
 
@@ -78,9 +79,10 @@ private:
     // Generate the settings hash
     void GenerateSettingHash();
 
-    void OverrideProfiledSettings(
-        uint32_t   appVersion,
-        AppProfile appProfile);
+    VkResult OverrideProfiledSettings(
+        const VkAllocationCallbacks* pAllocCb,
+        uint32_t                     appVersion,
+        AppProfile                   appProfile);
 
     void OverrideSettingsBySystemInfo();
 

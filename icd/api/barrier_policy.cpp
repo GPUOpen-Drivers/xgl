@@ -220,11 +220,20 @@ static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask)
         cacheMask |= Pal::CoherMemory;
     }
 
+    if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT)
+    {
+        cacheMask |= Pal::CoherStreamOut;
+    }
+
+    if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT)
+    {
+        cacheMask |= Pal::CoherStreamOut;
+    }
+
     // CoherQueueAtomic: Not used
     // CoherTimestamp: Timestamp write syncs are handled by the timestamp-related write/query funcs and not barriers
     // CoherCeLoad: Not used
     // CoherCeDump: Not used
-    // CoherStreamOut: Not used
 
     return cacheMask;
 }
@@ -278,6 +287,11 @@ static VK_INLINE uint32_t DstAccessToCacheMask(VkAccessFlags accessMask)
     if (accessMask & VK_ACCESS_MEMORY_READ_BIT)
     {
         cacheMask |= Pal::CoherMemory;
+    }
+
+    if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT)
+    {
+        cacheMask |= Pal::CoherStreamOut;
     }
 
     return cacheMask;
@@ -484,6 +498,12 @@ void DeviceBarrierPolicy::InitDeviceCachePolicy(
                                 | Pal::CoherIndirectArgs
                                 | Pal::CoherIndexData
                                 | Pal::CoherMemory;
+
+    if (enabledExtensions.IsExtensionEnabled(DeviceExtensions::EXT_TRANSFORM_FEEDBACK))
+    {
+        supportedOutputCacheMask |= Pal::CoherStreamOut;
+        supportedInputCacheMask  |= Pal::CoherStreamOut;
+    }
 
     if (enabledExtensions.IsExtensionEnabled(DeviceExtensions::AMD_BUFFER_MARKER))
     {
@@ -1124,6 +1144,18 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
     if (usage & VK_BUFFER_USAGE_INDIRECT_BUFFER_BIT)
     {
         supportedInputCacheMask |= Pal::CoherIndirectArgs;
+    }
+
+    if (usage & VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_BUFFER_BIT_EXT)
+    {
+        supportedInputCacheMask  |= Pal::CoherStreamOut;
+        supportedOutputCacheMask |= Pal::CoherStreamOut;
+    }
+
+    if (usage & VK_BUFFER_USAGE_TRANSFORM_FEEDBACK_COUNTER_BUFFER_BIT_EXT)
+    {
+        supportedInputCacheMask  |= Pal::CoherStreamOut;
+        supportedOutputCacheMask |= Pal::CoherStreamOut;
     }
 
     // Apply device specific supported cache masks to limit the scope.

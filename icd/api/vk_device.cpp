@@ -241,6 +241,7 @@ Device::Device(
         m_perGpu[deviceIdx].pSwCompositingMemory    = nullptr;
         m_perGpu[deviceIdx].pSwCompositingQueue     = nullptr;
         m_perGpu[deviceIdx].pSwCompositingSemaphore = nullptr;
+        m_perGpu[deviceIdx].pSwCompositingCmdBuffer = nullptr;
 
     }
 
@@ -1695,6 +1696,11 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
                 m_perGpu[deviceIdx].pSwCompositingQueue->Destroy();
             }
 
+            if (m_perGpu[deviceIdx].pSwCompositingCmdBuffer != nullptr)
+            {
+                m_perGpu[deviceIdx].pSwCompositingCmdBuffer->Destroy();
+            }
+
             VkInstance()->FreeMem(m_perGpu[deviceIdx].pSwCompositingMemory);
         }
 
@@ -2866,8 +2872,17 @@ VkResult Device::InitSwCompositing(
         size_t palQueueSize = PalDevice(deviceIdx)->GetQueueSize(queueCreateInfo, &palResult);
         VK_ASSERT(palResult == Pal::Result::Success);
 
+        Pal::CmdBufferCreateInfo cmdBufferCreateInfo = {};
+
+        cmdBufferCreateInfo.pCmdAllocator = GetSharedCmdAllocator(deviceIdx);
+        cmdBufferCreateInfo.engineType    = Pal::EngineType::EngineTypeDma;
+        cmdBufferCreateInfo.queueType     = Pal::QueueType::QueueTypeDma;
+
+        size_t cmdBufferSize = PalDevice(deviceIdx)->GetCmdBufferSize(cmdBufferCreateInfo, &palResult);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
         m_perGpu[deviceIdx].pSwCompositingMemory = VkInstance()->AllocMem(
-            (palQueueSize + palSemaphoreSize),
+            (palQueueSize + palSemaphoreSize + cmdBufferSize),
             VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
         if (m_perGpu[deviceIdx].pSwCompositingMemory == nullptr)
@@ -2889,6 +2904,24 @@ VkResult Device::InitSwCompositing(
                     &m_perGpu[deviceIdx].pSwCompositingQueue);
             }
 
+            if (palResult == Pal::Result::Success)
+            {
+                palResult = PalDevice(deviceIdx)->CreateCmdBuffer(
+                    cmdBufferCreateInfo,
+                    Util::VoidPtrInc(m_perGpu[deviceIdx].pSwCompositingMemory, (palSemaphoreSize + palQueueSize)),
+                    &(m_perGpu[deviceIdx].pSwCompositingCmdBuffer));
+
+                if (palResult == Pal::Result::Success)
+                {
+                    Pal::CmdBufferBuildInfo buildInfo = {};
+                    palResult = m_perGpu[deviceIdx].pSwCompositingCmdBuffer->Begin(buildInfo);
+                    if (palResult == Pal::Result::Success)
+                    {
+                        palResult = m_perGpu[deviceIdx].pSwCompositingCmdBuffer->End();
+                    }
+                }
+            }
+
             // Clean up if any error is encountered
             if (palResult != Pal::Result::Success)
             {
@@ -2896,6 +2929,16 @@ VkResult Device::InitSwCompositing(
                 {
                     m_perGpu[deviceIdx].pSwCompositingSemaphore->Destroy();
                     m_perGpu[deviceIdx].pSwCompositingSemaphore = nullptr;
+                }
+
+                if (m_perGpu[deviceIdx].pSwCompositingQueue != nullptr)
+                {
+                    m_perGpu[deviceIdx].pSwCompositingQueue->Destroy();
+                }
+
+                if (m_perGpu[deviceIdx].pSwCompositingCmdBuffer != nullptr)
+                {
+                    m_perGpu[deviceIdx].pSwCompositingCmdBuffer->Destroy();
                 }
 
                 VkInstance()->FreeMem(m_perGpu[deviceIdx].pSwCompositingMemory);
@@ -2968,6 +3011,33 @@ Pal::IQueue* Device::PerformSwCompositing(
     }
 
     return pPresentQueue;
+}
+
+// =====================================================================================================================
+// Issue the flip metadata on the software compositing internal present queue.
+VkResult Device::SwCompositingNotifyFlipMetadata(
+    Pal::IQueue*            pPresentQueue,
+    const Pal::CmdBufInfo&  cmdBufInfo)
+{
+    Pal::Result palResult = Pal::Result::ErrorUnknown;
+
+    for (uint32_t presentationDeviceIdx = 0; presentationDeviceIdx < NumPalDevices(); presentationDeviceIdx++)
+    {
+        if (pPresentQueue == m_perGpu[presentationDeviceIdx].pSwCompositingQueue)
+        {
+            // Found the master device index for the correct dummy command buffer to use.
+            Pal::SubmitInfo submitInfo = {};
+
+            submitInfo.cmdBufferCount  = 1;
+            submitInfo.ppCmdBuffers    = &m_perGpu[presentationDeviceIdx].pSwCompositingCmdBuffer;
+            submitInfo.pCmdBufInfoList = &cmdBufInfo;
+
+            palResult = pPresentQueue->Submit(submitInfo);
+            break;
+        }
+    }
+
+    return PalToVkResult(palResult);
 }
 
 // =====================================================================================================================

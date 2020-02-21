@@ -84,6 +84,12 @@ public:
         const VkAllocationCallbacks*    pAllocator,
         Pal::IImage**                   pPalImage);
 
+    static VkResult CreateFromAndroidHwBufferHandle(
+        Device*                                 pDevice,
+        const VkImageCreateInfo*                pImageCreateInfo,
+        bool                                    isExternalImage,
+        VkImage*                                pImage);
+
     static VkResult CreatePresentableImage(
         Device*                                 pDevice,
         const Pal::PresentableImageCreateInfo*  pCreateInfo,
@@ -246,8 +252,10 @@ private:
             uint32_t androidPresentable     : 1;  // True if this image is created as Android presentable image.
             uint32_t externalPinnedHost     : 1;  // True if image backing memory is compatible with pinned sysmem.
             uint32_t externalD3DHandle      : 1;  // True if image is backed by a D3D11 image
+            uint32_t externalAhbHandle      : 1;  // Ture if image is backed by Android Hardware Buffer
             uint32_t isColorFormat          : 1;  // True if the image has a color format
             uint32_t isYuvFormat            : 1;  // True if the image has a yuv format
+            uint32_t isExternalFormat       : 1;  // True if the image has undefined external format.
             uint32_t hasDepth               : 1;  // True if the image has depth components
             uint32_t hasStencil             : 1;  // True if the image has stencil components
             uint32_t sparseBinding          : 1;  // VK_IMAGE_CREATE_SPARSE_BINDING_BIT
@@ -255,7 +263,7 @@ private:
             uint32_t is2DArrayCompat        : 1;  // VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT
             uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
             uint32_t linear                 : 1;  // True if the image has VK_IMAGE_TILING_LINEAR
-            uint32_t reserved               : 15;
+            uint32_t reserved               : 13;
         };
         uint32_t     u32All;
     };

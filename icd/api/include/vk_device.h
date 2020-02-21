@@ -578,6 +578,10 @@ public:
         Pal::QueueType   cmdBufferQueueType,
         const Queue*     pQueue);
 
+    VkResult SwCompositingNotifyFlipMetadata(
+        Pal::IQueue*            pPresentQueue,
+        const Pal::CmdBufInfo&  cmdBufInfo);
+
     bool BigSW60Supported() const;
 
     void UpdateFeatureSettings();
@@ -680,6 +684,7 @@ protected:
         void*                  pSwCompositingMemory;    // Internal memory for the below PAL objects (master and slave)
         Pal::IQueue*           pSwCompositingQueue;     // Internal present queue (master) or transfer queue (slave)
         Pal::IQueueSemaphore*  pSwCompositingSemaphore; // Internal semaphore (master and slave)
+        Pal::ICmdBuffer*       pSwCompositingCmdBuffer; // Internal dummy command buffer for flip metadata (master)
 
     };
 

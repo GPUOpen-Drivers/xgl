@@ -78,8 +78,10 @@ VkResult Memory::Create(
     // indicate whether it is a allocation that supposed to be imported.
     Pal::OsExternalHandle handle    = 0;
     bool sharedViaNtHandle          = false;
+    bool sharedViaAndroidHwBuf      = false;
     bool isExternal                 = false;
     bool isHostMappedForeign        = false;
+    bool isAndroidHardwareBuffer    = false;
     void* pPinnedHostPtr            = nullptr; // If non-null, this memory is allocated as pinned system memory
     bool isCaptureReplay            = false;
 
@@ -98,7 +100,9 @@ VkResult Memory::Create(
     // Assign default priority based on panel setting (this may get elevated later by memory binds)
     MemoryPriority priority = MemoryPriority::FromSetting(pDevice->GetRuntimeSettings().memoryPriorityDefault);
 
-    Image* pBoundImage        = nullptr;
+    Image*  pBoundImage       = nullptr;
+    VkImage  dedicatedImage   = VK_NULL_HANDLE;
+    VkBuffer dedicatedBuffer  = VK_NULL_HANDLE;
 
     for (pInfo = pAllocInfo; pHeader != nullptr; pHeader = pHeader->pNext)
     {
@@ -174,7 +178,15 @@ VkResult Memory::Create(
                 const VkExportMemoryAllocateInfo* pExportMemory =
                     reinterpret_cast<const VkExportMemoryAllocateInfo *>(pHeader);
 #if defined(__unix__)
-                    VK_ASSERT(pExportMemory->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
+                    VK_ASSERT(pExportMemory->handleTypes &
+                           (VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT |
+                            VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID));
+
+                    if (pExportMemory->handleTypes &
+                        VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
+                    {
+                        sharedViaAndroidHwBuf   = true;
+                    }
 #endif
                     createInfo.flags.interprocess = 1;
                     // Todo: we'd better to pass in the handleTypes to the Pal as well.
@@ -215,6 +227,8 @@ VkResult Memory::Create(
                     pBoundImage       = Image::ObjectFromHandle(pDedicatedInfo->image);
                     createInfo.pImage = pBoundImage->PalImage(DefaultDeviceIndex);
                 }
+                dedicatedImage  = pDedicatedInfo->image;
+                dedicatedBuffer = pDedicatedInfo->buffer;
             }
             break;
 
@@ -284,14 +298,16 @@ VkResult Memory::Create(
 
     if (vkResult == VK_SUCCESS)
     {
-        if (isExternal)
+        if ((isExternal) || (sharedViaAndroidHwBuf))
         {
-#if defined(__unix__)
             ImportMemoryInfo importInfo = {};
-            importInfo.handle       = handle;
-            importInfo.isNtHandle   = sharedViaNtHandle;
-            vkResult = OpenExternalMemory(pDevice, importInfo, &pMemory);
-#endif
+            importInfo.handle           = handle;
+            importInfo.isAhbHandle      = isAndroidHardwareBuffer || sharedViaAndroidHwBuf;
+            importInfo.isNtHandle       = sharedViaNtHandle;
+
+            {
+                vkResult = OpenExternalMemory(pDevice, importInfo, &pMemory);
+            }
         }
         else
         {
@@ -708,8 +724,9 @@ VkResult Memory::OpenExternalSharedImage(
                                                          (VkImageUsageFlags)(0),
                                                          (VkImageUsageFlags)(0));
 
-    palOpenInfo.resourceInfo.hExternalResource = importInfo.handle;
-    palOpenInfo.resourceInfo.flags.ntHandle    = importInfo.isNtHandle;
+    palOpenInfo.resourceInfo.hExternalResource        = importInfo.handle;
+    palOpenInfo.resourceInfo.flags.ntHandle           = importInfo.isNtHandle;
+    palOpenInfo.resourceInfo.flags.androidHwBufHandle = importInfo.isAhbHandle;
 
     Pal::Result palResult = Pal::Result::Success;
     const bool openedViaName = (importInfo.handle == 0);
@@ -849,6 +866,14 @@ void Memory::Free(
         m_pExternalPalImage = nullptr;
     }
 
+    Pal::ResourceDestroyEventData data = {};
+    data.pObj = this;
+
+    pDevice->VkInstance()->PalPlatform()->LogEvent(
+        Pal::PalEvent::GpuMemoryResourceDestroy,
+        &data,
+        sizeof(Pal::ResourceDestroyEventData));
+
     for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); ++i)
     {
         for (uint32_t j = 0; j < m_pDevice->NumPalDevices(); ++j)
@@ -861,14 +886,6 @@ void Memory::Free(
                 {
                     Pal::IDevice* pPalDevice = pDevice->PalDevice(i);
                     pDevice->RemoveMemReference(pPalDevice, pGpuMemory);
-
-                    Pal::ResourceDestroyEventData data = {};
-                    data.pObj = pGpuMemory;
-
-                    pDevice->VkInstance()->PalPlatform()->LogEvent(
-                        Pal::PalEvent::GpuMemoryResourceDestroy,
-                        &data,
-                        sizeof(Pal::ResourceDestroyEventData));
 
                     // Destroy PAL memory object
                     pGpuMemory->Destroy();
@@ -942,7 +959,8 @@ VkResult Memory::OpenExternalMemory(
         openInfo.resourceInfo.hExternalResource = importInfo.handle;
     }
 
-    openInfo.resourceInfo.flags.ntHandle    = importInfo.isNtHandle;
+    openInfo.resourceInfo.flags.ntHandle           = importInfo.isNtHandle;
+    openInfo.resourceInfo.flags.androidHwBufHandle = importInfo.isAhbHandle;
     // Get CPU memory requirements for PAL
     gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetExternalSharedGpuMemorySize(&palResult);
     VK_ASSERT(palResult == Pal::Result::Success);

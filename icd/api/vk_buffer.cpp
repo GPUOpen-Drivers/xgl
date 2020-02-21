@@ -349,11 +349,8 @@ VkResult Buffer::Destroy(
     const VkAllocationCallbacks*    pAllocator)
 {
 
-    // @NOTE - This only handles the single GPU case currently.  MGPU is not supported by RMV v1
-    Pal::IGpuMemory* pMemoryObj = m_perGpu[DefaultDeviceIndex].pGpuMemory;
-
     Pal::ResourceDestroyEventData data = {};
-    data.pObj = pMemoryObj;
+    data.pObj = this;
 
     pDevice->VkInstance()->PalPlatform()->LogEvent(
         Pal::PalEvent::GpuMemoryResourceDestroy,
@@ -362,7 +359,7 @@ VkResult Buffer::Destroy(
 
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
-        pMemoryObj = m_perGpu[deviceIdx].pGpuMemory;
+        Pal::IGpuMemory* pMemoryObj = m_perGpu[deviceIdx].pGpuMemory;
 
         if (m_internalFlags.internalMemBound == true)
         {
@@ -445,7 +442,6 @@ VkResult Buffer::GetMemoryRequirements(
     {
         // In case of sparse buffers the alignment and granularity is the page size
         pMemoryRequirements->alignment = pDevice->GetProperties().virtualMemPageSize;
-        pMemoryRequirements->size      = Util::RoundUpToMultiple(m_size, pMemoryRequirements->alignment);
     }
     else
     {
@@ -453,7 +449,15 @@ VkResult Buffer::GetMemoryRequirements(
         // however, we'll specify such an alignment requirement which should fit formatted buffer use
         // with any kind of format
         pMemoryRequirements->alignment = (ubUsageEnabled) ? ubRequiredAlignment : 4;
-        pMemoryRequirements->size      = Util::RoundUpToMultiple(m_size, pMemoryRequirements->alignment);
+    }
+
+    pMemoryRequirements->size = Util::RoundUpToMultiple(m_size, pMemoryRequirements->alignment);
+
+    // MemoryRequirements cannot return smaller size than buffer size.
+    // MAX_UINT64 can be used as buffer size.
+    if (m_size > pMemoryRequirements->size)
+    {
+        pMemoryRequirements->size = m_size;
     }
 
     // Allow all available memory types for buffers

@@ -46,15 +46,14 @@ ResourceOptimizer::ResourceOptimizer(
     m_pDevice(pDevice),
     m_settings(pPhysicalDevice->GetRuntimeSettings())
 {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 496
-    static_assert((static_cast<uint32_t>(Pal::MetadataMode::Count) == 3),
+    static_assert((static_cast<uint32_t>(Pal::MetadataMode::Count) == 4),
         "The number of MetadataMode enum entries has changed. "
         "The DccMode structure may need to be updated as well.");
 
     dccModeToMetadataMode[DccMode::DccDefaultMode] = Pal::MetadataMode::Default;
     dccModeToMetadataMode[DccMode::DccDisableMode] = Pal::MetadataMode::Disabled;
-    dccModeToMetadataMode[DccMode::DccEnableMode] = Pal::MetadataMode::ForceEnabled;
-#endif
+    dccModeToMetadataMode[DccMode::DccEnableMode]  = Pal::MetadataMode::ForceEnabled;
+    dccModeToMetadataMode[DccMode::DccFmaskMode]   = Pal::MetadataMode::FmaskOnly;
 }
 
 // =====================================================================================================================
@@ -88,9 +87,7 @@ void ResourceOptimizer::ApplyProfileToImageCreateInfo(
             {
                 if (resourceCreate.apply.dccMode)
                 {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 496
                     pCreateInfo->metadataMode = dccModeToMetadataMode[resourceCreate.dccMode];
-#endif
                 }
             }
 

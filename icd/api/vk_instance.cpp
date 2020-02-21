@@ -590,7 +590,7 @@ VkResult Instance::LoadAndCommitSettings(
 {
     VkResult result = VK_SUCCESS;
 
-    for (uint32_t deviceIdx = 0; deviceIdx < deviceCount; ++deviceIdx)
+    for (uint32_t deviceIdx = 0; ((deviceIdx < deviceCount) && (result == VK_SUCCESS)); ++deviceIdx)
     {
         pAppProfiles[deviceIdx] = m_preInitAppProfile;
 
@@ -599,8 +599,12 @@ VkResult Instance::LoadAndCommitSettings(
 
         if (result == VK_SUCCESS)
         {
-            settingsLoaders[deviceIdx]->ProcessSettings(m_appVersion, &pAppProfiles[deviceIdx]);
+            result = settingsLoaders[deviceIdx]->ProcessSettings(
+                                &m_allocCallbacks, m_appVersion, &pAppProfiles[deviceIdx]);
+        }
 
+        if (result == VK_SUCCESS)
+        {
             UpdateSettingsWithAppProfile(settingsLoaders[deviceIdx]->GetSettingsPtr());
 
             // Make sure the final settings have legal values and update dependant parameters

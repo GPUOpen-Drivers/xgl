@@ -183,9 +183,7 @@ private:
     ResourceProfile        m_runtimeProfile;
 #endif
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 496
     Pal::MetadataMode dccModeToMetadataMode[static_cast<uint32_t>(Pal::MetadataMode::Count)];
-#endif
 };
 
 };

@@ -274,7 +274,7 @@ if(ICD_BUILD_LLPC)
 endif()
 
 if(ICD_BUILD_SPVONLY)
-    # add_subdirectory(${XGL_BILTOOL_PATH} ${PROJECT_BINARY_DIR}/api/bil/tool)
+    # add_subdirectory(${XGL_BILTOOL_PATH} ${PROJECT_BINARY_DIR}/api/compiler/bil/tool)
     # target_link_libraries(xgl biltool)
 endif()
 

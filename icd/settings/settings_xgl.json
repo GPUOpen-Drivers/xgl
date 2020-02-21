@@ -2193,6 +2193,11 @@
             "Description": "Any video operations"
           },
           {
+            "Name": "DbgBuildAccelerationStructure",
+            "Value": 134217728,
+            "Description": "Any ray tracing operations"
+          },
+          {
             "Name": "DbgBarrierOther",
             "Value": 2147483648,
             "Description": "Any other command not listed above"
@@ -4550,6 +4555,11 @@
             "Name": "DccEnableMode",
             "Value": 2,
             "Description": "Enabled"
+          },
+          {
+            "Name": "DccFmaskMode",
+            "Value": 3,
+            "Description": "Disabled"
           }
         ],
         "Name": "DccMode"

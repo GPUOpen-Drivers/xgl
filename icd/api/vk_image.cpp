@@ -524,6 +524,12 @@ VkResult Image::Create(
                 {
                     imageFlags.externalPinnedHost = true;
                 }
+
+                if (pExternalMemoryImageCreateInfo->handleTypes &
+                    VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
+                {
+                   imageFlags.externalAhbHandle = true;
+                }
             }
 
             break;
@@ -711,6 +717,17 @@ VkResult Image::Create(
         return result;
     }
 
+    if (imageFlags.externalAhbHandle)
+    {
+        result = Image::CreateFromAndroidHwBufferHandle(
+            pDevice,
+            pImageCreateInfo,
+            imageFlags.isExternalFormat,
+            pImage);
+
+        return result;
+    }
+
     // Calculate required system memory size
     const size_t apiSize   = ObjectSize(pDevice);
     size_t       totalSize = apiSize;
@@ -849,6 +866,127 @@ VkResult Image::Create(
             // Failure in creating the PAL image object. Free system memory and return error.
             pAllocator->pfnFree(pAllocator->pUserData, pMemory);
         }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Create a new image object from Android Hardware Buffer handle
+VkResult Image::CreateFromAndroidHwBufferHandle(
+    Device*                                pDevice,
+    const VkImageCreateInfo*               pImageCreateInfo,
+    bool                                   isExternalFormat,
+    VkImage*                               pImage)
+{
+    VkResult             result             = VkResult::VK_SUCCESS;
+    const size_t         apiSize            = ObjectSize(pDevice);
+    size_t               palImgSize         = 0;
+    size_t               totalSize          = 0;
+    void*                pMemory            = nullptr;
+    Pal::ImageCreateInfo palCreateInfo      = {};
+    Pal::Result          palResult          = Pal::Result::Success;
+    const VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
+    ImageFlags imageFlags;
+
+    imageFlags.u32All = 0;
+    imageFlags.externallyShareable  = true;
+    imageFlags.externalAhbHandle    = true;
+    imageFlags.isExternalFormat     = isExternalFormat;
+
+    //TODO: handle external format (mainly the YUV formats) with YCbCrSamplers later
+    if (isExternalFormat)
+    {
+        VK_NOT_IMPLEMENTED;
+        return VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo);
+    palImgSize = pDevice->PalDevice(DefaultDeviceIndex)->GetImageSize(palCreateInfo, &palResult);
+    VK_ASSERT(palResult == Pal::Result::Success);
+
+    totalSize = apiSize + palImgSize;
+
+    // Allocate system memory for objects
+    pMemory = pAllocator->pfnAllocation(
+        pAllocator->pUserData,
+        totalSize,
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if (pMemory == nullptr)
+    {
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
+
+    // Create PAL images
+    Pal::IImage* pPalImages[MaxPalDevices] = {};
+    void*        pPalImgAddr  = Util::VoidPtrInc(pMemory, apiSize);
+    size_t       palImgOffset = 0;
+
+    palResult = pDevice->PalDevice(DefaultDeviceIndex)->CreateImage(
+        palCreateInfo,
+        Util::VoidPtrInc(pPalImgAddr, palImgOffset),
+        &pPalImages[DefaultDeviceIndex]);
+
+    palImgOffset += palImgSize;
+
+    if (palResult != Pal::Result::Success)
+    {
+        result = VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    VkImage imageHandle = VK_NULL_HANDLE;
+
+    if (result == VK_SUCCESS)
+    {
+        // Create barrier policy for the image.
+        ImageBarrierPolicy barrierPolicy(pDevice,
+                                         pImageCreateInfo->usage,
+                                         pImageCreateInfo->sharingMode,
+                                         pImageCreateInfo->queueFamilyIndexCount,
+                                         pImageCreateInfo->pQueueFamilyIndices,
+                                         pImageCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT,
+                                         pImageCreateInfo->format);
+
+        VkExtent3D dummyTileSize = {};
+
+        // Construct API image object.
+        VK_PLACEMENT_NEW (pMemory) Image(
+            pDevice,
+            pImageCreateInfo->flags,
+            pPalImages,
+            nullptr,
+            barrierPolicy,
+            dummyTileSize,
+            palCreateInfo.mipLevels,
+            palCreateInfo.arraySize,
+            pImageCreateInfo->format,
+            pImageCreateInfo->samples,
+            pImageCreateInfo->usage,
+            pImageCreateInfo->usage,
+            imageFlags);
+
+        imageHandle = Image::HandleFromVoidPointer(pMemory);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        *pImage = imageHandle;
+    }
+    else
+    {
+        if (imageHandle != VK_NULL_HANDLE)
+        {
+            Image::ObjectFromHandle(imageHandle)->Destroy(pDevice, pAllocator);
+        }
+        else
+        {
+            pPalImages[DefaultDeviceIndex]->Destroy();
+        }
+
+        // Failure in creating the PAL image object. Free system memory and return error.
+        pAllocator->pfnFree(pAllocator->pUserData, pMemory);
     }
 
     return result;
@@ -1490,7 +1628,8 @@ void Image::GetSparseMemoryRequirements(
                                                         physDevice->PalProperties().imageProperties.prtTileSize;
 
             // If PAL reports alignment > size, then we have no choice but to increase the size to match.
-            pCurrentRequirement->imageMipTailSize = Util::RoundUpToMultiple(mipTailSize, memReqs.alignment);
+            pCurrentRequirement->imageMipTailSize = Util::RoundUpToMultiple(mipTailSize,
+                                                        physDevice->PalProperties().imageProperties.prtTileSize);
 
             // for per-slice-miptail, the miptail should only take one tile and the base address is tile aligned.
             // for single-miptail, the offset of first in-miptail mip level of slice 0 refers to the offset of miptail.
@@ -1510,7 +1649,7 @@ void Image::GetSparseMemoryRequirements(
             pCurrentRequirement->formatProperties.imageGranularity = {0};
             pCurrentRequirement->imageMipTailFirstLod              = 0;
             pCurrentRequirement->imageMipTailSize                  = Util::RoundUpToMultiple(memoryLayout.metadataSize,
-                                                                                             memReqs.alignment);
+                                                                                             physDevice->PalProperties().imageProperties.prtTileSize);
             pCurrentRequirement->imageMipTailOffset                = memoryLayout.metadataOffset;
             pCurrentRequirement->imageMipTailStride                = 0;
 

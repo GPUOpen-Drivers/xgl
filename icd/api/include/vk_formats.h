@@ -50,6 +50,7 @@ struct Formats
     VK_INLINE static bool IsColorFormat(VkFormat format);
     VK_INLINE static bool IsDepthStencilFormat(VkFormat format);
     VK_INLINE static bool IsBcCompressedFormat(VkFormat format);
+    VK_INLINE static bool IsRTVertexFormat(VkFormat format);
     VK_INLINE static bool IsYuvFormat(VkFormat format);
     VK_INLINE static bool IsYuvPlanar(VkFormat format);
     VK_INLINE static bool IsYuvPacked(VkFormat format);
@@ -198,6 +199,18 @@ bool Formats::IsBcCompressedFormat(VkFormat format)
 bool Formats::IsYuvFormat(VkFormat format)
 {
     return (format >= VK_YUV_FORMAT_START && format <= VK_YUV_FORMAT_END);
+}
+
+// =====================================================================================================================
+// Returns true if the given format is a yuv format.
+bool Formats::IsRTVertexFormat(VkFormat format)
+{
+    return (VK_FORMAT_R32G32_SFLOAT       == format) ||
+           (VK_FORMAT_R32G32B32_SFLOAT    == format) ||
+           (VK_FORMAT_R16G16_SFLOAT       == format) ||
+           (VK_FORMAT_R16G16B16A16_SFLOAT == format) ||
+           (VK_FORMAT_R16G16_SNORM        == format) ||
+           (VK_FORMAT_R16G16B16A16_SNORM  == format);
 }
 
 // =====================================================================================================================

@@ -120,9 +120,7 @@ endif()
 
 # Configure Vulkan SDK version definitions
 #if VKI_SDK_1_2
-if (USE_NEXT_SDK)
-    target_compile_definitions(xgl PRIVATE VKI_SDK_1_2=1)
-endif()
+target_compile_definitions(xgl PRIVATE VKI_SDK_1_2=1)
 #endif
 
 # Enable relevant GPUOpen preprocessor definitions
@@ -388,7 +386,7 @@ if (UNIX)
 
     target_link_libraries(xgl PRIVATE c stdc++ ${CMAKE_DL_LIBS} pthread)
 
-    if(NOT ICD_USE_GCC)
+    if(NOT ICD_USE_GCC AND NOT "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
         message(WARNING "Intel ICC untested in CMake.")
         target_link_libraries(xgl PRIVATE -fabi-version=0 -static-intel)
     endif()

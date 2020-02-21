@@ -316,6 +316,11 @@ public:
         VkExternalMemoryHandleTypeFlagBits handleType,
         VkExternalMemoryProperties*        pExternalMemoryProperties) const;
 
+    VkResult GetAndroidHarewareBufferUsage(
+        VkImageUsageFlags        usage,
+        VkImageCreateFlags       createFlags,
+        uint64_t*                pAHBUsage) const;
+
     VkResult GetImageFormatProperties(
         VkFormat                 format,
         VkImageType              type,

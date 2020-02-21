@@ -1334,8 +1334,14 @@ VkResult PhysicalDevice::GetImageFormatProperties(
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
         }
 
+        if (Formats::IsYuvFormat(format))
+        {
+            return VK_ERROR_FORMAT_NOT_SUPPORTED;
+        }
+
         if (flags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)
         {
+            // PAL doesn't expose all the information required to support a planar depth/stencil format
             if (Formats::IsDepthStencilFormat(format))
             {
                 const bool sparseDepthStencil = (GetPrtFeatures() & Pal::PrtFeatureImageDepthStencil) != 0;
@@ -1345,43 +1351,24 @@ VkResult PhysicalDevice::GetImageFormatProperties(
                 }
             }
 
-            if (Formats::IsYuvFormat(format))
+            const bool supported =
+                // Currently we only support optimally tiled sparse images
+                (tiling == VK_IMAGE_TILING_OPTIMAL)
+                // Currently we don't support 1D sparse images
+                && (type != VK_IMAGE_TYPE_1D)
+                // 2D sparse images depend on HW capability
+                && ((type != VK_IMAGE_TYPE_2D) || (GetPrtFeatures() & Pal::PrtFeatureImage2D))
+                // 3D sparse images depend on HW capability
+                && ((type != VK_IMAGE_TYPE_3D) ||
+                ((GetPrtFeatures() & (Pal::PrtFeatureImage3D | Pal::PrtFeatureNonStandardImage3D)) != 0))
+                // We only support pixel sizes not larger than 128 bits
+                && (Util::Pow2Pad(bytesPerPixel) <= 16)
+                // A combination of 3D image and 128-bit BC format is not supported.
+                && (((type == VK_IMAGE_TYPE_3D) && (Util::Pow2Pad(bytesPerPixel) == 16) && Formats::IsBcCompressedFormat(format)) == false);
+
+            if (supported == false)
             {
                 return VK_ERROR_FORMAT_NOT_SUPPORTED;
-            }
-
-            switch (type)
-            {
-                case VK_IMAGE_TYPE_1D:
-                {
-                    return VK_ERROR_FORMAT_NOT_SUPPORTED;
-                }
-                case VK_IMAGE_TYPE_2D:
-                {
-                    const bool sparseResidencyImage2D = (GetPrtFeatures() & Pal::PrtFeatureImage2D) != 0;
-                    if (!sparseResidencyImage2D)
-                    {
-                        return VK_ERROR_FORMAT_NOT_SUPPORTED;
-                    }
-                    break;
-                }
-                case VK_IMAGE_TYPE_3D:
-                {
-                    const bool sparseResidencyImage3D = (GetPrtFeatures() & (Pal::PrtFeatureImage3D |
-                                                                             Pal::PrtFeatureNonStandardImage3D)) != 0;
-                    if (!sparseResidencyImage3D)
-                    {
-                        return VK_ERROR_FORMAT_NOT_SUPPORTED;
-                    }
-                    else if (Formats::IsBcCompressedFormat(format) && (bytesPerPixel == 16))
-                    {
-                        // A combination of 3D PRT image and 128-bit BC format is not supported.
-                        return VK_ERROR_FORMAT_NOT_SUPPORTED;
-                    }
-                    break;
-                }
-                default:
-                    break;
             }
         }
 
@@ -1563,41 +1550,23 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
     uint32_t bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(VkToPalFormat(format).format));
 
-    bool supported = true
-        // If VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT is unsupported, this function should return zero results.
-        && GetRuntimeSettings().optEnablePrt
-        // Currently we only support optimally tiled sparse images
-        && (tiling == VK_IMAGE_TILING_OPTIMAL)
-        // Currently we don't support 1D sparse images
-        && (type != VK_IMAGE_TYPE_1D)
-        // 2D sparse images depend on HW capability
-        && ((type != VK_IMAGE_TYPE_2D) || (GetPrtFeatures() & Pal::PrtFeatureImage2D))
-        // 3D sparse images depend on HW capability
-        && ((type != VK_IMAGE_TYPE_3D) ||
-            ((GetPrtFeatures() & (Pal::PrtFeatureImage3D | Pal::PrtFeatureNonStandardImage3D)) != 0))
+    bool supported =
         // Multisampled sparse images depend on HW capability
-        && ((samples == VK_SAMPLE_COUNT_1_BIT) ||
-            ((type == VK_IMAGE_TYPE_2D) && (GetPrtFeatures() & Pal::PrtFeatureImageMultisampled)))
-        // We only support pixel sizes not larger than 128 bits
-        && (bytesPerPixel <= 16)
+        ((samples == VK_SAMPLE_COUNT_1_BIT) ||
+         ((type == VK_IMAGE_TYPE_2D) && (GetPrtFeatures() & Pal::PrtFeatureImageMultisampled)))
         // Up to 16 MSAA coverage samples are supported by HW
         && (samples <= Pal::MaxMsaaRasterizerSamples);
 
-    // Check if hardware supports sparse depth/stencil aspects.
-    if (aspects[1].available || aspects[2].available)
+    if (supported)
     {
-        supported &= ((PalProperties().imageProperties.prtFeatures & Pal::PrtFeatureImageDepthStencil) != 0);
-
-        // PAL doesn't expose all the information required to support a planar depth/stencil format.
-        if (aspects[1].available && aspects[2].available)
-        {
-            supported = false;
-        }
-    }
-    else if ((type == VK_IMAGE_TYPE_3D) && (bytesPerPixel == 16) && Formats::IsBcCompressedFormat(format))
-    {
-        // A combination of 3D image and 128-bit BC format is not supported.
-        supported = false;
+        VkImageFormatProperties imageFormatProperties;
+        supported = (GetImageFormatProperties(format,
+                                              type,
+                                              tiling,
+                                              usage,
+                                              (VK_IMAGE_CREATE_SPARSE_BINDING_BIT
+                                               | VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT),
+                                              &imageFormatProperties) == VK_SUCCESS);
     }
 
     if (supported)
@@ -4913,14 +4882,12 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
             pTextureLODGatherFormatProperties = reinterpret_cast<VkTextureLODGatherFormatPropertiesAMD*>(pHeader2);
             break;
         }
-
         case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
         {
             pSamplerYcbcrConversionImageFormatProperties = reinterpret_cast<VkSamplerYcbcrConversionImageFormatProperties*>(pHeader2);
             pSamplerYcbcrConversionImageFormatProperties->combinedImageSamplerDescriptorCount = 1;
             break;
         }
-
         default:
             break;
         }
@@ -5163,7 +5130,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pConservativeRasterizationProperties->degenerateTrianglesRasterized                 = VK_TRUE;
             pConservativeRasterizationProperties->degenerateLinesRasterized                     = VK_FALSE;
             pConservativeRasterizationProperties->fullyCoveredFragmentShaderInputVariable       = VK_FALSE;
-            pConservativeRasterizationProperties->conservativeRasterizationPostDepthCoverage    = VK_FALSE;
+            pConservativeRasterizationProperties->conservativeRasterizationPostDepthCoverage    = IsExtensionSupported(DeviceExtensions::EXT_POST_DEPTH_COVERAGE) ? VK_TRUE : VK_FALSE;
 
             break;
         }

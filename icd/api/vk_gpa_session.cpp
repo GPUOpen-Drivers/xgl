@@ -128,19 +128,26 @@ VkResult GpaSession::GetResults(
     size_t*  pSizeInBytes,
     void*    pData)
 {
-    Pal::Result result = m_session.GetResults(sampleId, pSizeInBytes, pData);
+    if (sampleId != GpuUtil::InvalidSampleId)
+    {
+        Pal::Result result = m_session.GetResults(sampleId, pSizeInBytes, pData);
 
-    if (result == Pal::Result::ErrorUnavailable)
-    {
-        return VK_NOT_READY;
-    }
-    else if (result == Pal::Result::ErrorInvalidMemorySize)
-    {
-        return VK_INCOMPLETE;
+        if (result == Pal::Result::ErrorUnavailable)
+        {
+            return VK_NOT_READY;
+        }
+        else if (result == Pal::Result::ErrorInvalidMemorySize)
+        {
+            return VK_INCOMPLETE;
+        }
+        else
+        {
+            return PalToVkResult(result);
+        }
     }
     else
     {
-        return PalToVkResult(result);
+        return VK_ERROR_INITIALIZATION_FAILED;
     }
 }
 
@@ -272,6 +279,11 @@ VkResult GpaSession::CmdBeginSample(
         uint32_t sampleID = m_session.BeginSample(pCmdbuf->PalCmdBuffer(DefaultDeviceIndex), sampleConfig);
 
         *pSampleID = sampleID;
+
+        if (sampleID == GpuUtil::InvalidSampleId)
+        {
+            result = VK_ERROR_INITIALIZATION_FAILED;
+        }
     }
 
     if (sampleConfig.perfCounters.pIds != nullptr)
@@ -287,7 +299,10 @@ void GpaSession::CmdEndSample(
     CmdBuffer* pCmdbuf,
     uint32_t   sampleID)
 {
-    m_session.EndSample(pCmdbuf->PalCmdBuffer(DefaultDeviceIndex), sampleID);
+    if (sampleID != GpuUtil::InvalidSampleId)
+    {
+        m_session.EndSample(pCmdbuf->PalCmdBuffer(DefaultDeviceIndex), sampleID);
+    }
 }
 
 // =====================================================================================================================

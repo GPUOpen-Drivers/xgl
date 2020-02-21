@@ -205,6 +205,7 @@ enum InternalSubAllocPool
     InternalPoolGpuReadOnlyRemote      = 0, // All read-only persistent mapped CPU-visible pools in system memory
     InternalPoolGpuReadOnlyCpuVisible,      // All read-only persistent mapped CPU-visible pools (incl. local visible)
     InternalPoolCpuVisible,                 // All CPU-visible pools
+    InternalPoolGpuAccess,                  // All GPU-visible pools
     InternalPoolDescriptorTable,            // Persistent mapped pool used for descriptor sets (main table)
     InternalPoolCpuCacheableGpuUncached,    // Cacheable CPU-visible pool with enabled gl2Uncached if requred for the GPU
     InternalPoolCount

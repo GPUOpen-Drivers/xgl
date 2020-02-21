@@ -50,6 +50,7 @@
 
 #include "sqtt/sqtt_layer.h"
 
+#include "palDequeImpl.h"
 #include "palQueue.h"
 
 namespace vk
@@ -73,7 +74,12 @@ Queue::Queue(
 {
     memcpy(m_pPalQueues, pPalQueues, sizeof(pPalQueues[0]) * pDevice->NumPalDevices());
     memset(&m_palFrameMetadataControl, 0, sizeof(Pal::PerSourceFrameMetadataControl));
-    memset(&m_pDummyCmdBuffer, 0, sizeof(m_pDummyCmdBuffer[0]) * pDevice->NumPalDevices());
+
+    for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
+    {
+        m_pDummyCmdBuffer[deviceIdx] = nullptr;
+        m_pCmdBufRing[deviceIdx]     = nullptr;
+    }
 
 }
 
@@ -87,6 +93,8 @@ Queue::~Queue()
             m_pDummyCmdBuffer[deviceIdx]->Destroy();
             m_pDevice->VkInstance()->FreeMem(m_pDummyCmdBuffer[deviceIdx]);
         }
+
+        DestroyCmdBufRing(deviceIdx);
     }
 
     if (m_pStackAllocator != nullptr)
@@ -128,7 +136,6 @@ VkResult Queue::CreateDummyCmdBuffer()
                 if (palResult == Pal::Result::Success)
                 {
                     Pal::CmdBufferBuildInfo buildInfo = {};
-                    buildInfo.flags.optimizeExclusiveSubmit = 1;
                     palResult = m_pDummyCmdBuffer[deviceIdx]->Begin(buildInfo);
                     if (palResult == Pal::Result::Success)
                     {
@@ -150,51 +157,66 @@ VkResult Queue::CreateDummyCmdBuffer()
 // Submit a dummy command buffer with associated command buffer info to KMD for FRTC/TurboSync/DVR features
 VkResult Queue::NotifyFlipMetadata(
     uint32_t                     deviceIdx,
-    Pal::ICmdBuffer*             pPresentCmdBuffer,
+    Pal::IQueue*                 pPresentQueue,
+    CmdBufState*                 pCmdBufState,
     const Pal::IGpuMemory*       pGpuMemory,
     FullscreenFrameMetadataFlags flags,
     bool                         forceSubmit)
 {
     VkResult result = VK_SUCCESS;
-    if (m_pDummyCmdBuffer[deviceIdx] == nullptr)
-    {
-        result = CreateDummyCmdBuffer();
-        VK_ASSERT(result == VK_SUCCESS);
-    }
 
-    // If there's already a command buffer that needs to be submitted, use it instead of a dummy one.
-    Pal::ICmdBuffer* pCmdBuffer = (pPresentCmdBuffer != nullptr) ? pPresentCmdBuffer : m_pDummyCmdBuffer[deviceIdx];
-
-    if (pCmdBuffer != nullptr)
+    if ((flags.frameBeginFlag == 1) || (flags.frameEndFlag == 1) || (flags.primaryHandle == 1) ||
+        (pCmdBufState != nullptr) || forceSubmit)
     {
-        if ((flags.frameBeginFlag == 1) || (flags.frameEndFlag == 1) || (flags.primaryHandle == 1) ||
-            (pPresentCmdBuffer != nullptr) || forceSubmit)
+        Pal::CmdBufInfo cmdBufInfo = {};
+        cmdBufInfo.isValid = 1;
+        if (flags.frameBeginFlag == 1)
         {
-            Pal::CmdBufInfo cmdBufInfo = {};
-            cmdBufInfo.isValid = 1;
-            if (flags.frameBeginFlag == 1)
-            {
-                cmdBufInfo.frameBegin = 1;
-            }
-            else if (flags.frameEndFlag == 1)
-            {
-                cmdBufInfo.frameEnd = 1;
-            }
-
-            if (flags.primaryHandle == 1)
-            {
-                cmdBufInfo.pPrimaryMemory = pGpuMemory;
-            }
-
-            Pal::SubmitInfo submitInfo = {};
-
-            submitInfo.cmdBufferCount  = 1;
-            submitInfo.ppCmdBuffers    = &pCmdBuffer;
-            submitInfo.pCmdBufInfoList = &cmdBufInfo;
-
-            result = PalToVkResult(m_pPalQueues[deviceIdx]->Submit(submitInfo));
-            VK_ASSERT(result == VK_SUCCESS);
+            cmdBufInfo.frameBegin = 1;
         }
+        else if (flags.frameEndFlag == 1)
+        {
+            cmdBufInfo.frameEnd = 1;
+        }
+
+        if (flags.primaryHandle == 1)
+        {
+            cmdBufInfo.pPrimaryMemory = pGpuMemory;
+        }
+
+        // Submit the flip metadata to the appropriate device and present queue for the software compositing path.
+        if ((pPresentQueue != nullptr) && (pPresentQueue != m_pPalQueues[deviceIdx]))
+        {
+            result = m_pDevice->SwCompositingNotifyFlipMetadata(pPresentQueue, cmdBufInfo);
+        }
+        else
+        {
+            // If there's already a command buffer that needs to be submitted, use it instead of a dummy one.
+            if (pCmdBufState != nullptr)
+            {
+                result = SubmitInternalCmdBuf(deviceIdx, cmdBufInfo, pCmdBufState);
+            }
+            else
+            {
+                if (m_pDummyCmdBuffer[deviceIdx] == nullptr)
+                {
+                    result = CreateDummyCmdBuffer();
+                }
+
+                if (result == VK_SUCCESS)
+                {
+                    Pal::SubmitInfo submitInfo = {};
+
+                    submitInfo.cmdBufferCount  = 1;
+                    submitInfo.ppCmdBuffers    = &m_pDummyCmdBuffer[deviceIdx];
+                    submitInfo.pCmdBufInfoList = &cmdBufInfo;
+
+                    result = PalToVkResult(m_pPalQueues[deviceIdx]->Submit(submitInfo));
+                }
+            }
+        }
+
+        VK_ASSERT(result == VK_SUCCESS);
     }
 
     return result;
@@ -204,14 +226,15 @@ VkResult Queue::NotifyFlipMetadata(
 // Submit command buffer info with frameEndFlag and primaryHandle before frame present
 VkResult Queue::NotifyFlipMetadataBeforePresent(
     uint32_t                         deviceIdx,
+    Pal::IQueue*                     pPresentQueue,
     const Pal::PresentSwapChainInfo* pPresentInfo,
-    Pal::ICmdBuffer*                 pPresentCmdBuffer,
+    CmdBufState*                     pCmdBufState,
     const Pal::IGpuMemory*           pGpuMemory,
     bool                             forceSubmit)
 {
     FullscreenFrameMetadataFlags flags = {};
 
-    return NotifyFlipMetadata(deviceIdx, pPresentCmdBuffer, pGpuMemory, flags, forceSubmit);
+    return NotifyFlipMetadata(deviceIdx, pPresentQueue, pCmdBufState, pGpuMemory, flags, forceSubmit);
 }
 
 // =====================================================================================================================
@@ -710,19 +733,29 @@ VkResult Queue::Present(
         // Get the presentable image index
         const uint32_t imageIndex = pPresentInfo->pImageIndices[curSwapchain];
 
-        // Fill in present information
         Pal::PresentSwapChainInfo presentInfo = {};
 
-        // There may be additional commands to submit prior to an end frame marker and the actual present.
-        Pal::ICmdBuffer* pPresentCmdBuffer = nullptr;
+        // Fill in present information and obtain the PAL memory of the presentable image.
+        Pal::IGpuMemory* pGpuMemory = pSwapChain->UpdatePresentInfo(presentationDeviceIdx, imageIndex, &presentInfo);
+
+        CmdBufState* pCmdBufState = AcquireInternalCmdBuf(presentationDeviceIdx);
+
+        // This must happen after the fullscreen manager has updated its overlay information and before the software
+        // compositor has an opportunity to copy the presentable image in order to include the overlay itself.
+        bool hasPostProcessing = BuildPostProcessCommands(presentationDeviceIdx,
+                                                          pCmdBufState,
+                                                          nullptr,
+                                                          &presentInfo,
+                                                          pSwapChain);
 
         // For MGPU, the swapchain and device properties might perform software composition and return
         // a different presentation device for the present of the intermediate surface.
         Pal::IQueue* pPresentQueue = pSwapChain->PrePresent(presentationDeviceIdx,
-                                                            imageIndex,
                                                             &presentInfo,
+                                                            &pGpuMemory,
                                                             this,
-                                                            &pPresentCmdBuffer);
+                                                            pCmdBufState,
+                                                            &hasPostProcessing);
 
         // Notify gpuopen developer mode that we're about to present (frame-end boundary)
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -736,16 +769,13 @@ VkResult Queue::Present(
         bool postFrameTimerSubmission = false;
         bool needFramePacing = NeedPacePresent(&presentInfo, pSwapChain, &syncFlip, &postFrameTimerSubmission);
 
-        const Pal::IGpuMemory* pGpuMemory = nullptr;
-        {
-            pGpuMemory = pSwapChain->GetPresentableImageMemory(imageIndex)->PalMemory(DefaultDeviceIndex);
-        }
-
         result = NotifyFlipMetadataBeforePresent(presentationDeviceIdx,
+                                                 pPresentQueue,
                                                  &presentInfo,
-                                                 pPresentCmdBuffer,
+                                                 (hasPostProcessing ? pCmdBufState : nullptr),
                                                  pGpuMemory,
                                                  needSemaphoreFlush);
+
         if (result != VK_SUCCESS)
         {
             break;
@@ -1264,6 +1294,273 @@ VkResult Queue::BindSparse(
     virtStackFrame.FreeArray(remapState.pRanges);
 
     return result;
+}
+
+// =====================================================================================================================
+// Initializes the command buffer ring
+void Queue::CreateCmdBufRing(
+    uint32_t                         deviceIdx)
+{
+    void* pMemory = m_pDevice->VkInstance()->AllocMem(sizeof(CmdBufRing), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if (pMemory != nullptr)
+    {
+        m_pCmdBufRing[deviceIdx] = VK_PLACEMENT_NEW(pMemory) CmdBufRing(m_pDevice->VkInstance()->Allocator());
+    }
+
+    VK_ASSERT(m_pCmdBufRing[deviceIdx] != nullptr);
+}
+
+// =====================================================================================================================
+// Destroys a ring buffer and frees any memory associated with it
+void Queue::DestroyCmdBufRing(
+    uint32_t                   deviceIdx)
+{
+    // Destroy the command buffer ring
+    if (m_pCmdBufRing[deviceIdx] != nullptr)
+    {
+        while (m_pCmdBufRing[deviceIdx]->NumElements() > 0)
+        {
+            CmdBufState* pCmdBufState = nullptr;
+            m_pCmdBufRing[deviceIdx]->PopFront(&pCmdBufState);
+            DestroyCmdBufState(deviceIdx, pCmdBufState);
+        }
+
+        Util::Destructor(m_pCmdBufRing[deviceIdx]);
+        m_pDevice->VkInstance()->FreeMem(m_pCmdBufRing[deviceIdx]);
+        m_pCmdBufRing[deviceIdx] = nullptr;
+    }
+}
+
+// =====================================================================================================================
+// Initializes the command buffer state
+CmdBufState* Queue::CreateCmdBufState(
+    uint32_t                         deviceIdx)
+{
+    CmdBufState* pCmdBufState = nullptr;
+
+    Pal::IDevice* pDevice = m_pDevice->PalDevice(deviceIdx);
+
+    Pal::CmdBufferCreateInfo cmdBufInfo = {};
+
+    cmdBufInfo.queueType     = m_pDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex);
+    cmdBufInfo.engineType    = m_pDevice->GetQueueFamilyPalEngineType(m_queueFamilyIndex);
+    cmdBufInfo.pCmdAllocator = m_pDevice->GetSharedCmdAllocator(deviceIdx);
+
+    Pal::FenceCreateInfo fenceInfo = {};
+
+    size_t cmdBufSize = 0;
+    size_t fenceSize = 0;
+
+    Pal::Result result;
+
+    cmdBufSize = pDevice->GetCmdBufferSize(cmdBufInfo, &result);
+
+    if (result == Pal::Result::Success)
+    {
+        fenceSize = pDevice->GetFenceSize(&result);
+    }
+
+    size_t totalSize = sizeof(CmdBufState) + cmdBufSize + fenceSize;
+
+    void* pStorage = nullptr;
+
+    if (result == Pal::Result::Success)
+    {
+        pStorage = m_pDevice->VkInstance()->AllocMem(totalSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    }
+
+    if (pStorage != nullptr)
+    {
+        pCmdBufState = static_cast<CmdBufState*>(pStorage);
+        pStorage = Util::VoidPtrInc(pStorage, sizeof(CmdBufState));
+
+        void* pCmdBufStorage = pStorage;
+        pStorage = Util::VoidPtrInc(pStorage, cmdBufSize);
+
+        void* pFenceStorage = pStorage;
+        pStorage = Util::VoidPtrInc(pStorage, fenceSize);
+
+        if (result == Pal::Result::Success)
+        {
+            result = pDevice->CreateCmdBuffer(cmdBufInfo, pCmdBufStorage, &pCmdBufState->pCmdBuf);
+        }
+
+        if (result == Pal::Result::Success)
+        {
+            result = pDevice->CreateFence(fenceInfo, pFenceStorage, &pCmdBufState->pFence);
+        }
+
+        VK_ASSERT(Util::VoidPtrInc(pCmdBufState, totalSize) == pStorage);
+
+        if (result != Pal::Result::Success)
+        {
+            DestroyCmdBufState(deviceIdx, pCmdBufState);
+            pCmdBufState = nullptr;
+        }
+    }
+
+    return pCmdBufState;
+}
+
+// =====================================================================================================================
+// Destroys a command buffer state and frees any memory associated with it
+void Queue::DestroyCmdBufState(
+    uint32_t     deviceIdx,
+    CmdBufState* pCmdBufState)
+{
+    // Wait to finish in case still in flight
+    if (pCmdBufState->pFence->GetStatus() == Pal::Result::NotReady)
+    {
+        m_pDevice->PalDevice(deviceIdx)->WaitForFences(1, &pCmdBufState->pFence, true, ~0ULL);
+    }
+
+    // Destroy Fence
+    if (pCmdBufState->pFence != nullptr)
+    {
+        pCmdBufState->pFence->Destroy();
+    }
+
+    // Destroy CmdBuf
+    if (pCmdBufState->pCmdBuf != nullptr)
+    {
+        pCmdBufState->pCmdBuf->Destroy();
+    }
+
+    // Free all system memory
+    m_pDevice->VkInstance()->FreeMem(pCmdBufState);
+}
+
+// =====================================================================================================================
+// Gets a new command buffer from a ring buffer, the cmd of which can be redefined with new command data
+CmdBufState* Queue::AcquireInternalCmdBuf(
+    uint32_t                       deviceIdx)
+{
+    CmdBufState* pCmdBufState = nullptr;
+
+    // Initialize on first use
+    if (m_pCmdBufRing[deviceIdx] == nullptr)
+    {
+        CreateCmdBufRing(deviceIdx);
+    }
+
+    if (m_pCmdBufRing[deviceIdx] != nullptr)
+    {
+        // Create a new command buffer if the least recently used one is still busy.
+        if ((m_pCmdBufRing[deviceIdx]->NumElements() == 0) ||
+            (m_pCmdBufRing[deviceIdx]->Front()->pFence->GetStatus() == Pal::Result::NotReady))
+        {
+            pCmdBufState = CreateCmdBufState(deviceIdx);
+        }
+        else
+        {
+            m_pCmdBufRing[deviceIdx]->PopFront(&pCmdBufState);
+        }
+
+        // Immediately push this command buffer onto the back of the deque to avoid leaking memory.
+        if (pCmdBufState != nullptr)
+        {
+            Pal::Result result = m_pCmdBufRing[deviceIdx]->PushBack(pCmdBufState);
+
+            if (result != Pal::Result::Success)
+            {
+                // We failed to push this command buffer onto the deque. To avoid leaking memory we must delete it.
+                DestroyCmdBufState(deviceIdx, pCmdBufState);
+                pCmdBufState = nullptr;
+            }
+            else
+            {
+                Pal::CmdBufferBuildInfo buildInfo = {};
+
+                buildInfo.flags.optimizeOneTimeSubmit = 1;
+
+                result = pCmdBufState->pCmdBuf->Reset(m_pDevice->GetSharedCmdAllocator(deviceIdx), true);
+
+                if (result == Pal::Result::Success)
+                {
+                    result = pCmdBufState->pCmdBuf->Begin(buildInfo);
+                }
+
+                if (result != Pal::Result::Success)
+                {
+                    pCmdBufState = nullptr;
+                }
+            }
+        }
+    }
+
+    return pCmdBufState;
+}
+
+// =====================================================================================================================
+// Build post processing commands
+bool Queue::BuildPostProcessCommands(
+    uint32_t                         deviceIdx,
+    CmdBufState*                     pCmdBufState,
+    const Pal::IImage*               pImage,
+    const Pal::PresentSwapChainInfo* pPresentInfo,
+    const SwapChain*                 pSwapChain)
+{
+    VK_ASSERT(((pPresentInfo != nullptr) && (pSwapChain != nullptr)) || (pImage != nullptr));
+
+    bool hasWork = false;
+
+    if (pCmdBufState != nullptr)
+    {
+        Pal::ICmdBuffer* pCmdBuf = pCmdBufState->pCmdBuf;
+
+        Pal::CmdPostProcessFrameInfo frameInfo = {};
+
+        if (pPresentInfo != nullptr)
+        {
+            frameInfo.pSrcImage   = pPresentInfo->pSrcImage;
+            frameInfo.presentMode = pPresentInfo->presentMode;
+        }
+        else
+        {
+            frameInfo.pSrcImage   = pImage;
+            frameInfo.presentMode = Pal::PresentMode::Unknown;
+        }
+
+        bool wasGpuWorkAdded = false;
+        pCmdBuf->CmdPostProcessFrame(frameInfo, &wasGpuWorkAdded);
+
+        hasWork = (hasWork || wasGpuWorkAdded);
+    }
+
+    return hasWork;
+}
+
+// =====================================================================================================================
+// Submit post processing commands
+VkResult Queue::SubmitInternalCmdBuf(
+    uint32_t                deviceIdx,
+    const Pal::CmdBufInfo&  cmdBufInfo,
+    CmdBufState*            pCmdBufState)
+{
+    Pal::Result result = pCmdBufState->pCmdBuf->End();
+
+    if (result == Pal::Result::Success)
+    {
+        result = m_pDevice->PalDevice(deviceIdx)->ResetFences(1, &pCmdBufState->pFence);
+
+        // Submit the command buffer
+        if (result == Pal::Result::Success)
+        {
+            Pal::SubmitInfo palSubmitInfo = {};
+
+            VK_ASSERT(cmdBufInfo.isValid == 1);
+
+            palSubmitInfo.cmdBufferCount  = 1;
+            palSubmitInfo.ppCmdBuffers    = &pCmdBufState->pCmdBuf;
+            palSubmitInfo.pCmdBufInfoList = &cmdBufInfo;
+            palSubmitInfo.pFence          = pCmdBufState->pFence;
+
+            result = m_pPalQueues[deviceIdx]->Submit(palSubmitInfo);
+        }
+    }
+
+    return PalToVkResult(result);
 }
 
 VkResult Queue::CreateSqttState(

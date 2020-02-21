@@ -60,24 +60,32 @@ static const char* HwStageNames[] =
 static const char* ApiStageNames[] =
 {
     ".cs",
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 549
     ".reserved", ///< @internal Reserved for future features.  Do not use!
+#endif
     ".vs",
     ".hs",
     ".ds",
     ".gs",
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 549
     ".reserved", ///< @internal Reserved for future features.  Do not use!
+#endif
     ".ps"
 };
 
 static const Pal::ShaderStageFlagBits IndexPalShaderStages[] =
 {
     Pal::ApiShaderStageCompute,
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 549
     static_cast<Pal::ShaderStageFlagBits>(0x0), ///< @internal Reserved for future features.  Do not use!
+#endif
     Pal::ApiShaderStageVertex,
     Pal::ApiShaderStageHull,
     Pal::ApiShaderStageDomain,
     Pal::ApiShaderStageGeometry,
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 549
     static_cast<Pal::ShaderStageFlagBits>(0x0), ///< @internal Reserved for future features.  Do not use!
+#endif
     Pal::ApiShaderStagePixel
 };
 

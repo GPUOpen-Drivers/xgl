@@ -134,12 +134,18 @@ public:
     VK_INLINE bool IsHwCompositingSupported() const
         { return (m_properties.flags.hwCompositing == 1); }
 
-    Pal::IQueue* PrePresent(
+    Pal::IGpuMemory* UpdatePresentInfo(
         uint32_t                   deviceIdx,
         uint32_t                   imageIndex,
+        Pal::PresentSwapChainInfo* pPresentInfo);
+
+    Pal::IQueue* PrePresent(
+        uint32_t                   deviceIdx,
         Pal::PresentSwapChainInfo* pPresentInfo,
-        const Queue*               pQueue,
-        Pal::ICmdBuffer**          ppPresentCmdBuffer);
+        Pal::IGpuMemory**          ppSrcImageGpuMemory,
+        Queue*                     pPresentQueue,
+        CmdBufState*               pCmdBufState,
+        bool*                      pHasPostProcessing);
 
     void PostPresent(
         const Pal::PresentSwapChainInfo& presentInfo,
@@ -158,23 +164,9 @@ protected:
         const Properties&   properties,
         VkPresentModeKHR    presentMode,
         FullscreenMgr*      pFullscreenMgr,
-        Pal::ICmdBuffer**   ppPresentCmdBuffers[MaxPalDevices],
         Pal::ISwapChain*    pPalSwapChain);
 
     void InitSwCompositor(Pal::QueueType presentQueueType);
-
-    void InitPresentCmdBuffers(
-        uint32_t deviceIdx,
-        uint32_t queueFamilyIndex);
-
-    void DestroyPresentCmdBuffers(
-        uint32_t deviceIdx);
-
-    Pal::ICmdBuffer* BuildPresentCmdBuffer(
-        const Pal::PresentSwapChainInfo& presentInfo,
-        uint32_t                         deviceIdx,
-        uint32_t                         imageIndex,
-        uint32_t                         queueFamilyIndex);
 
     Device*                 m_pDevice;
     const Properties        m_properties;
@@ -190,7 +182,6 @@ protected:
                                                // oldSwapChain when creating a new SwapChain.
 
     uint32_t                m_queueFamilyIndex;                    // Queue family index of the last present
-    Pal::ICmdBuffer**       m_ppPresentCmdBuffers[MaxPalDevices];  // Array of command buffers for each swap chain image
 };
 
 // =====================================================================================================================
@@ -306,8 +297,8 @@ public:
     Pal::IQueue* DoSwCompositing(
         Device*                    pDevice,
         uint32_t                   deviceIdx,
-        uint32_t                   imageIndex,
         Pal::PresentSwapChainInfo* pPresentInfo,
+        Pal::IGpuMemory**          ppSrcImageGpuMemory,
         const Queue*               pPresentQueue);
 
 protected:

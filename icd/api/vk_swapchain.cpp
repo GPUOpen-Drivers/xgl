@@ -69,7 +69,6 @@ SwapChain::SwapChain(
     const Properties&   properties,
     VkPresentModeKHR    presentMode,
     FullscreenMgr*      pFullscreenMgr,
-    Pal::ICmdBuffer**   ppPresentCmdBuffers[MaxPalDevices],
     Pal::ISwapChain*    pPalSwapChain)
     :
     m_pDevice(pDevice),
@@ -81,19 +80,8 @@ SwapChain::SwapChain(
     m_appOwnedImageCount(0),
     m_presentCount(0),
     m_presentMode(presentMode),
-    m_deprecated(false),
-    m_queueFamilyIndex(0)
+    m_deprecated(false)
 {
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-    {
-        m_ppPresentCmdBuffers[deviceIdx] = ppPresentCmdBuffers[deviceIdx];
-
-        for (uint32_t imageIdx = 0; imageIdx < m_properties.imageCount; imageIdx++)
-        {
-            m_ppPresentCmdBuffers[deviceIdx][imageIdx] = nullptr;
-        }
-
-    }
 }
 
 // =====================================================================================================================
@@ -343,8 +331,7 @@ VkResult SwapChain::Create(
     size_t          objSize          = vkSwapChainSize +
                                        palSwapChainSize +
                                        imageArraySize +
-                                       memoryArraySize +
-                                       (cmdBufArraySize * pDevice->NumPalDevices());
+                                       memoryArraySize;
     void*           pMemory          = pDevice->AllocApiObject(objSize, pAllocator);
 
     if (pMemory == nullptr)
@@ -408,15 +395,6 @@ VkResult SwapChain::Create(
 
     properties.imageMemory = static_cast<VkDeviceMemory*>(Util::VoidPtrInc(pMemory, offset));
     offset += memoryArraySize;
-
-    // Command buffers used for PAL post processing/overlays on the swap chain images.
-    Pal::ICmdBuffer** pCmdBuffers[MaxPalDevices];
-
-    for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
-    {
-        pCmdBuffers[deviceIdx] = static_cast<Pal::ICmdBuffer**>(Util::VoidPtrInc(pMemory, offset));
-        offset += cmdBufArraySize;
-    }
 
     VK_ASSERT(offset == objSize);
 
@@ -482,7 +460,6 @@ VkResult SwapChain::Create(
                                             properties,
                                             pCreateInfo->presentMode,
                                             pFullscreenMgr,
-                                            pCmdBuffers,
                                             pPalSwapChain);
 
         *pSwapChain = SwapChain::HandleFromVoidPointer(pMemory);
@@ -526,140 +503,6 @@ VkResult SwapChain::Create(
     }
 
     return result;
-}
-
-// =====================================================================================================================
-// Generate a command buffer for PAL's debug overlay and post processing if any is performed. Otherwise returns nullptr.
-Pal::ICmdBuffer* SwapChain::BuildPresentCmdBuffer(
-    const Pal::PresentSwapChainInfo& presentInfo,
-    uint32_t                         deviceIdx,
-    uint32_t                         imageIndex,
-    uint32_t                         queueFamilyIndex)
-{
-    // Get a per swap chain image command buffer for post processing.
-    InitPresentCmdBuffers(deviceIdx, queueFamilyIndex);
-
-    auto pCmdBuffer = m_ppPresentCmdBuffers[deviceIdx][imageIndex];
-    bool hasWork    = false;
-
-    if (pCmdBuffer != nullptr)
-    {
-        Pal::CmdBufferBuildInfo buildInfo = {};
-        buildInfo.flags.optimizeExclusiveSubmit = 1;
-
-        Pal::Result palResult = pCmdBuffer->Begin(buildInfo);
-
-        if (palResult == Pal::Result::Success)
-        {
-
-            Pal::CmdPostProcessFrameInfo frameInfo       = {};
-            bool                         wasGpuWorkAdded = false;
-
-            frameInfo.pSrcImage = presentInfo.pSrcImage;
-
-            pCmdBuffer->CmdPostProcessFrame(frameInfo, &wasGpuWorkAdded);
-
-            palResult = pCmdBuffer->End();
-
-            if (palResult != Pal::Result::Success)
-            {
-                // Give up with post processing, but don't fail the present.
-                VK_NEVER_CALLED();
-
-                hasWork = false;
-            }
-            else if (wasGpuWorkAdded)
-            {
-                hasWork = true;
-            }
-        }
-    }
-
-    // If nothing was added, return a nullptr to avoid potentially triggering an unnecessary submit.
-    return hasWork ? pCmdBuffer : nullptr;
-}
-
-// =====================================================================================================================
-// Initialize on the first present on a device and again on any subsequent present in case of a queue family change.
-void SwapChain::InitPresentCmdBuffers(
-    uint32_t deviceIdx,
-    uint32_t queueFamilyIndex)
-{
-    if ((m_ppPresentCmdBuffers[deviceIdx][0] == nullptr) || (queueFamilyIndex != m_queueFamilyIndex))
-    {
-        m_queueFamilyIndex = queueFamilyIndex;
-
-        // Destroy previous command buffers if there was a presentation queue family change.
-        if (m_ppPresentCmdBuffers[deviceIdx][0] != nullptr)
-        {
-            DestroyPresentCmdBuffers(deviceIdx);
-        }
-
-        Pal::CmdBufferCreateInfo palCreateInfo = {};
-        palCreateInfo.pCmdAllocator = m_pDevice->GetSharedCmdAllocator(deviceIdx);
-        palCreateInfo.queueType     = m_pDevice->GetQueueFamilyPalQueueType(m_queueFamilyIndex);
-        palCreateInfo.engineType    = m_pDevice->GetQueueFamilyPalEngineType(m_queueFamilyIndex);
-
-        Pal::Result  palResult;
-        Pal::IDevice* const pPalDevice = m_pDevice->PalDevice(deviceIdx);
-        const size_t palSize = pPalDevice->GetCmdBufferSize(palCreateInfo, &palResult);
-
-        if (palResult == Pal::Result::Success)
-        {
-            void* pMemory = m_pDevice->VkInstance()->AllocMem((palSize * m_properties.imageCount),
-                                                              VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-
-            if (pMemory != nullptr)
-            {
-                for (uint32_t i = 0; i < m_properties.imageCount; i++)
-                {
-                    palResult = pPalDevice->CreateCmdBuffer(palCreateInfo,
-                                                            Util::VoidPtrInc(pMemory, (palSize * i)),
-                                                            &(m_ppPresentCmdBuffers[deviceIdx][i]));
-
-                    if (palResult != Pal::Result::Success)
-                    {
-                        break;
-                    }
-                }
-
-                if (palResult != Pal::Result::Success)
-                {
-                    // Clean up on failure.
-                    if (m_ppPresentCmdBuffers[deviceIdx][0] != nullptr)
-                    {
-                        DestroyPresentCmdBuffers(deviceIdx);
-                    }
-                    else
-                    {
-                        m_pDevice->VkInstance()->FreeMem(pMemory);
-                    }
-                }
-            }
-        }
-    }
-}
-
-// =====================================================================================================================
-// Destroy internal command buffers used for post processing on present.
-void SwapChain::DestroyPresentCmdBuffers(
-    uint32_t deviceIdx)
-{
-    if (m_ppPresentCmdBuffers[deviceIdx][0] != nullptr)
-    {
-        void* pMemory = m_ppPresentCmdBuffers[deviceIdx][0];
-
-        for (uint32_t imageIdx = 0; imageIdx < m_properties.imageCount; imageIdx++)
-        {
-            if (m_ppPresentCmdBuffers[deviceIdx][imageIdx] != nullptr)
-            {
-                m_ppPresentCmdBuffers[deviceIdx][imageIdx]->Destroy();
-                m_ppPresentCmdBuffers[deviceIdx][imageIdx] = nullptr;
-            }
-        }
-
-        m_pDevice->VkInstance()->FreeMem(pMemory);
-    }
 }
 
 // =====================================================================================================================
@@ -713,12 +556,6 @@ VkResult SwapChain::Destroy(const VkAllocationCallbacks* pAllocator)
         // Remove memory references to presentable image memory and destroy the images and image memory.
         Memory::ObjectFromHandle(m_properties.imageMemory[i])->Free(m_pDevice, pAllocator);
         Image::ObjectFromHandle(m_properties.images[i])->Destroy(m_pDevice, pAllocator);
-    }
-
-    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
-    {
-        DestroyPresentCmdBuffers(deviceIdx);
-
     }
 
     if (m_pPalSwapChain != nullptr)
@@ -873,18 +710,14 @@ VkResult SwapChain::GetSwapchainImagesKHR(
 }
 
 // =====================================================================================================================
-// Performs fullscreen ownership transitions as well as MGPU software composition when necessary prior to a present
-// being enqueued on a particular queue using a particular image.
-// Returns:
-// - If SW compositon, a different queue which supports the present and nullptr present command buffer
-// - Otherwise, the original presentation queue and a pointer to a command buffer with post processing commands, if any
-Pal::IQueue* SwapChain::PrePresent(
+// Fills in the PAL swap chain present info with the appropriate image to present and returns its GPU memory.
+Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
     uint32_t                   deviceIdx,
     uint32_t                   imageIndex,
-    Pal::PresentSwapChainInfo* pPresentInfo,
-    const Queue*               pPresentQueue,
-    Pal::ICmdBuffer**          ppPresentCmdBuffer)
+    Pal::PresentSwapChainInfo* pPresentInfo)
 {
+    Pal::IGpuMemory* pSrcImageGpuMemory = nullptr;
+
     // Get swap chain properties
     pPresentInfo->pSwapChain  = m_pPalSwapChain;
     pPresentInfo->presentMode = m_properties.imagePresentSupport;
@@ -892,19 +725,31 @@ Pal::IQueue* SwapChain::PrePresent(
 
     {
         pPresentInfo->pSrcImage = GetPresentableImage(imageIndex)->PalImage(deviceIdx);
+
+        pSrcImageGpuMemory = GetPresentableImageMemory(imageIndex)->PalMemory(deviceIdx);
     }
 
-    // Let the fullscreen manager override some of this present information in case it has enabled
-    // fullscreen presents.
+    // Let the fullscreen manager perform any fullscreen ownership transitions and override some of this present
+    // information in case it has enabled fullscreen.
     if (m_pFullscreenMgr != nullptr)
     {
         m_pFullscreenMgr->UpdatePresentInfo(this, pPresentInfo);
     }
 
-    // SW compositing uses separate queues for present, so notify the original PAL queue first to build post
-    // processing commands for the original presentation queue.
-    *ppPresentCmdBuffer = BuildPresentCmdBuffer(*pPresentInfo, deviceIdx, imageIndex, pPresentQueue->GetFamilyIndex());
+    return pSrcImageGpuMemory;
+}
 
+// =====================================================================================================================
+// Performs MGPU software composition when necessary prior to a present.
+// Returns a different queue which supports the present for SW composition. Otherwise, the original presentation queue.
+Pal::IQueue* SwapChain::PrePresent(
+    uint32_t                   deviceIdx,
+    Pal::PresentSwapChainInfo* pPresentInfo,
+    Pal::IGpuMemory**          ppSrcImageGpuMemory,
+    Queue*                     pPresentQueue,
+    CmdBufState*               pCmdBufState,
+    bool*                      pHasPostProcessing)
+{
     // The presentation queue will be unchanged unless SW composition is needed.
     Pal::IQueue* pPalQueue = pPresentQueue->PalQueue(deviceIdx);
 
@@ -921,31 +766,26 @@ Pal::IQueue* SwapChain::PrePresent(
 
         if (m_pSwCompositor != nullptr)
         {
-            if (*ppPresentCmdBuffer != nullptr)
+            if (*pHasPostProcessing)
             {
                 // Submit to the original presentation queue before compositing.
                 Pal::CmdBufInfo cmdBufInfo = {};
-                Pal::SubmitInfo submitInfo = {};
 
                 cmdBufInfo.isValid = 1;
 
-                submitInfo.cmdBufferCount  = 1;
-                submitInfo.ppCmdBuffers    = ppPresentCmdBuffer;
-                submitInfo.pCmdBufInfoList = &cmdBufInfo;
-
-                Pal::Result palResult = pPalQueue->Submit(submitInfo);
+                VkResult result = pPresentQueue->SubmitInternalCmdBuf(deviceIdx, cmdBufInfo, pCmdBufState);
 
                 // Don't fail the present if driver post processing or overlays are dropped.
-                VK_ASSERT(palResult == Pal::Result::Success);
+                VK_ASSERT(result == VK_SUCCESS);
 
-                // Set to nullptr, so that the caller doesn't also submit this.
-                *ppPresentCmdBuffer = nullptr;
+                // Set to false, so that the caller doesn't also submit this.
+                *pHasPostProcessing = false;
             }
 
             pPalQueue = m_pSwCompositor->DoSwCompositing(m_pDevice,
                                                          deviceIdx,
-                                                         imageIndex,
                                                          pPresentInfo,
+                                                         ppSrcImageGpuMemory,
                                                          pPresentQueue);
         }
     }
@@ -1779,13 +1619,13 @@ void SwCompositor::Destroy(
 Pal::IQueue* SwCompositor::DoSwCompositing(
     Device*                    pDevice,
     uint32_t                   deviceIdx,
-    uint32_t                   imageIndex,
     Pal::PresentSwapChainInfo* pPresentInfo,
+    Pal::IGpuMemory**          ppSrcImageGpuMemory,
     const Queue*               pPresentQueue)
 {
     Pal::IQueue* pPalQueue = pDevice->PerformSwCompositing(deviceIdx,
                                                            m_presentationDeviceIdx,
-                                                           m_ppBltCmdBuffers[deviceIdx][imageIndex],
+                                                           m_ppBltCmdBuffers[deviceIdx][pPresentInfo->imageIndex],
                                                            m_queueType,
                                                            pPresentQueue);
 
@@ -1793,8 +1633,10 @@ Pal::IQueue* SwCompositor::DoSwCompositing(
     {
         if (deviceIdx != m_presentationDeviceIdx)
         {
-            // Update the present info to use the intermediate image as the source on a presentable device.
-            pPresentInfo->pSrcImage = m_ppBltImages[m_presentationDeviceIdx][imageIndex];
+            // Update the present info and full screen flip metadata to use the intermediate image and memory on the
+            // on the presentable device instead of the original source image and memory.
+            pPresentInfo->pSrcImage = m_ppBltImages[m_presentationDeviceIdx][pPresentInfo->imageIndex];
+            *ppSrcImageGpuMemory    = m_ppBltMemory[m_presentationDeviceIdx][pPresentInfo->imageIndex];
         }
     }
     else

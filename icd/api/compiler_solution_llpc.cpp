@@ -578,7 +578,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     // break support for systems with a mixture of ASICs. GFXIP dependent options
     // should be subtarget features or handled in LLVM backend.
     llpcOptions[numOptions++] = "-unroll-max-percent-threshold-boost=1000";
-    llpcOptions[numOptions++] = "-unroll-partial-threshold=700";
     llpcOptions[numOptions++] = "-pragma-unroll-threshold=1000";
     llpcOptions[numOptions++] = "-unroll-allow-partial";
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
@@ -590,23 +589,9 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     llpcOptions[numOptions++] = "-enable-load-scalarizer";
     llpcOptions[numOptions++] = "-scalar-threshold=3";
 
-    if ((appProfile == AppProfile::Talos) ||
-        (appProfile == AppProfile::WolfensteinII))
+    if (appProfile == AppProfile::SeriousSamFusion)
     {
-        llpcOptions[numOptions++] = "-unroll-threshold=2150";
-    }
-    else if (appProfile == AppProfile::WarHammerII)
-    {
-        llpcOptions[numOptions++] = "-unroll-threshold=1150";
-    }
-    else if ((appProfile == AppProfile::SeriousSamFusion) ||
-               (appProfile == AppProfile::Doom))
-    {
-        llpcOptions[numOptions++] = "-unroll-threshold=900";
-    }
-    else
-    {
-        llpcOptions[numOptions++] = "-unroll-threshold=700";
+        llpcOptions[numOptions++] = "-unroll-partial-threshold=700";
     }
 
     ShaderCacheMode shaderCacheMode = settings.shaderCacheMode;
