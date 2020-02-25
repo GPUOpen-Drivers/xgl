@@ -170,6 +170,9 @@ VkResult Sampler::Create(
             samplerInfo.flags.unnormalizedCoords       = (pSamplerInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
             samplerInfo.flags.prtBlendZeroMode         = 0;
             samplerInfo.flags.seamlessCubeMapFiltering = 1;
+            samplerInfo.flags.truncateCoords           = (pSamplerInfo->magFilter == VK_FILTER_NEAREST &&
+                                                          pSamplerInfo->minFilter == VK_FILTER_NEAREST)
+                                                          ? 1 : 0;
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
             samplerInfo.filterMode = VkToPalTexFilterMode(pVkSamplerReductionModeCreateInfoEXT->reductionMode);
