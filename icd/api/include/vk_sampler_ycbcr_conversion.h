@@ -75,6 +75,10 @@ private:
 
     uint32_t GetDstSelXYZW(VkFormat format);
 
+    static uint32_t MapSwizzle(
+        VkComponentSwizzle    inputSwizzle,
+        VkComponentSwizzle    defaultSwizzle);
+
     Llpc::SamplerYCbCrConversionMetaData m_metaData;
 };
 

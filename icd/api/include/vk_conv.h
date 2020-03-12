@@ -2934,10 +2934,10 @@ VK_INLINE Pal::QueuePriority VkToPalGlobalPriority(
         palPriority = Pal::QueuePriority::Normal;
         break;
     case VK_QUEUE_GLOBAL_PRIORITY_HIGH_EXT:
-        palPriority = Pal::QueuePriority::Medium;
+        palPriority = Pal::QueuePriority::High;
         break;
     case VK_QUEUE_GLOBAL_PRIORITY_REALTIME_EXT:
-        palPriority = Pal::QueuePriority::High;
+        palPriority = Pal::QueuePriority::Realtime;
         break;
     default:
         palPriority = Pal::QueuePriority::Normal;

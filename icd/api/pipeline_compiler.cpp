@@ -734,11 +734,26 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         cacheTime = Util::GetPerfCpuTime() - startTime;
     }
 
-    if ((pCreateInfo->compilerType == PipelineCompilerTypeLlpc) && shouldCompile)
+    if (shouldCompile)
     {
-        result = m_compilerSolutionLlpc.CreateGraphicsPipelineBinary(pDevice, deviceIdx, pPipelineCache, pCreateInfo,
-            pPipelineBinarySize, ppPipelineBinary, rasterizationStream, shaderInfos, pPipelineDumpHandle,
-            pipelineHash, &compileTime);
+        {
+            if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+            {
+                result = m_compilerSolutionLlpc.CreateGraphicsPipelineBinary(
+                    pDevice,
+                    deviceIdx,
+                    pPipelineCache,
+                    pCreateInfo,
+                    pPipelineBinarySize,
+                    ppPipelineBinary,
+                    rasterizationStream,
+                    shaderInfos,
+                    pPipelineDumpHandle,
+                    pipelineHash,
+                    &compileTime);
+            }
+
+        }
     }
 
     if ((pPipelineBinaryCache != nullptr) &&
@@ -904,10 +919,24 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         cacheTime = Util::GetPerfCpuTime() - startTime;
     }
 
-    if ((pCreateInfo->compilerType == PipelineCompilerTypeLlpc) && shouldCompile)
+    if (shouldCompile)
     {
-        result = m_compilerSolutionLlpc.CreateComputePipelineBinary(pDevice, deviceIdx, pPipelineCache, pCreateInfo,
-            pPipelineBinarySize, ppPipelineBinary, pPipelineDumpHandle, pipelineHash, &compileTime);
+        {
+            if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+            {
+                result = m_compilerSolutionLlpc.CreateComputePipelineBinary(
+                    pDevice,
+                    deviceIdx,
+                    pPipelineCache,
+                    pCreateInfo,
+                    pPipelineBinarySize,
+                    ppPipelineBinary,
+                    pPipelineDumpHandle,
+                    pipelineHash,
+                    &compileTime);
+            }
+
+        }
     }
 
     if ((pPipelineBinaryCache != nullptr) &&

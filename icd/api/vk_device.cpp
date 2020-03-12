@@ -764,6 +764,15 @@ VkResult Device::Create(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
         default:
             break;
         }
@@ -2242,23 +2251,37 @@ VkResult Device::CreateGraphicsPipelines(
     const VkAllocationCallbacks*                pAllocator,
     VkPipeline*                                 pPipelines)
 {
+    VK_ASSERT(pCreateInfos != nullptr);
+    VK_ASSERT(pPipelines != nullptr);
+
     VkResult finalResult = VK_SUCCESS;
     PipelineCache* pPipelineCache = PipelineCache::ObjectFromHandle(pipelineCache);
 
+    // Initialize output array to VK_NULL_HANDLE
     for (uint32_t i = 0; i < count; ++i)
     {
+        pPipelines[i] = VK_NULL_HANDLE;
+    }
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const VkGraphicsPipelineCreateInfo* pCreateInfo = &pCreateInfos[i];
+
         VkResult result = GraphicsPipeline::Create(
             this,
             pPipelineCache,
-            &pCreateInfos[i],
+            pCreateInfo,
             pAllocator,
             &pPipelines[i]);
 
         if (result != VK_SUCCESS)
         {
-            // We should return null handle in case of failure.
-            pPipelines[i] = VK_NULL_HANDLE;
-            finalResult = result;
+            // In case of failure, VK_NULL_HANDLE must be set
+            VK_ASSERT(pPipelines[i] == VK_NULL_HANDLE);
+
+            // Capture the first failure result and save it to be returned
+            finalResult = (finalResult != VK_SUCCESS) ? finalResult : result;
+
         }
     }
 
@@ -2273,23 +2296,37 @@ VkResult Device::CreateComputePipelines(
     const VkAllocationCallbacks*                pAllocator,
     VkPipeline*                                 pPipelines)
 {
+    VK_ASSERT(pCreateInfos != nullptr);
+    VK_ASSERT(pPipelines != nullptr);
+
     VkResult finalResult = VK_SUCCESS;
     PipelineCache* pPipelineCache = PipelineCache::ObjectFromHandle(pipelineCache);
 
+    // Initialize output array to VK_NULL_HANDLE
     for (uint32_t i = 0; i < count; ++i)
     {
+        pPipelines[i] = VK_NULL_HANDLE;
+    }
+
+    for (uint32_t i = 0; i < count; ++i)
+    {
+        const VkComputePipelineCreateInfo* pCreateInfo = &pCreateInfos[i];
+
         VkResult result = ComputePipeline::Create(
             this,
             pPipelineCache,
-            &pCreateInfos[i],
+            pCreateInfo,
             pAllocator,
             &pPipelines[i]);
 
         if (result != VK_SUCCESS)
         {
-            // We should return null handle in case of failure.
-            pPipelines[i] = VK_NULL_HANDLE;
-            finalResult = result;
+            // In case of failure, VK_NULL_HANDLE must be set
+            VK_ASSERT(pPipelines[i] == VK_NULL_HANDLE);
+
+            // Capture the first failure result and save it to be returned
+            finalResult = (finalResult != VK_SUCCESS) ? finalResult : result;
+
         }
     }
 

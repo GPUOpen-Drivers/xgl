@@ -3397,6 +3397,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_EXTERNAL_FENCE_FD));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_MULTIVIEW));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TEXEL_BUFFER_ALIGNMENT));
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTERNAL_MEMORY_HOST));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_DEPTH_CLIP_ENABLE));
@@ -3436,6 +3438,12 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MEMORY_OVERALLOCATION_BEHAVIOR));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_PRIORITY));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_MEMORY_BUDGET));
+
+    if ((pPhysicalDevice == nullptr) || pPhysicalDevice->PalProperties().gfxipProperties.flags.supportPostDepthCoverage)
+    {
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_POST_DEPTH_COVERAGE));
+    }
+
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_TRANSFORM_FEEDBACK));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SEPARATE_STENCIL_USAGE));
@@ -3470,6 +3478,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_CREATION_FEEDBACK));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_PIPELINE_EXECUTABLE_PROPERTIES));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_NON_SEMANTIC_INFO));
 
     return availableExtensions;
 }
@@ -4816,6 +4826,14 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_FEATURES_EXT:
+            {
+                VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT* pTexelBufferAlignmentFeature =
+                    reinterpret_cast<VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT*>(pHeader);
+                pTexelBufferAlignmentFeature->texelBufferAlignment = VK_TRUE;
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -4978,6 +4996,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceDepthStencilResolvePropertiesKHR*         pDepthStencilResolveProperties;
         VkPhysicalDeviceTimelineSemaphorePropertiesKHR*           pTimelineSemaphoreProperties;
         VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*         pSubgroupSizeControlProperties;
+        VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT*        pTexelBufferAlignmentProperties;
         VkPhysicalDeviceLineRasterizationPropertiesEXT*           pLineRasterizationProperties;
 #if VKI_SDK_1_2
         VkPhysicalDeviceVulkan11Properties*                       pVulkan11Properties;
@@ -5302,6 +5321,15 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 #endif
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT:
+        {
+            // Properties are guaranteed by the comment for PAL's definition of CreateTypedBufferViewSrds().
+            pTexelBufferAlignmentProperties->storageTexelBufferOffsetAlignmentBytes = m_limits.minTexelBufferOffsetAlignment;
+            pTexelBufferAlignmentProperties->storageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+            pTexelBufferAlignmentProperties->uniformTexelBufferOffsetAlignmentBytes = m_limits.minTexelBufferOffsetAlignment;
+            pTexelBufferAlignmentProperties->uniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+        }
 
         default:
             break;

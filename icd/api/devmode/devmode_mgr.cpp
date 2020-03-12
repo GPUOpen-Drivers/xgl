@@ -47,11 +47,9 @@
 #include "palCmdAllocator.h"
 #include "palFence.h"
 #include "palQueueSemaphore.h"
-#include "palListImpl.h"
 #include "palHashBaseImpl.h"
-
-// gpuutil headers
-#include "gpuUtil/palGpaSession.h"
+#include "palListImpl.h"
+#include "palVectorImpl.h"
 
 // gpuopen headers
 #include "devDriverServer.h"
@@ -331,6 +329,11 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_traceFrameBeginTag(0),
     m_traceFrameEndTag(0),
     m_targetApiPsoHash(0),
+    m_seMask(0),
+    m_perfCountersEnabled(false),
+    m_perfCounterMemLimit(0),
+    m_perfCounterFrequency(0),
+    m_perfCounterIds(pInstance->Allocator()),
     m_pipelineCaches(pInstance->Allocator())
 {
     memset(&m_trace, 0, sizeof(m_trace));
@@ -819,6 +822,55 @@ void DevModeMgr::TraceIdleToPendingStep(
             m_traceGpuMemLimit     = traceParameters.gpuMemoryLimitInMb * 1024 * 1024;
             m_enableInstTracing    = traceParameters.flags.enableInstructionTokens;
             m_allowComputePresents = traceParameters.flags.allowComputePresents;
+            m_seMask               = traceParameters.seMask;
+
+            m_perfCountersEnabled  = (traceParameters.flags.enableSpm != 0);
+
+            DevDriver::RGPProtocol::ServerSpmConfig counterConfig = {};
+            DevDriver::Vector<DevDriver::RGPProtocol::ServerSpmCounterId>
+                counters(m_pDevDriverServer->GetMessageChannel()->GetAllocCb());
+            m_pRGPServer->QuerySpmConfig(&counterConfig, &counters);
+
+            Pal::PerfExperimentProperties perfProperties = {};
+
+            const Pal::Result palResult =
+                pState->pDevice->PalDevice(DefaultDeviceIndex)->GetPerfExperimentProperties(&perfProperties);
+
+            // Querying performance properties should never fail
+            VK_ASSERT(palResult == Pal::Result::Success);
+
+            m_perfCounterFrequency = counterConfig.sampleFrequency;
+            m_perfCounterMemLimit  = counterConfig.memoryLimitInMb * 1024 * 1024;
+
+            m_perfCounterIds.Clear();
+
+            for (size_t counterIndex = 0; counterIndex < counters.Size(); ++counterIndex)
+            {
+                const DevDriver::RGPProtocol::ServerSpmCounterId serverCounter = counters[counterIndex];
+                const Pal::GpuBlockPerfProperties& blockPerfProps = perfProperties.blocks[serverCounter.blockId];
+
+                if (serverCounter.instanceId == DevDriver::RGPProtocol::kSpmAllInstancesId)
+                {
+                    for (uint32 instanceIndex = 0; instanceIndex < blockPerfProps.instanceCount; ++instanceIndex)
+                    {
+                        GpuUtil::PerfCounterId counterId = {};
+                        counterId.block = static_cast<Pal::GpuBlock>(serverCounter.blockId);
+                        counterId.instance = instanceIndex;
+                        counterId.eventId = serverCounter.eventId;
+
+                        m_perfCounterIds.PushBack(counterId);
+                    }
+                }
+                else
+                {
+                    GpuUtil::PerfCounterId counterId = {};
+                    counterId.block = static_cast<Pal::GpuBlock>(serverCounter.blockId);
+                    counterId.instance = serverCounter.instanceId;
+                    counterId.eventId = serverCounter.eventId;
+
+                    m_perfCounterIds.PushBack(counterId);
+                }
+            }
 
             // Initially assume we don't need to block on trace end.  This may change during transition to
             // Preparing.
@@ -995,19 +1047,25 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         GpuUtil::GpaSampleConfig sampleConfig = {};
 
         sampleConfig.type                                = GpuUtil::GpaSampleType::Trace;
-        sampleConfig.sqtt.seMask                         = UINT32_MAX;
-        sampleConfig.sqtt.gpuMemoryLimit                 = m_traceGpuMemLimit;
+
+        // Configure SQTT
+        sampleConfig.sqtt.seMask                         = m_seMask;
+        sampleConfig.sqtt.gpuMemoryLimit                 = (settings.devModeSqttGpuMemoryLimit == 0) ?
+                                                               m_traceGpuMemLimit : settings.devModeSqttGpuMemoryLimit;
         sampleConfig.sqtt.flags.enable                   = true;
         sampleConfig.sqtt.flags.supressInstructionTokens = (m_enableInstTracing == false) || (m_targetApiPsoHash != 0);
         sampleConfig.sqtt.flags.stallMode                = Pal::GpuProfilerStallMode::GpuProfilerStallAlways;
 
-        // Override trace buffer size from panel
-        if (settings.devModeSqttGpuMemoryLimit != 0)
+        // Configure SPM
+        if (m_perfCountersEnabled && (m_perfCounterIds.IsEmpty() == false))
         {
-            sampleConfig.sqtt.gpuMemoryLimit = settings.devModeSqttGpuMemoryLimit;
+            sampleConfig.perfCounters.gpuMemoryLimit = m_perfCounterMemLimit;
+            sampleConfig.perfCounters.spmTraceSampleInterval = m_perfCounterFrequency;
+            sampleConfig.perfCounters.numCounters = m_perfCounterIds.NumElements();
+            sampleConfig.perfCounters.pIds = m_perfCounterIds.Data();
         }
 
-        pState->gpaSampleId = pState->pGpaSession->BeginSample(pBeginCmdBuf, sampleConfig);
+        result = pState->pGpaSession->BeginSample(pBeginCmdBuf, sampleConfig, &pState->gpaSampleId);
     }
 
     if (result == Pal::Result::Success)
@@ -1138,8 +1196,8 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
             Pal::SubmitInfo submitInfo = {};
 
             submitInfo.cmdBufferCount = 1;
-            submitInfo.ppCmdBuffers = &pTracePrepareQueue->pFamily->pTraceBeginCmdBuf;
-            submitInfo.pFence = nullptr;
+            submitInfo.ppCmdBuffers   = &pTracePrepareQueue->pFamily->pTraceBeginCmdBuf;
+            submitInfo.fenceCount     = 0;
 
             result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
         }
@@ -1233,7 +1291,8 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
                 submitInfo.cmdBufferCount = 1;
                 submitInfo.ppCmdBuffers   = m_enableSampleUpdates ? &pTraceQueue->pFamily->pTraceBeginSqttCmdBuf
                                                                   : &pTraceQueue->pFamily->pTraceBeginCmdBuf;
-                submitInfo.pFence         = pState->pBeginFence;
+                submitInfo.ppFences       = &pState->pBeginFence;
+                submitInfo.fenceCount     = 1;
 
                 result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
             }
@@ -1272,7 +1331,7 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
 
                             submitInfo.cmdBufferCount = 1;
                             submitInfo.ppCmdBuffers   = &pFamilyState->pTraceFlushCmdBuf;
-                            submitInfo.pFence         = nullptr;
+                            submitInfo.fenceCount     = 0;
 
                             result = pQueueState->pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
 
@@ -1369,7 +1428,8 @@ Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
 
         submitInfo.cmdBufferCount = 1;
         submitInfo.ppCmdBuffers   = &pEndSqttCmdBuf;
-        submitInfo.pFence         = pState->pEndSqttFence;
+        submitInfo.ppFences       = &pState->pEndSqttFence;
+        submitInfo.fenceCount     = 1;
 
         result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
     }
@@ -1478,7 +1538,8 @@ Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
 
         submitInfo.cmdBufferCount = 1;
         submitInfo.ppCmdBuffers   = &pEndCmdBuf;
-        submitInfo.pFence         = pState->pEndFence;
+        submitInfo.ppFences       = &pState->pEndFence;
+        submitInfo.fenceCount     = 1;
 
         result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
     }
@@ -2101,6 +2162,9 @@ Pal::Result DevModeMgr::InitRGPTracing(
                 pPalDevice,
                 VK_VERSION_MAJOR(apiVersion),
                 VK_VERSION_MINOR(apiVersion),
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 575
+                GpuUtil::ApiType::Vulkan,
+#endif
                 RgpSqttInstrumentationSpecVersion,
                 RgpSqttInstrumentationApiVersion);
         }

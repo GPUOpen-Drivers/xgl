@@ -227,6 +227,32 @@ uint32_t SamplerYcbcrConversion::GetSqImgRsrcWord1(VkFormat format)
 }
 
 // =====================================================================================================================
+// Returns the mapped swizzle which eliminates identity case and adjust the value of enum to
+// match llpc YCbCr sampler setting, where: Zero = 0, One = 1, R = 4, G = 5, B = 6, A = 7
+uint32_t SamplerYcbcrConversion::MapSwizzle(
+    VkComponentSwizzle inputSwizzle,
+    VkComponentSwizzle defaultSwizzle)
+{
+    switch (inputSwizzle)
+    {
+    case VK_COMPONENT_SWIZZLE_IDENTITY:
+        return (defaultSwizzle + 1);
+    case VK_COMPONENT_SWIZZLE_ZERO:
+        return 0;
+    case VK_COMPONENT_SWIZZLE_ONE:
+        return 1;
+    case VK_COMPONENT_SWIZZLE_R:
+    case VK_COMPONENT_SWIZZLE_G:
+    case VK_COMPONENT_SWIZZLE_B:
+    case VK_COMPONENT_SWIZZLE_A:
+        return (inputSwizzle + 1);
+    default:
+        VK_NEVER_CALLED();
+        return (inputSwizzle + 1);
+    }
+}
+
+// =====================================================================================================================
 // Assign Ycbcr Conversion MetaData during construction
 SamplerYcbcrConversion::SamplerYcbcrConversion(
     const VkSamplerYcbcrConversionCreateInfo* pCreateInfo)
@@ -249,10 +275,10 @@ SamplerYcbcrConversion::SamplerYcbcrConversion(
         m_metaData.word0.bitDepth.channelBitsB = GetYuvBitDepth(pCreateInfo->format).zBitCount;
     }
 
-    m_metaData.word0.componentMapping.swizzleR = pCreateInfo->components.r;
-    m_metaData.word0.componentMapping.swizzleG = pCreateInfo->components.g;
-    m_metaData.word0.componentMapping.swizzleB = pCreateInfo->components.b;
-    m_metaData.word0.componentMapping.swizzleA = pCreateInfo->components.a;
+    m_metaData.word0.componentMapping.swizzleR = MapSwizzle(pCreateInfo->components.r, VK_COMPONENT_SWIZZLE_R);
+    m_metaData.word0.componentMapping.swizzleG = MapSwizzle(pCreateInfo->components.g, VK_COMPONENT_SWIZZLE_G);
+    m_metaData.word0.componentMapping.swizzleB = MapSwizzle(pCreateInfo->components.b, VK_COMPONENT_SWIZZLE_B);
+    m_metaData.word0.componentMapping.swizzleA = MapSwizzle(pCreateInfo->components.a, VK_COMPONENT_SWIZZLE_A);
     m_metaData.word0.yCbCrModel                = pCreateInfo->ycbcrModel;
     m_metaData.word0.yCbCrRange                = pCreateInfo->ycbcrRange;
     m_metaData.word0.forceExplicitReconstruct  = pCreateInfo->forceExplicitReconstruction;

@@ -1028,6 +1028,11 @@ VkResult FullscreenMgr::SetHdrMetadata(
     // TODO: I don't know if average luminance is important, but VK_EXT_hdr_metadata does not currently expose it.
     // ie. palGamut.avgLuminance = ConvertUnits(pMetadata->avgLuminance);
 
+    if ((m_mode != Implicit) && (m_exclusiveModeFlags.acquired))
+    {
+        m_pScreen->SetColorConfiguration(&m_colorParams);
+    }
+
     return VK_SUCCESS;
 }
 

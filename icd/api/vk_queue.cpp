@@ -272,6 +272,7 @@ VkResult Queue::Submit(
     // make sure that the fence is only signaled when all submissions complete.
     if ((submitCount == 0) && (pFence != nullptr))
     {
+        Pal::IFence* pPalFence = nullptr;
         // If the submit count is zero but there is a fence, do a dummy submit just so the fence is signaled.
         Pal::SubmitInfo submitInfo = {};
 
@@ -284,8 +285,11 @@ VkResult Queue::Submit(
         Pal::Result palResult = Pal::Result::Success;
 
         pFence->SetActiveDevice(DefaultDeviceIndex);
+        pPalFence = pFence->PalFence(DefaultDeviceIndex);
 
-        submitInfo.pFence = pFence->PalFence(DefaultDeviceIndex);
+        submitInfo.ppFences   = &pPalFence;
+        submitInfo.fenceCount = 1;
+
         palResult = PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
 
         result = PalToVkResult(palResult);
@@ -346,6 +350,7 @@ VkResult Queue::Submit(
 
             bool lastBatch = (submitIdx == submitCount - 1);
 
+            Pal::IFence*    pPalFence     = nullptr;
             Pal::SubmitInfo palSubmitInfo = {};
 
             palSubmitInfo.ppCmdBuffers    = pPalCmdBuffers;
@@ -382,13 +387,15 @@ VkResult Queue::Submit(
 
                 if (lastBatch && (pFence != nullptr))
                 {
-                    palSubmitInfo.pFence = pFence->PalFence(deviceIdx);
+                    pPalFence = pFence->PalFence(deviceIdx);
+                    palSubmitInfo.ppFences   = &pPalFence;
+                    palSubmitInfo.fenceCount = 1;
 
                     pFence->SetActiveDevice(deviceIdx);
                 }
 
                 if ((palSubmitInfo.cmdBufferCount > 0) ||
-                    (palSubmitInfo.pFence != nullptr)  ||
+                    (palSubmitInfo.fenceCount > 0)     ||
                     (submitInfo.waitSemaphoreCount > 0))
                 {
                     Pal::Result palResult = Pal::Result::Success;
@@ -704,6 +711,15 @@ VkResult Queue::Present(
 
     if (pPresentInfo == nullptr)
     {
+#if ICD_GPUOPEN_DEVMODE_BUILD
+        const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
+        if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
+        {
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, true);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, true);
+        }
+#endif // #if ICD_GPUOPEN_DEVMODE_BUILD
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 
@@ -905,7 +921,8 @@ VkResult Queue::CommitVirtualRemapRanges(
     {
         Pal::SubmitInfo submitInfo = {};
 
-        submitInfo.pFence = pFence;
+        submitInfo.ppFences   = &pFence;
+        submitInfo.fenceCount = 1;
 
         result = PalQueue(deviceIndex)->Submit(submitInfo);
     }
@@ -1271,6 +1288,7 @@ VkResult Queue::BindSparse(
             signalFenceDeviceMask = 1 << DefaultDeviceIndex;
         }
 
+        Pal::IFence*    pPalFence  = nullptr;
         Pal::SubmitInfo submitInfo = {};
 
         Fence* pFence = Fence::ObjectFromHandle(fence);
@@ -1280,7 +1298,9 @@ VkResult Queue::BindSparse(
         while (result == VK_SUCCESS && deviceGroup.Iterate())
         {
             const uint32_t deviceIndex = deviceGroup.Index();
-            submitInfo.pFence = pFence->PalFence(deviceIndex);
+            pPalFence = pFence->PalFence(deviceIndex);
+            submitInfo.ppFences   = &pPalFence;
+            submitInfo.fenceCount = 1;
 
             // set the active device mask for the fence.
             // the following fence wait would only be applied to the fence one the active device index.
@@ -1554,7 +1574,8 @@ VkResult Queue::SubmitInternalCmdBuf(
             palSubmitInfo.cmdBufferCount  = 1;
             palSubmitInfo.ppCmdBuffers    = &pCmdBufState->pCmdBuf;
             palSubmitInfo.pCmdBufInfoList = &cmdBufInfo;
-            palSubmitInfo.pFence          = pCmdBufState->pFence;
+            palSubmitInfo.ppFences        = &pCmdBufState->pFence;
+            palSubmitInfo.fenceCount      = 1;
 
             result = m_pPalQueues[deviceIdx]->Submit(palSubmitInfo);
         }

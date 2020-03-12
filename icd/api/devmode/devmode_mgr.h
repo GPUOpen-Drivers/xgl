@@ -42,6 +42,10 @@
 #include "palQueue.h"
 #include "palUtil.h"
 #include "palList.h"
+#include "palVector.h"
+
+// gpuutil headers
+#include "gpuUtil/palGpaSession.h"
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
 // gpuopen headers
@@ -57,12 +61,6 @@ class  IFence;
 class  IQueueSemaphore;
 struct PalPublicSettings;
 }
-
-// GpuUtil forward declarations
-namespace GpuUtil
-{
-class GpaSession;
-};
 
 // GPUOpen forward declarations
 namespace DevDriver
@@ -329,6 +327,14 @@ private:
     uint32_t                            m_traceFrameBeginIndex;
     uint32_t                            m_traceFrameEndIndex;
     uint64_t                            m_targetApiPsoHash;
+    uint32_t                            m_seMask;                   // Shader engine mask
+    bool                                m_perfCountersEnabled;      // True if perf counters are enabled
+    uint64_t                            m_perfCounterMemLimit;      // Memory limit for perf counters
+    uint32_t                            m_perfCounterFrequency;     // Counter sample frequency
+
+    using PerfCounterList = Util::Vector<GpuUtil::PerfCounterId, 8, PalAllocator>;
+
+    PerfCounterList                     m_perfCounterIds;           // List of perf counter ids
 
     using PipelineCacheList = Util::List<PipelineBinaryCache*, PalAllocator>;
 

@@ -68,14 +68,10 @@ option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBG
 #endif
 
 option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
-option(ICD_BUILD_SPVONLY "Build SPV Only?" OFF)
 
 if(ICD_BUILD_LLPCONLY)
     set(ICD_BUILD_LLPC ON CACHE BOOL "ICD_BUILD_LLPCONLY override." FORCE)
-    set(ICD_BUILD_SPVONLY OFF CACHE BOOL "ICD_BUILD_LLPCONLY override." FORCE)
 endif()
-
-option(USE_NEXT_SDK "Use next SDK?" OFF)
 
 option(ICD_BUILD_VIDEO "Build Video Support?" OFF)
 
@@ -156,10 +152,6 @@ set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/../pal CACHE PATH "Specify the path to th
 set(PAL_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_PAL_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(PAL_CLIENT_INTERFACE_MINOR_VERSION ${ICD_PAL_CLIENT_MINOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(PAL_CLIENT "VULKAN" CACHE STRING "${PROJECT_NAME} override." FORCE)
-
-if(ICD_BUILD_SPVONLY)
-    set(PAL_ENABLE_PRINTS_ASSERTS ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
-endif()
 
 set(PAL_MEMTRACK ${ICD_MEMTRACK} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GPUOPEN ${ICD_GPUOPEN_DEVMODE_BUILD} CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -273,15 +265,8 @@ if(ICD_BUILD_LLPC)
     add_subdirectory(${XGL_LLPC_PATH} ${CMAKE_BINARY_DIR}/llpc)
 endif()
 
-if(ICD_BUILD_SPVONLY)
-    # add_subdirectory(${XGL_BILTOOL_PATH} ${PROJECT_BINARY_DIR}/api/compiler/bil/tool)
-    # target_link_libraries(xgl biltool)
-endif()
-
-if(NOT ICD_BUILD_SPVONLY)
-    if(NOT ICD_BUILD_LLPCONLY)
-        add_subdirectory(icd)
-    endif()
+if(NOT ICD_BUILD_LLPCONLY)
+    add_subdirectory(icd)
 endif()
 
 #build wsa

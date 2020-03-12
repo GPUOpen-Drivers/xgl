@@ -621,6 +621,16 @@ VkResult Image::Create(
         palCreateInfo.usageFlags.noStencilShaderRead = true;
     }
 
+    // Enable fullCopyDstOnly for MSAA color image with usage of transfer dst to maximize the texture copy performance.
+    if ((pCreateInfo != nullptr)                                          &&
+        (pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                    &&
+        ((pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0) &&
+        ((pCreateInfo->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0)     &&
+        (settings.enableFullCopyDstOnly))
+    {
+        palCreateInfo.flags.fullCopyDstOnly = 1;
+    }
+
     palCreateInfo.metadataMode         = Pal::MetadataMode::Default;
     palCreateInfo.metadataTcCompatMode = Pal::MetadataTcCompatMode::Default;
 

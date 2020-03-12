@@ -88,7 +88,13 @@ GpaSession::GpaSession(
     m_pDevice(pDevice),
     m_session(
         pDevice->VkInstance()->PalPlatform(),
-        pDevice->PalDevice(DefaultDeviceIndex), 0, 0, 0)
+        pDevice->PalDevice(DefaultDeviceIndex),
+        0,
+        0,
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 575
+        GpuUtil::ApiType::Vulkan,
+#endif
+        0)
 {
 
 }
@@ -276,14 +282,8 @@ VkResult GpaSession::CmdBeginSample(
 
     if (result == VK_SUCCESS)
     {
-        uint32_t sampleID = m_session.BeginSample(pCmdbuf->PalCmdBuffer(DefaultDeviceIndex), sampleConfig);
-
-        *pSampleID = sampleID;
-
-        if (sampleID == GpuUtil::InvalidSampleId)
-        {
-            result = VK_ERROR_INITIALIZATION_FAILED;
-        }
+        result = PalToVkResult(
+            m_session.BeginSample(pCmdbuf->PalCmdBuffer(DefaultDeviceIndex), sampleConfig, pSampleID));
     }
 
     if (sampleConfig.perfCounters.pIds != nullptr)

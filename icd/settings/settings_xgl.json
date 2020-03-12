@@ -222,19 +222,6 @@
   ],
   "Settings": [
     {
-      "Name": "RenderPassNewEnable",
-      "Description": "Use new render passes",
-      "Tags": [
-        "Render Passes"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "renderPassNewEnable"
-    },
-    {
       "Name": "RenderPassLogEnable",
       "Description": "Write a graph visualization of each created render pass in .dot format",
       "Tags": [
@@ -306,58 +293,6 @@
       "Scope": "Driver",
       "Type": "uint32",
       "VariableName": "renderPassLogFlags"
-    },
-    {
-      "Description": "If true, forces a full pipeline idle between each node rather than relying on GPU events.",
-      "Tags": [
-        "Render Passes"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "renderPassForceWaitIdle",
-      "Name": "RenderPassForceWaitIdle"
-    },
-    {
-      "Description": "If non-zero, the following input/output caches are always force-flushed between each node.",
-      "Tags": [
-        "Render Passes"
-      ],
-      "Defaults": {
-        "Default": 0
-      },
-      "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "renderPassForceCacheInputCoher",
-      "Name": "RenderPassForceCacheInputCoher"
-    },
-    {
-      "Description": "If non-zero, the following input/output caches are always force-flushed between each node.",
-      "Tags": [
-        "Render Passes"
-      ],
-      "Defaults": {
-        "Default": 0
-      },
-      "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "renderPassForceCacheOutputCoher",
-      "Name": "RenderPassForceCacheOutputCoher"
-    },
-    {
-      "Description": "Use asynchronous GPU events to wait between steps of a renderpass instance.",
-      "Tags": [
-        "Render Passes"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "renderPassAsyncEventEnable",
-      "Name": "RenderPassAsyncEventEnable"
     },
     {
       "Description": "Minimum number of GPU events to allocate at once by the command buffer GPU event manager.",
@@ -857,6 +792,19 @@
       "Scope": "Driver",
       "Type": "bool",
       "VariableName": "ignoreSuboptimalSwapchainSize"
+    },
+    {
+      "Name": "DelayFullScreenAcquireToFirstPresent",
+      "Description": "When true, delays acquiring exclusive full screen to the first present. May be needed in cases where the OS state gets messed up because of early acquires by the application",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "delayFullScreenAcquireToFirstPresent"
     },
     {
       "Description": "Enable pipeline dump, pipeline is stored with .pipe format. You must set AMD_DEBUG_DIR and make sure $AMD_DEBUG_DIR + pipelineDumpDir is  an available directory.",
@@ -2480,6 +2428,10 @@
       "Tags": [
         "Debugging"
       ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
       "Defaults": {
         "Default": 0
       },
@@ -2493,6 +2445,10 @@
       "Tags": [
         "Debugging"
       ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
       "Defaults": {
         "Default": 0
       },
@@ -2506,6 +2462,10 @@
       "Tags": [
         "Debugging"
       ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
       "Defaults": {
         "Default": 0
       },
@@ -2519,6 +2479,10 @@
       "Tags": [
         "Debugging"
       ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
       "Defaults": {
         "Default": 0
       },
@@ -2532,6 +2496,10 @@
       "Tags": [
         "Debugging"
       ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
       "Defaults": {
         "Default": 0
       },
@@ -3253,7 +3221,7 @@
         "Optimization"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "DependsOn": {
         "OS": [
@@ -3503,6 +3471,19 @@
       "Type": "bool",
       "VariableName": "disableMsaaStencilShaderRead",
       "Name": "DisableMsaaStencilShaderRead",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "For MSAA color image created with usage of transfer dst, enable this optimization to avoid heavy expanding.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "enableFullCopyDstOnly",
+      "Name": "EnableFullCopyDstOnly",
       "Scope": "Driver"
     },
     {
@@ -3772,17 +3753,38 @@
       "Scope": "Driver"
     },
     {
-      "Name": "EnableMlModelForWaveSize",
-      "Description": "Enable a machine learning model to optimally choose Wave64 or Wave32 instead of relying on per shader stage defaults. Currently, only fragment shaders are affected and compilation times will be longer. ",
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "MlModelForWaveSizeOff",
+            "Value": 0,
+            "Description": "Wave size selection is determined by WaveSize enum."
+          },
+          {
+            "Name": "MlModelForWaveSizePhase1",
+            "Value": 1,
+            "Description": "Enabled wave size selection is post-compile using Machine Learning."
+          },
+          {
+            "Name": "MlModelForWaveSizePhase2",
+            "Value": 2,
+            "Description": "Enabled wave size selection is pre-compile using Deep Learning."
+          }
+        ],
+        "Name": "WaveSizeDecision"
+      },
+      "Description": "Enable a machine learning model to optimally choose Wave64 or Wave32 instead of relying on per shader stage defaults.",
       "Tags": [
         "Optimization"
       ],
       "Defaults": {
-        "Default": false
+        "Default": "MlModelForWaveSizeOff"
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "enableMlModelForWaveSize"
+      "Type": "enum",
+      "VariableName": "waveSizeDecision",
+      "Name": "WaveSizeDecision"
     },
     {
       "Description": "Enable async compile for shader module and pipelines.",

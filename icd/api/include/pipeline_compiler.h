@@ -165,6 +165,8 @@ public:
     ) const;
 
     VK_INLINE Llpc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
+
+    void GetElfCacheMetricString(char* pOutStr, size_t outStrSize);
 private:
 
     void ApplyProfileOptions(
@@ -176,8 +178,6 @@ private:
         PipelineOptimizerKey*        pProfileKey
         , Llpc::NggState*            pNggState
     );
-
-    void GetElfCacheMetricString(char* pOutStr, size_t outStrSize);
 
     template<class PipelineBuildInfo>
     bool ReplacePipelineBinary(

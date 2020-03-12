@@ -369,6 +369,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::ThronesOfBritannia)
         {
             m_settings.disableHtileBasedMsaaRead = true;
+            m_settings.enableFullCopyDstOnly = true;
         }
 
         if (appProfile == AppProfile::DiRT4)

@@ -589,7 +589,8 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     llpcOptions[numOptions++] = "-enable-load-scalarizer";
     llpcOptions[numOptions++] = "-scalar-threshold=3";
 
-    if (appProfile == AppProfile::SeriousSamFusion)
+    if ((appProfile == AppProfile::SeriousSamFusion) ||
+        (appProfile == AppProfile::Talos))
     {
         llpcOptions[numOptions++] = "-unroll-partial-threshold=700";
     }
