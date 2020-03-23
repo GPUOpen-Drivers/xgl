@@ -376,6 +376,10 @@ target_sources(xgl PRIVATE
 
 ### XGL LLVM ####
 if(ICD_BUILD_LLPC)
+    # Add LGC as a dependency, but only if its CMakeLists.txt exists.
+    if(EXISTS "${XGL_LLPC_PATH}/../lgc/CMakeLists.txt")
+        target_link_libraries(xgl PRIVATE LLVMlgc)
+    endif()
     target_link_libraries(xgl PRIVATE llpc dl stdc++)
     llvm_map_components_to_libnames(llvm_libs amdgpucodegen amdgpuinfo amdgpuasmparser amdgpudisassembler LTO ipo analysis bitreader bitwriter codegen irreader linker mc passes support target transformutils coroutines)
     target_link_libraries(xgl PRIVATE ${llvm_libs})
