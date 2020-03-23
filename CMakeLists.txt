@@ -241,6 +241,12 @@ set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE
 set(LLPC_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 if(ICD_BUILD_LLPC)
+    # Add LGC as an LLVM external project, but only if its CMakeLists.txt exists.
+    if(EXISTS "${XGL_LLPC_PATH}/../lgc/CMakeLists.txt")
+        set(LLVM_EXTERNAL_PROJECTS lgc)
+        set(LLVM_EXTERNAL_LGC_SOURCE_DIR ${XGL_LLPC_PATH}/../lgc)
+    endif()
+    # Set other LLVM settings.
     set(LLVM_ENABLE_ASSERTIONS ${CMAKE_BUILD_TYPE_DEBUG} CACHE BOOL Force)
     set(LLVM_TARGETS_TO_BUILD AMDGPU CACHE STRING Force)
     set(LLVM_BUILD_TESTS OFF CACHE BOOL Force)
