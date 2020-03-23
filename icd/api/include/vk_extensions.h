@@ -136,7 +136,8 @@ public:
         const char* const* const    extensionNames,
         uint32_t                    extensionNameCount,
         const Supported&            supported,
-        Enabled&                    enabled)
+        Enabled&                    enabled,
+        uint32_t                    curApiVersion)
     {
         bool invalidExtensionRequested = false;
 
@@ -148,7 +149,9 @@ public:
             {
                 const typename T::ExtensionId id = static_cast<typename T::ExtensionId>(j);
 
-                if (supported.IsExtensionSupported(id))
+                uint32_t apiVersion = T::GetRequiredApiVersion(id);
+
+                if (supported.IsExtensionSupported(id) && (curApiVersion >= apiVersion))
                 {
                     const VkExtensionProperties& ext = supported.GetExtensionInfo(id);
 
@@ -202,6 +205,28 @@ public:
         EXT_SWAPCHAIN_COLORSPACE,
         Count
     };
+
+    static uint32_t GetRequiredApiVersion(ExtensionId id)
+    {
+        uint32_t requiredApiVersion = 0xFFFFFFFF;
+
+        if (id < ExtensionId::Count)
+        {
+            switch (id) {
+                case KHR_DEVICE_GROUP_CREATION:
+                case KHR_EXTERNAL_MEMORY_CAPABILITIES:
+                case KHR_EXTERNAL_SEMAPHORE_CAPABILITIES:
+                case KHR_EXTERNAL_FENCE_CAPABILITIES:
+                case KHR_GET_PHYSICAL_DEVICE_PROPERTIES2:
+                    requiredApiVersion = VK_API_VERSION_1_1;
+                    break;
+                default:
+                    requiredApiVersion = VK_API_VERSION_1_0;
+            }
+        }
+
+        return requiredApiVersion;
+    }
 };
 
 // =====================================================================================================================
@@ -318,6 +343,69 @@ public:
         EXT_TEXEL_BUFFER_ALIGNMENT,
         Count
     };
+
+    static uint32_t GetRequiredApiVersion(ExtensionId id)
+    {
+        uint32_t requiredApiVersion = 0xFFFFFFFF;
+
+        if (id < ExtensionId::Count)
+        {
+            switch (id) {
+                case KHR_8BIT_STORAGE:
+                case KHR_BUFFER_DEVICE_ADDRESS:
+                case KHR_CREATE_RENDERPASS2:
+                case KHR_DEPTH_STENCIL_RESOLVE:
+                case EXT_DESCRIPTOR_INDEXING:
+                case KHR_DRAW_INDIRECT_COUNT:
+                case KHR_DRIVER_PROPERTIES:
+                case EXT_HOST_QUERY_RESET:
+                case KHR_IMAGE_FORMAT_LIST:
+                case KHR_IMAGELESS_FRAMEBUFFER:
+                case EXT_SAMPLER_FILTER_MINMAX:
+                case KHR_SAMPLER_MIRROR_CLAMP_TO_EDGE:
+                case EXT_SCALAR_BLOCK_LAYOUT:
+                case EXT_SEPARATE_STENCIL_USAGE:
+                case KHR_SEPARATE_DEPTH_STENCIL_LAYOUTS:
+                case KHR_SPIRV_1_4:
+                case KHR_SWAPCHAIN_MUTABLE_FORMAT:
+                case KHR_SHADER_ATOMIC_INT64:
+                case KHR_SHADER_FLOAT_CONTROLS:
+                case KHR_SHADER_FLOAT16_INT8:
+                case EXT_SHADER_VIEWPORT_INDEX_LAYER:
+                case KHR_SHADER_SUBGROUP_EXTENDED_TYPES:
+                case KHR_TIMELINE_SEMAPHORE:
+                case KHR_UNIFORM_BUFFER_STANDARD_LAYOUT:
+                case KHR_VULKAN_MEMORY_MODEL:
+                    requiredApiVersion = VK_API_VERSION_1_2;
+                    break;
+                case KHR_16BIT_STORAGE:
+                case KHR_BIND_MEMORY2:
+                case KHR_DEDICATED_ALLOCATION:
+                case KHR_DESCRIPTOR_UPDATE_TEMPLATE:
+                case KHR_DEVICE_GROUP:
+                case KHR_EXTERNAL_MEMORY:
+                case KHR_EXTERNAL_SEMAPHORE:
+                case KHR_EXTERNAL_FENCE:
+                case KHR_GET_MEMORY_REQUIREMENTS2:
+                case KHR_MAINTENANCE1:
+                case KHR_MAINTENANCE2:
+                case KHR_MAINTENANCE3:
+                case KHR_MULTIVIEW:
+                case KHR_RELAXED_BLOCK_LAYOUT:
+                case KHR_SAMPLER_YCBCR_CONVERSION:
+                case KHR_SHADER_DRAW_PARAMETERS:
+                case KHR_STORAGE_BUFFER_STORAGE_CLASS:
+                case KHR_VARIABLE_POINTERS:
+                    requiredApiVersion = VK_API_VERSION_1_1;
+                    break;
+                default:
+                    requiredApiVersion = VK_API_VERSION_1_0;
+            }
+        }
+
+        return requiredApiVersion;
+    }
+
 };
 
 } /* namespace vk */

@@ -179,18 +179,6 @@ VkResult Instance::Create(
 
     InstanceExtensions::Enabled enabledInstanceExtensions;
 
-    // Make sure the caller only requests extensions we actually support.
-    if (pCreateInfo->enabledExtensionCount > 0)
-    {
-        if (!InstanceExtensions::EnableExtensions(pCreateInfo->ppEnabledExtensionNames,
-                                                  pCreateInfo->enabledExtensionCount,
-                                                  Instance::GetSupportedExtensions(),
-                                                  enabledInstanceExtensions))
-        {
-            return VK_ERROR_EXTENSION_NOT_PRESENT;
-        }
-    }
-
     // According to the Vulkan 1.1 spec, if pApplicationInfo is not provided or if the apiVersion requested is 0
     // it is equivalent of providing an apiVersion of 1.0.0
     uint32_t apiVersion = VK_MAKE_VERSION(1,0,0);
@@ -198,6 +186,19 @@ VkResult Instance::Create(
     if ((pAppInfo != nullptr) && (pAppInfo->apiVersion != 0))
     {
         apiVersion = pAppInfo->apiVersion;
+    }
+
+    // Make sure the caller only requests extensions we actually support.
+    if (pCreateInfo->enabledExtensionCount > 0)
+    {
+        if (!InstanceExtensions::EnableExtensions(pCreateInfo->ppEnabledExtensionNames,
+                                                  pCreateInfo->enabledExtensionCount,
+                                                  Instance::GetSupportedExtensions(),
+                                                  enabledInstanceExtensions,
+                                                  apiVersion))
+        {
+            return VK_ERROR_EXTENSION_NOT_PRESENT;
+        }
     }
 
     // pAllocCb is never NULL here because the entry point will fill it in if the

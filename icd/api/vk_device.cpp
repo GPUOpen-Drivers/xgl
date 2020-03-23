@@ -382,7 +382,8 @@ VkResult Device::Create(
         if (!DeviceExtensions::EnableExtensions(pCreateInfo->ppEnabledExtensionNames,
                                                 pCreateInfo->enabledExtensionCount,
                                                 pPhysicalDevice->GetAllowedExtensions(),
-                                                enabledDeviceExtensions))
+                                                enabledDeviceExtensions,
+                                                pPhysicalDevice->VkInstance()->GetAPIVersion()))
         {
             return VK_ERROR_EXTENSION_NOT_PRESENT;
         }
