@@ -36,7 +36,11 @@
 
 #include "include/vk_shader_code.h"
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+#include "vkgcDefs.h"
+#else
 #include "llpc.h"
+#endif
 
 // Forward declare PAL classes used in this file
 namespace Pal
@@ -242,9 +246,16 @@ struct PipelineProfile
 // This struct represents unified shader compiler options
 struct PipelineShaderOptionsPtr
 {
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+    Vkgc::PipelineOptions*       pPipelineOptions;
+    Vkgc::PipelineShaderOptions* pOptions;
+    Vkgc::NggState*              pNggState;
+#else
     Llpc::PipelineOptions*       pPipelineOptions;
     Llpc::PipelineShaderOptions* pOptions;
     Llpc::NggState*              pNggState;
+#endif
+
 };
 
 // =====================================================================================================================

@@ -36,6 +36,7 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/vk_queue.h"
+#include "include/vk_device.h"
 
 // PAL headers
 #include "palHashMap.h"
@@ -98,7 +99,6 @@ class ETWClient;
 // Vulkan forward declarations
 namespace vk
 {
-class Device;
 class Instance;
 class PhysicalDevice;
 class Pipeline;
@@ -132,8 +132,16 @@ public:
 
     void Destroy();
 
-    void NotifyFrameBegin(const Queue* pQueue, bool viaPresent);
-    void NotifyFrameEnd(const Queue* pQueue, bool viaPresent);
+    enum class FrameDelimiterType : uint32_t
+    {
+        QueuePresent,
+        QueueLabel,
+        CmdBufferTag,
+        Count
+    };
+
+    void NotifyFrameBegin(const Queue* pQueue, FrameDelimiterType delimiterType);
+    void NotifyFrameEnd(const Queue* pQueue, FrameDelimiterType delimiterType);
     void WaitForDriverResume();
     void PipelineCreated(Device* pDevice, Pipeline* pPipeline);
     void PipelineDestroyed(Device* pDevice, Pipeline* pPipeline);
@@ -188,7 +196,7 @@ public:
 
 private:
     // Steps that an RGP trace goes through
-    enum class TraceStatus
+    enum class TraceStatus : uint32_t
     {
         // "Pre-trace" stages:
         Idle = 0,           // No active trace and none requested
@@ -204,7 +212,7 @@ private:
     };
 
     // Various trigger modes supported for RGP traces
-    enum class TriggerMode
+    enum class TriggerMode : uint32_t
     {
         Present = 0, // Traces triggered by presents
         Index,       // Traces triggered by frame indices
@@ -231,7 +239,7 @@ private:
     // Queue-specific resources to support RGP tracing (part of device state)
     struct TraceQueueState
     {
-        Queue*                 pQueue;
+        const Queue*           pQueue;
         TraceQueueFamilyState* pFamily;
         Pal::uint64            queueId;
         Pal::uint64            queueContext;
@@ -246,6 +254,7 @@ private:
     {
         TraceStatus           status;             // Current trace status (idle, running, etc.)
         TriggerMode           triggerMode;        // Current trigger mode for RGP frame trace
+        bool                  labelDelimsPresent; // True is a label delimiter is recieved
 
         Device*               pDevice;            // The device currently doing the tracing
         Pal::ICmdAllocator*   pCmdAllocator;      // Command allocator for creating trace-begin/end buffers
@@ -265,6 +274,9 @@ private:
         // Queue-specific state/information for tracing:
         uint32_t              queueCount;
         TraceQueueState       queueState[MaxTraceQueues];
+        uint32_t              auxQueueCount;
+        TraceQueueState       auxQueueStates[MaxTraceQueues]; // Used for queues belonging to other logical devices
+                                                              // pointing to the same physical device
         uint32_t              queueFamilyCount;
         TraceQueueFamilyState queueFamilyState[MaxTraceQueueFamilies];
 
@@ -281,9 +293,9 @@ private:
 
     Pal::Result Init();
 
-    void AdvanceActiveTraceStep(TraceState* pState, const Queue* pQueue, bool beginFrame, bool actualPresent);
+    void AdvanceActiveTraceStep(TraceState* pState, const Queue* pQueue, bool beginFrame, FrameDelimiterType delimiterType);
     void TraceIdleToPendingStep(TraceState* pState);
-    Pal::Result TracePendingToPreparingStep(TraceState* pState, const Queue* pQueue, bool actualPresent);
+    Pal::Result TracePendingToPreparingStep(TraceState* pState, const Queue* pQueue, FrameDelimiterType delimiterType);
     Pal::Result TracePreparingToRunningStep(TraceState* pState, const Queue* pQueue);
     Pal::Result TraceRunningToWaitingForSqttStep(TraceState* pState, const Queue* pQueue);
     Pal::Result TraceWaitingForSqttToEndingStep(TraceState* pState, const Queue* pQueue);
@@ -293,7 +305,8 @@ private:
     Pal::Result CheckTraceDeviceChanged(TraceState* pState, Device* pNewDevice);
     void DestroyRGPTracing(TraceState* pState);
     Pal::Result InitRGPTracing(TraceState* pState, Device* pDevice);
-    Pal::Result InitTraceQueueResources(TraceState* pState, bool* pHasDebugVmid);
+    Pal::Result InitTraceQueueResources(TraceState* pState, bool* pHasDebugVmid, const Queue* pQueue, bool auxQueue);
+    Pal::Result InitTraceQueueResourcesForDevice(TraceState* pState, bool* pHasDebugVmid);
     Pal::Result InitTraceQueueFamilyResources(TraceState* pTraceState, TraceQueueFamilyState* pFamilyState);
     void DestroyTraceQueueFamilyResources(TraceQueueFamilyState* pState);
     TraceQueueState* FindTraceQueueState(TraceState* pState, const Queue* pQueue);
@@ -357,7 +370,7 @@ VK_INLINE bool DevModeMgr::IsQueueTimingActive(
             (m_trace.status == TraceStatus::Running ||
              m_trace.status == TraceStatus::Preparing ||
              m_trace.status == TraceStatus::WaitingForSqtt) &&
-            (pDevice == m_trace.pDevice));
+            (pDevice->VkPhysicalDevice(DefaultDeviceIndex) == m_trace.pDevice->VkPhysicalDevice(DefaultDeviceIndex)));
 }
 
 // =====================================================================================================================

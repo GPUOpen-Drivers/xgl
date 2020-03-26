@@ -26,6 +26,16 @@
 cmake_minimum_required(VERSION 3.5)
 project(XGL VERSION 1 LANGUAGES C CXX)
 
+# Before GCC7, when LTO is enabled, undefined refernece error was observed when linking static libraries.
+# Use the gcc-ar wrapper instead of ar, this invokes ar with the right plugin arguments
+# --plugin /usr/lib/gcc/.../liblto_plugin.so
+if(UNIX)
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        set(CMAKE_AR /usr/bin/gcc-ar)
+        set(CMAKE_RANLIB /usr/bin/gcc-ranlib)
+    endif()
+endif()
+
 ### Set Default Build Type #############################################################################################
 if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   message(STATUS "No build type selected, default to release")

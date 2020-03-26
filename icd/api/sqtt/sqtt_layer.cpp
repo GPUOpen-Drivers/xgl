@@ -2231,7 +2231,7 @@ static void CheckRGPFrameBegin(
 
                 if (pCmdBuf->HasDebugTag(frameBeginTag))
                 {
-                    pDevMode->NotifyFrameBegin(pQueue, false);
+                    pDevMode->NotifyFrameBegin(pQueue, DevModeMgr::FrameDelimiterType::CmdBufferTag);
 
                     return;
                 }
@@ -2266,7 +2266,7 @@ static void CheckRGPFrameEnd(
 
                 if (pCmdBuf->HasDebugTag(frameEndTag))
                 {
-                    pDevMode->NotifyFrameEnd(pQueue, false);
+                    pDevMode->NotifyFrameEnd(pQueue, DevModeMgr::FrameDelimiterType::CmdBufferTag);
 
                     return;
                 }

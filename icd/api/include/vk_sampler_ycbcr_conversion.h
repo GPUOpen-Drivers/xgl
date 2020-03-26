@@ -27,7 +27,11 @@
 
 #pragma once
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+#include "vkgcDefs.h"
+#else
 #include "llpc.h"
+#endif
 #include "include/khronos/vulkan.h"
 #include "include/vk_defines.h"
 #include "include/vk_dispatch.h"
@@ -63,7 +67,11 @@ public:
         const Device*                               pDevice,
         const VkAllocationCallbacks*                pAllocator);
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+    Vkgc::SamplerYCbCrConversionMetaData* GetMetaData() {return &m_metaData;}
+#else
     Llpc::SamplerYCbCrConversionMetaData* GetMetaData() {return &m_metaData;}
+#endif
 
 protected:
     SamplerYcbcrConversion(const VkSamplerYcbcrConversionCreateInfo* pCreateInfo);
@@ -79,7 +87,11 @@ private:
         VkComponentSwizzle    inputSwizzle,
         VkComponentSwizzle    defaultSwizzle);
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+    Vkgc::SamplerYCbCrConversionMetaData m_metaData;
+#else
     Llpc::SamplerYCbCrConversionMetaData m_metaData;
+#endif
 };
 
 namespace entry

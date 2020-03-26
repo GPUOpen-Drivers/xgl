@@ -32,8 +32,6 @@
 #include "palPipeline.h"
 #include "palMetroHash.h"
 
-#include "llpc.h"
-
 #include <climits>
 
 namespace vk

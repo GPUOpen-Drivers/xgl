@@ -28,6 +28,10 @@
 * @brief Contains implementation of CompilerSolution
 ***********************************************************************************************************************
 */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
+
 #include "include/compiler_solution.h"
 #include "include/vk_physical_device.h"
 
@@ -50,7 +54,7 @@ CompilerSolution::~CompilerSolution()
 // =====================================================================================================================
 // Initialize CompilerSolution class
 VkResult CompilerSolution::Initialize(
-    Llpc::GfxIpVersion gfxIp,
+    Vkgc::GfxIpVersion gfxIp,
     Pal::GfxIpLevel    gfxIpLevel)
 {
     m_gfxIp      = gfxIp;

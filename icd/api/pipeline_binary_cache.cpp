@@ -28,6 +28,9 @@
 * @brief Implementation of the Vulkan interface for PAL layered caching.
 ***********************************************************************************************************************
 */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
 
 #include "include/pipeline_binary_cache.h"
 #include "include/vk_physical_device.h"
@@ -145,7 +148,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
     size_t                    initDataSize,
     const void*               pInitData,
     bool                      internal,
-    const Llpc::GfxIpVersion& gfxIp,
+    const Vkgc::GfxIpVersion& gfxIp,
     const PhysicalDevice*     pPhysicalDevice)
 {
     PipelineBinaryCache* pObj = nullptr;
@@ -199,7 +202,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
 // =====================================================================================================================
 PipelineBinaryCache::PipelineBinaryCache(
     Instance*                 pInstance,
-    const Llpc::GfxIpVersion& gfxIp,
+    const Vkgc::GfxIpVersion& gfxIp,
     bool                      internal)
     :
     m_pInstance        { pInstance },

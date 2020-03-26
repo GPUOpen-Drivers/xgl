@@ -33,7 +33,6 @@
 // Vulkan headers
 #include "devmode/devmode_mgr.h"
 #include "include/vk_cmdbuffer.h"
-#include "include/vk_device.h"
 #include "include/vk_instance.h"
 #include "include/vk_pipeline.h"
 #include "include/vk_physical_device.h"
@@ -454,46 +453,50 @@ void DevModeMgr::WaitForDriverResume()
 // =====================================================================================================================
 // Called to notify of a frame-end boundary and is used to coordinate RGP trace start/stop.
 //
-// If "actualPresent" is true, this call is coming from an actual present call.  Otherwise, it is a virtual
-// frame end boundary.
+// "delimiterType" represents how the transition/notify was triggered.
 void DevModeMgr::NotifyFrameEnd(
-    const Queue* pQueue,
-    bool         actualPresent)
+    const Queue*       pQueue,
+    FrameDelimiterType delimiterType)
 {
     // Get the RGP message server
     if (IsTracingEnabled())
     {
-        // Only act if this present is coming from the same device that started the trace
-        if (m_trace.status != TraceStatus::Idle)
+        // Don't act if a QueuePresent is coming, but a QueueLabel was previously seen
+        if ((delimiterType != FrameDelimiterType::QueuePresent) ||
+            (m_trace.labelDelimsPresent == false))
         {
-            Util::MutexAuto traceLock(&m_traceMutex);
-
+            // Only act if this present is coming from the same device that started the trace
             if (m_trace.status != TraceStatus::Idle)
             {
-                if (IsQueueTimingActive(pQueue->VkDevice()))
+                Util::MutexAuto traceLock(&m_traceMutex);
+
+                if (m_trace.status != TraceStatus::Idle)
                 {
-                    // Call TimedQueuePresent() to insert commands that collect GPU timestamp.
-                    Pal::IQueue* pPalQueue = pQueue->PalQueue(DefaultDeviceIndex);
+                    if (IsQueueTimingActive(pQueue->VkDevice()))
+                    {
+                        // Call TimedQueuePresent() to insert commands that collect GPU timestamp.
+                        Pal::IQueue* pPalQueue = pQueue->PalQueue(DefaultDeviceIndex);
 
-                    // Currently nothing in the PresentInfo struct is used for inserting a timed present marker.
-                    GpuUtil::TimedQueuePresentInfo timedPresentInfo = {};
+                        // Currently nothing in the PresentInfo struct is used for inserting a timed present marker.
+                        GpuUtil::TimedQueuePresentInfo timedPresentInfo = {};
 
-                    Pal::Result result = m_trace.pGpaSession->TimedQueuePresent(pPalQueue, timedPresentInfo);
+                        Pal::Result result = m_trace.pGpaSession->TimedQueuePresent(pPalQueue, timedPresentInfo);
 
-                    VK_ASSERT(result == Pal::Result::Success);
+                        VK_ASSERT(result == Pal::Result::Success);
+                    }
+
+                    // Increment trace frame counters.  These control when the trace can transition
+                    if (m_trace.status == TraceStatus::Preparing)
+                    {
+                        m_trace.preparedFrameCount++;
+                    }
+                    else if (m_trace.status == TraceStatus::Running)
+                    {
+                        m_trace.sqttFrameCount++;
+                    }
+
+                    AdvanceActiveTraceStep(&m_trace, pQueue, false, delimiterType);
                 }
-
-                // Increment trace frame counters.  These control when the trace can transition
-                if (m_trace.status == TraceStatus::Preparing)
-                {
-                    m_trace.preparedFrameCount++;
-                }
-                else if (m_trace.status == TraceStatus::Running)
-                {
-                    m_trace.sqttFrameCount++;
-                }
-
-                AdvanceActiveTraceStep(&m_trace, pQueue, false, actualPresent);
             }
         }
     }
@@ -503,30 +506,33 @@ void DevModeMgr::NotifyFrameEnd(
 
 // =====================================================================================================================
 void DevModeMgr::AdvanceActiveTraceStep(
-    TraceState*  pState,
-    const Queue* pQueue,
-    bool         beginFrame,
-    bool         actualPresent)
+    TraceState*        pState,
+    const Queue*       pQueue,
+    bool               beginFrame,
+    FrameDelimiterType delimiterType)
 {
+    // In present trigger mode, we should advance when a real (or dummy) present occurs.
+    // In index trigger mode, we should advance when a specific present index occurs.
+    // In tag trigger mode, we should advance when a tag trigger is encountered.
+    constexpr uint32_t delimiterToValidTriggers[static_cast<uint32_t>(FrameDelimiterType::Count)] =
+    {
+        (1 << static_cast<uint32_t>(TriggerMode::Present)) |
+            (1 << static_cast<uint32_t>(TriggerMode::Index)), // Frame::Delimiter::QueuePresent
+        (1 << static_cast<uint32_t>(TriggerMode::Present)) |
+            (1 << static_cast<uint32_t>(TriggerMode::Index)), // Frame::Delimiter::QueueLabel
+        (1 << static_cast<uint32_t>(TriggerMode::Tag))        // Frame::Delimiter::CmdBufferTag
+    };
+
     VK_ASSERT(pState->status != TraceStatus::Idle);
 
-    // Only advance the trace step if we're processing the right type of trigger.
-    // In present trigger mode, we should only advance when a real present occurs.
-    // In index trigger mode, we should only advance when a specific present index occurs.
-    // In tag trigger mode, we should only advance when a tag trigger is encountered.
-    // Tag triggers is currently the only type supported that is not based off actual present calls.
-    const bool isValidTrigger   = (((actualPresent) &&
-                                    ((m_trace.triggerMode == TriggerMode::Present) ||
-                                     (m_trace.triggerMode == TriggerMode::Index))) ||
-                                   ((actualPresent == false) &&
-                                    (m_trace.triggerMode == TriggerMode::Tag)));
-
-    if (isValidTrigger)
+    // Only advance the trace step if we're processing the right type of trigger.ac
+    if ((delimiterToValidTriggers[static_cast<uint32_t>(delimiterType)] &
+            (1 << static_cast<uint32_t>(m_trace.triggerMode))) != 0)
     {
         if (m_trace.status == TraceStatus::Pending)
         {
             // Attempt to start preparing for a trace
-            if (TracePendingToPreparingStep(&m_trace, pQueue, actualPresent) != Pal::Result::Success)
+            if (TracePendingToPreparingStep(&m_trace, pQueue, delimiterType) != Pal::Result::Success)
             {
                 FinishOrAbortTrace(&m_trace, true);
             }
@@ -732,42 +738,53 @@ Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
 // =====================================================================================================================
 // Notifies of a frame-begin boundary and is used to coordinate RGP trace start/stop.
 //
-// If "actualPresent" is true, this is being called from an actual present; otherwise, this is manual frame-begin
-// signal.
+// "delimiterType" represents how the transition/notify was triggered.
 void DevModeMgr::NotifyFrameBegin(
-    const Queue* pQueue,
-    bool         actualPresent)
+    const Queue*       pQueue,
+    FrameDelimiterType delimiterType)
 {
     // Wait for the driver to be resumed in case it's been paused.
     WaitForDriverResume();
 
     if (IsTracingEnabled())
     {
-        // Check for pending traces here also in case the application presents before submitting any work.  This
-        // may transition Idle to Pending which we will handle immediately below
-        //
-        // Note: deliberately above the mutex lock below because PendingTraceStep() is specially written to be
-        // thread-safe).
-        if (m_trace.status == TraceStatus::Idle)
+        // Don't act if a QueuePresent is coming, but a QueueLabel was previously seen
+        if ((delimiterType != FrameDelimiterType::QueuePresent) ||
+            (m_trace.labelDelimsPresent == false))
         {
-            TraceIdleToPendingStep(&m_trace);
-        }
+            if (delimiterType == FrameDelimiterType::QueueLabel)
+            {
+                m_trace.labelDelimsPresent = true;
+            }
 
-        if (m_trace.status != TraceStatus::Idle)
-        {
-            Util::MutexAuto traceLock(&m_traceMutex);
+            // Check for pending traces here also in case the application presents before submitting any work.  This
+            // may transition Idle to Pending which we will handle immediately below
+            //
+            // Note: deliberately above the mutex lock below because PendingTraceStep() is specially written to be
+            // thread-safe).
+            if (m_trace.status == TraceStatus::Idle)
+            {
+                TraceIdleToPendingStep(&m_trace);
+            }
 
             if (m_trace.status != TraceStatus::Idle)
             {
-                AdvanceActiveTraceStep(&m_trace, pQueue, true, actualPresent);
+                Util::MutexAuto traceLock(&m_traceMutex);
+
+                if (m_trace.status != TraceStatus::Idle)
+                {
+                    AdvanceActiveTraceStep(&m_trace, pQueue, true, delimiterType);
+                }
             }
         }
     }
 }
 
 // =====================================================================================================================
-// Returns the queue state for this particular queue.
-DevModeMgr::TraceQueueState* DevModeMgr::FindTraceQueueState(TraceState* pState, const Queue* pQueue)
+// Returns the queue state for this aparticular queue.
+DevModeMgr::TraceQueueState* DevModeMgr::FindTraceQueueState(
+    TraceState*  pState,
+    const Queue* pQueue)
 {
     TraceQueueState* pTraceQueue = nullptr;
 
@@ -776,6 +793,25 @@ DevModeMgr::TraceQueueState* DevModeMgr::FindTraceQueueState(TraceState* pState,
         if (pState->queueState[queue].pQueue == pQueue)
         {
             pTraceQueue = &pState->queueState[queue];
+        }
+    }
+
+    if (pTraceQueue == nullptr)
+    {
+        for (uint32_t queue = 0; (queue < pState->auxQueueCount) && (pTraceQueue == nullptr); queue++)
+        {
+            if (pState->auxQueueStates[queue].pQueue == pQueue)
+            {
+                pTraceQueue = &pState->auxQueueStates[queue];
+            }
+        }
+
+        if (pTraceQueue == nullptr)
+        {
+            if (InitTraceQueueResources(pState, nullptr, pQueue, true) == Pal::Result::Success)
+            {
+                pTraceQueue = &pState->auxQueueStates[pState->auxQueueCount - 1];
+            }
         }
     }
 
@@ -936,15 +972,13 @@ void DevModeMgr::TraceIdleToPendingStep(
 // This function starts preparing for an RGP trace.  Preparation involves some N frames of lead-up time during which
 // timing samples are accumulated to synchronize CPU and GPU clock domains.
 //
-// If "actualPresent" is true, it means that this transition is happening as a consequence of an actual vkQueuePresent
-// call, rather than a virtual frame boundary being communicated via API signals (e.g. debug object frame begin/end
-// tags).
+// "delimiterType" represents how the transition/notify was triggered.
 //
 // This function transitions from the Pending state to the Preparing state.
 Pal::Result DevModeMgr::TracePendingToPreparingStep(
-    TraceState*  pState,
-    const Queue* pQueue,
-    bool         actualPresent)
+    TraceState*        pState,
+    const Queue*       pQueue,
+    FrameDelimiterType delimiterType)
 {
     VK_ASSERT(pState->status  == TraceStatus::Pending);
 
@@ -1193,11 +1227,15 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         // Submit the trace-begin command buffer
         if (result == Pal::Result::Success)
         {
-            Pal::SubmitInfo submitInfo = {};
+            Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+            perSubQueueInfo.cmdBufferCount             = 1;
+            perSubQueueInfo.ppCmdBuffers               = &pTracePrepareQueue->pFamily->pTraceBeginCmdBuf;
+            perSubQueueInfo.pCmdBufInfoList            = nullptr;
 
-            submitInfo.cmdBufferCount = 1;
-            submitInfo.ppCmdBuffers   = &pTracePrepareQueue->pFamily->pTraceBeginCmdBuf;
-            submitInfo.fenceCount     = 0;
+            Pal::SubmitInfo submitInfo      = {};
+            submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+            submitInfo.perSubQueueInfoCount = 1;
+            submitInfo.fenceCount           = 0;
 
             result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
         }
@@ -1213,9 +1251,9 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
 
         m_trace.status = TraceStatus::Preparing;
 
-        // If the app is not tracing using vkQueuePresent, we need to immediately block on trace end
+        // If the app is tracing using tags, we need to immediately block on trace end
         // (rather than periodically checking during future present calls).
-        m_blockingTraceEnd |= (actualPresent == false);
+        m_blockingTraceEnd |= (delimiterType == FrameDelimiterType::CmdBufferTag);
 
         // Override via panel setting
         m_blockingTraceEnd |= settings.devModeSqttForceBlockOnTraceEnd;
@@ -1286,13 +1324,19 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
             // Submit the trace-begin command buffer
             if (result == Pal::Result::Success)
             {
+                Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+
+                perSubQueueInfo.cmdBufferCount  = 1;
+                perSubQueueInfo.ppCmdBuffers    = m_enableSampleUpdates ? &pTraceQueue->pFamily->pTraceBeginSqttCmdBuf
+                                                                        : &pTraceQueue->pFamily->pTraceBeginCmdBuf;
+                perSubQueueInfo.pCmdBufInfoList = nullptr;
+
                 Pal::SubmitInfo submitInfo = {};
 
-                submitInfo.cmdBufferCount = 1;
-                submitInfo.ppCmdBuffers   = m_enableSampleUpdates ? &pTraceQueue->pFamily->pTraceBeginSqttCmdBuf
-                                                                  : &pTraceQueue->pFamily->pTraceBeginCmdBuf;
-                submitInfo.ppFences       = &pState->pBeginFence;
-                submitInfo.fenceCount     = 1;
+                submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+                submitInfo.perSubQueueInfoCount = 1;
+                submitInfo.ppFences             = &pState->pBeginFence;
+                submitInfo.fenceCount           = 1;
 
                 result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
             }
@@ -1326,12 +1370,17 @@ Pal::Result DevModeMgr::TracePreparingToRunningStep(
 
                         if (pQueueState->pFamily == pFamilyState)
                         {
+                            Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+                            perSubQueueInfo.cmdBufferCount  = 1;
+                            perSubQueueInfo.ppCmdBuffers    = &pFamilyState->pTraceFlushCmdBuf;
+                            perSubQueueInfo.pCmdBufInfoList = nullptr;
+
                             // Submit the flush command buffer
                             Pal::SubmitInfo submitInfo = {};
 
-                            submitInfo.cmdBufferCount = 1;
-                            submitInfo.ppCmdBuffers   = &pFamilyState->pTraceFlushCmdBuf;
-                            submitInfo.fenceCount     = 0;
+                            submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+                            submitInfo.perSubQueueInfoCount = 1;
+                            submitInfo.fenceCount           = 0;
 
                             result = pQueueState->pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
 
@@ -1424,12 +1473,16 @@ Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
     // Submit the trace-end-sqtt command buffer
     if (result == Pal::Result::Success)
     {
-        Pal::SubmitInfo submitInfo = {};
+        Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+        perSubQueueInfo.cmdBufferCount  = 1;
+        perSubQueueInfo.ppCmdBuffers    = &pEndSqttCmdBuf;
+        perSubQueueInfo.pCmdBufInfoList = nullptr;
 
-        submitInfo.cmdBufferCount = 1;
-        submitInfo.ppCmdBuffers   = &pEndSqttCmdBuf;
-        submitInfo.ppFences       = &pState->pEndSqttFence;
-        submitInfo.fenceCount     = 1;
+        Pal::SubmitInfo submitInfo = {};
+        submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+        submitInfo.perSubQueueInfoCount = 1;
+        submitInfo.ppFences             = &pState->pEndSqttFence;
+        submitInfo.fenceCount           = 1;
 
         result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
     }
@@ -1534,12 +1587,19 @@ Pal::Result DevModeMgr::TraceWaitingForSqttToEndingStep(
     // Submit the trace-end command buffer
     if (result == Pal::Result::Success)
     {
+
+        Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+
+        perSubQueueInfo.cmdBufferCount  = 1;
+        perSubQueueInfo.ppCmdBuffers    = &pEndCmdBuf;
+        perSubQueueInfo.pCmdBufInfoList = nullptr;
+
         Pal::SubmitInfo submitInfo = {};
 
-        submitInfo.cmdBufferCount = 1;
-        submitInfo.ppCmdBuffers   = &pEndCmdBuf;
-        submitInfo.ppFences       = &pState->pEndFence;
-        submitInfo.fenceCount     = 1;
+        submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+        submitInfo.perSubQueueInfoCount = 1;
+        submitInfo.ppFences             = &pState->pEndFence;
+        submitInfo.fenceCount           = 1;
 
         result = pQueue->PalQueue(DefaultDeviceIndex)->Submit(submitInfo);
     }
@@ -1724,9 +1784,117 @@ void DevModeMgr::DestroyRGPTracing(TraceState* pState)
 }
 
 // =====================================================================================================================
+// This function initializes the resources necessary for capturing queue timing data from a given queue.
+//
+// If "auxQueue" is true, then the queue provided does not belong to the tracing logical device, but belongs to the
+// same physical device (and thus, the same PAL device)
+Pal::Result DevModeMgr::InitTraceQueueResources(
+    TraceState*  pState,
+    bool*        pHasDebugVmid,
+    const Queue* pQueue,
+    bool         auxQueue)
+{
+    Pal::Result result = Pal::Result::Success;
+
+    // Has this queue's family been previously seen?
+    uint32_t familyIdx = pQueue->GetFamilyIndex();
+    TraceQueueFamilyState* pFamilyState = nullptr;
+
+    for (uint32_t familyStateIdx = 0; familyStateIdx < pState->queueFamilyCount; ++familyStateIdx)
+    {
+        if (pState->queueFamilyState[familyStateIdx].queueFamilyIndex == familyIdx)
+        {
+            pFamilyState = &pState->queueFamilyState[familyStateIdx];
+        }
+    }
+
+    // Figure out information about this queue's family if it hasn't been seen before
+    if (pFamilyState == nullptr)
+    {
+        VK_ASSERT(pState->queueFamilyCount < VK_ARRAY_SIZE(pState->queueFamilyState));
+
+        pFamilyState = &pState->queueFamilyState[pState->queueFamilyCount++];
+
+        pFamilyState->queueFamilyIndex = familyIdx;
+        pFamilyState->supportsTracing = SqttMgr::IsTracingSupported(
+            pState->pDevice->VkPhysicalDevice(DefaultDeviceIndex), familyIdx);
+        pFamilyState->queueType = pState->pDevice->GetQueueFamilyPalQueueType(familyIdx);
+        pFamilyState->engineType = pState->pDevice->GetQueueFamilyPalEngineType(familyIdx);
+
+        // Initialize resources for this queue family
+        result = InitTraceQueueFamilyResources(pState, pFamilyState);
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        uint32_t* pQueueStateCount = auxQueue ? &pState->auxQueueCount : &pState->queueCount;
+
+        if ((*pQueueStateCount) < MaxTraceQueues)
+        {
+            (*pQueueStateCount)++;
+        }
+        else
+        {
+            result = Pal::Result::ErrorUnavailable;
+        }
+    }
+
+    // Register this queue for timing operations
+    if (result == Pal::Result::Success)
+    {
+        TraceQueueState* pQueueState = auxQueue ?
+            &pState->auxQueueStates[pState->auxQueueCount - 1] : &pState->queueState[pState->queueCount - 1];
+
+        pQueueState->pQueue = pQueue;
+        pQueueState->pFamily = pFamilyState;
+        pQueueState->timingSupported = false;
+        pQueueState->queueId = reinterpret_cast<Pal::uint64>(ApiQueue::FromObject(pQueue));
+
+        // Get the OS context handle for this queue (this is a thing that RGP needs on DX clients;
+        // it may be optional for Vulkan, but we provide it anyway if available).
+        Pal::KernelContextInfo kernelContextInfo = {};
+
+        Pal::Result palResult = Pal::Result::Success;
+        Pal::Result queryKernelSuccess = pQueue->PalQueue(DefaultDeviceIndex)->QueryKernelContextInfo(&kernelContextInfo);
+
+        // Ensure we've acquired the debug VMID (note that some platforms do not
+        // implement this function, so don't fail the whole trace if so)
+        if (queryKernelSuccess == Pal::Result::Success &&
+            kernelContextInfo.flags.hasDebugVmid == false)
+        {
+            *pHasDebugVmid = false;
+        }
+
+        if (pState->queueTimingEnabled)
+        {
+            if (palResult == Pal::Result::Success)
+            {
+                pQueueState->queueContext = kernelContextInfo.contextIdentifier;
+            }
+
+            // I think we need a GPA session per PAL device in the group, and we need to register each
+            // per-device queue with the corresponding PAL device's GPA session.  This needs to be
+            // fixed for MGPU tracing to work (among probably many other things).
+            VK_ASSERT(pState->pDevice->NumPalDevices() == 1);
+
+            // Register the queue with the GPA session class for timed queue operation support.
+            if (pState->pGpaSession->RegisterTimedQueue(
+                pQueue->PalQueue(DefaultDeviceIndex),
+                pQueueState->queueId,
+                pQueueState->queueContext) == Pal::Result::Success)
+            {
+                pQueueState->timingSupported = true;
+            }
+        }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 // This function finds out all the queues in the device that we have to synchronize for RGP-traced frames and
 // initializes resources for them.
-Pal::Result DevModeMgr::InitTraceQueueResources(
+Pal::Result DevModeMgr::InitTraceQueueResourcesForDevice(
     TraceState* pState,
     bool*       pHasDebugVmid)
 {
@@ -1751,83 +1919,7 @@ Pal::Result DevModeMgr::InitTraceQueueResources(
                 {
                     Queue* pQueue = ApiQueue::ObjectFromHandle(queueHandle);
 
-                    // Has this queue's family been previously seen?
-                    TraceQueueFamilyState* pFamilyState = nullptr;
-
-                    for (uint32_t familyStateIdx = 0; familyStateIdx < pState->queueFamilyCount; ++familyStateIdx)
-                    {
-                        if (pState->queueFamilyState[familyStateIdx].queueFamilyIndex == familyIdx)
-                        {
-                            pFamilyState = &pState->queueFamilyState[familyStateIdx];
-                        }
-                    }
-
-                    // Figure out information about this queue's family if it hasn't been seen before
-                    if (pFamilyState == nullptr)
-                    {
-                        VK_ASSERT(pState->queueFamilyCount < VK_ARRAY_SIZE(pState->queueFamilyState));
-
-                        pFamilyState = &pState->queueFamilyState[pState->queueFamilyCount++];
-
-                        pFamilyState->queueFamilyIndex = familyIdx;
-                        pFamilyState->supportsTracing  = SqttMgr::IsTracingSupported(
-                                                            pState->pDevice->VkPhysicalDevice(DefaultDeviceIndex), familyIdx);
-                        pFamilyState->queueType        = pState->pDevice->GetQueueFamilyPalQueueType(familyIdx);
-                        pFamilyState->engineType       = pState->pDevice->GetQueueFamilyPalEngineType(familyIdx);
-
-                        // Initialize resources for this queue family
-                        result = InitTraceQueueFamilyResources(pState, pFamilyState);
-                    }
-
-                    // Register this queue for timing operations
-                    if (result == Pal::Result::Success)
-                    {
-                        VK_ASSERT(pState->queueCount < VK_ARRAY_SIZE(pState->queueState));
-
-                        TraceQueueState* pQueueState = &pState->queueState[pState->queueCount++];
-
-                        pQueueState->pQueue          = pQueue;
-                        pQueueState->pFamily         = pFamilyState;
-                        pQueueState->timingSupported = false;
-                        pQueueState->queueId         = reinterpret_cast<Pal::uint64>(queueHandle);
-
-                        // Get the OS context handle for this queue (this is a thing that RGP needs on DX clients;
-                        // it may be optional for Vulkan, but we provide it anyway if available).
-                        Pal::KernelContextInfo kernelContextInfo = {};
-
-                        Pal::Result palResult = Pal::Result::Success;
-                        Pal::Result queryKernelSuccess = pQueue->PalQueue(DefaultDeviceIndex)->QueryKernelContextInfo(&kernelContextInfo);
-
-                        // Ensure we've acquired the debug VMID (note that some platforms do not
-                        // implement this function, so don't fail the whole trace if so)
-                        if (queryKernelSuccess == Pal::Result::Success &&
-                            kernelContextInfo.flags.hasDebugVmid == false)
-                        {
-                            *pHasDebugVmid = false;
-                        }
-
-                        if (pState->queueTimingEnabled)
-                        {
-                            if (palResult == Pal::Result::Success)
-                            {
-                                pQueueState->queueContext = kernelContextInfo.contextIdentifier;
-                            }
-
-                            // I think we need a GPA session per PAL device in the group, and we need to register each
-                            // per-device queue with the corresponding PAL device's GPA session.  This needs to be
-                            // fixed for MGPU tracing to work (among probably many other things).
-                            VK_ASSERT(pState->pDevice->NumPalDevices() == 1);
-
-                            // Register the queue with the GPA session class for timed queue operation support.
-                            if (pState->pGpaSession->RegisterTimedQueue(
-                                pQueue->PalQueue(DefaultDeviceIndex),
-                                pQueueState->queueId,
-                                pQueueState->queueContext) == Pal::Result::Success)
-                            {
-                                pQueueState->timingSupported = true;
-                            }
-                        }
-                    }
+                    result = InitTraceQueueResources(pState, pHasDebugVmid, pQueue, false);
                 }
             }
         }
@@ -2185,7 +2277,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
 
     if (result == Pal::Result::Success)
     {
-        result = InitTraceQueueResources(pState, &hasDebugVmid);
+        result = InitTraceQueueResourcesForDevice(pState, &hasDebugVmid);
     }
 
     // If we've failed to acquire the debug VMID, fail to trace
@@ -2266,7 +2358,8 @@ bool DevModeMgr::QueueSupportsTiming(
     VK_ASSERT(deviceIdx == DefaultDeviceIndex); // MGPU tracing is not supported
 
     bool timingSupported = (deviceIdx == DefaultDeviceIndex) &&
-                           (pQueue->VkDevice() == m_trace.pDevice);
+                           (pQueue->VkDevice()->VkPhysicalDevice(DefaultDeviceIndex) ==
+                               m_trace.pDevice->VkPhysicalDevice(DefaultDeviceIndex));
 
     // Make sure this queue was successfully registered
     if (timingSupported)
@@ -2381,9 +2474,9 @@ Pal::Result DevModeMgr::TimedQueueSubmit(
     const Pal::SubmitInfo&       submitInfo,
     VirtualStackFrame*           pVirtStackFrame)
 {
-    VK_ASSERT(cmdBufferCount == submitInfo.cmdBufferCount);
+    VK_ASSERT(cmdBufferCount == submitInfo.pPerSubQueueInfo[0].cmdBufferCount);
 
-    bool timingSupported = QueueSupportsTiming(deviceIdx, pQueue) && (submitInfo.cmdBufferCount > 0);
+    bool timingSupported = QueueSupportsTiming(deviceIdx, pQueue) && (submitInfo.pPerSubQueueInfo[0].cmdBufferCount > 0);
 
     // Fill in extra meta-data information to associate the API command buffer data with the generated
     // timing information.
@@ -2424,7 +2517,7 @@ Pal::Result DevModeMgr::TimedQueueSubmit(
                 pSqttCmdBufIds[cbIdx] = pCmdBuf->GetSqttState()->GetId().u32All;
             }
 
-            VK_ASSERT(pCmdBuf->PalCmdBuffer(DefaultDeviceIndex) == submitInfo.ppCmdBuffers[cbIdx]);
+            VK_ASSERT(pCmdBuf->PalCmdBuffer(DefaultDeviceIndex) == submitInfo.pPerSubQueueInfo[0].ppCmdBuffers[cbIdx]);
         }
 
         // Do a timed submit of all the command buffers

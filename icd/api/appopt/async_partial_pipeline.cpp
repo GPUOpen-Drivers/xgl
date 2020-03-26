@@ -28,12 +28,20 @@
 * @brief Implementation of class async::PartialPipeline
 ***********************************************************************************************************************
 */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
+
 #include "async_layer.h"
 #include "async_partial_pipeline.h"
 
 #include "include/vk_device.h"
 #include "include/vk_shader.h"
 #include "palListImpl.h"
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+#include "llpc.h"
+#endif
 
 namespace vk
 {
@@ -103,11 +111,11 @@ static const uint32_t OffsetStrideInDwords = 12;
 // Creat ResourceMappingNode from module data
 void PartialPipeline::CreatePipelineLayoutFromModuleData(
     AsyncLayer*                         pAsyncLayer,
-    Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
-    const Llpc::ResourceMappingNode**   ppResourceMappingNode,
+    Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
+    const Vkgc::ResourceMappingNode**   ppResourceMappingNode,
     uint32_t*                           pMappingNodeCount)
 {
-    const Llpc::ResourceNodeData* pResourceNodeData = pShaderModuleEntryData->pResNodeDatas;
+    const Vkgc::ResourceNodeData* pResourceNodeData = pShaderModuleEntryData->pResNodeDatas;
     uint32_t resNodeDataCount = pShaderModuleEntryData->resNodeDataCount;
     uint32_t pushConstSize = pShaderModuleEntryData->pushConstSize;
     uint32_t setCount = 0;
@@ -131,8 +139,8 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
     uint32_t totalNodes = pushConstSize != 0 ? resNodeDataCount + setCount + 1 : resNodeDataCount + setCount;
 
     Device* pDevice = pAsyncLayer->GetDevice();
-    auto pSets = static_cast<Llpc::ResourceMappingNode*>(pDevice->AllocApiObject(
-            totalNodes * sizeof(Llpc::ResourceMappingNode), m_pAllocator));
+    auto pSets = static_cast<Vkgc::ResourceMappingNode*>(pDevice->AllocApiObject(
+            totalNodes * sizeof(Vkgc::ResourceMappingNode), m_pAllocator));
     auto pNodes = pSets + setCount + 1;
     uint32_t topLevelOffset = 0;
 
@@ -147,7 +155,7 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
         {
             set = pNodes[i].srdRange.set;
             pSets[set].tablePtr.pNext = &pNodes[i];
-            pSets[set].type = Llpc::ResourceMappingNodeType::DescriptorTableVaPtr;
+            pSets[set].type = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
             pSets[set].sizeInDwords = 1;
             pSets[set].offsetInDwords = topLevelOffset;
             topLevelOffset += pSets[set].sizeInDwords;
@@ -162,7 +170,7 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
     if (pushConstSize)
     {
         // Add a node for push consts at the end of root descriptor list.
-        pSets[resNodeDataCount + setCount].type = Llpc::ResourceMappingNodeType::PushConst;
+        pSets[resNodeDataCount + setCount].type = Vkgc::ResourceMappingNodeType::PushConst;
         pSets[resNodeDataCount + setCount].sizeInDwords = pushConstSize;
         pSets[resNodeDataCount + setCount].offsetInDwords = topLevelOffset;
     }
@@ -175,7 +183,7 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
 // Creat color target from module data
 void PartialPipeline::CreateColorTargetFromModuleData(
     Llpc::ShaderModuleDataEx* pShaderModuleDataEx,
-    Llpc::ColorTarget* pTarget)
+    Vkgc::ColorTarget* pTarget)
 {
     for (uint32_t i = 0; i < pShaderModuleDataEx->extra.fsOutInfoCount; ++i)
     {
@@ -183,7 +191,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
         uint32_t componentCount =  pShaderModuleDataEx->extra.pFsOutInfos[i].componentCount;
         Llpc::BasicType basicType = pShaderModuleDataEx->extra.pFsOutInfos[i].basicType;
 
-        VK_ASSERT(location < Llpc::MaxColorTargets);
+        VK_ASSERT(location < Vkgc::MaxColorTargets);
         pTarget[location].channelWriteMask = (1U << componentCount) - 1;
         // Further optimization is app profile for color format according to fsOutInfos.
         switch (basicType)
@@ -342,10 +350,10 @@ void PartialPipeline::Execute(
     vk::ShaderModule* pShaderModule = vk::ShaderModule::ObjectFromHandle(pTask->shaderModuleHandle);
     void* pShaderModuleData =  pShaderModule->GetShaderData(compilerType);
     auto pShaderModuleDataEx = reinterpret_cast<Llpc::ShaderModuleDataEx*>(pShaderModuleData);
-    Llpc::ShaderModuleEntryData* pShaderModuleEntryData = nullptr;
-    Llpc::ColorTarget pColorTarget[Llpc::MaxColorTargets] = {};
+    Vkgc::ShaderModuleEntryData* pShaderModuleEntryData = nullptr;
+    Vkgc::ColorTarget pColorTarget[Vkgc::MaxColorTargets] = {};
     if ((pShaderModuleDataEx->extra.entryCount == 1) &&
-        (pShaderModuleDataEx->extra.entryDatas[0].stage == Llpc::ShaderStageCompute))
+        (pShaderModuleDataEx->extra.entryDatas[0].stage == Vkgc::ShaderStageCompute))
     {
         pShaderModuleEntryData = &pShaderModuleDataEx->extra.entryDatas[0];
     }
@@ -353,7 +361,7 @@ void PartialPipeline::Execute(
     {
         for (uint32_t i = 0; i < pShaderModuleDataEx->extra.entryCount; ++i)
         {
-            if (pShaderModuleDataEx->extra.entryDatas[i].stage == Llpc::ShaderStageFragment)
+            if (pShaderModuleDataEx->extra.entryDatas[i].stage == Vkgc::ShaderStageFragment)
             {
                 CreateColorTargetFromModuleData(pShaderModuleDataEx, pColorTarget);
                 if (pColorTarget[0].format == VK_FORMAT_UNDEFINED)
@@ -370,7 +378,7 @@ void PartialPipeline::Execute(
     {
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {
-            const Llpc::ResourceMappingNode*    pResourceMappingNode = nullptr;
+            const Vkgc::ResourceMappingNode*    pResourceMappingNode = nullptr;
             uint32_t                            mappingNodeCount = 0;
             CreatePipelineLayoutFromModuleData(pAsyncLayer, pShaderModuleEntryData, &pResourceMappingNode, &mappingNodeCount);
 

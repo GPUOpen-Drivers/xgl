@@ -656,15 +656,6 @@ PFN_vkVoidFunction DispatchTable::GetEntryPoint(const char* pName) const
                     {
                         pFunc = m_table[epIdx];
                     }
-
-                    // Some of the VK_EXT_debug_utils functions are implemented in the loader as device
-                    // entry points, even though VK_EXT_debug_utils is an instance extension.
-                    // https://github.com/KhronosGroup/Vulkan-Loader/issues/116
-                    // The workaround below should be removed once the issue is resolved.
-                    if (m_pInstance->IsTracingSupportEnabled())
-                    {
-                        pFunc = m_table[epIdx];
-                    }
                 }
                 break;
 

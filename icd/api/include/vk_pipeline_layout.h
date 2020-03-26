@@ -131,7 +131,11 @@ public:
         ShaderStage                                 stage,
         void*                                       pBuffer,
         const VkPipelineVertexInputStateCreateInfo* pVertexInput,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc::PipelineShaderInfo*                   pShaderInfo,
+#else
         Llpc::PipelineShaderInfo*                   pShaderInfo,
+#endif
         VbBindingInfo*                              pVbInfo,
         bool                                        isLastVertexStage) const;
 
@@ -172,11 +176,19 @@ protected:
     VkResult BuildLlpcSetMapping(
         uint32_t                     setIndex,
         const DescriptorSetLayout*   pLayout,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc::ResourceMappingNode*   pStaNodes,
+        uint32_t*                    pStaNodeCount,
+        Vkgc::ResourceMappingNode*   pDynNodes,
+        uint32_t*                    pDynNodeCount,
+        Vkgc::DescriptorRangeValue*  pDescriptorRangeValue,
+#else
         Llpc::ResourceMappingNode*   pStaNodes,
         uint32_t*                    pStaNodeCount,
         Llpc::ResourceMappingNode*   pDynNodes,
         uint32_t*                    pDynNodeCount,
         Llpc::DescriptorRangeValue*  pDescriptorRangeValue,
+#endif
         uint32_t*                    pDescriptorRangeCount,
         uint32_t                     userDataRegBase) const;
 
@@ -187,8 +199,13 @@ protected:
     static uint64_t BuildApiHash(
         const VkPipelineLayoutCreateInfo* pCreateInfo);
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+    static Vkgc::ResourceMappingNodeType MapLlpcResourceNodeType(
+        VkDescriptorType descriptorType);
+#else
     static Llpc::ResourceMappingNodeType MapLlpcResourceNodeType(
         VkDescriptorType descriptorType);
+#endif
 
     const Info              m_info;
     const PipelineInfo      m_pipelineInfo;

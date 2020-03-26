@@ -32,6 +32,7 @@
 #include "include/vk_conv.h"
 namespace vk
 {
+
 // =====================================================================================================================
 // Helper function to calculate image texels based on whether an image is compressed or not. Element is compatible to
 // pal definition. For non-compressed format elements equal to texels. For compressed format elements are considered

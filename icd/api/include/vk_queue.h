@@ -116,6 +116,9 @@ public:
         const VkBindSparseInfo*                     pBindInfo,
         VkFence                                     fence);
 
+    void InsertDebugUtilsLabel(
+        const VkDebugUtilsLabelEXT*                 pLabelInfo);
+
     VkResult CreateSqttState(
         void* pMemory);
 

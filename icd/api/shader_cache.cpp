@@ -28,6 +28,10 @@
 * @brief Contains implementation of ShaderCache
 ***********************************************************************************************************************
 */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
+
 #include "include/shader_cache.h"
 #include "include/pipeline_compiler.h"
 #include "include/vk_conv.h"
@@ -62,8 +66,8 @@ VkResult ShaderCache::Serialize(
     VkResult result = VK_SUCCESS;
 
     {
-        Llpc::Result llpcResult = m_cache.pLlpcShaderCache->Serialize(pBlob, pSize);
-        result = (llpcResult == Llpc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+        Vkgc::Result llpcResult = m_cache.pLlpcShaderCache->Serialize(pBlob, pSize);
+        result = (llpcResult == Vkgc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
     }
 
     return result;
@@ -78,9 +82,9 @@ VkResult ShaderCache::Merge(
     VkResult result = VK_SUCCESS;
 
     {
-        Llpc::Result llpcResult = m_cache.pLlpcShaderCache->Merge(srcCacheCount,
+        Vkgc::Result llpcResult = m_cache.pLlpcShaderCache->Merge(srcCacheCount,
             const_cast<const Llpc::IShaderCache **>(&ppSrcCaches->pLlpcShaderCache));
-        result = (llpcResult == Llpc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+        result = (llpcResult == Vkgc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
     }
 
     return result;

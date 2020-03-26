@@ -76,7 +76,11 @@ public:
     static void ApplyPipelineOptions(
         const Device*          pDevice,
         VkPipelineCreateFlags  flags,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc:PipelineOptions* pOptions);
+#else
         Llpc::PipelineOptions* pOptions);
+#endif
 
     VkResult BuildShaderModule(
         const Device*             pDevice,
@@ -88,10 +92,17 @@ public:
     virtual VkResult CreatePartialPipelineBinary(
         uint32_t                            deviceIdx,
         void*                               pShaderModuleData,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
+        const Vkgc::ResourceMappingNode*    pResourceMappingNode,
+        uint32_t                            mappingNodeCount,
+        Vkgc::ColorTarget*                  pColorTarget);
+#else
         Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
         const Llpc::ResourceMappingNode*    pResourceMappingNode,
         uint32_t                            mappingNodeCount,
         Llpc::ColorTarget*                  pColorTarget);
+#endif
 
     VkResult CreateGraphicsPipelineBinary(
         Device*                             pDevice,
@@ -161,10 +172,18 @@ public:
 
     void ApplyDefaultShaderOptions(
         ShaderStage                  stage,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc::PipelineShaderOptions* pShaderOptions
+#else
         Llpc::PipelineShaderOptions* pShaderOptions
+#endif
     ) const;
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+    VK_INLINE Vkgc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
+#else
     VK_INLINE Llpc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
+#endif
 
     void GetElfCacheMetricString(char* pOutStr, size_t outStrSize);
 private:
@@ -173,10 +192,19 @@ private:
         Device*                      pDevice,
         ShaderStage                  stage,
         ShaderModule*                pShaderModule,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc::PipelineOptions*       pPipelineOptions,
+        Vkgc::PipelineShaderInfo*    pShaderInfo,
+#else
         Llpc::PipelineOptions*       pPipelineOptions,
         Llpc::PipelineShaderInfo*    pShaderInfo,
+#endif
         PipelineOptimizerKey*        pProfileKey
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        , Vkgc::NggState*            pNggState
+#else
         , Llpc::NggState*            pNggState
+#endif
     );
 
     template<class PipelineBuildInfo>
@@ -205,7 +233,11 @@ private:
     bool ReplacePipelineShaderModule(
         const Device*             pDevice,
         PipelineCompilerType      compilerType,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc::PipelineShaderInfo* pShaderInfo,
+#else
         Llpc::PipelineShaderInfo* pShaderInfo,
+#endif
         ShaderModuleHandle*       pShaderModule);
 
     Util::Result GetCachedPipelineBinary(
@@ -220,7 +252,11 @@ private:
     // -----------------------------------------------------------------------------------------------------------------
 
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+    Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgc
+#else
     Llpc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by LLPC
+#endif
 
     CompilerSolutionLlpc m_compilerSolutionLlpc;
 
@@ -238,6 +274,9 @@ private:
     void GetPipelineCreationInfoNext(
         const VkStructHeader*                             pHeader,
         const VkPipelineCreationFeedbackCreateInfoEXT**   ppPipelineCreationFeadbackCreateInfo);
+
+    static VkPipelineCreateFlags GetCacheIdControlFlags(
+        VkPipelineCreateFlags in);
 }; // class PipelineCompiler
 
 } // namespce vk

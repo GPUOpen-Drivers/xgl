@@ -22,6 +22,9 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
 
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
@@ -78,7 +81,7 @@ uint64_t Sampler::BuildApiHash(
             {
             case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
                 hasher.Update(pYCbCrConversionInfo->sType);
-                Llpc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData;
+                Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData;
                 pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pYCbCrConversionInfo->conversion)->GetMetaData();
                 hasher.Update(pSamplerYCbCrConversionMetaData->word0.u32All);
                 hasher.Update(pSamplerYCbCrConversionMetaData->word1.u32All);
@@ -116,7 +119,7 @@ VkResult Sampler::Create(
     uint64_t         apiHash     = BuildApiHash(pCreateInfo);
     Pal::SamplerInfo samplerInfo = {};
     samplerInfo.filterMode       = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
-    Llpc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData = nullptr;
+    Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData = nullptr;
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
     union
@@ -194,7 +197,7 @@ VkResult Sampler::Create(
     const uint32_t palSize = props.gfxipProperties.srdSizes.sampler;
 
     const uint32_t yCbCrMetaDataSize = (pSamplerYCbCrConversionMetaData == nullptr) ?
-                                    0 : sizeof(Llpc::SamplerYCbCrConversionMetaData);
+                                    0 : sizeof(Vkgc::SamplerYCbCrConversionMetaData);
 
     // Allocate system memory. Construct the sampler in memory and then wrap a Vulkan
     // object around it.
