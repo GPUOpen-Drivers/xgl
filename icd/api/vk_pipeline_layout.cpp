@@ -28,14 +28,15 @@
  * @brief Contains implementation of Vulkan pipeline layout objects.
  ***********************************************************************************************************************
  */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
 
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_descriptor_set_layout.h"
 #include "include/vk_shader.h"
 #include "include/vk_sampler.h"
 #include "palMetroHash.h"
-
-#include "llpc.h"
 
 #include "include/vert_buf_binding_mgr.h"
 
@@ -226,9 +227,9 @@ VkResult PipelineLayout::ConvertCreateInfo(
     // Add the user data nodes count to the total number of resource mapping nodes
     pPipelineInfo->numRsrcMapNodes += pPipelineInfo->numUserDataNodes;
 
-    pPipelineInfo->tempStageSize = (pPipelineInfo->numRsrcMapNodes * sizeof(Llpc::ResourceMappingNode));
+    pPipelineInfo->tempStageSize = (pPipelineInfo->numRsrcMapNodes * sizeof(Vkgc::ResourceMappingNode));
 
-    pPipelineInfo->tempStageSize += (pPipelineInfo->numDescRangeValueNodes * sizeof(Llpc::DescriptorRangeValue));
+    pPipelineInfo->tempStageSize += (pPipelineInfo->numDescRangeValueNodes * sizeof(Vkgc::DescriptorRangeValue));
 
     // Calculate scratch buffer size for building pipeline mappings for all shader stages based on this layout
     pPipelineInfo->tempBufferSize = (ShaderStageNativeStageCount * pPipelineInfo->tempStageSize);
@@ -308,38 +309,38 @@ VkResult PipelineLayout::Create(
 }
 
 // =====================================================================================================================
-// Translates VkDescriptorType to LLPC ResourceMappingNodeType
-Llpc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
+// Translates VkDescriptorType to VKGC ResourceMappingNodeType
+Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
     VkDescriptorType descriptorType)
 {
-    auto nodeType = Llpc::ResourceMappingNodeType::Unknown;
+    auto nodeType = Vkgc::ResourceMappingNodeType::Unknown;
     switch(static_cast<uint32_t>(descriptorType))
     {
     case VK_DESCRIPTOR_TYPE_SAMPLER:
-        nodeType = Llpc::ResourceMappingNodeType::DescriptorSampler;
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorSampler;
         break;
     case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
-        nodeType = Llpc::ResourceMappingNodeType::DescriptorCombinedTexture;
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorCombinedTexture;
         break;
     case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
-        nodeType = Llpc::ResourceMappingNodeType::DescriptorResource;
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorResource;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER:
-        nodeType = Llpc::ResourceMappingNodeType::DescriptorTexelBuffer;
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-        nodeType = Llpc::ResourceMappingNodeType::DescriptorBuffer;
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
         break;
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
-        nodeType = Llpc::ResourceMappingNodeType::DescriptorResource;
+        nodeType = Vkgc::ResourceMappingNodeType::DescriptorResource;
         break;
     case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
-        nodeType = Llpc::ResourceMappingNodeType::PushConst;
+        nodeType = Vkgc::ResourceMappingNodeType::PushConst;
         break;
     default:
         VK_NEVER_CALLED();
@@ -349,15 +350,15 @@ Llpc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
 }
 
 // =====================================================================================================================
-// Builds the LLPC resource mapping nodes for a descriptor set
+// Builds the VKGC resource mapping nodes for a descriptor set
 VkResult PipelineLayout::BuildLlpcSetMapping(
     uint32_t                     setIndex,
     const DescriptorSetLayout*   pLayout,
-    Llpc::ResourceMappingNode*   pStaNodes,
+    Vkgc::ResourceMappingNode*   pStaNodes,
     uint32_t*                    pStaNodeCount,
-    Llpc::ResourceMappingNode*   pDynNodes,
+    Vkgc::ResourceMappingNode*   pDynNodes,
     uint32_t*                    pDynNodeCount,
-    Llpc::DescriptorRangeValue*  pDescriptorRangeValue,
+    Vkgc::DescriptorRangeValue*  pDescriptorRangeValue,
     uint32_t*                    pDescriptorRangeCount,
     uint32_t                     userDataRegBase
     ) const
@@ -390,12 +391,12 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
 
                 if (binding.imm.dwArrayStride == 4)
                 {
-                    pDescriptorRangeValue->type = Llpc::ResourceMappingNodeType::DescriptorSampler;
+                    pDescriptorRangeValue->type = Vkgc::ResourceMappingNodeType::DescriptorSampler;
                 }
                 else
                 {
-                    pNode->type = Llpc::ResourceMappingNodeType::DescriptorYCbCrSampler;
-                    pDescriptorRangeValue->type = Llpc::ResourceMappingNodeType::DescriptorYCbCrSampler;
+                    pNode->type = Vkgc::ResourceMappingNodeType::DescriptorYCbCrSampler;
+                    pDescriptorRangeValue->type = Vkgc::ResourceMappingNodeType::DescriptorYCbCrSampler;
                 }
 
                 pDescriptorRangeValue->set         = setIndex;
@@ -414,8 +415,8 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
                       (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC));
             auto pNode = &pDynNodes[*pDynNodeCount];
             pNode->type                = (binding.dyn.dwArrayStride == 2) ?
-                                         Llpc::ResourceMappingNodeType::DescriptorBufferCompact :
-                                         Llpc::ResourceMappingNodeType::DescriptorBuffer;
+                                         Vkgc::ResourceMappingNodeType::DescriptorBufferCompact :
+                                         Vkgc::ResourceMappingNodeType::DescriptorBuffer;
             pNode->offsetInDwords      = userDataRegBase + binding.dyn.dwOffset;
             pNode->sizeInDwords        = binding.dyn.dwSize;
             pNode->srdRange.binding    = binding.info.binding;
@@ -490,7 +491,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     ShaderStage                                 stage,
     void*                                       pBuffer,
     const VkPipelineVertexInputStateCreateInfo* pVertexInput,
-    Llpc::PipelineShaderInfo*                   pShaderInfo,
+    Vkgc::PipelineShaderInfo*                   pShaderInfo,
     VbBindingInfo*                              pVbInfo,
     bool                                        isLastVertexStage
     ) const
@@ -506,11 +507,11 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
 
     void* pStageBuffer = Util::VoidPtrInc(pBuffer, stageIndex * m_pipelineInfo.tempStageSize);
 
-    Llpc::ResourceMappingNode* pUserDataNodes = reinterpret_cast<Llpc::ResourceMappingNode*>(pStageBuffer);
+    Vkgc::ResourceMappingNode* pUserDataNodes = reinterpret_cast<Vkgc::ResourceMappingNode*>(pStageBuffer);
 
-    Llpc::ResourceMappingNode* pAllNodes = pUserDataNodes + m_pipelineInfo.numUserDataNodes;
-    Llpc::DescriptorRangeValue* pDescriptorRangeValues =
-        reinterpret_cast<Llpc::DescriptorRangeValue*>(pUserDataNodes + m_pipelineInfo.numRsrcMapNodes);
+    Vkgc::ResourceMappingNode* pAllNodes = pUserDataNodes + m_pipelineInfo.numUserDataNodes;
+    Vkgc::DescriptorRangeValue* pDescriptorRangeValues =
+        reinterpret_cast<Vkgc::DescriptorRangeValue*>(pUserDataNodes + m_pipelineInfo.numRsrcMapNodes);
     uint32_t descriptorRangeCount = 0;
 
     uint32_t mappingNodeCount  = 0; // Number of consumed ResourceMappingNodes
@@ -520,8 +521,8 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     {
         if ((m_info.userDataLayout.transformFeedbackRegCount > 0) && isLastVertexStage)
         {
-            Llpc::ResourceMappingNode* pTransformFeedbackNode = &pUserDataNodes[userDataNodeCount];
-            pTransformFeedbackNode->type           = Llpc::ResourceMappingNodeType::StreamOutTableVaPtr;
+            Vkgc::ResourceMappingNode* pTransformFeedbackNode = &pUserDataNodes[userDataNodeCount];
+            pTransformFeedbackNode->type           = Vkgc::ResourceMappingNodeType::StreamOutTableVaPtr;
             pTransformFeedbackNode->offsetInDwords = m_info.userDataLayout.transformFeedbackRegBase;
             pTransformFeedbackNode->sizeInDwords   = m_info.userDataLayout.transformFeedbackRegCount;
 
@@ -534,11 +535,11 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     {
         if (m_info.userDataLayout.pushConstRegCount > 0)
         {
-            Llpc::ResourceMappingNode* pPushConstNode = &pUserDataNodes[userDataNodeCount];
-            pPushConstNode->type             = Llpc::ResourceMappingNodeType::PushConst;
+            Vkgc::ResourceMappingNode* pPushConstNode = &pUserDataNodes[userDataNodeCount];
+            pPushConstNode->type             = Vkgc::ResourceMappingNodeType::PushConst;
             pPushConstNode->offsetInDwords   = m_info.userDataLayout.pushConstRegBase;
             pPushConstNode->sizeInDwords     = m_info.userDataLayout.pushConstRegCount;
-            pPushConstNode->srdRange.set     = Llpc::InternalDescriptorSetId;
+            pPushConstNode->srdRange.set     = Vkgc::InternalDescriptorSetId;
 
             userDataNodeCount += 1;
         }
@@ -556,7 +557,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
             // Build the resource mapping nodes for the contents of this set.
             auto pStaNodes   = &pAllNodes[mappingNodeCount];
             auto pDynNodes   = &pUserDataNodes[userDataNodeCount];
-            Llpc::DescriptorRangeValue* pDescValues = &pDescriptorRangeValues[descriptorRangeCount];
+            Vkgc::DescriptorRangeValue* pDescValues = &pDescriptorRangeValues[descriptorRangeCount];
 
             uint32_t descRangeCount;
             uint32_t staNodeCount;
@@ -587,7 +588,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
             {
                 auto pSetPtrNode = &pUserDataNodes[userDataNodeCount];
 
-                pSetPtrNode->type               = Llpc::ResourceMappingNodeType::DescriptorTableVaPtr;
+                pSetPtrNode->type               = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
                 pSetPtrNode->offsetInDwords     = m_info.userDataLayout.setBindingRegBase +
                     pSetUserData->setPtrRegOffset;
                 pSetPtrNode->sizeInDwords       = SetPtrRegCount;
@@ -615,7 +616,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
             // Add the set pointer node pointing to this table
             auto pVbTblPtrNode = &pUserDataNodes[userDataNodeCount];
 
-            pVbTblPtrNode->type           = Llpc::ResourceMappingNodeType::IndirectUserDataVaPtr;
+            pVbTblPtrNode->type           = Vkgc::ResourceMappingNodeType::IndirectUserDataVaPtr;
             pVbTblPtrNode->offsetInDwords = m_info.userDataRegCount;
             pVbTblPtrNode->sizeInDwords   = VbTablePtrRegCount;
             pVbTblPtrNode->userDataPtr.sizeInDwords = vbTableSize;

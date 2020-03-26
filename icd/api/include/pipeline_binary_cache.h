@@ -67,7 +67,11 @@ public:
         size_t                    initDataSize,
         const void*               pInitData,
         bool                      internal,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        const Vkgc::GfxIpVersion& gfxIp,
+#else
         const Llpc::GfxIpVersion& gfxIp,
+#endif
         const PhysicalDevice*     pPhysicalDevice);
 
     static bool IsValidBlob(
@@ -138,7 +142,11 @@ private:
 
     explicit PipelineBinaryCache(
         Instance*                 pInstance,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        const Vkgc::GfxIpVersion& gfxIp,
+#else
         const Llpc::GfxIpVersion& gfxIp,
+#endif
         bool                      internal);
     ~PipelineBinaryCache();
 
@@ -190,7 +198,11 @@ private:
     static const uint32_t   ArchiveType;                // TypeId created by hashed string VK_SHADER_PIPELINE_CACHE
     static const uint32_t   ElfType;                    // TypeId created by hashed string VK_PIPELINE_ELF
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+    Vkgc::GfxIpVersion      m_gfxIp;                    // Compared against e_flags of reinjected elf files
+#else
     Llpc::GfxIpVersion      m_gfxIp;                    // Compared against e_flags of reinjected elf files
+#endif
 
     Instance* const         m_pInstance;                // Allocator for use when interacting with the cache
 

@@ -28,6 +28,9 @@
  * @brief Contains implementation of Vulkan descriptor set layout objects.
  ***********************************************************************************************************************
  */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
 
 #include "include/vk_descriptor_set_layout.h"
 #include "include/vk_device.h"
@@ -326,7 +329,7 @@ void DescriptorSetLayout::ConvertImmutableInfo(
          (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)))
     {
         uint32_t descCount = pBindingInfo->descriptorCount;
-        const uint32_t yCbCrMetaDataSizeInDW = sizeof(Llpc::SamplerYCbCrConversionMetaData) / sizeof(uint32_t);
+        const uint32_t yCbCrMetaDataSizeInDW = sizeof(Vkgc::SamplerYCbCrConversionMetaData) / sizeof(uint32_t);
 
         // Dword offset to this binding's immutable data.
         pBindingSectionInfo->dwOffset = pSectionInfo->numImmutableSamplers * descSizeInDw +
@@ -574,7 +577,7 @@ VkResult DescriptorSetLayout::Create(
 
     const size_t bindingInfoAuxSize     = bindingCount          * sizeof(BindingInfo);
     const size_t immSamplerAuxSize      = immSamplerCount       * pDevice->GetProperties().descriptorSizes.sampler;
-    const size_t immYCbCrMetaDataSize   = immYCbCrMetaDataCount * sizeof(Llpc::SamplerYCbCrConversionMetaData);
+    const size_t immYCbCrMetaDataSize   = immYCbCrMetaDataCount * sizeof(Vkgc::SamplerYCbCrConversionMetaData);
 
     const size_t apiSize = sizeof(DescriptorSetLayout);
     const size_t auxSize = bindingInfoAuxSize + immSamplerAuxSize + immYCbCrMetaDataSize;
@@ -661,7 +664,7 @@ uint32_t DescriptorSetLayout::GetImmSamplerArrayByteSize() const
 // Get the size in bytes of immutable ycbcr meta data array
 uint32_t DescriptorSetLayout::GetImmYCbCrMetaDataArrayByteSize() const
 {
-    return m_info.imm.numImmutableYCbCrMetaData * sizeof(Llpc::SamplerYCbCrConversionMetaData);
+    return m_info.imm.numImmutableYCbCrMetaData * sizeof(Vkgc::SamplerYCbCrConversionMetaData);
 }
 
 // =====================================================================================================================

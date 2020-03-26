@@ -58,13 +58,13 @@ struct Formats
     VK_INLINE static bool IsYuvXChromaSubsampled(VkFormat format);
     VK_INLINE static bool IsYuvYChromaSubsampled(VkFormat format);
     VK_INLINE static uint32_t GetYuvPlaneCounts(VkFormat format);
+    VK_INLINE static bool IsASTCFormat(VkFormat format);
     VK_INLINE static bool HasDepth(VkFormat format);
     VK_INLINE static bool HasStencil(VkFormat format);
     VK_INLINE static VkFormat GetAspectFormat(VkFormat format, VkImageAspectFlags aspectMask);
 
     VK_INLINE static uint32_t GetIndex(VkFormat format);
     VK_INLINE static VkFormat FromIndex(uint32_t index);
-
     static VkExtent3D ElementsToTexels(VkFormat format, const VkExtent3D& extent);
     static Pal::Formats::NumericSupportFlags GetNumberFormat(VkFormat format);
 };
@@ -199,6 +199,13 @@ bool Formats::IsBcCompressedFormat(VkFormat format)
 bool Formats::IsYuvFormat(VkFormat format)
 {
     return (format >= VK_YUV_FORMAT_START && format <= VK_YUV_FORMAT_END);
+}
+
+// =====================================================================================================================
+bool Formats::IsASTCFormat(
+    VkFormat format)
+{
+    return ((format >= VK_FORMAT_ASTC_4x4_UNORM_BLOCK) && (format <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK));
 }
 
 // =====================================================================================================================

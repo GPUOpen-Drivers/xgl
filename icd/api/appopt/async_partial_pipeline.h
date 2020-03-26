@@ -56,13 +56,22 @@ public:
 
     void CreatePipelineLayoutFromModuleData(
         AsyncLayer*                         pAsyncLayer,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
+        const Vkgc::ResourceMappingNode**   ppResourceMappingNode,
+#else
         Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
         const Llpc::ResourceMappingNode**   ppResourceMappingNode,
+#endif
         uint32_t*                           pMappingNodeCount);
 
     void CreateColorTargetFromModuleData(
         Llpc::ShaderModuleDataEx* pShaderModuleDataEx,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc::ColorTarget* pTarget);
+#else
         Llpc::ColorTarget* pTarget);
+#endif
 
     void Execute(AsyncLayer* pAsyncLayer, PartialPipelineTask* pTask);
 

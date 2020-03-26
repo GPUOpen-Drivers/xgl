@@ -28,6 +28,10 @@
 * @brief Contains implementation of CompilerSolutionLlpc
 ***********************************************************************************************************************
 */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
+
 #include "include/compiler_solution_llpc.h"
 #include "include/vk_device.h"
 #include "include/vk_physical_device.h"
@@ -58,7 +62,7 @@ CompilerSolutionLlpc::~CompilerSolutionLlpc()
 // =====================================================================================================================
 // Initialize CompilerSolutionLlpc class
 VkResult CompilerSolutionLlpc::Initialize(
-    Llpc::GfxIpVersion gfxIp,
+    Vkgc::GfxIpVersion gfxIp,
     Pal::GfxIpLevel    gfxIpLevel)
 {
     VkResult result = CompilerSolution::Initialize(gfxIp, gfxIpLevel);
@@ -110,11 +114,11 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
     llpcCacheCreateInfo.initialDataSize = initialDataSize;
 
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 38
-    Llpc::Result llpcResult = m_pLlpc->CreateShaderCache(
+    Vkgc::Result llpcResult = m_pLlpc->CreateShaderCache(
         &llpcCacheCreateInfo,
         &shaderCachePtr.pLlpcShaderCache);
 
-    if (llpcResult == Llpc::Result::Success)
+    if (llpcResult == Vkgc::Result::Success)
     {
         pShaderCache->Init(PipelineCompilerTypeLlpc, shaderCachePtr);
     }
@@ -159,9 +163,9 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     moduleInfo.options.enableOpt = (flags & VK_SHADER_MODULE_ENABLE_OPT_BIT) ? true : false;
 #endif
 
-    Llpc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
+    Vkgc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
 
-    if ((llpcResult == Llpc::Result::Success) || (llpcResult == Llpc::Result::Delayed))
+    if ((llpcResult == Vkgc::Result::Success) || (llpcResult == Vkgc::Result::Delayed))
     {
         pShaderModule->pLlpcShaderModule = buildOut.pModuleData;
         VK_ASSERT(pShaderMemory == pShaderModule->pLlpcShaderModule);
@@ -170,7 +174,7 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     {
         // Clean up if fail
         pInstance->FreeMem(pShaderMemory);
-        if (llpcResult == Llpc::Result::ErrorOutOfMemory)
+        if (llpcResult == Vkgc::Result::ErrorOutOfMemory)
         {
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
@@ -197,19 +201,19 @@ void CompilerSolutionLlpc::FreeShaderModule(ShaderModuleHandle* pShaderModule)
 VkResult CompilerSolutionLlpc::CreatePartialPipelineBinary(
     uint32_t                            deviceIdx,
     void*                               pShaderModuleData,
-    Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
-    const Llpc::ResourceMappingNode*    pResourceMappingNode,
+    Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
+    const Vkgc::ResourceMappingNode*    pResourceMappingNode,
     uint32_t                            mappingNodeCount,
-    Llpc::ColorTarget*                  pColorTarget)
+    Vkgc::ColorTarget*                  pColorTarget)
 {
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
     VkResult result = VK_SUCCESS;
 
     auto pShaderModuleDataEx = reinterpret_cast<Llpc::ShaderModuleDataEx*>(pShaderModuleData);
-    if (pShaderModuleEntryData->stage == Llpc::ShaderStageCompute)
+    if (pShaderModuleEntryData->stage == Vkgc::ShaderStageCompute)
     {
-        Llpc::ComputePipelineBuildInfo pipelineBuildInfo = {};
+        Vkgc::ComputePipelineBuildInfo pipelineBuildInfo = {};
         Llpc::ComputePipelineBuildOut  pipelineOut = {};
         void* pLlpcPipelineBuffer = nullptr;
 
@@ -223,7 +227,7 @@ VkResult CompilerSolutionLlpc::CreatePartialPipelineBinary(
         pipelineBuildInfo.cs.userDataNodeCount = mappingNodeCount;
 
         auto llpcResult = m_pLlpc->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut, nullptr);
-        if (llpcResult != Llpc::Result::Success)
+        if (llpcResult != Vkgc::Result::Success)
         {
             // There shouldn't be anything to free for the failure case
             VK_ASSERT(pLlpcPipelineBuffer == nullptr);
@@ -233,7 +237,7 @@ VkResult CompilerSolutionLlpc::CreatePartialPipelineBinary(
     }
     else
     {
-        Llpc::GraphicsPipelineBuildInfo pipelineBuildInfo = {};
+        Vkgc::GraphicsPipelineBuildInfo pipelineBuildInfo = {};
         // Build the LLPC pipeline
         Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
         void* pLlpcPipelineBuffer = nullptr;
@@ -253,12 +257,12 @@ VkResult CompilerSolutionLlpc::CreatePartialPipelineBinary(
         pipelineBuildInfo.fs.userDataNodeCount = mappingNodeCount;
 
         VK_ASSERT(pColorTarget != 0);
-        for (uint32_t i = 0; i < Llpc::MaxColorTargets; ++i)
+        for (uint32_t i = 0; i < Vkgc::MaxColorTargets; ++i)
         {
             pipelineBuildInfo.cbState.target[i] = pColorTarget[i];
         }
         auto llpcResult = m_pLlpc->BuildGraphicsPipeline(&pipelineBuildInfo, &pipelineOut, nullptr);
-        if (llpcResult != Llpc::Result::Success)
+        if (llpcResult != Vkgc::Result::Success)
         {
             // There shouldn't be anything to free for the failure case
             VK_ASSERT(pLlpcPipelineBuffer == nullptr);
@@ -280,7 +284,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     size_t*                     pPipelineBinarySize,
     const void**                ppPipelineBinary,
     uint32_t                    rasterizationStream,
-    Llpc::PipelineShaderInfo**  ppShadersInfo,
+    Vkgc::PipelineShaderInfo**  ppShadersInfo,
     void*                       pPipelineDumpHandle,
     uint64_t                    pipelineHash,
     int64_t*                    pCompileTime)
@@ -321,7 +325,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     }
 
     auto llpcResult = m_pLlpc->BuildGraphicsPipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
-    if (llpcResult != Llpc::Result::Success)
+    if (llpcResult != Vkgc::Result::Success)
     {
         // There shouldn't be anything to free for the failure case
         VK_ASSERT(pLlpcPipelineBuffer == nullptr);
@@ -340,7 +344,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
             char extraInfo[256];
             ShaderOptimizerKey* pShaderKey = &pCreateInfo->pipelineProfileKey.shaders[0];
             Util::Snprintf(extraInfo, sizeof(extraInfo), "\n;PipelineOptimizer\n");
-            Llpc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+            Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
             for (uint32_t i = 0; i < ShaderStageCount; i++)
             {
                 if (pShaderKey[i].codeHash.upper || pShaderKey[i].codeHash.lower)
@@ -353,7 +357,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
                         pName,
                         pShaderKey[i].codeHash.upper,
                         pShaderKey[i].codeHash.lower);
-                    Llpc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+                    Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
                 }
             }
         }
@@ -384,7 +388,7 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
     AppProfile             appProfile = m_pPhysicalDevice->GetAppProfile();
 
-    Llpc::ComputePipelineBuildInfo* pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
+    Vkgc::ComputePipelineBuildInfo* pPipelineBuildInfo = &pCreateInfo->pipelineInfo;
 
     VkResult result = VK_SUCCESS;
 
@@ -421,11 +425,11 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
 
     // Build pipline binary
     auto llpcResult = m_pLlpc->BuildComputePipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
-    if (llpcResult != Llpc::Result::Success)
+    if (llpcResult != Vkgc::Result::Success)
     {
         // There shouldn't be anything to free for the failure case
         VK_ASSERT(pLlpcPipelineBuffer == nullptr);
-        if (llpcResult == Llpc::Result::ErrorOutOfMemory)
+        if (llpcResult == Vkgc::Result::ErrorOutOfMemory)
         {
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
@@ -448,7 +452,7 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
             char extraInfo[256];
             ShaderOptimizerKey* pShaderKey = &pCreateInfo->pipelineProfileKey.shaders[static_cast<ShaderStage>(ShaderStageCompute)];
             Util::Snprintf(extraInfo, sizeof(extraInfo), "\n\n;PipelineOptimizer\n");
-            Llpc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+            Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
 
             if (pShaderKey->codeHash.upper || pShaderKey->codeHash.lower)
             {
@@ -460,7 +464,7 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
                     pName,
                     pShaderKey->codeHash.upper,
                     pShaderKey->codeHash.lower);
-                Llpc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
+                Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
             }
         }
     }
@@ -695,12 +699,12 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     VK_ASSERT(numOptions <= MaxLlpcOptions);
 
     // Create LLPC compiler
-    Llpc::Result llpcResult = Llpc::ICompiler::Create(m_gfxIp, numOptions, llpcOptions, &pCompiler);
-    VK_ASSERT(llpcResult == Llpc::Result::Success);
+    Vkgc::Result llpcResult = Llpc::ICompiler::Create(m_gfxIp, numOptions, llpcOptions, &pCompiler);
+    VK_ASSERT(llpcResult == Vkgc::Result::Success);
 
     m_pLlpc = pCompiler;
 
-    return (llpcResult == Llpc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
+    return (llpcResult == Vkgc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
 }
 
 }

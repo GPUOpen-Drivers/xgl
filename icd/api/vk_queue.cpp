@@ -205,11 +205,14 @@ VkResult Queue::NotifyFlipMetadata(
 
                 if (result == VK_SUCCESS)
                 {
-                    Pal::SubmitInfo submitInfo = {};
+                    Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+                    perSubQueueInfo.cmdBufferCount  = 1;
+                    perSubQueueInfo.ppCmdBuffers    = &m_pDummyCmdBuffer[deviceIdx];
+                    perSubQueueInfo.pCmdBufInfoList = &cmdBufInfo;
 
-                    submitInfo.cmdBufferCount  = 1;
-                    submitInfo.ppCmdBuffers    = &m_pDummyCmdBuffer[deviceIdx];
-                    submitInfo.pCmdBufInfoList = &cmdBufInfo;
+                    Pal::SubmitInfo submitInfo = {};
+                    submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+                    submitInfo.perSubQueueInfoCount = 1;
 
                     result = PalToVkResult(m_pPalQueues[deviceIdx]->Submit(submitInfo));
                 }
@@ -273,14 +276,15 @@ VkResult Queue::Submit(
     if ((submitCount == 0) && (pFence != nullptr))
     {
         Pal::IFence* pPalFence = nullptr;
-        // If the submit count is zero but there is a fence, do a dummy submit just so the fence is signaled.
-        Pal::SubmitInfo submitInfo = {};
 
-        submitInfo.cmdBufferCount  = 0;
-        submitInfo.ppCmdBuffers    = nullptr;
-        submitInfo.pCmdBufInfoList = nullptr;
-        submitInfo.gpuMemRefCount  = 0;
-        submitInfo.pGpuMemoryRefs  = nullptr;
+        // If the submit count is zero but there is a fence, do a dummy submit just so the fence is signaled.
+        Pal::SubmitInfo            submitInfo      = {};
+        Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+
+        submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+        submitInfo.perSubQueueInfoCount = 1;
+        submitInfo.gpuMemRefCount       = 0;
+        submitInfo.pGpuMemoryRefs       = nullptr;
 
         Pal::Result palResult = Pal::Result::Success;
 
@@ -351,12 +355,17 @@ VkResult Queue::Submit(
             bool lastBatch = (submitIdx == submitCount - 1);
 
             Pal::IFence*    pPalFence     = nullptr;
-            Pal::SubmitInfo palSubmitInfo = {};
 
-            palSubmitInfo.ppCmdBuffers    = pPalCmdBuffers;
-            palSubmitInfo.pCmdBufInfoList = nullptr;
-            palSubmitInfo.gpuMemRefCount  = 0;
-            palSubmitInfo.pGpuMemoryRefs  = nullptr;
+            Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+            perSubQueueInfo.cmdBufferCount  = 0;
+            perSubQueueInfo.ppCmdBuffers    = pPalCmdBuffers;
+            perSubQueueInfo.pCmdBufInfoList = nullptr;
+
+            Pal::SubmitInfo palSubmitInfo = {};
+            palSubmitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+            palSubmitInfo.perSubQueueInfoCount = 1;
+            palSubmitInfo.gpuMemRefCount       = 0;
+            palSubmitInfo.pGpuMemoryRefs       = nullptr;
 
             const uint32_t deviceCount = (pDeviceGroupInfo == nullptr) ? 1 : m_pDevice->NumPalDevices();
 
@@ -367,7 +376,7 @@ VkResult Queue::Submit(
                 DispatchableCmdBuffer* const * pCommandBuffers =
                     reinterpret_cast<DispatchableCmdBuffer*const*>(submitInfo.pCommandBuffers);
 
-                palSubmitInfo.cmdBufferCount = 0;
+                perSubQueueInfo.cmdBufferCount = 0;
 
                 const uint32_t deviceMask = 1 << deviceIdx;
 
@@ -382,7 +391,7 @@ VkResult Queue::Submit(
 
                     const CmdBuffer& cmdBuf = *(*pCommandBuffers[i]);
 
-                    pPalCmdBuffers[palSubmitInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
+                    pPalCmdBuffers[perSubQueueInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
                 }
 
                 if (lastBatch && (pFence != nullptr))
@@ -394,7 +403,7 @@ VkResult Queue::Submit(
                     pFence->SetActiveDevice(deviceIdx);
                 }
 
-                if ((palSubmitInfo.cmdBufferCount > 0) ||
+                if ((perSubQueueInfo.cmdBufferCount > 0) ||
                     (palSubmitInfo.fenceCount > 0)     ||
                     (submitInfo.waitSemaphoreCount > 0))
                 {
@@ -712,12 +721,10 @@ VkResult Queue::Present(
     if (pPresentInfo == nullptr)
     {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-        const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
-
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
-            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, true);
-            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, true);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueuePresent);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueuePresent);
         }
 #endif // #if ICD_GPUOPEN_DEVMODE_BUILD
         return VK_ERROR_INITIALIZATION_FAILED;
@@ -777,7 +784,7 @@ VkResult Queue::Present(
 #if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
-            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, true);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueuePresent);
         }
 #endif
 
@@ -818,7 +825,7 @@ VkResult Queue::Present(
 #if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
-            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, true);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueuePresent);
         }
 #endif
 
@@ -1288,8 +1295,12 @@ VkResult Queue::BindSparse(
             signalFenceDeviceMask = 1 << DefaultDeviceIndex;
         }
 
-        Pal::IFence*    pPalFence  = nullptr;
-        Pal::SubmitInfo submitInfo = {};
+        Pal::IFence*               pPalFence       = nullptr;
+        Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+        Pal::SubmitInfo            submitInfo      = {};
+
+        submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+        submitInfo.perSubQueueInfoCount = 1;
 
         Fence* pFence = Fence::ObjectFromHandle(fence);
 
@@ -1567,15 +1578,19 @@ VkResult Queue::SubmitInternalCmdBuf(
         // Submit the command buffer
         if (result == Pal::Result::Success)
         {
+            Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+            perSubQueueInfo.cmdBufferCount  = 1;
+            perSubQueueInfo.ppCmdBuffers    = &pCmdBufState->pCmdBuf;
+            perSubQueueInfo.pCmdBufInfoList = &cmdBufInfo;
+
             Pal::SubmitInfo palSubmitInfo = {};
 
             VK_ASSERT(cmdBufInfo.isValid == 1);
 
-            palSubmitInfo.cmdBufferCount  = 1;
-            palSubmitInfo.ppCmdBuffers    = &pCmdBufState->pCmdBuf;
-            palSubmitInfo.pCmdBufInfoList = &cmdBufInfo;
-            palSubmitInfo.ppFences        = &pCmdBufState->pFence;
-            palSubmitInfo.fenceCount      = 1;
+            palSubmitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+            palSubmitInfo.perSubQueueInfoCount = 1;
+            palSubmitInfo.ppFences             = &pCmdBufState->pFence;
+            palSubmitInfo.fenceCount           = 1;
 
             result = m_pPalQueues[deviceIdx]->Submit(palSubmitInfo);
         }
@@ -1590,6 +1605,34 @@ VkResult Queue::CreateSqttState(
     m_pSqttState = VK_PLACEMENT_NEW(pMemory) SqttQueueState(this);
 
     return m_pSqttState->Init();
+}
+
+// =====================================================================================================================
+// Contains the core implementation of vkInsertDebugUtilsLabelEXT. The SQTT layer (when on) extends this functionality.
+void Queue::InsertDebugUtilsLabel(
+    const VkDebugUtilsLabelEXT*                 pLabelInfo)
+{
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    if (strcmp(pLabelInfo->pLabelName, settings.devModeStartFrameDebugUtilsLabel) == 0)
+    {
+        if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
+        {
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueueLabel);
+        }
+    }
+#endif
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    if (strcmp(pLabelInfo->pLabelName, settings.devModeEndFrameDebugUtilsLabel) == 0)
+    {
+        if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
+        {
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueueLabel);
+        }
+    }
+#endif
 }
 
 /**
@@ -1654,6 +1697,7 @@ VKAPI_ATTR void VKAPI_CALL vkQueueInsertDebugUtilsLabelEXT(
     VkQueue                                     queue,
     const VkDebugUtilsLabelEXT*                 pLabelInfo)
 {
+    ApiQueue::ObjectFromHandle(queue)->InsertDebugUtilsLabel(pLabelInfo);
 }
 
 } // namespace entry

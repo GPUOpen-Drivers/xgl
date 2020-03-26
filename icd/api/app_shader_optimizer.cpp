@@ -28,6 +28,10 @@
 * @brief Functions for tuning specific shader compile parameters for optimized code generation.
 **************************************************************************************************
 */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
+
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
 #include "include/vk_physical_device.h"
@@ -170,7 +174,7 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 if (shaderCreate.apply.waveBreakSize)
                 {
                     options.pOptions->waveBreakSize =
-                        static_cast<Llpc::WaveBreakSize>(shaderCreate.tuningOptions.waveBreakSize);
+                        static_cast<Vkgc::WaveBreakSize>(shaderCreate.tuningOptions.waveBreakSize);
                 }
 
                 if (shaderCreate.apply.nggDisable)
@@ -515,7 +519,8 @@ void ShaderOptimizer::BuildTuningProfile()
         action.shaderCreate.tuningOptions.userDataSpillThreshold = 0;
     }
 
-    action.shaderCreate.apply.allowReZ = m_settings.overrideAllowReZ;
+    action.shaderCreate.apply.allowReZ                = m_settings.overrideAllowReZ;
+    action.shaderCreate.apply.enableSelectiveInline   = m_settings.overrideEnableSelectiveInline;
 
     if (m_settings.overrideDisableLoopUnrolls)
     {
@@ -560,6 +565,9 @@ void ShaderOptimizer::BuildTuningProfile()
     default:
         VK_NEVER_CALLED();
     }
+
+    action.shaderCreate.apply.nggDisable      = !(m_settings.enableNgg);
+    action.shaderCreate.apply.enableSubvector = m_settings.overrideEnableSubvector;
 
     if (m_settings.overrideWavesPerCu != 0)
     {
@@ -640,6 +648,68 @@ void ShaderOptimizer::BuildAppProfileLlpc()
             m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0xfa535f5e84c8b76e;
             m_appProfile.entries[i].action.createInfo.apply.binningOverride = true;
             m_appProfile.entries[i].action.createInfo.binningOverride = Pal::BinningOverride::Disable;
+        }
+        else if (Pal::GfxIpLevel::GfxIp10_1 == gfxIpLevel)
+        {
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0xF986532BB17816EA3098CF611F82EE06,CS,WAVESIZE,64
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0x3098CF611F82EE06;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xF986532BB17816EA;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.waveSize = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.waveSize = 64;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0x9CA3346855A52A28378987DA9EC691AA,CS,WAVESIZE,64
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0x378987DA9EC691AA;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0x9CA3346855A52A28;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.waveSize = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.waveSize = 64;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0x8870793DE8BE7BA9B61429D9C34C9AC6,CS,WAVESIZE,64
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0xB61429D9C34C9AC6;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0x8870793DE8BE7BA9;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.waveSize = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.waveSize = 64;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0xD744A95893DA078379783E2E62E4A0A1,CS,WAVESIZE,64
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0x79783E2E62E4A0A1;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0xD744A95893DA0783;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.waveSize = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.waveSize = 64;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0x1FA1621910138F987100A2DCD89FF535,CS,WAVESIZE,64
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.lower = 0x7100A2DCD89FF535;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].codeHash.upper = 0x1FA1621910138F98;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.waveSize = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.waveSize = 64;
+
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // 0x6595736CFBCE3E5656B9A44C18C9A595,PS,WAVESIZE,32
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].match.codeHash = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x56B9A44C18C9A595;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x6595736CFBCE3E56;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.apply.waveSize = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.waveSize = 32;
         }
     }
     else if (appProfile == AppProfile::DoomVFR)
@@ -1706,6 +1776,16 @@ void ShaderOptimizer::BuildAppProfileLlpc()
             m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.lower = 0x64ECA5E83285C2FA;
             m_appProfile.entries[i].pattern.shaders[ShaderStageFragment].codeHash.upper = 0x98A1064EC65EB412;
             m_appProfile.entries[i].action.shaders[ShaderStageFragment].shaderCreate.tuningOptions.disableLicm = true;
+        }
+        else if (Pal::GfxIpLevel::GfxIp10_1 == gfxIpLevel)
+        {
+            ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+            // Set waveSize to 64 for all the CS
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.stageActive = true;
+            m_appProfile.entries[i].pattern.shaders[ShaderStageCompute].match.codeHash = false;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.apply.waveSize = true;
+            m_appProfile.entries[i].action.shaders[ShaderStageCompute].shaderCreate.tuningOptions.waveSize = 64;
         }
     }
 }

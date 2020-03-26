@@ -3813,6 +3813,34 @@
       "Name": "EnablePartialPipelineCompile"
     },
     {
+      "Description": "Determines the string that's used to trigger a start-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameBegin\" by default.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": "AmdFrameBegin"
+      },
+      "Scope": "Driver",
+      "Type": "string",
+      "VariableName": "devModeStartFrameDebugUtilsLabel",
+      "Name": "DevModeStartFrameDebugUtilsLabel",
+      "Size": 512
+    },
+    {
+      "Description": "Determines the string that's used to trigger an end-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameEnd\" by default",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": "AmdFrameEnd"
+      },
+      "Scope": "Driver",
+      "Type": "string",
+      "VariableName": "devModeEndFrameDebugUtilsLabel",
+      "Name": "DevModeEndFrameDebugUtilsLabel",
+      "Size": 512
+    },
+    {
       "Description": "Determines the pipeline binary max size limit (in KB) used by the PipelineUriService when injecting pipeline binaries back into the driver. The limit is 256KB by default.",
       "Tags": [
         "Developer Mode"
@@ -4341,6 +4369,32 @@
       "Type": "bool",
       "VariableName": "overrideReconfigWorkgroupLayout",
       "Name": "OverrideReconfigWorkgroupLayout",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable selective inlining behavior in the compiler.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideEnableSelectiveInline",
+      "Name": "OverrideEnableSelectiveInline",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable Subvector to look for opportunities in Wave64 mode to generate subvector code switching to Wave32 mode over parts of the shader",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideEnableSubvector",
+      "Name": "OverrideEnableSubvector",
       "Scope": "Driver"
     },
     {

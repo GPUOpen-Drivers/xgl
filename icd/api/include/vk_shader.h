@@ -32,8 +32,6 @@
 #include "include/vk_dispatch.h"
 #include "include/pipeline_compiler.h"
 
-#include "llpc.h"
-
 namespace Pal { enum class ResourceMappingNodeType : Pal::uint32; }
 
 // NOTE: Internal shader module create flag, please modify it if it conflict with vulkan header files.

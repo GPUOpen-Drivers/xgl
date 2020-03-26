@@ -605,7 +605,11 @@ protected:
         size_t                           codeByteSize,
         const uint8_t*                   pCode,
         uint32_t                         numUserDataNodes,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        const Vkgc::ResourceMappingNode* pUserDataNodes,
+#else
         const Llpc::ResourceMappingNode* pUserDataNodes,
+#endif
         InternalPipeline*                pInternalPipeline);
 
     VkResult CreateInternalPipelines();
@@ -650,6 +654,7 @@ protected:
     OptLayer*                           m_pAppOptLayer;            // State for an app-specific layer, otherwise null
     BarrierFilterLayer*                 m_pBarrierFilterLayer;     // State for enabling barrier filtering, otherwise
                                                                    // null
+
     Util::Mutex                         m_memoryMutex;             // Shared mutex used occasionally by memory objects
 
     // The states of m_enabledFeatures are provided by application

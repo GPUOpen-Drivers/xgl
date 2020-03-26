@@ -413,23 +413,6 @@ if (UNIX)
         -Wl,-soname=${ICD_TARGET}.so.1
     )
 
-    # There is depencency among these static libraries, they must be linked in some order to meet the dependency.
-    # However, when LTO is enabled, it seems impossible to ensure such kind of order. "whole-archive" makes sure that
-    # all of the symbols from the static libraries are added into symbol tables no matter if they are referenced
-    # previously so that removing the dependency requirements. This issue was observed with GCC 5.
-    if(CMAKE_BUILD_TYPE_RELEASE)
-        execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
-        if (GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
-            target_link_libraries(xgl PRIVATE -Wl,--whole-archive $<TARGET_FILE:pal> -Wl,--no-whole-archive)
-            target_link_libraries(xgl PUBLIC -Wl,--whole-archive $<TARGET_FILE:metrohash> -Wl,--no-whole-archive)
-            target_link_libraries(xgl PUBLIC -Wl,--whole-archive $<TARGET_FILE:ddCore> -Wl,--no-whole-archive)
-            target_link_libraries(xgl PUBLIC -Wl,--whole-archive $<TARGET_FILE:gpuopen> -Wl,--no-whole-archive)
-            target_link_libraries(xgl PUBLIC -Wl,--whole-archive $<TARGET_FILE:vam> -Wl,--no-whole-archive)
-            target_link_libraries(xgl PUBLIC -Wl,--whole-archive $<TARGET_FILE:addrlib> -Wl,--no-whole-archive)
-            target_link_libraries(xgl PUBLIC -Wl,--whole-archive $<TARGET_FILE:cwpack> -Wl,--no-whole-archive)
-        endif()
-    endif()
-
 endif()
 
 target_link_libraries(xgl PRIVATE pal)

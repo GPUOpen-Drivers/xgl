@@ -28,6 +28,9 @@
  * @brief Contains implementation of Vulkan pipeline compiler
  ***********************************************************************************************************************
  */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
 
 #include "include/pipeline_compiler.h"
 #include "include/vk_device.h"
@@ -45,6 +48,10 @@
 #include "include/pipeline_binary_cache.h"
 
 #include "palPipelineAbiProcessorImpl.h"
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+#include "llpc.h"
+#endif
 
 #include <inttypes.h>
 
@@ -313,7 +320,7 @@ bool PipelineCompiler::ReplacePipelineBinary(
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
     char fileName[128];
-    Llpc::IPipelineDumper::GetPipelineName(pPipelineBuildInfo, fileName, 128);
+    Vkgc::IPipelineDumper::GetPipelineName(pPipelineBuildInfo, fileName, 128);
 
     char replaceFileName[256];
     int32_t length = Util::Snprintf(replaceFileName, 256, "%s/%s_replace.elf", settings.shaderReplaceDir, fileName);
@@ -347,7 +354,7 @@ bool PipelineCompiler::ReplacePipelineBinary(
 bool PipelineCompiler::ReplacePipelineShaderModule(
     const Device*             pDevice,
     PipelineCompilerType      compilerType,
-    Llpc::PipelineShaderInfo* pShaderInfo,
+    Vkgc::PipelineShaderInfo* pShaderInfo,
     ShaderModuleHandle*       pShaderModule)
 {
     bool replaced = false;
@@ -355,7 +362,7 @@ bool PipelineCompiler::ReplacePipelineShaderModule(
 
     if (pShaderInfo->pModuleData != nullptr)
     {
-        uint64_t hash64 = Llpc::IPipelineDumper::GetShaderHash(pShaderInfo->pModuleData);
+        uint64_t hash64 = Vkgc::IPipelineDumper::GetShaderHash(pShaderInfo->pModuleData);
         size_t codeSize = 0;
         void* pCode = nullptr;
 
@@ -595,10 +602,10 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
 VkResult PipelineCompiler::CreatePartialPipelineBinary(
     uint32_t                            deviceIdx,
     void*                               pShaderModuleData,
-    Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
-    const Llpc::ResourceMappingNode*    pResourceMappingNode,
+    Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
+    const Vkgc::ResourceMappingNode*    pResourceMappingNode,
     uint32_t                            mappingNodeCount,
-    Llpc::ColorTarget*                  pColorTarget)
+    Vkgc::ColorTarget*                  pColorTarget)
 {
     uint32_t compilerMask = GetCompilerCollectionMask();
     VkResult result = VK_SUCCESS;
@@ -629,14 +636,14 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     auto                   pInstance     = m_pPhysicalDevice->Manager()->VkInstance();
 
     int64_t compileTime = 0;
-    uint64_t pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
+    uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
 
     void* pPipelineDumpHandle = nullptr;
     const void* moduleDataBaks[ShaderGfxStageCount];
     ShaderModuleHandle shaderModuleReplaceHandles[ShaderGfxStageCount];
     bool shaderModuleReplaced = false;
 
-    Llpc::PipelineShaderInfo* shaderInfos[ShaderGfxStageCount] =
+    Vkgc::PipelineShaderInfo* shaderInfos[ShaderGfxStageCount] =
     {
         &pCreateInfo->pipelineInfo.vs,
         &pCreateInfo->pipelineInfo.tcs,
@@ -669,24 +676,24 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
             if (shaderModuleReplaced)
             {
-                pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
+                pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
             }
         }
     }
 
     if (settings.enablePipelineDump)
     {
-        Llpc::PipelineDumpOptions dumpOptions = {};
+        Vkgc::PipelineDumpOptions dumpOptions = {};
         dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
         dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
         dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
         dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
-        Llpc::PipelineBuildInfo pipelineInfo = {};
+        Vkgc::PipelineBuildInfo pipelineInfo = {};
         pipelineInfo.pGraphicsInfo = &pCreateInfo->pipelineInfo;
-        pPipelineDumpHandle = Llpc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo);
+        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo);
 #else
-        pPipelineDumpHandle = Llpc::IPipelineDumper::BeginPipelineDump(&dumpOptions, nullptr, &pCreateInfo->pipelineInfo);
+        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, nullptr, &pCreateInfo->pipelineInfo);
 #endif
     }
 
@@ -717,7 +724,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         hash.Update(pCreateInfo->pipelineInfo.fs.options);
         hash.Update(pCreateInfo->pipelineInfo.options);
         hash.Update(pCreateInfo->pipelineInfo.nggState);
-        hash.Update(pCreateInfo->flags);
+        hash.Update(GetCacheIdControlFlags(pCreateInfo->flags));
         hash.Update(pCreateInfo->dbFormat);
         hash.Update(pCreateInfo->pipelineProfileKey);
         hash.Update(deviceIdx);
@@ -792,12 +799,12 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     {
         if (result == VK_SUCCESS)
         {
-            Llpc::BinaryData pipelineBinary = {};
+            Vkgc::BinaryData pipelineBinary = {};
             pipelineBinary.codeSize = *pPipelineBinarySize;
             pipelineBinary.pCode = *ppPipelineBinary;
-            Llpc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
+            Vkgc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
         }
-        Llpc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
+        Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 
     if (shaderModuleReplaced)
@@ -833,7 +840,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     pCreateInfo->pipelineInfo.deviceIndex = deviceIdx;
 
     int64_t compileTime = 0;
-    uint64_t pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
+    uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
 
     void* pPipelineDumpHandle = nullptr;
     const void* pModuleDataBak = nullptr;
@@ -842,17 +849,17 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
     if (settings.enablePipelineDump)
     {
-        Llpc::PipelineDumpOptions dumpOptions = {};
+        Vkgc::PipelineDumpOptions dumpOptions = {};
         dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
         dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
         dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
         dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
-        Llpc::PipelineBuildInfo pipelineInfo = {};
+        Vkgc::PipelineBuildInfo pipelineInfo = {};
         pipelineInfo.pComputeInfo = &pCreateInfo->pipelineInfo;
-        pPipelineDumpHandle = Llpc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo);
+        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo);
 #else
-        pPipelineDumpHandle = Llpc::IPipelineDumper::BeginPipelineDump(&dumpOptions, &pCreateInfo->pipelineInfo, nullptr);
+        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, &pCreateInfo->pipelineInfo, nullptr);
 #endif
     }
 
@@ -876,7 +883,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
             if (shaderModuleReplaced)
             {
-                pipelineHash = Llpc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
+                pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
             }
         }
     }
@@ -903,7 +910,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         hash.Update(pipelineHash);
         hash.Update(pCreateInfo->pipelineInfo.cs.options);
         hash.Update(pCreateInfo->pipelineInfo.options);
-        hash.Update(pCreateInfo->flags);
+        hash.Update(GetCacheIdControlFlags(pCreateInfo->flags));
         hash.Update(pCreateInfo->pipelineProfileKey);
         hash.Update(deviceIdx);
         hash.Update(pCreateInfo->compilerType);
@@ -974,12 +981,12 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     {
         if (result == VK_SUCCESS)
         {
-            Llpc::BinaryData pipelineBinary = {};
+            Vkgc::BinaryData pipelineBinary = {};
             pipelineBinary.codeSize = *pPipelineBinarySize;
             pipelineBinary.pCode = *ppPipelineBinary;
-            Llpc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
+            Vkgc::IPipelineDumper::DumpPipelineBinary(pPipelineDumpHandle, m_gfxIp, &pipelineBinary);
         }
-        Llpc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
+        Vkgc::IPipelineDumper::EndPipelineDump(pPipelineDumpHandle);
     }
 
     if (shaderModuleReplaced)
@@ -1266,7 +1273,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.nggState.forceNonPassthrough        = settings.nggForceNonPassthrough;
         pCreateInfo->pipelineInfo.nggState.alwaysUsePrimShaderTable   = settings.nggAlwaysUsePrimShaderTable;
         pCreateInfo->pipelineInfo.nggState.compactMode                =
-            static_cast<Llpc::NggCompactMode>(settings.nggCompactionMode);
+            static_cast<Vkgc::NggCompactMode>(settings.nggCompactionMode);
 
         pCreateInfo->pipelineInfo.nggState.enableFastLaunch           = false;
         pCreateInfo->pipelineInfo.nggState.enableVertexReuse          = false;
@@ -1280,16 +1287,17 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.nggState.backfaceExponent           = settings.nggBackfaceExponent;
         pCreateInfo->pipelineInfo.nggState.subgroupSizing             =
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 26
-            static_cast<Llpc::NggSubgroupSizingType>(settings.nggSubgroupSizing);
+            static_cast<Vkgc::NggSubgroupSizingType>(settings.nggSubgroupSizing);
 #else
             (settings.nggSubgroupSizing == NggSubgroupSizingType::NggSubgroupAuto) ?
-            Llpc::NggSubgroupSizingType::MaximumSize :
-            static_cast<Llpc::NggSubgroupSizingType>(static_cast<uint32_t>(settings.nggSubgroupSizing) - 1);
+            Vkgc::NggSubgroupSizingType::MaximumSize :
+            static_cast<Vkgc::NggSubgroupSizingType>(static_cast<uint32_t>(settings.nggSubgroupSizing) - 1);
 #endif
         pCreateInfo->pipelineInfo.nggState.primsPerSubgroup           = settings.nggPrimsPerSubgroup;
         pCreateInfo->pipelineInfo.nggState.vertsPerSubgroup           = settings.nggVertsPerSubgroup;
     }
 
+    pCreateInfo->flags = flags;
     ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options);
 
     if (pLayout != nullptr)
@@ -1320,7 +1328,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     }
 
     // Build the LLPC pipeline
-    Llpc::PipelineShaderInfo* shaderInfos[] =
+    Vkgc::PipelineShaderInfo* shaderInfos[] =
     {
         &pCreateInfo->pipelineInfo.vs,
         &pCreateInfo->pipelineInfo.tcs,
@@ -1359,7 +1367,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pShaderInfo->pSpecializationInfo   = pStage->pSpecializationInfo;
         pShaderInfo->pEntryTarget          = pStage->pName;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
-        pShaderInfo->entryStage = static_cast<Llpc::ShaderStage>(stage);
+        pShaderInfo->entryStage = static_cast<Vkgc::ShaderStage>(stage);
 #endif
         // Build the resource mapping description for LLPC.  This data contains things about how shader
         // inputs like descriptor set bindings are communicated to this pipeline in a form that LLPC can
@@ -1458,7 +1466,7 @@ uint32_t PipelineCompiler::GetCompilerCollectionMask()
 void PipelineCompiler::ApplyPipelineOptions(
     const Device*            pDevice,
     VkPipelineCreateFlags    flags,
-    Llpc::PipelineOptions*   pOptions)
+    Vkgc::PipelineOptions*   pOptions)
 {
     if (pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_INFO) ||
         (pDevice->IsExtensionEnabled(DeviceExtensions::KHR_PIPELINE_EXECUTABLE_PROPERTIES) &&
@@ -1542,7 +1550,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
     pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
-    pCreateInfo->pipelineInfo.cs.entryStage          = Llpc::ShaderStageCompute;
+    pCreateInfo->pipelineInfo.cs.entryStage          = Vkgc::ShaderStageCompute;
 #endif
 
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 31
@@ -1589,7 +1597,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 // Set any non-zero shader option defaults
 void PipelineCompiler::ApplyDefaultShaderOptions(
     ShaderStage                  stage,
-    Llpc::PipelineShaderOptions* pShaderOptions
+    Vkgc::PipelineShaderOptions* pShaderOptions
     ) const
 {
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
@@ -1619,7 +1627,7 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
     }
 
     pShaderOptions->wgpMode       = ((settings.enableWgpMode & (1 << stage)) != 0);
-    pShaderOptions->waveBreakSize = static_cast<Llpc::WaveBreakSize>(settings.waveBreakSize);
+    pShaderOptions->waveBreakSize = static_cast<Vkgc::WaveBreakSize>(settings.waveBreakSize);
 
 }
 
@@ -1629,10 +1637,10 @@ void PipelineCompiler::ApplyProfileOptions(
     Device*                      pDevice,
     ShaderStage                  stage,
     ShaderModule*                pShaderModule,
-    Llpc::PipelineOptions*       pPipelineOptions,
-    Llpc::PipelineShaderInfo*    pShaderInfo,
+    Vkgc::PipelineOptions*       pPipelineOptions,
+    Vkgc::PipelineShaderInfo*    pShaderInfo,
     PipelineOptimizerKey*        pProfileKey
-    , Llpc::NggState*            pNggState
+    , Vkgc::NggState*            pNggState
     )
 {
     auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
@@ -1645,7 +1653,7 @@ void PipelineCompiler::ApplyProfileOptions(
     if (settings.pipelineUseShaderHashAsProfileHash)
     {
         const void* pModuleData = pShaderInfo->pModuleData;
-        shaderKey.codeHash.lower = Llpc::IPipelineDumper::GetShaderHash(pModuleData);
+        shaderKey.codeHash.lower = Vkgc::IPipelineDumper::GetShaderHash(pModuleData);
         shaderKey.codeHash.upper = 0;
     }
     else
@@ -1778,5 +1786,21 @@ Util::Result PipelineCompiler::RegisterAndLoadReinjectionBinary(
     return result;
 }
 #endif
+
+// =====================================================================================================================
+// Filter VkPipelineCreateFlags to only values used for pipeline caching
+VkPipelineCreateFlags PipelineCompiler::GetCacheIdControlFlags(
+    VkPipelineCreateFlags in)
+{
+    // The following flags should NOT affect cache computation
+    static constexpr VkPipelineCreateFlags CacheIdIgnoreFlags = { 0
+        | VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR
+        | VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR
+        | VK_PIPELINE_CREATE_DERIVATIVE_BIT
+        | VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT
+    };
+
+    return in & (~CacheIdIgnoreFlags);
+}
 
 }

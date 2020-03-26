@@ -28,6 +28,9 @@
  * @brief Contains implementation of Vulkan device object.
  ***********************************************************************************************************************
  */
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
+#define Vkgc Llpc
+#endif
 
 #ifdef VK_USE_PLATFORM_XCB_KHR
 #include <xcb/xcb.h>
@@ -81,8 +84,6 @@
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
 #endif
-
-#include "llpc.h"
 
 #include "palCmdBuffer.h"
 #include "palCmdAllocator.h"
@@ -1757,7 +1758,7 @@ VkResult Device::CreateInternalComputePipeline(
     size_t                           codeByteSize,
     const uint8_t*                   pCode,
     uint32_t                         numUserDataNodes,
-    const Llpc::ResourceMappingNode* pUserDataNodes,
+    const Vkgc::ResourceMappingNode* pUserDataNodes,
     InternalPipeline*                pInternalPipeline)
 {
     VK_ASSERT(numUserDataNodes <= VK_ARRAY_SIZE(pInternalPipeline->userDataNodeOffsets));
@@ -1789,7 +1790,7 @@ VkResult Device::CreateInternalComputePipeline(
         pShaderInfo->pSpecializationInfo = nullptr;
         pShaderInfo->pEntryTarget        = "main";
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
-        pShaderInfo->entryStage          = Llpc::ShaderStageCompute;
+        pShaderInfo->entryStage          = Vkgc::ShaderStageCompute;
 #endif
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
@@ -1894,30 +1895,30 @@ VkResult Device::CreateInternalPipelines()
     const size_t spvCodeSize = useStridedShader ?
         sizeof(CopyTimestampQueryPoolStridedSpv) : sizeof(CopyTimestampQueryPoolSpv);
 
-    Llpc::ResourceMappingNode userDataNodes[3] = {};
+    Vkgc::ResourceMappingNode userDataNodes[3] = {};
 
     const uint32_t uavViewSize = m_properties.descriptorSizes.bufferView / sizeof(uint32_t);
 
     // Timestamp counter storage view
     userDataNodes[0].type = useStridedShader ?
-        Llpc::ResourceMappingNodeType::DescriptorBuffer : Llpc::ResourceMappingNodeType::DescriptorTexelBuffer;
+        Vkgc::ResourceMappingNodeType::DescriptorBuffer : Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
     userDataNodes[0].offsetInDwords = 0;
     userDataNodes[0].sizeInDwords = uavViewSize;
     userDataNodes[0].srdRange.set = 0;
     userDataNodes[0].srdRange.binding = 0;
 
     // Copy destination storage view
-    userDataNodes[1].type = Llpc::ResourceMappingNodeType::DescriptorBuffer;
+    userDataNodes[1].type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
     userDataNodes[1].offsetInDwords = uavViewSize;
     userDataNodes[1].sizeInDwords = uavViewSize;
     userDataNodes[1].srdRange.set = 0;
     userDataNodes[1].srdRange.binding = 1;
 
     // Inline constant data
-    userDataNodes[2].type = Llpc::ResourceMappingNodeType::PushConst;
+    userDataNodes[2].type = Vkgc::ResourceMappingNodeType::PushConst;
     userDataNodes[2].offsetInDwords = 2 * uavViewSize;
     userDataNodes[2].sizeInDwords = 4;
-    userDataNodes[2].srdRange.set = Llpc::InternalDescriptorSetId;
+    userDataNodes[2].srdRange.set = Vkgc::InternalDescriptorSetId;
 
     result = CreateInternalComputePipeline(
         spvCodeSize,
@@ -3025,10 +3026,14 @@ Pal::IQueue* Device::PerformSwCompositing(
             cmdBufInfo.isValid = true;
             cmdBufInfo.p2pCmd  = true;
 
+            Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+            perSubQueueInfo.cmdBufferCount  = 1;
+            perSubQueueInfo.ppCmdBuffers    = &pCommandBuffer;
+            perSubQueueInfo.pCmdBufInfoList = &cmdBufInfo;
+
             Pal::SubmitInfo submitInfo = {};
-            submitInfo.cmdBufferCount  = 1;
-            submitInfo.pCmdBufInfoList = &cmdBufInfo;
-            submitInfo.ppCmdBuffers    = &pCommandBuffer;
+            submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+            submitInfo.perSubQueueInfoCount = 1;
 
             // Use the separate SDMA queue and synchronize the slave device's queue with the peer transfer
             if (cmdBufferQueueType == Pal::QueueType::QueueTypeDma)
@@ -3063,11 +3068,14 @@ VkResult Device::SwCompositingNotifyFlipMetadata(
         if (pPresentQueue == m_perGpu[presentationDeviceIdx].pSwCompositingQueue)
         {
             // Found the master device index for the correct dummy command buffer to use.
-            Pal::SubmitInfo submitInfo = {};
+            Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+            perSubQueueInfo.cmdBufferCount  = 1;
+            perSubQueueInfo.ppCmdBuffers    = &m_perGpu[presentationDeviceIdx].pSwCompositingCmdBuffer;
+            perSubQueueInfo.pCmdBufInfoList = &cmdBufInfo;
 
-            submitInfo.cmdBufferCount  = 1;
-            submitInfo.ppCmdBuffers    = &m_perGpu[presentationDeviceIdx].pSwCompositingCmdBuffer;
-            submitInfo.pCmdBufInfoList = &cmdBufInfo;
+            Pal::SubmitInfo submitInfo = {};
+            submitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
+            submitInfo.perSubQueueInfoCount = 1;
 
             palResult = pPresentQueue->Submit(submitInfo);
             break;
