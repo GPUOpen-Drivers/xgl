@@ -26,13 +26,23 @@
 cmake_minimum_required(VERSION 3.5)
 project(XGL VERSION 1 LANGUAGES C CXX)
 
-# Before GCC7, when LTO is enabled, undefined refernece error was observed when linking static libraries.
+# Before GCC7, when LTO is enabled, undefined reference error was observed when linking static libraries.
 # Use the gcc-ar wrapper instead of ar, this invokes ar with the right plugin arguments
 # --plugin /usr/lib/gcc/.../liblto_plugin.so
 if(UNIX)
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-        set(CMAKE_AR /usr/bin/gcc-ar)
-        set(CMAKE_RANLIB /usr/bin/gcc-ranlib)
+        find_program(GCC_AR gcc-ar)
+        if (GCC_AR)
+             set(CMAKE_AR ${GCC_AR})
+        else()
+            message(FATAL_ERROR "gcc-ar cannot be found!")
+        endif()
+        find_program(GCC_RANLIB gcc-ranlib)
+        if (GCC_RANLIB)
+            set(CMAKE_RANLIB ${GCC_RANLIB})
+        else()
+            message(FATAL_ERROR "gcc-ranlib cannot be found!")
+        endif()
     endif()
 endif()
 
