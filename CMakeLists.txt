@@ -88,6 +88,12 @@ cmake_dependent_option(XGL_BUILD_NAVI14 "Build open source vulkan for Navi14" ON
 option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
 #endif
 
+option(VKI_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES "Use experimental shader cache for pipeline caching instead of PAL pipeline caching?" OFF)
+message(STATUS "Setting VKI_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES:" ${VKI_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES})
+if(ICD_BUILD_LLPC)
+    option(LLPC_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES "Enable experimental LLPC shader cache pipelines?" ${VKI_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES})
+endif()
+
 option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 
 if(ICD_BUILD_LLPCONLY)

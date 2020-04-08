@@ -201,6 +201,16 @@ VkResult PipelineCompiler::CreateShaderCache(
     VkResult                     result         = VK_SUCCESS;
     PipelineCompilerType         cacheType      = GetShaderCacheType();
 
+#if XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+    if (cacheType == PipelineCompilerTypeLlpc)
+    {
+        result = m_compilerSolutionLlpc.CreateShaderCache(pInitialData,
+                                                          initialDataSize,
+                                                          pShaderCacheMem,
+                                                          pShaderCache);
+    }
+#endif // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+
     return result;
 }
 
@@ -210,6 +220,14 @@ size_t PipelineCompiler::GetShaderCacheSize(
     PipelineCompilerType cacheType)
 {
     size_t shaderCacheSize = 0;
+
+#if XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+    if (cacheType == PipelineCompilerTypeLlpc)
+    {
+        shaderCacheSize = m_compilerSolutionLlpc.GetShaderCacheSize(cacheType);
+    }
+#endif
+
     return shaderCacheSize;
 }
 
@@ -618,6 +636,74 @@ VkResult PipelineCompiler::CreatePartialPipelineBinary(
     return result;
 }
 
+#if XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+// These functions implement a generic primitives for retrieving and storing pipelines.
+namespace
+{
+Util::Result AsCacheResult(Util::Result result) { return result; }
+
+Util::Result AsCacheResult(Llpc::Result result)
+{
+    // Util::Result has much more possible values than Llpc::Result.
+    // Here, we support the most basic ones that are used when dealing with shader caches.
+    switch (result)
+    {
+    case Llpc::Result::Success:
+        return Util::Result::Success;
+    case Llpc::Result::ErrorUnavailable:
+        return Util::Result::NotFound;
+    case Llpc::Result::ErrorOutOfMemory:
+        return Util::Result::ErrorOutOfMemory;
+    default:
+        break;
+    }
+
+    return Util::Result::ErrorUnknown;
+}
+
+template <typename IShaderCacheTy>
+Util::Result RetrievePipeline(
+    Util::MetroHash::Hash* pHash,
+    size_t* pPipelineBinarySize,
+    const void** ppPipelineBinary,
+    Instance* pInstance,
+    IShaderCacheTy* pShaderCache)
+{
+    // Get the pipeline size.
+    auto cacheLookupResult = pShaderCache->RetrievePipeline(
+        pHash, pPipelineBinarySize, nullptr);
+    Util::Result result = AsCacheResult(cacheLookupResult);
+    if (result != Util::Result::Success)
+    {
+        return result;
+    }
+
+    *ppPipelineBinary = pInstance->AllocMem(
+        *pPipelineBinarySize,
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    auto cacheFetchResult = pShaderCache->RetrievePipeline(
+        pHash, pPipelineBinarySize, ppPipelineBinary);
+    return AsCacheResult(cacheFetchResult);
+}
+
+template <typename IShaderCacheTy>
+Util::Result StorePipelineBinary(
+    Util::MetroHash::Hash* pHash,
+    size_t* pPipelineBinarySize,
+    const void** ppPipelineBinary,
+    IShaderCacheTy* pShaderCache)
+{
+    auto storeResult = pShaderCache->StorePipelineBinary(
+        pHash, *pPipelineBinarySize, *ppPipelineBinary);
+
+    Util::Result result = AsCacheResult(storeResult);
+    VK_ASSERT(Util::IsErrorResult(result) == false);
+    return result;
+}
+} // namespace
+#endif // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+
 // =====================================================================================================================
 // Creates graphics pipeline binary.
 VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
@@ -697,6 +783,53 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 #endif
     }
 
+#if XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+    PipelineCompilerType cacheType = GetShaderCacheType();
+    Util::Result cacheResult = Util::Result::Success;
+    if (pPipelineCache != nullptr)
+    {
+        Llpc::IShaderCache* const pLlpcShaderCache =
+            pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
+
+        Util::MetroHash128 hash = {};
+
+        if (pLlpcShaderCache != nullptr)
+        {
+            hash.Update(pipelineHash);
+            hash.Update(pCreateInfo->pipelineInfo.vs.options);
+            hash.Update(pCreateInfo->pipelineInfo.tes.options);
+            hash.Update(pCreateInfo->pipelineInfo.tcs.options);
+            hash.Update(pCreateInfo->pipelineInfo.gs.options);
+            hash.Update(pCreateInfo->pipelineInfo.fs.options);
+            hash.Update(pCreateInfo->pipelineInfo.options);
+            hash.Update(pCreateInfo->flags);
+            hash.Update(pCreateInfo->dbFormat);
+            hash.Update(pCreateInfo->pipelineProfileKey);
+            hash.Update(deviceIdx);
+            hash.Update(pCreateInfo->compilerType);
+            hash.Finalize(pCacheId->bytes);
+        }
+
+        bool isHit = false;
+        if (pLlpcShaderCache != nullptr && cacheType == PipelineCompilerTypeLlpc)
+        {
+            cacheResult = RetrievePipeline(
+                pCacheId, pPipelineBinarySize, ppPipelineBinary, pInstance, pLlpcShaderCache);
+            m_cacheAttempts++;
+
+            isHit = (cacheResult == Util::Result::Success);
+        }
+        if (isHit)
+        {
+            pCreateInfo->elfWasCached = true;
+            shouldCompile             = false;
+            m_cacheHits++;
+            pCreateInfo->pipelineFeedback.hitApplicationCache = true;
+        }
+    }
+
+#else // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+
     // PAL Pipeline caching
     Util::Result                 cacheResult = Util::Result::Success;
 
@@ -740,6 +873,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
         cacheTime = Util::GetPerfCpuTime() - startTime;
     }
+#endif // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
 
     if (shouldCompile)
     {
@@ -763,17 +897,22 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         }
     }
 
-    if ((pPipelineBinaryCache != nullptr) &&
-        (isUserCacheHit == false) &&
-        (result == VK_SUCCESS))
+#if XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+    if ((pPipelineCache != nullptr) &&
+        (result == VK_SUCCESS) &&
+        (cacheResult == Util::Result::NotFound))
     {
-        cacheResult = pPipelineBinaryCache->StorePipelineBinary(
-            pCacheId,
-            *pPipelineBinarySize,
-            *ppPipelineBinary);
+        Llpc::IShaderCache* const pLlpcShaderCache =
+            pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
 
-        VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
+        if (cacheType == PipelineCompilerTypeLlpc && pLlpcShaderCache != nullptr)
+        {
+            cacheResult = StorePipelineBinary(
+                pCacheId, pPipelineBinarySize, ppPipelineBinary, pLlpcShaderCache);
+        }
     }
+
+#else // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
 
     if ((m_pBinaryCache != nullptr) &&
         (isInternalCacheHit == false) &&
@@ -789,6 +928,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     m_totalTimeSpent += pCreateInfo->elfWasCached ? cacheTime : compileTime;
     m_totalBinaries++;
+#endif // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
@@ -888,6 +1028,49 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         }
     }
 
+#if XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+    PipelineCompilerType cacheType = GetShaderCacheType();
+    Util::Result cacheResult = Util::Result::Success;
+    if (pPipelineCache != nullptr)
+    {
+        Llpc::IShaderCache* const pLlpcShaderCache =
+            pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
+
+        Util::MetroHash128 hash = {};
+
+        if (pLlpcShaderCache != nullptr)
+        {
+            hash.Update(pipelineHash);
+            hash.Update(pCreateInfo->pipelineInfo.cs.options);
+            hash.Update(pCreateInfo->pipelineInfo.options);
+            hash.Update(pCreateInfo->flags);
+            hash.Update(pCreateInfo->pipelineProfileKey);
+            hash.Update(deviceIdx);
+            hash.Update(pCreateInfo->compilerType);
+            hash.Finalize(pCacheId->bytes);
+        }
+
+        bool isHit = false;
+        if (pLlpcShaderCache != nullptr && cacheType == PipelineCompilerTypeLlpc)
+        {
+            cacheResult = RetrievePipeline(
+                pCacheId, pPipelineBinarySize, ppPipelineBinary, pInstance, pLlpcShaderCache);
+            m_cacheAttempts++;
+
+            isHit = (cacheResult == Util::Result::Success);
+        }
+
+        if (isHit)
+        {
+            pCreateInfo->elfWasCached = true;
+            shouldCompile             = false;
+            m_cacheHits++;
+            pCreateInfo->pipelineFeedback.hitApplicationCache = true;
+        }
+    }
+
+#else // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+
     // PAL Pipeline caching
     Util::Result                 cacheResult = Util::Result::Success;
 
@@ -925,6 +1108,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
         cacheTime = Util::GetPerfCpuTime() - startTime;
     }
+#endif // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
 
     if (shouldCompile)
     {
@@ -945,6 +1129,23 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
         }
     }
+
+#if XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+    if ((pPipelineCache != nullptr) &&
+        (result == VK_SUCCESS) &&
+        (cacheResult == Util::Result::NotFound))
+    {
+        Llpc::IShaderCache* const pLlpcShaderCache =
+            pPipelineCache->GetShaderCache(deviceIdx).GetCachePtr().pLlpcShaderCache;
+
+        if (cacheType == PipelineCompilerTypeLlpc && pLlpcShaderCache != nullptr)
+        {
+            cacheResult = StorePipelineBinary(
+                pCacheId, pPipelineBinarySize, ppPipelineBinary, pLlpcShaderCache);
+        }
+    }
+
+#else // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
 
     if ((pPipelineBinaryCache != nullptr) &&
         (isUserCacheHit == false) &&
@@ -972,6 +1173,8 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
     m_totalTimeSpent += pCreateInfo->elfWasCached ? cacheTime : compileTime;
     m_totalBinaries++;
+#endif // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINESE
+
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
         ReplacePipelineIsaCode(pDevice, pipelineHash, *ppPipelineBinary, *pPipelineBinarySize);

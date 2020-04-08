@@ -91,8 +91,16 @@ void CompilerSolutionLlpc::Destroy()
 size_t CompilerSolutionLlpc::GetShaderCacheSize(
     PipelineCompilerType cacheType)
 {
+    size_t shaderCacheSize = 0;
+
+#if XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+    VK_ASSERT(cacheType == PipelineCompilerTypeLlpc);
+
+#else // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
     VK_NEVER_CALLED();
-    return 0;
+#endif // XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
+
+    return shaderCacheSize;
 }
 
 // =====================================================================================================================
@@ -113,7 +121,7 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
     llpcCacheCreateInfo.pInitialData    = pInitialData;
     llpcCacheCreateInfo.initialDataSize = initialDataSize;
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 38
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 38 || XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
     Vkgc::Result llpcResult = m_pLlpc->CreateShaderCache(
         &llpcCacheCreateInfo,
         &shaderCachePtr.pLlpcShaderCache);

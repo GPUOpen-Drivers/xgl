@@ -247,7 +247,7 @@ VkResult PipelineCache::GetData(
 
     VkResult        result = VK_SUCCESS;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 534
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 534 && !XGL_USE_EXPERIMENTAL_SHADER_CACHE_PIPELINES
     if (m_pBinaryCache != nullptr)
     {
         result = m_pBinaryCache->Serialize(pData, pSize);
@@ -435,8 +435,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(
         {
             void* pPrivateData = Util::VoidPtrInc(pData, HeaderSize);
             result = pCache->GetData(pPrivateData, &privateDataSize);
-            *pDataSize = privateDataSize + HeaderSize;
         }
+        *pDataSize = fullDataSize;
     }
 
     return result;
