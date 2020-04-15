@@ -32,10 +32,6 @@
 #ifndef __VK_ICD_H_PROXY__
 #define __VK_ICD_H_PROXY__
 
-#if VKI_SDK_1_2
 #include "sdk-1.2/vk_icd.h"
-#else
-#include "sdk-1.1/vk_icd.h"
-#endif
 
 #endif /* __VK_ICD_H_PROXY__ */

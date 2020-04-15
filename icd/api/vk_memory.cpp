@@ -210,7 +210,7 @@ VkResult Memory::Create(
 
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
                 // Test if capture replay has been specified for the memory allocation
-                if (pMemoryAllocateFlags->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT_KHR)
+                if (pMemoryAllocateFlags->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT)
                 {
                     createInfo.vaRange = Pal::VaRange::CaptureReplay;
                 }
@@ -242,10 +242,10 @@ VkResult Memory::Create(
             break;
 
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
-            case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO_KHR:
+            case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO:
             {
-                const VkMemoryOpaqueCaptureAddressAllocateInfoKHR* pMemOpaqueCaptureAddressAllocateInfo =
-                    reinterpret_cast<const VkMemoryOpaqueCaptureAddressAllocateInfoKHR *>(pHeader);
+                const VkMemoryOpaqueCaptureAddressAllocateInfo* pMemOpaqueCaptureAddressAllocateInfo =
+                    reinterpret_cast<const VkMemoryOpaqueCaptureAddressAllocateInfo *>(pHeader);
 
                 VkDeviceAddress baseVaAddress = pMemOpaqueCaptureAddressAllocateInfo->opaqueCaptureAddress;
                 if (baseVaAddress != 0)
@@ -1372,9 +1372,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdPropertiesKHR(
 #endif
 
 // =====================================================================================================================
-VKAPI_ATTR uint64_t VKAPI_CALL vkGetDeviceMemoryOpaqueCaptureAddressKHR(
+VKAPI_ATTR uint64_t VKAPI_CALL vkGetDeviceMemoryOpaqueCaptureAddress(
     VkDevice                                         device,
-    const VkDeviceMemoryOpaqueCaptureAddressInfoKHR* pInfo)
+    const VkDeviceMemoryOpaqueCaptureAddressInfo*    pInfo)
 {
     const Memory* pMemory = Memory::ObjectFromHandle(pInfo->memory);
 

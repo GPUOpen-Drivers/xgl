@@ -95,7 +95,7 @@ void VertBufBindingMgr::BindVertexBuffers(
     const VkDeviceSize* pInOffsets)
 {
     utils::IterateMask deviceGroup(pCmdBuf->GetDeviceMask());
-    while (deviceGroup.Iterate())
+    do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
@@ -131,6 +131,7 @@ void VertBufBindingMgr::BindVertexBuffers(
         pCmdBuf->PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(
             firstBinding, bindingCount, &m_bindings[deviceIdx][firstBinding]);
     }
+    while (deviceGroup.IterateNext());
 }
 
 // =====================================================================================================================
@@ -146,7 +147,7 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
     // Update strides for each binding used by the graphics pipeline.  Rebuild SRD data for those bindings
     // whose strides changed.
     utils::IterateMask deviceGroup(pCmdBuf->GetDeviceMask());
-    while (deviceGroup.Iterate())
+    do
     {
         uint32_t deviceIdx = deviceGroup.Index();
 
@@ -177,6 +178,7 @@ void VertBufBindingMgr::GraphicsPipelineChanged(
                 firstChanged, (lastChanged - firstChanged) + 1, &m_bindings[deviceIdx][firstChanged]);
         }
     }
+    while (deviceGroup.IterateNext());
 }
 }//namespace vk
 

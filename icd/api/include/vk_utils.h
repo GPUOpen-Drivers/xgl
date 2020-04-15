@@ -34,6 +34,7 @@
 
 #pragma once
 
+#include "vk_defines.h"
 #include "include/khronos/vulkan.h"
 #include "pal.h"
 #include "palAssert.h"
@@ -126,14 +127,14 @@ namespace utils
 {
 
 // =====================================================================================================================
-// this function can be used to get the right externsion structure of specific type in case there are more than one
-// externsion is supported
-VK_INLINE const VkStructHeader * GetExtensionStructure(const VkStructHeader* pHeader, VkStructureType type)
+// This function can be used to get the right externsion structure of specific type in case there are more than one
+// extension is supported
+VK_INLINE const VkStructHeader* GetExtensionStructure(const VkStructHeader* pHeader, VkStructureType sType)
 {
     const VkStructHeader* pIter = pHeader;
     while(pIter != nullptr)
     {
-        if (pIter->sType == type)
+        if (pIter->sType == sType)
         {
             return pIter;
         }
@@ -143,6 +144,16 @@ VK_INLINE const VkStructHeader * GetExtensionStructure(const VkStructHeader* pHe
         }
     }
     return nullptr;
+}
+
+// =====================================================================================================================
+template<typename ExtStruct, typename SrcStruct>
+VK_INLINE const ExtStruct* GetExtensionStructure(
+    const SrcStruct* pHeader,
+    VkStructureType  sType)
+{
+    return reinterpret_cast<const ExtStruct*>(
+        GetExtensionStructure(reinterpret_cast<const VkStructHeader*>(pHeader), sType));
 }
 
 // =====================================================================================================================
@@ -245,14 +256,25 @@ public:
     VK_INLINE IterateMask(uint32_t mask) :
         m_index(0),
         m_mask(mask)
-    {}
-
-    VK_INLINE bool Iterate()
     {
-        if (Util::BitMaskScanForward(&m_index, m_mask) == true)
+        if (MaxPalDevices > 1)
         {
-            m_mask ^= (1 << m_index);
-            return true;
+            if (Util::BitMaskScanForward(&m_index, m_mask) == true)
+            {
+                m_mask ^= (1 << m_index);
+            }
+        }
+    }
+
+    VK_INLINE bool IterateNext()
+    {
+        if (MaxPalDevices > 1)
+        {
+            if (Util::BitMaskScanForward(&m_index, m_mask) == true)
+            {
+                m_mask ^= (1 << m_index);
+                return true;
+            }
         }
         return false;
     }

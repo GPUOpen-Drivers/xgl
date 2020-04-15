@@ -59,7 +59,7 @@ Buffer::Buffer(
     m_internalFlags.usageUniformBuffer    = (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
     m_internalFlags.createSparseBinding   = (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
     m_internalFlags.createSparseResidency = (flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
-    // Note: The VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT_KHR is only used in vk_memory objects.
+    // Note: The VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT is only used in vk_memory objects.
 
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {
@@ -568,9 +568,9 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR(
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddress(
     VkDevice                                    device,
-    const VkBufferDeviceAddressInfoKHR* const   pInfo)
+    const VkBufferDeviceAddressInfo* const      pInfo)
 {
     Buffer* const pBuffer = Buffer::ObjectFromHandle(pInfo->buffer);
 
@@ -578,12 +578,12 @@ VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR uint64_t VKAPI_CALL vkGetBufferOpaqueCaptureAddressKHR(
+VKAPI_ATTR uint64_t VKAPI_CALL vkGetBufferOpaqueCaptureAddress(
     VkDevice                                    device,
-    const VkBufferDeviceAddressInfoKHR*         pInfo)
+    const VkBufferDeviceAddressInfo*            pInfo)
 {
-    // Returning 0 for vkGetBufferOpaqueCaptureAddressKHR, as this function is used by implementations that allocate
-    // VA at buffer creation. Applications should just use vkGetBufferDeviceAddressKHR for our implementation.
+    // Returning 0 for vkGetBufferOpaqueCaptureAddress, as this function is used by implementations that allocate
+    // VA at buffer creation. Applications should just use vkGetBufferDeviceAddress for our implementation.
     return 0;
 }
 

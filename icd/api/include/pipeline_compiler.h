@@ -77,7 +77,7 @@ public:
         const Device*          pDevice,
         VkPipelineCreateFlags  flags,
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-        Vkgc:PipelineOptions* pOptions);
+        Vkgc::PipelineOptions* pOptions);
 #else
         Llpc::PipelineOptions* pOptions);
 #endif

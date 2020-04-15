@@ -65,8 +65,8 @@ struct AttachmentReference
 {
     AttachmentReference();
 
-    void Init(const VkAttachmentReference&      attachRef);
-    void Init(const VkAttachmentReference2KHR&  attachRef);
+    void Init(const VkAttachmentReference&  attachRef);
+    void Init(const VkAttachmentReference2& attachRef);
 
     uint32_t              attachment;
     VkImageLayout         layout;
@@ -78,8 +78,8 @@ struct AttachmentDescription
 {
     AttachmentDescription();
 
-    void Init(const VkAttachmentDescription&     attachDesc);
-    void Init(const VkAttachmentDescription2KHR& attachDesc);
+    void Init(const VkAttachmentDescription&  attachDesc);
+    void Init(const VkAttachmentDescription2& attachDesc);
 
     VkAttachmentDescriptionFlags    flags;
     VkFormat                        format;
@@ -122,7 +122,7 @@ struct SubpassDescription
 
     void Init(
         uint32_t                        subpassIndex,
-        const VkSubpassDescription2KHR& subpassDesc,
+        const VkSubpassDescription2&    subpassDesc,
         const RenderPassExtCreateInfo&  renderPassExt,
         const AttachmentDescription*    pAttachments,
         uint32_t                        attachmentCount,
@@ -141,8 +141,8 @@ struct SubpassDescription
     uint32_t                    preserveAttachmentCount;
     uint32_t*                   pPreserveAttachments;
 
-    VkResolveModeFlagBitsKHR    depthResolveMode;
-    VkResolveModeFlagBitsKHR    stencilResolveMode;
+    VkResolveModeFlagBits       depthResolveMode;
+    VkResolveModeFlagBits       stencilResolveMode;
     AttachmentReference         depthStencilResolveAttachment;
 
     SubpassSampleCount          subpassSampleCount;
@@ -159,7 +159,7 @@ struct SubpassDependency
 
     void Init(
         uint32_t                        subpassDepIndex,
-        const VkSubpassDependency2KHR&  subpassDep,
+        const VkSubpassDependency2&     subpassDep,
         const RenderPassExtCreateInfo&  renderPassExt);
 
     uint32_t                srcSubpass;
@@ -183,7 +183,7 @@ struct RenderPassCreateInfo
         size_t                              memorySize);
 
     void Init(
-        const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+        const VkRenderPassCreateInfo2*      pCreateInfo,
         const RenderPassExtCreateInfo&      renderPassExt,
         void*                               pMemoryPtr,
         size_t                              memorySize);
@@ -214,7 +214,7 @@ public:
 
     static VkResult Create(
         Device*                             pDevice,
-        const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+        const VkRenderPassCreateInfo2*      pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
         VkRenderPass*                       pRenderPass);
 
@@ -231,10 +231,10 @@ public:
 
     uint32_t GetColorAttachmentSamples(uint32_t subPassIndex, uint32_t colorTarget) const;
     uint32_t GetDepthStencilAttachmentSamples(uint32_t subPassIndex) const;
-    VK_INLINE VkResolveModeFlagBitsKHR GetDepthResolveMode(uint32_t subpass) const
+    VK_INLINE VkResolveModeFlagBits GetDepthResolveMode(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].depthResolveMode; }
 
-    VK_INLINE VkResolveModeFlagBitsKHR GetStencilResolveMode(uint32_t subpass) const
+    VK_INLINE VkResolveModeFlagBits GetStencilResolveMode(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].stencilResolveMode; }
 
     uint32_t GetSubpassColorReferenceCount(uint32_t subPassIndex) const;

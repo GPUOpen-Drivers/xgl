@@ -22,12 +22,9 @@
 **
 */
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
 
 #define VK_EXT_acquire_xlib_display 1
 #define VK_EXT_ACQUIRE_XLIB_DISPLAY_SPEC_VERSION 1

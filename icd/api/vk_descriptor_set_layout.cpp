@@ -86,8 +86,8 @@ uint64_t DescriptorSetLayout::BuildApiHash(
     {
         union
         {
-            const VkStructHeader*                                 pInfo;
-            const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT* pBindingFlagsCreateInfo;
+            const VkStructHeader*                              pInfo;
+            const VkDescriptorSetLayoutBindingFlagsCreateInfo* pBindingFlagsCreateInfo;
         };
 
         pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
@@ -96,7 +96,7 @@ uint64_t DescriptorSetLayout::BuildApiHash(
         {
             switch (static_cast<uint32_t>(pInfo->sType))
             {
-            case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT:
+            case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO:
                 hasher.Update(pBindingFlagsCreateInfo->sType);
                 hasher.Update(pBindingFlagsCreateInfo->bindingCount);
 
@@ -418,9 +418,9 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
     union
     {
-        const VkStructHeader*                                 pHeader;
-        const VkDescriptorSetLayoutCreateInfo*                pInfo;
-        const VkDescriptorSetLayoutBindingFlagsCreateInfoEXT* pBindingFlags;
+        const VkStructHeader*                              pHeader;
+        const VkDescriptorSetLayoutCreateInfo*             pInfo;
+        const VkDescriptorSetLayoutBindingFlagsCreateInfo* pBindingFlags;
     };
 
     pOut->activeStageMask = VK_SHADER_STAGE_ALL; // TODO set this up properly enumerating the active stages.
@@ -447,19 +447,19 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
                EXTRACT_VK_STRUCTURES_0(
                    BindingFlag,
-                   DescriptorSetLayoutBindingFlagsCreateInfoEXT,
+                   DescriptorSetLayoutBindingFlagsCreateInfo,
                    pBindingFlags,
-                   DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO_EXT)
+                   DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO)
 
-                if (pDescriptorSetLayoutBindingFlagsCreateInfoEXT != nullptr)
+                if (pDescriptorSetLayoutBindingFlagsCreateInfo != nullptr)
                 {
-                    VK_ASSERT(pDescriptorSetLayoutBindingFlagsCreateInfoEXT->bindingCount == pInfo->bindingCount);
+                    VK_ASSERT(pDescriptorSetLayoutBindingFlagsCreateInfo->bindingCount == pInfo->bindingCount);
 
                     for (uint32_t inIndex = 0; inIndex < pInfo->bindingCount; ++inIndex)
                     {
                         const VkDescriptorSetLayoutBinding& currentBinding = pInfo->pBindings[inIndex];
                         pOutBindings[currentBinding.binding].bindingFlags  =
-                            pDescriptorSetLayoutBindingFlagsCreateInfoEXT->pBindingFlags[inIndex];
+                            pDescriptorSetLayoutBindingFlagsCreateInfo->pBindingFlags[inIndex];
                     }
                 }
 
@@ -467,8 +467,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                 // We compute offsets using the size we've seen so far as we iterate, so we need to handle
                 // the bindings in binding-number order, rather than array order.
 
-                VK_IGNORE(pInfo->flags & VK_DESCRIPTOR_POOL_CREATE_UPDATE_AFTER_BIND_BIT_EXT);
-                VK_IGNORE(pInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT_EXT);
+                VK_IGNORE(pInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
 
                 // First, copy the binding info into our output array in order.
                 for (uint32_t inIndex = 0; inIndex < pInfo->bindingCount; ++inIndex)
@@ -489,7 +488,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
 
                     // If the last binding has the VARIABLE_DESCRIPTOR_COUNT_BIT set, write the varDescDwStride
                     if ((bindingNumber == (pOut->count - 1)) &&
-                        (pBinding->bindingFlags & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT))
+                        (pBinding->bindingFlags & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT))
                     {
                         pOut->varDescStride = GetSingleDescStaticSize(pDevice, pBinding->info.descriptorType);
                     }

@@ -22,12 +22,9 @@
 **
 */
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
 
 #define VK_GGP_stream_descriptor_surface 1
 #define VK_GGP_STREAM_DESCRIPTOR_SURFACE_SPEC_VERSION 1
@@ -50,7 +47,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateStreamDescriptorSurfaceGGP(
     VkSurfaceKHR*                               pSurface);
 #endif
 
-
 #define VK_GGP_frame_token 1
 #define VK_GGP_FRAME_TOKEN_SPEC_VERSION   1
 #define VK_GGP_FRAME_TOKEN_EXTENSION_NAME "VK_GGP_frame_token"
@@ -59,7 +55,6 @@ typedef struct VkPresentFrameTokenGGP {
     const void*        pNext;
     GgpFrameToken      frameToken;
 } VkPresentFrameTokenGGP;
-
 
 #ifdef __cplusplus
 }

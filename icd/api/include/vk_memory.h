@@ -266,9 +266,9 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryCommitment(
     VkDeviceMemory                              memory,
     VkDeviceSize*                               pCommittedMemoryInBytes);
 
-VKAPI_ATTR uint64_t VKAPI_CALL vkGetDeviceMemoryOpaqueCaptureAddressKHR(
+VKAPI_ATTR uint64_t VKAPI_CALL vkGetDeviceMemoryOpaqueCaptureAddress(
     VkDevice                                         device,
-    const VkDeviceMemoryOpaqueCaptureAddressInfoKHR* pInfo);
+    const VkDeviceMemoryOpaqueCaptureAddressInfo*    pInfo);
 
 #if defined(__unix__)
 VKAPI_ATTR void VKAPI_CALL vkGetDeviceMemoryFDAMD(

@@ -737,7 +737,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyQueryPool(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR void VKAPI_CALL vkResetQueryPoolEXT(
+VKAPI_ATTR void VKAPI_CALL vkResetQueryPool(
     VkDevice                                    device,
     VkQueryPool                                 queryPool,
     uint32_t                                    firstQuery,

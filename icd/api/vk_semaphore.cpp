@@ -140,7 +140,7 @@ VkResult Semaphore::Create(
     {
         const VkStructHeader*                pHeader;
         const VkSemaphoreCreateInfo*         pInfo;
-        const VkSemaphoreTypeCreateInfoKHR*  pTypeInfo;
+        const VkSemaphoreTypeCreateInfo*     pTypeInfo;
         const VkExportSemaphoreCreateInfo*   pExportSemaphoreCreateInfo;
     };
     for (pInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -151,10 +151,10 @@ VkResult Semaphore::Create(
         {
             break;
         }
-        case VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO_KHR:
+        case VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO:
         {
             // mark this semaphore is timeline or not
-            palCreateInfo.flags.timeline = (pTypeInfo->semaphoreType == VK_SEMAPHORE_TYPE_TIMELINE_KHR);
+            palCreateInfo.flags.timeline = (pTypeInfo->semaphoreType == VK_SEMAPHORE_TYPE_TIMELINE);
             palCreateInfo.initialCount   = pTypeInfo->initialValue;
 
             break;

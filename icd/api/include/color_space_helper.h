@@ -88,6 +88,11 @@ public:
         return (GetBitFormat(palFormat) & bitSupport) != 0;
     }
 
+    static bool IsFmtHdr(const Fmts& format)
+    {
+        return (format.fmtSupported == FmtSupport::Fmt_KnownHDR);
+    }
+
 private:
 
     static FmtSupport GetBitFormat(Pal::ChNumFormat palFormat);

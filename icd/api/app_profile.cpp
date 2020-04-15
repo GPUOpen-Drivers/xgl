@@ -601,7 +601,6 @@ AppProfile ScanApplicationProfile(
 
     AppProfile profile = AppProfile::Default;
 
-
     // Generate hashes for all of the tested pattern entries
     Util::MetroHash::Hash hashes[PatternCount] = {};
     char* texts[PatternCount] = {};

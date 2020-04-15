@@ -75,6 +75,7 @@ SwapChain::SwapChain(
     m_properties(properties),
     m_nextImage(0),
     m_pPalSwapChain(pPalSwapChain),
+    m_colorParams({}),
     m_pFullscreenMgr(pFullscreenMgr),
     m_pSwCompositor(nullptr),
     m_appOwnedImageCount(0),
@@ -289,6 +290,8 @@ VkResult SwapChain::Create(
     {
         palResult = pScreen->GetProperties(&screenProperties);
         VK_ASSERT(palResult == Pal::Result::Success);
+
+        properties.displayableInfo.pScreen = pScreen;
     }
 
     // Determine if SW compositing is also required for fullscreen exclusive mode by querying for HW compositing support
@@ -676,6 +679,13 @@ void SwapChain::PostPresent(
     m_appOwnedImageCount--;
     m_presentCount++;
 }
+// =====================================================================================================================
+// Called after full screen has been acquired so the color params can bet set correctly
+void SwapChain::AcquireFullScreenProperties()
+{
+    m_colorParams.format     = VkToPalFormat(m_properties.fullscreenSurfaceFormat.format).format;
+    m_colorParams.colorSpace = VkToPalScreenSpace(m_properties.fullscreenSurfaceFormat);
+}
 
 // =====================================================================================================================
 // Gets an array of presentable images associated with the swapchain.
@@ -840,8 +850,9 @@ void SwapChain::SetHdrMetadata(
 {
     Pal::IScreen* pPalScreen = m_properties.displayableInfo.pScreen;
 
-    // HDR is only supported for display window system at present.
-    if (m_properties.displayableInfo.icdPlatform != VK_ICD_WSI_PLATFORM_DISPLAY)
+    // HDR is only supported for display window system and Windows at present
+    if ((m_properties.displayableInfo.icdPlatform != VK_ICD_WSI_PLATFORM_DISPLAY) &&
+        (m_properties.displayableInfo.icdPlatform != VK_ICD_WSI_PLATFORM_WIN32))
     {
         return;
     }
@@ -853,31 +864,35 @@ void SwapChain::SetHdrMetadata(
     auto ConvertUnits        = [] (float input) { return static_cast<uint32_t>(static_cast<double>(input) * 50000.0); };
     auto ConvertMinLuminance = [] (float input) { return static_cast<uint32_t>(static_cast<double>(input) * 10000.0); };
 
-    Pal::ScreenColorConfig colorParams = {};
+    m_colorParams.format     = VkToPalFormat(m_properties.surfaceFormat.format).format;
+    m_colorParams.colorSpace = VkToPalScreenSpace(m_properties.surfaceFormat);
 
-    colorParams.format     = VkToPalFormat(m_properties.surfaceFormat.format).format;
-    colorParams.colorSpace = VkToPalScreenSpace(m_properties.surfaceFormat);
-
-    colorParams.userDefinedColorGamut.chromaticityRedX          = ConvertUnits(pMetadata->displayPrimaryRed.x);
-    colorParams.userDefinedColorGamut.chromaticityRedY          = ConvertUnits(pMetadata->displayPrimaryRed.y);
-    colorParams.userDefinedColorGamut.chromaticityGreenX        = ConvertUnits(pMetadata->displayPrimaryGreen.x);
-    colorParams.userDefinedColorGamut.chromaticityGreenY        = ConvertUnits(pMetadata->displayPrimaryGreen.y);
-    colorParams.userDefinedColorGamut.chromaticityBlueX         = ConvertUnits(pMetadata->displayPrimaryBlue.x);
-    colorParams.userDefinedColorGamut.chromaticityBlueY         = ConvertUnits(pMetadata->displayPrimaryBlue.y);
-    colorParams.userDefinedColorGamut.chromaticityWhitePointX   = ConvertUnits(pMetadata->whitePoint.x);
-    colorParams.userDefinedColorGamut.chromaticityWhitePointY   = ConvertUnits(pMetadata->whitePoint.y);
-    colorParams.userDefinedColorGamut.minLuminance              = ConvertMinLuminance(pMetadata->minLuminance);
-    colorParams.userDefinedColorGamut.maxLuminance              = static_cast<uint32_t>(pMetadata->maxLuminance);
+    m_colorParams.userDefinedColorGamut.chromaticityRedX          = ConvertUnits(pMetadata->displayPrimaryRed.x);
+    m_colorParams.userDefinedColorGamut.chromaticityRedY          = ConvertUnits(pMetadata->displayPrimaryRed.y);
+    m_colorParams.userDefinedColorGamut.chromaticityGreenX        = ConvertUnits(pMetadata->displayPrimaryGreen.x);
+    m_colorParams.userDefinedColorGamut.chromaticityGreenY        = ConvertUnits(pMetadata->displayPrimaryGreen.y);
+    m_colorParams.userDefinedColorGamut.chromaticityBlueX         = ConvertUnits(pMetadata->displayPrimaryBlue.x);
+    m_colorParams.userDefinedColorGamut.chromaticityBlueY         = ConvertUnits(pMetadata->displayPrimaryBlue.y);
+    m_colorParams.userDefinedColorGamut.chromaticityWhitePointX   = ConvertUnits(pMetadata->whitePoint.x);
+    m_colorParams.userDefinedColorGamut.chromaticityWhitePointY   = ConvertUnits(pMetadata->whitePoint.y);
+    m_colorParams.userDefinedColorGamut.minLuminance              = ConvertMinLuminance(pMetadata->minLuminance);
+    m_colorParams.userDefinedColorGamut.maxLuminance              = static_cast<uint32_t>(pMetadata->maxLuminance);
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 512
-    colorParams.userDefinedColorGamut.maxFrameAverageLightLevel = static_cast<uint32_t>(
-                                                                  pMetadata->maxFrameAverageLightLevel);
+    m_colorParams.userDefinedColorGamut.maxFrameAverageLightLevel = static_cast<uint32_t>(
+                                                                    pMetadata->maxFrameAverageLightLevel);
 #endif
 
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 506
-    colorParams.userDefinedColorGamut.maxContentLightLevel    = static_cast<uint32_t>(pMetadata->maxContentLightLevel);
+    m_colorParams.userDefinedColorGamut.maxContentLightLevel    = static_cast<uint32_t>(pMetadata->maxContentLightLevel);
 #endif
 
-    pPalScreen->SetColorConfiguration(&colorParams);
+    // TODO: I don't know if average luminance is important, but VK_EXT_hdr_metadata does not currently expose it.
+    // ie. palGamut.avgLuminance = ConvertUnits(pMetadata->avgLuminance);
+
+    {
+        VkResult result = PalToVkResult(pPalScreen->SetColorConfiguration(&m_colorParams));
+        VK_ASSERT(result == VK_SUCCESS);
+    }
 }
 
 // =====================================================================================================================
@@ -900,8 +915,6 @@ FullscreenMgr::FullscreenMgr(
     m_mode(mode)
 {
     VK_ASSERT(m_pScreen != nullptr);
-
-    pScreen->GetColorCapabilities(&m_colorCaps);
 }
 
 // =====================================================================================================================
@@ -958,9 +971,8 @@ bool FullscreenMgr::TryEnterExclusive(
 
                         if (m_mode != Implicit)
                         {
-                            m_colorParams.format              = VkToPalFormat(props.fullscreenSurfaceFormat.format).format;
-                            m_colorParams.colorSpace          = VkToPalScreenSpace(props.fullscreenSurfaceFormat);
-                            m_pScreen->SetColorConfiguration(&m_colorParams);
+                            pSwapChain->AcquireFullScreenProperties();
+                            m_pScreen->SetColorConfiguration(&pSwapChain->GetColorParams());
                         }
                     }
                 }
@@ -1001,39 +1013,6 @@ bool FullscreenMgr::TryExitExclusive(
     m_exclusiveModeFlags.acquired = 0;
 
     return true;
-}
-
-// =====================================================================================================================
-VkResult FullscreenMgr::SetHdrMetadata(
-    Device*                    pDevice,
-    const VkHdrMetadataEXT*    pMetadata)
-{
-    Pal::ColorGamut& palGamut = m_colorParams.userDefinedColorGamut;
-
-    auto ConvertUnits = [] (float input) { return static_cast<uint32_t>(static_cast<double>(input) * 10000.0); };
-
-    palGamut.chromaticityRedX         = ConvertUnits(pMetadata->displayPrimaryRed.x);
-    palGamut.chromaticityRedY         = ConvertUnits(pMetadata->displayPrimaryRed.y);
-    palGamut.chromaticityGreenX       = ConvertUnits(pMetadata->displayPrimaryGreen.x);
-    palGamut.chromaticityGreenY       = ConvertUnits(pMetadata->displayPrimaryGreen.y);
-    palGamut.chromaticityBlueX        = ConvertUnits(pMetadata->displayPrimaryBlue.x);
-    palGamut.chromaticityBlueY        = ConvertUnits(pMetadata->displayPrimaryBlue.y);
-    palGamut.chromaticityWhitePointX  = ConvertUnits(pMetadata->whitePoint.x);
-    palGamut.chromaticityWhitePointY  = ConvertUnits(pMetadata->whitePoint.y);
-    palGamut.minLuminance             = ConvertUnits(pMetadata->minLuminance);
-
-    // max already in nits
-    palGamut.maxLuminance             = static_cast<uint32_t>(pMetadata->maxLuminance);
-
-    // TODO: I don't know if average luminance is important, but VK_EXT_hdr_metadata does not currently expose it.
-    // ie. palGamut.avgLuminance = ConvertUnits(pMetadata->avgLuminance);
-
-    if ((m_mode != Implicit) && (m_exclusiveModeFlags.acquired))
-    {
-        m_pScreen->SetColorConfiguration(&m_colorParams);
-    }
-
-    return VK_SUCCESS;
 }
 
 // =====================================================================================================================
@@ -1745,16 +1724,12 @@ VKAPI_ATTR void VKAPI_CALL vkSetHdrMetadataEXT(
     const VkSwapchainKHR*                       pSwapchains,
     const VkHdrMetadataEXT*                     pMetadata)
 {
-    VkResult result = VK_SUCCESS;
-
     Device* pDevice = ApiDevice::ObjectFromHandle(device);
 
-    for (uint32_t swapChainIndex = 0; (swapChainIndex < swapchainCount) && (result == VK_SUCCESS); swapChainIndex++)
+    for (uint32_t swapChainIndex = 0; (swapChainIndex < swapchainCount); swapChainIndex++)
     {
         SwapChain::ObjectFromHandle(pSwapchains[swapChainIndex])->SetHdrMetadata(pMetadata);
     }
-
-    VK_ASSERT(result == VK_SUCCESS);
 }
 
 } // namespace entry

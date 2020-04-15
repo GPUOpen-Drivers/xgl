@@ -285,10 +285,10 @@ public:
         VkBool32*                pQuadOperationsInAllStages) const;
 
     VK_INLINE void GetPhysicalDeviceDriverProperties(
-        VkDriverIdKHR*           pDriverID,
+        VkDriverId*              pDriverID,
         char*                    pDriverName,
         char*                    pDriverInfo,
-        VkConformanceVersionKHR* pConformanceVersion) const;
+        VkConformanceVersion*    pConformanceVersion) const;
 
     template<typename T>
     VK_INLINE void GetPhysicalDeviceFloatControlsProperties(
@@ -299,8 +299,8 @@ public:
         T                        pDescriptorIndexingProperties) const;
 
     VK_INLINE void GetPhysicalDeviceDepthStencilResolveProperties(
-        VkResolveModeFlagsKHR*   pSupportedDepthResolveModes,
-        VkResolveModeFlagsKHR*   pSupportedStencilResolveModes,
+        VkResolveModeFlags*      pSupportedDepthResolveModes,
+        VkResolveModeFlags*      pSupportedStencilResolveModes,
         VkBool32*                pIndependentResolveNone,
         VkBool32*                pIndependentResolve) const;
 
@@ -730,6 +730,7 @@ protected:
 
     const AppProfile                 m_appProfile;
     bool                             m_prtOnDmaSupported;
+    bool                             m_eqaaSupported;
 
     DeviceExtensions::Supported      m_supportedExtensions;
     DeviceExtensions::Supported      m_allowedExtensions;

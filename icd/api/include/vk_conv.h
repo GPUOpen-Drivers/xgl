@@ -804,23 +804,18 @@ VK_INLINE Pal::ImageViewType VkToPalImageViewType(VkImageViewType imgViewType)
     return convert::ImageViewType(imgViewType);
 }
 
-#if VKI_SDK_1_2
-// This is no longer necessary once the below code removes _EXT and uses the core enum.
-#define VK_SAMPLER_REDUCTION_MODE_RANGE_SIZE_EXT VK_SAMPLER_REDUCTION_MODE_RANGE_SIZE
-#endif
-
 // =====================================================================================================================
-VK_TO_PAL_TABLE_I_EXT(  SAMPLER_REDUCTION_MODE, SamplerReductionModeEXT,    TexFilterMode,
+VK_TO_PAL_TABLE_I(  SAMPLER_REDUCTION_MODE, SamplerReductionMode,   TexFilterMode,
 // =====================================================================================================================
-    VK_TO_PAL_ENTRY_I(  SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE_EXT,        TexFilterMode::Blend)
-    VK_TO_PAL_ENTRY_I(  SAMPLER_REDUCTION_MODE_MIN_EXT,                     TexFilterMode::Min)
-    VK_TO_PAL_ENTRY_I(  SAMPLER_REDUCTION_MODE_MAX_EXT,                     TexFilterMode::Max)
+    VK_TO_PAL_ENTRY_I(  SAMPLER_REDUCTION_MODE_WEIGHTED_AVERAGE,    TexFilterMode::Blend)
+    VK_TO_PAL_ENTRY_I(  SAMPLER_REDUCTION_MODE_MIN,                 TexFilterMode::Min)
+    VK_TO_PAL_ENTRY_I(  SAMPLER_REDUCTION_MODE_MAX,                 TexFilterMode::Max)
 // =====================================================================================================================
 )
 
 // =====================================================================================================================
 // Converts Vulkan filter mode to PAL equivalent.
-VK_INLINE Pal::TexFilterMode VkToPalTexFilterMode(VkSamplerReductionModeEXT filterMode)
+VK_INLINE Pal::TexFilterMode VkToPalTexFilterMode(VkSamplerReductionMode filterMode)
 {
     return convert::TexFilterMode(filterMode);
 }
@@ -2098,8 +2093,13 @@ VK_INLINE Pal::HwPipePoint VkToPalWaitPipePoint(VkPipelineStageFlags flags)
 
     Pal::HwPipePoint dstPipePoint;
 
+    // If flags is exclusively set to VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT
+    if (flags == VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT)
+    {
+        dstPipePoint = Pal::HwPipeBottom;
+    }
     // Check if pre-rasterization waiting is enough.
-    if ((flags & ~dstPreRasterizationFlags) == 0)
+    else if ((flags & ~dstPreRasterizationFlags) == 0)
     {
         dstPipePoint = Pal::HwPipePreRasterization;
     }
@@ -2949,19 +2949,19 @@ VK_INLINE Pal::QueuePriority VkToPalGlobalPriority(
 
 // =====================================================================================================================
 VK_INLINE Pal::ResolveMode VkToPalResolveMode(
-    VkResolveModeFlagBitsKHR vkResolveMode)
+    VkResolveModeFlagBits vkResolveMode)
 {
     switch (vkResolveMode)
     {
-    case VK_RESOLVE_MODE_MIN_BIT_KHR:
+    case VK_RESOLVE_MODE_MIN_BIT:
         return Pal::ResolveMode::Minimum;
-    case VK_RESOLVE_MODE_MAX_BIT_KHR:
+    case VK_RESOLVE_MODE_MAX_BIT:
         return Pal::ResolveMode::Maximum;
-    case VK_RESOLVE_MODE_SAMPLE_ZERO_BIT_KHR:
+    case VK_RESOLVE_MODE_SAMPLE_ZERO_BIT:
         return Pal::ResolveMode::Average;
-    case VK_RESOLVE_MODE_AVERAGE_BIT_KHR:
+    case VK_RESOLVE_MODE_AVERAGE_BIT:
         return Pal::ResolveMode::Average;
-    case VK_RESOLVE_MODE_NONE_KHR:
+    case VK_RESOLVE_MODE_NONE:
     default:
         VK_NEVER_CALLED();
         return Pal::ResolveMode::Average;

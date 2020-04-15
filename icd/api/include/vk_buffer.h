@@ -213,13 +213,13 @@ VKAPI_ATTR void VKAPI_CALL vkGetBufferMemoryRequirements2(
     const VkBufferMemoryRequirementsInfo2*      pInfo,
     VkMemoryRequirements2*                      pMemoryRequirements);
 
-VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddressKHR(
+VKAPI_ATTR VkDeviceAddress VKAPI_CALL vkGetBufferDeviceAddress(
     VkDevice                                    device,
-    const VkBufferDeviceAddressInfoKHR*         pInfo);
+    const VkBufferDeviceAddressInfo*            pInfo);
 
-VKAPI_ATTR uint64_t VKAPI_CALL vkGetBufferOpaqueCaptureAddressKHR(
+VKAPI_ATTR uint64_t VKAPI_CALL vkGetBufferOpaqueCaptureAddress(
     VkDevice                                    device,
-    const VkBufferDeviceAddressInfoKHR*         pInfo);
+    const VkBufferDeviceAddressInfo*            pInfo);
 
 } // namespace entry
 

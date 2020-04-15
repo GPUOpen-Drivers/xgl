@@ -172,7 +172,6 @@ vkGetImageSparseMemoryRequirements2                 @device     @core(1.1)
 vkTrimCommandPool                                   @device     @core(1.1)
 vkUpdateDescriptorSetWithTemplate                   @device     @core(1.1)
 
-#if VKI_SDK_1_2
 vkCmdDrawIndexedIndirectCount                       @device     @core(1.2)
 vkCmdDrawIndirectCount                              @device     @core(1.2)
 vkCmdBeginRenderPass2                               @device     @core(1.2)
@@ -186,7 +185,6 @@ vkGetSemaphoreCounterValue                          @device     @core(1.2)
 vkResetQueryPool                                    @device     @core(1.2)
 vkSignalSemaphore                                   @device     @core(1.2)
 vkWaitSemaphores                                    @device     @core(1.2)
-#endif
 
 vkEnumeratePhysicalDeviceGroupsKHR                  @instance   @iext(KHR_device_group_creation)
 

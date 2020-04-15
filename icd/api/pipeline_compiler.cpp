@@ -49,7 +49,7 @@
 
 #include "palPipelineAbiProcessorImpl.h"
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+#if  LLPC_CLIENT_INTERFACE_MAJOR_VERSION>= 39
 #include "llpc.h"
 #endif
 

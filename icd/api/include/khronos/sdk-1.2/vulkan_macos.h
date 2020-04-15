@@ -22,12 +22,9 @@
 **
 */
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
 
 #define VK_MVK_macos_surface 1
 #define VK_MVK_MACOS_SURFACE_SPEC_VERSION 2

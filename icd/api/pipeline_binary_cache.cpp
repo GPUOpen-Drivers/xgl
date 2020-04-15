@@ -933,6 +933,19 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                 if (Util::Snprintf(pathBuffer, _MAX_FNAME, "%s%s", pUserDataPath, pCacheSubPath) > 0)
                 {
                     pCachePath = pathBuffer;
+#if VK_IS_PAL_VERSION_AT_LEAST(582, 2)
+                    if (settings.allowCleanUpCacheDirectory)
+                    {
+                        uint64 totalSize = 0, oldestTime = 0;
+                        if (Util::GetStatusOfDir(pCachePath, &totalSize, &oldestTime) == Util::Result::Success)
+                        {
+                            if (totalSize >= settings.pipelineCacheDefaultLocationLimitation)
+                            {
+                                Util::RemoveFilesOfDir(pCachePath, oldestTime + settings.thresholdOfCleanUpCache);
+                            }
+                        }
+                    }
+#endif
                     result = VK_SUCCESS;
                 }
             }

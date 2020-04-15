@@ -22,12 +22,9 @@
 **
 */
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
 
 #define VK_KHR_wayland_surface 1
 #define VK_KHR_WAYLAND_SURFACE_SPEC_VERSION 6

@@ -68,7 +68,6 @@ class ShaderModule;
 class PipelineLayout : public NonDispatchable<VkPipelineLayout, PipelineLayout>
 {
 
-
 public:
     // Number of user data registers consumed per descriptor set address (we use 32-bit addresses)
     static constexpr uint32_t SetPtrRegCount = 1;
