@@ -566,7 +566,7 @@ void ShaderOptimizer::BuildTuningProfile()
         VK_NEVER_CALLED();
     }
 
-    action.shaderCreate.apply.nggDisable      = !(m_settings.enableNgg);
+    action.shaderCreate.apply.nggDisable      = m_settings.overrideUseNgg;
     action.shaderCreate.apply.enableSubvector = m_settings.overrideEnableSubvector;
 
     if (m_settings.overrideWavesPerCu != 0)

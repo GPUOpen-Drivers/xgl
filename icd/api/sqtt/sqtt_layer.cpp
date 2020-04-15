@@ -2153,32 +2153,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
         }
     }
 
-    // We will also log the object name if it is an object type that RMV cares about.
-    if ((pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_BUFFER) ||
-        (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_IMAGE) ||
-        (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_PIPELINE))
-    {
-        // For buffers, the RMV resource handle is the same as the handle passed in so we can log that directly,
-        // but for image and pipeline the RMV resource handle comes from the Pal object.
-        Pal::DebugNameEventData nameData = {};
-        if (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_BUFFER)
-        {
-            nameData.pObj = reinterpret_cast<const void*>(pNameInfo->objectHandle);
-        }
-        else if (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_IMAGE)
-        {
-            Image* pImage = reinterpret_cast<Image*>(pNameInfo->objectHandle);
-            nameData.pObj = pImage->PalImage(DefaultDeviceIndex);
-        }
-        else // Pipeline
-        {
-            Pipeline* pPipeline = reinterpret_cast<Pipeline*>(pNameInfo->objectHandle);
-            nameData.pObj = pPipeline->PalPipeline(DefaultDeviceIndex);
-        }
-        nameData.pDebugName = pNameInfo->pObjectName;
-        pDevice->VkInstance()->PalPlatform()->LogEvent(Pal::PalEvent::DebugName, &nameData, sizeof(nameData));
-    }
-
     return SQTT_CALL_NEXT_LAYER(vkSetDebugUtilsObjectNameEXT)(device, pNameInfo);
 }
 

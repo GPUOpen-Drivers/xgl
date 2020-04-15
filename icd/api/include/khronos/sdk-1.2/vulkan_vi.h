@@ -22,12 +22,9 @@
 **
 */
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
 
 #define VK_NN_vi_surface 1
 #define VK_NN_VI_SURFACE_SPEC_VERSION     1

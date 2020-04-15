@@ -461,8 +461,8 @@ VkResult Image::Create(
         const VkExternalMemoryImageCreateInfo*      pExternalMemoryImageCreateInfo;
         const VkImageCreateInfo*                    pVkImageCreateInfo;
         const VkImageSwapchainCreateInfoKHR*        pVkImageSwapchainCreateInfoKHR;
-        const VkImageFormatListCreateInfoKHR*       pVkImageFormatListCreateInfoKHR;
-        const VkImageStencilUsageCreateInfoEXT*     pVkImageStencilUsageCreateInfoEXT;
+        const VkImageFormatListCreateInfo*          pVkImageFormatListCreateInfo;
+        const VkImageStencilUsageCreateInfo*        pVkImageStencilUsageCreateInfo;
     };
 
     ImageFlags imageFlags;
@@ -540,25 +540,25 @@ VkResult Image::Create(
             break;
         }
 
-        case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR:
+        case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
         {
             // Processing of the actual contents of this happens later due to AutoBuffer scoping.
-            viewFormatCount = pVkImageFormatListCreateInfoKHR->viewFormatCount;
-            pViewFormats    = pVkImageFormatListCreateInfoKHR->pViewFormats;
+            viewFormatCount = pVkImageFormatListCreateInfo->viewFormatCount;
+            pViewFormats    = pVkImageFormatListCreateInfo->pViewFormats;
             break;
         }
 
-        case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT:
+        case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
         {
             Pal::ImageUsageFlags usageFlags = VkToPalImageUsageFlags(
-                                        pVkImageStencilUsageCreateInfoEXT->stencilUsage,
+                                        pVkImageStencilUsageCreateInfo->stencilUsage,
                                         pCreateInfo->format,
                                         pCreateInfo->samples,
                                         (VkImageUsageFlags)(settings.optImgMaskToApplyShaderReadUsageForTransferSrc),
                                         (VkImageUsageFlags)(settings.optImgMaskToApplyShaderWriteUsageForTransferDst));
 
             stencilShaderRead = usageFlags.shaderRead | usageFlags.resolveSrc;
-            stencilUsage      = pVkImageStencilUsageCreateInfoEXT->stencilUsage;
+            stencilUsage      = pVkImageStencilUsageCreateInfo->stencilUsage;
 
             palCreateInfo.usageFlags.u32All |= usageFlags.u32All;
 

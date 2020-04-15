@@ -68,9 +68,9 @@ uint64_t Sampler::BuildApiHash(
     {
         union
         {
-            const VkStructHeader*                      pInfo;
-            const VkSamplerYcbcrConversionInfo*        pYCbCrConversionInfo;
-            const VkSamplerReductionModeCreateInfoEXT* pReductionModeCreateInfo;
+            const VkStructHeader*                   pInfo;
+            const VkSamplerYcbcrConversionInfo*     pYCbCrConversionInfo;
+            const VkSamplerReductionModeCreateInfo* pReductionModeCreateInfo;
         };
 
         pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
@@ -89,7 +89,7 @@ uint64_t Sampler::BuildApiHash(
                 hasher.Update(pSamplerYCbCrConversionMetaData->word3.u32All);
 
                 break;
-            case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
+            case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO:
                 hasher.Update(pReductionModeCreateInfo->sType);
                 hasher.Update(pReductionModeCreateInfo->reductionMode);
 
@@ -124,10 +124,10 @@ VkResult Sampler::Create(
 
     union
     {
-        const VkStructHeader*                      pHeader;
-        const VkSamplerCreateInfo*                 pSamplerInfo;
-        const VkSamplerReductionModeCreateInfoEXT* pVkSamplerReductionModeCreateInfoEXT;
-        const VkSamplerYcbcrConversionInfo*        pVkSamplerYCbCrConversionInfo;
+        const VkStructHeader*                   pHeader;
+        const VkSamplerCreateInfo*              pSamplerInfo;
+        const VkSamplerReductionModeCreateInfo* pVkSamplerReductionModeCreateInfo;
+        const VkSamplerYcbcrConversionInfo*     pVkSamplerYCbCrConversionInfo;
     };
 
     // Parse the creation info.
@@ -175,7 +175,7 @@ VkResult Sampler::Create(
             samplerInfo.flags.seamlessCubeMapFiltering = 1;
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
-            samplerInfo.filterMode = VkToPalTexFilterMode(pVkSamplerReductionModeCreateInfoEXT->reductionMode);
+            samplerInfo.filterMode = VkToPalTexFilterMode(pVkSamplerReductionModeCreateInfo->reductionMode);
             break;
         case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
             pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pVkSamplerYCbCrConversionInfo->conversion)->GetMetaData();

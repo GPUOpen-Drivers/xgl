@@ -39,10 +39,6 @@
 #include "include/vk_shader.h"
 #include "palListImpl.h"
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-#include "llpc.h"
-#endif
-
 namespace vk
 {
 
@@ -182,21 +178,21 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
 // =====================================================================================================================
 // Creat color target from module data
 void PartialPipeline::CreateColorTargetFromModuleData(
-    Llpc::ShaderModuleDataEx* pShaderModuleDataEx,
+    Vkgc::ShaderModuleDataEx* pShaderModuleDataEx,
     Vkgc::ColorTarget* pTarget)
 {
     for (uint32_t i = 0; i < pShaderModuleDataEx->extra.fsOutInfoCount; ++i)
     {
         uint32_t location = pShaderModuleDataEx->extra.pFsOutInfos[i].location;
         uint32_t componentCount =  pShaderModuleDataEx->extra.pFsOutInfos[i].componentCount;
-        Llpc::BasicType basicType = pShaderModuleDataEx->extra.pFsOutInfos[i].basicType;
+        Vkgc::BasicType basicType = pShaderModuleDataEx->extra.pFsOutInfos[i].basicType;
 
         VK_ASSERT(location < Vkgc::MaxColorTargets);
         pTarget[location].channelWriteMask = (1U << componentCount) - 1;
         // Further optimization is app profile for color format according to fsOutInfos.
         switch (basicType)
         {
-        case Llpc::BasicType::Float:
+        case Vkgc::BasicType::Float:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -208,7 +204,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Double:
+        case Vkgc::BasicType::Double:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -220,7 +216,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Int:
+        case Vkgc::BasicType::Int:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -232,7 +228,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Uint:
+        case Vkgc::BasicType::Uint:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -244,7 +240,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Int64:
+        case Vkgc::BasicType::Int64:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -256,7 +252,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Uint64:
+        case Vkgc::BasicType::Uint64:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -268,7 +264,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Float16:
+        case Vkgc::BasicType::Float16:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -280,7 +276,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Int16:
+        case Vkgc::BasicType::Int16:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -292,7 +288,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Uint16:
+        case Vkgc::BasicType::Uint16:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -304,7 +300,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Int8:
+        case Vkgc::BasicType::Int8:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -316,7 +312,7 @@ void PartialPipeline::CreateColorTargetFromModuleData(
                 pTarget[location].format = formatTable[componentCount - 1];
                 break;
             }
-        case Llpc::BasicType::Uint8:
+        case Vkgc::BasicType::Uint8:
             {
                 static const VkFormat formatTable[] =
                 {
@@ -349,7 +345,7 @@ void PartialPipeline::Execute(
 
     vk::ShaderModule* pShaderModule = vk::ShaderModule::ObjectFromHandle(pTask->shaderModuleHandle);
     void* pShaderModuleData =  pShaderModule->GetShaderData(compilerType);
-    auto pShaderModuleDataEx = reinterpret_cast<Llpc::ShaderModuleDataEx*>(pShaderModuleData);
+    auto pShaderModuleDataEx = reinterpret_cast<Vkgc::ShaderModuleDataEx*>(pShaderModuleData);
     Vkgc::ShaderModuleEntryData* pShaderModuleEntryData = nullptr;
     Vkgc::ColorTarget pColorTarget[Vkgc::MaxColorTargets] = {};
     if ((pShaderModuleDataEx->extra.entryCount == 1) &&

@@ -36,5 +36,4 @@
 namespace vk
 {
 
-
 } // namespace vk

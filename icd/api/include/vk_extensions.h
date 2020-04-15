@@ -316,6 +316,7 @@ public:
         KHR_SHADER_NON_SEMANTIC_INFO,
         KHR_SAMPLER_YCBCR_CONVERSION,
         EXT_TEXEL_BUFFER_ALIGNMENT,
+        KHR_INCREMENTAL_PRESENT,
         Count
     };
 };

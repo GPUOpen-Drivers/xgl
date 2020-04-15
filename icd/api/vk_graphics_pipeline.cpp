@@ -1735,7 +1735,7 @@ void GraphicsPipeline::BindToCmdBuffer(
     }
 
     utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
-    while (deviceGroup.Iterate())
+    do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
@@ -1846,6 +1846,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pPalCmdBuf->CmdSetScissorRects(pRenderState->allGpuState.scissor);
         }
     }
+    while (deviceGroup.IterateNext());
 
     const bool stencilMasks = ContainsStaticState(DynamicStatesInternal::STENCIL_COMPARE_MASK) |
                               ContainsStaticState(DynamicStatesInternal::STENCIL_WRITE_MASK)   |

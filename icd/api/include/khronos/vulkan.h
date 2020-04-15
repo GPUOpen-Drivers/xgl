@@ -34,11 +34,7 @@
 
 #include "vk_platform.h"
 
-#if VKI_SDK_1_2
 #include "sdk-1.2/vulkan.h"
-#else
-#include "sdk-1.1/vulkan.h"
-#endif
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 #ifdef None

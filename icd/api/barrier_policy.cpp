@@ -97,13 +97,13 @@ public:
                   Pal::LayoutDepthStencilTarget,                            // Read-write depth
                   Pal::LayoutDepthStencilTarget | Pal::LayoutShaderRead);   // Read-only stencil
 
-        InitEntry(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR,
+        InitEntry(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             Pal::LayoutDepthStencilTarget);
-        InitEntry(VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR,
+        InitEntry(VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
             Pal::LayoutDepthStencilTarget | Pal::LayoutShaderRead);
-        InitEntry(VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR,
+        InitEntry(VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL,
             Pal::LayoutDepthStencilTarget);
-        InitEntry(VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR,
+        InitEntry(VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL,
             Pal::LayoutDepthStencilTarget | Pal::LayoutShaderRead);
     }
 
@@ -129,16 +129,16 @@ public:
             case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 2;
                 break;
-            case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL_KHR:
+            case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 6;
                 break;
-            case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR:
+            case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 7;
                 break;
-            case VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL_KHR:
+            case VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 8;
                 break;
-            case VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL_KHR:
+            case VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 9;
                 break;
             default:

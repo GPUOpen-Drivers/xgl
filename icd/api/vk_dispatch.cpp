@@ -230,32 +230,28 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdDrawIndexed                                );
     INIT_DISPATCH_ENTRY(vkCmdDrawIndexedIndirect                        );
     INIT_DISPATCH_ENTRY(vkCmdDrawIndirect                               );
-    INIT_DISPATCH_ENTRY(vkCmdDrawIndexedIndirectCountAMD                );
-    INIT_DISPATCH_ENTRY(vkCmdDrawIndirectCountAMD                       );
+    INIT_DISPATCH_ENTRY(vkCmdDrawIndexedIndirectCount                   );
+    INIT_DISPATCH_ENTRY(vkCmdDrawIndirectCount                          );
     INIT_DISPATCH_ALIAS(vkCmdDrawIndexedIndirectCountKHR                ,
-                        vkCmdDrawIndexedIndirectCountAMD                );
+                        vkCmdDrawIndexedIndirectCount                   );
     INIT_DISPATCH_ALIAS(vkCmdDrawIndirectCountKHR                       ,
-                        vkCmdDrawIndirectCountAMD                       );
-#if VKI_SDK_1_2
-    INIT_DISPATCH_ALIAS(vkCmdDrawIndexedIndirectCount                   ,
-                        vkCmdDrawIndexedIndirectCountAMD                );
-    INIT_DISPATCH_ALIAS(vkCmdDrawIndirectCount                          ,
-                        vkCmdDrawIndirectCountAMD                       );
-#endif
-    INIT_DISPATCH_ENTRY(vkCreateRenderPass2KHR                          );
-    INIT_DISPATCH_ENTRY(vkCmdBeginRenderPass2KHR                        );
-    INIT_DISPATCH_ENTRY(vkCmdNextSubpass2KHR                            );
-    INIT_DISPATCH_ENTRY(vkCmdEndRenderPass2KHR                          );
-#if VKI_SDK_1_2
-    INIT_DISPATCH_ALIAS(vkCreateRenderPass2                             ,
-                        vkCreateRenderPass2KHR                          );
-    INIT_DISPATCH_ALIAS(vkCmdBeginRenderPass2                           ,
-                        vkCmdBeginRenderPass2KHR                        );
-    INIT_DISPATCH_ALIAS(vkCmdNextSubpass2                               ,
-                        vkCmdNextSubpass2KHR                            );
-    INIT_DISPATCH_ALIAS(vkCmdEndRenderPass2                             ,
-                        vkCmdEndRenderPass2KHR                          );
-#endif
+                        vkCmdDrawIndirectCount                          );
+    INIT_DISPATCH_ALIAS(vkCmdDrawIndexedIndirectCountAMD                ,
+                        vkCmdDrawIndexedIndirectCount                   );
+    INIT_DISPATCH_ALIAS(vkCmdDrawIndirectCountAMD                       ,
+                        vkCmdDrawIndirectCount                          );
+    INIT_DISPATCH_ENTRY(vkCreateRenderPass2                             );
+    INIT_DISPATCH_ENTRY(vkCmdBeginRenderPass2                           );
+    INIT_DISPATCH_ENTRY(vkCmdNextSubpass2                               );
+    INIT_DISPATCH_ENTRY(vkCmdEndRenderPass2                             );
+    INIT_DISPATCH_ALIAS(vkCreateRenderPass2KHR                          ,
+                        vkCreateRenderPass2                             );
+    INIT_DISPATCH_ALIAS(vkCmdBeginRenderPass2KHR                        ,
+                        vkCmdBeginRenderPass2                           );
+    INIT_DISPATCH_ALIAS(vkCmdNextSubpass2KHR                            ,
+                        vkCmdNextSubpass2                               );
+    INIT_DISPATCH_ALIAS(vkCmdEndRenderPass2KHR                          ,
+                        vkCmdEndRenderPass2                             );
     INIT_DISPATCH_ENTRY(vkCmdDispatch                                   );
     INIT_DISPATCH_ENTRY(vkCmdDispatchIndirect                           );
     INIT_DISPATCH_ENTRY(vkCmdEndRenderPass                              );
@@ -532,17 +528,15 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCreateDebugReportCallbackEXT                  );
     INIT_DISPATCH_ENTRY(vkDestroyDebugReportCallbackEXT                 );
     INIT_DISPATCH_ENTRY(vkDebugReportMessageEXT                         );
-    INIT_DISPATCH_ENTRY(vkGetSemaphoreCounterValueKHR                   );
-    INIT_DISPATCH_ENTRY(vkWaitSemaphoresKHR                             );
-    INIT_DISPATCH_ENTRY(vkSignalSemaphoreKHR                            );
-#if VKI_SDK_1_2
-    INIT_DISPATCH_ALIAS(vkGetSemaphoreCounterValue                      ,
-                        vkGetSemaphoreCounterValueKHR                   );
-    INIT_DISPATCH_ALIAS(vkWaitSemaphores                                ,
-                        vkWaitSemaphoresKHR                             );
-    INIT_DISPATCH_ALIAS(vkSignalSemaphore                               ,
-                        vkSignalSemaphoreKHR                            );
-#endif
+    INIT_DISPATCH_ENTRY(vkGetSemaphoreCounterValue                      );
+    INIT_DISPATCH_ENTRY(vkWaitSemaphores                                );
+    INIT_DISPATCH_ENTRY(vkSignalSemaphore                               );
+    INIT_DISPATCH_ALIAS(vkGetSemaphoreCounterValueKHR                   ,
+                        vkGetSemaphoreCounterValue                      );
+    INIT_DISPATCH_ALIAS(vkWaitSemaphoresKHR                             ,
+                        vkWaitSemaphores                                );
+    INIT_DISPATCH_ALIAS(vkSignalSemaphoreKHR                            ,
+                        vkSignalSemaphore                               );
     INIT_DISPATCH_ENTRY(vkCmdWriteBufferMarkerAMD                       );
     INIT_DISPATCH_ENTRY(vkGetMemoryHostPointerPropertiesEXT             );
 #if defined(__unix__)
@@ -579,22 +573,18 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutablePropertiesKHR             );
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableStatisticsKHR             );
     INIT_DISPATCH_ENTRY(vkGetPipelineExecutableInternalRepresentationsKHR);
-    INIT_DISPATCH_ENTRY(vkGetBufferDeviceAddressKHR                     );
-    INIT_DISPATCH_ENTRY(vkGetBufferOpaqueCaptureAddressKHR              );
-    INIT_DISPATCH_ENTRY(vkGetDeviceMemoryOpaqueCaptureAddressKHR        );
-#if VKI_SDK_1_2
-     INIT_DISPATCH_ALIAS(vkGetBufferDeviceAddress                        ,
-                         vkGetBufferDeviceAddressKHR                     );
-     INIT_DISPATCH_ALIAS(vkGetBufferOpaqueCaptureAddress                 ,
-                         vkGetBufferOpaqueCaptureAddressKHR              );
-     INIT_DISPATCH_ALIAS(vkGetDeviceMemoryOpaqueCaptureAddress           ,
-                         vkGetDeviceMemoryOpaqueCaptureAddressKHR        );
-#endif
-    INIT_DISPATCH_ENTRY(vkResetQueryPoolEXT                             );
-#if VKI_SDK_1_2
-    INIT_DISPATCH_ALIAS(vkResetQueryPool                                ,
-                        vkResetQueryPoolEXT                             );
-#endif
+    INIT_DISPATCH_ENTRY(vkGetBufferDeviceAddress                        );
+    INIT_DISPATCH_ENTRY(vkGetBufferOpaqueCaptureAddress                 );
+    INIT_DISPATCH_ENTRY(vkGetDeviceMemoryOpaqueCaptureAddress           );
+    INIT_DISPATCH_ALIAS(vkGetBufferDeviceAddressKHR                     ,
+                        vkGetBufferDeviceAddress                        );
+    INIT_DISPATCH_ALIAS(vkGetBufferOpaqueCaptureAddressKHR              ,
+                        vkGetBufferOpaqueCaptureAddress                 );
+    INIT_DISPATCH_ALIAS(vkGetDeviceMemoryOpaqueCaptureAddressKHR        ,
+                        vkGetDeviceMemoryOpaqueCaptureAddress           );
+    INIT_DISPATCH_ENTRY(vkResetQueryPool                                );
+    INIT_DISPATCH_ALIAS(vkResetQueryPoolEXT                             ,
+                        vkResetQueryPool                                );
     INIT_DISPATCH_ENTRY(vkCmdSetLineStippleEXT                          );
 
     INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceCalibrateableTimeDomainsEXT  );

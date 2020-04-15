@@ -277,8 +277,8 @@ VkResult DescriptorPool::AllocDescriptorSets(
     uint32_t                     count                           = pAllocateInfo->descriptorSetCount;
     const VkDescriptorSetLayout* pSetLayouts                     = pAllocateInfo->pSetLayouts;
 
-    const VkDescriptorSetVariableDescriptorCountAllocateInfoEXT* pVariableDescriptorCount =
-        reinterpret_cast<const VkDescriptorSetVariableDescriptorCountAllocateInfoEXT*>(pAllocateInfo->pNext);
+    const VkDescriptorSetVariableDescriptorCountAllocateInfo* pVariableDescriptorCount =
+        reinterpret_cast<const VkDescriptorSetVariableDescriptorCountAllocateInfo*>(pAllocateInfo->pNext);
 
     while ((result == VK_SUCCESS) && (allocCount < count))
     {
@@ -293,14 +293,14 @@ VkResult DescriptorPool::AllocDescriptorSets(
             if (pVariableDescriptorCount != nullptr)
             {
                 VK_ASSERT(pVariableDescriptorCount->sType ==
-                    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO_EXT);
+                    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO);
 
                 VK_ASSERT(pVariableDescriptorCount->descriptorSetCount == pAllocateInfo->descriptorSetCount);
 
                 uint32_t lastBindingIdx = pLayout->Info().count - 1;
 
                 if (pLayout->Binding(lastBindingIdx).bindingFlags &
-                    VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT_EXT)
+                    VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)
                 {
                     variableDescriptorCounts = pVariableDescriptorCount->pDescriptorCounts[allocCount];
                     VK_ASSERT(variableDescriptorCounts <= pLayout->Binding(lastBindingIdx).info.descriptorCount);

@@ -31,9 +31,5 @@
 
 #pragma once
 
-#if VKI_SDK_1_2
 #include "sdk-1.2/spirv.hpp"
-#else
-#include "sdk-1.1/spirv.hpp"
-#endif
 

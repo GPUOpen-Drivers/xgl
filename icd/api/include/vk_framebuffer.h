@@ -89,7 +89,7 @@ public:
         return pAttachments[index];
     }
 
-    void SetImageViews(const VkRenderPassAttachmentBeginInfoKHR* pRenderPassAttachmentBeginInfoKHR);
+    void SetImageViews(const VkRenderPassAttachmentBeginInfo* pRenderPassAttachmentBeginInfo);
 
 protected:
     Framebuffer(const VkFramebufferCreateInfo& info, Attachment* pAttachments);

@@ -171,7 +171,11 @@ namespace vk
     static const uint32_t DefaultMemoryInstanceIdx = 0;
 
     // Maximum number of Pal devices
+#if defined(VKI_BUILD_MAX_NUM_GPUS)
+    static const uint32_t MaxPalDevices = VKI_BUILD_MAX_NUM_GPUS;
+#else
     static const uint32_t MaxPalDevices = 4;
+#endif
 
     // Invalid Mask
     static const uint32_t InvalidPalDeviceMask = 1 << (MaxPalDevices+1);

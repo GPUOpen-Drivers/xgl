@@ -22,12 +22,9 @@
 **
 */
 
-
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-
 
 #define VK_KHR_xlib_surface 1
 #define VK_KHR_XLIB_SURFACE_SPEC_VERSION  6

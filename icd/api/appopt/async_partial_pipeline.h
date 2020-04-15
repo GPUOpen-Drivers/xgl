@@ -35,7 +35,11 @@
 #pragma once
 
 #include "include/vk_dispatch.h"
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+#include "vkgcDefs.h"
+#else
 #include "llpc.h"
+#endif
 
 namespace vk
 {
@@ -66,10 +70,11 @@ public:
         uint32_t*                           pMappingNodeCount);
 
     void CreateColorTargetFromModuleData(
-        Llpc::ShaderModuleDataEx* pShaderModuleDataEx,
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+        Vkgc::ShaderModuleDataEx* pShaderModuleDataEx,
         Vkgc::ColorTarget* pTarget);
 #else
+        Llpc::ShaderModuleDataEx* pShaderModuleDataEx,
         Llpc::ColorTarget* pTarget);
 #endif
 

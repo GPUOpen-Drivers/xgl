@@ -94,6 +94,10 @@ if(XGL_BUILD_RAVEN2)
     target_compile_definitions(xgl PRIVATE VKI_BUILD_RAVEN2=1)
     target_compile_definitions(xgl PRIVATE PAL_BUILD_RAVEN2)
 endif()
+if(XGL_BUILD_RENOIR)
+    target_compile_definitions(xgl PRIVATE VKI_BUILD_RENOIR=1)
+    target_compile_definitions(xgl PRIVATE PAL_BUILD_RENOIR)
+endif()
 if(XGL_BUILD_VEGA20)
     target_compile_definitions(xgl PRIVATE VKI_BUILD_VEGA20=1)
     target_compile_definitions(xgl PRIVATE PAL_BUILD_VEGA20)
@@ -117,11 +121,6 @@ endif()
 if(ICD_MEMTRACK)
     target_compile_definitions(xgl PRIVATE ICD_MEMTRACK)
 endif()
-
-# Configure Vulkan SDK version definitions
-#if VKI_SDK_1_2
-target_compile_definitions(xgl PRIVATE VKI_SDK_1_2=1)
-#endif
 
 # Enable relevant GPUOpen preprocessor definitions
 if(ICD_GPUOPEN_DEVMODE_BUILD)
@@ -376,6 +375,10 @@ target_sources(xgl PRIVATE
 
 ### XGL LLVM ####
 if(ICD_BUILD_LLPC)
+    # Add LGC as a dependency, but only if its CMakeLists.txt exists.
+    if(EXISTS "${XGL_LLPC_PATH}/../lgc/CMakeLists.txt")
+        target_link_libraries(xgl PRIVATE LLVMlgc)
+    endif()
     target_link_libraries(xgl PRIVATE llpc dl stdc++)
     llvm_map_components_to_libnames(llvm_libs amdgpucodegen amdgpuinfo amdgpuasmparser amdgpudisassembler LTO ipo analysis bitreader bitwriter codegen irreader linker mc passes support target transformutils coroutines)
     target_link_libraries(xgl PRIVATE ${llvm_libs})

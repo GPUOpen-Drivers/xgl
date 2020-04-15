@@ -134,6 +134,9 @@ public:
     VK_INLINE bool IsHwCompositingSupported() const
         { return (m_properties.flags.hwCompositing == 1); }
 
+    VK_INLINE const Pal::ScreenColorConfig& GetColorParams() const
+        { return m_colorParams; }
+
     Pal::IGpuMemory* UpdatePresentInfo(
         uint32_t                   deviceIdx,
         uint32_t                   imageIndex,
@@ -150,6 +153,8 @@ public:
     void PostPresent(
         const Pal::PresentSwapChainInfo& presentInfo,
         Pal::Result*                     pPresentResult);
+
+    void AcquireFullScreenProperties();
 
     void SetHdrMetadata(
         const VkHdrMetadataEXT* pMetadata);
@@ -173,6 +178,7 @@ protected:
     uint32_t                m_nextImage;
     Pal::ISwapChain*        m_pPalSwapChain;
 
+    Pal::ScreenColorConfig  m_colorParams;
     FullscreenMgr*          m_pFullscreenMgr;
     SwCompositor*           m_pSwCompositor;
     int32_t                 m_appOwnedImageCount;
@@ -249,10 +255,6 @@ public:
     VK_INLINE Pal::IScreen* GetPalScreen() const
         { return m_pScreen; }
 
-    VkResult SetHdrMetadata(
-        Device*                    pDevice,
-        const VkHdrMetadataEXT*    pMetadata);
-
     bool TryEnterExclusive(SwapChain* pSwapChain);
     bool TryExitExclusive(SwapChain* pSwapChain);
 
@@ -269,9 +271,6 @@ private:
                                                     // out.
     uint32_t            m_fullscreenPresentSuccessCount; // Number of consecutively successful fullscreen presents.
 
-    Pal::ScreenColorCapabilities m_colorCaps;
-    Pal::ScreenColorConfig       m_colorParams;
-    Pal::ScreenColorConfig       m_windowedColorParams;
     Pal::OsDisplayHandle         m_hDisplay;        // The monitor of the IScreen from swap chain creation
     Pal::OsWindowHandle          m_hWindow;         // The window of the swap chain
 

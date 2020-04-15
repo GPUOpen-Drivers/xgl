@@ -208,6 +208,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             // This works around a crash at app startup.
             m_settings.ignoreSuboptimalSwapchainSize = true;
+
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                if (pInfo->revision == Pal::AsicRevision::Navi14)
+                {
+                    m_settings.barrierFilterOptions = SkipImageLayoutUndefined;
+                }
+            }
         }
 
         if (appProfile == AppProfile::WolfensteinII)

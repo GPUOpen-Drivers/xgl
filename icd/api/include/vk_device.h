@@ -213,7 +213,7 @@ public:
         VkRenderPass*                               pRenderPass);
 
     VkResult CreateRenderPass2(
-        const VkRenderPassCreateInfo2KHR*           pCreateInfo,
+        const VkRenderPassCreateInfo2*              pCreateInfo,
         const VkAllocationCallbacks*                pAllocator,
         VkRenderPass*                               pRenderPass);
 
@@ -286,15 +286,15 @@ public:
         const VkAllocationCallbacks*                pAllocator,
         VkPipelineCache*                            pPipelineCache);
 
-    VkResult GetSemaphoreCounterValueKHR(
+    VkResult GetSemaphoreCounterValue(
         VkSemaphore                                 semaphore,
         uint64_t*                                   pValue);
 
-    VkResult WaitSemaphoresKHR(
-        const VkSemaphoreWaitInfoKHR*               pWaitInfo,
+    VkResult WaitSemaphores(
+        const VkSemaphoreWaitInfo*                  pWaitInfo,
         uint64_t                                    timeout);
 
-    VkResult SignalSemaphoreKHR(
+    VkResult SignalSemaphore(
         VkSemaphore                                 semaphore,
         uint64_t                                    value);
 
@@ -591,6 +591,8 @@ public:
         return m_scalarBlockLayoutEnabled;
     }
 
+VkResult SetDebugUtilsObjectName(const VkDebugUtilsObjectNameInfoEXT* pNameInfo);
+
 protected:
     Device(
         uint32_t                         deviceCount,
@@ -820,9 +822,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(
     const VkAllocationCallbacks*                pAllocator,
     VkRenderPass*                               pRenderPass);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2(
     VkDevice                                    device,
-    const VkRenderPassCreateInfo2KHR*           pCreateInfo,
+    const VkRenderPassCreateInfo2*              pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkRenderPass*                               pRenderPass);
 
@@ -974,19 +976,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetCalibratedTimestampsEXT(
     uint64_t*                                   pTimestamps,
     uint64_t*                                   pMaxDeviation);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreCounterValueKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreCounterValue(
     VkDevice                                    device,
     VkSemaphore                                 semaphore,
     uint64_t*                                   pValue);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkWaitSemaphoresKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkWaitSemaphores(
     VkDevice                                    device,
-    const VkSemaphoreWaitInfoKHR*               pWaitInfo,
+    const VkSemaphoreWaitInfo*                  pWaitInfo,
     uint64_t                                    timeout);
 
-VKAPI_ATTR VkResult VKAPI_CALL vkSignalSemaphoreKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkSignalSemaphore(
     VkDevice                                    device,
-    const VkSemaphoreSignalInfoKHR*             pSignalInfo);
+    const VkSemaphoreSignalInfo*                pSignalInfo);
 
 VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryHostPointerPropertiesEXT(
     VkDevice                                    device,

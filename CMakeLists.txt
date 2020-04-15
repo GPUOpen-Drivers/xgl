@@ -26,13 +26,23 @@
 cmake_minimum_required(VERSION 3.5)
 project(XGL VERSION 1 LANGUAGES C CXX)
 
-# Before GCC7, when LTO is enabled, undefined refernece error was observed when linking static libraries.
+# Before GCC7, when LTO is enabled, undefined reference error was observed when linking static libraries.
 # Use the gcc-ar wrapper instead of ar, this invokes ar with the right plugin arguments
 # --plugin /usr/lib/gcc/.../liblto_plugin.so
 if(UNIX)
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-        set(CMAKE_AR /usr/bin/gcc-ar)
-        set(CMAKE_RANLIB /usr/bin/gcc-ranlib)
+        find_program(GCC_AR gcc-ar)
+        if (GCC_AR)
+             set(CMAKE_AR ${GCC_AR})
+        else()
+            message(FATAL_ERROR "gcc-ar cannot be found!")
+        endif()
+        find_program(GCC_RANLIB gcc-ranlib)
+        if (GCC_RANLIB)
+            set(CMAKE_RANLIB ${GCC_RANLIB})
+        else()
+            message(FATAL_ERROR "gcc-ranlib cannot be found!")
+        endif()
     endif()
 endif()
 
@@ -67,6 +77,7 @@ endif()
 option(ICD_BUILD_LLPC "Build LLPC?" ON)
 option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
 option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)
+option(XGL_BUILD_RENOIR "Build open source vulkan for Renoir?" ON)
 
 option(XGL_BUILD_LIT "Build with Lit test?" OFF)
 option(XGL_BUILD_GFX10 "Build open source vulkan for GFX10" ON)
@@ -167,6 +178,7 @@ set(PAL_MEMTRACK ${ICD_MEMTRACK} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GPUOPEN ${ICD_GPUOPEN_DEVMODE_BUILD} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_VIDEO ${ICD_BUILD_VIDEO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(PAL_BUILD_RENOIR ${XGL_BUILD_RENOIR} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -251,6 +263,12 @@ set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE
 set(LLPC_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 if(ICD_BUILD_LLPC)
+    # Add LGC as an LLVM external project, but only if its CMakeLists.txt exists.
+    if(EXISTS "${XGL_LLPC_PATH}/../lgc/CMakeLists.txt")
+        set(LLVM_EXTERNAL_PROJECTS lgc)
+        set(LLVM_EXTERNAL_LGC_SOURCE_DIR ${XGL_LLPC_PATH}/../lgc)
+    endif()
+    # Set other LLVM settings.
     set(LLVM_ENABLE_ASSERTIONS ${CMAKE_BUILD_TYPE_DEBUG} CACHE BOOL Force)
     set(LLVM_TARGETS_TO_BUILD AMDGPU CACHE STRING Force)
     set(LLVM_BUILD_TESTS OFF CACHE BOOL Force)
@@ -265,6 +283,7 @@ if(ICD_BUILD_LLPC)
     set(LLVM_ENABLE_TERMINFO OFF CACHE BOOL Force)
     set(LLVM_ENABLE_ZLIB OFF CACHE BOOL Force)
     set(LLPC_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(LLPC_BUILD_RENOIR ${XGL_BUILD_RENOIR} CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(LLPC_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
     # confict with PAL

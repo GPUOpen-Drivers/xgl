@@ -453,11 +453,11 @@ VkResult Device::Create(
 
             break;
         }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_8BIT_STORAGE_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevice8BitStorageFeaturesKHR>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevice8BitStorageFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDevice8BitStorageFeaturesKHR*>(pHeader));
+                reinterpret_cast<const VkPhysicalDevice8BitStorageFeatures*>(pHeader));
 
             break;
         }
@@ -509,11 +509,11 @@ VkResult Device::Create(
 
             break;
         }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES_EXT:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceDescriptorIndexingFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceDescriptorIndexingFeaturesEXT *>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceDescriptorIndexingFeatures*>(pHeader));
 
             break;
         }
@@ -534,14 +534,14 @@ VkResult Device::Create(
             break;
         }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceScalarBlockLayoutFeaturesEXT>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceScalarBlockLayoutFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeaturesEXT*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeatures*>(pHeader));
 
             if ((vkResult == VK_SUCCESS) &&
-                reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeaturesEXT*>(pHeader)->scalarBlockLayout)
+                reinterpret_cast<const VkPhysicalDeviceScalarBlockLayoutFeatures*>(pHeader)->scalarBlockLayout)
             {
                 scalarBlockLayoutEnabled = true;
             }
@@ -556,11 +556,11 @@ VkResult Device::Create(
 
             break;
         }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVulkanMemoryModelFeaturesKHR>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVulkanMemoryModelFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceVulkanMemoryModelFeaturesKHR*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceVulkanMemoryModelFeatures*>(pHeader));
 
             break;
         }
@@ -572,11 +572,11 @@ VkResult Device::Create(
 
             break;
         }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_INT64_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderAtomicInt64FeaturesKHR>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderAtomicInt64Features>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceShaderAtomicInt64FeaturesKHR*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceShaderAtomicInt64Features*>(pHeader));
 
             break;
         }
@@ -597,19 +597,19 @@ VkResult Device::Create(
 
             break;
         }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES_EXT:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceHostQueryResetFeaturesEXT>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceHostQueryResetFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceHostQueryResetFeaturesEXT*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceHostQueryResetFeatures*>(pHeader));
 
             break;
         }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_BUFFER_DEVICE_ADDRESS_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceBufferDeviceAddressFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeaturesKHR*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceBufferDeviceAddressFeatures*>(pHeader));
 
             break;
         }
@@ -622,20 +622,20 @@ VkResult Device::Create(
             break;
         }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_UNIFORM_BUFFER_STANDARD_LAYOUT_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceUniformBufferStandardLayoutFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceUniformBufferStandardLayoutFeatures*>(pHeader));
 
             break;
         }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures*>(pHeader));
 
             break;
         }
@@ -649,11 +649,11 @@ VkResult Device::Create(
             break;
         }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures*>(pHeader));
 
             break;
         }
@@ -667,11 +667,11 @@ VkResult Device::Create(
             break;
         }
 
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGELESS_FRAMEBUFFER_FEATURES:
         {
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceImagelessFramebufferFeaturesKHR>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceImagelessFramebufferFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceImagelessFramebufferFeaturesKHR*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceImagelessFramebufferFeatures*>(pHeader));
 
             break;
         }
@@ -684,12 +684,12 @@ VkResult Device::Create(
 
             break;
         }
-        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES_KHR:
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_FEATURES:
         {
 
-            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTimelineSemaphoreFeaturesKHR>(
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTimelineSemaphoreFeatures>(
                 pPhysicalDevice,
-                reinterpret_cast<const VkPhysicalDeviceTimelineSemaphoreFeaturesKHR*>(pHeader));
+                reinterpret_cast<const VkPhysicalDeviceTimelineSemaphoreFeatures*>(pHeader));
 
             break;
         }
@@ -730,7 +730,6 @@ VkResult Device::Create(
             break;
         }
 
-#if VKI_SDK_1_2
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_FEATURES:
         {
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceVulkan11Features>(
@@ -754,7 +753,6 @@ VkResult Device::Create(
 
             break;
         }
-#endif
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
         {
@@ -2201,7 +2199,7 @@ VkResult Device::CreateRenderPass(
 
 // =====================================================================================================================
 VkResult Device::CreateRenderPass2(
-    const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+    const VkRenderPassCreateInfo2*      pCreateInfo,
     const VkAllocationCallbacks*        pAllocator,
     VkRenderPass*                       pRenderPass)
 {
@@ -2635,7 +2633,7 @@ VkResult Device::CreateQueryPool(
 }
 
 // =====================================================================================================================
-VkResult Device::GetSemaphoreCounterValueKHR(
+VkResult Device::GetSemaphoreCounterValue(
     VkSemaphore                                 semaphore,
     uint64_t*                                   pValue)
 {
@@ -2645,8 +2643,8 @@ VkResult Device::GetSemaphoreCounterValueKHR(
 }
 
 // =====================================================================================================================
-VkResult Device::WaitSemaphoresKHR(
-    const VkSemaphoreWaitInfoKHR*               pWaitInfo,
+VkResult Device::WaitSemaphores(
+    const VkSemaphoreWaitInfo*                  pWaitInfo,
     uint64_t                                    timeout)
 {
     Pal::Result palResult = Pal::Result::Success;
@@ -2663,7 +2661,7 @@ VkResult Device::WaitSemaphoresKHR(
     }
 
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 508
-    if (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT_KHR)
+    if (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT)
     {
         flags |= Pal::HostWaitFlags::HostWaitAny;
     }
@@ -2674,7 +2672,7 @@ VkResult Device::WaitSemaphoresKHR(
 }
 
 // =====================================================================================================================
-VkResult Device::SignalSemaphoreKHR(
+VkResult Device::SignalSemaphore(
     VkSemaphore                                 semaphore,
     uint64_t                                    value)
 {
@@ -2834,7 +2832,7 @@ VkResult Device::TryIncreaseAllocatedMemorySize(
     VkResult           vkResult = VK_SUCCESS;
     utils::IterateMask deviceGroup(deviceMask);
 
-    while (deviceGroup.Iterate())
+    do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
@@ -2845,6 +2843,7 @@ VkResult Device::TryIncreaseAllocatedMemorySize(
             break;
         }
     }
+    while (deviceGroup.IterateNext());
 
     return vkResult;
 }
@@ -2859,12 +2858,13 @@ void Device::IncreaseAllocatedMemorySize(
 {
     utils::IterateMask deviceGroup(deviceMask);
 
-    while (deviceGroup.Iterate())
+    do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
         m_perGpu[deviceIdx].pPhysicalDevice->IncreaseAllocatedMemorySize(allocationSize, heapIdx);
     }
+    while (deviceGroup.IterateNext());
 }
 
 // =====================================================================================================================
@@ -2876,12 +2876,13 @@ void Device::DecreaseAllocatedMemorySize(
 {
     utils::IterateMask deviceGroup(deviceMask);
 
-    while (deviceGroup.Iterate())
+    do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
         m_perGpu[deviceIdx].pPhysicalDevice->DecreaseAllocatedMemorySize(allocationSize, heapIdx);
     }
+    while (deviceGroup.IterateNext());
 }
 
 // =====================================================================================================================
@@ -3102,6 +3103,40 @@ void Device::UpdateFeatureSettings()
 
 }
 
+// =====================================================================================================================
+// Handles logging of debug names from the DebugUtils extension
+VkResult Device::SetDebugUtilsObjectName(
+    const VkDebugUtilsObjectNameInfoEXT* pNameInfo)
+{
+    // Log the object name if it is an object type that RMV cares about.
+    if ((pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_BUFFER) ||
+        (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_IMAGE) ||
+        (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_PIPELINE))
+    {
+        // For buffers, the RMV resource handle is the same as the handle passed in so we can log that directly,
+        // but for image and pipeline the RMV resource handle comes from the Pal object.
+        Pal::DebugNameEventData nameData = {};
+        if (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_BUFFER)
+        {
+            nameData.pObj = reinterpret_cast<const void*>(pNameInfo->objectHandle);
+        }
+        else if (pNameInfo->objectType == VkObjectType::VK_OBJECT_TYPE_IMAGE)
+        {
+            Image* pImage = reinterpret_cast<Image*>(pNameInfo->objectHandle);
+            nameData.pObj = pImage->PalImage(DefaultDeviceIndex);
+        }
+        else // Pipeline
+        {
+            Pipeline* pPipeline = reinterpret_cast<Pipeline*>(pNameInfo->objectHandle);
+            nameData.pObj = pPipeline->PalPipeline(DefaultDeviceIndex);
+        }
+        nameData.pDebugName = pNameInfo->pObjectName;
+        VkInstance()->PalPlatform()->LogEvent(Pal::PalEvent::DebugName, &nameData, sizeof(nameData));
+    }
+
+    return VkResult::VK_SUCCESS;
+}
+
 /**
  ***********************************************************************************************************************
  * C-Callable entry points start here. These entries go in the dispatch table(s).
@@ -3289,9 +3324,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass(
 }
 
 // =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2KHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkCreateRenderPass2(
     VkDevice                                    device,
-    const VkRenderPassCreateInfo2KHR*           pCreateInfo,
+    const VkRenderPassCreateInfo2*              pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkRenderPass*                               pRenderPass)
 {
@@ -3621,8 +3656,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
     VkDevice                                    device,
     const VkDebugUtilsObjectNameInfoEXT*        pNameInfo)
 {
-
-    return VK_SUCCESS;
+    return ApiDevice::ObjectFromHandle(device)->SetDebugUtilsObjectName(pNameInfo);
 }
 
 // =====================================================================================================================
@@ -3719,31 +3753,31 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetCalibratedTimestampsEXT(
         pMaxDeviation);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreCounterValueKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreCounterValue(
     VkDevice                                    device,
     VkSemaphore                                 semaphore,
     uint64_t*                                   pValue)
 {
-    return ApiDevice::ObjectFromHandle(device)->GetSemaphoreCounterValueKHR(
+    return ApiDevice::ObjectFromHandle(device)->GetSemaphoreCounterValue(
         semaphore,
         pValue);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL vkWaitSemaphoresKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkWaitSemaphores(
     VkDevice                                    device,
-    const VkSemaphoreWaitInfoKHR*               pWaitInfo,
+    const VkSemaphoreWaitInfo*                  pWaitInfo,
     uint64_t                                    timeout)
 {
-    return ApiDevice::ObjectFromHandle(device)->WaitSemaphoresKHR(
+    return ApiDevice::ObjectFromHandle(device)->WaitSemaphores(
         pWaitInfo,
         timeout);
 }
 
-VKAPI_ATTR VkResult VKAPI_CALL vkSignalSemaphoreKHR(
+VKAPI_ATTR VkResult VKAPI_CALL vkSignalSemaphore(
     VkDevice                                    device,
-    const VkSemaphoreSignalInfoKHR*             pSignalInfo)
+    const VkSemaphoreSignalInfo*                pSignalInfo)
 {
-    return ApiDevice::ObjectFromHandle(device)->SignalSemaphoreKHR(
+    return ApiDevice::ObjectFromHandle(device)->SignalSemaphore(
         pSignalInfo->semaphore,
         pSignalInfo->value);
 }

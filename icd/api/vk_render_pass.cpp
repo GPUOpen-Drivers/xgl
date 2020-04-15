@@ -185,7 +185,7 @@ void AttachmentReference::Init(const VkAttachmentReference& attachRef)
 }
 
 // =====================================================================================================================
-void AttachmentReference::Init(const VkAttachmentReference2KHR& attachRef)
+void AttachmentReference::Init(const VkAttachmentReference2& attachRef)
 {
     attachment    = attachRef.attachment;
     layout        = attachRef.layout;
@@ -194,16 +194,16 @@ void AttachmentReference::Init(const VkAttachmentReference2KHR& attachRef)
 
     union
     {
-        const VkStructHeader*                        pHeader;
-        const VkAttachmentReference2KHR*             pAttachmentReference;
-        const VkAttachmentReferenceStencilLayoutKHR* pStencilLayout;
+        const VkStructHeader*                     pHeader;
+        const VkAttachmentReference2*             pAttachmentReference;
+        const VkAttachmentReferenceStencilLayout* pStencilLayout;
     };
 
     for (pAttachmentReference = &attachRef; pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT_KHR:
+        case VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT:
             stencilLayout = pStencilLayout->stencilLayout;
             break;
         default:
@@ -247,7 +247,7 @@ void AttachmentDescription::Init(const VkAttachmentDescription& attachDesc)
 }
 
 // =====================================================================================================================
-void AttachmentDescription::Init(const VkAttachmentDescription2KHR& attachDesc)
+void AttachmentDescription::Init(const VkAttachmentDescription2& attachDesc)
 {
     flags                = attachDesc.flags;
     format               = attachDesc.format;
@@ -263,16 +263,16 @@ void AttachmentDescription::Init(const VkAttachmentDescription2KHR& attachDesc)
 
     union
     {
-        const VkStructHeader*                          pHeader;
-        const VkAttachmentDescription2KHR*             pAttachmentDescription;
-        const VkAttachmentDescriptionStencilLayoutKHR* pStencilLayout;
+        const VkStructHeader*                       pHeader;
+        const VkAttachmentDescription2*             pAttachmentDescription;
+        const VkAttachmentDescriptionStencilLayout* pStencilLayout;
     };
 
     for (pAttachmentDescription = &attachDesc; pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT_KHR:
+        case VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT:
             stencilInitialLayout = pStencilLayout->stencilInitialLayout;
             stencilFinalLayout   = pStencilLayout->stencilFinalLayout;
             break;
@@ -327,7 +327,7 @@ void SubpassDependency::Init(
 // =====================================================================================================================
 void SubpassDependency::Init(
     uint32_t                        subpassDepIndex,
-    const VkSubpassDependency2KHR&  subpassDep,
+    const VkSubpassDependency2&     subpassDep,
     const RenderPassExtCreateInfo&  renderPassExt)
 {
     srcSubpass      = subpassDep.srcSubpass;
@@ -368,8 +368,8 @@ SubpassDescription::SubpassDescription()
     pResolveAttachments     (nullptr),
     preserveAttachmentCount (0),
     pPreserveAttachments    (nullptr),
-    depthResolveMode        (VK_RESOLVE_MODE_NONE_KHR),
-    stencilResolveMode      (VK_RESOLVE_MODE_NONE_KHR)
+    depthResolveMode        (VK_RESOLVE_MODE_NONE),
+    stencilResolveMode      (VK_RESOLVE_MODE_NONE)
 {
 }
 
@@ -529,7 +529,7 @@ void SubpassDescription::Init(
 // =====================================================================================================================
 void SubpassDescription::Init(
     uint32_t                        subpassIndex,
-    const VkSubpassDescription2KHR& subpassDesc,
+    const VkSubpassDescription2&    subpassDesc,
     const RenderPassExtCreateInfo&  renderPassExt,
     const AttachmentDescription*    pAttachments,
     uint32_t                        attachmentCount,
@@ -540,15 +540,15 @@ void SubpassDescription::Init(
 
     union
     {
-        const VkStructHeader*                             pHeader;
-        const VkSubpassDescriptionDepthStencilResolveKHR* pDepthStencilResolveCreateInfo;
+        const VkStructHeader*                          pHeader;
+        const VkSubpassDescriptionDepthStencilResolve* pDepthStencilResolveCreateInfo;
     };
 
     for (pHeader = static_cast<const VkStructHeader*>(subpassDesc.pNext); pHeader != nullptr; pHeader = pHeader->pNext)
     {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE_KHR:
+        case VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE:
         {
             depthResolveMode   = pDepthStencilResolveCreateInfo->depthResolveMode;
             stencilResolveMode = pDepthStencilResolveCreateInfo->stencilResolveMode;
@@ -562,7 +562,7 @@ void SubpassDescription::Init(
         }
     }
 
-    InitSubpassDescription<VkSubpassDescription2KHR>(
+    InitSubpassDescription<VkSubpassDescription2>(
         subpassIndex,
         subpassDesc,
         renderPassExt,
@@ -612,9 +612,9 @@ static size_t GetRenderPassCreateInfoRequiredMemorySize(
     {
         createInfoSize += renderPassExt.pMultiviewCreateInfo->correlationMaskCount * sizeof(uint32_t);
     }
-    else if (std::is_same<RenderPassCreateInfoType, VkRenderPassCreateInfo2KHR>::value)
+    else if (std::is_same<RenderPassCreateInfoType, VkRenderPassCreateInfo2>::value)
     {
-        auto pCreateInfo2 = reinterpret_cast<const VkRenderPassCreateInfo2KHR*>(pCreateInfo);
+        auto pCreateInfo2 = reinterpret_cast<const VkRenderPassCreateInfo2*>(pCreateInfo);
 
         createInfoSize += pCreateInfo2->correlatedViewMaskCount * sizeof(uint32_t);
     }
@@ -729,7 +729,7 @@ void RenderPassCreateInfo::Init(
 
 // =====================================================================================================================
 void RenderPassCreateInfo::Init(
-    const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+    const VkRenderPassCreateInfo2*      pCreateInfo,
     const RenderPassExtCreateInfo&      renderPassExt,
     void*                               pMemoryPtr,
     size_t                              memorySize)
@@ -746,7 +746,7 @@ void RenderPassCreateInfo::Init(
             pCreateInfo->correlatedViewMaskCount * sizeof(uint32_t));
     }
 
-    InitRenderPassCreateInfo<VkRenderPassCreateInfo2KHR>(
+    InitRenderPassCreateInfo<VkRenderPassCreateInfo2>(
         pCreateInfo,
         renderPassExt,
         pMemoryPtr,
@@ -890,11 +890,11 @@ VkResult RenderPass::Create(
 // =====================================================================================================================
 VkResult RenderPass::Create(
     Device*                             pDevice,
-    const VkRenderPassCreateInfo2KHR*   pCreateInfo,
+    const VkRenderPassCreateInfo2*      pCreateInfo,
     const VkAllocationCallbacks*        pAllocator,
     VkRenderPass*                       pRenderPass)
 {
-    return CreateRenderPass<VkRenderPassCreateInfo2KHR>(
+    return CreateRenderPass<VkRenderPassCreateInfo2>(
         pDevice,
         pCreateInfo,
         pAllocator,

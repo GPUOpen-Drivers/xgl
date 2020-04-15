@@ -31,8 +31,4 @@
 
 #pragma once
 
-#if VKI_SDK_1_2
 #include "sdk-1.2/GLSL.std.450.h"
-#else
-#include "sdk-1.1/GLSL.std.450.h"
-#endif

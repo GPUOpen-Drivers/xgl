@@ -304,13 +304,13 @@ VkResult Queue::Submit(
         {
             const VkSubmitInfo& submitInfo = pSubmits[submitIdx];
             const VkDeviceGroupSubmitInfo* pDeviceGroupInfo = nullptr;
-            const VkTimelineSemaphoreSubmitInfoKHR* pTimelineSemaphoreInfo = nullptr;
+            const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = nullptr;
             {
                 union
                 {
                     const VkStructHeader*                          pHeader;
                     const VkSubmitInfo*                            pVkSubmitInfo;
-                    const VkTimelineSemaphoreSubmitInfoKHR*        pVkTimelineSemaphoreSubmitInfo;
+                    const VkTimelineSemaphoreSubmitInfo*           pVkTimelineSemaphoreSubmitInfo;
                     const VkDeviceGroupSubmitInfo*                 pVkDeviceGroupSubmitInfo;
                 };
 
@@ -321,7 +321,7 @@ VkResult Queue::Submit(
                     case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO:
                         pDeviceGroupInfo = pVkDeviceGroupSubmitInfo;
                         break;
-                    case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR:
+                    case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
                         pTimelineSemaphoreInfo = pVkTimelineSemaphoreSubmitInfo;
                         break;
                     default:
@@ -667,7 +667,8 @@ VkResult Queue::Present(
     uint32_t presentationDeviceIdx = 0;
     bool     needSemaphoreFlush    = false;
 
-    const VkPresentInfoKHR* pVkInfo = nullptr;
+    const VkPresentInfoKHR*    pVkInfo    = nullptr;
+    const VkPresentRegionsKHR* pVkRegions = nullptr;
 
     {
         union
@@ -675,6 +676,7 @@ VkResult Queue::Present(
             const VkStructHeader*              pHeader;
             const VkPresentInfoKHR*            pVkPresentInfoKHR;
             const VkDeviceGroupPresentInfoKHR* pVkDeviceGroupPresentInfoKHR;
+            const VkPresentRegionsKHR*         pVkPresentRegionsKHR;
         };
 
         for (pVkPresentInfoKHR = pPresentInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -691,6 +693,12 @@ VkResult Queue::Present(
                 const uint32_t deviceMask = *pVkDeviceGroupPresentInfoKHR->pDeviceMasks;
                 VK_ASSERT(Util::CountSetBits(deviceMask) == 1);
                 Util::BitMaskScanForward(&presentationDeviceIdx, deviceMask);
+                break;
+            }
+            case VK_STRUCTURE_TYPE_PRESENT_REGIONS_KHR:
+            {
+                VK_ASSERT(pVkPresentRegionsKHR->swapchainCount == pPresentInfo->swapchainCount);
+                pVkRegions = pVkPresentRegionsKHR;
                 break;
             }
             default:
@@ -747,6 +755,8 @@ VkResult Queue::Present(
 #endif
     }
 
+    VirtualStackFrame virtStackFrame(m_pStackAllocator);
+
     // Get presentable image object
     for (uint32_t curSwapchain = 0; curSwapchain < pPresentInfo->swapchainCount; curSwapchain++)
     {
@@ -757,6 +767,33 @@ VkResult Queue::Present(
         const uint32_t imageIndex = pPresentInfo->pImageIndices[curSwapchain];
 
         Pal::PresentSwapChainInfo presentInfo = {};
+
+        Pal::Rect* pPresentRects = nullptr;
+
+        if ((pVkRegions != nullptr) &&
+            (pVkRegions->pRegions != nullptr))
+        {
+            const VkPresentRegionKHR* pVkRegion = &pVkRegions->pRegions[curSwapchain];
+
+            if ((pVkRegion->rectangleCount > 0) &&
+                (pVkRegion->pRectangles != nullptr))
+            {
+                pPresentRects = virtStackFrame.AllocArray<Pal::Rect>(pVkRegion->rectangleCount);
+                if (pPresentRects == nullptr)
+                {
+                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                    break;
+                }
+                for (uint32_t r = 0; r < pVkRegion->rectangleCount; ++r)
+                {
+                    const VkRectLayerKHR& rectLayer = pVkRegion->pRectangles[r];
+                    const VkRect2D        rect2D = { rectLayer.offset, rectLayer.extent };
+                    pPresentRects[r] = VkToPalRect(rect2D);
+                }
+                presentInfo.rectangleCount = pVkRegion->rectangleCount;
+                presentInfo.pRectangles    = pPresentRects;
+            }
+        }
 
         // Fill in present information and obtain the PAL memory of the presentable image.
         Pal::IGpuMemory* pGpuMemory = pSwapChain->UpdatePresentInfo(presentationDeviceIdx, imageIndex, &presentInfo);
@@ -858,6 +895,10 @@ VkResult Queue::Present(
             result = VK_ERROR_DEVICE_LOST;
         }
 
+        if (pPresentRects != nullptr)
+        {
+            virtStackFrame.FreeArray(pPresentRects);
+        }
     }
 
     return result;
@@ -1137,13 +1178,13 @@ static void PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(
     const VkBindSparseInfo& bindInfo,
     uint32_t*               pResourceDeviceIndex,
     uint32_t*               pMemoryDeviceIndex,
-    const VkTimelineSemaphoreSubmitInfoKHR** ppTimelineSemaphoreInfo)
+    const VkTimelineSemaphoreSubmitInfo** ppTimelineSemaphoreInfo)
 {
     union
     {
-        const VkStructHeader*               pHeader;
-        const VkTimelineSemaphoreSubmitInfoKHR* pSemaphoreInfo;
-        const VkDeviceGroupBindSparseInfo*  pDeviceGroupBindSparseInfo;
+        const VkStructHeader*                pHeader;
+        const VkTimelineSemaphoreSubmitInfo* pSemaphoreInfo;
+        const VkDeviceGroupBindSparseInfo*   pDeviceGroupBindSparseInfo;
     };
 
     for (pHeader  = static_cast<const VkStructHeader*>(bindInfo.pNext);
@@ -1165,7 +1206,7 @@ static void PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(
 
                 break;
             }
-            case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR:
+            case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
             {
                 *ppTimelineSemaphoreInfo = pSemaphoreInfo;
                 break;
@@ -1216,8 +1257,8 @@ VkResult Queue::BindSparse(
         uint32_t    resourceDeviceIndex     = DefaultDeviceIndex;
         uint32_t    memoryDeviceIndex       = DefaultDeviceIndex;
         uint32_t    nextResourceDeviceIndex = DefaultDeviceIndex;
-        const VkTimelineSemaphoreSubmitInfoKHR* pTimelineSemaphoreInfo = nullptr;
-        const VkTimelineSemaphoreSubmitInfoKHR* pNextTimelineSemaphoreInfo = nullptr;
+        const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = nullptr;
+        const VkTimelineSemaphoreSubmitInfo* pNextTimelineSemaphoreInfo = nullptr;
 
         PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(bindInfo, &resourceDeviceIndex, &memoryDeviceIndex,
                                                                &pTimelineSemaphoreInfo);
@@ -1306,11 +1347,11 @@ VkResult Queue::BindSparse(
 
         utils::IterateMask deviceGroup(signalFenceDeviceMask);
 
-        while (result == VK_SUCCESS && deviceGroup.Iterate())
+        do
         {
             const uint32_t deviceIndex = deviceGroup.Index();
             pPalFence = pFence->PalFence(deviceIndex);
-            submitInfo.ppFences   = &pPalFence;
+            submitInfo.ppFences = &pPalFence;
             submitInfo.fenceCount = 1;
 
             // set the active device mask for the fence.
@@ -1320,6 +1361,7 @@ VkResult Queue::BindSparse(
 
             result = PalToVkResult(PalQueue(deviceIndex)->Submit(submitInfo));
         }
+        while ((result == VK_SUCCESS) && deviceGroup.IterateNext());
     }
 
     virtStackFrame.FreeArray(remapState.pRanges);
@@ -1615,21 +1657,21 @@ void Queue::InsertDebugUtilsLabel(
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    if (strcmp(pLabelInfo->pLabelName, settings.devModeStartFrameDebugUtilsLabel) == 0)
-    {
-        if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
-        {
-            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueueLabel);
-        }
-    }
-#endif
-
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if (strcmp(pLabelInfo->pLabelName, settings.devModeEndFrameDebugUtilsLabel) == 0)
     {
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueueLabel);
+        }
+    }
+#endif
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    if (strcmp(pLabelInfo->pLabelName, settings.devModeStartFrameDebugUtilsLabel) == 0)
+    {
+        if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
+        {
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueueLabel);
         }
     }
 #endif

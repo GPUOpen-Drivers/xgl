@@ -291,7 +291,7 @@ VkResult ImageView::Create(
         {
         case VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO:
             // The image view usage must be a subset of the usage of the image it is created from.  For uncompressed
-            // views of compressed images or format compatible image views, VK_IMAGE_CREATE_EXTENDED_USAGE_BIT_KHR
+            // views of compressed images or format compatible image views, VK_IMAGE_CREATE_EXTENDED_USAGE_BIT
             // allows the image to be created with usage flags that are not supported for the format the image is created
             // with but are supported for the format of the VkImageView.
             VK_ASSERT((imageViewUsage | pUsageInfo->usage) == imageViewUsage);

@@ -56,12 +56,13 @@ void StencilOpsCombiner::PalCmdSetStencilState(CmdBuffer* pCmdBuffer)
         (m_palDeviceMask                != palDeviceMask))
     {
         utils::IterateMask deviceGroup(palDeviceMask);
-        while (deviceGroup.Iterate())
+        do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
             pCmdBuffer->PalCmdBuffer(deviceIdx)->CmdSetStencilRefMasks(m_state.m_palState);
         }
+        while (deviceGroup.IterateNext());
 
         m_previous_state.Get64bitRef() = m_state.Get64bitRef();
         m_palDeviceMask                = palDeviceMask;

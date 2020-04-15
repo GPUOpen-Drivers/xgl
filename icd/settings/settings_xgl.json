@@ -348,7 +348,7 @@
         "Command Buffer Options"
       ],
       "Defaults": {
-        "Default": "Pal::GpuHeapGartCacheable"
+        "Default": "Pal::GpuHeapGartUswc"
       },
       "Scope": "Driver",
       "Type": "enum",
@@ -1895,6 +1895,53 @@
       "Size": 256
     },
     {
+      "Name": "PipelineCacheDefaultLocationLimitation",
+      "Description": "The size of PipelineCachingDefaultLocation is limited to (default 10GB).",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 10737418240
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "VariableName": "pipelineCacheDefaultLocationLimitation"
+    },
+    {
+      "Name": "AllowCleanUpCacheDirectory",
+      "Description": "Controls whether the cache directory is cleaned up by xgl driver",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false,
+        "WinDefault": false,
+        "LnxDefault": true
+      },
+      "Type": "bool",
+      "VariableName": "allowCleanUpCacheDirectory",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ThresholdOfCleanUpCache",
+      "Description": "Driver will delete files from oldest to (oldest + Threshold). The threshold unit is seconds. Default is 86400",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 86400
+      },
+      "Flags": {
+        "IsHex": true
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "VariableName": "thresholdOfCleanUpCache"
+    },
+    {
       "Name": "MarkPipelineCacheWithBuildTimestamp",
       "Description": "Controles whether the pipline cache is tagged with the build timestamp. This provides extra stability by forcing a cache rebuild for every new driver released.  May be useful to disable during rapid iteration. (Default: TRUE)",
       "Tags": [
@@ -2806,6 +2853,19 @@
       "Scope": "Driver",
       "Type": "uint32",
       "VariableName": "limitSampleCounts"
+    },
+    {
+      "Name": "AlwaysReportHdrFormats",
+      "Description": "Always report HDR formats(If monitor supports them) to the application.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "alwaysReportHdrFormats"
     },
     {
       "Description": "Custom device allocation count limitation, when larger than 0.",
@@ -4528,6 +4588,19 @@
       "Scope": "Driver"
     },
     {
+      "Name": "OverrideUseNgg",
+      "Description": "Override use of NGG on a per shader basis. Default behavior to enable NGG use",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseNgg",
+      "Scope": "Driver"
+    },
+    {
       "Name": "ResourceProfileIgnoresAppProfile",
       "Description": "If this is true, any production app profile-installed resource optimizations are ignored.",
       "Tags": [
@@ -4667,6 +4740,19 @@
       "Scope": "Global",
       "Type": "uint32",
       "VariableName": "appGpuID"
+    },
+    {
+      "Name": "DisableAMDVendorExtensions",
+      "Description": "Disables AMD Vendor Extensions",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "disableAMDVendorExtensions",
+      "Scope": "Driver"
     }
   ]
 }
