@@ -2028,8 +2028,11 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
 #if ICD_GPUOPEN_DEVMODE_BUILD
     if (pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable && (pDevMgr != nullptr))
     {
-        Pipeline* pPipeline = Pipeline::ObjectFromHandle(pipeline);
-        pDevMgr->PipelineDestroyed(pDevice, pPipeline);
+        if (VK_NULL_HANDLE != pipeline)
+        {
+            Pipeline* pPipeline = Pipeline::ObjectFromHandle(pipeline);
+            pDevMgr->PipelineDestroyed(pDevice, pPipeline);
+        }
     }
 #endif
 
