@@ -1114,12 +1114,12 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         case TriggerMode::Tag:
             sampleTraceApiInfo.profilingMode = GpuUtil::TraceProfilingMode::Tags;
             sampleTraceApiInfo.profilingModeData.tagData.start = m_traceFrameBeginTag;
-            sampleTraceApiInfo.profilingModeData.tagData.start = m_traceFrameEndTag;
+            sampleTraceApiInfo.profilingModeData.tagData.end = m_traceFrameEndTag;
             break;
         case TriggerMode::Index:
             sampleTraceApiInfo.profilingMode = GpuUtil::TraceProfilingMode::FrameNumber;
             sampleTraceApiInfo.profilingModeData.frameNumberData.start = m_traceFrameBeginIndex;
-            sampleTraceApiInfo.profilingModeData.frameNumberData.start = m_traceFrameEndIndex;
+            sampleTraceApiInfo.profilingModeData.frameNumberData.end = m_traceFrameEndIndex;
             break;
         default:
             VK_NOT_IMPLEMENTED;
@@ -1412,7 +1412,16 @@ Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
     VK_ASSERT(pState->status == TraceStatus::Running);
 
     // Do not advance unless we've traced the necessary number of frames
-    if (m_trace.sqttFrameCount < m_trace.pDevice->GetRuntimeSettings().devModeSqttFrameCount)
+    // also take into account if a specific number of frames has been requested
+    // through Index mode
+    uint32_t requestedFrames =
+        m_trace.pDevice->GetRuntimeSettings().devModeSqttFrameCount;
+    if (pState->triggerMode == TriggerMode::Index)
+    {
+        requestedFrames = (m_traceFrameBeginIndex < m_traceFrameEndIndex) ?
+            m_traceFrameEndIndex - m_traceFrameBeginIndex : 0u;
+    }
+    if (m_trace.sqttFrameCount < requestedFrames)
     {
         return Pal::Result::Success;
     }
