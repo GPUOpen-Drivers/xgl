@@ -35,6 +35,7 @@
 #include "include/khronos/vulkan.h"
 
 #include "include/vk_shader_code.h"
+#include "appopt/g_shader_profile.h"
 
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
 #include "vkgcDefs.h"
@@ -68,179 +69,6 @@ struct ShaderOptimizerKey
 struct PipelineOptimizerKey
 {
     ShaderOptimizerKey shaders[ShaderStageCount];
-};
-
-struct ShaderProfilePattern
-{
-    // Defines which pattern tests are enabled
-    union
-    {
-        struct
-        {
-            uint32_t stageActive      : 1; // Stage needs to be active
-            uint32_t stageInactive    : 1; // Stage needs to be inactive
-            uint32_t codeHash         : 1; // Test code hash (128-bit)
-            uint32_t codeSizeLessThan : 1; // Test code size less than codeSizeLessThanValue
-            uint32_t reserved         : 27;
-        };
-        uint32_t u32All;
-    } match;
-
-    Pal::ShaderHash codeHash;
-    size_t          codeSizeLessThanValue;
-};
-
-struct PipelineProfilePattern
-{
-    // Defines which pattern tests are enabled
-    union
-    {
-        struct
-        {
-            uint32_t always     : 1;  // Pattern always hits
-            uint32_t reserved   : 31;
-        };
-        uint32_t u32All;
-    }  match;
-
-    ShaderProfilePattern shaders[ShaderStageCount];
-};
-
-struct ShaderTuningOptions
-{
-    uint32_t vgprLimit;
-    uint32_t sgprLimit;
-    uint32_t ldsSpillLimitDwords;
-    uint32_t maxArraySizeForFastDynamicIndexing;
-    uint32_t userDataSpillThreshold;
-    uint32_t maxThreadGroupsPerComputeUnit;
-    uint32_t waveSize;
-    uint32_t waveBreakSize;
-    uint32_t useSiScheduler;
-    uint32_t reconfigWorkgroupLayout;
-    uint32_t forceLoopUnrollCount;
-    bool enableLoadScalarizer;
-    bool disableLicm;
-    uint32_t unrollThreshold;
-};
-
-struct ShaderProfileAction
-{
-    struct
-    {
-        // Defines which values are applied
-        union
-        {
-            struct
-            {
-                uint32_t optStrategyFlags                   : 1;
-                uint32_t vgprLimit                          : 1;
-                uint32_t sgprLimit                          : 1;
-                uint32_t ldsSpillLimitDwords                : 1;
-                uint32_t maxArraySizeForFastDynamicIndexing : 1;
-                uint32_t userDataSpillThreshold             : 1;
-                uint32_t maxThreadGroupsPerComputeUnit      : 1;
-                uint32_t scOptions                          : 1;
-                uint32_t scOptionsMask                      : 1;
-                uint32_t trapPresent                        : 1;
-                uint32_t debugMode                          : 1;
-                uint32_t allowReZ                           : 1;
-                uint32_t shaderReplaceEnabled               : 1;
-                uint32_t fpControlFlags                     : 1;
-                uint32_t optimizationIntent                 : 1;
-                uint32_t disableLoopUnrolls                 : 1;
-                uint32_t enableSelectiveInline              : 1;
-                uint32_t waveSize                           : 1;
-                uint32_t wgpMode                            : 1;
-                uint32_t waveBreakSize                      : 1;
-                uint32_t nggDisable                         : 1;
-                uint32_t nggFasterLaunchRate                : 1;
-                uint32_t nggVertexReuse                     : 1;
-                uint32_t nggEnableFrustumCulling            : 1;
-                uint32_t nggEnableBoxFilterCulling          : 1;
-                uint32_t nggEnableSphereCulling             : 1;
-                uint32_t nggEnableBackfaceCulling           : 1;
-                uint32_t nggEnableSmallPrimFilter           : 1;
-                uint32_t enableSubvector                    : 1;
-                uint32_t enableSubvectorSharedVgprs         : 1;
-                uint32_t reserved                           : 1;
-            };
-            uint32_t u32All;
-        } apply;
-
-        ShaderTuningOptions tuningOptions;
-    } shaderCreate;
-
-    struct
-    {
-        // Empty for now (potentially interesting tuning parameters exist though)
-    } pipelineShader;
-
-    // Applied to DynamicXShaderInfo
-    struct
-    {
-        // Defines which values are applied
-        union
-        {
-            struct
-            {
-                uint32_t maxWavesPerCu          : 1;
-                uint32_t cuEnableMask           : 1;
-                uint32_t maxThreadGroupsPerCu   : 1;
-                uint32_t reserved               : 29;
-            };
-            uint32_t u32All;
-        } apply;
-
-        uint32_t                             maxWavesPerCu;
-        uint32_t                             cuEnableMask;
-        uint32_t                             maxThreadGroupsPerCu;
-    } dynamicShaderInfo;
-};
-
-struct PipelineProfileAction
-{
-    // Applied to ShaderCreateInfo/PipelineShaderInfo/DynamicXShaderInfo:
-    ShaderProfileAction shaders[ShaderStageCount];
-
-    // Applied to Graphics/ComputePipelineCreateInfo:
-    struct
-    {
-        union
-        {
-            struct
-            {
-                uint32_t lateAllocVsLimit : 1;
-                uint32_t binningOverride  : 1;
-
-                uint32_t reserved         : 30;
-            };
-            uint32_t u32All;
-        } apply;
-
-        Pal::BinningOverride binningOverride;
-        uint32_t             lateAllocVsLimit;
-    } createInfo;
-};
-
-// This struct describes a single entry in a per-application profile of shader compilation parameter tweaks.
-//
-// Each entry describes a pair of match patterns and actions.  For a given shader in a given pipeline, if all
-// patterns defined by this entry match, then all actions are applied to that shader prior to compilation.
-struct PipelineProfileEntry
-{
-    PipelineProfilePattern pattern;
-    PipelineProfileAction action;
-};
-
-constexpr uint32_t MaxPipelineProfileEntries = 32;
-
-// Describes a collection of entries that can be used to apply application-specific shader compilation tuning
-// to different classes of shaders.
-struct PipelineProfile
-{
-    uint32_t              entryCount;
-    PipelineProfileEntry  entries[MaxPipelineProfileEntries];
 };
 
 // This struct represents unified shader compiler options
@@ -342,6 +170,8 @@ private:
 
     PipelineProfile        m_tuningProfile;
     PipelineProfile        m_appProfile;
+
+    ShaderProfile          m_appShaderProfile;
 
 #if ICD_RUNTIME_APP_PROFILE
     PipelineProfile        m_runtimeProfile;

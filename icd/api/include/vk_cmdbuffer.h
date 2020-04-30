@@ -821,6 +821,9 @@ public:
         uint32_t               perDeviceStride,
         const uint32_t*        pEntryValues);
 
+    VK_INLINE void PalCmdSuspendPredication(
+        bool suspend);
+
     template< typename EventContainer_T >
     VK_INLINE void InsertDeviceEvents(
         const Pal::IGpuEvent**  pDestEvents,
@@ -985,6 +988,20 @@ private:
         uint32_t               lengthInDwords,
         const uint32_t* const  pInputValues);
 
+    union CmdBufferFlags
+    {
+        uint32_t u32All;
+
+        struct
+        {
+            uint32_t is2ndLvl                  :  1;
+            uint32_t isRecording               :  1;
+            uint32_t needResetState            :  1;
+            uint32_t hasConditionalRendering   :  1;
+            uint32_t reserved                  : 28;
+        };
+    };
+
     Device* const                 m_pDevice;
     CmdPool* const                m_pCmdPool;
     uint32_t                      m_queueFamilyIndex;
@@ -1001,9 +1018,7 @@ private:
 
     VertBufBindingMgr             m_vbMgr;           // Manages current vertex buffer bindings
     StencilOpsCombiner            m_stencilCombiner; // Manages internal stencil combined state
-    bool                          m_is2ndLvl;        // is this command buffer secondary or primary
-    bool                          m_isRecording;
-    bool                          m_needResetState;
+    CmdBufferFlags                m_flags;
     VkResult                      m_recordingResult; // Tracks the result of recording commands to capture OOM errors
 
     const DeviceBarrierPolicy     m_barrierPolicy;   // Barrier policy to use with this command buffer

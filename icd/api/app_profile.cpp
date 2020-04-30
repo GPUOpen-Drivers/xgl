@@ -289,6 +289,36 @@ constexpr AppProfilePatternEntry AppEngineSaschaWillemsExamples =
     "vulkanexample"
 };
 
+constexpr AppProfilePatternEntry AppNameWolfensteinYoungblood =
+{
+    PatternAppNameLower,
+    "wolfenstein: youngblood"
+};
+
+constexpr AppProfilePatternEntry AppNameRainbowSixSiege =
+{
+    PatternAppNameLower,
+    "rainbow six siege"
+};
+
+constexpr AppProfilePatternEntry AppEngineScimitar =
+{
+    PatternEngineNameLower,
+    "scimitar"
+};
+
+constexpr AppProfilePatternEntry AppNameRage2 =
+{
+    PatternAppNameLower,
+    "rage 2"
+};
+
+constexpr AppProfilePatternEntry AppEngineApex =
+{
+    PatternEngineNameLower,
+    "apex engine"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -316,6 +346,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::WolfensteinII,
         {
             AppNameWolfensteinII,
+            AppEngineIdTech,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::WolfensteinYoungblood,
+        {
+            AppNameWolfensteinYoungblood,
             AppEngineIdTech,
             PatternEnd
         }
@@ -554,6 +593,40 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameSaschaWillemsExamples,
             AppEngineSaschaWillemsExamples,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Rage2,
+        {
+            AppNameRage2,
+            AppEngineApex,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::ApexEngine,
+        {
+            AppEngineApex,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::RainbowSixSiege,
+        {
+            AppNameRainbowSixSiege,
+            AppEngineScimitar,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::ScimitarEngine,
+        {
+            AppEngineScimitar,
             PatternEnd
         }
     },

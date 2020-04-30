@@ -353,15 +353,14 @@ CmdBuffer::CmdBuffer(
     m_validShaderStageFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetValidShaderStages(queueFamilyIndex)),
     m_pStackAllocator(nullptr),
     m_vbMgr(pDevice),
-    m_is2ndLvl(false),
-    m_isRecording(false),
-    m_needResetState(true),
+    m_flags(),
     m_recordingResult(VK_SUCCESS),
     m_barrierPolicy(barrierPolicy),
     m_pSqttState(nullptr),
     m_renderPassInstance(pDevice->VkInstance()->Allocator()),
     m_pTransformFeedbackState(nullptr)
 {
+    m_flags.needResetState = true;
 
 #if VK_ENABLE_DEBUG_BARRIERS
     m_dbgBarrierPreCmdMask  = m_pDevice->GetRuntimeSettings().dbgBarrierPreCmdEnable;
@@ -525,7 +524,7 @@ VkResult CmdBuffer::Initialize(
 
     if (result == Pal::Result::Success)
     {
-        m_is2ndLvl = (groupCreateInfo.flags.nested == 1) ? true : false;
+        m_flags.is2ndLvl = groupCreateInfo.flags.nested;
     }
 
     // Initialize SQTT command buffer state if thread tracing support is enabled (gpuopen developer mode).
@@ -964,16 +963,16 @@ void CmdBuffer::PalCmdCopyImageToMemory(
 VkResult CmdBuffer::Begin(
     const VkCommandBufferBeginInfo* pBeginInfo)
 {
-    VK_ASSERT(!m_isRecording);
+    VK_ASSERT(!m_flags.isRecording);
 
     // Beginning a command buffer implicitly resets its state if it is not reset before.
-    if (m_needResetState)
+    if (m_flags.needResetState)
     {
         ResetState();
     }
     else
     {
-        m_needResetState = true;
+        m_flags.needResetState = true;
     }
 
     Pal::CmdBufferBuildInfo   cmdInfo = { 0 };
@@ -1027,14 +1026,35 @@ VkResult CmdBuffer::Begin(
                 break;
             }
 
-            if (m_is2ndLvl && (pInfo->pInheritanceInfo != nullptr))
+            if (m_flags.is2ndLvl && (pInfo->pInheritanceInfo != nullptr))
             {
+                // Only provide valid inherited state pointer for 2nd level command buffers
+                cmdInfo.pInheritedState = &inheritedStateParams;
+
                 pRenderPass = RenderPass::ObjectFromHandle(pInfo->pInheritanceInfo->renderPass);
                 pFramebuffer = Framebuffer::ObjectFromHandle(pInfo->pInheritanceInfo->framebuffer);
                 currentSubPass = pInfo->pInheritanceInfo->subpass;
                 if (pInfo->pInheritanceInfo->occlusionQueryEnable)
                 {
                     inheritedStateParams.stateFlags.occlusionQuery = 1;
+                }
+
+                const void* pNext = pInfo->pInheritanceInfo->pNext;
+
+                while (pNext != nullptr)
+                {
+                    const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+                    if (pHeader->sType == VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT)
+                    {
+                        const VkCommandBufferInheritanceConditionalRenderingInfoEXT* pConditionalRenderingInfo =
+                            static_cast<const VkCommandBufferInheritanceConditionalRenderingInfoEXT*>(pNext);
+
+                        inheritedStateParams.stateFlags.predication = pConditionalRenderingInfo->conditionalRenderingEnable;
+                        m_flags.hasConditionalRendering             = pConditionalRenderingInfo->conditionalRenderingEnable;
+                    }
+
+                    pNext = pHeader->pNext;
                 }
             }
             break;
@@ -1056,8 +1076,10 @@ VkResult CmdBuffer::Begin(
 
     m_curDeviceMask = m_cbBeginDeviceMask;
 
-    if (m_is2ndLvl && pRenderPass) // secondary VkCommandBuffer will be used inside VkRenderPass
+    if (pRenderPass) // secondary VkCommandBuffer will be used inside VkRenderPass
     {
+        VK_ASSERT(m_flags.is2ndLvl);
+
         inheritedStateParams.colorTargetCount = pRenderPass->GetSubpassColorReferenceCount(currentSubPass);
         inheritedStateParams.stateFlags.targetViewState = 1;
 
@@ -1067,10 +1089,6 @@ VkResult CmdBuffer::Begin(
                 VkToPalFormat(pRenderPass->GetColorAttachmentFormat(currentSubPass, i));
             inheritedStateParams.sampleCount[i] = pRenderPass->GetColorAttachmentSamples(currentSubPass, i);
         }
-
-        // only provide valid inherited state pointer for 2nd level command buffer. Right now we unconditionally
-        // do this. Later when we allow to bind fbo at beinCmdbuffer() time, we can skip this
-        cmdInfo.pInheritedState = &inheritedStateParams;
     }
 
     Pal::Result result = PalCmdBufferBegin(cmdInfo);
@@ -1112,10 +1130,12 @@ VkResult CmdBuffer::Begin(
         }
     }
 
-    m_isRecording = true;
+    m_flags.isRecording = true;
 
-    if (m_is2ndLvl && pRenderPass) // secondary VkCommandBuffer will be used inside VkRenderPass
+    if (pRenderPass) // secondary VkCommandBuffer will be used inside VkRenderPass
     {
+        VK_ASSERT(m_flags.is2ndLvl);
+
         // In order to use secondary VkCommandBuffer inside VkRenderPass,
         // when vkBeginCommandBuffer() is called, the VkCommandBufferInheritanceInfo
         // has to specify a VkRenderPass, defining VkRenderPasses with which
@@ -1160,7 +1180,7 @@ VkResult CmdBuffer::End(void)
 {
     Pal::Result result;
 
-    VK_ASSERT(m_isRecording);
+    VK_ASSERT(m_flags.isRecording);
 
     DbgBarrierPreCmd(DbgBarrierCmdBufEnd);
 
@@ -1173,7 +1193,7 @@ VkResult CmdBuffer::End(void)
 
     result = PalCmdBufferEnd();
 
-    m_isRecording = false;
+    m_flags.isRecording = false;
 
     return (m_recordingResult == VK_SUCCESS ? PalToVkResult(result) : m_recordingResult);
 }
@@ -1252,6 +1272,8 @@ void CmdBuffer::ResetState()
     m_renderPassInstance.flags.u32All = 0;
 
     m_recordingResult = VK_SUCCESS;
+
+    m_flags.hasConditionalRendering = false;
 }
 
 // =====================================================================================================================
@@ -1262,17 +1284,17 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
 
     ResetState();
 
-    m_needResetState = false;
+    m_flags.needResetState = false;
 
     const bool releaseResources = ((flags & VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) != 0);
 
     // If the command buffer is being recorded, the stack allocator will still be around.
     // Make sure to free it.
-    if (m_isRecording)
+    if (m_flags.isRecording)
     {
         End();
 
-        VK_ASSERT(!m_isRecording);
+        VK_ASSERT(!m_flags.isRecording);
     }
 
     if (releaseResources)
@@ -1636,7 +1658,7 @@ void CmdBuffer::BindDescriptorSets(
             const uint32_t setBindIdx = firstSet + i;
 
             // User data information for this set
-            const PipelineLayout::SetUserDataLayout& setLayoutInfo = layoutInfo.setUserData[setBindIdx];
+            const PipelineLayout::SetUserDataLayout& setLayoutInfo = pLayout->GetSetUserData(setBindIdx);
 
             // If this descriptor set has any dynamic descriptor data then write them into the shadow.
             if (setLayoutInfo.dynDescDataRegCount > 0)
@@ -1680,8 +1702,8 @@ void CmdBuffer::BindDescriptorSets(
         }
 
         // Figure out the total range of user data registers written by this sequence of descriptor set binds
-        const PipelineLayout::SetUserDataLayout& firstSetLayout = layoutInfo.setUserData[firstSet];
-        const PipelineLayout::SetUserDataLayout& lastSetLayout = layoutInfo.setUserData[firstSet + setCount - 1];
+        const PipelineLayout::SetUserDataLayout& firstSetLayout = pLayout->GetSetUserData(firstSet);
+        const PipelineLayout::SetUserDataLayout& lastSetLayout = pLayout->GetSetUserData(firstSet + setCount - 1);
 
         const uint32_t rangeOffsetBegin = firstSetLayout.firstRegOffset;
         const uint32_t rangeOffsetEnd = lastSetLayout.firstRegOffset + lastSetLayout.totalRegCount;
@@ -1764,15 +1786,21 @@ PFN_vkCmdBindDescriptorSets CmdBuffer::GetCmdBindDescriptorSetsFunc(
         case 1:
             pFunc = GetCmdBindDescriptorSetsFunc<1>(pDevice);
             break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
         case 2:
             pFunc = GetCmdBindDescriptorSetsFunc<2>(pDevice);
             break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
         case 3:
             pFunc = GetCmdBindDescriptorSetsFunc<3>(pDevice);
             break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
         case 4:
             pFunc = GetCmdBindDescriptorSetsFunc<4>(pDevice);
             break;
+#endif
         default:
             pFunc = nullptr;
             VK_NEVER_CALLED();
@@ -1998,6 +2026,8 @@ void CmdBuffer::CopyBuffer(
 {
     DbgBarrierPreCmd(DbgBarrierCopyBuffer);
 
+    PalCmdSuspendPredication(true);
+
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
     const auto maxRegions  = EstimateMaxObjectsOnVirtualStack(sizeof(*pRegions));
@@ -2032,6 +2062,8 @@ void CmdBuffer::CopyBuffer(
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    PalCmdSuspendPredication(false);
+
     DbgBarrierPostCmd(DbgBarrierCopyBuffer);
 }
 
@@ -2045,6 +2077,8 @@ void CmdBuffer::CopyImage(
     const VkImageCopy* pRegions)
 {
     DbgBarrierPreCmd(DbgBarrierCopyImage);
+
+    PalCmdSuspendPredication(true);
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
@@ -2090,6 +2124,8 @@ void CmdBuffer::CopyImage(
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    PalCmdSuspendPredication(false);
+
     DbgBarrierPostCmd(DbgBarrierCopyImage);
 }
 
@@ -2104,6 +2140,8 @@ void CmdBuffer::BlitImage(
     VkFilter           filter)
 {
     DbgBarrierPreCmd(DbgBarrierCopyImage);
+
+    PalCmdSuspendPredication(true);
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
@@ -2159,6 +2197,8 @@ void CmdBuffer::BlitImage(
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    PalCmdSuspendPredication(false);
+
     DbgBarrierPostCmd(DbgBarrierCopyImage);
 }
 
@@ -2172,6 +2212,8 @@ void CmdBuffer::CopyBufferToImage(
     const VkBufferImageCopy*  pRegions)
 {
     DbgBarrierPreCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
+
+    PalCmdSuspendPredication(true);
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
@@ -2216,6 +2258,8 @@ void CmdBuffer::CopyBufferToImage(
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    PalCmdSuspendPredication(false);
+
     DbgBarrierPostCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
 }
 
@@ -2229,6 +2273,8 @@ void CmdBuffer::CopyImageToBuffer(
     const VkBufferImageCopy* pRegions)
 {
     DbgBarrierPreCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
+
+    PalCmdSuspendPredication(true);
 
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
@@ -2275,6 +2321,8 @@ void CmdBuffer::CopyImageToBuffer(
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    PalCmdSuspendPredication(false);
+
     DbgBarrierPostCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
 }
 
@@ -2287,9 +2335,13 @@ void CmdBuffer::UpdateBuffer(
 {
     DbgBarrierPreCmd(DbgBarrierCopyBuffer);
 
+    PalCmdSuspendPredication(true);
+
     Buffer* pDestBuffer = Buffer::ObjectFromHandle(destBuffer);
 
     PalCmdUpdateBuffer(pDestBuffer, pDestBuffer->MemOffset() + destOffset, dataSize, pData);
+
+    PalCmdSuspendPredication(false);
 
     DbgBarrierPostCmd(DbgBarrierCopyBuffer);
 }
@@ -2303,6 +2355,8 @@ void CmdBuffer::FillBuffer(
 {
     DbgBarrierPreCmd(DbgBarrierCopyBuffer);
 
+    PalCmdSuspendPredication(true);
+
     Buffer* pDestBuffer = Buffer::ObjectFromHandle(destBuffer);
 
     if (fillSize == VK_WHOLE_SIZE)
@@ -2311,6 +2365,8 @@ void CmdBuffer::FillBuffer(
     }
 
     PalCmdFillBuffer(pDestBuffer, pDestBuffer->MemOffset() + destOffset, fillSize, data);
+
+    PalCmdSuspendPredication(false);
 
     DbgBarrierPostCmd(DbgBarrierCopyBuffer);
 }
@@ -2324,6 +2380,8 @@ void CmdBuffer::ClearColorImage(
     uint32_t                       rangeCount,
     const VkImageSubresourceRange* pRanges)
 {
+    PalCmdSuspendPredication(true);
+
     const Image* pImage = Image::ObjectFromHandle(image);
 
     const Pal::SwizzledFormat palFormat = VkToPalFormat(pImage->GetFormat());
@@ -2383,6 +2441,8 @@ void CmdBuffer::ClearColorImage(
     {
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
+
+    PalCmdSuspendPredication(false);
 }
 
 // =====================================================================================================================
@@ -2432,6 +2492,8 @@ void CmdBuffer::ClearDepthStencilImage(
     uint32_t                       rangeCount,
     const VkImageSubresourceRange* pRanges)
 {
+    PalCmdSuspendPredication(true);
+
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
     const auto maxRanges  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRanges)), MaxPalDepthAspectsPerMask);
@@ -2485,6 +2547,8 @@ void CmdBuffer::ClearDepthStencilImage(
     {
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
+
+    PalCmdSuspendPredication(false);
 }
 
 // =====================================================================================================================
@@ -2495,7 +2559,7 @@ void CmdBuffer::ClearAttachments(
     uint32_t                 rectCount,
     const VkClearRect*       pRects)
 {
-    if ((m_is2ndLvl == false) && (m_state.allGpuState.pFramebuffer != nullptr))
+    if ((m_flags.is2ndLvl == false) && (m_state.allGpuState.pFramebuffer != nullptr))
     {
         ClearImageAttachments(attachmentCount, pAttachments, rectCount, pRects);
     }
@@ -2592,6 +2656,7 @@ void CmdBuffer::ClearBoundAttachments(
                     PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundDepthStencilTargets(
                         VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
                         clearInfo.clearValue.depthStencil.stencil,
+                        StencilWriteMaskFull,
                         pRenderPass->GetDepthStencilAttachmentSamples(subpass),
                         pRenderPass->GetDepthStencilAttachmentSamples(subpass),
                         selectFlags,
@@ -2695,6 +2760,7 @@ void CmdBuffer::PalCmdClearDepthStencil(
             stencilLayout,
             depth,
             stencil,
+            StencilWriteMaskFull,
             rangeCount,
             pRanges,
             rectCount,
@@ -2948,6 +3014,8 @@ void CmdBuffer::ResolveImage(
     uint32_t              rectCount,
     const VkImageResolve* pRects)
 {
+    PalCmdSuspendPredication(true);
+
     VirtualStackFrame virtStackFrame(m_pStackAllocator);
 
     const auto maxRects  = Util::Max(EstimateMaxObjectsOnVirtualStack(sizeof(*pRects)), MaxRangePerAttachment);
@@ -3001,6 +3069,8 @@ void CmdBuffer::ResolveImage(
     {
         m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
+
+    PalCmdSuspendPredication(false);
 }
 
 // =====================================================================================================================
@@ -3631,6 +3701,8 @@ void CmdBuffer::ResetQueryPool(
 {
     DbgBarrierPreCmd(DbgBarrierQueryReset);
 
+    PalCmdSuspendPredication(true);
+
     const QueryPool* pBasePool = QueryPool::ObjectFromHandle(queryPool);
 
     if (pBasePool->GetQueryType() != VK_QUERY_TYPE_TIMESTAMP)
@@ -3660,6 +3732,8 @@ void CmdBuffer::ResetQueryPool(
             queryCount,
             TimestampQueryPool::TimestampNotReadyChunk);
     }
+
+    PalCmdSuspendPredication(false);
 
     DbgBarrierPostCmd(DbgBarrierQueryReset);
 }
@@ -3773,6 +3847,23 @@ void CmdBuffer::PalCmdSetMsaaQuadSamplePattern(
 }
 
 // =====================================================================================================================
+void CmdBuffer::PalCmdSuspendPredication(
+    bool suspend)
+{
+    if (m_flags.hasConditionalRendering)
+    {
+        utils::IterateMask deviceGroup(m_curDeviceMask);
+
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+            PalCmdBuffer(deviceIdx)->CmdSuspendPredication(suspend);
+        }
+        while (deviceGroup.IterateNext());
+    }
+}
+
+// =====================================================================================================================
 void CmdBuffer::CopyQueryPoolResults(
     VkQueryPool        queryPool,
     uint32_t           firstQuery,
@@ -3783,6 +3874,8 @@ void CmdBuffer::CopyQueryPoolResults(
     VkQueryResultFlags flags)
 {
     DbgBarrierPreCmd(DbgBarrierCopyBuffer | DbgBarrierCopyQueryPool);
+
+    PalCmdSuspendPredication(true);
 
     const QueryPool* pBasePool = QueryPool::ObjectFromHandle(queryPool);
     const Buffer* pDestBuffer = Buffer::ObjectFromHandle(destBuffer);
@@ -3942,6 +4035,8 @@ void CmdBuffer::CopyQueryPoolResults(
         while (deviceGroup.IterateNext());
     }
 
+    PalCmdSuspendPredication(false);
+
     DbgBarrierPostCmd(DbgBarrierCopyBuffer | DbgBarrierCopyQueryPool);
 }
 
@@ -3953,6 +4048,8 @@ void CmdBuffer::WriteTimestamp(
     uint32_t                  query)
 {
     DbgBarrierPreCmd(DbgBarrierWriteTimestamp);
+
+    PalCmdSuspendPredication(true);
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
@@ -3996,6 +4093,9 @@ void CmdBuffer::WriteTimestamp(
         }
     }
     while (deviceGroup.IterateNext());
+
+    PalCmdSuspendPredication(false);
+
     DbgBarrierPostCmd(DbgBarrierWriteTimestamp);
 }
 
@@ -4319,6 +4419,14 @@ void CmdBuffer::BeginRenderPass(
 
         // Begin the first subpass
         m_renderPassInstance.pExecuteInfo = m_state.allGpuState.pRenderPass->GetExecuteInfo();
+
+        utils::IterateMask deviceGroup(GetRpDeviceMask());
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+            PalCmdBuffer(deviceIdx)->CmdSetGlobalScissor(m_state.allGpuState.pFramebuffer->GetGlobalScissorParams());
+        }
+        while (deviceGroup.IterateNext());
 
         RPBeginSubpass();
     }
@@ -4705,6 +4813,7 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
                 stencilLayout,
                 clearDepth,
                 clearStencil,
+                StencilWriteMaskFull,
                 clearSubresRanges.NumElements(),
                 clearSubresRanges.Data(),
                 1,
@@ -5579,7 +5688,14 @@ void CmdBuffer::EndTransformFeedback(
                     (m_pTransformFeedbackState->bindMask & (1 << i)))
                 {
                     Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
-                    counterBufferAddr[i]   = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
+                    if (pCounterBufferOffsets != nullptr)
+                    {
+                        counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
+                    }
+                    else
+                    {
+                        counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx);
+                    }
                 }
             }
 
@@ -5692,6 +5808,8 @@ void CmdBuffer::CmdBeginConditionalRendering(
             false);
     }
     while (deviceGroup.IterateNext());
+
+    m_flags.hasConditionalRendering = true;
 }
 
 // =====================================================================================================================
@@ -5711,6 +5829,8 @@ void CmdBuffer::CmdEndConditionalRendering()
             false);
     }
     while (deviceGroup.IterateNext());
+
+    m_flags.hasConditionalRendering = false;
 }
 
 // =====================================================================================================================

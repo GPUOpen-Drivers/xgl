@@ -91,7 +91,8 @@ VkResult PipelineLayout::ConvertCreateInfo(
     const Device*                     pDevice,
     const VkPipelineLayoutCreateInfo* pIn,
     Info*                             pInfo,
-    PipelineInfo*                     pPipelineInfo)
+    PipelineInfo*                     pPipelineInfo,
+    SetUserDataLayout*                pSetUserDataLayouts)
 {
     // We currently allocate user data registers for various resources in the following fashion:
     // First user data registers will hold the descriptor set bindings in increasing order by set index.
@@ -102,11 +103,6 @@ VkResult PipelineLayout::ConvertCreateInfo(
     // This allocation allows the descriptor set bindings to easily persist across pipeline switches.
 
     VkResult result = VK_SUCCESS;
-
-    if ((pIn->setLayoutCount > 0) && (pIn->pSetLayouts == nullptr))
-    {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
 
     pPipelineInfo->numRsrcMapNodes        = 0;
     pPipelineInfo->numDescRangeValueNodes = 0;
@@ -164,7 +160,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
     for (uint32_t i = 0; i < pInfo->setCount; ++i)
     {
-        SetUserDataLayout* pSetUserData = &pInfo->setUserData[i];
+        SetUserDataLayout* pSetUserData = &pSetUserDataLayouts[i];
 
         // Initialize the set layout info
         const auto& setLayoutInfo = DescriptorSetLayout::ObjectFromHandle(pIn->pSetLayouts[i])->Info();
@@ -252,37 +248,24 @@ VkResult PipelineLayout::Create(
     const VkAllocationCallbacks*      pAllocator,
     VkPipelineLayout*                 pPipelineLayout)
 {
+    VK_ASSERT((pCreateInfo->setLayoutCount == 0) || (pCreateInfo->pSetLayouts != nullptr));
+
     Info info = {};
     PipelineInfo pipelineInfo = {};
     uint64_t apiHash = BuildApiHash(pCreateInfo);
 
-    size_t setLayoutsOffset[MaxDescriptorSets];
     size_t setLayoutsArraySize = 0;
-
-    memset(setLayoutsOffset, 0, MaxDescriptorSets * sizeof(size_t));
 
     for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; ++i)
     {
         DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i]);
-
-        setLayoutsOffset[i] = setLayoutsArraySize;
         setLayoutsArraySize += pLayout->GetObjectSize();
     }
 
-    VkResult result = ConvertCreateInfo(
-        pDevice,
-        pCreateInfo,
-        &info,
-        &pipelineInfo);
-
-    if (result != VK_SUCCESS)
-    {
-        return result;
-    }
-
-    // Need to add extra storage for descriptor set layouts
+    // Need to add extra storage for DescriptorSetLayout*, SetUserDataLayout, and the descriptor set layouts themselves
     const size_t apiSize = sizeof(PipelineLayout);
-    const size_t objSize = apiSize + setLayoutsArraySize;
+    const size_t objSize = apiSize + (pCreateInfo->setLayoutCount * sizeof(SetUserDataLayout)) +
+        (pCreateInfo->setLayoutCount * sizeof(DescriptorSetLayout*)) + setLayoutsArraySize;
 
     void* pSysMem = pDevice->AllocApiObject(objSize, pAllocator);
 
@@ -291,14 +274,36 @@ VkResult PipelineLayout::Create(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
+    SetUserDataLayout* pSetUserData = static_cast<SetUserDataLayout*>(Util::VoidPtrInc(pSysMem, apiSize));
+    DescriptorSetLayout** ppSetLayouts = static_cast<DescriptorSetLayout**>(
+        Util::VoidPtrInc(pSysMem, apiSize + (pCreateInfo->setLayoutCount * sizeof(SetUserDataLayout))));
+
+    VkResult result = ConvertCreateInfo(
+        pDevice,
+        pCreateInfo,
+        &info,
+        &pipelineInfo,
+        pSetUserData);
+
+    if (result != VK_SUCCESS)
+    {
+        pAllocator->pfnFree(pAllocator->pUserData, pSysMem);
+        return result;
+    }
+
+    size_t currentSetLayoutOffset = apiSize + (pCreateInfo->setLayoutCount * sizeof(SetUserDataLayout)) +
+        (pCreateInfo->setLayoutCount * sizeof(DescriptorSetLayout*));
+
     for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; ++i)
     {
-        info.pSetLayouts[i] = reinterpret_cast<DescriptorSetLayout*>(Util::VoidPtrInc(pSysMem, apiSize + setLayoutsOffset[i]));
+        ppSetLayouts[i] = reinterpret_cast<DescriptorSetLayout*>(Util::VoidPtrInc(pSysMem, currentSetLayoutOffset));
 
         const DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pCreateInfo->pSetLayouts[i]);
 
         // Copy the original descriptor set layout object
-        pLayout->Copy(pDevice, info.pSetLayouts[i]);
+        pLayout->Copy(pDevice, ppSetLayouts[i]);
+
+        currentSetLayoutOffset += pLayout->GetObjectSize();
     }
 
     VK_PLACEMENT_NEW(pSysMem) PipelineLayout(pDevice, info, pipelineInfo, apiHash);
@@ -548,8 +553,8 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     // Build descriptor for each set
     for (uint32_t setIndex = 0; (setIndex < m_info.setCount) && (result == VK_SUCCESS); ++setIndex)
     {
-        const SetUserDataLayout* pSetUserData = &m_info.setUserData[setIndex];
-        const auto* pSetLayout = m_info.pSetLayouts[setIndex];
+        const SetUserDataLayout* pSetUserData = &GetSetUserData(setIndex);
+        const auto* pSetLayout = GetSetLayouts(setIndex);
 
         // Test if this descriptor set is active in this stage.
         if (Util::TestAnyFlagSet(pSetLayout->Info().activeStageMask, stageMask))
@@ -648,7 +653,7 @@ VkResult PipelineLayout::Destroy(
 {
     for (uint32_t i = 0; i < m_info.setCount; ++i)
     {
-        m_info.pSetLayouts[i]->Destroy(pDevice, pAllocator, false);
+        GetSetLayouts(i)->Destroy(pDevice, pAllocator, false);
     }
 
     this->~PipelineLayout();

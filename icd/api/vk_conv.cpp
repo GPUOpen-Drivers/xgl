@@ -249,11 +249,11 @@ VK_TO_PAL_STRUC_X(  FORMAT_R64_SFLOAT,                            PalFmt_Undefin
 VK_TO_PAL_STRUC_X(  FORMAT_R64G64_SFLOAT,                         PalFmt_Undefined)
 VK_TO_PAL_STRUC_X(  FORMAT_R64G64B64_SFLOAT,                      PalFmt_Undefined)
 VK_TO_PAL_STRUC_X(  FORMAT_R64G64B64A64_SFLOAT,                   PalFmt_Undefined)
-VK_TO_PAL_STRUC_X(  FORMAT_R64_UINT,                              PalFmt_Undefined)
+VK_TO_PAL_STRUC_X(  FORMAT_R64_UINT,                              PalFmt_RG(32, 32, Uint))
 VK_TO_PAL_STRUC_X(  FORMAT_R64G64_UINT,                           PalFmt_Undefined)
 VK_TO_PAL_STRUC_X(  FORMAT_R64G64B64_UINT,                        PalFmt_Undefined)
 VK_TO_PAL_STRUC_X(  FORMAT_R64G64B64A64_UINT,                     PalFmt_Undefined)
-VK_TO_PAL_STRUC_X(  FORMAT_R64_SINT,                              PalFmt_Undefined)
+VK_TO_PAL_STRUC_X(  FORMAT_R64_SINT,                              PalFmt_RG(32, 32, Sint))
 VK_TO_PAL_STRUC_X(  FORMAT_R64G64_SINT,                           PalFmt_Undefined)
 VK_TO_PAL_STRUC_X(  FORMAT_R64G64B64_SINT,                        PalFmt_Undefined)
 VK_TO_PAL_STRUC_X(  FORMAT_R64G64B64A64_SINT,                     PalFmt_Undefined)
@@ -808,12 +808,24 @@ const char* VkResultName(
         errName = "VK_ERROR_FRAGMENTED_POOL";
         break;
 
+    case VkResult::VK_ERROR_UNKNOWN:
+        errName = "VK_ERROR_UNKNOWN";
+        break;
+
     case VkResult::VK_ERROR_OUT_OF_POOL_MEMORY:
         errName = "VK_ERROR_OUT_OF_POOL_MEMORY";
         break;
 
     case VkResult::VK_ERROR_INVALID_EXTERNAL_HANDLE:
         errName = "VK_ERROR_INVALID_EXTERNAL_HANDLE";
+        break;
+
+    case VkResult::VK_ERROR_FRAGMENTATION:
+        errName = "VK_ERROR_FRAGMENTATION";
+        break;
+
+    case VkResult::VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS:
+        errName = "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
         break;
 
     case VkResult::VK_ERROR_SURFACE_LOST_KHR:
@@ -848,12 +860,12 @@ const char* VkResultName(
         errName = "VK_ERROR_INVALID_DRM_FORMAT_MODIFIER_PLANE_LAYOUT_EXT";
         break;
 
-    case VkResult::VK_ERROR_FRAGMENTATION_EXT:
-        errName = "VK_ERROR_FRAGMENTATION_EXT";
-        break;
-
     case VkResult::VK_ERROR_NOT_PERMITTED_EXT:
         errName = "VK_ERROR_NOT_PERMITTED_EXT";
+        break;
+
+    case VkResult::VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT:
+        errName = "VK_ERROR_FULL_SCREEN_EXCLUSIVE_MODE_LOST_EXT";
         break;
 
     default:
@@ -962,14 +974,14 @@ VkResult PalToVkError(
     case Pal::Result::ErrorMultiDevicePresentFailed:
     case Pal::Result::ErrorWindowedPresentUnavailable:
     case Pal::Result::ErrorInvalidResolution:
-        // VK_ERROR_OUT_OF_HOST_MEMORY is a catch all error code returned by almost all API calls
-        vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        // VK_ERROR_UNKNOWN is an error that can be returned by any error returning API function
+        vkResult = VK_ERROR_UNKNOWN;
         break;
     case Pal::Result::ErrorIncompatibleDisplayMode:
         vkResult = VK_ERROR_OUT_OF_DATE_KHR;
         break;
     case Pal::Result::ErrorFullscreenUnavailable:
-        vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        vkResult = VK_ERROR_UNKNOWN;
         break;
     case Pal::Result::ErrorGpuPageFaultDetected:
         vkResult = VK_ERROR_DEVICE_LOST;
@@ -993,8 +1005,8 @@ VkResult PalToVkError(
         // There's no private screen support yet. Fall through to the default path.
     default:
         VK_NOT_IMPLEMENTED;
-        // VK_ERROR_OUT_OF_HOST_MEMORY is a catch all error code returned by almost all API calls
-        vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        // VK_ERROR_UNKNOWN is an error that can be returned by any error returning API function
+        vkResult = VK_ERROR_UNKNOWN;
         break;
     }
 

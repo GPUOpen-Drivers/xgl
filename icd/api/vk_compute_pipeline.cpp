@@ -159,6 +159,7 @@ VkResult ComputePipeline::Create(
     VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(
         pDevice, pCreateInfo, &binaryCreateInfo, &pPipelineCreationFeadbackCreateInfo);
 
+    uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
     for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < pDevice->NumPalDevices()); deviceIdx++)
     {
         result = pDevice->GetCompiler(deviceIdx)->CreateComputePipelineBinary(
@@ -343,11 +344,16 @@ VkResult ComputePipeline::Create(
 
     if (result == VK_SUCCESS)
     {
+        uint64_t duration = Util::GetPerfCpuTime() - startTime;
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
-        binaryCreateInfo.pipelineFeedback.duration = Util::GetPerfCpuTime() - startTime;
+        binaryCreateInfo.pipelineFeedback.duration = duration;
         pDefaultCompiler->SetPipelineCreationFeedbackInfo(
                 pPipelineCreationFeadbackCreateInfo,
                 &binaryCreateInfo.pipelineFeedback);
+
+        const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+        // The hash is same as pipline dump file name, we can easily analyze further.
+        AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", pipelineHash, duration);
     }
 
     return result;

@@ -86,7 +86,7 @@ VkResult PipelineCache::Create(
         shaderCacheSize += pipelineCacheSize[i];
     }
 
-    if (pCreateInfo->initialDataSize > 0)
+    if ((pCreateInfo->initialDataSize > 0) && settings.usePipelineCacheInitialData)
     {
         const PipelineCacheHeaderData* pHeader = static_cast<const PipelineCacheHeaderData*>(pCreateInfo->pInitialData);
 

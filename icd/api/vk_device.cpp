@@ -358,8 +358,15 @@ VkResult Device::Create(
     uint32_t queueCounts[Queue::MaxQueueFamilies] = {};
     uint32_t queueFlags[Queue::MaxQueueFamilies] = {};
 
-    // VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT is the default value.
-    VkQueueGlobalPriorityEXT queuePriority[Queue::MaxQueueFamilies] = { VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT };
+    // initialize queue priority with the default value VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT.
+    VkQueueGlobalPriorityEXT queuePriority[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
+    for (uint32_t familyId = 0; familyId < Queue::MaxQueueFamilies; familyId++)
+    {
+        for (uint32_t queueId = 0; queueId < Queue::MaxQueuesPerFamily; queueId++)
+        {
+            queuePriority[familyId][queueId] = VK_QUEUE_GLOBAL_PRIORITY_MEDIUM_EXT;
+        }
+    }
 
     // Dedicated Compute Units
     static constexpr uint32_t MaxEngineCount = 8;
@@ -826,7 +833,10 @@ VkResult Device::Create(
                         switch (static_cast<uint32_t>(pSubHeader->sType))
                         {
                             case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT:
-                                queuePriority[pQueueInfo->queueFamilyIndex] = pPriorityInfo->globalPriority;
+                                for (uint32_t queueId = 0; queueId < pQueueInfo->queueCount; queueId++)
+                                {
+                                    queuePriority[pQueueInfo->queueFamilyIndex][queueId] = pPriorityInfo->globalPriority;
+                                }
                                 break;
                             default:
                                 // Skip any unknown extension structures
@@ -889,7 +899,7 @@ VkResult Device::Create(
                     queueFamilyIndex,
                     queueIndex,
                     dedicatedComputeUnits[queueFamilyIndex][queueIndex],
-                    queuePriority[queueFamilyIndex],
+                    queuePriority[queueFamilyIndex][queueIndex],
                     &queueCreateInfo,
                     useComputeAsTransferQueue);
 
@@ -953,7 +963,7 @@ VkResult Device::Create(
                                              queueFamilyIndex,
                                              queueIndex,
                                              dedicatedComputeUnits[queueFamilyIndex][queueIndex],
-                                             queuePriority[queueFamilyIndex],
+                                             queuePriority[queueFamilyIndex][queueIndex],
                                              &queueCreateInfo,
                                              useComputeAsTransferQueue);
 
@@ -1262,6 +1272,7 @@ VkResult Device::Initialize(
             break;
         }
         case AppProfile::WolfensteinII:
+        case AppProfile::WolfensteinYoungblood:
             // This application optimization layer is currently GFX10-specific
             if (deviceProps.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
@@ -1343,6 +1354,7 @@ VkResult Device::Initialize(
             case AppProfile::DawnOfWarIII:
             case AppProfile::AshesOfTheSingularity:
             case AppProfile::StrangeBrigade:
+            case AppProfile::Rage2:
                 m_allocationSizeTracking = false;
                 break;
             default:
@@ -2583,7 +2595,7 @@ VkResult Device::GetCalibratedTimestamps(
                 break;
             default:
                 // An invalid time domain value was specified.  Return error.
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+                result = VK_ERROR_UNKNOWN;
                 pTimestamps[i] = 0;
                 VK_NEVER_CALLED();
                 break;

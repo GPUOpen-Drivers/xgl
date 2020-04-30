@@ -264,7 +264,7 @@ public:
         uint32_t                        dwStride,
         size_t                          descriptorStrideInBytes = 0);
 
-    template <VkDescriptorType type>
+    template <size_t bufferDescSize, VkDescriptorType type>
     static void WriteBufferInfoDescriptors(
         const Device*                   pDevice,
         const VkDescriptorBufferInfo*   pDescriptors,

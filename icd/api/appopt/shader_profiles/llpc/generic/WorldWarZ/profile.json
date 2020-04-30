@@ -1,0 +1,76 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "cs": {
+          "unrollThreshold": 5000
+        }
+      }
+    },
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "gs": {
+          "unrollThreshold": 5000
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x8e7c1a0bf3840a8e 72471fc83e552db6"
+        }
+      },
+      "action": {
+        "ps": {
+          "unrollThreshold": 5000
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xebdc99d2d10996af 430db057557a582a"
+        }
+      },
+      "action": {
+        "ps": {
+          "unrollThreshold": 5000
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xe237e10d52d588ea 4ebed8bc1d0b0a4a"
+        }
+      },
+      "action": {
+        "ps": {
+          "unrollThreshold": 5000
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0x3b9c1f6c8b2237c8 4eaed799f784f0a1"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    }
+  ]
+}

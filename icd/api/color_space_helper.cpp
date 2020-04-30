@@ -60,7 +60,7 @@ const LookupDefines colorspaceLookup[] =
     { Pal::ScreenColorSpace::CsAdobe,        VK_COLOR_SPACE_ADOBERGB_LINEAR_EXT,      FmtSupport::Fmt_All          },
     { Pal::ScreenColorSpace::CsDciP3,        VK_COLOR_SPACE_DCI_P3_NONLINEAR_EXT,     FmtSupport::Fmt_All          },
     { Pal::ScreenColorSpace::CsScrgb,        VK_COLOR_SPACE_EXTENDED_SRGB_LINEAR_EXT, FmtSupport::Fmt_16bpc_sfloat },
-    { Pal::ScreenColorSpace::CsUserDefined,  VK_COLOR_SPACE_PASS_THROUGH_EXT,         FmtSupport::Fmt_All          }
+    { Pal::ScreenColorSpace::CsUserDefined,  VK_COLOR_SPACE_PASS_THROUGH_EXT,         FmtSupport::Fmt_All          },
 };
 
 static const uint32_t colorspaceLookupSize = sizeof(colorspaceLookup) / sizeof(colorspaceLookup[0]);

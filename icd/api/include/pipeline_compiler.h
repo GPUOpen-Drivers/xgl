@@ -73,7 +73,7 @@ public:
 
     PipelineCompilerType GetShaderCacheType();
 
-    static void ApplyPipelineOptions(
+    void ApplyPipelineOptions(
         const Device*          pDevice,
         VkPipelineCreateFlags  flags,
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39

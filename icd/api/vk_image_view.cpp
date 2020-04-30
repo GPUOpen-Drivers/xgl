@@ -81,8 +81,14 @@ void ImageView::BuildImageSrds(
 {
     Pal::ImageViewInfo info = {};
 
+    Pal::ImageTiling imageTiling = pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().tiling;
+
     info.viewType         = VkToPalImageViewType(pCreateInfo->viewType);
-    info.swizzledFormat   = RemapFormatComponents(viewFormat, subresRange, pCreateInfo->components);
+    info.swizzledFormat   = RemapFormatComponents(viewFormat,
+                                                  subresRange,
+                                                  pCreateInfo->components,
+                                                  pDevice->PalDevice(DefaultDeviceIndex),
+                                                  imageTiling);
     info.samplePatternIdx = Device::GetDefaultSamplePatternIndex(pImage->GetImageSamples());
     info.texOptLevel      = VkToPalTexFilterQuality(pDevice->GetRuntimeSettings().vulkanTexFilterQuality);
 

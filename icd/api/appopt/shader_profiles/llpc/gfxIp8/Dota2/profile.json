@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xfd59b52b7db5ef6b f9b17451c9c6cf06"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1
+        }
+      }
+    }
+  ]
+}

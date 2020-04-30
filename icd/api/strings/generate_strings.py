@@ -79,7 +79,7 @@ def GetOpt():
     if (workDir[-1] != '/'):
         workDir = workDir + '/';
 
-    if (os.path.exists(workDir) == False) or (os.path.exists(workDir + "base_extensions.txt") == False):
+    if (os.path.exists(workDir) == False) or (os.path.exists(workDir + "extensions.txt") == False):
         print("Work directory is not correct: " + workDir);
         exit();
 
@@ -145,11 +145,10 @@ def make_version(version):
 def generate_string_file_pass(string_file_prefix, header_file_prefix, gentype):
     global PREFIX;
 
-    string_file_txt = "%s.txt" % (string_file_prefix);
-    string_file = ".%s" % (string_file_txt);
+    string_file = "%s.txt" % (string_file_prefix);
     header_file = "%sg_%s_%s.h" % (PREFIX, header_file_prefix, gentype);
 
-    print("Generating %s from %s ..." % (header_file, string_file_txt))
+    print("Generating %s from %s ..." % (header_file, string_file))
 
     f = open(string_file)
     lines = f.readlines()
@@ -159,7 +158,7 @@ def generate_string_file_pass(string_file_prefix, header_file_prefix, gentype):
 
     f = open(header_file, 'w')
 
-    f.write("// do not edit by hand; generated from source file \"%s.txt\"\n" % string_file_prefix)
+    f.write("// do not edit by hand; generated from source file \"%s\"\n" % string_file)
     for line in lines:
         original = line.rstrip().lstrip()
         if original == "" or original[0] == '#':
@@ -196,7 +195,7 @@ def generate_string_file(string_file_prefix):
     generate_string_file_pass(string_file_prefix, string_file_prefix, 'decl');
     generate_string_file_pass(string_file_prefix, string_file_prefix, 'impl');
 
-def generate_func_table(entry_file_prefix, header_file):
+def generate_func_table(entry_file, header_file):
     from func_table_template import header_template
     from func_table_template import entry_point_member
 
@@ -204,9 +203,8 @@ def generate_func_table(entry_file_prefix, header_file):
     global openSource;
     global PREFIX
 
-    print("Generating %s from %s ..." % (header_file, entry_file_prefix))
+    print("Generating %s from %s ..." % (header_file, entry_file))
 
-    entry_file = ".%s" % (entry_file_prefix);
     f = open(entry_file)
     lines = f.readlines()
     f.close()
@@ -263,50 +261,17 @@ def generate_func_table(entry_file_prefix, header_file):
 
     if openSource:
         header_template = header_template.replace('$copyright_string$', open_copyright)
-    header_template = header_template.replace('$entry_file$', entry_file_prefix)
+    header_template = header_template.replace('$entry_file$', entry_file)
     header_template = header_template.replace('$entry_point_members$', entry_point_members)
 
     header.write(header_template)
     header.close()
-
-def generate_temp_file(string_file):
-    global PREFIX
-    src0_file = "base_%s.txt" % (string_file);
-    src1_file = "%s%s.txt" % (PREFIX, string_file);
-    dst_file  = ".%s.txt" % (string_file);
-    fdst = open(dst_file, 'w')
-
-    if os.access(src0_file, os.R_OK):
-        f = open(src0_file, 'r')
-        lines = f.readlines()
-        f.close()
-        if len(lines) != 0 and not lines[len(lines) - 1].endswith('\n'):
-            # Cope with input file with no final NL.
-            lines[len(lines) - 1] += '\n'
-        fdst.writelines(lines)
-
-    if os.access(src1_file, os.R_OK):
-        f = open(src1_file, 'r')
-        lines = f.readlines()
-        f.close()
-        fdst.writelines(lines)
-
-    fdst.close()
-
-def delete_temp_file(string_file):
-    dst_file  = ".%s.txt" % (string_file)
-    if os.path.exists(dst_file):
-        os.remove(dst_file)
 
 GetOpt()
 os.chdir(workDir)
 
 PREFIX = "./"
 
-generate_temp_file("extensions")
-generate_temp_file("entry_points")
 generate_string_file("extensions")
 generate_string_file("entry_points")
 generate_func_table("entry_points.txt", "g_func_table.h")
-delete_temp_file("extensions")
-delete_temp_file("entry_points")

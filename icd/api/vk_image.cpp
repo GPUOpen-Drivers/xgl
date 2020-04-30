@@ -481,7 +481,7 @@ VkResult Image::Create(
 
             // Fail image creation if the sample count is not supported based on the setting
             result = ((settings.limitSampleCounts & pImageCreateInfo->samples) != 0) ? VK_SUCCESS
-                                                                                     : VK_ERROR_OUT_OF_HOST_MEMORY;
+                                                                                     : VK_ERROR_UNKNOWN;
 
             // The setting of stencilShaderRead will be overrode, if
             // VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT exists.
@@ -902,13 +902,14 @@ VkResult Image::CreateFromAndroidHwBufferHandle(
     imageFlags.u32All = 0;
     imageFlags.externallyShareable  = true;
     imageFlags.externalAhbHandle    = true;
+    imageFlags.dedicatedRequired    = true;
     imageFlags.isExternalFormat     = isExternalFormat;
 
     //TODO: handle external format (mainly the YUV formats) with YCbCrSamplers later
     if (isExternalFormat)
     {
         VK_NOT_IMPLEMENTED;
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
+        return VK_ERROR_UNKNOWN;
     }
 
     ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo);

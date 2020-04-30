@@ -136,6 +136,12 @@ void VulkanSettingsLoader::OverrideSettingsBySystemInfo()
         MakeAbsolutePath(m_settings.shaderReplaceDir, sizeof(m_settings.shaderReplaceDir),
                          pRootPath, m_settings.shaderReplaceDir);
 
+        MakeAbsolutePath(m_settings.pipelineProfileDumpFile, sizeof(m_settings.pipelineProfileDumpFile),
+                         pRootPath, m_settings.pipelineProfileDumpFile);
+#if ICD_RUNTIME_APP_PROFILE
+        MakeAbsolutePath(m_settings.pipelineProfileRuntimeFile, sizeof(m_settings.pipelineProfileRuntimeFile),
+                         pRootPath, m_settings.pipelineProfileRuntimeFile);
+#endif
     }
 }
 
@@ -218,7 +224,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
-        if (appProfile == AppProfile::WolfensteinII)
+        if ((appProfile == AppProfile::WolfensteinII) ||
+            (appProfile == AppProfile::WolfensteinYoungblood))
         {
             m_settings.enableSpvPerfOptimal = true;
 
@@ -254,6 +261,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
 
         if (((appProfile == AppProfile::WolfensteinII) ||
+            (appProfile == AppProfile::WolfensteinYoungblood) ||
             (appProfile == AppProfile::Doom)) &&
             (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1))
         {
@@ -354,6 +362,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::StrangeBrigade)
         {
+
         }
 
         if (appProfile == AppProfile::MadMax)
@@ -399,6 +408,49 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.forceDccForColorAttachments = false;
             }
+        }
+
+        if (appProfile == AppProfile::RainbowSixSiege)
+        {
+            m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
+            m_settings.useAnisoThreshold = true;
+            m_settings.anisoThreshold = 1.0f;
+
+            // Ignore suboptimal swapchain size to fix crash on task switch
+            m_settings.ignoreSuboptimalSwapchainSize = true;
+
+            // Navi10 has better performance on Rainbow 6 Siege when dccBitsPerPixelThreshold is set to 64
+            if (pInfo->revision == Pal::AsicRevision::Navi10)
+            {
+                m_settings.dccBitsPerPixelThreshold = 64;
+            }
+        }
+
+        if (appProfile == AppProfile::Rage2 || appProfile == AppProfile::ApexEngine)
+        {
+            // Prefetching shaders gives us a 2.5% perf increase
+            m_settings.prefetchShaders = true;
+
+            //PM4 optimizations give us another 1.5% perf increase
+            m_settings.optimizeCmdbufMode = OptimizeCmdbufMode::EnableOptimizeCmdbuf;
+
+            // Rage 2 currently has all it's images set to VK_SHARING_MODE_CONCURRENT.
+            // Forcing these images to use VK_SHARING_MODE_EXCLUSIVE gives us around 5% perf increase.
+            m_settings.barrierFilterOptions = BarrierFilterOptions::ForceImageSharingModeExclusive;
+
+            // Vega 20 seems to be do better on Rage 2 when dccBitsPerPixelThreshold is set to 16
+            // 3-5% gain when exclusive sharing mode is enabled.
+            if (pInfo->revision == Pal::AsicRevision::Vega20)
+            {
+                m_settings.dccBitsPerPixelThreshold = 16;
+            }
+
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                // Rage 2 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
+                m_settings.forceDccForColorAttachments = false;
+            }
+
         }
 
         if (appProfile == AppProfile::SaschaWillemsExamples)

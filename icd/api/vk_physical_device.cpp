@@ -720,9 +720,9 @@ VkResult PhysicalDevice::Initialize()
                 m_memoryVkIndexToPalHeap[memoryTypeIndex] = allocPalGpuHeap;
                 m_memoryPalHeapToVkIndexBits[allocPalGpuHeap] |= (1UL << memoryTypeIndex);
 
-                VkMemoryType& memoryType = m_memoryProperties.memoryTypes[memoryTypeIndex];
+                VkMemoryType* pMemoryType = &m_memoryProperties.memoryTypes[memoryTypeIndex];
 
-                memoryType.heapIndex = heapIndex;
+                pMemoryType->heapIndex = heapIndex;
 
                 m_memoryTypeMask |= 1 << memoryTypeIndex;
 
@@ -730,22 +730,22 @@ VkResult PhysicalDevice::Initialize()
 
                 if (heapProps.flags.cpuVisible)
                 {
-                    memoryType.propertyFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
+                    pMemoryType->propertyFlags |= VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT;
                 }
 
                 if (heapProps.flags.cpuGpuCoherent)
                 {
-                    memoryType.propertyFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+                    pMemoryType->propertyFlags |= VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
                 }
 
                 if (heapProps.flags.cpuUncached == 0)
                 {
-                    memoryType.propertyFlags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
+                    pMemoryType->propertyFlags |= VK_MEMORY_PROPERTY_HOST_CACHED_BIT;
                 }
 
                 if (m_memoryProperties.memoryHeaps[heapIndex].flags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
                 {
-                    memoryType.propertyFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+                    pMemoryType->propertyFlags |= VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
 
                     if (m_memoryProperties.memoryHeapCount > 1)
                     {
@@ -754,7 +754,7 @@ VkResult PhysicalDevice::Initialize()
                         //       VK_AMD_memory_overallocation_behavior.
                         // Use m_heapVkToPal instead of palGpuHeap here to handle cases where multiple memory types
                         // share the same heap.
-                        const Pal::gpusize heapSize = heapProperties[m_heapVkToPal[memoryType.heapIndex]].heapSize;
+                        const Pal::gpusize heapSize = heapProperties[m_heapVkToPal[pMemoryType->heapIndex]].heapSize;
                         m_memoryVkIndexAddRemoteBackupHeap[memoryTypeIndex] =
                             (heapSize < settings.memoryRemoteBackupHeapMinHeapSize);
                     }
@@ -765,8 +765,8 @@ VkResult PhysicalDevice::Initialize()
                     // Add device coherent memory type based on below type:
                     // 1. Visible and host coherent
                     // 2. Invisible
-                    if (((memoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
-                        (memoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) ||
+                    if (((pMemoryType->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) &&
+                        (pMemoryType->propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)) ||
                         (palGpuHeap == Pal::GpuHeapInvisible))
                     {
                         memTypeWantsCoherentMemory[memoryTypeIndex] = true;
@@ -797,9 +797,9 @@ VkResult PhysicalDevice::Initialize()
                 // Optional: if we have exposed a memory type that is host visible, add a backup
                 // memory type that is not host visible. We will use it for optimally tiled images.
                 if (settings.addHostInvisibleMemoryTypesForOptimalImages &&
-                    ((memoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0)  &&
+                    ((pMemoryType->propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) != 0)  &&
                     // Skip host visible+coherent+cached as we won't need it
-                    ((memoryType.propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == 0))
+                    ((pMemoryType->propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == 0))
                 {
                     memoryTypeIndex = m_memoryProperties.memoryTypeCount++;
 
@@ -807,16 +807,30 @@ VkResult PhysicalDevice::Initialize()
                     m_memoryVkIndexToPalHeap[memoryTypeIndex] = palGpuHeap;
                     m_memoryPalHeapToVkIndexBits[palGpuHeap] |= (1UL << memoryTypeIndex);
 
-                    VkMemoryType& nextMemoryType = m_memoryProperties.memoryTypes[memoryTypeIndex];
+                    VkMemoryType* pNextMemoryType = &m_memoryProperties.memoryTypes[memoryTypeIndex];
 
                     constexpr VkFlags hostMask = (VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT  |
                                                     VK_MEMORY_PROPERTY_HOST_COHERENT_BIT |
                                                     VK_MEMORY_PROPERTY_HOST_CACHED_BIT);
 
-                    nextMemoryType.heapIndex     = memoryType.heapIndex;
-                    nextMemoryType.propertyFlags = memoryType.propertyFlags & ~hostMask;
+                    pNextMemoryType->heapIndex     = pMemoryType->heapIndex;
+                    pNextMemoryType->propertyFlags = pMemoryType->propertyFlags & ~hostMask;
                 }
             }
+        }
+
+        VkBool32 protectedMemorySupported = VK_FALSE;
+        GetPhysicalDeviceProtectedMemoryFeatures(&protectedMemorySupported);
+        if (protectedMemorySupported && (invisHeapSize > 0))
+        {
+            uint32_t memoryTypeIndex                             = m_memoryProperties.memoryTypeCount++;
+            m_memoryTypeMask                                    |= 1 << memoryTypeIndex;
+            m_memoryVkIndexToPalHeap[memoryTypeIndex]            = Pal::GpuHeapInvisible;
+            m_memoryPalHeapToVkIndexBits[Pal::GpuHeapInvisible] |= (1UL << memoryTypeIndex);
+
+            VkMemoryType* pMemType = &m_memoryProperties.memoryTypes[memoryTypeIndex];
+            pMemType->heapIndex     = heapIndices[Pal::GpuHeapInvisible];
+            pMemType->propertyFlags = VK_MEMORY_PROPERTY_PROTECTED_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
         }
 
         // Add device coherent memory type based on memory types which have been added in m_memoryProperties.memoryTypes
@@ -826,13 +840,13 @@ VkResult PhysicalDevice::Initialize()
             uint32_t currentTypeCount = m_memoryProperties.memoryTypeCount;
             for (uint32_t memoryTypeIndex = 0; memoryTypeIndex < currentTypeCount; ++memoryTypeIndex)
             {
-                VkMemoryType& currentmemoryType = m_memoryProperties.memoryTypes[memoryTypeIndex];
-                VkMemoryType& lastMemoryType    = m_memoryProperties.memoryTypes[m_memoryProperties.memoryTypeCount];
+                VkMemoryType* pCurrentmemoryType = &m_memoryProperties.memoryTypes[memoryTypeIndex];
+                VkMemoryType* pLastMemoryType    = &m_memoryProperties.memoryTypes[m_memoryProperties.memoryTypeCount];
 
                 if (memTypeWantsCoherentMemory[memoryTypeIndex])
                 {
-                    lastMemoryType.heapIndex     = currentmemoryType.heapIndex;
-                    lastMemoryType.propertyFlags = currentmemoryType.propertyFlags |
+                    pLastMemoryType->heapIndex     = pCurrentmemoryType->heapIndex;
+                    pLastMemoryType->propertyFlags = pCurrentmemoryType->propertyFlags |
                                                    VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD |
                                                    VK_MEMORY_PROPERTY_DEVICE_UNCACHED_BIT_AMD;
 
@@ -1058,9 +1072,16 @@ void PhysicalDevice::PopulateFormatProperties()
         optimalFlags &= AllImgFeatures;
         bufferFlags  &= AllBufFeatures;
 
-        m_formatFeaturesTable[i].bufferFeatures        = bufferFlags;
-        m_formatFeaturesTable[i].linearTilingFeatures  = linearFlags;
-        m_formatFeaturesTable[i].optimalTilingFeatures = optimalFlags;
+        if ((format == VK_FORMAT_R64_SINT) || (format == VK_FORMAT_R64_UINT))
+        {
+            memset(&m_formatFeaturesTable[i], 0, sizeof(VkFormatProperties));
+        }
+        else
+        {
+            m_formatFeaturesTable[i].bufferFeatures        = bufferFlags;
+            m_formatFeaturesTable[i].linearTilingFeatures  = linearFlags;
+            m_formatFeaturesTable[i].optimalTilingFeatures = optimalFlags;
+        }
 
         // Vulkan doesn't have a corresponding flag for multisampling support.  If there ends up being more cases
         // like this, just store the entire PAL format table in the physical device instead of using a bitfield.
@@ -1516,13 +1537,11 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     //    4- Image formats that do not support any of the following uses:
     //         a- color attachment.
     //         b- depth/stencil attachment.
-    //         c- storage image.
     if ((FormatSupportsMsaa(format) == false)                                           ||
         (type != VK_IMAGE_TYPE_2D)                                                      ||
         (tiling == VK_IMAGE_TILING_LINEAR)                                              ||
         ((flags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT) != 0)                            ||
-        ((supportedFeatures & (VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT    |
-                               VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
+        ((supportedFeatures & (VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
                                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)) == 0))
     {
         pImageFormatProperties->sampleCounts = VK_SAMPLE_COUNT_1_BIT;
@@ -4357,12 +4376,9 @@ void PhysicalDevice::GetPhysicalDeviceBufferAddressFeatures(
     ) const
 {
     *pBufferDeviceAddress              = VK_FALSE;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
     *pBufferDeviceAddressCaptureReplay = VK_FALSE;
-#else
-    *pBufferDeviceAddressCaptureReplay = VK_FALSE;
-#endif
     *pBufferDeviceAddressMultiDevice   = VK_FALSE;
+
 }
 
 // =====================================================================================================================
@@ -5352,6 +5368,7 @@ void PhysicalDevice::GetDeviceProperties2(
             pTexelBufferAlignmentProperties->storageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
             pTexelBufferAlignmentProperties->uniformTexelBufferOffsetAlignmentBytes = m_limits.minTexelBufferOffsetAlignment;
             pTexelBufferAlignmentProperties->uniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+            break;
         }
 
         default:

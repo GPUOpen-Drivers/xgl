@@ -116,9 +116,16 @@ void DescriptorUpdate::WriteSamplerDescriptors(
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
-        const void* pSamplerDesc = Sampler::ObjectFromHandle(pImageInfo->sampler)->Descriptor();
+        if (pImageInfo->sampler == VK_NULL_HANDLE)
+        {
+            memset(pDestAddr, 0, samplerDescSize);
+        }
+        else
+        {
+            const void* pSamplerDesc = Sampler::ObjectFromHandle(pImageInfo->sampler)->Descriptor();
 
-        memcpy(pDestAddr, pSamplerDesc, samplerDescSize);
+            memcpy(pDestAddr, pSamplerDesc, samplerDescSize);
+        }
 
         pImageInfo = static_cast<const VkDescriptorImageInfo*>(Util::VoidPtrInc(pImageInfo, imageInfoStride));
     }
@@ -141,12 +148,28 @@ void DescriptorUpdate::WriteImageSamplerDescriptors(
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
-        const void* pImageDesc      = ImageView::ObjectFromHandle(pImageInfo->imageView)->
-                                          Descriptor(pImageInfo->imageLayout, deviceIdx, imageDescSize);
-        const void* pSamplerDesc    = Sampler::ObjectFromHandle(pImageInfo->sampler)->Descriptor();
+        if (pImageInfo->imageView == VK_NULL_HANDLE)
+        {
+            memset(pDestAddr, 0, imageDescSize);
+        }
+        else
+        {
+            const void* pImageDesc = ImageView::ObjectFromHandle(pImageInfo->imageView)->
+                Descriptor(pImageInfo->imageLayout, deviceIdx, imageDescSize);
 
-        memcpy(pDestAddr, pImageDesc, imageDescSize);
-        memcpy(pDestAddr + (imageDescSize / sizeof(uint32_t)), pSamplerDesc, samplerDescSize);
+            memcpy(pDestAddr, pImageDesc, imageDescSize);
+        }
+
+        if (pImageInfo->sampler == VK_NULL_HANDLE)
+        {
+            memset(pDestAddr + (imageDescSize / sizeof(uint32_t)), 0, samplerDescSize);
+        }
+        else
+        {
+            const void* pSamplerDesc = Sampler::ObjectFromHandle(pImageInfo->sampler)->Descriptor();
+
+            memcpy(pDestAddr + (imageDescSize / sizeof(uint32_t)), pSamplerDesc, samplerDescSize);
+        }
 
         pImageInfo = static_cast<const VkDescriptorImageInfo*>(Util::VoidPtrInc(pImageInfo, imageInfoStride));
     }
@@ -169,10 +192,17 @@ void DescriptorUpdate::WriteImageDescriptors(
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
-        const void* pImageDesc = ImageView::ObjectFromHandle(pImageInfo->imageView)->
-                                        Descriptor(pImageInfo->imageLayout, deviceIdx, imageDescSize);
+        if (pImageInfo->imageView == VK_NULL_HANDLE)
+        {
+            memset(pDestAddr, 0, imageDescSize);
+        }
+        else
+        {
+            const void* pImageDesc = ImageView::ObjectFromHandle(pImageInfo->imageView)->
+                Descriptor(pImageInfo->imageLayout, deviceIdx, imageDescSize);
 
-        memcpy(pDestAddr, pImageDesc, imageDescSize);
+            memcpy(pDestAddr, pImageDesc, imageDescSize);
+        }
 
         pImageInfo = static_cast<const VkDescriptorImageInfo*>(Util::VoidPtrInc(pImageInfo, imageInfoStride));
     }
@@ -196,21 +226,28 @@ void DescriptorUpdate::WriteFmaskDescriptors(
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
-        const ImageView* const pImageView = ImageView::ObjectFromHandle(pImageInfo->imageView);
-        const void*            pImageDesc = pImageView->Descriptor(pImageInfo->imageLayout, deviceIdx, 0);
-
-        if (pImageView->NeedsFmaskViewSrds())
+        if (pImageInfo->imageView == VK_NULL_HANDLE)
         {
-            // Copy over FMASK descriptor
-            // Image descriptors including shader read and write descriptors.
-            const void* pSrcFmaskAddr = Util::VoidPtrInc(pImageDesc, imageDescSize * 2);
-
-            memcpy(pDestAddr, pSrcFmaskAddr, fmaskDescSize);
+            memset(pDestAddr, 0, fmaskDescSize);
         }
         else
         {
-            // If no FMASK descriptor, need clear the memory to 0.
-            memset(pDestAddr, 0, fmaskDescSize);
+            const ImageView* const pImageView = ImageView::ObjectFromHandle(pImageInfo->imageView);
+            const void* pImageDesc = pImageView->Descriptor(pImageInfo->imageLayout, deviceIdx, 0);
+
+            if (pImageView->NeedsFmaskViewSrds())
+            {
+                // Copy over FMASK descriptor
+                // Image descriptors including shader read and write descriptors.
+                const void* pSrcFmaskAddr = Util::VoidPtrInc(pImageDesc, imageDescSize * 2);
+
+                memcpy(pDestAddr, pSrcFmaskAddr, fmaskDescSize);
+            }
+            else
+            {
+                // If no FMASK descriptor, need clear the memory to 0.
+                memset(pDestAddr, 0, fmaskDescSize);
+            }
         }
 
         pImageInfo = static_cast<const VkDescriptorImageInfo*>(Util::VoidPtrInc(pImageInfo, imageInfoStride));
@@ -234,9 +271,16 @@ void DescriptorUpdate::WriteBufferDescriptors(
 
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
-        const void* pBufferDesc = BufferView::ObjectFromHandle(*pBufferView)->Descriptor(type, deviceIdx);
+        if (*pBufferView == VK_NULL_HANDLE)
+        {
+            memset(pDestAddr, 0, bufferDescSize);
+        }
+        else
+        {
+            const void* pBufferDesc = BufferView::ObjectFromHandle(*pBufferView)->Descriptor(type, deviceIdx);
 
-        memcpy(pDestAddr, pBufferDesc, bufferDescSize);
+            memcpy(pDestAddr, pBufferDesc, bufferDescSize);
+        }
 
         pBufferView = static_cast<const VkBufferView*>(Util::VoidPtrInc(pBufferView, bufferViewStride));
     }
@@ -244,7 +288,7 @@ void DescriptorUpdate::WriteBufferDescriptors(
 
 // =====================================================================================================================
 // Write buffer descriptors using bufferInfo field used with uniform and storage buffers
-template <VkDescriptorType type>
+template <size_t bufferDescSize, VkDescriptorType type>
 void DescriptorUpdate::WriteBufferInfoDescriptors(
     const Device*                   pDevice,
     const VkDescriptorBufferInfo*   pDescriptors,
@@ -257,7 +301,6 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
     const VkDescriptorBufferInfo* pBufferInfo      = pDescriptors;
     const size_t                  bufferInfoStride = (descriptorStrideInBytes != 0) ? descriptorStrideInBytes
                                                                                     : sizeof(VkDescriptorBufferInfo);
-
     Pal::BufferViewInfo info = {};
 
     VK_ASSERT((type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)         ||
@@ -274,27 +317,44 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
     // Build the SRD
     for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
     {
-        info.gpuAddr = Buffer::ObjectFromHandle(pBufferInfo->buffer)->GpuVirtAddr(deviceIdx) + pBufferInfo->offset;
-
-        if ((pDevice->GetEnabledFeatures().robustBufferAccess == false) &&
-            ((type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC)        ||
-             (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)))
+        if (pBufferInfo->buffer == VK_NULL_HANDLE)
         {
-            pDestAddr[0] = Util::LowPart(info.gpuAddr);
-            pDestAddr[1] = Util::HighPart(info.gpuAddr);
-        }
-        else
-        {
-            if (pBufferInfo->range == VK_WHOLE_SIZE)
+            if ((pDevice->GetEnabledFeatures().robustBufferAccess == false) &&
+                ((type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) ||
+                 (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)))
             {
-                info.range = reinterpret_cast<Buffer*>(pBufferInfo->buffer)->GetSize() - pBufferInfo->offset;
+                pDestAddr[0] = 0;
+                pDestAddr[1] = 0;
             }
             else
             {
-                info.range = pBufferInfo->range;
+                memset(pDestAddr, 0, bufferDescSize);
             }
+        }
+        else
+        {
+            info.gpuAddr = Buffer::ObjectFromHandle(pBufferInfo->buffer)->GpuVirtAddr(deviceIdx) + pBufferInfo->offset;
 
-            pPalDevice->CreateUntypedBufferViewSrds(1, &info, pDestAddr);
+            if ((pDevice->GetEnabledFeatures().robustBufferAccess == false) &&
+                ((type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) ||
+                 (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)))
+            {
+                pDestAddr[0] = Util::LowPart(info.gpuAddr);
+                pDestAddr[1] = Util::HighPart(info.gpuAddr);
+            }
+            else
+            {
+                if (pBufferInfo->range == VK_WHOLE_SIZE)
+                {
+                    info.range = reinterpret_cast<Buffer*>(pBufferInfo->buffer)->GetSize() - pBufferInfo->offset;
+                }
+                else
+                {
+                    info.range = pBufferInfo->range;
+                }
+
+                pPalDevice->CreateUntypedBufferViewSrds(1, &info, pDestAddr);
+            }
         }
 
         pBufferInfo = static_cast<const VkDescriptorBufferInfo*>(Util::VoidPtrInc(pBufferInfo, bufferInfoStride));
@@ -443,7 +503,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-            WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(
+            WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(
                 pDevice,
                 params.pBufferInfo,
                 deviceIdx,
@@ -453,7 +513,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             break;
 
         case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-            WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER>(
+            WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER>(
                 pDevice,
                 params.pBufferInfo,
                 deviceIdx,
@@ -469,7 +529,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             pDestAddr = pDestSet->DynamicDescriptorData(deviceIdx) +
                         pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
 
-            WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC>(
+            WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC>(
                 pDevice,
                 params.pBufferInfo,
                 deviceIdx,
@@ -485,7 +545,7 @@ void DescriptorUpdate::WriteDescriptorSets(
             pDestAddr = pDestSet->DynamicDescriptorData(deviceIdx) +
                         pDestSet->Layout()->GetDstDynOffset(destBinding, params.dstArrayElement);
 
-            WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC>(
+            WriteBufferInfoDescriptors<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC>(
                 pDevice,
                 params.pBufferInfo,
                 deviceIdx,
@@ -702,15 +762,21 @@ PFN_vkUpdateDescriptorSets DescriptorUpdate::GetUpdateDescriptorSetsFunc(
         case 1:
             pFunc = GetUpdateDescriptorSetsFunc<1>(pDevice);
             break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
         case 2:
             pFunc = GetUpdateDescriptorSetsFunc<2>(pDevice);
             break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
         case 3:
             pFunc = GetUpdateDescriptorSetsFunc<3>(pDevice);
             break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
         case 4:
             pFunc = GetUpdateDescriptorSetsFunc<4>(pDevice);
             break;
+#endif
         default:
             break;
     }
@@ -846,7 +912,7 @@ void DescriptorUpdate::WriteBufferDescriptors<16, VK_DESCRIPTOR_TYPE_STORAGE_TEX
     size_t                              descriptorStrideInBytes);
 
 template
-void DescriptorUpdate::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(
+void DescriptorUpdate::WriteBufferInfoDescriptors<16, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER>(
     const Device*                   pDevice,
     const VkDescriptorBufferInfo*   pDescriptors,
     uint32_t                        deviceIdx,
@@ -856,7 +922,7 @@ void DescriptorUpdate::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUF
     size_t                          descriptorStrideInBytes);
 
 template
-void DescriptorUpdate::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER>(
+void DescriptorUpdate::WriteBufferInfoDescriptors<16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER>(
     const Device*                   pDevice,
     const VkDescriptorBufferInfo*   pDescriptors,
     uint32_t                        deviceIdx,
@@ -866,7 +932,7 @@ void DescriptorUpdate::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUF
     size_t                          descriptorStrideInBytes);
 
 template
-void DescriptorUpdate::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC>(
+void DescriptorUpdate::WriteBufferInfoDescriptors<16, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC>(
     const Device*                   pDevice,
     const VkDescriptorBufferInfo*   pDescriptors,
     uint32_t                        deviceIdx,
@@ -876,7 +942,7 @@ void DescriptorUpdate::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_UNIFORM_BUF
     size_t                          descriptorStrideInBytes);
 
 template
-void DescriptorUpdate::WriteBufferInfoDescriptors<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC>(
+void DescriptorUpdate::WriteBufferInfoDescriptors<16, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC>(
     const Device*                   pDevice,
     const VkDescriptorBufferInfo*   pDescriptors,
     uint32_t                        deviceIdx,

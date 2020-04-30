@@ -91,6 +91,11 @@ public:
 
     void SetImageViews(const VkRenderPassAttachmentBeginInfo* pRenderPassAttachmentBeginInfo);
 
+    const Pal::GlobalScissorParams& GetGlobalScissorParams() const
+    {
+        return m_globalScissorParams;
+    }
+
 protected:
     Framebuffer(const VkFramebufferCreateInfo& info, Attachment* pAttachments);
 
@@ -99,7 +104,8 @@ private:
         const Image* pImage,
         Attachment*  pAttachment);
 
-    const uint32_t  m_attachmentCount;
+    const uint32_t            m_attachmentCount;
+    Pal::GlobalScissorParams  m_globalScissorParams;
 };
 
 namespace entry

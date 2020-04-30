@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xfcf614faf683306f 12af666ef39a3cb9"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLoopUnrolls": 1
+        }
+      }
+    }
+  ]
+}

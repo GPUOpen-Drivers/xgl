@@ -315,6 +315,8 @@ static const char* PipelineStageFlagString(
         return compact ? "ALL_GFX" : "ALL_GRAPHICS_BIT";
     case VK_PIPELINE_STAGE_ALL_COMMANDS_BIT:
         return compact ? "ALL" : "ALL_COMMANDS_BIT";
+    case VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT:
+        return compact ? "COND_REND" : "CONDITIONAL_RENDERING_BIT";
     default:
         VK_NEVER_CALLED();
         return "<unknown pipeline stage flag>";

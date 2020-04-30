@@ -1128,15 +1128,21 @@ VKAPI_ATTR VkResult VKAPI_CALL DescriptorPool::AllocateDescriptorSets(
     case 1:
         pFunc = CreateDescriptorPool<1>;
         break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
     case 2:
         pFunc = CreateDescriptorPool<2>;
         break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
     case 3:
         pFunc = CreateDescriptorPool<3>;
         break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
     case 4:
         pFunc = CreateDescriptorPool<4>;
         break;
+#endif
     default:
         VK_NEVER_CALLED();
         break;
@@ -1156,15 +1162,21 @@ PFN_vkFreeDescriptorSets DescriptorPool::GetFreeDescriptorSetsFunc(
     case 1:
         pFunc = FreeDescriptorSets<1>;
         break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
     case 2:
         pFunc = FreeDescriptorSets<2>;
         break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
     case 3:
         pFunc = FreeDescriptorSets<3>;
         break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
     case 4:
         pFunc = FreeDescriptorSets<4>;
         break;
+#endif
     default:
         VK_NEVER_CALLED();
         break;
@@ -1184,15 +1196,21 @@ PFN_vkResetDescriptorPool DescriptorPool::GetResetDescriptorPoolFunc(
     case 1:
         pFunc = ResetDescriptorPool<1>;
         break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
     case 2:
         pFunc = ResetDescriptorPool<2>;
         break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
     case 3:
         pFunc = ResetDescriptorPool<3>;
         break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
     case 4:
         pFunc = ResetDescriptorPool<4>;
         break;
+#endif
     default:
         VK_NEVER_CALLED();
         break;
@@ -1212,15 +1230,21 @@ PFN_vkAllocateDescriptorSets DescriptorPool::GetAllocateDescriptorSetsFunc(
     case 1:
         pFunc = AllocateDescriptorSets<1>;
         break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
     case 2:
         pFunc = AllocateDescriptorSets<2>;
         break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
     case 3:
         pFunc = AllocateDescriptorSets<3>;
         break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
     case 4:
         pFunc = AllocateDescriptorSets<4>;
         break;
+#endif
     default:
         VK_NEVER_CALLED();
         break;
