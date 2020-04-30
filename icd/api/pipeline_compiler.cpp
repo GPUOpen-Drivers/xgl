@@ -32,6 +32,7 @@
 #define Vkgc Llpc
 #endif
 
+#include "include/log.h"
 #include "include/pipeline_compiler.h"
 #include "include/vk_device.h"
 #include "include/vk_physical_device.h"
@@ -1400,8 +1401,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                             pShaderModule,
                             &pCreateInfo->pipelineInfo.options,
                             pShaderInfo,
-                            &pCreateInfo->pipelineProfileKey
-                            , &pCreateInfo->pipelineInfo.nggState
+                            &pCreateInfo->pipelineProfileKey,
+                            &pCreateInfo->pipelineInfo.nggState
                             );
     }
 
@@ -1490,6 +1491,14 @@ void PipelineCompiler::ApplyPipelineOptions(
     {
         pOptions->robustBufferAccess = true;
     }
+#endif
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 38
+    // Setup shadow descriptor table pointer
+    const auto& info = m_pPhysicalDevice->PalProperties();
+    pOptions->shadowDescriptorTableUsage = Vkgc::ShadowDescriptorTableUsage::Enable;
+    pOptions->shadowDescriptorTablePtrHigh =
+          static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32);
 #endif
 }
 
@@ -1586,8 +1595,8 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
                         pShaderModule,
                         nullptr,
                         &pCreateInfo->pipelineInfo.cs,
-                        &pCreateInfo->pipelineProfileKey
-                      , nullptr
+                        &pCreateInfo->pipelineProfileKey,
+                        nullptr
                         );
 
     return result;
@@ -1639,8 +1648,8 @@ void PipelineCompiler::ApplyProfileOptions(
     ShaderModule*                pShaderModule,
     Vkgc::PipelineOptions*       pPipelineOptions,
     Vkgc::PipelineShaderInfo*    pShaderInfo,
-    PipelineOptimizerKey*        pProfileKey
-    , Vkgc::NggState*            pNggState
+    PipelineOptimizerKey*        pProfileKey,
+    Vkgc::NggState*              pNggState
     )
 {
     auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();

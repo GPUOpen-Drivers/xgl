@@ -667,6 +667,7 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
         case Pal::ChNumFormat::NV21:
         case Pal::ChNumFormat::P016:
         case Pal::ChNumFormat::P010:
+        case Pal::ChNumFormat::P210:
             if (aspectMask & VK_IMAGE_ASPECT_PLANE_0_BIT)
             {
                 aspectMask ^= VK_IMAGE_ASPECT_PLANE_0_BIT;
@@ -986,7 +987,9 @@ VK_TO_PAL_ENTRY_X(  COMPONENT_SWIZZLE_A,                      ChannelSwizzle::W 
 VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
     Pal::SwizzledFormat       format,
     Pal::SubresRange          subresRange,
-    const VkComponentMapping& mapping)
+    const VkComponentMapping& mapping,
+    const Pal::IDevice*       pPalDevice,
+    Pal::ImageTiling          imageTiling)
 {
     using Pal::ChannelSwizzle;
 
@@ -1002,13 +1005,23 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
     // Copy the unswizzled format
     Pal::SwizzledFormat newFormat = format;
 
+    // See if we can use MM formats for YUV images
+    Pal::MergedFormatPropertiesTable formatProperties = {};
+    pPalDevice->GetFormatProperties(&formatProperties);
+
+    uint32_t tilingIdx         = (imageTiling == Pal::ImageTiling::Linear) ? 0 : 1;
+    uint32_t x8MmformatIdx     = static_cast<uint32_t>(Pal::ChNumFormat::X8_MM_Unorm);
+    uint32_t x8Y8MmformatIdx   = static_cast<uint32_t>(Pal::ChNumFormat::X8Y8_MM_Unorm);
+    uint32_t x16MmformatIdx    = static_cast<uint32_t>(Pal::ChNumFormat::X16_MM_Unorm);
+    uint32_t x16Y16MmformatIdx = static_cast<uint32_t>(Pal::ChNumFormat::X16Y16_MM_Unorm);
+
     // As spec says, the remapping must be identity for any VkImageView used with a combined image sampler that
     // enables sampler YCbCr conversion, thus we could totally ignore the setting in VkComponentMapping.
     // For YCbCr conversions, the remapping is settled in VkSamplerYcbcrConversionCreateInfo, and happens when
     // the conversion finishes.
     // Note: AYUV && NV11 are not available in VK_KHR_sampler_ycbcr_conversion extension.
     if ((format.format >= Pal::ChNumFormat::AYUV) &&
-        (format.format <= Pal::ChNumFormat::P010))
+        (format.format <= Pal::ChNumFormat::P210))
     {
         switch (format.format)
         {
@@ -1041,7 +1054,8 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
             newFormat.swizzle.a = ChannelSwizzle::One;
             break;
         case Pal::ChNumFormat::YV12:
-            newFormat.format = Pal::ChNumFormat::X8_Unorm;
+            newFormat.format = (formatProperties.features[x8MmformatIdx][tilingIdx] != 0) ?
+                               Pal::ChNumFormat::X8_MM_Unorm : Pal::ChNumFormat::X8_Unorm;
             if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
             {
                 newFormat.swizzle.r = ChannelSwizzle::Zero;
@@ -1066,7 +1080,8 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
         case Pal::ChNumFormat::NV21:
             if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
             {
-                newFormat.format = Pal::ChNumFormat::X8_Unorm;
+                newFormat.format = (formatProperties.features[x8MmformatIdx][tilingIdx] != 0) ?
+                                   Pal::ChNumFormat::X8_MM_Unorm : Pal::ChNumFormat::X8_Unorm;
                 newFormat.swizzle.r = ChannelSwizzle::Zero;
                 newFormat.swizzle.g = ChannelSwizzle::X;
                 newFormat.swizzle.b = ChannelSwizzle::Zero;
@@ -1074,7 +1089,8 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
             }
             else if (subresRange.startSubres.aspect == Pal::ImageAspect::CbCr)
             {
-                newFormat.format = Pal::ChNumFormat::X8Y8_Unorm;
+                newFormat.format = (formatProperties.features[x8Y8MmformatIdx][tilingIdx] != 0) ?
+                                   Pal::ChNumFormat::X8Y8_MM_Unorm : Pal::ChNumFormat::X8Y8_Unorm;
                 if (format.format == Pal::ChNumFormat::NV12)
                 {
                     newFormat.swizzle.r = ChannelSwizzle::Y;
@@ -1091,9 +1107,11 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
             break;
         case Pal::ChNumFormat::P016:
         case Pal::ChNumFormat::P010:
+        case Pal::ChNumFormat::P210:
             if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
             {
-                newFormat.format = Pal::ChNumFormat::X16_Unorm;
+                newFormat.format = (formatProperties.features[x16MmformatIdx][tilingIdx] != 0) ?
+                                   Pal::ChNumFormat::X16_MM_Unorm : Pal::ChNumFormat::X16_Unorm;
                 newFormat.swizzle.r = ChannelSwizzle::Zero;
                 newFormat.swizzle.g = ChannelSwizzle::X;
                 newFormat.swizzle.b = ChannelSwizzle::Zero;
@@ -1101,7 +1119,8 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
             }
             else if (subresRange.startSubres.aspect == Pal::ImageAspect::CbCr)
             {
-                newFormat.format = Pal::ChNumFormat::X16Y16_Unorm;
+                newFormat.format = (formatProperties.features[x16Y16MmformatIdx][tilingIdx] != 0) ?
+                                   Pal::ChNumFormat::X16Y16_MM_Unorm : Pal::ChNumFormat::X16Y16_Unorm;
                 newFormat.swizzle.r = ChannelSwizzle::Y;
                 newFormat.swizzle.g = ChannelSwizzle::Zero;
                 newFormat.swizzle.b = ChannelSwizzle::X;
@@ -1164,6 +1183,7 @@ VK_INLINE VkImageAspectFlags PalYuvFormatToVkImageAspectPlane(
     case Pal::ChNumFormat::NV21:
     case Pal::ChNumFormat::P016:
     case Pal::ChNumFormat::P010:
+    case Pal::ChNumFormat::P210:
         return VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT;
         // YUV planar formats with spearate Y, U, and V planes.
     case Pal::ChNumFormat::YV12:
@@ -1406,6 +1426,7 @@ VK_INLINE Pal::uint32 BytesPerPixel(Pal::ChNumFormat format, Pal::ImageAspect as
             break;
         case Pal::ChNumFormat::P016:
         case Pal::ChNumFormat::P010:
+        case Pal::ChNumFormat::P210:
             VK_ASSERT((Pal::ImageAspect::Y == aspect) || (Pal::ImageAspect::CbCr == aspect));
             bytesPerPixel = (Pal::ImageAspect::Y == aspect) ? 2 : 4;
             break;
@@ -1693,6 +1714,9 @@ VK_INLINE Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
                                     ? bufferImageCopy.bufferImageHeight
                                     : bufferImageCopy.imageExtent.height;
 
+    // For best performance, let PAL choose the copy format
+    region.swizzledFormat = Pal::UndefinedSwizzledFormat;
+
     // PAL expects all dimensions to be in blocks for compressed formats so let's handle that here
     if (Pal::Formats::IsBlockCompressed(format))
     {
@@ -1750,6 +1774,8 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format)
         case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:    return PalFmt(Pal::ChNumFormat::P010,
             Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
         case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:    return PalFmt(Pal::ChNumFormat::P016,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:    return PalFmt(Pal::ChNumFormat::P210,
             Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
         }
         return Pal::UndefinedSwizzledFormat;
@@ -2025,7 +2051,8 @@ static const HwPipePointMappingEntry hwPipePointMappingTable[] =
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT           |
         VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT                    |
         VK_PIPELINE_STAGE_ALL_GRAPHICS_BIT                      |
-        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT
+        VK_PIPELINE_STAGE_ALL_COMMANDS_BIT                      |
+        VK_PIPELINE_STAGE_CONDITIONAL_RENDERING_BIT_EXT
     },
 
     // Flags that require flushing CS workload.

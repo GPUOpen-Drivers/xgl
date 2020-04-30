@@ -149,6 +149,17 @@ if(UNIX)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_KHR)
 endif()
 
+#if VKI_KHR_DISPLAY
+if(VKI_KHR_DISPLAY)
+    target_compile_definitions(xgl PRIVATE VKI_KHR_DISPLAY)
+endif()
+#endif
+#if VKI_NORMALIZED_TRIG_FUNCTIONS
+if(VKI_NORMALIZED_TRIG_FUNCTIONS)
+    target_compile_definitions(xgl PRIVATE VKI_NORMALIZED_TRIG_FUNCTIONS)
+endif()
+#endif
+
 ### Include Directories ################################################################################################
 
 target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
@@ -158,12 +169,8 @@ target_include_directories(xgl PRIVATE
     api
     api/include
     api/include/khronos
+    ${XGL_VKGC_PATH}/include
 )
-
-if(ICD_BUILD_LLPC)
-    target_include_directories(xgl PRIVATE ${XGL_LLPC_PATH}/include)
-    target_link_libraries(xgl PRIVATE llpc)
-endif()
 
 target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
@@ -176,6 +183,32 @@ endif()
 ### XGL Sources ########################################################################################################
 
 ### ICD api ####################################################################
+
+### ICD Auto-generated Shader Profiles Files ###########################################################################
+# ICD_GENDIR Path to the code generation tools
+set(ICD_GENDIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate)
+
+# ICD shader profile code generation main script
+set(ICD_GEN_SHADER_PROFILE_SCRIPTS ${ICD_GENDIR}/genShaderProfile.py ${ICD_GENDIR}/shaderProfileTemplate.py )
+
+set(ICD_SHADER_PROFILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/appopt)
+
+set(ICD_SHADER_PROFILE_SOURCE_FILES_DIR ${ICD_SHADER_PROFILE_DIR}/shader_profiles)
+
+add_custom_command(
+    OUTPUT ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.cpp ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.h
+    COMMAND ${PYTHON_CMD} ${ICD_GENDIR}/genShaderProfile.py ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
+    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
+    COMMENT "Generating shader profiles code from all profile.json files"
+)
+
+add_custom_target(
+    GenerateShaderProfiles
+    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
+    COMMENT "Checking if re-generation is required for shader profiles"
+)
+
+add_dependencies(xgl GenerateShaderProfiles)
 
 target_sources(xgl PRIVATE
     api/app_profile.cpp
@@ -238,11 +271,13 @@ target_sources(xgl PRIVATE
     api/appopt/async_layer.cpp
     api/appopt/async_shader_module.cpp
     api/appopt/async_partial_pipeline.cpp
+    api/appopt/g_shader_profile.cpp
     api/render_state_cache.cpp
     api/renderpass/renderpass_builder.cpp
     api/renderpass/renderpass_logger.cpp
     api/utils/temp_mem_arena.cpp
     api/utils/json_reader.cpp
+    api/utils/json_writer.cpp
 )
 
 if(XGL_BUILD_GFX10)
@@ -280,8 +315,8 @@ set(ICD_STRING_OUTPUT_FILES ${ICD_STRING_DIR}/g_entry_points_decl.h
                             ${ICD_STRING_DIR}/g_func_table.h
 )
 
-set(ICD_STRING_SOURCE_FILES ${ICD_STRING_DIR}/base_entry_points.txt
-                            ${ICD_STRING_DIR}/base_extensions.txt
+set(ICD_STRING_SOURCE_FILES ${ICD_STRING_DIR}/entry_points.txt
+                            ${ICD_STRING_DIR}/extensions.txt
 )
 
 add_custom_command(
@@ -339,9 +374,6 @@ target_sources(xgl PRIVATE
 )
 
 ### ICD Auto-generated Files ###########################################################################################
-# ICD_GENDIR Path to the code generation tools
-set(ICD_GENDIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate)
-
 # ICD settings code generation main script
 set(ICD_GEN_SETTINGS ${ICD_GENDIR}/genSettingsCode.py)
 
@@ -373,16 +405,8 @@ target_sources(xgl PRIVATE
     settings/settings.cpp
 )
 
-### XGL LLVM ####
-if(ICD_BUILD_LLPC)
-    # Add LGC as a dependency, but only if its CMakeLists.txt exists.
-    if(EXISTS "${XGL_LLPC_PATH}/../lgc/CMakeLists.txt")
-        target_link_libraries(xgl PRIVATE LLVMlgc)
-    endif()
-    target_link_libraries(xgl PRIVATE llpc dl stdc++)
-    llvm_map_components_to_libnames(llvm_libs amdgpucodegen amdgpuinfo amdgpuasmparser amdgpudisassembler LTO ipo analysis bitreader bitwriter codegen irreader linker mc passes support target transformutils coroutines)
-    target_link_libraries(xgl PRIVATE ${llvm_libs})
-endif()
+### XGL VKGC ####
+target_link_libraries(xgl PRIVATE vkgc dl stdc++)
 
 ### Link Libraries #####################################################################################################
 if (UNIX)

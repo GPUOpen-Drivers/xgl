@@ -258,17 +258,20 @@ private:
     // These hash tables map static graphics pipeline state to a unique token i.e. a perfect hash.
     Util::HashMap<Pal::InputAssemblyStateParams,
                   StaticParamState,
-                  PalAllocator>                   m_inputAssemblyState;
+                  PalAllocator,
+                  Util::JenkinsHashFunc>          m_inputAssemblyState;
     uint32_t                                      m_inputAssemblyStateNextId;
 
     Util::HashMap<Pal::TriangleRasterStateParams,
                   StaticParamState,
-                  PalAllocator>                   m_triangleRasterState;
+                  PalAllocator,
+                  Util::JenkinsHashFunc>          m_triangleRasterState;
     uint32_t                                      m_triangleRasterStateNextId;
 
     Util::HashMap<Pal::PointLineRasterStateParams,
                   StaticParamState,
-                  PalAllocator>                   m_pointLineRasterState;
+                  PalAllocator,
+                  Util::JenkinsHashFunc>          m_pointLineRasterState;
     uint32_t                                      m_pointLineRasterStateNextId;
 
     Util::HashMap<Pal::LineStippleStateParams,
@@ -278,12 +281,14 @@ private:
 
     Util::HashMap<Pal::DepthBiasParams,
                   StaticParamState,
-                  PalAllocator>                   m_depthBias;
+                  PalAllocator,
+                  Util::JenkinsHashFunc>          m_depthBias;
     uint32_t                                      m_depthBiasNextId;
 
     Util::HashMap<Pal::BlendConstParams,
                   StaticParamState,
-                  PalAllocator>                   m_blendConst;
+                  PalAllocator,
+                  Util::JenkinsHashFunc>          m_blendConst;
     uint32_t                                      m_blendConstNextId;
 
     Util::HashMap<Pal::DepthBoundsParams,
@@ -296,7 +301,7 @@ private:
     Util::HashMap<Pal::ViewportParams,
                   StaticParamState,
                   PalAllocator,
-                  Util::DefaultHashFunc,
+                  Util::JenkinsHashFunc,
                   Util::DefaultEqualFunc,
                   Util::HashAllocator<PalAllocator>,
                   ViewportHashGroupSize>          m_viewport;
@@ -307,7 +312,7 @@ private:
     Util::HashMap<Pal::ScissorRectParams,
                   StaticParamState,
                   PalAllocator,
-                  Util::DefaultHashFunc,
+                  Util::JenkinsHashFunc,
                   Util::DefaultEqualFunc,
                   Util::HashAllocator<PalAllocator>,
                   ScissorRectHashGroupSize>       m_scissorRect;
@@ -318,7 +323,7 @@ private:
     Util::HashMap<Pal::MsaaStateCreateInfo,
                   StaticMsaaState*,
                   PalAllocator,
-                  Util::DefaultHashFunc,
+                  Util::JenkinsHashFunc,
                   Util::DefaultEqualFunc,
                   Util::HashAllocator<PalAllocator>,
                   1024>                              m_msaaStates;
@@ -332,7 +337,7 @@ private:
     Util::HashMap<SamplePattern,
         StaticParamState,
         PalAllocator,
-        Util::DefaultHashFunc,
+        Util::JenkinsHashFunc,
         Util::DefaultEqualFunc,
         Util::HashAllocator<PalAllocator>,
         SamplePatternHashGroupSize>               m_samplePattern;
@@ -341,7 +346,7 @@ private:
     Util::HashMap<Pal::ColorBlendStateCreateInfo,
         StaticColorBlendState*,
         PalAllocator,
-        Util::DefaultHashFunc,
+        Util::JenkinsHashFunc,
         Util::DefaultEqualFunc,
         Util::HashAllocator<PalAllocator>,
         1024>                                         m_colorBlendStates;
@@ -353,7 +358,7 @@ private:
     Util::HashMap<Pal::DepthStencilStateCreateInfo,
         StaticDepthStencilState*,
         PalAllocator,
-        Util::DefaultHashFunc,
+        Util::JenkinsHashFunc,
         Util::DefaultEqualFunc,
         Util::HashAllocator<PalAllocator>,
         1024>                                         m_depthStencilStates;

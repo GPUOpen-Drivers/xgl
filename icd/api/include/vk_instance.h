@@ -216,6 +216,9 @@ public:
     DevModeMgr* GetDevModeMgr()
         { return m_pDevModeMgr; }
 
+    const char* GetApplicationName() const
+        { return m_applicationName; }
+
     VkResult LoadAndCommitSettings(
         uint32_t              deviceCount,
         Pal::IDevice**        ppDevices,
@@ -333,6 +336,9 @@ private:
 
     DevModeMgr*     m_pDevModeMgr;      // GPUOpen Developer Mode manager.
 
+    static const size_t APP_INFO_MAX_CHARS = 256;
+    char m_applicationName[APP_INFO_MAX_CHARS];
+
     Util::List<DebugReportCallback*, PalAllocator>  m_debugReportCallbacks;             // List of registered Debug
                                                                                         // Report Callbacks
     Util::List<DebugUtilsMessenger*, PalAllocator>  m_debugUtilsMessengers;             // List of registered Debug
@@ -347,6 +353,8 @@ private:
     // The ratified extensions (including instance and device) under developing could be enabled by environmental
     // variable, AMDVLK_ENABLE_DEVELOPING_EXT.
     static const char* m_extensionsEnv;
+
+    uint64_t  m_logTagIdMask;
 };
 
 // =====================================================================================================================

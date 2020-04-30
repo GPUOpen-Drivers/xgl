@@ -87,7 +87,6 @@ cmake_dependent_option(XGL_BUILD_NAVI14 "Build open source vulkan for Navi14" ON
 #if VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES
 option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
 #endif
-
 option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 
 if(ICD_BUILD_LLPCONLY)
@@ -183,15 +182,6 @@ set(PAL_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." 
 set(PAL_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
-# LLVM
-# LLVM will be switched to llvm monorepo. Check if the new llvm exist first and fallback to
-# the old llvm if it doesn't during the transition. The old path should be removed once the transition gets completed.
-if(EXISTS ${PROJECT_SOURCE_DIR}/../llvm-project/llvm)
-    set(XGL_LLVM_SRC_PATH ${PROJECT_SOURCE_DIR}/../llvm-project/llvm CACHE PATH "Specify the path to the LLVM.")
-else()
-    set(XGL_LLVM_SRC_PATH ${PROJECT_SOURCE_DIR}/../llvm CACHE PATH "Specify the path to the LLVM.")
-endif()
-
 # Wayland
 if (BUILD_WAYLAND_SUPPORT)
     set(PAL_BUILD_WAYLAND ON CACHE BOOL "Build PAL with Wayland support" FORCE)
@@ -204,6 +194,12 @@ find_package(PythonInterp 3)
 if(NOT PYTHONINTERP_FOUND)
     if(UNIX)
         message(FATAL_ERROR "Python 3 is needed to generate some source files.")
+    endif()
+else()
+    if(UNIX)
+        if(${PYTHON_VERSION_MINOR} LESS "6")
+            message(FATAL_ERROR "Python 3.6(CPython) or higher is needed to generate some source files.")
+        endif()
     endif()
 endif()
 set(PYTHON_CMD ${PYTHON_EXECUTABLE})
@@ -240,22 +236,14 @@ if(EXISTS ${XGL_CWPACK_PATH} AND NOT TARGET cwpack)
     add_subdirectory(${XGL_CWPACK_PATH} ${PROJECT_BINARY_DIR}/cwpack)
 endif()
 
-### LLPC ###############################################################
+### VKGC ###############################################################
 set(XGL_ICD_PATH ${PROJECT_SOURCE_DIR}/icd CACHE PATH "The path of xgl, it is read-only.")
 
-# Support the old path and new path of llpc
-# New path - the repo name is llpc instead of compiler
-if (EXISTS ${PROJECT_SOURCE_DIR}/../llpc/llpc/CMakeLists.txt)
-    set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc/llpc CACHE PATH "Specify the path to the LLPC." FORCE)
-# Old path
-elseif (EXISTS ${PROJECT_SOURCE_DIR}/../llpc/CMakeLists.txt)
-    set(XGL_LLPC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the LLPC." FORCE)
-# New path
-elseif (EXISTS ${XGL_ICD_PATH}/api/compiler/llpc/CMakeLists.txt)
-    set(XGL_LLPC_PATH ${XGL_ICD_PATH}/api/compiler/llpc CACHE PATH "Specify the path to the LLPC." FORCE)
-# Old path
-elseif (EXISTS ${XGL_ICD_PATH}/api/llpc/CMakeLists.txt)
-    set(XGL_LLPC_PATH ${XGL_ICD_PATH}/api/llpc CACHE PATH "Specify the path to the LLPC." FORCE)
+if (EXISTS ${XGL_ICD_PATH}/api/compiler/CMakeLists.txt)
+    set(XGL_VKGC_PATH ${XGL_ICD_PATH}/api/compiler CACHE PATH "Specify the path to the compiler." FORCE)
+else()
+    # On github, the default repo name is llpc instead of compiler
+    set(XGL_VKGC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the llpc repository." FORCE)
 endif()
 
 set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
@@ -263,44 +251,13 @@ set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE
 set(LLPC_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 if(ICD_BUILD_LLPC)
-    # Add LGC as an LLVM external project, but only if its CMakeLists.txt exists.
-    if(EXISTS "${XGL_LLPC_PATH}/../lgc/CMakeLists.txt")
-        set(LLVM_EXTERNAL_PROJECTS lgc)
-        set(LLVM_EXTERNAL_LGC_SOURCE_DIR ${XGL_LLPC_PATH}/../lgc)
-    endif()
-    # Set other LLVM settings.
-    set(LLVM_ENABLE_ASSERTIONS ${CMAKE_BUILD_TYPE_DEBUG} CACHE BOOL Force)
-    set(LLVM_TARGETS_TO_BUILD AMDGPU CACHE STRING Force)
-    set(LLVM_BUILD_TESTS OFF CACHE BOOL Force)
-    set(LLVM_BUILD_TOOLS ON CACHE BOOL Force)
-    set(LLVM_BUILD_UTILS OFF CACHE BOOL Force)
-    set(LLVM_INCLUDE_DOCS OFF CACHE BOOL Force)
-    set(LLVM_INCLUDE_EXAMPLES OFF CACHE BOOL Force)
-    set(LLVM_INCLUDE_GO_TESTS OFF CACHE BOOL Force)
-    set(LLVM_INCLUDE_TESTS OFF CACHE BOOL Force)
-    set(LLVM_INCLUDE_TOOLS ON CACHE BOOL Force)
-    set(LLVM_INCLUDE_UTILS ON CACHE BOOL Force)
-    set(LLVM_ENABLE_TERMINFO OFF CACHE BOOL Force)
-    set(LLVM_ENABLE_ZLIB OFF CACHE BOOL Force)
     set(LLPC_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-set(LLPC_BUILD_RENOIR ${XGL_BUILD_RENOIR} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+    set(LLPC_BUILD_RENOIR ${XGL_BUILD_RENOIR} CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(LLPC_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-
-    # confict with PAL
-    #set(LLVM_OPTIMIZED_TABLEGEN ON CACHE BOOL Force)
-    add_subdirectory(${XGL_LLVM_SRC_PATH} ${PROJECT_BINARY_DIR}/llvm)
-    set(XGL_LLVM_BUILD_PATH ${CMAKE_BINARY_DIR}/llvm)
-
-    add_subdirectory(${XGL_LLPC_PATH} ${CMAKE_BINARY_DIR}/llpc)
 endif()
+
+add_subdirectory(${XGL_VKGC_PATH} ${CMAKE_BINARY_DIR}/compiler)
 
 if(NOT ICD_BUILD_LLPCONLY)
     add_subdirectory(icd)
-endif()
-
-#build wsa
-option(BUILD_WSA "Build wsa" OFF)
-
-if (BUILD_WSA)
-    add_subdirectory(${PROJECT_SOURCE_DIR}/../wsa ${PROJECT_BINARY_DIR}/wsa)
 endif()

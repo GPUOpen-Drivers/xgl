@@ -860,7 +860,6 @@ void SwapChain::SetHdrMetadata(
     //861-G spec section 6.9.1 "Static Metadata Type 1".
     //Data Bytes 3 – 18 are coded as unsigned 16-bit values in units of 0.00002, where 0x0000 represents
     //zero and 0xC350 represents 1.0000.
-
     auto ConvertUnits        = [] (float input) { return static_cast<uint32_t>(static_cast<double>(input) * 50000.0); };
     auto ConvertMinLuminance = [] (float input) { return static_cast<uint32_t>(static_cast<double>(input) * 10000.0); };
 

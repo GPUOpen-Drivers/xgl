@@ -1,0 +1,12 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "lateAllocVsLimit": 0
+      }
+    }
+  ]
+}

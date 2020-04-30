@@ -41,7 +41,11 @@
 
 #include "palPipeline.h"
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+namespace Vkgc
+#else
 namespace Llpc
+#endif
 {
 struct PipelineShaderInfo;
 struct ResourceMappingNode;
@@ -67,7 +71,6 @@ class ShaderModule;
 // CmdBindDescriptorSets to determine how to bind a particular descriptor set to a location within the layout.
 class PipelineLayout : public NonDispatchable<VkPipelineLayout, PipelineLayout>
 {
-
 public:
     // Number of user data registers consumed per descriptor set address (we use 32-bit addresses)
     static constexpr uint32_t SetPtrRegCount = 1;
@@ -100,12 +103,8 @@ public:
         UserDataLayout             userDataLayout;
         // Number of descriptor set bindings in this pipeline layout
         uint32_t                   setCount;
-        // Array of descriptor set layouts in this pipeline layout, indexed by set index
-        SetUserDataLayout          setUserData[MaxDescriptorSets];
         // Total number of user data registers used in this pipeline layout
         uint32_t                   userDataRegCount;
-        // Original descriptor set layout pointers
-        DescriptorSetLayout* pSetLayouts[MaxDescriptorSets];
     };
 
     // This information is specific for pipeline construction:
@@ -157,12 +156,31 @@ public:
     VK_INLINE const Info& GetInfo() const
         { return m_info; }
 
+    // Descriptor set layouts in this pipeline layout
+    VK_INLINE const SetUserDataLayout& GetSetUserData(uint32_t setIndex) const
+    {
+        return static_cast<const SetUserDataLayout*>(Util::VoidPtrInc(this, sizeof(*this)))[setIndex];
+    }
+
+    // Original descriptor set layout pointers
+    VK_INLINE const DescriptorSetLayout* GetSetLayouts(uint32_t setIndex) const
+    {
+        return static_cast<const DescriptorSetLayout* const*>(
+            Util::VoidPtrInc(this, sizeof(*this) + (m_info.setCount * sizeof(SetUserDataLayout))))[setIndex];
+    }
+    VK_INLINE DescriptorSetLayout* GetSetLayouts(uint32_t setIndex)
+    {
+        return static_cast<DescriptorSetLayout**>(
+            Util::VoidPtrInc(this, sizeof(*this) + (m_info.setCount * sizeof(SetUserDataLayout))))[setIndex];
+    }
+
 protected:
     static VkResult ConvertCreateInfo(
         const Device*                     pDevice,
         const VkPipelineLayoutCreateInfo* pIn,
         Info*                             pInfo,
-        PipelineInfo*                     pPipelineInfo);
+        PipelineInfo*                     pPipelineInfo,
+        SetUserDataLayout*                pSetUserDataLayouts);
 
     PipelineLayout(
         const Device*       pDevice,
@@ -211,6 +229,11 @@ protected:
     const Device* const     m_pDevice;
     const uint64_t          m_apiHash;
 };
+
+static_assert(alignof(PipelineLayout::SetUserDataLayout) <= alignof(PipelineLayout),
+    "PipelineLayout::SetUserDataLayout must not have greater alignment than PipelineLayout object!");
+static_assert((sizeof(PipelineLayout::SetUserDataLayout) % alignof(DescriptorSetLayout*)) == 0,
+    "DescriptorSetLayout pointer is not properly aligned after PipelineLayout::SetUserDataLayout!");
 
 namespace entry
 {

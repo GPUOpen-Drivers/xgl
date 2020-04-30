@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x98a1064ec65eb412 64eca5e83285c2fa"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLicm": true
+        }
+      }
+    }
+  ]
+}

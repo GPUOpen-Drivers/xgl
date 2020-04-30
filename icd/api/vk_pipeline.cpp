@@ -214,7 +214,7 @@ VkResult Pipeline::GetShaderDisassembly(
         // VK_PIPELINE_CREATE_CAPTURE_INTERNAL_REPRESENTATIONS_BIT_KHR
         VK_NEVER_CALLED();
 
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
+        return VK_ERROR_UNKNOWN;
     }
 
     VkResult    result    = VK_SUCCESS;
@@ -844,7 +844,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableStatisticsKHR(
     // Return error is the there are now statics for stage.
     if (palResult != Pal::Result::Success)
     {
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
+        return VK_ERROR_UNKNOWN;
     }
 
     // Convert from PAL to VK statistics

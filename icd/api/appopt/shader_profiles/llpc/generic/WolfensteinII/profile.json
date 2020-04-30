@@ -1,0 +1,14 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "cs": {
+          "unrollThreshold": 2150
+        }
+      }
+    }
+  ]
+}

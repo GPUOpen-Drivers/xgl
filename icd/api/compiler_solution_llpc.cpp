@@ -159,7 +159,8 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     moduleInfo.shaderBin.pCode    = pCode;
     moduleInfo.shaderBin.codeSize = codeSize;
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 32
-    PipelineCompiler::ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions);
+    auto pPipelineCompiler = m_pPhysicalDevice->GetCompiler();
+    pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions);
     moduleInfo.options.enableOpt = (flags & VK_SHADER_MODULE_ENABLE_OPT_BIT) ? true : false;
 #endif
 
@@ -524,6 +525,7 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     Pal::DeviceProperties info;
     m_pPhysicalDevice->PalDevice()->GetProperties(&info);
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 38
     llpcOptions[numOptions++] = "-enable-shadow-desc";
     optionLength = Util::Snprintf(pOptionBuffer,
                                   bufSize,
@@ -534,6 +536,7 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     llpcOptions[numOptions++] = pOptionBuffer;
     pOptionBuffer += optionLength;
     bufSize       -= optionLength;
+#endif
 
     // LLPC log options
     llpcOptions[numOptions++] = (settings.enableLog & 1) ? "-enable-errs=1" : "-enable-errs=0";
@@ -608,18 +611,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
         // si-scheduler interacts badly with SIFormMemoryClauses pass, so
         // disable the effect of that pass by limiting clause length to 1.
         llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
-    }
-
-    // Force enable cache to disk to improve user experience
-    if ((shaderCacheMode == ShaderCacheEnableRuntimeOnly) &&
-         ((appProfile == AppProfile::MadMax) ||
-          (appProfile == AppProfile::SeriousSamFusion) ||
-          (appProfile == AppProfile::F1_2017) ||
-          (appProfile == AppProfile::Feral3DEngine) ||
-          (appProfile == AppProfile::DawnOfWarIII)))
-    {
-        // Force to use internal disk cache.
-        shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
     }
 
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);

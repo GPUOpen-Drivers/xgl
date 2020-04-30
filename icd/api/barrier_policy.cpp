@@ -177,7 +177,7 @@ protected:
         m_layoutUsageTable[2][usageIndex] = layoutUsage2;
     }
 
-    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 10 };
+    enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 11 };
 
     uint32_t    m_layoutUsageTable[MaxPalAspectsPerMask][LayoutUsageTableSize];
 };
@@ -228,6 +228,11 @@ static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask)
     if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_WRITE_BIT_EXT)
     {
         cacheMask |= Pal::CoherStreamOut;
+    }
+
+    if (accessMask & VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT)
+    {
+        cacheMask |= Pal::CoherMemory;
     }
 
     // CoherQueueAtomic: Not used
@@ -292,6 +297,11 @@ static VK_INLINE uint32_t DstAccessToCacheMask(VkAccessFlags accessMask)
     if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT)
     {
         cacheMask |= Pal::CoherStreamOut;
+    }
+
+    if (accessMask & VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT)
+    {
+        cacheMask |= Pal::CoherMemory;
     }
 
     return cacheMask;
@@ -1157,6 +1167,9 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
         supportedInputCacheMask  |= Pal::CoherStreamOut;
         supportedOutputCacheMask |= Pal::CoherStreamOut;
     }
+
+    // Nothing to do since Pal::CoherMemory is already set
+    VK_IGNORE(usage & VK_BUFFER_USAGE_CONDITIONAL_RENDERING_BIT_EXT);
 
     // Apply device specific supported cache masks to limit the scope.
     supportedOutputCacheMask &= pDevice->GetBarrierPolicy().GetSupportedOutputCacheMask();

@@ -72,6 +72,9 @@ enum class AppProfile : uint32_t
     WorldWarZ,             // WorldWarZ
     ThreeKingdoms,         // Three Kingdoms by Feral3D
     DiRT4,                 // DiRT4 by Feral3D
+    Rage2,                 // Rage2 by Avalanche Studios
+    RainbowSixSiege,       // Tom Clancy's Rainbow Six Siege: Operation Phantom by Ubisoft
+    WolfensteinYoungblood, // Wolfenstein Youngblood by Machine Games
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)
@@ -79,6 +82,8 @@ enum class AppProfile : uint32_t
     SedpEngine,            // Serious Engine (Default)
     Source2Engine,         // Source 2 Engine (Default)
     NitrousEngine,         // Nitrous Engine by Oxide (Default)
+    ApexEngine,            // Avalanche Open World Engine (Default)
+    ScimitarEngine,        // Scimitar Engine by Ubisoft (Default)
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
 };
 

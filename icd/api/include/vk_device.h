@@ -45,6 +45,7 @@
 #include "include/app_resource_optimizer.h"
 
 #include "include/internal_mem_mgr.h"
+#include "include/log.h"
 #include "include/render_state_cache.h"
 #include "include/virtual_stack_mgr.h"
 #include "include/barrier_policy.h"
@@ -69,8 +70,16 @@ class VirtualLinearAllocator;
 namespace Llpc
 {
 class ICompiler;
-struct ResourceMappingNode;
 };
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+namespace Vkgc
+#else
+namespace Llpc
+#endif
+{
+struct ResourceMappingNode;
+}
 
 namespace vk
 {

@@ -1,0 +1,23 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "lateAllocVsLimit": 0
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xfa535f5e84c8b76e ef8212debb55d37f"
+        }
+      },
+      "action": {
+        "binningOverride": 1
+      }
+    }
+  ]
+}

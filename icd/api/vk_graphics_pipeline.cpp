@@ -23,6 +23,7 @@
  *
  **********************************************************************************************************************/
 
+#include "include/log.h"
 #include "include/stencil_ops_combiner.h"
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
@@ -1251,6 +1252,7 @@ VkResult GraphicsPipeline::Create(
     ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &vbInfo, &localPipelineInfo);
 
     const uint32_t numPalDevices = pDevice->NumPalDevices();
+    uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
     for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices); ++i)
     {
         if (i == DefaultDeviceIndex)
@@ -1519,11 +1521,16 @@ VkResult GraphicsPipeline::Create(
     }
     if (result == VK_SUCCESS)
     {
+        uint64_t duration = Util::GetPerfCpuTime() - startTime;
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
-        binaryCreateInfo.pipelineFeedback.duration = Util::GetPerfCpuTime() - startTime;
+        binaryCreateInfo.pipelineFeedback.duration = duration;
         pDefaultCompiler->SetPipelineCreationFeedbackInfo(
             pPipelineCreationFeadbackCreateInfo,
             &binaryCreateInfo.pipelineFeedback);
+
+        const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+        // The hash is same as pipline dump file name, we can easily analyze further.
+        AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", pipelineHash, duration);
     }
 
     return result;

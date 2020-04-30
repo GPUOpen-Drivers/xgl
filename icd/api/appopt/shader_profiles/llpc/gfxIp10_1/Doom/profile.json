@@ -1,0 +1,82 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0xf986532bb17816ea 3098cf611f82ee06"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x9ca3346855a52a28 378987da9ec691aa"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x8870793de8be7ba9 b61429d9c34c9ac6"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0xd744a95893da0783 79783e2e62e4a0a1"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x1fa1621910138f98 7100a2dcd89ff535"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x6595736cfbce3e56 56b9a44c18c9a595"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    }
+  ]
+}

@@ -131,7 +131,7 @@ private:
             const void*                 pDescriptorInfo,
             const TemplateUpdateInfo&   entry);
 
-    template <VkDescriptorType descriptorType, uint32_t numPalDevices>
+    template <size_t bufferDescSize, VkDescriptorType descriptorType, uint32_t numPalDevices>
     static void UpdateEntryBuffer(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,

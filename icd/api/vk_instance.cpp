@@ -29,6 +29,7 @@
  ***********************************************************************************************************************
  */
 
+#include "include/log.h"
 #include "include/khronos/vulkan.h"
 #include "include/vk_alloccb.h"
 #include "include/vk_conv.h"
@@ -94,12 +95,14 @@ Instance::Instance(
     m_pScreenStorage(nullptr),
     m_pDevModeMgr(nullptr),
     m_debugReportCallbacks(&m_palAllocator),
-    m_debugUtilsMessengers(&m_palAllocator)
+    m_debugUtilsMessengers(&m_palAllocator),
+    m_logTagIdMask(0)
 {
     m_flags.u32All = 0;
 
     memset(m_screens, 0, sizeof(m_screens));
 
+    memset(m_applicationName, 0, sizeof(m_applicationName));
 }
 
 // =====================================================================================================================
@@ -307,6 +310,15 @@ VkResult Instance::Init(
     const VkApplicationInfo* pAppInfo)
 {
     VkResult status;
+
+    if (pAppInfo != nullptr)
+    {
+        if (pAppInfo->pApplicationName != nullptr)
+        {
+            strncpy(m_applicationName, pAppInfo->pApplicationName, APP_INFO_MAX_CHARS - 1);
+        }
+
+    }
 
     m_palAllocator.Init();
     m_privateAllocator.Init();
@@ -536,6 +548,14 @@ VkResult Instance::Init(
 
     if (status == VK_SUCCESS)
     {
+        PhysicalDevice* pPhysicalDevice = ApiPhysicalDevice::ObjectFromHandle(devices[DefaultDeviceIndex]);
+        m_logTagIdMask = pPhysicalDevice->GetRuntimeSettings().logTagIdMask;
+        AmdvlkLog(m_logTagIdMask, GeneralPrint, "%s Begin ********\n",
+            GetApplicationName());
+    }
+
+    if (status == VK_SUCCESS)
+    {
         InitDispatchTable();
     }
 
@@ -649,6 +669,8 @@ void Instance::UpdateSettingsWithAppProfile(
 // Destroys the Instance.
 VkResult Instance::Destroy(void)
 {
+    AmdvlkLog(m_logTagIdMask, GeneralPrint, "%s End ********\n", GetApplicationName());
+
 #if ICD_GPUOPEN_DEVMODE_BUILD
     if (m_pDevModeMgr != nullptr)
     {

@@ -515,6 +515,19 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Controls which category messages are output to log file (/var/tmp/palLog.txt). e.g. enable PipelineCompileTime(enum LogTagId in icd/api/include/log.h), logTagIdMask |= 1<<PipelineCompileTime",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "VariableName": "logTagIdMask",
+      "Name": "LogTagIdMask"
+    },
+    {
       "Name": "PipelineFastCompileMode",
       "Description": "Controls how SC 'fast compile mode' (disable optimizations) is enabled",
       "Tags": [
@@ -608,8 +621,40 @@
       "VariableName": "pipelineUseShaderHashAsProfileHash"
     },
     {
+      "Name": "EnablePipelineProfileDumping",
+      "Description": "Enable dumping of tuning optimizations in JSON format, as applied to shaders for a currently runnning app",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "enablePipelineProfileDumping",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "File (in relative path) to dump app shader profile to. Root directory is determined by AMD_DEBUG_DIR environment variable",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Flags": {
+        "IsFile": true
+      },
+      "Defaults": {
+        "Default": "vkDump/appShaderProfile",
+        "WinDefault": "vkDump\\appShaderProfile.json",
+        "LnxDefault": "vkDump/appShaderProfile.json"
+      },
+      "Name": "PipelineProfileDumpFile",
+      "Type": "string",
+      "VariableName": "pipelineProfileDumpFile",
+      "Size": 260,
+      "Scope": "Driver"
+    },
+    {
       "Name": "PipelineProfileRuntimeFile",
-      "Description": "Path to a JSON file that describes a shader app profile that is parsed at runtime.  This setting only triggers on debug builds or builds made with the ICD_RUNTIME_APP_PROFILE=1 option.  This file has the same format as the JSON files used to build production shader app profiles.",
+      "Description": "Relative Path to a JSON file that describes a shader app profile that is parsed at runtime. This setting only triggers on debug builds or builds made with the ICD_RUNTIME_APP_PROFILE=1 option. This file has the same format as the JSON files used to build production shader app profiles. Root directory is determined by AMD_DEBUG_DIR environment variable",
       "Tags": [
         "Pipeline Options"
       ],
@@ -652,7 +697,7 @@
     },
     {
       "Name": "PipelineProfileHaltOnParseFailure",
-      "Description": "If the driver fails to parse a runtime profile JSON file, it will assert and enter into aninfinite loop if this setting is TRUE. ",
+      "Description": "If the driver fails to parse a runtime profile JSON file, it will assert and enter into an infinite loop if this setting is TRUE. ",
       "Tags": [
         "Pipeline Options"
       ],
@@ -1378,6 +1423,19 @@
       "VariableName": "nggDisableCullingValuInstrThreshold"
     },
     {
+      "Name": "NggDisableCompaction",
+      "Description": "Disable subgroup compaction within the implicit primitive shader, possibly exporting more data than necessary to avoid multiple round trips through LDS to store the culling results.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "nggDisableCompaction"
+    },
+    {
       "Description": "Force HW to guarantee forward progress per wave on GFX10 0x00000000 - Disable (default) 0x00000001 - Enable for vertex shaders 0x00000002 - Enable for tessellation control shaders 0x00000004 - Enable for tessellation evaluation shaders 0x00000008 - Enable for geometry shaders 0x00000010 - Enable for fragment shaders 0x00000020 - Enable for compute shaders ",
       "Tags": [
         "SPIRV Options"
@@ -1825,14 +1883,14 @@
     },
     {
       "Name": "AllowVkPipelineCachingToDisk",
-      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for saving shader ELFs. (Default: FALSE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
+      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for saving shader ELFs. (Default: TRUE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
       "Tags": [
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": false,
+        "Default": true,
         "WinDefault": true,
-        "LnxDefault": false
+        "LnxDefault": true
       },
       "Type": "bool",
       "VariableName": "usePalPipelineCaching",
@@ -1849,6 +1907,19 @@
       },
       "Type": "bool",
       "VariableName": "allowExternalPipelineCacheObject",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "UsePipelineCacheInitialData",
+      "Description": "Controls whether to use existing, compiled runtime shader pipeline caches. (Default: TRUE)",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "usePipelineCacheInitialData",
       "Scope": "Driver"
     },
     {

@@ -1,0 +1,30 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x3895042bcf33699a da756541f86d98d8"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 16
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x4aadf469c56d08f3 530864a25609abcd"
+        }
+      },
+      "action": {
+        "ps": {
+          "maxWavesPerCu": 20
+        }
+      }
+    }
+  ]
+}

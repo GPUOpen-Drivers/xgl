@@ -246,8 +246,8 @@ public:
     VkResult CalcSubAllocationPool(const MemoryPoolProperties& poolProps, void** ppPoolInfo);
 
 private:
-    typedef Util::List<InternalMemoryPool, PalAllocator>                        MemoryPoolList;
-    typedef Util::HashMap<MemoryPoolProperties, MemoryPoolList*, PalAllocator>  MemoryPoolListMap;
+    typedef Util::List<InternalMemoryPool, PalAllocator>                                               MemoryPoolList;
+    typedef Util::HashMap<MemoryPoolProperties, MemoryPoolList*, PalAllocator, Util::JenkinsHashFunc>  MemoryPoolListMap;
 
     VkResult CalcSubAllocationPoolInternal(
         const MemoryPoolProperties& poolProps,

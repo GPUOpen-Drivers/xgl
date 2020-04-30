@@ -171,16 +171,16 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
         pFunc = &UpdateEntryTexelBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-        pFunc = &UpdateEntryBuffer<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, numPalDevices>;
+        pFunc = &UpdateEntryBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
-        pFunc = &UpdateEntryBuffer<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, numPalDevices>;
+        pFunc = &UpdateEntryBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
-        pFunc = &UpdateEntryBuffer<VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, numPalDevices>;
+        pFunc = &UpdateEntryBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
-        pFunc = &UpdateEntryBuffer<VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, numPalDevices>;
+        pFunc = &UpdateEntryBuffer<bufferDescSize, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, numPalDevices>;
         break;
     case VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
         pFunc = &UpdateEntryInlineUniformBlock<numPalDevices>;
@@ -237,20 +237,26 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
 {
     DescriptorUpdateTemplate::PfnUpdateEntry pFunc = nullptr;
 
-        switch (pDevice->NumPalDevices())
+    switch (pDevice->NumPalDevices())
     {
         case 1:
             pFunc = GetUpdateEntryFunc<1>(pDevice, descriptorType, dstBinding);
             break;
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
         case 2:
             pFunc = GetUpdateEntryFunc<2>(pDevice, descriptorType, dstBinding);
             break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 2)
         case 3:
             pFunc = GetUpdateEntryFunc<3>(pDevice, descriptorType, dstBinding);
             break;
+#endif
+#if (VKI_BUILD_MAX_NUM_GPUS > 3)
         case 4:
             pFunc = GetUpdateEntryFunc<4>(pDevice, descriptorType, dstBinding);
             break;
+#endif
         default:
             VK_NEVER_CALLED();
             pFunc = nullptr;
@@ -393,7 +399,7 @@ void DescriptorUpdateTemplate::UpdateEntryTexelBuffer(
 }
 
 // =====================================================================================================================
-template <VkDescriptorType descriptorType, uint32_t numPalDevices>
+template <size_t bufferDescSize, VkDescriptorType descriptorType, uint32_t numPalDevices>
 void DescriptorUpdateTemplate::UpdateEntryBuffer(
     const Device*               pDevice,
     VkDescriptorSet             descriptorSet,
@@ -426,7 +432,7 @@ void DescriptorUpdateTemplate::UpdateEntryBuffer(
             stride      = entry.dstBindStaDwArrayStride;
         }
 
-        DescriptorUpdate::WriteBufferInfoDescriptors<descriptorType>(
+        DescriptorUpdate::WriteBufferInfoDescriptors<bufferDescSize, descriptorType>(
                 pDevice,
                 pBufferInfo,
                 deviceIdx,

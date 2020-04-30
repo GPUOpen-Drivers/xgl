@@ -132,6 +132,10 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
                          Attachment*                    pAttachments)
     : m_attachmentCount (info.attachmentCount)
 {
+    m_globalScissorParams.scissorRegion.offset.x      = 0;
+    m_globalScissorParams.scissorRegion.offset.y      = 0;
+    m_globalScissorParams.scissorRegion.extent.width  = info.width;
+    m_globalScissorParams.scissorRegion.extent.height = info.height;
 
     // If Imageless framebuffer don't process attachments
     if (info.flags & VK_FRAMEBUFFER_CREATE_IMAGELESS_BIT)
