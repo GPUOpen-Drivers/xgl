@@ -3824,7 +3824,7 @@ VkResult PhysicalDevice::GetRandROutputDisplay(
 
     if (pScreen == nullptr)
     {
-        VkResult result = VK_INCOMPLETE;
+        result = VK_INCOMPLETE;
     }
 
     return result;
