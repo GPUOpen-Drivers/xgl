@@ -3056,9 +3056,13 @@ VkResult PhysicalDevice::GetSurfaceFormats(
         uint32_t colorSpaceCount = 0;
         uint32_t numImgFormats = 0;
 
+        // Get supported color capabilities of screen:
+        Pal::Result palResult = pScreen->GetColorCapabilities(&palColorCaps);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
         // Enumerate
         ColorSpaceHelper::GetSupportedFormats(palColorCaps.supportedColorSpaces, &colorSpaceCount, nullptr);
-        Pal::Result palResult = pScreen->GetFormats(&numImgFormats, nullptr);
+        palResult = pScreen->GetFormats(&numImgFormats, nullptr);
         VK_ASSERT(palResult == Pal::Result::Success);
         const size_t totalMem = (sizeof(Pal::SwizzledFormat)        * numImgFormats) +
                                 (sizeof(VkFormat)                   * numImgFormats) +
