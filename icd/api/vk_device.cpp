@@ -785,7 +785,7 @@ VkResult Device::Create(
     }
 
     // If the pNext chain includes a VkPhysicalDeviceFeatures2 structure, then pEnabledFeatures must be NULL.
-    if (pCreateInfo->pEnabledFeatures != nullptr)
+    if ((vkResult == VK_SUCCESS) && (pCreateInfo->pEnabledFeatures != nullptr))
     {
         vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFeatures>(
             pPhysicalDevice,
