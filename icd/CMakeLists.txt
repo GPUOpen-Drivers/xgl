@@ -29,55 +29,65 @@ set_target_properties(xgl PROPERTIES PREFIX "")
 install(TARGETS xgl DESTINATION ${CMAKE_SOURCE_DIR}/lib/${CMAKE_BUILD_TYPE})
 
 ### Compiler Options ###################################################################################################
-if(UNIX)
-    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
-        target_compile_options(xgl PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-fPIC -fno-rtti -fno-math-errno>)
-        target_compile_options(xgl PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-unused -Wno-unused-parameter -Wno-ignored-qualifiers -Wno-missing-field-initializers -std=c++0x >)
-
-        # bil
-        target_compile_options(xgl PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-Wno-switch>)
-
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    if(ICD_ANALYSIS_WARNINGS_AS_ERRORS)
         target_compile_options(xgl PRIVATE
             -Werror
-            -pthread
-            -fno-exceptions
+            -Wno-error=comment
+            -Wno-error=pointer-arith
         )
+    endif()
 
-        # GCC only
+    target_compile_options(xgl PRIVATE
+        -fno-exceptions
+        -fno-strict-aliasing
+        -fPIC
+        -pthread
+    )
+
+    target_compile_options(xgl PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
+        -fno-math-errno
+        -fno-rtti
+        -std=c++14
+        -Wno-comment
+        -Wno-ignored-qualifiers
+        -Wno-missing-field-initializers
+        -Wno-pointer-arith
+        -Wno-switch
+        -Wno-unused
+        -Wno-unused-parameter
+    >)
+
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         target_compile_options(xgl PRIVATE
             -mpreferred-stack-boundary=6
             -fno-threadsafe-statics
             -fmerge-all-constants
             -fms-extensions
         )
-
-        # Disable warnings and errors that GCC will throw about comment formatting.
-        target_compile_options(xgl PRIVATE -Wno-error=comment -Wno-comment)
-
-        # Disable warnings and errors that GCC will throw about pointer arithmetic.
-        target_compile_options(xgl PRIVATE -Wno-error=pointer-arith -Wno-pointer-arith)
-
-        if(TARGET_ARCHITECTURE_BITS EQUAL 32)
-            target_compile_options(xgl PRIVATE -msse -msse2)
-        endif()
-
-        if(CMAKE_BUILD_TYPE_RELEASE)
-            target_compile_options(xgl PRIVATE -fno-strict-aliasing -fno-delete-null-pointer-checks -O3)
-            execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
-            if (GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
-                add_definitions("-flto  -fuse-linker-plugin -Wno-odr")
-                message(WARNING "LTO enabled for XGL")
-            endif()
-        endif()
-
-        set(ICD_USE_GCC TRUE)
-        #message(STATUS "Configured ${PROJECT_NAME} compiler options for GCC.")
-    elseif("${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
-        #message(STATUS "Configured compiler options for Clang.")
-        message(WARNING "Clang is untested.")
-    else()
-        message(FATAL_ERROR "Using unknown compiler.")
     endif()
+
+    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
+            OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 7))
+        target_compile_options(xgl PRIVATE
+            -fno-delete-null-pointer-checks
+        )
+    endif()
+
+    if(TARGET_ARCHITECTURE_BITS EQUAL 32)
+        target_compile_options(xgl PRIVATE -msse -msse2)
+    endif()
+
+    if(CMAKE_BUILD_TYPE_RELEASE)
+        target_compile_options(xgl PRIVATE -O3)
+        execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
+        if(GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
+            add_definitions("-flto -fuse-linker-plugin -Wno-odr")
+            message(WARNING "LTO enabled for XGL")
+        endif()
+    endif()
+else()
+    message(FATAL_ERROR "Using unknown compiler")
 endif()
 
 ### Build Definitions ##################################################################################################
@@ -278,6 +288,7 @@ target_sources(xgl PRIVATE
     api/utils/temp_mem_arena.cpp
     api/utils/json_reader.cpp
     api/utils/json_writer.cpp
+    api/icd_main.cpp
 )
 
 if(XGL_BUILD_GFX10)
@@ -412,7 +423,7 @@ target_link_libraries(xgl PRIVATE vkgc dl stdc++)
 if (UNIX)
     target_link_libraries(xgl PRIVATE c stdc++ ${CMAKE_DL_LIBS} pthread)
 
-    if(NOT ICD_USE_GCC AND NOT "${CMAKE_CXX_COMPILER_ID}" MATCHES "Clang")
+    if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
         message(WARNING "Intel ICC untested in CMake.")
         target_link_libraries(xgl PRIVATE -fabi-version=0 -static-intel)
     endif()

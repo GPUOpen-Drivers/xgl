@@ -717,6 +717,22 @@ Pal::Result DevModeMgr::TraceEndingToIdleStep(TraceState* pState)
             if (pState->pGpaSession->GetResults(pState->gpaSampleId, &traceDataSize, pTraceData) ==
                 Pal::Result::Success)
             {
+                const RuntimeSettings& settings = pState->pDevice->GetRuntimeSettings();
+
+                if (settings.devModeEnableRgpTraceDump)
+                {
+                    Util::File dumpFile;
+                    if (dumpFile.Open(settings.devModeRgpTraceDumpFile, Util::FileAccessMode::FileAccessWrite | Util::FileAccessMode::FileAccessBinary) == Util::Result::Success)
+                    {
+                        dumpFile.Write(pTraceData, traceDataSize);
+                        dumpFile.Close();
+                    }
+                    else
+                    {
+                        VK_ALERT_ALWAYS_MSG("Failed to open RGP trace dump file: %s", settings.devModeRgpTraceDumpFile);
+                    }
+                }
+
                 // Transmit trace data to anyone who's listening
                 auto devResult = m_pRGPServer->WriteTraceData(static_cast<Pal::uint8*>(pTraceData), traceDataSize);
 

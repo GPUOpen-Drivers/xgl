@@ -744,6 +744,11 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     if (shouldCompile)
     {
+        if (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT)
+        {
+            result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
+        }
+        else
         {
             if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
             {
@@ -929,6 +934,11 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 
     if (shouldCompile)
     {
+        if (pCreateInfo->flags & VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT)
+        {
+            result = VK_PIPELINE_COMPILE_REQUIRED_EXT;
+        }
+        else
         {
             if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
             {
@@ -1807,6 +1817,8 @@ VkPipelineCreateFlags PipelineCompiler::GetCacheIdControlFlags(
         | VK_PIPELINE_CREATE_CAPTURE_STATISTICS_BIT_KHR
         | VK_PIPELINE_CREATE_DERIVATIVE_BIT
         | VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT
+        | VK_PIPELINE_CREATE_FAIL_ON_PIPELINE_COMPILE_REQUIRED_BIT_EXT
+        | VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT
     };
 
     return in & (~CacheIdIgnoreFlags);

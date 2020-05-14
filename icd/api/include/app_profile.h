@@ -75,6 +75,7 @@ enum class AppProfile : uint32_t
     Rage2,                 // Rage2 by Avalanche Studios
     RainbowSixSiege,       // Tom Clancy's Rainbow Six Siege: Operation Phantom by Ubisoft
     WolfensteinYoungblood, // Wolfenstein Youngblood by Machine Games
+    RedDeadRedemption2,    // Red Dead Redemption 2 by Rockstar
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)

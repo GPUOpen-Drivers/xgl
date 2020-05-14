@@ -121,9 +121,25 @@ enum PipelineBind
     PipelineBindCount
 };
 
+union DirtyState
+{
+    struct
+    {
+        uint32 viewport     :  1;
+        uint32 scissor      :  1;
+        uint32 depthStencil :  1;
+        uint32 reserved     : 29;
+    };
+
+    uint32 u32All;
+};
+
 // Members of CmdBufferRenderState that are different for each GPU
 struct PerGpuRenderState
 {
+    Pal::ScissorRectParams scissor;
+    Pal::ViewportParams    viewport;
+
     // Any members added to this structure may need to be cleared in CmdBuffer::ResetState().
     const Pal::IMsaaState*          pMsaaState;
     const Pal::IColorBlendState*    pColorBlendState;
@@ -163,6 +179,10 @@ struct AllGpuRenderState
     // The Imageless Frambuffer extension allows setting this at RenderPassBind
     Framebuffer*             pFramebuffer;
 
+    // Dirty bits indicate which state should be validated. It assumed viewport/scissor in perGpuStates will likely be
+    // changed for all GPUs if it is changed for any GPU. Put DirtyState management here will be easier to manage.
+    DirtyState dirty;
+
     // Value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
     // defined by the last bound GraphicsPipeline, which was not nullptr.
     bool ViewIndexFromDeviceIndex;
@@ -180,8 +200,6 @@ struct AllGpuRenderState
     // the same PAL pipeline bind point.
     PipelineBind            palToApiPipeline[static_cast<size_t>(Pal::PipelineBindPoint::Count)];
 
-    Pal::ScissorRectParams       scissor;
-    Pal::ViewportParams          viewport;
     Pal::LineStippleStateParams  lineStipple;
 };
 
@@ -413,12 +431,20 @@ public:
         uint32_t                                    viewportCount,
         const VkViewport*                           pViewports);
 
+    void SetViewportWithCount(
+        uint32_t                                    viewportCount,
+        const VkViewport*                           pViewports);
+
     void SetAllViewports(
         const Pal::ViewportParams&                  params,
         uint32_t                                    staticToken);
 
     void SetScissor(
         uint32_t                                    firstScissor,
+        uint32_t                                    scissorCount,
+        const VkRect2D*                             pScissors);
+
+    void SetScissorWithCount(
         uint32_t                                    scissorCount,
         const VkRect2D*                             pScissors);
 
@@ -866,6 +892,8 @@ public:
     static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
 
 private:
+    void ValidateStates();
+
     CmdBuffer(
         Device*                         pDevice,
         CmdPool*                        pCmdPool,

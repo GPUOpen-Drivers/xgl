@@ -295,19 +295,6 @@
       "VariableName": "renderPassLogFlags"
     },
     {
-      "Description": "Minimum number of GPU events to allocate at once by the command buffer GPU event manager.",
-      "Tags": [
-        "Command Buffer Options"
-      ],
-      "Defaults": {
-        "Default": 128
-      },
-      "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "cmdBufGpuEventMinAllocCount",
-      "Name": "CmdBufGpuEventMinAllocCount"
-    },
-    {
       "Description": "Use shared CmdAllocator for all command buffers.",
       "Tags": [
         "Command Buffer Options"
@@ -4322,6 +4309,38 @@
       "Type": "uint32",
       "VariableName": "devModeSqttPrepareFrameCount",
       "Name": "DevModeSqttPrepareFrameCount"
+    },
+    {
+      "Description": "Enable RGP trace dumping directly from the driver (in addition to sending it to RDP). This is useful in situations where the network connection is very lossy.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "devModeEnableRgpTraceDump",
+      "Name": "DevModeEnableRgpTraceDump"
+    },
+    {
+      "Description": "File where the RGP trace is dumped when DevModeEnableRgpTraceDump is set.",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Flags": {
+        "IsFile": true
+      },
+      "Defaults": {
+        "Default": "trace.rgp",
+        "WinDefault": "trace.rgp",
+        "LnxDefault": "trace.rgp"
+      },
+      "Scope": "Driver",
+      "Name": "DevModeRgpTraceDumpFile",
+      "Type": "string",
+      "VariableName": "devModeRgpTraceDumpFile",
+      "Size": 256
     },
     {
       "Name": "OverrideShaderParams",

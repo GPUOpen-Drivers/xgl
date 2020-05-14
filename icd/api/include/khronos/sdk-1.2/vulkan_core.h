@@ -40,7 +40,7 @@ extern "C" {
 #define VK_VERSION_MINOR(version) (((uint32_t)(version) >> 12) & 0x3ff)
 #define VK_VERSION_PATCH(version) ((uint32_t)(version) & 0xfff)
 // Version of this file
-#define VK_HEADER_VERSION 135
+#define VK_HEADER_VERSION 139
 
 // Complete version of this file
 #define VK_HEADER_VERSION_COMPLETE VK_MAKE_VERSION(1, 2, VK_HEADER_VERSION)
@@ -149,12 +149,13 @@ typedef enum VkResult {
     VK_THREAD_DONE_KHR = 1000268001,
     VK_OPERATION_DEFERRED_KHR = 1000268002,
     VK_OPERATION_NOT_DEFERRED_KHR = 1000268003,
-    VK_ERROR_PIPELINE_COMPILE_REQUIRED_EXT = 1000297000,
+    VK_PIPELINE_COMPILE_REQUIRED_EXT = 1000297000,
     VK_ERROR_OUT_OF_POOL_MEMORY_KHR = VK_ERROR_OUT_OF_POOL_MEMORY,
     VK_ERROR_INVALID_EXTERNAL_HANDLE_KHR = VK_ERROR_INVALID_EXTERNAL_HANDLE,
     VK_ERROR_FRAGMENTATION_EXT = VK_ERROR_FRAGMENTATION,
     VK_ERROR_INVALID_DEVICE_ADDRESS_EXT = VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS,
     VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS_KHR = VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS,
+    VK_ERROR_PIPELINE_COMPILE_REQUIRED_EXT = VK_PIPELINE_COMPILE_REQUIRED_EXT,
     VK_RESULT_BEGIN_RANGE = VK_ERROR_UNKNOWN,
     VK_RESULT_END_RANGE = VK_INCOMPLETE,
     VK_RESULT_RANGE_SIZE = (VK_INCOMPLETE - VK_ERROR_UNKNOWN + 1),
@@ -354,6 +355,7 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TRANSFORM_FEEDBACK_PROPERTIES_EXT = 1000028001,
     VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT = 1000028002,
     VK_STRUCTURE_TYPE_IMAGE_VIEW_HANDLE_INFO_NVX = 1000030000,
+    VK_STRUCTURE_TYPE_IMAGE_VIEW_ADDRESS_PROPERTIES_NVX = 1000030001,
     VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD = 1000041000,
     VK_STRUCTURE_TYPE_STREAM_DESCRIPTOR_SURFACE_CREATE_INFO_GGP = 1000049000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CORNER_SAMPLED_IMAGE_FEATURES_NV = 1000050000,
@@ -458,7 +460,6 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_INSTANCES_DATA_KHR = 1000150004,
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_TRIANGLES_DATA_KHR = 1000150005,
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_GEOMETRY_KHR = 1000150006,
-    VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_INFO_KHR = 1000150007,
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_MEMORY_REQUIREMENTS_INFO_KHR = 1000150008,
     VK_STRUCTURE_TYPE_ACCELERATION_STRUCTURE_VERSION_KHR = 1000150009,
     VK_STRUCTURE_TYPE_COPY_ACCELERATION_STRUCTURE_INFO_KHR = 1000150010,
@@ -522,7 +523,7 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_CHECKPOINT_DATA_NV = 1000206000,
     VK_STRUCTURE_TYPE_QUEUE_FAMILY_CHECKPOINT_PROPERTIES_NV = 1000206001,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_FUNCTIONS_2_FEATURES_INTEL = 1000209000,
-    VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO_INTEL = 1000210000,
+    VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_QUERY_CREATE_INFO_INTEL = 1000210000,
     VK_STRUCTURE_TYPE_INITIALIZE_PERFORMANCE_API_INFO_INTEL = 1000210001,
     VK_STRUCTURE_TYPE_PERFORMANCE_MARKER_INFO_INTEL = 1000210002,
     VK_STRUCTURE_TYPE_PERFORMANCE_STREAM_MARKER_INFO_INTEL = 1000210003,
@@ -586,6 +587,8 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT = 1000281001,
     VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_RENDER_PASS_TRANSFORM_INFO_QCOM = 1000282000,
     VK_STRUCTURE_TYPE_RENDER_PASS_TRANSFORM_BEGIN_INFO_QCOM = 1000282001,
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT = 1000286000,
+    VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT = 1000286001,
     VK_STRUCTURE_TYPE_PIPELINE_LIBRARY_CREATE_INFO_KHR = 1000290000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES_EXT = 1000297000,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DIAGNOSTICS_CONFIG_FEATURES_NV = 1000300000,
@@ -690,6 +693,7 @@ typedef enum VkStructureType {
     VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO_KHR = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
     VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO_KHR = VK_STRUCTURE_TYPE_SEMAPHORE_WAIT_INFO,
     VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO_KHR = VK_STRUCTURE_TYPE_SEMAPHORE_SIGNAL_INFO,
+    VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO_INTEL = VK_STRUCTURE_TYPE_QUERY_POOL_PERFORMANCE_QUERY_CREATE_INFO_INTEL,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES_KHR = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_MEMORY_MODEL_FEATURES,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES_EXT = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SCALAR_BLOCK_LAYOUT_FEATURES,
     VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES_KHR = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SEPARATE_DEPTH_STENCIL_LAYOUTS_FEATURES,
@@ -1417,6 +1421,7 @@ typedef enum VkAttachmentLoadOp {
 typedef enum VkAttachmentStoreOp {
     VK_ATTACHMENT_STORE_OP_STORE = 0,
     VK_ATTACHMENT_STORE_OP_DONT_CARE = 1,
+    VK_ATTACHMENT_STORE_OP_NONE_QCOM = 1000301000,
     VK_ATTACHMENT_STORE_OP_BEGIN_RANGE = VK_ATTACHMENT_STORE_OP_STORE,
     VK_ATTACHMENT_STORE_OP_END_RANGE = VK_ATTACHMENT_STORE_OP_DONT_CARE,
     VK_ATTACHMENT_STORE_OP_RANGE_SIZE = (VK_ATTACHMENT_STORE_OP_DONT_CARE - VK_ATTACHMENT_STORE_OP_STORE + 1),
@@ -1945,6 +1950,8 @@ typedef VkFlags VkAttachmentDescriptionFlags;
 typedef enum VkSubpassDescriptionFlagBits {
     VK_SUBPASS_DESCRIPTION_PER_VIEW_ATTRIBUTES_BIT_NVX = 0x00000001,
     VK_SUBPASS_DESCRIPTION_PER_VIEW_POSITION_X_ONLY_BIT_NVX = 0x00000002,
+    VK_SUBPASS_DESCRIPTION_FRAGMENT_REGION_BIT_QCOM = 0x00000004,
+    VK_SUBPASS_DESCRIPTION_SHADER_RESOLVE_BIT_QCOM = 0x00000008,
     VK_SUBPASS_DESCRIPTION_FLAG_BITS_MAX_ENUM = 0x7FFFFFFF
 } VkSubpassDescriptionFlagBits;
 typedef VkFlags VkSubpassDescriptionFlags;
@@ -7686,7 +7693,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdDrawIndirectByteCountEXT(
 #endif
 
 #define VK_NVX_image_view_handle 1
-#define VK_NVX_IMAGE_VIEW_HANDLE_SPEC_VERSION 1
+#define VK_NVX_IMAGE_VIEW_HANDLE_SPEC_VERSION 2
 #define VK_NVX_IMAGE_VIEW_HANDLE_EXTENSION_NAME "VK_NVX_image_view_handle"
 typedef struct VkImageViewHandleInfoNVX {
     VkStructureType     sType;
@@ -7696,12 +7703,25 @@ typedef struct VkImageViewHandleInfoNVX {
     VkSampler           sampler;
 } VkImageViewHandleInfoNVX;
 
+typedef struct VkImageViewAddressPropertiesNVX {
+    VkStructureType    sType;
+    void*              pNext;
+    VkDeviceAddress    deviceAddress;
+    VkDeviceSize       size;
+} VkImageViewAddressPropertiesNVX;
+
 typedef uint32_t (VKAPI_PTR *PFN_vkGetImageViewHandleNVX)(VkDevice device, const VkImageViewHandleInfoNVX* pInfo);
+typedef VkResult (VKAPI_PTR *PFN_vkGetImageViewAddressNVX)(VkDevice device, VkImageView imageView, VkImageViewAddressPropertiesNVX* pProperties);
 
 #ifndef VK_NO_PROTOTYPES
 VKAPI_ATTR uint32_t VKAPI_CALL vkGetImageViewHandleNVX(
     VkDevice                                    device,
     const VkImageViewHandleInfoNVX*             pInfo);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetImageViewAddressNVX(
+    VkDevice                                    device,
+    VkImageView                                 imageView,
+    VkImageViewAddressPropertiesNVX*            pProperties);
 #endif
 
 #define VK_AMD_draw_indirect_count 1
@@ -8350,7 +8370,7 @@ VKAPI_ATTR void VKAPI_CALL vkSetHdrMetadataEXT(
 
 #define VK_EXT_debug_utils 1
 VK_DEFINE_NON_DISPATCHABLE_HANDLE(VkDebugUtilsMessengerEXT)
-#define VK_EXT_DEBUG_UTILS_SPEC_VERSION   1
+#define VK_EXT_DEBUG_UTILS_SPEC_VERSION   2
 #define VK_EXT_DEBUG_UTILS_EXTENSION_NAME "VK_EXT_debug_utils"
 typedef VkFlags VkDebugUtilsMessengerCallbackDataFlagsEXT;
 typedef VkFlags VkDebugUtilsMessengerCreateFlagsEXT;
@@ -9391,6 +9411,10 @@ typedef struct VkFilterCubicImageViewImageFormatPropertiesEXT {
     VkBool32           filterCubic;
     VkBool32           filterCubicMinmax;
 } VkFilterCubicImageViewImageFormatPropertiesEXT;
+
+#define VK_QCOM_render_pass_shader_resolve 1
+#define VK_QCOM_RENDER_PASS_SHADER_RESOLVE_SPEC_VERSION 4
+#define VK_QCOM_RENDER_PASS_SHADER_RESOLVE_EXTENSION_NAME "VK_QCOM_render_pass_shader_resolve"
 
 #define VK_EXT_global_priority 1
 #define VK_EXT_GLOBAL_PRIORITY_SPEC_VERSION 2
@@ -10441,7 +10465,7 @@ typedef enum VkIndirectCommandsLayoutUsageFlagBitsNV {
 typedef VkFlags VkIndirectCommandsLayoutUsageFlagsNV;
 typedef struct VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV {
     VkStructureType    sType;
-    const void*        pNext;
+    void*              pNext;
     uint32_t           maxGraphicsShaderGroupCount;
     uint32_t           maxIndirectSequenceCount;
     uint32_t           maxIndirectCommandsTokenCount;
@@ -10632,12 +10656,30 @@ typedef struct VkCommandBufferInheritanceRenderPassTransformInfoQCOM {
     VkRect2D                         renderArea;
 } VkCommandBufferInheritanceRenderPassTransformInfoQCOM;
 
+#define VK_EXT_robustness2 1
+#define VK_EXT_ROBUSTNESS_2_SPEC_VERSION  1
+#define VK_EXT_ROBUSTNESS_2_EXTENSION_NAME "VK_EXT_robustness2"
+typedef struct VkPhysicalDeviceRobustness2FeaturesEXT {
+    VkStructureType    sType;
+    void*              pNext;
+    VkBool32           robustBufferAccess2;
+    VkBool32           robustImageAccess2;
+    VkBool32           nullDescriptor;
+} VkPhysicalDeviceRobustness2FeaturesEXT;
+
+typedef struct VkPhysicalDeviceRobustness2PropertiesEXT {
+    VkStructureType    sType;
+    void*              pNext;
+    VkDeviceSize       robustStorageBufferAccessSizeAlignment;
+    VkDeviceSize       robustUniformBufferAccessSizeAlignment;
+} VkPhysicalDeviceRobustness2PropertiesEXT;
+
 #define VK_GOOGLE_user_type 1
 #define VK_GOOGLE_USER_TYPE_SPEC_VERSION  1
 #define VK_GOOGLE_USER_TYPE_EXTENSION_NAME "VK_GOOGLE_user_type"
 
 #define VK_EXT_pipeline_creation_cache_control 1
-#define VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_SPEC_VERSION 2
+#define VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_SPEC_VERSION 3
 #define VK_EXT_PIPELINE_CREATION_CACHE_CONTROL_EXTENSION_NAME "VK_EXT_pipeline_creation_cache_control"
 typedef struct VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT {
     VkStructureType    sType;
@@ -10667,6 +10709,10 @@ typedef struct VkDeviceDiagnosticsConfigCreateInfoNV {
     const void*                         pNext;
     VkDeviceDiagnosticsConfigFlagsNV    flags;
 } VkDeviceDiagnosticsConfigCreateInfoNV;
+
+#define VK_QCOM_render_pass_store_ops 1
+#define VK_QCOM_render_pass_store_ops_SPEC_VERSION 2
+#define VK_QCOM_render_pass_store_ops_EXTENSION_NAME "VK_QCOM_render_pass_store_ops"
 
 #ifdef __cplusplus
 }

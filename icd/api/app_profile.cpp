@@ -319,6 +319,18 @@ constexpr AppProfilePatternEntry AppEngineApex =
     "apex engine"
 };
 
+constexpr AppProfilePatternEntry AppNameRDR2 =
+{
+    PatternAppNameLower,
+    "red dead redemption 2"
+};
+
+constexpr AppProfilePatternEntry  AppEngineRAGE
+{
+    PatternEngineNameLower,
+    "sga"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -627,6 +639,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::ScimitarEngine,
         {
             AppEngineScimitar,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::RedDeadRedemption2,
+        {
+            AppNameRDR2,
+            AppEngineRAGE,
             PatternEnd
         }
     },

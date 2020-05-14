@@ -250,7 +250,7 @@ protected:
         bool                                   viewIndexFromDeviceIndex,
         PipelineBinaryInfo*                    pBinary,
         uint64_t                               apiHash,
-        Util::MetroHash64&                     palPipelineHasher);
+        Util::MetroHash64*                     pPalPipelineHasher);
 
     void CreateStaticState();
     void DestroyStaticState(const VkAllocationCallbacks* pAllocator);

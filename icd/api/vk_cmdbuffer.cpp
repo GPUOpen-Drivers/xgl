@@ -1227,16 +1227,6 @@ void CmdBuffer::ResetPipelineState()
     m_state.allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Compute)]  = PipelineBindCompute;
     m_state.allGpuState.palToApiPipeline[uint32_t(Pal::PipelineBindPoint::Graphics)] = PipelineBindGraphics;
 
-    m_state.allGpuState.scissor.count             = 0;
-    m_state.allGpuState.viewport.count            = 0;
-    m_state.allGpuState.viewport.horzClipRatio    = FLT_MAX;
-    m_state.allGpuState.viewport.vertClipRatio    = FLT_MAX;
-    m_state.allGpuState.viewport.horzDiscardRatio = 1.0f;
-    m_state.allGpuState.viewport.vertDiscardRatio = 1.0f;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 524
-    m_state.allGpuState.viewport.depthRange       = Pal::DepthRange::ZeroToOne;
-#endif
-
     const uint32_t numPalDevices = m_pDevice->NumPalDevices();
     uint32_t deviceIdx           = 0;
     do
@@ -1244,6 +1234,16 @@ void CmdBuffer::ResetPipelineState()
         m_state.perGpuState[deviceIdx].pMsaaState         = nullptr;
         m_state.perGpuState[deviceIdx].pColorBlendState   = nullptr;
         m_state.perGpuState[deviceIdx].pDepthStencilState = nullptr;
+
+        m_state.perGpuState[deviceIdx].scissor.count             = 0;
+        m_state.perGpuState[deviceIdx].viewport.count            = 0;
+        m_state.perGpuState[deviceIdx].viewport.horzClipRatio    = FLT_MAX;
+        m_state.perGpuState[deviceIdx].viewport.vertClipRatio    = FLT_MAX;
+        m_state.perGpuState[deviceIdx].viewport.horzDiscardRatio = 1.0f;
+        m_state.perGpuState[deviceIdx].viewport.vertDiscardRatio = 1.0f;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 524
+        m_state.perGpuState[deviceIdx].viewport.depthRange       = Pal::DepthRange::ZeroToOne;
+#endif
 
         deviceIdx++;
     }
@@ -1876,6 +1876,8 @@ void CmdBuffer::Draw(
 {
     DbgBarrierPreCmd(DbgBarrierDrawNonIndexed);
 
+    ValidateStates();
+
     PalCmdDraw(firstVertex,
         vertexCount,
         firstInstance,
@@ -1893,6 +1895,8 @@ void CmdBuffer::DrawIndexed(
     uint32_t instanceCount)
 {
     DbgBarrierPreCmd(DbgBarrierDrawIndexed);
+
+    ValidateStates();
 
     PalCmdDrawIndexed(firstIndex,
                       indexCount,
@@ -1914,6 +1918,8 @@ void CmdBuffer::DrawIndirect(
     VkDeviceSize countOffset)
 {
     DbgBarrierPreCmd((indexed ? DbgBarrierDrawIndexed : DbgBarrierDrawNonIndexed) | DbgBarrierDrawIndirect);
+
+    ValidateStates();
 
     Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
 
@@ -5195,27 +5201,42 @@ void CmdBuffer::SetViewport(
     // in VkPipelineViewportStateCreateInfo.viewportCount.
     // VK_ASSERT((firstViewport + viewportCount) <= m_state.viewport.count);
 
-    DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
-
     const bool khrMaintenance1 = ((m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
                                   m_pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1));
-
-    for (uint32_t i = 0; i < viewportCount; ++i)
-    {
-        VkToPalViewport(pViewports[i], firstViewport + i, khrMaintenance1, &m_state.allGpuState.viewport);
-    }
 
     utils::IterateMask deviceGroup(m_curDeviceMask);
 
     do
     {
-        PalCmdBuffer(deviceGroup.Index())->CmdSetViewports(m_state.allGpuState.viewport);
+        const uint32_t deviceIndex = deviceGroup.Index();
+
+        for (uint32_t i = 0; i < viewportCount; ++i)
+        {
+            VkToPalViewport(pViewports[i],
+                            firstViewport + i,
+                            khrMaintenance1,
+                            &m_state.perGpuState[deviceIndex].viewport);
+        }
     }
     while (deviceGroup.IterateNext());
 
+    m_state.allGpuState.dirty.viewport         = 1;
     m_state.allGpuState.staticTokens.viewports = DynamicRenderStateToken;
+}
 
-    DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+// =====================================================================================================================
+void CmdBuffer::SetViewportWithCount(
+    uint32_t            viewportCount,
+    const VkViewport*   pViewports)
+{
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    do
+    {
+        m_state.perGpuState[deviceGroup.Index()].viewport.count = viewportCount;
+    }
+    while (deviceGroup.IterateNext());
+
+    SetViewport(0, viewportCount, pViewports);
 }
 
 // =====================================================================================================================
@@ -5223,28 +5244,24 @@ void CmdBuffer::SetAllViewports(
     const Pal::ViewportParams& params,
     uint32_t                   staticToken)
 {
-    DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
-
-    m_state.allGpuState.viewport.count = params.count;
-
-    for (uint32_t i = 0; i < params.count; ++i)
-    {
-        m_state.allGpuState.viewport.viewports[i] = params.viewports[i];
-    }
-
     VK_ASSERT(m_cbBeginDeviceMask == m_pDevice->GetPalDeviceMask());
+
     utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
     do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        PalCmdBuffer(deviceIdx)->CmdSetViewports(m_state.allGpuState.viewport);
+        for (uint32_t i = 0; i < params.count; ++i)
+        {
+            m_state.perGpuState[deviceIdx].viewport.viewports[i] = params.viewports[i];
+        }
+
+        m_state.perGpuState[deviceIdx].viewport.count = params.count;
     }
     while (deviceGroup.IterateNext());
 
+    m_state.allGpuState.dirty.viewport         = 1;
     m_state.allGpuState.staticTokens.viewports = staticToken;
-
-    DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
 }
 
 // =====================================================================================================================
@@ -5253,24 +5270,35 @@ void CmdBuffer::SetScissor(
     uint32_t            scissorCount,
     const VkRect2D*     pScissors)
 {
-    DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
-
-    for (uint32_t i = 0; i < scissorCount; ++i)
-    {
-        VkToPalScissorRect(pScissors[i], firstScissor + i, &m_state.allGpuState.scissor);
-    }
-
     utils::IterateMask deviceGroup(m_curDeviceMask);
-
     do
     {
-        PalCmdBuffer(deviceGroup.Index())->CmdSetScissorRects(m_state.allGpuState.scissor);
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        for (uint32_t i = 0; i < scissorCount; ++i)
+        {
+            VkToPalScissorRect(pScissors[i], firstScissor + i, &m_state.perGpuState[deviceIdx].scissor);
+        }
     }
     while (deviceGroup.IterateNext());
 
+    m_state.allGpuState.dirty.scissor            = 1;
     m_state.allGpuState.staticTokens.scissorRect = DynamicRenderStateToken;
+}
 
-    DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+// =====================================================================================================================
+void CmdBuffer::SetScissorWithCount(
+    uint32_t            scissorCount,
+    const VkRect2D*     pScissors)
+{
+    utils::IterateMask deviceGroup(m_curDeviceMask);
+    do
+    {
+        m_state.perGpuState[deviceGroup.Index()].scissor.count = scissorCount;
+    }
+    while (deviceGroup.IterateNext());
+
+    SetScissor(0, scissorCount, pScissors);
 }
 
 // =====================================================================================================================
@@ -5278,28 +5306,24 @@ void CmdBuffer::SetAllScissors(
     const Pal::ScissorRectParams& params,
     uint32_t                      staticToken)
 {
-    DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
-
-    m_state.allGpuState.scissor.count = params.count;
-
-    for (uint32_t i = 0; i < params.count; ++i)
-    {
-        m_state.allGpuState.scissor.scissors[i] = params.scissors[i];
-    }
-
     VK_ASSERT(m_cbBeginDeviceMask == m_pDevice->GetPalDeviceMask());
+
     utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
     do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        PalCmdBuffer(deviceIdx)->CmdSetScissorRects(m_state.allGpuState.scissor);
+        m_state.perGpuState[deviceIdx].scissor.count = params.count;
+
+        for (uint32_t i = 0; i < params.count; ++i)
+        {
+            m_state.perGpuState[deviceIdx].scissor.scissors[i] = params.scissors[i];
+        }
     }
     while (deviceGroup.IterateNext());
 
+    m_state.allGpuState.dirty.scissor            = 1;
     m_state.allGpuState.staticTokens.scissorRect = staticToken;
-
-    DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
 }
 
 // =====================================================================================================================
@@ -5634,14 +5658,16 @@ void CmdBuffer::BeginTransformFeedback(
             uint64_t counterBufferAddr[Pal::MaxStreamOutTargets] = {};
 
             const uint32_t deviceIdx = deviceGroup.Index();
-            for (uint32_t i = firstCounterBuffer; i < counterBufferCount; i++)
+            if (pCounterBuffers != nullptr)
             {
-                if ((pCounterBuffers != nullptr) &&
-                    (pCounterBuffers[i] != VK_NULL_HANDLE) &&
-                    (m_pTransformFeedbackState->bindMask & (1 << i)))
+                for (uint32_t i = firstCounterBuffer; i < (firstCounterBuffer + counterBufferCount); i++)
                 {
-                    Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
-                    counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
+                    if ((pCounterBuffers[i] != VK_NULL_HANDLE) &&
+                        (m_pTransformFeedbackState->bindMask & (1 << i)))
+                    {
+                        Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
+                        counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
+                    }
                 }
             }
 
@@ -5681,20 +5707,22 @@ void CmdBuffer::EndTransformFeedback(
             uint64_t counterBufferAddr[Pal::MaxStreamOutTargets] = {};
 
             const uint32_t deviceIdx = deviceGroup.Index();
-            for (uint32_t i = firstCounterBuffer; i < counterBufferCount; i++)
+            if (pCounterBuffers != nullptr)
             {
-                if ((pCounterBuffers    != nullptr)        &&
-                    (pCounterBuffers[i] != VK_NULL_HANDLE) &&
-                    (m_pTransformFeedbackState->bindMask & (1 << i)))
+                for (uint32_t i = firstCounterBuffer; i < (firstCounterBuffer + counterBufferCount); i++)
                 {
-                    Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
-                    if (pCounterBufferOffsets != nullptr)
+                    if ((pCounterBuffers[i] != VK_NULL_HANDLE) &&
+                        (m_pTransformFeedbackState->bindMask & (1 << i)))
                     {
-                        counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
-                    }
-                    else
-                    {
-                        counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx);
+                        Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
+                        if (pCounterBufferOffsets != nullptr)
+                        {
+                            counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
+                        }
+                        else
+                        {
+                            counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx);
+                        }
                     }
                 }
             }
@@ -5723,6 +5751,9 @@ void CmdBuffer::DrawIndirectByteCount(
     uint32_t        vertexStride)
 {
     Buffer* pCounterBuffer = Buffer::ObjectFromHandle(counterBuffer);
+
+    ValidateStates();
+
     utils::IterateMask deviceGroup(m_curDeviceMask);
     do
     {
@@ -5831,6 +5862,42 @@ void CmdBuffer::CmdEndConditionalRendering()
     while (deviceGroup.IterateNext());
 
     m_flags.hasConditionalRendering = false;
+}
+
+// =====================================================================================================================
+void CmdBuffer::ValidateStates()
+{
+    if (m_state.allGpuState.dirty.u32All != 0)
+    {
+        utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
+        do
+        {
+            const uint32_t deviceIdx = deviceGroup.Index();
+
+            // Dirty bits should never be set for a static state
+            if (m_state.allGpuState.dirty.viewport)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                PalCmdBuffer(deviceIdx)->CmdSetViewports(m_state.perGpuState[deviceIdx].viewport);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+
+            if (m_state.allGpuState.dirty.scissor)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                PalCmdBuffer(deviceIdx)->CmdSetScissorRects(m_state.perGpuState[deviceIdx].scissor);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+        }
+        while (deviceGroup.IterateNext());
+
+        // Clear the dirty bits
+        m_state.allGpuState.dirty.u32All = 0;
+    }
 }
 
 // =====================================================================================================================

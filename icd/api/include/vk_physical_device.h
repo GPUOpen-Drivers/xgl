@@ -140,6 +140,11 @@ public:
 
     uint32_t GetMemoryTypeMaskMatching(VkMemoryPropertyFlags flags) const;
 
+    VK_INLINE uint32_t GetMemoryTypeMaskForExternalSharing() const
+    {
+        return m_memoryTypeMaskForExternalSharing;
+    }
+
     VK_INLINE uint32_t GetMemoryTypeForAttachmentImage() const
     {
         return m_memoryVkIndexAttachmentImage;
@@ -695,6 +700,7 @@ protected:
     Pal::DeviceProperties            m_properties;
 
     uint32_t                         m_memoryTypeMask;
+    uint32_t                         m_memoryTypeMaskForExternalSharing;
     uint32_t                         m_memoryVkIndexAttachmentImage;
     bool                             m_memoryVkIndexAddRemoteBackupHeap[VK_MAX_MEMORY_TYPES];
     uint32_t                         m_memoryPalHeapToVkIndexBits[Pal::GpuHeapCount];

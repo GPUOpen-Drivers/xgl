@@ -64,6 +64,7 @@
 #include "palPlatformKey.h"
 #include "palScreen.h"
 #include "palHashLiteralString.h"
+#include "palVectorImpl.h"
 #include <string>
 #include <vector>
 
@@ -321,6 +322,7 @@ PhysicalDevice::PhysicalDevice(
     m_pPhysicalDeviceManager(pPhysicalDeviceManager),
     m_pPalDevice(pPalDevice),
     m_memoryTypeMask(0),
+    m_memoryTypeMaskForExternalSharing(0),
     m_memoryVkIndexAttachmentImage(0),
     m_pSettingsLoader(pSettingsLoader),
     m_sampleLocationSampleCounts(0),
@@ -864,6 +866,8 @@ VkResult PhysicalDevice::Initialize()
         VK_ASSERT(m_memoryProperties.memoryTypeCount <= VK_MAX_MEMORY_TYPES);
         VK_ASSERT(m_memoryProperties.memoryHeapCount <= Pal::GpuHeapCount);
     }
+
+    m_memoryTypeMaskForExternalSharing = GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
     if (result == Pal::Result::Success)
     {
@@ -2773,33 +2777,51 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
                 VK_ASSERT(displayableInfo.icdPlatform == VK_ICD_WSI_PLATFORM_DISPLAY);
 
                 Pal::IScreen* pPalScreen = displayableInfo.pScreen;
+                if (pPalScreen != nullptr)
+                {
+                    Pal::ScreenColorCapabilities screenCaps;
+                    Pal::Result palResult = pPalScreen->GetColorCapabilities(&screenCaps);
+                    VK_ASSERT(palResult == Pal::Result::Success);
 
-                Pal::ScreenColorCapabilities screenCaps;
-                Pal::Result palResult = pPalScreen->GetColorCapabilities(&screenCaps);
-                VK_ASSERT(palResult == Pal::Result::Success);
+                    const Pal::ColorGamut& colorGamut = screenCaps.nativeColorGamut;
 
-                const Pal::ColorGamut& colorGamut = screenCaps.nativeColorGamut;
+                    constexpr double scale             = 1.0 / 50000.0;
+                    constexpr double minLuminanceScale = 1.0 / 10000.0;
 
-                constexpr double scale             = 1.0 / 50000.0;
-                constexpr double minLuminanceScale = 1.0 / 10000.0;
+                    vkMetadata.displayPrimaryRed.x       = static_cast<float>(colorGamut.chromaticityRedX        * scale);
+                    vkMetadata.displayPrimaryRed.y       = static_cast<float>(colorGamut.chromaticityRedY        * scale);
+                    vkMetadata.displayPrimaryGreen.x     = static_cast<float>(colorGamut.chromaticityGreenX      * scale);
+                    vkMetadata.displayPrimaryGreen.y     = static_cast<float>(colorGamut.chromaticityGreenY      * scale);
+                    vkMetadata.displayPrimaryBlue.x      = static_cast<float>(colorGamut.chromaticityBlueX       * scale);
+                    vkMetadata.displayPrimaryBlue.y      = static_cast<float>(colorGamut.chromaticityBlueY       * scale);
+                    vkMetadata.whitePoint.x              = static_cast<float>(colorGamut.chromaticityWhitePointX * scale);
+                    vkMetadata.whitePoint.y              = static_cast<float>(colorGamut.chromaticityWhitePointY * scale);
 
-                vkMetadata.displayPrimaryRed.x       = static_cast<float>(colorGamut.chromaticityRedX        * scale);
-                vkMetadata.displayPrimaryRed.y       = static_cast<float>(colorGamut.chromaticityRedY        * scale);
-                vkMetadata.displayPrimaryGreen.x     = static_cast<float>(colorGamut.chromaticityGreenX      * scale);
-                vkMetadata.displayPrimaryGreen.y     = static_cast<float>(colorGamut.chromaticityGreenY      * scale);
-                vkMetadata.displayPrimaryBlue.x      = static_cast<float>(colorGamut.chromaticityBlueX       * scale);
-                vkMetadata.displayPrimaryBlue.y      = static_cast<float>(colorGamut.chromaticityBlueY       * scale);
-                vkMetadata.whitePoint.x              = static_cast<float>(colorGamut.chromaticityWhitePointX * scale);
-                vkMetadata.whitePoint.y              = static_cast<float>(colorGamut.chromaticityWhitePointY * scale);
-
-                vkMetadata.minLuminance = static_cast<float>(colorGamut.minLuminance * minLuminanceScale);
-                vkMetadata.maxLuminance              = static_cast<float>(colorGamut.maxLuminance);
+                    vkMetadata.minLuminance = static_cast<float>(colorGamut.minLuminance * minLuminanceScale);
+                    vkMetadata.maxLuminance              = static_cast<float>(colorGamut.maxLuminance);
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 512
-                vkMetadata.maxFrameAverageLightLevel = static_cast<float>(colorGamut.maxFrameAverageLightLevel);
+                    vkMetadata.maxFrameAverageLightLevel = static_cast<float>(colorGamut.maxFrameAverageLightLevel);
 #endif
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 506
-                vkMetadata.maxContentLightLevel      = static_cast<float>(colorGamut.maxContentLightLevel);
+                    vkMetadata.maxContentLightLevel      = static_cast<float>(colorGamut.maxContentLightLevel);
 #endif
+                }
+                else
+                {
+                    // Standard Red Green Blue.
+                    vkMetadata.displayPrimaryRed.x       = 0.6400f;
+                    vkMetadata.displayPrimaryRed.y       = 0.3300f;
+                    vkMetadata.displayPrimaryGreen.x     = 0.3000f;
+                    vkMetadata.displayPrimaryGreen.y     = 0.6000f;
+                    vkMetadata.displayPrimaryBlue.x      = 0.1500f;
+                    vkMetadata.displayPrimaryBlue.y      = 0.0600f;
+                    vkMetadata.whitePoint.x              = 0.3127f;
+                    vkMetadata.whitePoint.y              = 0.3290f;
+                    vkMetadata.minLuminance              = 0.0f;
+                    vkMetadata.maxLuminance              = 0.0f;
+                    vkMetadata.maxFrameAverageLightLevel = 0.0f;
+                    vkMetadata.maxContentLightLevel      = 0.0f;
+                }
                 break;
             }
             default:
@@ -3000,11 +3022,9 @@ VkResult PhysicalDevice::GetSurfaceFormats(
     Pal::IScreen* pScreen = displayableInfo.pScreen;
     isWindowed = (displayableInfo.icdPlatform != VK_ICD_WSI_PLATFORM_DISPLAY);
 
-    bool needsWorkaround = false;
+    bool needsWorkaround = pScreen == nullptr ? isWindowed :
+                           (palColorCaps.supportedColorSpaces == Pal::ScreenColorSpace::TfUndefined);
 
-#if defined(__unix__)
-    needsWorkaround = isWindowed;
-#endif
     // This workaround is needed on Windows in cases where we get a valid screen object but it has
     // no valid display properties. This scenario can happen when running apps without a display connected.
     if (needsWorkaround)
@@ -3078,20 +3098,25 @@ VkResult PhysicalDevice::GetSurfaceFormats(
         VK_ASSERT(palResult == Pal::Result::Success);
 
         VkFormat* pVkFormats = reinterpret_cast<VkFormat*>(pPalFormats + numImgFormats);
+        memset(pVkFormats, 0, sizeof(VkFormat)* numImgFormats);
 
         vk::ColorSpaceHelper::Fmts* pColorSpaces =
             reinterpret_cast<vk::ColorSpaceHelper::Fmts*>(pVkFormats + numImgFormats);
 
-        // Convert Pal formats to Vulkan formats
-        for (uint32_t fmtIndx = 0; fmtIndx < numImgFormats; fmtIndx++)
+        Pal::MergedFormatPropertiesTable formatProperties = {};
+        palResult = m_pPalDevice->GetFormatProperties(&formatProperties);
+        VK_ASSERT(palResult == Pal::Result::Success);
+
+        Util::Vector<VkFormat, 32, PalAllocator>  windowedFormats(VkInstance()->Allocator());
+
+        for (uint32_t vkFmtIdx = VK_FORMAT_BEGIN_RANGE; vkFmtIdx <= VK_FORMAT_END_RANGE; vkFmtIdx++)
         {
-            const Pal::SwizzledFormat srcFormat = pPalFormats[fmtIndx];
+            bool isFullscreenFormat = false;
+            const Pal::SwizzledFormat cmpFormat = VkToPalFormat(static_cast<VkFormat>(vkFmtIdx));
 
-            pVkFormats[fmtIndx] = VK_FORMAT_UNDEFINED;
-
-            for (uint32_t vkFmtIdx = VK_FORMAT_BEGIN_RANGE; vkFmtIdx <= VK_FORMAT_END_RANGE; vkFmtIdx++)
+            for (uint32_t fmtIndx = 0; fmtIndx < numImgFormats; fmtIndx++)
             {
-                const Pal::SwizzledFormat cmpFormat = VkToPalFormat(static_cast<VkFormat>(vkFmtIdx));
+                const Pal::SwizzledFormat srcFormat = pPalFormats[fmtIndx];
 
                 if ((srcFormat.format == cmpFormat.format) &&
                     (srcFormat.swizzle.r == cmpFormat.swizzle.r) &&
@@ -3100,23 +3125,28 @@ VkResult PhysicalDevice::GetSurfaceFormats(
                     (srcFormat.swizzle.a == cmpFormat.swizzle.a))
                 {
                     pVkFormats[fmtIndx] = static_cast<VkFormat>(vkFmtIdx);
+                    isFullscreenFormat = true;
                     break;
                 }
             }
 
-            VK_ASSERT(pVkFormats[fmtIndx] != VK_FORMAT_UNDEFINED);
+            const Pal::FormatFeatureFlags formatBits =
+                formatProperties.features[static_cast<size_t>(cmpFormat.format)][Pal::IsLinear];
+
+            if ((isFullscreenFormat == false) && ((formatBits & Pal::FormatFeatureWindowedPresent) != 0))
+            {
+                windowedFormats.PushBack(static_cast<VkFormat>(vkFmtIdx));
+            }
         }
 
         ColorSpaceHelper::GetSupportedFormats(palColorCaps.supportedColorSpaces, &colorSpaceCount, pColorSpaces);
-
-        Pal::MergedFormatPropertiesTable formatProperties = {};
-        palResult = m_pPalDevice->GetFormatProperties(&formatProperties);
-        VK_ASSERT(palResult == Pal::Result::Success);
 
         const RuntimeSettings& settings = GetSettingsLoader()->GetSettings();
         // Report HDR in windowed mode only if OS is in HDR mode. Always report on fullscreen
         bool reportHdrSupport = (isWindowed == false) || palColorCaps.isHdrEnabled || settings.alwaysReportHdrFormats;
 
+        // First add all the fullscreen formats, with supported colorspaces, we keep the windowed
+        // check here cause fullscereen formats may support windowed presents.
         for (uint32_t colorSpaceIndex = 0; colorSpaceIndex < colorSpaceCount; colorSpaceIndex++)
         {
             const VkColorSpaceKHR              colorSpaceFmt = pColorSpaces[colorSpaceIndex].colorSpace;
@@ -3151,6 +3181,32 @@ VkResult PhysicalDevice::GetSurfaceFormats(
                     }
                     ++numPresentFormats;
                 }
+            }
+        }
+
+        // Add all windowed formats
+        if (isWindowed)
+        {
+            if (pSurfaceFormats != nullptr)
+            {
+                for (uint32_t i = 0; i < windowedFormats.NumElements(); i++)
+                {
+                    if (numPresentFormats < maxBufferCount)
+                    {
+                        pSurfaceFormats[numPresentFormats].format = windowedFormats.At(i);
+                        pSurfaceFormats[numPresentFormats].colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+                    }
+                    else
+                    {
+                        result = VK_INCOMPLETE;
+                        break;
+                    }
+                    ++numPresentFormats;
+                }
+            }
+            else
+            {
+                numPresentFormats += windowedFormats.NumElements();
             }
         }
 
@@ -3432,6 +3488,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_VULKAN_MEMORY_MODEL));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_CREATION_CACHE_CONTROL));
 
     if (IsConditionalRenderingSupported(pPhysicalDevice))
     {
@@ -4604,6 +4662,14 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES_EXT:
+            {
+                VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT* pPipelineCreationCacheControl =
+                    reinterpret_cast<VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT*>(pHeader);
+                pPipelineCreationCacheControl->pipelineCreationCacheControl = VK_TRUE;
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT:
             {
                 VkPhysicalDeviceMemoryPriorityFeaturesEXT* pMemPriorityFeature =
@@ -4877,6 +4943,16 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT:
+            {
+                VkPhysicalDeviceRobustness2FeaturesEXT* pRobustness2Features =
+                    reinterpret_cast<VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader);
+                pRobustness2Features->robustImageAccess2  = VK_FALSE;
+                pRobustness2Features->robustBufferAccess2 = VK_FALSE;
+                pRobustness2Features->nullDescriptor      = VK_FALSE;
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -5040,6 +5116,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceTimelineSemaphoreProperties*              pTimelineSemaphoreProperties;
         VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*         pSubgroupSizeControlProperties;
         VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT*        pTexelBufferAlignmentProperties;
+        VkPhysicalDeviceRobustness2PropertiesEXT*                 pRobustness2Properties;
         VkPhysicalDeviceLineRasterizationPropertiesEXT*           pLineRasterizationProperties;
         VkPhysicalDeviceVulkan11Properties*                       pVulkan11Properties;
         VkPhysicalDeviceVulkan12Properties*                       pVulkan12Properties;
@@ -5368,6 +5445,13 @@ void PhysicalDevice::GetDeviceProperties2(
             pTexelBufferAlignmentProperties->storageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
             pTexelBufferAlignmentProperties->uniformTexelBufferOffsetAlignmentBytes = m_limits.minTexelBufferOffsetAlignment;
             pTexelBufferAlignmentProperties->uniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT:
+        {
+            pRobustness2Properties->robustStorageBufferAccessSizeAlignment = 4;
+            pRobustness2Properties->robustUniformBufferAccessSizeAlignment = 4;
             break;
         }
 

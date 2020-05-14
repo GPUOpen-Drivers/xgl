@@ -104,10 +104,10 @@ ComputePipeline::ComputePipeline(
     uint32_t                             staticStateMask,
     uint64_t                             apiHash)
     :
-    Pipeline(pDevice, pPalPipeline, pPipelineLayout, pPipelineBinary, staticStateMask),
+    Pipeline(pDevice),
     m_info(immedInfo)
 {
-    m_apiHash = apiHash;
+    Pipeline::Init(pPalPipeline, pPipelineLayout, pPipelineBinary, staticStateMask, apiHash);
 
     CreateStaticState();
 }

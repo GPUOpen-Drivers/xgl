@@ -656,7 +656,7 @@ VkResult Image::Create(
             {
                 palCreateInfo.metadataMode =
                     (Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format) < settings.dccBitsPerPixelThreshold) ?
-                    Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
+                    Pal::MetadataMode::FmaskOnly : Pal::MetadataMode::ForceEnabled;
             }
         }
 
@@ -681,7 +681,7 @@ VkResult Image::Create(
             pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_IMAGE_LOAD_STORE_LOD) &&
             (pCreateInfo->mipLevels > 4) && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))
         {
-            palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
+            palCreateInfo.metadataMode = Pal::MetadataMode::FmaskOnly;
         }
 
         ResourceOptimizerKey resourceKey;
@@ -1727,6 +1727,12 @@ VkResult Image::GetMemoryRequirements(
 
         VK_ASSERT(pReqs->memoryTypeBits != 0);
     }
+
+    if (m_internalFlags.externallyShareable)
+    {
+        pReqs->memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
+    }
+
     // Optional: if the image is optimally tiled, don't allow it with host visible memory types.
     if ((m_internalFlags.linear == 0) &&
         pDevice->GetRuntimeSettings().addHostInvisibleMemoryTypesForOptimalImages)
