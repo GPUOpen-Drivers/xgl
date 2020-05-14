@@ -588,6 +588,15 @@ VkResult Device::Create(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PRIORITY_FEATURES_EXT:
         {
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceMemoryPriorityFeaturesEXT>(
@@ -775,6 +784,15 @@ VkResult Device::Create(
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT>(
                 pPhysicalDevice,
                 reinterpret_cast<const VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceRobustness2FeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader));
 
             break;
         }
@@ -2293,6 +2311,10 @@ VkResult Device::CreateGraphicsPipelines(
             // Capture the first failure result and save it to be returned
             finalResult = (finalResult != VK_SUCCESS) ? finalResult : result;
 
+            if (pCreateInfo->flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
+            {
+                break;
+            }
         }
     }
 
@@ -2338,6 +2360,10 @@ VkResult Device::CreateComputePipelines(
             // Capture the first failure result and save it to be returned
             finalResult = (finalResult != VK_SUCCESS) ? finalResult : result;
 
+            if (pCreateInfo->flags & VK_PIPELINE_CREATE_EARLY_RETURN_ON_FAILURE_BIT_EXT)
+            {
+                break;
+            }
         }
     }
 

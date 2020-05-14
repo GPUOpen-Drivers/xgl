@@ -453,6 +453,27 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         }
 
+        if (appProfile == AppProfile::RedDeadRedemption2)
+        {
+            m_settings.enableAcquireBeforeSignal = true;
+
+            m_settings.limitSampleCounts = VK_SAMPLE_COUNT_1_BIT |
+                VK_SAMPLE_COUNT_2_BIT |
+                VK_SAMPLE_COUNT_4_BIT;
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            {
+            }
+
+            // Game does a lot of material swapping during the draws. Prefetching shaders gives us a gain of 2%.
+            m_settings.prefetchShaders = true;
+
+            // Force exclusive sharing mode - 2% gain
+            m_settings.barrierFilterOptions = BarrierFilterOptions::ForceImageSharingModeExclusive;
+
+            m_settings.delayFullScreenAcquireToFirstPresent = true;
+        }
+
         if (appProfile == AppProfile::SaschaWillemsExamples)
         {
             m_settings.forceDepthClampBasedOnZExport = true;
@@ -631,7 +652,8 @@ void VulkanSettingsLoader::ValidateSettings()
     Pal::DeviceProperties deviceProps;
     m_pDevice->GetProperties(&deviceProps);
 
-    if (deviceProps.gpuMemoryProperties.flags.shadowDescVaSupport == 0)
+    if ((deviceProps.gpuMemoryProperties.flags.shadowDescVaSupport == 0) ||
+        (deviceProps.gfxipProperties.srdSizes.fmaskView == 0))
     {
         m_settings.enableFmaskBasedMsaaRead = false;
     }

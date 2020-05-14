@@ -392,14 +392,19 @@ public:
         return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskMatching(flags);
     }
 
-    VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
+    VK_INLINE uint32_t GetMemoryTypeMaskForExternalSharing() const
     {
-        return VkPhysicalDevice(DefaultDeviceIndex)->GetVkTypeIndexBitsFromPalHeap(heapIndex, pVkIndexBits);
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskForExternalSharing();
     }
 
     VK_INLINE uint32_t GetMemoryTypeForAttachmentImage() const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeForAttachmentImage();
+    }
+
+    VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
+    {
+        return VkPhysicalDevice(DefaultDeviceIndex)->GetVkTypeIndexBitsFromPalHeap(heapIndex, pVkIndexBits);
     }
 
     VK_INLINE Pal::GpuHeap GetPalHeapFromVkTypeIndex(uint32_t vkIndex) const

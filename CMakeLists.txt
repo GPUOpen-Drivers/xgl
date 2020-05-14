@@ -105,9 +105,11 @@ option(ICD_GPUOPEN_DEVMODE_BUILD "Build ${PROJECT_NAME} with GPU Open Developer 
 
 option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})
 
-option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" OFF)
+option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" ON)
 
 option(BUILD_XLIB_XRANDR_SUPPORT "Build Xlib with xrandr 1.6 support" OFF)
+
+option(ICD_ANALYSIS_WARNINGS_AS_ERRORS "Warnings as errors?" OFF)
 
 # Option Overrides #################################################################################
 # These are options that override XGL subproject options.  As these overrides are managed and force
@@ -254,6 +256,7 @@ if(ICD_BUILD_LLPC)
     set(LLPC_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(LLPC_BUILD_RENOIR ${XGL_BUILD_RENOIR} CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(LLPC_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+    set(LLPC_ENABLE_WERROR ${ICD_ANALYSIS_WARNINGS_AS_ERRORS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 endif()
 
 add_subdirectory(${XGL_VKGC_PATH} ${CMAKE_BINARY_DIR}/compiler)

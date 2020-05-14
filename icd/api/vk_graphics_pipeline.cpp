@@ -898,24 +898,23 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             VK_ASSERT(pVp->scissorCount <= Pal::MaxViewports);
             VK_ASSERT(pVp->scissorCount == pVp->viewportCount);
 
-            pInfo->immedInfo.viewportParams.count     = pVp->viewportCount;
-            pInfo->immedInfo.scissorRectParams.count  = pVp->scissorCount;
+            pInfo->immedInfo.viewportParams.count    = pVp->viewportCount;
+            pInfo->immedInfo.scissorRectParams.count = pVp->scissorCount;
 
             if (dynamicStateFlags[VK_DYNAMIC_STATE_VIEWPORT] == false)
             {
                 VK_ASSERT(pVp->pViewports != nullptr);
 
-                const bool khrMaintenance1 =
-                    ((pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 1, 0)) ||
-                     pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1));
+                const bool maintenanceEnabled = pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1);
+                uint32_t   enabledApiVersion  = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion();
+                const bool khrMaintenance1    = (enabledApiVersion >= VK_MAKE_VERSION(1, 1, 0)) || maintenanceEnabled;
 
                 for (uint32_t i = 0; i < pVp->viewportCount; ++i)
                 {
-                    VkToPalViewport(
-                        pVp->pViewports[i],
-                        i,
-                        khrMaintenance1,
-                        &pInfo->immedInfo.viewportParams);
+                    VkToPalViewport(pVp->pViewports[i],
+                            i,
+                            khrMaintenance1,
+                            &pInfo->immedInfo.viewportParams);
                 }
 
                 pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_VIEWPORT;
@@ -929,9 +928,9 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 {
                     VkToPalScissorRect(pVp->pScissors[i], i, &pInfo->immedInfo.scissorRectParams);
                 }
-
                 pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_SCISSOR;
             }
+
         }
 
         BuildRasterizationState(pDevice,
@@ -1481,7 +1480,7 @@ VkResult GraphicsPipeline::Create(
             viewIndexFromDeviceIndex,
             pBinaryInfo,
             apiPsoHash,
-            palPipelineHasher);
+            &palPipelineHasher);
 
         *pPipeline = GraphicsPipeline::HandleFromVoidPointer(pSystemMem);
     }
@@ -1551,15 +1550,16 @@ GraphicsPipeline::GraphicsPipeline(
     bool                                   viewIndexFromDeviceIndex,
     PipelineBinaryInfo*                    pBinary,
     uint64_t                               apiHash,
-    Util::MetroHash64&                     palPipelineHasher)
+    Util::MetroHash64*                     pPalPipelineHasher)
     :
-    Pipeline(pDevice, pPalPipeline, pLayout, pBinary, staticStateMask),
+    Pipeline(pDevice),
     m_info(immedInfo),
     m_vbInfo(vbInfo),
     m_coverageSamples(coverageSamples),
     m_flags()
 {
-    m_apiHash = apiHash;
+    Pipeline::Init(pPalPipeline, pLayout, pBinary, staticStateMask, apiHash);
+
     m_flags.viewIndexFromDeviceIndex = viewIndexFromDeviceIndex;
 
     memcpy(m_pPalMsaa,         pPalMsaa,         sizeof(pPalMsaa[0])         * pDevice->NumPalDevices());
@@ -1568,8 +1568,8 @@ GraphicsPipeline::GraphicsPipeline(
 
     CreateStaticState();
 
-    palPipelineHasher.Update(m_palPipelineHash);
-    palPipelineHasher.Finalize(reinterpret_cast<uint8* const>(&m_palPipelineHash));
+    pPalPipelineHasher->Update(m_palPipelineHash);
+    pPalPipelineHasher->Finalize(reinterpret_cast<uint8* const>(&m_palPipelineHash));
 }
 
 // =====================================================================================================================
@@ -1708,14 +1708,6 @@ void GraphicsPipeline::BindToCmdBuffer(
     StencilOpsCombiner*                    pStencilCombiner,
     const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos) const
 {
-    // If the viewport/scissor counts changed, we need to resend the current viewport/scissor state to PAL
-    bool viewportCountDirty = (pRenderState->allGpuState.viewport.count != m_info.viewportParams.count);
-    bool scissorCountDirty  = (pRenderState->allGpuState.scissor.count  != m_info.scissorRectParams.count);
-
-    // Update current viewport/scissor count
-    pRenderState->allGpuState.viewport.count = m_info.viewportParams.count;
-    pRenderState->allGpuState.scissor.count  = m_info.scissorRectParams.count;
-
     // Get this pipeline's static tokens
     const auto& newTokens = m_info.staticTokens;
 
@@ -1727,18 +1719,43 @@ void GraphicsPipeline::BindToCmdBuffer(
     // This code will attempt to skip programming state state based on redundant value checks.  These checks are often
     // represented as token compares, where the tokens are two perfect hashes of previously compiled pipelines' static
     // parameter values.
-    if (ContainsStaticState(DynamicStatesInternal::VIEWPORT) &&
-        CmdBuffer::IsStaticStateDifferent(oldTokens.viewports, newTokens.viewport))
+    // If VIEWPORT is static, VIEWPORT_COUNT must be static as well
+    if (ContainsStaticState(DynamicStatesInternal::VIEWPORT))
     {
-        pCmdBuffer->SetAllViewports(m_info.viewportParams, newTokens.viewport);
-        viewportCountDirty = false;
+        if (CmdBuffer::IsStaticStateDifferent(oldTokens.viewports, newTokens.viewport))
+        {
+            pCmdBuffer->SetAllViewports(m_info.viewportParams, newTokens.viewport);
+        }
+    }
+    else
+    {
+        utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
+        do
+        {
+            pRenderState->perGpuState[deviceGroup.Index()].viewport.count = m_info.viewportParams.count;
+        }
+        while (deviceGroup.IterateNext());
+
+        pRenderState->allGpuState.dirty.viewport = 1;
     }
 
-    if (ContainsStaticState(DynamicStatesInternal::SCISSOR) &&
-        CmdBuffer::IsStaticStateDifferent(oldTokens.scissorRect, newTokens.scissorRect))
+    if (ContainsStaticState(DynamicStatesInternal::SCISSOR))
     {
-        pCmdBuffer->SetAllScissors(m_info.scissorRectParams, newTokens.scissorRect);
-        scissorCountDirty = false;
+        if (CmdBuffer::IsStaticStateDifferent(oldTokens.scissorRect, newTokens.scissorRect))
+        {
+            pCmdBuffer->SetAllScissors(m_info.scissorRectParams, newTokens.scissorRect);
+        }
+    }
+    else
+    {
+        utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
+        do
+        {
+            pRenderState->perGpuState[deviceGroup.Index()].scissor.count = m_info.scissorRectParams.count;
+        }
+        while (deviceGroup.IterateNext());
+
+        pRenderState->allGpuState.dirty.scissor = 1;
     }
 
     utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
@@ -1840,17 +1857,6 @@ void GraphicsPipeline::BindToCmdBuffer(
             pCmdBuffer->PalCmdSetMsaaQuadSamplePattern(
                 m_info.samplePattern.sampleCount, m_info.samplePattern.locations);
             pRenderState->allGpuState.staticTokens.samplePattern = newTokens.samplePattern;
-        }
-        // If we still need to rebind viewports but the pipeline state did not already do it, resend the state to PAL
-        // (note that we are only reprogramming the previous state here, so no need to update tokens)
-        if (viewportCountDirty)
-        {
-            pPalCmdBuf->CmdSetViewports(pRenderState->allGpuState.viewport);
-        }
-
-        if (scissorCountDirty)
-        {
-            pPalCmdBuf->CmdSetScissorRects(pRenderState->allGpuState.scissor);
         }
     }
     while (deviceGroup.IterateNext());

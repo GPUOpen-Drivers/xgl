@@ -150,13 +150,16 @@ public:
 
 protected:
     Pipeline(
-        Device* const         pDevice,
+        Device* const         pDevice);
+
+    virtual ~Pipeline();
+
+    void Init(
         Pal::IPipeline**      pPalPipeline,
         const PipelineLayout* pLayout,
         PipelineBinaryInfo*   pBinary,
-        uint32_t              staticStateMask);
-
-    virtual ~Pipeline();
+        uint32_t              staticStateMask,
+        uint64_t              apiHash);
 
     static void GenerateHashFromSpecializationInfo(
         Util::MetroHash128*         pHasher,
@@ -175,7 +178,7 @@ protected:
     uint64_t                           m_apiHash;
 
 private:
-    PipelineBinaryInfo* const       m_pBinary;
+    PipelineBinaryInfo*                m_pBinary;
 };
 
 namespace entry

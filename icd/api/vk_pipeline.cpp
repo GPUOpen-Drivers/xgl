@@ -139,23 +139,32 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
 
 // =====================================================================================================================
 Pipeline::Pipeline(
-    Device* const         pDevice,
+    Device* const pDevice)
+    :
+    m_pDevice(pDevice),
+    m_userDataLayout(),
+    m_palPipelineHash(0),
+    m_staticStateMask(0),
+    m_apiHash(0),
+    m_pBinary(nullptr)
+{
+    memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));
+}
+
+void Pipeline::Init(
     Pal::IPipeline**      pPalPipeline,
     const PipelineLayout* pLayout,
     PipelineBinaryInfo*   pBinary,
-    uint32_t              staticStateMask)
-    :
-    m_pDevice(pDevice),
-    m_userDataLayout(pLayout->GetInfo().userDataLayout),
-    m_staticStateMask(staticStateMask),
-    m_apiHash(0),
-    m_pBinary(pBinary)
+    uint32_t              staticStateMask,
+    uint64_t              apiHash)
 {
-    memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));
-
+    m_userDataLayout = pLayout->GetInfo().userDataLayout;
+    m_staticStateMask = staticStateMask;
+    m_apiHash = apiHash;
+    m_pBinary = pBinary;
     m_palPipelineHash = pPalPipeline[DefaultDeviceIndex]->GetInfo().internalPipelineHash.unique;
 
-    for (uint32_t devIdx = 0; devIdx < pDevice->NumPalDevices(); devIdx++)
+    for (uint32_t devIdx = 0; devIdx < m_pDevice->NumPalDevices(); devIdx++)
     {
         m_pPalPipeline[devIdx] = pPalPipeline[devIdx];
     }
@@ -165,7 +174,7 @@ Pipeline::Pipeline(
 Pipeline::~Pipeline()
 {
     // Destroy PAL object
-    for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    for (uint32_t deviceIdx = 0; (deviceIdx < m_pDevice->NumPalDevices()) && (m_pPalPipeline[deviceIdx] != nullptr); deviceIdx++)
     {
         m_pPalPipeline[deviceIdx]->Destroy();
     }

@@ -484,6 +484,11 @@ VkResult Buffer::GetMemoryRequirements(
         VK_ASSERT(pMemoryRequirements->memoryTypeBits != 0);
     }
 
+    if (m_internalFlags.externallyShareable)
+    {
+        pMemoryRequirements->memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
+    }
+
     return VK_SUCCESS;
 }
 
