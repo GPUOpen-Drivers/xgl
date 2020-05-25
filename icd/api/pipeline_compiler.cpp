@@ -1536,6 +1536,7 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->shadowDescriptorTableUsage = Vkgc::ShadowDescriptorTableUsage::Enable;
     pOptions->shadowDescriptorTablePtrHigh =
           static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32);
+    pOptions->enableRelocatableShaderElf = m_pPhysicalDevice->GetRuntimeSettings().enableRelocatableShaders;
 #endif
 }
 
