@@ -1622,7 +1622,7 @@ void CmdBuffer::ReleaseResources()
 }
 
 // =====================================================================================================================
-template <uint32_t numPalDevices, bool robustBufferAccess>
+template <uint32_t numPalDevices, bool useCompactDescriptor>
 void CmdBuffer::BindDescriptorSets(
     VkPipelineBindPoint    pipelineBindPoint,
     VkPipelineLayout       layout,
@@ -1675,7 +1675,7 @@ void CmdBuffer::BindDescriptorSets(
                             setBindingData[apiBindPoint][setLayoutInfo.dynDescDataRegOffset]),
                         pDynamicOffsets,
                         setLayoutInfo.dynDescCount,
-                        robustBufferAccess);
+                        useCompactDescriptor);
 
                     deviceIdx++;
                 } while (deviceIdx < numPalDevices);
@@ -1754,7 +1754,7 @@ VK_INLINE bool CmdBuffer::PalPipelineBindingOwnedBy(
 }
 
 // =====================================================================================================================
-template<uint32_t numPalDevices, bool robustBufferAccess>
+template<uint32_t numPalDevices, bool useCompactDescriptor>
 VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdBindDescriptorSets(
     VkCommandBuffer                             cmdBuffer,
     VkPipelineBindPoint                         pipelineBindPoint,
@@ -1765,7 +1765,7 @@ VKAPI_ATTR void VKAPI_CALL CmdBuffer::CmdBindDescriptorSets(
     uint32_t                                    dynamicOffsetCount,
     const uint32_t*                             pDynamicOffsets)
 {
-    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindDescriptorSets<numPalDevices, robustBufferAccess>(
+    ApiCmdBuffer::ObjectFromHandle(cmdBuffer)->BindDescriptorSets<numPalDevices, useCompactDescriptor>(
         pipelineBindPoint,
         layout,
         firstSet,
@@ -1817,7 +1817,7 @@ PFN_vkCmdBindDescriptorSets CmdBuffer::GetCmdBindDescriptorSetsFunc(
 {
     PFN_vkCmdBindDescriptorSets pFunc = nullptr;
 
-    if (pDevice->GetEnabledFeatures().robustBufferAccess)
+    if (pDevice->UseCompactDynamicDescriptors())
     {
         pFunc = CmdBindDescriptorSets<numPalDevices, true>;
     }

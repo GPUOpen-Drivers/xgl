@@ -111,7 +111,7 @@ public:
         uint32_t*       pUserData,
         const uint32_t* pDynamicOffsets,
         uint32_t        numDynamicDescriptors,
-        bool            robustBufferAccess);
+        bool            useCompactDescriptor);
 
 protected:
     DescriptorSet(uint32_t heapIndex);
@@ -196,14 +196,14 @@ void DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
     uint32_t*       pUserData,
     const uint32_t* pDynamicOffsets,
     uint32_t        numDynamicDescriptors,
-    bool            robustBufferAccess)
+    bool            useCompactDescriptor)
 {
     // This code expects 4 DW SRDs whose first 48 bits is the base address.
 
     DescriptorSet<numPalDevices>* pSet  = StateFromHandle(set);
     uint64_t* pDstQwords = reinterpret_cast<uint64_t*>(pUserData);
     uint64_t* pSrcQwords = pSet->DynamicDescriptorDataQw(deviceIdx);
-    const uint32_t dynDataNumQwords = robustBufferAccess ? 2 : 1;
+    const uint32_t dynDataNumQwords = useCompactDescriptor ? 1 : 2;
     for (uint32_t i = 0; i < numDynamicDescriptors; ++i)
     {
         const uint64_t baseAddressMask = 0x0000FFFFFFFFFFFFull;
@@ -217,7 +217,7 @@ void DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
 
         pDstQwords[i * dynDataNumQwords] = hiBits | baseAddress;
 
-        if (robustBufferAccess)
+        if (!useCompactDescriptor)
         {
             pDstQwords[i * dynDataNumQwords + 1] = pSrcQwords[i * dynDataNumQwords + 1];
         }

@@ -852,6 +852,19 @@
       "VariableName": "delayFullScreenAcquireToFirstPresent"
     },
     {
+      "Name": "EnableRelocatableShaders",
+      "Description": "Builds a pipeline by linking reloctable shader elf, which have been built individually.  Only valid when LLPC is the pipeline compiler.",
+      "Tags": [
+	"SPIRV Options"
+      ],
+      "Defaults": {
+	"Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableRelocatableShaders"
+    },
+    {
       "Description": "Enable pipeline dump, pipeline is stored with .pipe format. You must set AMD_DEBUG_DIR and make sure $AMD_DEBUG_DIR + pipelineDumpDir is  an available directory.",
       "Tags": [
         "SPIRV Options"

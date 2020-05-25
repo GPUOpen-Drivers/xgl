@@ -204,7 +204,7 @@ uint32_t DescriptorSetLayout::GetDynamicBufferDescDwSize(const Device* pDevice)
 {
     // Currently we store the whole buffer SRD in the dynamic section (i.e. user data registers).
     uint32_t size = 0;
-    if (pDevice->GetEnabledFeatures().robustBufferAccess == false)
+    if (pDevice->UseCompactDynamicDescriptors())
     {
         size = sizeof(Pal::gpusize);
     }
