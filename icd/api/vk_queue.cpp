@@ -305,6 +305,8 @@ VkResult Queue::Submit(
             const VkSubmitInfo& submitInfo = pSubmits[submitIdx];
             const VkDeviceGroupSubmitInfo* pDeviceGroupInfo = nullptr;
             const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = nullptr;
+            bool  protectedSubmit = false;
+
             {
                 union
                 {
@@ -312,6 +314,8 @@ VkResult Queue::Submit(
                     const VkSubmitInfo*                            pVkSubmitInfo;
                     const VkTimelineSemaphoreSubmitInfo*           pVkTimelineSemaphoreSubmitInfo;
                     const VkDeviceGroupSubmitInfo*                 pVkDeviceGroupSubmitInfo;
+                    const VkProtectedSubmitInfo*                   pVkProtectedSubmitInfo;
+
                 };
 
                 for (pVkSubmitInfo = &submitInfo; pHeader != nullptr; pHeader = pHeader->pNext)
@@ -323,6 +327,9 @@ VkResult Queue::Submit(
                         break;
                     case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
                         pTimelineSemaphoreInfo = pVkTimelineSemaphoreSubmitInfo;
+                        break;
+                    case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO:
+                        protectedSubmit = pVkProtectedSubmitInfo->protectedSubmit;
                         break;
                     default:
                         // Skip any unknown extension structures
@@ -391,7 +398,15 @@ VkResult Queue::Submit(
 
                     const CmdBuffer& cmdBuf = *(*pCommandBuffers[i]);
 
-                    pPalCmdBuffers[perSubQueueInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
+                    if (cmdBuf.IsProtected() == protectedSubmit)
+                    {
+
+                        pPalCmdBuffers[perSubQueueInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
+                    }
+                    else
+                    {
+                        VK_NEVER_CALLED();
+                    }
                 }
 
                 if (lastBatch && (pFence != nullptr))

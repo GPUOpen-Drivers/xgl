@@ -68,7 +68,6 @@ VkResult Memory::Create(
     VK_ASSERT(pAllocInfo != nullptr);
     VK_ASSERT(pMemoryHandle != nullptr);
 
-    const Pal::DeviceProperties&            palProperties    = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
     const VkPhysicalDeviceMemoryProperties& memoryProperties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryProperties();
 
     // Create a mask to indicate the devices the memory allocations happened on
@@ -109,7 +108,7 @@ VkResult Memory::Create(
         switch (pHeader->sType)
         {
             case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO:
-
+            {
                 createInfo.size = pInfo->allocationSize;
 
                 // Calculate the required base address alignment for the given memory type.  These alignments are
@@ -154,24 +153,36 @@ VkResult Memory::Create(
                     createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
                 }
 
-                if (((memoryProperties.memoryTypes[pInfo->memoryTypeIndex].propertyFlags &
-                    VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD) != 0) &&
+                VkMemoryPropertyFlags propertyFlags = memoryProperties.memoryTypes[pInfo->memoryTypeIndex].propertyFlags;
+
+                if ((propertyFlags & VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD) &&
                     pDevice->IsDeviceCoherentMemoryEnabled())
                 {
                     createInfo.flags.gl2Uncached = 1;
                 }
 
-                break;
+                if ((propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0)
+                {
+                    createInfo.flags.cpuInvisible = 1;
+                }
+
+                if ((propertyFlags & VK_MEMORY_PROPERTY_PROTECTED_BIT) != 0)
+                {
+                    createInfo.flags.tmzProtected = 1;
+                }
+            }
+            break;
+
 #if defined(__unix__)
             case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
-                {
-                    const VkImportMemoryFdInfoKHR* pImportMemoryFdInfo =
-                        reinterpret_cast<const VkImportMemoryFdInfoKHR *>(pHeader);
-                    VK_ASSERT(pImportMemoryFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
-                    handle = pImportMemoryFdInfo->fd;
-                    isExternal = true;
-                }
-                break;
+            {
+                const VkImportMemoryFdInfoKHR* pImportMemoryFdInfo =
+                    reinterpret_cast<const VkImportMemoryFdInfoKHR *>(pHeader);
+                VK_ASSERT(pImportMemoryFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
+                handle = pImportMemoryFdInfo->fd;
+                isExternal = true;
+            }
+            break;
 #endif
             case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO:
             {

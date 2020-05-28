@@ -358,9 +358,13 @@ CmdBuffer::CmdBuffer(
     m_barrierPolicy(barrierPolicy),
     m_pSqttState(nullptr),
     m_renderPassInstance(pDevice->VkInstance()->Allocator()),
-    m_pTransformFeedbackState(nullptr)
+    m_pTransformFeedbackState(nullptr),
+    m_palDepthStencilState(pDevice->VkInstance()->Allocator())
 {
     m_flags.needResetState = true;
+
+    // Command buffer prefetching was found to be slower for command buffers in local memory.
+    m_flags.prefetchCommands = (m_pDevice->GetRuntimeSettings().cmdAllocatorDataHeap != Pal::GpuHeapLocal);
 
 #if VK_ENABLE_DEBUG_BARRIERS
     m_dbgBarrierPreCmdMask  = m_pDevice->GetRuntimeSettings().dbgBarrierPreCmdEnable;
@@ -835,6 +839,7 @@ void CmdBuffer::PalCmdCopyImage(
             destImageLayout,
             regionCount,
             pRegions,
+            nullptr,
             0);
     }
     else
@@ -851,6 +856,7 @@ void CmdBuffer::PalCmdCopyImage(
                 destImageLayout,
                 regionCount,
                 pRegions,
+                nullptr,
                 0);
         }
         while (deviceGroup.IterateNext());
@@ -991,7 +997,12 @@ VkResult CmdBuffer::Begin(
     m_cbBeginDeviceMask = m_pDevice->GetPalDeviceMask();
 
     palFlags.u32All = 0;
-    palFlags.prefetchCommands = 1;
+    palFlags.prefetchCommands = m_flags.prefetchCommands;
+
+    if (IsProtected())
+    {
+        palFlags.enableTmz = 1;
+    }
 
     if (m_pDevice->GetRuntimeSettings().prefetchShaders)
     {
@@ -1207,6 +1218,9 @@ void CmdBuffer::ResetPipelineState()
     m_vbMgr.Reset();
 
     memset(&m_state.allGpuState.staticTokens, 0u, sizeof(m_state.allGpuState.staticTokens));
+    memset(&(m_state.allGpuState.depthStencilCreateInfo),
+           0u,
+           sizeof(m_state.allGpuState.depthStencilCreateInfo));
 
     uint32_t bindIdx = 0;
     do
@@ -1363,7 +1377,7 @@ void CmdBuffer::BindPipeline(
                 {
                     Pal::DynamicComputeShaderInfo computeShaderInfo = {};
 
-                    computeShaderInfo.maxWavesPerCu = settings.asyncComputeQueueMaxWavesPerCu;
+                    computeShaderInfo.maxWavesPerCu = static_cast<float>(settings.asyncComputeQueueMaxWavesPerCu);
 
                     pPipeline->BindToCmdBuffer(this, computeShaderInfo);
                 }
@@ -1393,10 +1407,13 @@ void CmdBuffer::BindPipeline(
                 {
                     pPipeline->BindToCmdBuffer(this, &m_state, &m_stencilCombiner);
 
-                    m_vbMgr.GraphicsPipelineChanged(this, pPipeline);
+                    {
+                        m_vbMgr.GraphicsPipelineChanged(this, pPipeline);
+                    }
 
                     m_state.allGpuState.pGraphicsPipeline = pPipeline;
                     pNewUserDataLayout = pPipeline->GetUserDataLayout();
+
                 }
             }
             else
@@ -1594,7 +1611,17 @@ VkResult CmdBuffer::Destroy(void)
 // =====================================================================================================================
 void CmdBuffer::ReleaseResources()
 {
-    auto pInstance = m_pDevice->VkInstance();
+    auto              pInstance = m_pDevice->VkInstance();
+    RenderStateCache* pRSCache  = m_pDevice->GetRenderStateCache();
+
+    for (uint32_t i = 0; i < m_palDepthStencilState.NumElements(); ++i)
+    {
+        DynamicDepthStencil palDepthStencilState = m_palDepthStencilState.At(i);
+
+        pRSCache->DestroyDepthStencilState(palDepthStencilState.pPalDepthStencil, pInstance->GetAllocCallbacks());
+    }
+
+    m_palDepthStencilState.Clear();
 
     // Release per-attachment render pass instance memory
     if (m_renderPassInstance.pAttachments != nullptr)
@@ -1858,11 +1885,14 @@ void CmdBuffer::BindVertexBuffers(
     uint32_t            firstBinding,
     uint32_t            bindingCount,
     const VkBuffer*     pBuffers,
-    const VkDeviceSize* pOffsets)
+    const VkDeviceSize* pOffsets,
+    const VkDeviceSize* pSizes,
+    const VkDeviceSize* pStrides)
+
 {
     DbgBarrierPreCmd(DbgBarrierBindIndexVertexBuffer);
 
-    m_vbMgr.BindVertexBuffers(this, firstBinding, bindingCount, pBuffers, pOffsets);
+    m_vbMgr.BindVertexBuffers(this, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
 
     DbgBarrierPostCmd(DbgBarrierBindIndexVertexBuffer);
 }
@@ -2840,7 +2870,8 @@ void CmdBuffer::PalCmdResolveImage(
                     dstImageLayout,
                     resolveMode,
                     regionCount,
-                    pRegions + (regionPerDevice ? (MaxRangePerAttachment * deviceIdx) : 0) );
+                    pRegions + (regionPerDevice ? (MaxRangePerAttachment * deviceIdx) : 0),
+                    0);
     }
     while (deviceGroup.IterateNext());
 
@@ -5245,7 +5276,6 @@ void CmdBuffer::SetAllViewports(
     uint32_t                   staticToken)
 {
     VK_ASSERT(m_cbBeginDeviceMask == m_pDevice->GetPalDeviceMask());
-
     utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
     do
     {
@@ -5869,12 +5899,13 @@ void CmdBuffer::ValidateStates()
 {
     if (m_state.allGpuState.dirty.u32All != 0)
     {
+        Pal::IDepthStencilState* pPalDepthStencil[MaxPalDevices] = {};
+
         utils::IterateMask deviceGroup(m_cbBeginDeviceMask);
         do
         {
             const uint32_t deviceIdx = deviceGroup.Index();
 
-            // Dirty bits should never be set for a static state
             if (m_state.allGpuState.dirty.viewport)
             {
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
@@ -5891,6 +5922,83 @@ void CmdBuffer::ValidateStates()
                 PalCmdBuffer(deviceIdx)->CmdSetScissorRects(m_state.perGpuState[deviceIdx].scissor);
 
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+
+            if (m_state.allGpuState.dirty.rasterState)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                PalCmdBuffer(deviceIdx)->CmdSetTriangleRasterState(m_state.allGpuState.triangleRasterState);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+
+            if (m_state.allGpuState.dirty.inputAssembly)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                PalCmdBuffer(deviceIdx)->CmdSetInputAssemblyState(m_state.allGpuState.inputAssemblyState);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+
+            if (m_state.allGpuState.dirty.depthStencil)
+            {
+                RenderStateCache* pRSCache = m_pDevice->GetRenderStateCache();
+
+                // Check pPalDepthStencil[0] should be fine since pPalDepthStencil[i] would be nullptr when
+                // pPalDepthStencil[0] is nullptr.
+                if (pPalDepthStencil[0] == nullptr)
+                {
+                    bool depthStencilExist = false;
+
+                    pRSCache->CreateDepthStencilState(m_state.allGpuState.depthStencilCreateInfo,
+                                                      m_pDevice->VkInstance()->GetAllocCallbacks(),
+                                                      VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
+                                                      pPalDepthStencil);
+
+                    // Check if pPalDepthStencil is already in the m_state.allGpuState.palDepthStencilState, destroy it
+                    // and use the old one if yes. The destroy is not expensive since it's just a refCount--.
+                    for (uint32_t i = 0; i < m_palDepthStencilState.NumElements(); ++i)
+                    {
+                        const DynamicDepthStencil palDepthStencilState = m_palDepthStencilState.At(i);
+
+                        // Check device0 only should be sufficient
+                        if (palDepthStencilState.pPalDepthStencil[0] == pPalDepthStencil[0])
+                        {
+                            depthStencilExist = true;
+
+                            pRSCache->DestroyDepthStencilState(pPalDepthStencil,
+                                                               m_pDevice->VkInstance()->GetAllocCallbacks());
+
+                            for (uint32_t j = 0; j < MaxPalDevices; ++j)
+                            {
+                                pPalDepthStencil[j] = palDepthStencilState.pPalDepthStencil[j];
+                            }
+                            break;
+                        }
+                    }
+
+                    // Add it to the m_palDepthStencilState if it doesn't exist
+                    if (!depthStencilExist)
+                    {
+                        DynamicDepthStencil palDepthStencilState = {};
+
+                        for (uint32_t i = 0; i < MaxPalDevices; ++i)
+                        {
+                            palDepthStencilState.pPalDepthStencil[i] = pPalDepthStencil[i];
+                        }
+
+                        m_palDepthStencilState.PushBack(palDepthStencilState);
+                    }
+                }
+
+                VK_ASSERT(pPalDepthStencil[0] != nullptr);
+
+                PalCmdBindDepthStencilState(
+                        m_pPalCmdBuffers[deviceIdx],
+                        deviceIdx,
+                        pPalDepthStencil[deviceIdx]);
             }
         }
         while (deviceGroup.IterateNext());
@@ -5997,7 +6105,9 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers(
         firstBinding,
         bindingCount,
         pBuffers,
-        pOffsets);
+        pOffsets,
+        nullptr,
+        nullptr);
 }
 
 // =====================================================================================================================

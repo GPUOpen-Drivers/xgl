@@ -85,7 +85,7 @@ public:
     {
         // Memory for the object and the array of attachments is allocated in Framebuffer::Create() with the
         // attachments immediately after the object.
-        const Attachment* pAttachments = static_cast<const Attachment*>(Util::VoidPtrInc(this, sizeof(*this)));
+        const Attachment* pAttachments = static_cast<const Attachment*>(Util::VoidPtrInc(this, GetAttachmentsOffset()));
         return pAttachments[index];
     }
 
@@ -103,6 +103,14 @@ private:
     inline void SetSubresRanges(
         const Image* pImage,
         Attachment*  pAttachment);
+
+    // Get the start address of the first Attachment object relative to the start of a Framebuffer object.
+    inline static size_t GetAttachmentsOffset()
+    {
+        // The alignment requirement of Framebuffer is less than of Attachment.
+        // Therefore, we need to round up (this only works if the Framebuffer object is sufficiently aligned).
+        return Util::Pow2Align(sizeof(Framebuffer), alignof(Attachment));
+    }
 
     const uint32_t            m_attachmentCount;
     Pal::GlobalScissorParams  m_globalScissorParams;

@@ -62,12 +62,12 @@ struct StencilRefMaskParams
     {
         return static_cast<uint8_t*>(&m_palState.frontRef);
     }
-    uint64_t& Get64bitRef()
-    {
-        return *reinterpret_cast<uint64_t*>(&m_palState.frontRef);
-    }
 
-    Pal::StencilRefMaskParams   m_palState;
+    union
+    {
+        Pal::StencilRefMaskParams m_palState;
+        uint64_t m_palState64bit;
+    };
 };
 
 class StencilOpsCombiner
@@ -83,7 +83,7 @@ public:
         // Just invalidate m_previous_state only otherwise we would need to
         // setup the default front\back OpValues == 1
 
-        m_previous_state.Get64bitRef() = 0;
+        m_previous_state.m_palState64bit = 0;
     }
 
     void Set(StencilRefMaskParams::Fields field, uint8_t value)

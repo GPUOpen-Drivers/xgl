@@ -456,10 +456,13 @@ static void InitSubpassDescription(
     outDesc->preserveAttachmentCount = subpassDesc.preserveAttachmentCount;
     outDesc->pPreserveAttachments    = reinterpret_cast<uint32_t*>(nextPtr);
 
-    memcpy(
-        outDesc->pPreserveAttachments,
-        subpassDesc.pPreserveAttachments,
-        subpassDesc.preserveAttachmentCount * sizeof(uint32_t));
+    if (subpassDesc.preserveAttachmentCount > 0)
+    {
+        memcpy(
+            outDesc->pPreserveAttachments,
+            subpassDesc.pPreserveAttachments,
+            subpassDesc.preserveAttachmentCount * sizeof(uint32_t));
+    }
 
     nextPtr = Util::VoidPtrInc(nextPtr, subpassDesc.preserveAttachmentCount * sizeof(uint32_t));
     VK_ASSERT(Util::VoidPtrDiff(nextPtr, pMemoryPtr) <= memorySize);

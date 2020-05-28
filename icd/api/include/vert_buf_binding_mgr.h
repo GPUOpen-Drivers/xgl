@@ -73,8 +73,10 @@ public:
         CmdBuffer*          pCmdBuf,
         uint32_t            firstBinding,
         uint32_t            bindingCount,
-        const VkBuffer*     pBuffers,
-        const VkDeviceSize* pOffsets);
+        const VkBuffer*     pInBuffers,
+        const VkDeviceSize* pInOffsets,
+        const VkDeviceSize* pInSizes,
+        const VkDeviceSize* pInStrides);
 
     void GraphicsPipelineChanged(CmdBuffer* pCmdBuf, const GraphicsPipeline* pPipeline);
 

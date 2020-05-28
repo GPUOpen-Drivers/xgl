@@ -1,0 +1,43 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x7c92a52e30841496 59025b19edae3734"
+        }
+      },
+      "action": {
+        "cs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x767991f055de051d ec878c820bd1d81e"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x8648e5203943c0b0 0ebeff2cbf131944"
+        }
+      },
+      "action": {
+        "ps": {
+          "enableLoadScalarizer": true
+        }
+      }
+    }
+  ]
+}

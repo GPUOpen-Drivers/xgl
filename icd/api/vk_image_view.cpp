@@ -176,7 +176,8 @@ Pal::Result ImageView::BuildColorTargetView(
     const Pal::SubresRange&   subresRange,
     const Pal::Range&         zRange,
     void*                     pPalViewMemory,
-    Pal::IColorTargetView**   pColorView)
+    Pal::IColorTargetView**   pColorView,
+    const RuntimeSettings&    settings)
 {
     struct Pal::SubresId subresId;
 
@@ -213,7 +214,8 @@ Pal::Result ImageView::BuildDepthStencilView(
     const Pal::Range&         zRange,
     uint32_t                  viewFlags,
     void*                     pPalViewMemory,
-    Pal::IDepthStencilView**  pDepthStencilView)
+    Pal::IDepthStencilView**  pDepthStencilView,
+    const RuntimeSettings&    settings)
 {
     Pal::DepthStencilViewCreateInfo depthInfo = {};
 
@@ -478,7 +480,8 @@ VkResult ImageView::Create(
                                           palRanges[0],
                                           zRange,
                                           pPalMem,
-                                          &pColorView[deviceIdx]);
+                                          &pColorView[deviceIdx],
+                                          pDevice->GetRuntimeSettings());
          }
     }
 
@@ -500,7 +503,8 @@ VkResult ImageView::Create(
                                            zRange,
                                            viewFlags,
                                            pPalMem,
-                                           &pDsView[deviceIdx]);
+                                           &pDsView[deviceIdx],
+                                           pDevice->GetRuntimeSettings());
         }
     }
 

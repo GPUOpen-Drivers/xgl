@@ -186,7 +186,7 @@ VkResult DescriptorPool::Init(
 
             for (uint32 i = 0; i < pCreateInfo->poolSizeCount; i++)
             {
-                pPoolSizes[i].type = VkDescriptorTypeToPalDescriptorType(pCreateInfo->pPoolSizes[i].type);
+                pPoolSizes[i].type = VkToPalDescriptorType(pCreateInfo->pPoolSizes[i].type);
                 pPoolSizes[i].numDescriptors = pCreateInfo->pPoolSizes[i].descriptorCount;
             }
 

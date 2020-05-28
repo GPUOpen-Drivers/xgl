@@ -36,6 +36,7 @@ global:
     vkEnumerateInstanceExtensionProperties;
     vkEnumerateInstanceLayerProperties;
     vkEnumerateInstanceVersion;
+    HMI;
 local:
     *;
 };

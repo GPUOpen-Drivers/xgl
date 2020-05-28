@@ -77,25 +77,37 @@ public:
 
     void UnregisterCmdBuffer(CmdBuffer* pCmdBuffer);
 
-    VkResult PalCmdAllocatorReset();
-
     VK_INLINE uint32_t GetQueueFamilyIndex() const { return m_queueFamilyIndex; }
 
-protected:
+    bool IsProtected() const { return m_flags.isProtected ? true : false; }
+
+private:
     CmdPool(
-        Device*              pDevice,
-        Pal::ICmdAllocator** pPalCmdAllocators,
-        uint32_t             queueFamilyIndex,
-        bool                 sharedCmdAllocator);
+        Device*                   pDevice,
+        Pal::ICmdAllocator**      pPalCmdAllocators,
+        uint32_t                  queueFamilyIndex,
+        VkCommandPoolCreateFlags  flags,
+        bool                      sharedCmdAllocator);
+
+    VkResult ResetCmdAllocator();
 
     Device*             m_pDevice;
     Pal::ICmdAllocator* m_pPalCmdAllocators[MaxPalDevices];
     const uint32_t      m_queueFamilyIndex;
     const bool          m_sharedCmdAllocator;
 
+    union
+    {
+        struct
+        {
+            uint32 isProtected : 1;
+            uint32 reserved    : 31;
+        };
+        uint32 u32All;
+    } m_flags;
+
     Util::HashSet<CmdBuffer*, PalAllocator> m_cmdBufferRegistry;
 
-    uint32_t                         m_totalEventMgrCount;
 };
 
 namespace entry

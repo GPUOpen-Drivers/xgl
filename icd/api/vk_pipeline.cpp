@@ -233,7 +233,7 @@ VkResult Pipeline::GetShaderDisassembly(
     {
         bool symbolValid = false;
         Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
-        Util::Abi::ApiShaderType      apiShaderType;
+        Util::Abi::ApiShaderType      apiShaderType = Util::Abi::ApiShaderType::Cs;
 
         switch (shaderType)
         {

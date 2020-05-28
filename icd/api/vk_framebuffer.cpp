@@ -91,7 +91,13 @@ VkResult Framebuffer::Create(
 {
     VkResult result = VK_SUCCESS;
 
-    const size_t apiSize        = sizeof(Framebuffer);
+    size_t apiSize = sizeof(Framebuffer);
+    if (pCreateInfo->attachmentCount > 0)
+    {
+        // We need to add alignment for attachments.
+        apiSize = GetAttachmentsOffset();
+    }
+
     const size_t attachmentSize = sizeof(Attachment) * pCreateInfo->attachmentCount;
     const size_t objSize        = apiSize + attachmentSize;
 
@@ -178,7 +184,7 @@ VkResult Framebuffer::Destroy(
 void Framebuffer::SetImageViews(
     const VkRenderPassAttachmentBeginInfo* pRenderPassAttachmentBeginInfo)
 {
-    Attachment* pAttachments = static_cast<Attachment*>(Util::VoidPtrInc(this, sizeof(*this)));
+    Attachment* pAttachments = static_cast<Attachment*>(Util::VoidPtrInc(this, GetAttachmentsOffset()));
 
     for (uint32_t i = 0; i < pRenderPassAttachmentBeginInfo->attachmentCount; i++)
     {

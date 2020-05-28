@@ -1,0 +1,30 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x730eeeb82e6434a8 76d57aacbd824dbd"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLoopUnrolls": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xe449709f7ed22376 a6da0f40d4c8b54f"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLoopUnrolls": 1
+        }
+      }
+    }
+  ]
+}

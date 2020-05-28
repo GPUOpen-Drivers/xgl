@@ -1,0 +1,95 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0xe4eb5ea3fb70eeb7 2989e44ba02788a8"
+        }
+      },
+      "action": {
+        "cs": {
+          "disableLoopUnrolls": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x86bb99062eadf839 58ddfe449fc0b3d8"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x5a0e57337fe9533e 52bfe4af6f91ca9e"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xdcdd10e03921b065 9f8de289b463bea5"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x98245ecf0f55d763 ad0576dabd7c7e8a"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x70291f07f48e9c91 17842590a932dc9"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xa645928927b04693 58bfff013c011ec8"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    }
+  ]
+}

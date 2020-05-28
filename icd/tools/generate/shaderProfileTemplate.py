@@ -1309,6 +1309,7 @@ SHADER_ACTION = {
         "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
         "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
     },
+
     "reconfigWorkgroupLayout": {
         "type": [int],
         "jsonReadable": True,
@@ -1329,6 +1330,7 @@ SHADER_ACTION = {
         "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
         "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
     },
+
     "forceLoopUnrollCount": {
         "type": [int],
         "jsonReadable": True,
@@ -1349,6 +1351,7 @@ SHADER_ACTION = {
         "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
         "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
     },
+
     "enableLoadScalarizer": {
         "type": [bool],
         "jsonReadable": True,
@@ -1369,6 +1372,7 @@ SHADER_ACTION = {
         "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
         "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
     },
+
     "disableLicm": {
         "type": [bool],
         "jsonReadable": True,
@@ -1389,6 +1393,7 @@ SHADER_ACTION = {
         "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
         "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
     },
+
     "unrollThreshold": {
         "type": [int],
         "jsonReadable": True,

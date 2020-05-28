@@ -140,6 +140,9 @@ public:
     VK_INLINE bool ContainsStaticState(DynamicStatesInternal dynamicState) const
         { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) != 0); }
 
+    VK_INLINE bool ContainsDynamicState(DynamicStatesInternal dynamicState) const
+        { return ((m_staticStateMask & (1UL << static_cast<uint32_t>(dynamicState))) == 0); }
+
     VkResult GetShaderDisassembly(
         const Device*                 pDevice,
         const Pal::IPipeline*         pPalPipeline,

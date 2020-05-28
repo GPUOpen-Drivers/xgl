@@ -656,8 +656,25 @@ VkResult Image::Create(
             {
                 palCreateInfo.metadataMode =
                     (Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format) < settings.dccBitsPerPixelThreshold) ?
-                    Pal::MetadataMode::FmaskOnly : Pal::MetadataMode::ForceEnabled;
+                    Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
             }
+        }
+
+        // a. If devs don't enable the extension: can keep DCC enabled for UAVs with mips
+        // b. If dev enables the extension: keep DCC enabled for UAVs with <= 4 mips
+        // c. Can app-detect un-disable DCC for cases where we know devs don't store to multiple mips
+        if ((gfxLevel == Pal::GfxIpLevel::GfxIp10_1) &&
+            pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_IMAGE_LOAD_STORE_LOD) &&
+            (pCreateInfo->mipLevels > 4) && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))
+        {
+            palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
+        }
+
+        // If DCC was disabled above, still attempt to use Fmask.
+        if ((palCreateInfo.samples > 1) && (palCreateInfo.usageFlags.colorTarget) &&
+            (palCreateInfo.metadataMode == Pal::MetadataMode::Disabled))
+        {
+            palCreateInfo.metadataMode = Pal::MetadataMode::FmaskOnly;
         }
 
         // Disable TC compatible reads in order to maximize texture fetch performance.
@@ -672,16 +689,6 @@ VkResult Image::Create(
         if (pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)
         {
             palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
-        }
-
-        // a. If devs don't enable the extension: can keep DCC enabled for UAVs with mips
-        // b. If dev enables the extension: keep DCC enabled for UAVs with <= 4 mips
-        // c. Can app-detect un-disable DCC for cases where we know devs don't store to multiple mips
-        if ((gfxLevel == Pal::GfxIpLevel::GfxIp10_1) &&
-            pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_IMAGE_LOAD_STORE_LOD) &&
-            (pCreateInfo->mipLevels > 4) && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))
-        {
-            palCreateInfo.metadataMode = Pal::MetadataMode::FmaskOnly;
         }
 
         ResourceOptimizerKey resourceKey;

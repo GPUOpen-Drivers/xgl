@@ -237,7 +237,7 @@ VkResult SwapChain::Create(
     const uint32_t           swapImageCount      = (pDevice->NumPalDevices() > 1) ?
                                                         Util::Max<uint32_t>(5, pCreateInfo->minImageCount) :
                                                         pCreateInfo->minImageCount;
-
+    swapChainCreateInfo.flags.tmzProtected  = (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR) ? 1 : 0;
     swapChainCreateInfo.hDisplay            = properties.imageCreateInfo.hDisplay;
     swapChainCreateInfo.hWindow             = properties.displayableInfo.windowHandle;
     swapChainCreateInfo.wsiPlatform         = properties.displayableInfo.palPlatform;
@@ -1519,6 +1519,7 @@ SwCompositor* SwCompositor::Create(
                                 dstLayout,
                                 1,
                                 &region,
+                                nullptr,
                                 0);
 
                             ppBltCmdBuffers[deviceIdx][i]->End();

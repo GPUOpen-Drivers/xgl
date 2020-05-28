@@ -907,33 +907,49 @@ VkResult Device::Create(
 
     for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
     {
-        for (queueIndex = 0; queueIndex < queueCounts[queueFamilyIndex]; queueIndex++)
+        for (queueIndex = 0; (queueIndex < queueCounts[queueFamilyIndex]) && (vkResult == VK_SUCCESS); queueIndex++)
         {
-            for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
+            for (uint32_t deviceIdx = 0; (deviceIdx < numDevices) && (vkResult == VK_SUCCESS); deviceIdx++)
             {
-                Pal::QueueCreateInfo queueCreateInfo = {};
-                ConstructQueueCreateInfo(pPhysicalDevices,
-                    deviceIdx,
-                    queueFamilyIndex,
-                    queueIndex,
-                    dedicatedComputeUnits[queueFamilyIndex][queueIndex],
-                    queuePriority[queueFamilyIndex][queueIndex],
-                    &queueCreateInfo,
-                    useComputeAsTransferQueue);
+                // Protected-capable device queues, to which unprotected command buffers or protected command
+                // buffers can be submitted. HW only allows protected compute queue submit protected command buffers.
+                Pal::QueueType palQueueType =
+                    pPhysicalDevices[deviceIdx]->GetQueueFamilyPalQueueType(queueFamilyIndex);
+                if ((queueFlags[queueFamilyIndex] & VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT) &&
+                     (palQueueType == Pal::QueueType::QueueTypeCompute))
+                {
+                    vkResult = VK_ERROR_INITIALIZATION_FAILED;
+                    VK_ALERT_ALWAYS_MSG("Compute queue not support TMZ");
+                }
+                else
+                {
+                    Pal::QueueCreateInfo queueCreateInfo = {};
+                    ConstructQueueCreateInfo(pPhysicalDevices,
+                        deviceIdx,
+                        queueFamilyIndex,
+                        queueIndex,
+                        dedicatedComputeUnits[queueFamilyIndex][queueIndex],
+                        queuePriority[queueFamilyIndex][queueIndex],
+                        &queueCreateInfo,
+                        useComputeAsTransferQueue);
 
-                palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSize(queueCreateInfo, &palResult);
+                    palQueueMemorySize += pPalDevices[deviceIdx]->GetQueueSize(queueCreateInfo, &palResult);
 
-                VK_ASSERT(palResult == Pal::Result::Success);
+                    VK_ASSERT(palResult == Pal::Result::Success);
+                }
             }
         }
     }
 
-    pMemory = pInstance->AllocMem(
-        apiDeviceSize + (totalQueues * apiQueueSize) + palQueueMemorySize,
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    if (vkResult == VK_SUCCESS)
+    {
+        pMemory = pInstance->AllocMem(
+            apiDeviceSize + (totalQueues * apiQueueSize) + palQueueMemorySize,
+            VK_DEFAULT_MEM_ALIGN,
+            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
-    vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+        vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+    }
 
     if ((pCreateInfo != nullptr) && (pMemory != nullptr))
     {

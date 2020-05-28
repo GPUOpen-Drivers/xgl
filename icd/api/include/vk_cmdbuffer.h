@@ -58,6 +58,7 @@
 #include "palLinearAllocator.h"
 #include "palPipeline.h"
 #include "palQueue.h"
+#include "palVector.h"
 
 // Forward declare PAL classes used in this file
 namespace Pal
@@ -125,13 +126,20 @@ union DirtyState
 {
     struct
     {
-        uint32 viewport     :  1;
-        uint32 scissor      :  1;
-        uint32 depthStencil :  1;
-        uint32 reserved     : 29;
+        uint32 viewport      :  1;
+        uint32 scissor       :  1;
+        uint32 depthStencil  :  1;
+        uint32 rasterState   :  1;
+        uint32 inputAssembly :  1;
+        uint32 reserved      : 27;
     };
 
     uint32 u32All;
+};
+
+struct DynamicDepthStencil
+{
+    Pal::IDepthStencilState* pPalDepthStencil[MaxPalDevices];
 };
 
 // Members of CmdBufferRenderState that are different for each GPU
@@ -200,7 +208,10 @@ struct AllGpuRenderState
     // the same PAL pipeline bind point.
     PipelineBind            palToApiPipeline[static_cast<size_t>(Pal::PipelineBindPoint::Count)];
 
-    Pal::LineStippleStateParams  lineStipple;
+    Pal::LineStippleStateParams      lineStipple;
+    Pal::TriangleRasterStateParams   triangleRasterState;
+    Pal::InputAssemblyStateParams    inputAssemblyState;
+    Pal::DepthStencilStateCreateInfo depthStencilCreateInfo;
 };
 
 // This structure describes current render state within a command buffer during its building.
@@ -295,7 +306,9 @@ public:
         uint32_t                                    firstBinding,
         uint32_t                                    bindingCount,
         const VkBuffer*                             pBuffers,
-        const VkDeviceSize*                         pOffsets);
+        const VkDeviceSize*                         pOffsets,
+        const VkDeviceSize*                         pSizes,
+        const VkDeviceSize*                         pStrides);
 
     void Draw(
         uint32_t                                    firstVertex,
@@ -645,6 +658,11 @@ public:
         return m_cbBeginDeviceMask;
     }
 
+    VK_INLINE bool IsProtected() const
+    {
+        return m_pCmdPool->IsProtected();
+    }
+
     VkResult Destroy(void);
 
     VK_FORCEINLINE Device* VkDevice(void) const
@@ -891,6 +909,8 @@ public:
 
     static PFN_vkCmdBindDescriptorSets GetCmdBindDescriptorSetsFunc(const Device* pDevice);
 
+    CmdPool* GetCmdPool() const { return m_pCmdPool; }
+
 private:
     void ValidateStates();
 
@@ -1026,7 +1046,8 @@ private:
             uint32_t isRecording               :  1;
             uint32_t needResetState            :  1;
             uint32_t hasConditionalRendering   :  1;
-            uint32_t reserved                  : 28;
+            uint32_t prefetchCommands          :  1;
+            uint32_t reserved                  : 27;
         };
     };
 
@@ -1060,6 +1081,8 @@ private:
     uint32_t                      m_dbgBarrierPreCmdMask;
     uint32_t                      m_dbgBarrierPostCmdMask;
 #endif
+
+    Util::Vector<DynamicDepthStencil, 16, PalAllocator> m_palDepthStencilState;
 
 };
 

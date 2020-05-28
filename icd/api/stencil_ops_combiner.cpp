@@ -52,8 +52,8 @@ void StencilOpsCombiner::PalCmdSetStencilState(CmdBuffer* pCmdBuffer)
 {
     const uint32_t palDeviceMask = pCmdBuffer->GetDeviceMask();
 
-    if ((m_previous_state.Get64bitRef() != m_state.Get64bitRef()) ||
-        (m_palDeviceMask                != palDeviceMask))
+    if ((m_previous_state.m_palState64bit != m_state.m_palState64bit) ||
+        (m_palDeviceMask                  != palDeviceMask))
     {
         utils::IterateMask deviceGroup(palDeviceMask);
         do
@@ -64,8 +64,8 @@ void StencilOpsCombiner::PalCmdSetStencilState(CmdBuffer* pCmdBuffer)
         }
         while (deviceGroup.IterateNext());
 
-        m_previous_state.Get64bitRef() = m_state.Get64bitRef();
-        m_palDeviceMask                = palDeviceMask;
+        m_previous_state.m_palState64bit = m_state.m_palState64bit;
+        m_palDeviceMask                  = palDeviceMask;
     }
 }
 

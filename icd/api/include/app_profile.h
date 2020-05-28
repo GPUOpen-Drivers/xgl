@@ -76,6 +76,7 @@ enum class AppProfile : uint32_t
     RainbowSixSiege,       // Tom Clancy's Rainbow Six Siege: Operation Phantom by Ubisoft
     WolfensteinYoungblood, // Wolfenstein Youngblood by Machine Games
     RedDeadRedemption2,    // Red Dead Redemption 2 by Rockstar
+    DoomEternal,           // Doom Eternal by id Software
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)

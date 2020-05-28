@@ -1,0 +1,138 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xcd8bed3a5b53770b 183d0a947aec968c"
+        }
+      },
+      "action": {
+        "binningOverride": 1,
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x7ec0c9d811608df2 7d8747cb719980cf"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xc4005611a6ed0d95 31470d7db287ff1b"
+        }
+      },
+      "action": {
+        "ps": {
+          "vgprLimit": 84,
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xdf783db69677edb5 fd14066a61356a01"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x647fbec34ecf51ee 1d81e32e7af51a49"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "wgpMode": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xa7267b61cd3896f3 8c7289f7dcc7fc0"
+        }
+      },
+      "action": {
+        "binningOverride": 1,
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x0270207ca5a4ce62 c23553d21ac060df"
+        }
+      },
+      "action": {
+        "binningOverride": 1
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0xea8fab72c3e88612 2eaae3c34eb86e94"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x2a7989f7c61e7042 bf702e91d366fd9b"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x843a0d494e5680eb 4abd67a2567e4d84"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 56,
+          "ldsSpillLimitDwords": 1536
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xf872897ec301765d afab576853dcec75"
+        }
+      },
+      "action": {
+        "binningOverride": 1
+      }
+    }
+  ]
+}

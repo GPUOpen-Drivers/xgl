@@ -1,0 +1,187 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xc79a37cd260277ef e5ca053e0978210f"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1,
+          "unrollThreshold": 900
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x8af14cff0496e80b d73aafa65ed26e2c"
+        }
+      },
+      "action": {
+        "binningOverride": 2
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x70379e5982d0d369 fbf50b9f866b1daa"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLoopUnrolls": 1,
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x620a4e559eb52ded 870db091946a7585"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLoopUnrolls": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xb60900b3e1256ddf c7a889dbac76f591"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLoopUnrolls": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x435a117d4c9a824b 4e7f7bfeb93755b6"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1,
+          "unrollThreshold": 900
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xd22a4fe1a6b61288 879b2b5c5f578eb0"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x9e4c92d858a55778 56901799f5cbb608"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xe394e60e5ec992fd 3688a97277e808f7"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xc49272618f2ac58c 8e0b62aa62452b75"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLoopUnrolls": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x7fe1bab7a796a797 7765a6faeb079ff9"
+        }
+      },
+      "action": {
+        "ps": {
+          "unrollThreshold": 900
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xb020780b537a01c4 26365f3e39be59e6"
+        }
+      },
+      "action": {
+        "ps": {
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xe0a7e913f914052f 26cad2ef6c447782"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x154112d144c95de5 ecf087b422ed60ce"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    }
+  ]
+}

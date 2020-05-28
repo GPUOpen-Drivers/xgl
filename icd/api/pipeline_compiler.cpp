@@ -730,6 +730,10 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         hash.Update(pCreateInfo->pipelineProfileKey);
         hash.Update(deviceIdx);
         hash.Update(pCreateInfo->compilerType);
+        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+        {
+            hash.Update(reinterpret_cast<const uint8_t*>(settings.llpcOptions), sizeof(settings.llpcOptions));
+        }
         hash.Finalize(pCacheId->bytes);
 
         cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
@@ -920,6 +924,10 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         hash.Update(pCreateInfo->pipelineProfileKey);
         hash.Update(deviceIdx);
         hash.Update(pCreateInfo->compilerType);
+        if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
+        {
+            hash.Update(reinterpret_cast<const uint8_t*>(settings.llpcOptions), sizeof(settings.llpcOptions));
+        }
         hash.Finalize(pCacheId->bytes);
 
         cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
@@ -1294,6 +1302,25 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.nggState.enableSphereCulling        = settings.nggEnableSphereCulling;
         pCreateInfo->pipelineInfo.nggState.enableSmallPrimFilter      = settings.nggEnableSmallPrimFilter;
         pCreateInfo->pipelineInfo.nggState.enableCullDistanceCulling  = settings.nggEnableCullDistanceCulling;
+
+        if (settings.requireMrtForNggCulling)
+        {
+            uint32_t numTargets = 0;
+            for (uint32_t i = 0; i < Pal::MaxColorTargets; ++i)
+            {
+                numTargets += pCreateInfo->pipelineInfo.cbState.target[i].channelWriteMask ? 1 : 0;
+            }
+
+            if (numTargets < 2)
+            {
+                pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling     = false;
+                pCreateInfo->pipelineInfo.nggState.enableFrustumCulling      = false;
+                pCreateInfo->pipelineInfo.nggState.enableBoxFilterCulling    = false;
+                pCreateInfo->pipelineInfo.nggState.enableSphereCulling       = false;
+                pCreateInfo->pipelineInfo.nggState.enableSmallPrimFilter     = false;
+                pCreateInfo->pipelineInfo.nggState.enableCullDistanceCulling = false;
+            }
+        }
 
         pCreateInfo->pipelineInfo.nggState.backfaceExponent           = settings.nggBackfaceExponent;
         pCreateInfo->pipelineInfo.nggState.subgroupSizing             =

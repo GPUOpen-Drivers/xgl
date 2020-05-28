@@ -44,17 +44,24 @@ namespace vk
 
 // =====================================================================================================================
 CmdPool::CmdPool(
-    Device*              pDevice,
-    Pal::ICmdAllocator** pPalCmdAllocators,
-    uint32_t             queueFamilyIndex,
-    bool                 sharedCmdAllocator)
+    Device*                   pDevice,
+    Pal::ICmdAllocator**      pPalCmdAllocators,
+    uint32_t                  queueFamilyIndex,
+    VkCommandPoolCreateFlags  flags,
+    bool                      sharedCmdAllocator)
     :
     m_pDevice(pDevice),
     m_queueFamilyIndex(queueFamilyIndex),
     m_sharedCmdAllocator(sharedCmdAllocator),
-    m_cmdBufferRegistry(32, pDevice->VkInstance()->Allocator()),
-    m_totalEventMgrCount(0)
+    m_cmdBufferRegistry(32, pDevice->VkInstance()->Allocator())
 {
+    m_flags.u32All = 0;
+
+    if (flags & VK_COMMAND_POOL_CREATE_PROTECTED_BIT)
+    {
+        m_flags.isProtected = true;
+    }
+
     memcpy(m_pPalCmdAllocators, pPalCmdAllocators, sizeof(pPalCmdAllocators[0]) * pDevice->NumPalDevices());
 }
 
@@ -101,7 +108,6 @@ VkResult CmdPool::Create(
         // object in a single thread at any given time, we don't need a thread safe CmdAllocator.
         Pal::CmdAllocatorCreateInfo createInfo = { };
 
-        createInfo.flags.threadSafe               = 1;
         createInfo.flags.autoMemoryReuse          = 1;
         createInfo.flags.disableBusyChunkTracking = 1;
 
@@ -167,6 +173,7 @@ VkResult CmdPool::Create(
             pDevice,
             pPalCmdAllocator,
             pCreateInfo->queueFamilyIndex,
+            pCreateInfo->flags,
             pSettings->useSharedCmdAllocator);
 
         VkCommandPool handle = CmdPool::HandleFromVoidPointer(pMemory);
@@ -226,7 +233,8 @@ VkResult CmdPool::Destroy(
 }
 
 // =====================================================================================================================
-VkResult CmdPool::PalCmdAllocatorReset()
+// Resets the PAL command allocators
+VkResult CmdPool::ResetCmdAllocator()
 {
     Pal::Result result = Pal::Result::Success;
 
@@ -255,7 +263,6 @@ VkResult CmdPool::Reset(VkCommandPoolResetFlags flags)
     for (auto it = m_cmdBufferRegistry.Begin(); (it.Get() != nullptr) && (result == VK_SUCCESS); it.Next())
     {
         // Per-spec we always have to do a command buffer reset that also releases the used resources.
-
         result = it.Get()->key->Reset(VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT);
     }
 
@@ -265,7 +272,7 @@ VkResult CmdPool::Reset(VkCommandPoolResetFlags flags)
         // CmdAllocator objects, not a single shared one.
         if (m_sharedCmdAllocator == false)
         {
-            result = PalCmdAllocatorReset();
+            result = ResetCmdAllocator();
         }
     }
 

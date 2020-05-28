@@ -889,6 +889,10 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             }
         }
 
+        pInfo->bindDepthStencilObject  = true;
+        pInfo->bindTriangleRasterState = true;
+        pInfo->bindInputAssemblyState  = true;
+
         const VkPipelineViewportStateCreateInfo* pVp = pGraphicsPipelineCreateInfo->pViewportState;
 
         if (pVp != nullptr)
@@ -1140,13 +1144,14 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
         if ((dbFormat != VK_FORMAT_UNDEFINED) && (pDs != nullptr))
         {
-            pInfo->ds.stencilEnable     = (pDs->stencilTestEnable == VK_TRUE);
-            pInfo->ds.depthEnable       = (pDs->depthTestEnable == VK_TRUE);
-            pInfo->ds.depthWriteEnable  = (pDs->depthWriteEnable == VK_TRUE);
-            pInfo->ds.depthFunc         = VkToPalCompareFunc(pDs->depthCompareOp);
-            pInfo->ds.depthBoundsEnable = (pDs->depthBoundsTestEnable == VK_TRUE);
+            pInfo->immedInfo.depthStencilCreateInfo.stencilEnable     = (pDs->stencilTestEnable == VK_TRUE);
+            pInfo->immedInfo.depthStencilCreateInfo.depthEnable       = (pDs->depthTestEnable == VK_TRUE);
+            pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable  = (pDs->depthWriteEnable == VK_TRUE);
+            pInfo->immedInfo.depthStencilCreateInfo.depthFunc         = VkToPalCompareFunc(pDs->depthCompareOp);
+            pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable = (pDs->depthBoundsTestEnable == VK_TRUE);
 
-            if (pInfo->ds.depthBoundsEnable && dynamicStateFlags[VK_DYNAMIC_STATE_DEPTH_BOUNDS] == false)
+            if ((pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable) &&
+                (dynamicStateFlags[VK_DYNAMIC_STATE_DEPTH_BOUNDS] == false))
             {
                 pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BOUNDS;
             }
@@ -1171,25 +1176,25 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         }
         else
         {
-            pInfo->ds.depthEnable       = false;
-            pInfo->ds.depthWriteEnable  = false;
-            pInfo->ds.depthFunc         = Pal::CompareFunc::Always;
-            pInfo->ds.depthBoundsEnable = false;
-            pInfo->ds.stencilEnable     = false;
+            pInfo->immedInfo.depthStencilCreateInfo.depthEnable       = false;
+            pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable  = false;
+            pInfo->immedInfo.depthStencilCreateInfo.depthFunc         = Pal::CompareFunc::Always;
+            pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable = false;
+            pInfo->immedInfo.depthStencilCreateInfo.stencilEnable     = false;
         }
 
         constexpr uint8_t DefaultStencilOpValue = 1;
 
         if (pDs != nullptr)
         {
-            pInfo->ds.front.stencilFailOp      = VkToPalStencilOp(pDs->front.failOp);
-            pInfo->ds.front.stencilPassOp      = VkToPalStencilOp(pDs->front.passOp);
-            pInfo->ds.front.stencilDepthFailOp = VkToPalStencilOp(pDs->front.depthFailOp);
-            pInfo->ds.front.stencilFunc        = VkToPalCompareFunc(pDs->front.compareOp);
-            pInfo->ds.back.stencilFailOp       = VkToPalStencilOp(pDs->back.failOp);
-            pInfo->ds.back.stencilPassOp       = VkToPalStencilOp(pDs->back.passOp);
-            pInfo->ds.back.stencilDepthFailOp  = VkToPalStencilOp(pDs->back.depthFailOp);
-            pInfo->ds.back.stencilFunc         = VkToPalCompareFunc(pDs->back.compareOp);
+            pInfo->immedInfo.depthStencilCreateInfo.front.stencilFailOp      = VkToPalStencilOp(pDs->front.failOp);
+            pInfo->immedInfo.depthStencilCreateInfo.front.stencilPassOp      = VkToPalStencilOp(pDs->front.passOp);
+            pInfo->immedInfo.depthStencilCreateInfo.front.stencilDepthFailOp = VkToPalStencilOp(pDs->front.depthFailOp);
+            pInfo->immedInfo.depthStencilCreateInfo.front.stencilFunc        = VkToPalCompareFunc(pDs->front.compareOp);
+            pInfo->immedInfo.depthStencilCreateInfo.back.stencilFailOp       = VkToPalStencilOp(pDs->back.failOp);
+            pInfo->immedInfo.depthStencilCreateInfo.back.stencilPassOp       = VkToPalStencilOp(pDs->back.passOp);
+            pInfo->immedInfo.depthStencilCreateInfo.back.stencilDepthFailOp  = VkToPalStencilOp(pDs->back.depthFailOp);
+            pInfo->immedInfo.depthStencilCreateInfo.back.stencilFunc         = VkToPalCompareFunc(pDs->back.compareOp);
 
             pInfo->immedInfo.stencilRefMasks.frontRef       = static_cast<uint8_t>(pDs->front.reference);
             pInfo->immedInfo.stencilRefMasks.frontReadMask  = static_cast<uint8_t>(pDs->front.compareMask);
@@ -1433,10 +1438,10 @@ VkResult GraphicsPipeline::Create(
             }
 
             // Create the PAL depth stencil state object
-            if (palResult == Pal::Result::Success)
+            if ((palResult == Pal::Result::Success) && localPipelineInfo.bindDepthStencilObject)
             {
                 palResult = pRSCache->CreateDepthStencilState(
-                    localPipelineInfo.ds,
+                    localPipelineInfo.immedInfo.depthStencilCreateInfo,
                     pAllocator,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                     pPalDepthStencil);
@@ -1472,6 +1477,9 @@ VkResult GraphicsPipeline::Create(
             localPipelineInfo.pLayout,
             localPipelineInfo.immedInfo,
             localPipelineInfo.staticStateMask,
+            localPipelineInfo.bindDepthStencilObject,
+            localPipelineInfo.bindTriangleRasterState,
+            localPipelineInfo.bindInputAssemblyState,
             vbInfo,
             pPalMsaa,
             pPalColorBlend,
@@ -1500,7 +1508,11 @@ VkResult GraphicsPipeline::Create(
     {
         pRSCache->DestroyMsaaState(pPalMsaa, pAllocator);
         pRSCache->DestroyColorBlendState(pPalColorBlend, pAllocator);
-        pRSCache->DestroyDepthStencilState(pPalDepthStencil, pAllocator);
+
+        if (pPalDepthStencil[0] != nullptr)
+        {
+            pRSCache->DestroyDepthStencilState(pPalDepthStencil, pAllocator);
+        }
 
         // Something went wrong with creating the PAL object. Free memory and return error.
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
@@ -1542,6 +1554,9 @@ GraphicsPipeline::GraphicsPipeline(
     const PipelineLayout*                  pLayout,
     const ImmedInfo&                       immedInfo,
     uint32_t                               staticStateMask,
+    bool                                   bindDepthStencilObject,
+    bool                                   bindTriangleRasterState,
+    bool                                   bindInputAssemblyState,
     const VbBindingInfo&                   vbInfo,
     Pal::IMsaaState**                      pPalMsaa,
     Pal::IColorBlendState**                pPalColorBlend,
@@ -1560,11 +1575,14 @@ GraphicsPipeline::GraphicsPipeline(
 {
     Pipeline::Init(pPalPipeline, pLayout, pBinary, staticStateMask, apiHash);
 
-    m_flags.viewIndexFromDeviceIndex = viewIndexFromDeviceIndex;
-
     memcpy(m_pPalMsaa,         pPalMsaa,         sizeof(pPalMsaa[0])         * pDevice->NumPalDevices());
     memcpy(m_pPalColorBlend,   pPalColorBlend,   sizeof(pPalColorBlend[0])   * pDevice->NumPalDevices());
     memcpy(m_pPalDepthStencil, pPalDepthStencil, sizeof(pPalDepthStencil[0]) * pDevice->NumPalDevices());
+
+    m_flags.viewIndexFromDeviceIndex = viewIndexFromDeviceIndex;
+    m_flags.bindDepthStencilObject   = bindDepthStencilObject;
+    m_flags.bindTriangleRasterState  = bindTriangleRasterState;
+    m_flags.bindInputAssemblyState   = bindInputAssemblyState;
 
     CreateStaticState();
 
@@ -1580,8 +1598,8 @@ void GraphicsPipeline::CreateStaticState()
     RenderStateCache* pCache = m_pDevice->GetRenderStateCache();
     auto* pStaticTokens      = &m_info.staticTokens;
 
-    pStaticTokens->inputAssemblyState         = pCache->CreateInputAssemblyState(m_info.inputAssemblyState);
-    pStaticTokens->triangleRasterState        = pCache->CreateTriangleRasterState(m_info.triangleRasterState);
+    pStaticTokens->inputAssemblyState         = DynamicRenderStateToken;
+    pStaticTokens->triangleRasterState        = DynamicRenderStateToken;
     pStaticTokens->pointLineRasterState       = DynamicRenderStateToken;
     pStaticTokens->depthBias                  = DynamicRenderStateToken;
     pStaticTokens->blendConst                 = DynamicRenderStateToken;
@@ -1591,6 +1609,16 @@ void GraphicsPipeline::CreateStaticState()
     pStaticTokens->samplePattern              = DynamicRenderStateToken;
     pStaticTokens->waveLimits                 = DynamicRenderStateToken;
     pStaticTokens->lineStippleState           = DynamicRenderStateToken;
+
+    if (m_flags.bindInputAssemblyState)
+    {
+        pStaticTokens->inputAssemblyState = pCache->CreateInputAssemblyState(m_info.inputAssemblyState);
+    }
+
+    if (m_flags.bindTriangleRasterState)
+    {
+        pStaticTokens->triangleRasterState = pCache->CreateTriangleRasterState(m_info.triangleRasterState);
+    }
 
     if (ContainsStaticState(DynamicStatesInternal::LINE_WIDTH))
     {
@@ -1644,13 +1672,23 @@ void GraphicsPipeline::DestroyStaticState(
 
     pCache->DestroyMsaaState(m_pPalMsaa, pAllocator);
     pCache->DestroyColorBlendState(m_pPalColorBlend, pAllocator);
-    pCache->DestroyDepthStencilState(m_pPalDepthStencil, pAllocator);
 
-    pCache->DestroyInputAssemblyState(m_info.inputAssemblyState,
-                                      m_info.staticTokens.inputAssemblyState);
+    if (m_pPalDepthStencil[0] != nullptr)
+    {
+        pCache->DestroyDepthStencilState(m_pPalDepthStencil, pAllocator);
+    }
 
-    pCache->DestroyTriangleRasterState(m_info.triangleRasterState,
-                                       m_info.staticTokens.triangleRasterState);
+    if (m_flags.bindInputAssemblyState)
+    {
+        pCache->DestroyInputAssemblyState(m_info.inputAssemblyState,
+                                          m_info.staticTokens.inputAssemblyState);
+    }
+
+    if (m_flags.bindTriangleRasterState)
+    {
+        pCache->DestroyTriangleRasterState(m_info.triangleRasterState,
+                                           m_info.staticTokens.triangleRasterState);
+    }
 
     pCache->DestroyPointLineRasterState(m_info.pointLineRasterParams,
                                         m_info.staticTokens.pointLineRasterState);
@@ -1798,22 +1836,32 @@ void GraphicsPipeline::BindToCmdBuffer(
         }
 
         // Bind state objects that are always static; these are redundancy checked by the pointer in the command buffer.
-        pCmdBuffer->PalCmdBindDepthStencilState(pPalCmdBuf, deviceIdx, m_pPalDepthStencil[deviceIdx]);
+        if (m_flags.bindDepthStencilObject)
+        {
+            pCmdBuffer->PalCmdBindDepthStencilState(pPalCmdBuf, deviceIdx, m_pPalDepthStencil[deviceIdx]);
+
+            pRenderState->allGpuState.dirty.depthStencil = 0;
+        }
+
         pCmdBuffer->PalCmdBindColorBlendState(pPalCmdBuf, deviceIdx, m_pPalColorBlend[deviceIdx]);
         pCmdBuffer->PalCmdBindMsaaState(pPalCmdBuf, deviceIdx, m_pPalMsaa[deviceIdx]);
 
         // Write parameters that are marked static pipeline state.  Redundancy check these based on static tokens:
         // skip the write if the previously written static token matches.
-        if (CmdBuffer::IsStaticStateDifferent(oldTokens.inputAssemblyState, newTokens.inputAssemblyState))
+
+        if (CmdBuffer::IsStaticStateDifferent(oldTokens.inputAssemblyState, newTokens.inputAssemblyState) &&
+                m_flags.bindInputAssemblyState)
         {
             pPalCmdBuf->CmdSetInputAssemblyState(m_info.inputAssemblyState);
             pRenderState->allGpuState.staticTokens.inputAssemblyState = newTokens.inputAssemblyState;
         }
 
-        if (CmdBuffer::IsStaticStateDifferent(oldTokens.triangleRasterState, newTokens.triangleRasterState))
+        if (CmdBuffer::IsStaticStateDifferent(oldTokens.triangleRasterState, newTokens.triangleRasterState) &&
+                m_flags.bindTriangleRasterState)
         {
             pPalCmdBuf->CmdSetTriangleRasterState(m_info.triangleRasterState);
             pRenderState->allGpuState.staticTokens.triangleRasterState = newTokens.triangleRasterState;
+            pRenderState->allGpuState.dirty.rasterState = 0;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::LINE_WIDTH) &&
@@ -1932,5 +1980,4 @@ void GraphicsPipeline::BindNullPipeline(CmdBuffer* pCmdBuffer)
         pPalCmdBuf->CmdBindDepthStencilState(nullptr);
     }
 }
-
 } // namespace vk

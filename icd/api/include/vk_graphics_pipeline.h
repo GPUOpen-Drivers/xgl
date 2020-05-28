@@ -217,6 +217,7 @@ protected:
         Pal::StencilRefMaskParams             stencilRefMasks;
         SamplePattern                         samplePattern;
         Pal::DynamicGraphicsShaderInfos       graphicsWaveLimitParams;
+        Pal::DepthStencilStateCreateInfo      depthStencilCreateInfo;
 
         // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
         // state programming during pipeline binds.
@@ -242,6 +243,9 @@ protected:
         const PipelineLayout*                  pLayout,
         const ImmedInfo&                       immedInfo,
         uint32_t                               staticStateMask,
+        bool                                   bindDepthStencilObject,
+        bool                                   bindTriangleRasterState,
+        bool                                   bindInputAssemblyState,
         const VbBindingInfo&                   vbInfo,
         Pal::IMsaaState**                      pPalMsaa,
         Pal::IColorBlendState**                pPalColorBlend,
@@ -270,6 +274,9 @@ protected:
         VkShaderStageFlagBits                       activeStages;
         uint32_t                                    rasterizationStream;
         bool                                        bresenhamEnable;
+        bool                                        bindDepthStencilObject;
+        bool                                        bindTriangleRasterState;
+        bool                                        bindInputAssemblyState;
     };
 
     static void ConvertGraphicsPipelineInfo(
@@ -334,7 +341,6 @@ private:
     Pal::IColorBlendState*    m_pPalColorBlend[MaxPalDevices];    // PAL color blend state object
     Pal::IDepthStencilState*  m_pPalDepthStencil[MaxPalDevices];  // PAL depth stencil state object
     VbBindingInfo             m_vbInfo;                           // Information about vertex buffer bindings
-
     uint32_t                  m_coverageSamples;
 
     union
@@ -343,7 +349,10 @@ private:
         struct
         {
             uint8_t viewIndexFromDeviceIndex : 1;
-            uint8_t reserved                 : 7;
+            uint8_t bindDepthStencilObject   : 1;
+            uint8_t bindTriangleRasterState  : 1;
+            uint8_t bindInputAssemblyState   : 1;
+            uint8_t reserved                 : 4;
         };
     } m_flags;
 };

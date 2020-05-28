@@ -183,6 +183,11 @@ VkResult Sampler::Create(
         case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
             pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pVkSamplerYCbCrConversionInfo->conversion)->GetMetaData();
             pSamplerYCbCrConversionMetaData->word1.lumaFilter = samplerInfo.filter.minification;
+
+            if (pSamplerYCbCrConversionMetaData->word0.forceExplicitReconstruct)
+            {
+                samplerInfo.flags.truncateCoords = 0;
+            }
             break;
 
         default:

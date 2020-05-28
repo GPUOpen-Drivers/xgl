@@ -867,7 +867,7 @@ VkResult PhysicalDevice::Initialize()
         VK_ASSERT(m_memoryProperties.memoryHeapCount <= Pal::GpuHeapCount);
     }
 
-    m_memoryTypeMaskForExternalSharing = GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    m_memoryTypeMaskForExternalSharing = m_memoryTypeMask;
 
     if (result == Pal::Result::Success)
     {
@@ -3021,6 +3021,12 @@ VkResult PhysicalDevice::GetSurfaceFormats(
 
     Pal::IScreen* pScreen = displayableInfo.pScreen;
     isWindowed = (displayableInfo.icdPlatform != VK_ICD_WSI_PLATFORM_DISPLAY);
+
+    if (pScreen != nullptr)
+    {
+        Pal::Result palResult = pScreen->GetColorCapabilities(&palColorCaps);
+        VK_ASSERT(palResult == Pal::Result::Success);
+    }
 
     bool needsWorkaround = pScreen == nullptr ? isWindowed :
                            (palColorCaps.supportedColorSpaces == Pal::ScreenColorSpace::TfUndefined);

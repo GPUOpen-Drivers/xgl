@@ -92,30 +92,30 @@ void VertBufBindingMgr::BindVertexBuffers(
     uint32_t            firstBinding,
     uint32_t            bindingCount,
     const VkBuffer*     pInBuffers,
-    const VkDeviceSize* pInOffsets)
+    const VkDeviceSize* pInOffsets,
+    const VkDeviceSize* pInSizes,
+    const VkDeviceSize* pInStrides)
 {
     utils::IterateMask deviceGroup(pCmdBuf->GetDeviceMask());
     do
     {
         const uint32_t deviceIdx = deviceGroup.Index();
 
-        const VkBuffer*     pBuffers = pInBuffers;
-        const VkDeviceSize* pOffsets = pInOffsets;
-
         Pal::BufferViewInfo* pBinding    = &m_bindings[deviceIdx][firstBinding];
         Pal::BufferViewInfo* pEndBinding = pBinding + bindingCount;
+        uint32_t             inputIdx    = 0;
 
         while (pBinding != pEndBinding)
         {
-            const VkBuffer     buffer = *pBuffers;
-            const VkDeviceSize offset = *pOffsets;
+            const VkBuffer     buffer = pInBuffers[inputIdx];
+            const VkDeviceSize offset = pInOffsets[inputIdx];
 
             if (buffer != VK_NULL_HANDLE)
             {
                 const Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
 
                 pBinding->gpuAddr = pBuffer->GpuVirtAddr(deviceIdx) + offset;
-                pBinding->range   = pBuffer->GetSize() - offset;
+                pBinding->range   = (pInSizes != nullptr) ? pInSizes[inputIdx] : pBuffer->GetSize() - offset;
             }
             else
             {
@@ -123,8 +123,12 @@ void VertBufBindingMgr::BindVertexBuffers(
                 pBinding->range   = 0;
             }
 
-            pBuffers++;
-            pOffsets++;
+            if (pInStrides != nullptr)
+            {
+                pBinding->stride = pInStrides[inputIdx];
+            }
+
+            inputIdx++;
             pBinding++;
         }
 

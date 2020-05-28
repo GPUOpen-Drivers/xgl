@@ -1,0 +1,292 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x505651ac055f537a c4d98df71afd07b9"
+        }
+      },
+      "action": {
+        "ps": {
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xd226ba9e2a5bd8d6 9bf782559b7e4c74"
+        }
+      },
+      "action": {
+        "ps": {
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x67f3b02e8a770712 9396e9ef9ff3f616"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xa1bad82b65ab5760 32661abee21c5880"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x349f0cb03a54d3fb 849a89c60b8d27f6"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xb0f626077cdbd932 b1372dad4ec698e7"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xd33a2617087d2e05 dc3e0e358dbe7ec8"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x88e3517dbb964d7f 2ae8021f616da377"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xc7a986985a693f84 406b42fb06da1db4"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xab7e77553a4790f7 5213d389b1f5f611"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x579f291ba16e8526 7c84a20ece7a38d"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0xf8d297ebb07612cd 476e6779bd4275fd"
+        }
+      },
+      "action": {
+        "cs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x6cfa095297e1ebd9 c5503c7adcb99118"
+        }
+      },
+      "action": {
+        "cs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0x8a53595f143c1d12 1a19414c76783df3"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x1784cca187ca2131 5c992b149fde1aca"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x2f8bd73037839855 f514eacf88a02a7d"
+        }
+      },
+      "action": {
+        "ps": {
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0x77c34b1c08b3c185 be3c260d6ec230af"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0x86c9baf4d3389204 601e54d3f386cdb8"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0xb396d24454277733 efc9aaba5e5ea0e9"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0x59790c4419a57854 c5d36b08c4b35cb7"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0xca6c4ec171d01ec1 1436591682e49aa4"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0x6aa53b86573dcb39 3fd5a53e2881bcaa"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    }
+  ]
+}

@@ -331,6 +331,12 @@ constexpr AppProfilePatternEntry  AppEngineRAGE
     "sga"
 };
 
+constexpr AppProfilePatternEntry AppNameDoomEternal =
+{
+    PatternAppNameLower,
+    "doometernal"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -340,6 +346,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::Doom,
         {
             AppNameDoom,
+            AppEngineIdTech,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::DoomEternal,
+        {
+            AppNameDoomEternal,
             AppEngineIdTech,
             PatternEnd
         }

@@ -201,6 +201,17 @@ VkResult InternalMemMgr::Init()
             &m_pCommonPools[InternalPoolCpuCacheableGpuUncached]);
     }
 
+    if (result == VK_SUCCESS)
+    {
+        m_commonPoolProps[InternalPoolDebugDump] = m_commonPoolProps[InternalPoolCpuCacheableGpuUncached];
+
+        m_commonPoolProps[InternalPoolDebugDump].flags.debug = 1;
+
+        result = CalcSubAllocationPool(
+            m_commonPoolProps[InternalPoolDebugDump],
+            &m_pCommonPools[InternalPoolDebugDump]);
+    }
+
     return result;
 }
 

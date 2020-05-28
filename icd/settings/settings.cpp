@@ -474,6 +474,35 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.delayFullScreenAcquireToFirstPresent = true;
         }
 
+        if (appProfile == AppProfile::DoomEternal)
+        {
+
+            m_settings.barrierFilterOptions = SkipStrayExecutionDependencies | ForceImageSharingModeExclusive;
+
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
+                m_settings.forceDccForColorAttachments = false;
+
+                // Doom Eternal performs better with NGG disabled (3% gain on 4k), likely because idTech runs it's own
+                // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.
+                m_settings.enableNgg = false;
+
+                m_settings.asyncComputeQueueMaxWavesPerCu = 40;
+            }
+
+            // PM4 optimizations give us 1% gain
+            m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
+
+            m_settings.enableSpvPerfOptimal = true;
+
+            // id games are known to query instance-level functions with vkGetDeviceProcAddr illegally thus we
+            // can't do any better than returning a non-null function pointer for them.
+            m_settings.lenientInstanceFuncQuery = true;
+
+            m_settings.alwaysReportHdrFormats = true;
+        }
+
         if (appProfile == AppProfile::SaschaWillemsExamples)
         {
             m_settings.forceDepthClampBasedOnZExport = true;
@@ -691,6 +720,8 @@ void VulkanSettingsLoader::UpdatePalSettings()
     // Set it to true for applications that have perf drops
     pPalSettings->depthClampBasedOnZExport = m_settings.forceDepthClampBasedOnZExport;
 #endif
+
+    pPalSettings->cpDmaCmdCopyMemoryMaxBytes = m_settings.cpDmaCmdCopyMemoryMaxBytes;
 
 }
 

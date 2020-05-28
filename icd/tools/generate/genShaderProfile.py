@@ -132,7 +132,7 @@ def parseJsonProfileEntryPattern(pattern):
         print("************ Parsing failed ****************")
         return success, codePattern
 
-def parseJsonFlags(key, flag):
+def parseJsonFlags(key, flags):
     cppCode = ""
     success = False
     return success, cppCode
@@ -239,12 +239,19 @@ def parseJsonProfileEntryAction(action):
         if branch not in result:
             result[branch] = False
 
-    success = checkValidKeys(action, ENTRIES_TEMPLATE["entries"]["action"]) or checkValidKeys(action, PIPELINE_ACTION)
+    success = True
+    for actionKey in action:
+        if actionKey in ENTRIES_TEMPLATE["entries"]["action"]:
+            success &= True
+        elif actionKey in PIPELINE_ACTION:
+            success &= True
+        else:
+            success = False
+
     codeAction = ""
     if success:
-        for actionKey in [*action]:
+        for actionKey, actionValue in action.items():
             cppCode = ""
-            actionValue = action[actionKey]
 
             if actionKey in ENTRIES_TEMPLATE["entries"]["action"]:
                 if type(actionValue) in ENTRIES_TEMPLATE["entries"]["action"][actionKey]["type"]:
@@ -300,7 +307,7 @@ def genProfile(dict, compiler, gfxip):
             result[branch] = False
 
     for entry in entries:
-        if checkValidKeys(entry, ENTRIES_TEMPLATE["entries"]) or checkValidKeys(entry, PIPELINE_ACTION):
+        if checkValidKeys(entry, ENTRIES_TEMPLATE["entries"]):
             pattern = entry["pattern"]
             action = entry["action"]
 
@@ -728,7 +735,6 @@ def checkValidKeys(obj1, obj2):
 
     elif isinstance(obj1, list) and isinstance(obj2, dict):
         for key in obj1:
-
             if key in [*obj2]:
                 pass
             else:

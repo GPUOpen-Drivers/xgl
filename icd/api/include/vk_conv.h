@@ -2995,7 +2995,7 @@ VK_INLINE Pal::ResolveMode VkToPalResolveMode(
     }
 }
 
-VK_INLINE Pal::ResourceDescriptionDescriptorType VkDescriptorTypeToPalDescriptorType(
+VK_INLINE Pal::ResourceDescriptionDescriptorType VkToPalDescriptorType(
     VkDescriptorType vkType)
 {
     Pal::ResourceDescriptionDescriptorType retType = Pal::ResourceDescriptionDescriptorType::Count;

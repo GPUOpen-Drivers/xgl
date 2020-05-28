@@ -305,6 +305,39 @@ void SqttCmdBufferState::Begin(
 void SqttCmdBufferState::End()
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
+    // If instruction tracing was enabled for this Command List,
+    // insert a barrier used to wait for all trace data to finish writing.
+    if (m_instructionTrace.started && m_settings.rgpInstTraceBarrierEnabled)
+    {
+        // Select the pipe point based on the bound pipeline's type.
+        Pal::HwPipePoint pipePoint = Pal::HwPipeTop;
+        if (m_instructionTrace.bindPoint == VK_PIPELINE_BIND_POINT_GRAPHICS)
+        {
+            pipePoint = Pal::HwPipePostPs;
+        }
+        else if (m_instructionTrace.bindPoint == VK_PIPELINE_BIND_POINT_COMPUTE)
+        {
+            pipePoint = Pal::HwPipePostCs;
+        }
+        else
+        {
+            // Invalid pipeline type.
+            PAL_ASSERT_ALWAYS();
+        }
+
+        Pal::BarrierInfo barrierInfo   = {};
+        barrierInfo.waitPoint          = Pal::HwPipeTop;
+        barrierInfo.pipePointWaitCount = 1;
+        barrierInfo.pPipePoints        = &pipePoint;
+        barrierInfo.reason             = RgpBarrierInternalInstructionTraceStall;
+
+        m_pCmdBuf->PalCmdBuffer(DefaultDeviceIndex)->CmdBarrier(barrierInfo);
+    }
+#endif
+
+    WriteCbEndMarker();
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
     if ((m_pDevModeMgr != nullptr) &&
         (m_instructionTrace.started))
     {
@@ -312,8 +345,6 @@ void SqttCmdBufferState::End()
         m_instructionTrace.started = false;
     }
 #endif
-
-    WriteCbEndMarker();
 }
 
 // =====================================================================================================================

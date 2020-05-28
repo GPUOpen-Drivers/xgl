@@ -572,7 +572,8 @@ enum RgpBarrierReason : uint32_t
     RgpBarrierInternalPreResetQueryPoolSync       = RgpBarrierInternalBase + 0,
     RgpBarrierInternalPostResetQueryPoolSync      = RgpBarrierInternalBase + 1,
     RgpBarrierInternalGpuEventRecycleStall        = RgpBarrierInternalBase + 2,
-    RgpBarrierInternalPreCopyQueryPoolResultsSync = RgpBarrierInternalBase + 3
+    RgpBarrierInternalPreCopyQueryPoolResultsSync = RgpBarrierInternalBase + 3,
+    RgpBarrierInternalInstructionTraceStall       = RgpBarrierInternalBase + 4
 };
 
 };

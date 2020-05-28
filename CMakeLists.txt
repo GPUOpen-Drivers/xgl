@@ -74,7 +74,10 @@ endif()
 
 ### Cached Project Options #############################################################################################
 
+option(XGL_ENABLE_LTO "Build with LTO enabled?" ON)
+
 option(ICD_BUILD_LLPC "Build LLPC?" ON)
+cmake_dependent_option(ICD_COMPILER_DEFAULT "Default value of compiler" ON "ICD_BUILD_LLPC" OFF)
 option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
 option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)
 option(XGL_BUILD_RENOIR "Build open source vulkan for Renoir?" ON)
@@ -94,6 +97,12 @@ if(ICD_BUILD_LLPCONLY)
 endif()
 
 option(ICD_BUILD_VIDEO "Build Video Support?" OFF)
+
+set(XGL_USE_SANITIZER "" CACHE STRING "Build with sanitizers, e.g. Address;Undefined")
+
+if(XGL_USE_SANITIZER)
+    set(LLVM_USE_SANITIZER "${XGL_USE_SANITIZER}" CACHE BOOL "LLVM_USE_SANITIZER is overridden." FORCE)
+endif()
 
 option(XGL_LLVM_UPSTREAM "Build with upstreamed LLVM?" OFF)
 
@@ -169,11 +178,14 @@ if(ICD_GPUOPEN_DEVMODE_BUILD)
 endif()
 
 # PAL
+if(EXISTS ${PROJECT_SOURCE_DIR}/../pal)
+    set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/../pal CACHE PATH "Specify the path to the PAL project.")
+endif()
 set(PAL_BUILD_JEMALLOC OFF CACHE BOOL "Force jemalloc off" FORCE)
-set(XGL_PAL_PATH ${PROJECT_SOURCE_DIR}/../pal CACHE PATH "Specify the path to the PAL project.")
 set(PAL_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_PAL_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(PAL_CLIENT_INTERFACE_MINOR_VERSION ${ICD_PAL_CLIENT_MINOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(PAL_CLIENT "VULKAN" CACHE STRING "${PROJECT_NAME} override." FORCE)
+set(PAL_ENABLE_LTO ${XGL_ENABLE_LTO} CACHE BOOL "XGL override to build PAL with LTO support" FORCE)
 
 set(PAL_MEMTRACK ${ICD_MEMTRACK} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GPUOPEN ${ICD_GPUOPEN_DEVMODE_BUILD} CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -190,6 +202,82 @@ if (BUILD_WAYLAND_SUPPORT)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(WAYLAND REQUIRED wayland-client)
 endif()
+
+# Sanitizers
+# Temporary variables
+set(ICD_SANITIZER_LINK_FLAGS "")
+set(ICD_SANITIZER_COMPILE_FLAGS "")
+
+macro(xgl_append_common_sanitizer_flags)
+    if(NOT MSVC)
+        # Append -fno-omit-frame-pointer and turn on debug info to get better stack traces.
+        string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fno-omit-frame-pointer")
+        if (NOT CMAKE_BUILD_TYPE_DEBUG)
+            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -gline-tables-only")
+        else()
+            # Use -O1 even in debug mode, otherwise sanitizers slowdown is too large.
+            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -O1")
+        endif()
+    elseif(CLANG_CL)
+        # Keep frame pointers around.
+        string(APPEND ICD_SANITIZER_COMPILE_FLAGS " /Oy-")
+        # Always ask the linker to produce symbols with asan.
+        string(APPEND ICD_SANITIZER_COMPILE_FLAGS " /Z7")
+        string(APPEND ICD_SANITIZER_LINK_FLAGS " -debug")
+    endif()
+endmacro()
+
+if(XGL_USE_SANITIZER)
+    # -pthread is needed sometimes to fix a cmake bug: https://gitlab.kitware.com/cmake/cmake/issues/16609
+    string(APPEND ICD_SANITIZER_LINK_FLAGS " -pthread")
+    if(UNIX)
+        if(XGL_USE_SANITIZER MATCHES "Address")
+            string(APPEND ICD_SANITIZER_LINK_FLAGS " -shared-libasan")
+        endif()
+
+        if(XGL_USE_SANITIZER STREQUAL "Address")
+            xgl_append_common_sanitizer_flags()
+            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=address")
+            string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize=address")
+        elseif(XGL_USE_SANITIZER STREQUAL "Undefined")
+            xgl_append_common_sanitizer_flags()
+            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=undefined -fno-sanitize=vptr,function \
+                                                        -fno-sanitize-recover=all")
+            string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize=undefined")
+        elseif(XGL_USE_SANITIZER STREQUAL "Thread")
+            xgl_append_common_sanitizer_flags()
+            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=thread")
+            string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize=thread")
+        elseif(XGL_USE_SANITIZER STREQUAL "Address;Undefined" OR
+               XGL_USE_SANITIZER STREQUAL "Undefined;Address")
+            xgl_append_common_sanitizer_flags()
+            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=address,undefined -fno-sanitize=vptr,function \
+                                                        -fno-sanitize-recover=all")
+            string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize=address,undefined")
+        else()
+            message(FATAL_ERROR "Unsupported value of XGL_USE_SANITIZER: ${XGL_USE_SANITIZER}")
+        endif()
+    elseif(MSVC)
+        if(XGL_USE_SANITIZER STREQUAL "Address")
+            xgl_append_common_sanitizer_flags()
+            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=address")
+            string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize=address")
+        else()
+            message(FATAL_ERROR "This sanitizer not yet supported in the MSVC environment: ${XGL_USE_SANITIZER}")
+        endif()
+    else()
+        message(FATAL_ERROR "XGL_USE_SANITIZER is not supported on this platform.")
+    endif()
+
+    if(XGL_USE_SANITIZER MATCHES "(Undefined;)?Address(;Undefined)?")
+        string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize-address-use-after-scope")
+    endif()
+endif()
+
+string(APPEND CMAKE_EXE_LINKER_FLAGS "${ICD_SANITIZER_LINK_FLAGS}")
+string(APPEND CMAKE_SHARED_LINKER_FLAGS "${ICD_SANITIZER_LINK_FLAGS}")
+string(APPEND CMAKE_C_FLAGS "${ICD_SANITIZER_COMPILE_FLAGS}")
+string(APPEND CMAKE_CXX_FLAGS "${ICD_SANITIZER_COMPILE_FLAGS}")
 
 ### Generator Dependencies #############################################################################################
 find_package(PythonInterp 3)
@@ -252,6 +340,7 @@ set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE S
 set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
 if(ICD_BUILD_LLPC)
     set(LLPC_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(LLPC_BUILD_RENOIR ${XGL_BUILD_RENOIR} CACHE BOOL "${PROJECT_NAME} override." FORCE)

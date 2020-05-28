@@ -1384,6 +1384,19 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Enable culling only if there is more than one render target.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "requireMrtForNggCulling",
+      "Name": "RequireMrtForNggCulling",
+      "Scope": "Driver"
+    },
+    {
       "Name": "NggDisableCullingVmemInstrThreshold",
       "Description": "Control the NGG culling hueristic's allowed ratio of VMEM instructions that can be duplicated because of culling. 0 is the compiler's default, not none",
       "Tags": [
@@ -3931,6 +3944,19 @@
       "Name": "EnablePartialPipelineCompile"
     },
     {
+      "Description": "Specifies the maximum threshold in bytes for linear transfer commands to use CP DMA, which have less overhead than CS/Gfx copies, but also less throughput for large copies.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 65536
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "cpDmaCmdCopyMemoryMaxBytes",
+      "Name": "CpDmaCmdCopyMemoryMaxBytes"
+    },
+    {
       "Description": "Determines the string that's used to trigger a start-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameBegin\" by default.",
       "Tags": [
         "Developer Mode"
@@ -4341,6 +4367,19 @@
       "Type": "string",
       "VariableName": "devModeRgpTraceDumpFile",
       "Size": 256
+    },
+    {
+      "Name": "RgpInstTraceBarrierEnabled",
+      "VariableName": "rgpInstTraceBarrierEnabled",
+      "Type": "bool",
+      "Description": "Controls the barrier inserted during RGP tracing when instruction trace is active which stalls at the end of the command buffer to ensure that instruction trace is not disabled while the pipeline being traced is still in flight.  This barrier has a significant effect on frame timing.",
+      "Scope": "Driver",
+      "Tags": [
+        "Developer Mode"
+      ],
+      "Defaults": {
+        "Default": true
+      }
     },
     {
       "Name": "OverrideShaderParams",

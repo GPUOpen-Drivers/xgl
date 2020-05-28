@@ -1,0 +1,148 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x4d6ae91e42846dda 45c950cf0da3b6a1"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1,
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0xbc9a17755b98ba8f b2dcac35e290d358"
+        }
+      },
+      "action": {
+        "cs": {
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x009df75bd4debca4 d287c35f916a0082"
+        }
+      },
+      "action": {
+        "ps": {
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x8a6db015d18cfa5a e7e4820e902750ad"
+        }
+      },
+      "action": {
+        "cs": {
+          "enableLoadScalarizer": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x7c7be79c0c10118b 2579c71e29f36ad5"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0x081f1c2167f254db e3a7759fcc6120f6"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x85d431dff448dcdd 802b5059f23c17e7"
+        }
+      },
+      "action": {
+        "cs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0x91950c2aeb1bc2a9 a548718852253d37"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x6b53d1fb5d5ad9ee f5bcdb9801e6037b"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0xe58161c4edb2021f 62729dc182370222"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "vs": {
+          "stageActive": true,
+          "codeHash": "0xe8d91b9b08530510 5dbe1f87f1b3ebef"
+        }
+      },
+      "action": {
+        "vs": {
+          "useSiScheduler": 1
+        }
+      }
+    }
+  ]
+}

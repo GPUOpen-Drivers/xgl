@@ -69,7 +69,9 @@ union InternalMemCreateFlags
                                         // reason.
         uint32_t needShadow       : 1;  // If a shadow table is needed.
         uint32_t needGl2Uncached  : 1;  // If a gl2Uncached is needed.
-        uint32_t reserved         : 27; // Reserved
+        uint32_t debug            : 1;  // Memory used for internal debugging (e.g. data dumping) only;
+                                        // not to be mixed with regular sub-allocations
+        uint32_t reserved         : 26; // Reserved
     };
     uint32_t u32All;
 };
@@ -208,6 +210,7 @@ enum InternalSubAllocPool
     InternalPoolGpuAccess,                  // All GPU-visible pools
     InternalPoolDescriptorTable,            // Persistent mapped pool used for descriptor sets (main table)
     InternalPoolCpuCacheableGpuUncached,    // Cacheable CPU-visible pool with enabled gl2Uncached if requred for the GPU
+    InternalPoolDebugDump,
     InternalPoolCount
 };
 

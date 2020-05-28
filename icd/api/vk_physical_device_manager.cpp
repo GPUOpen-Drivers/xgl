@@ -273,7 +273,7 @@ VkResult PhysicalDeviceManager::UpdateLockedPhysicalDeviceList(void)
     // Create a temporary array of pointers to VulkanSettingsLoader objects
     VulkanSettingsLoader* settingsArray[Pal::MaxDevices] = { nullptr };
 
-    if (palDeviceCount > 0)
+    if ((result == VK_SUCCESS) && (palDeviceCount > 0))
     {
         for (uint32_t i = 0; i < palDeviceCount; ++i)
         {

@@ -80,15 +80,21 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 
     if(CMAKE_BUILD_TYPE_RELEASE)
         target_compile_options(xgl PRIVATE -O3)
-        if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-            execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
-            if(GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
-                add_definitions("-flto -fuse-linker-plugin -Wno-odr")
+        if(XGL_ENABLE_LTO)
+            if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
+                execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
+                if(GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
+                    # add global definition to enable LTO here since some components have no option
+                    # to enable it.
+                    add_definitions("-flto -fuse-linker-plugin -Wno-odr")
+                    message(WARNING "LTO enabled for XGL")
+                endif()
+            elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
+                # add global definition to enable LTO here since some components have no option
+                # to enable it.
+                add_definitions("-flto=thin")
                 message(WARNING "LTO enabled for XGL")
             endif()
-        elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-            add_definitions("-flto=thin")
-            message(WARNING "LTO enabled for XGL")
         endif()
     endif()
 else()
@@ -153,8 +159,6 @@ if (BUILD_WAYLAND_SUPPORT)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
     target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
 endif()
-
-find_package(XCB)
 if (${XCB_RANDR_LEASE})
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_XRANDR_EXT=1)
 endif()
@@ -389,6 +393,8 @@ target_sources(xgl PRIVATE
     layers/vk_layer_switchable_graphics.cpp
 )
 
+### ICD Android interface ######################################################
+
 ### ICD Auto-generated Files ###########################################################################################
 # ICD settings code generation main script
 set(ICD_GEN_SETTINGS ${ICD_GENDIR}/genSettingsCode.py)
@@ -445,12 +451,18 @@ if (UNIX)
 
     target_link_libraries(xgl PRIVATE
         -Wl,-Bdynamic
-        -Wl,--no-undefined
         -Wl,-z,noexecstack
         -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/make/amdicd.so.def
         -Wl,-Map=${ICD_TARGET}.map
         -Wl,-soname=${ICD_TARGET}.so.1
     )
+
+    if(NOT XGL_USE_SANITIZER)
+        # -Wl,--no-undefined is incompatible with asan
+        target_link_libraries(xgl PRIVATE
+            -Wl,--no-undefined
+        )
+    endif()
 
 endif()
 
