@@ -46,6 +46,7 @@ struct NextLinkFuncPointers
     PFN_vkCreateInstance                        pfnCreateInstance;
     PFN_vkEnumeratePhysicalDevices              pfnEnumeratePhysicalDevices;
     PFN_vkGetPhysicalDeviceProperties           pfnGetPhysicalDeviceProperties;
+    PFN_vkEnumeratePhysicalDeviceGroups         pfnEnumeratePhysicalDeviceGroups;
 };
 
 extern NextLinkFuncPointers g_nextLinkFuncs;
@@ -59,6 +60,11 @@ typedef VkResult (VKAPI_PTR *PFN_vkEnumeratePhysicalDevices_SG)(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceCount,
     VkPhysicalDevice*                           pPhysicalDevices);
+
+typedef VkResult (VKAPI_PTR *PFN_vkEnumeratePhysicalDeviceGroups_SG)(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties);
 
 // Entry in a layer dispatch table of Vulkan entry points that maps a name to a function pointer implementation.
 // An array of these makes up a dispatch table that represents one or more driver-internal layers's dispatch table,
@@ -95,6 +101,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceCount,
     VkPhysicalDevice*                           pPhysicalDevices);
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties);
 
 } // namespace entry
 } // namespace vk

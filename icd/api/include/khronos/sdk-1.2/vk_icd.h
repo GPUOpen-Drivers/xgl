@@ -103,7 +103,7 @@ typedef struct {
     MirConnection *connection;
     MirSurface *mirSurface;
 } VkIcdSurfaceMir;
-#endif  // VK_USE_PLATFORM_MIR_KHR
+#endif
 
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
 typedef struct {
@@ -111,7 +111,7 @@ typedef struct {
     struct wl_display *display;
     struct wl_surface *surface;
 } VkIcdSurfaceWayland;
-#endif  // VK_USE_PLATFORM_WAYLAND_KHR
+#endif
 
 #ifdef VK_USE_PLATFORM_WIN32_KHR
 typedef struct {
@@ -119,7 +119,7 @@ typedef struct {
     HINSTANCE hinstance;
     HWND hwnd;
 } VkIcdSurfaceWin32;
-#endif  // VK_USE_PLATFORM_WIN32_KHR
+#endif
 
 #ifdef VK_USE_PLATFORM_XCB_KHR
 typedef struct {
@@ -127,7 +127,7 @@ typedef struct {
     xcb_connection_t *connection;
     xcb_window_t window;
 } VkIcdSurfaceXcb;
-#endif  // VK_USE_PLATFORM_XCB_KHR
+#endif
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 typedef struct {
@@ -135,28 +135,28 @@ typedef struct {
     Display *dpy;
     Window window;
 } VkIcdSurfaceXlib;
-#endif  // VK_USE_PLATFORM_XLIB_KHR
+#endif
 
 #ifdef VK_USE_PLATFORM_ANDROID_KHR
 typedef struct {
     VkIcdSurfaceBase base;
     struct ANativeWindow *window;
 } VkIcdSurfaceAndroid;
-#endif  // VK_USE_PLATFORM_ANDROID_KHR
+#endif
 
 #ifdef VK_USE_PLATFORM_MACOS_MVK
 typedef struct {
     VkIcdSurfaceBase base;
     const void *pView;
 } VkIcdSurfaceMacOS;
-#endif  // VK_USE_PLATFORM_MACOS_MVK
+#endif
 
 #ifdef VK_USE_PLATFORM_IOS_MVK
 typedef struct {
     VkIcdSurfaceBase base;
     const void *pView;
 } VkIcdSurfaceIOS;
-#endif  // VK_USE_PLATFORM_IOS_MVK
+#endif
 
 typedef struct {
     VkIcdSurfaceBase base;
@@ -178,6 +178,6 @@ typedef struct {
     VkIcdSurfaceBase base;
     const CAMetalLayer *pLayer;
 } VkIcdSurfaceMetal;
-#endif // VK_USE_PLATFORM_METAL_EXT
+#endif
 
-#endif  // VKICD_H
+#endif

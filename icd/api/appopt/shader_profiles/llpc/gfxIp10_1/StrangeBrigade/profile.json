@@ -1,0 +1,66 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x3895042bcf33699a da756541f86d98d8"
+        }
+      },
+      "action": {
+        "cs": {
+          "wgpMode": 1,
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xfff9a6ecc6e82e1e 33f8fde12c4ed7e3"
+        }
+      },
+      "action": {
+        "binningOverride": 2,
+        "ps": {
+          "allowReZ": 1,
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x92fac7999fffada5 5b38c51bff1696a0"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1,
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x2321ae7374b9802b a0fb69a7be4893d0"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x5b3491787d1d3c70 70c98118938d07f1"
+        }
+      },
+      "action": {
+        "binningOverride": 1
+      }
+    }
+  ]
+}

@@ -381,7 +381,7 @@ VK_TO_PAL_STRUC_X(  FORMAT_A8B8G8R8_SRGB_PACK32,                  PalFmt_ABGR_PA
 // Storage declarations of lookup tables used by non-identity conversions
 VK_TO_PAL_DECL_LOOKUP_TABLE(PRIMITIVE_TOPOLOGY,             PrimitiveTopology                                          )
 VK_TO_PAL_DECL_LOOKUP_TABLE(FORMAT,                         SwizzledFormat                                             )
-VK_TO_PAL_DECL_LOOKUP_TABLE_COMPLEX(PRIMITIVE_TOPOLOGY,     PalPrimTypeAdjacency, PrimTypeAdjacency                    )
+VK_TO_PAL_DECL_LOOKUP_TABLE(PRIMITIVE_TOPOLOGY,             PrimitiveType                                              )
 VK_TO_PAL_DECL_LOOKUP_TABLE_COMPLEX(QUERY_TYPE,             PalQueryTypePool,     QueryTypePool                        )
 VK_TO_PAL_DECL_LOOKUP_TABLE(INDEX_TYPE,                     IndexType                                                  )
 VK_TO_PAL_DECL_LOOKUP_TABLE(BORDER_COLOR,                   BorderColorType                                            )

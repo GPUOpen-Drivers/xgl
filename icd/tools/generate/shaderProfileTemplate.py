@@ -1690,7 +1690,10 @@ ENTRIES_TEMPLATE = {
                     "branch": SHADER_ACTION,
                     "shaderStage": "ShaderStageCompute"
                 }
-            }
+            },
+            # The "BuildTypes" key is not used by the genShaderProfile script in any way. It is included here simply to
+            # mark this key as a valid key that can be a part of each entry in the entries list in profile.json files.
+            "BuildTypes": []
         }
 }
 
@@ -2239,7 +2242,9 @@ bool ShaderProfile::ParseJsonProfileEntry(
     static const char* ValidKeys[] =
     {
         "pattern",
-        "action"
+        "action",
+        // BuildTypes key is added here only to maintain consistency. The value against this key (if any in JSON) is not read at runtime.
+        "BuildTypes"
     };
 
     success &= CheckValidKeys(pEntry, VK_ARRAY_SIZE(ValidKeys), ValidKeys);

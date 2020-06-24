@@ -125,6 +125,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance_SG(
                     g_nextLinkFuncs.pfnGetPhysicalDeviceProperties =
                         reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
                             pfnGetInstanceProcAddr(*pInstance, "vkGetPhysicalDeviceProperties"));
+                    g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups =
+                        reinterpret_cast<PFN_vkEnumeratePhysicalDeviceGroups>(
+                            pfnGetInstanceProcAddr(*pInstance, "vkEnumeratePhysicalDeviceGroups"));
                 }
             }
             break;
@@ -204,18 +207,15 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
                                                     physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
                                                     sizeof(void*),
                                                     VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-            VkPhysicalDevice* pTmpLayerPhysicalDevice = nullptr;
-            VkPhysicalDeviceProperties* pProperties = nullptr;
+            VkPhysicalDevice* pTmpLayerPhysicalDevice = static_cast<VkPhysicalDevice*>(pTmpLayerPhysicalDeviceMemory);
+            VkPhysicalDeviceProperties* pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
 
-            if ((pTmpLayerPhysicalDeviceMemory == nullptr) || (pPropertiesMemory == nullptr))
+            if ((pTmpLayerPhysicalDevice == nullptr) || (pProperties == nullptr))
             {
                 result = VK_ERROR_OUT_OF_HOST_MEMORY;
             }
             else
             {
-                pTmpLayerPhysicalDevice = static_cast<VkPhysicalDevice*>(pTmpLayerPhysicalDeviceMemory);
-                pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
-
                 result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance,
                                                                      &physicalDeviceCount,
                                                                      pTmpLayerPhysicalDevice);
@@ -274,13 +274,14 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
                 *pPhysicalDeviceCount = 1;
             }
 
-            if (pTmpLayerPhysicalDeviceMemory != nullptr)
+            if (pTmpLayerPhysicalDevice != nullptr)
             {
-                pAllocCb->pfnFree(pAllocCb->pUserData, pTmpLayerPhysicalDeviceMemory);
+                pAllocCb->pfnFree(pAllocCb->pUserData, pTmpLayerPhysicalDevice);
             }
-            if (pPropertiesMemory != nullptr)
+
+            if (pProperties != nullptr)
             {
-                pAllocCb->pfnFree(pAllocCb->pUserData, pPropertiesMemory);
+                pAllocCb->pfnFree(pAllocCb->pUserData, pProperties);
             }
         }
         else if ((pPhysicalDevices != nullptr) && (physicalDeviceCount == 2))
@@ -328,9 +329,154 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
         }
     }
 
-    if (pPhysicalDevices != nullptr)
+    if (pLayerPhysicalDevices != nullptr)
     {
         pAllocCb->pfnFree(pAllocCb->pUserData, pLayerPhysicalDevices);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Layer's implementation for vkEnumeratePhysicalDeviceGroups, call next link's vkEnumeratePhysicalDeviceGroups,
+// implementation, then adjust the returned physical device groups result by checking hybrid graphics platform
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties)
+{
+    VkResult result = VK_SUCCESS;
+    const VkAllocationCallbacks* pAllocCb = &allocator::g_DefaultAllocCallback;
+    VK_ASSERT(pAllocCb != nullptr);
+
+    VK_ASSERT(pPhysicalDeviceGroupCount != nullptr);
+    uint32_t physicalDeviceGroupCount = *pPhysicalDeviceGroupCount;
+    VkPhysicalDeviceGroupProperties* pLayerPhysicalDeviceGroups = nullptr;
+
+    if (pPhysicalDeviceGroupProperties != nullptr)
+    {
+        // Get real device groups count at first
+        result = g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups(instance, &physicalDeviceGroupCount, nullptr);
+        if (result == VK_SUCCESS)
+        {
+            void* pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                                    physicalDeviceGroupCount * sizeof(VkPhysicalDeviceGroupProperties),
+                                                    sizeof(void*),
+                                                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+            if (pMemory == nullptr)
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            else
+            {
+                pLayerPhysicalDeviceGroups = static_cast<VkPhysicalDeviceGroupProperties*>(pMemory);
+            }
+        }
+    }
+
+    // Call loader's terminator function into ICDs to get all the physical device groups
+    if (result == VK_SUCCESS)
+    {
+        result = g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups(instance,
+                                                                  &physicalDeviceGroupCount,
+                                                                  pLayerPhysicalDeviceGroups);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        bool isHybridGraphics = false;
+
+        if (physicalDeviceGroupCount > 1)
+        {
+            isHybridGraphics = IsHybridGraphicsSupported();
+        }
+
+        if (isHybridGraphics)
+        {
+            uint32_t physicalDeviceCount = physicalDeviceGroupCount;
+            void* pTmpLayerPhysicalDeviceMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                                        physicalDeviceCount * sizeof(VkPhysicalDevice),
+                                                        sizeof(void*),
+                                                        VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+            void* pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                                    physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
+                                                    sizeof(void*),
+                                                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+            VkPhysicalDevice* pTmpLayerPhysicalDevice = static_cast<VkPhysicalDevice*>(pTmpLayerPhysicalDeviceMemory);
+            VkPhysicalDeviceProperties* pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
+
+            if ((pTmpLayerPhysicalDevice == nullptr) || (pProperties == nullptr))
+            {
+                result = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
+            else
+            {
+                // Call vkEnumeratePhysicalDevices_SG to get all valid physical devices, store all valid
+                // physical device properies in pProperties
+                result = vkEnumeratePhysicalDevices_SG(instance, &physicalDeviceCount, pTmpLayerPhysicalDevice);
+                if ((result == VK_SUCCESS) && (pPhysicalDeviceGroupProperties != nullptr))
+                {
+                    for (uint32_t i = 0; i < physicalDeviceCount; i++)
+                    {
+                       g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pTmpLayerPhysicalDevice[i], &pProperties[i]);
+                    }
+                }
+            }
+
+            if (result == VK_SUCCESS)
+            {
+                // Check the physical devices in device group, only report the device groups which contains valid
+                // physical devices
+                if (pPhysicalDeviceGroupProperties != nullptr)
+                {
+                    uint32_t deviceGroupCount = 0;
+                    for (uint32_t i = 0; i < physicalDeviceGroupCount; i++)
+                    {
+                        VkPhysicalDeviceProperties properties = {};
+                        g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(
+                                pLayerPhysicalDeviceGroups[i].physicalDevices[0], &properties);
+                        for (uint32_t j = 0; j < physicalDeviceCount; j++)
+                        {
+                            if ((properties.vendorID == pProperties[j].vendorID) &&
+                                (properties.deviceID == pProperties[j].deviceID))
+                            {
+                                pPhysicalDeviceGroupProperties[deviceGroupCount] = pLayerPhysicalDeviceGroups[i];
+                                deviceGroupCount++;
+                            }
+                        }
+                    }
+                }
+
+                *pPhysicalDeviceGroupCount = physicalDeviceCount;
+            }
+
+            if (pTmpLayerPhysicalDevice != nullptr)
+            {
+                pAllocCb->pfnFree(pAllocCb->pUserData, pTmpLayerPhysicalDevice);
+            }
+
+            if (pProperties != nullptr)
+            {
+                pAllocCb->pfnFree(pAllocCb->pUserData, pProperties);
+            }
+        }
+        else
+        {
+            // If it is not HG platform, report all the physical device groups to upper layer or loader
+            *pPhysicalDeviceGroupCount = physicalDeviceGroupCount;
+            if (pPhysicalDeviceGroupProperties != nullptr)
+            {
+                for (uint32_t i = 0; i < physicalDeviceGroupCount; i++)
+                {
+                    pPhysicalDeviceGroupProperties[i] = pLayerPhysicalDeviceGroups[i];
+                }
+            }
+        }
+    }
+
+    if (pLayerPhysicalDeviceGroups != nullptr)
+    {
+        pAllocCb->pfnFree(pAllocCb->pUserData, pLayerPhysicalDeviceGroups);
     }
 
     return result;
@@ -345,6 +491,7 @@ const LayerDispatchTableEntry g_LayerDispatchTable_SG[] =
 {
     LAYER_DISPATCH_ENTRY(vkCreateInstance_SG),
     LAYER_DISPATCH_ENTRY(vkEnumeratePhysicalDevices_SG),
+    LAYER_DISPATCH_ENTRY(vkEnumeratePhysicalDeviceGroups_SG),
     VK_LAYER_DISPATCH_TABLE_END()
 };
 

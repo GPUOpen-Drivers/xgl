@@ -749,7 +749,7 @@ VkResult Queue::Present(
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueuePresent);
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueuePresent);
         }
-#endif // #if ICD_GPUOPEN_DEVMODE_BUILD
+#endif
         return VK_ERROR_INITIALIZATION_FAILED;
     }
 

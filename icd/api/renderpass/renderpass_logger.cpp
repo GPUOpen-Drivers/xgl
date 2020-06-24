@@ -529,7 +529,7 @@ void RenderPassLogger::LogAccessMask(VkAccessFlags flags, bool compact)
     uint32_t count = 0;
 
 #define LogFlag(flag) \
-    if ((flags & flag) == flag) \
+    if ((flags & static_cast<uint32_t>(flag)) == static_cast<uint32_t>(flag)) \
     { \
         if (count >= 1) \
         { \

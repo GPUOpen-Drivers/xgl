@@ -9,7 +9,7 @@
       },
       "action": {
         "cs": {
-          "maxWavesPerCu": 16
+          "maxWavesPerCu": 12
         }
       }
     },
@@ -23,6 +23,19 @@
       "action": {
         "ps": {
           "maxWavesPerCu": 20
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x4fb0ed7fc490c3cf 11e6ef9ceddeefce"
+        }
+      },
+      "action": {
+        "cs": {
+          "useSiScheduler": 1
         }
       }
     }

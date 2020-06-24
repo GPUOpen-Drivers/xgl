@@ -408,7 +408,8 @@ static void GetFormatFeatureFlags(
     const Pal::MergedFormatPropertiesTable& formatProperties,
     VkFormat                                format,
     VkImageTiling                           imageTiling,
-    VkFormatFeatureFlags*                   pOutFormatFeatureFlags)
+    VkFormatFeatureFlags*                   pOutFormatFeatureFlags,
+    const RuntimeSettings&                  settings)
 {
     const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(format);
 
@@ -418,10 +419,11 @@ static void GetFormatFeatureFlags(
     VkFormatFeatureFlags retFlags = PalToVkFormatFeatureFlags(formatProperties.features[formatIdx][tilingIdx]);
 
     // Only expect vertex buffer support for core formats for now (change this if needed otherwise in the future).
-    if (VK_ENUM_IN_RANGE(format, VK_FORMAT))
+    if (VK_ENUM_IN_RANGE(format, VK_FORMAT) && (imageTiling == VK_IMAGE_TILING_LINEAR))
     {
-        if ((imageTiling == VK_IMAGE_TILING_LINEAR) &&
-            Llpc::ICompiler::IsVertexFormatSupported(format))
+        bool canSupportVertexFormat = false;
+        canSupportVertexFormat = Llpc::ICompiler::IsVertexFormatSupported(format);
+        if (canSupportVertexFormat)
         {
             retFlags |= VK_FORMAT_FEATURE_VERTEX_BUFFER_BIT;
         }
@@ -823,16 +825,50 @@ VkResult PhysicalDevice::Initialize()
 
         VkBool32 protectedMemorySupported = VK_FALSE;
         GetPhysicalDeviceProtectedMemoryFeatures(&protectedMemorySupported);
-        if (protectedMemorySupported && (invisHeapSize > 0))
-        {
-            uint32_t memoryTypeIndex                             = m_memoryProperties.memoryTypeCount++;
-            m_memoryTypeMask                                    |= 1 << memoryTypeIndex;
-            m_memoryVkIndexToPalHeap[memoryTypeIndex]            = Pal::GpuHeapInvisible;
-            m_memoryPalHeapToVkIndexBits[Pal::GpuHeapInvisible] |= (1UL << memoryTypeIndex);
 
-            VkMemoryType* pMemType = &m_memoryProperties.memoryTypes[memoryTypeIndex];
-            pMemType->heapIndex     = heapIndices[Pal::GpuHeapInvisible];
-            pMemType->propertyFlags = VK_MEMORY_PROPERTY_PROTECTED_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+        if (protectedMemorySupported)
+        {
+            // The heap order of protected memory.
+            constexpr Pal::GpuHeap ProtectedPriority[Pal::GpuHeapCount - 1] =
+            {
+                Pal::GpuHeapGartUswc,
+                Pal::GpuHeapInvisible,
+                Pal::GpuHeapLocal
+            };
+
+            bool protectedMemoryTypeFound = false;
+
+            for (uint32_t orderedHeapIndex = 0; orderedHeapIndex < Pal::GpuHeapCount - 1; ++orderedHeapIndex)
+            {
+                Pal::GpuHeap palGpuHeap     = ProtectedPriority[orderedHeapIndex];
+                const Pal::gpusize heapSize = heapProperties[palGpuHeap].heapSize;
+
+                if ((heapSize > 0) && heapProperties[palGpuHeap].flags.supportsTmz)
+                {
+                    uint32_t memoryTypeIndex                  = m_memoryProperties.memoryTypeCount++;
+                    m_memoryTypeMask                         |= 1 << memoryTypeIndex;
+                    m_memoryVkIndexToPalHeap[memoryTypeIndex] = palGpuHeap;
+                    m_memoryPalHeapToVkIndexBits[palGpuHeap] |= (1UL << memoryTypeIndex);
+                    VkMemoryType* pMemType                    = &m_memoryProperties.memoryTypes[memoryTypeIndex];
+                    pMemType->heapIndex                       = heapIndices[palGpuHeap];
+
+                    if ((palGpuHeap != Pal::GpuHeapGartUswc) || (m_memoryProperties.memoryHeapCount == 1))
+                    {
+                        pMemType->propertyFlags = VK_MEMORY_PROPERTY_PROTECTED_BIT | VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT;
+                    }
+                    else
+                    {
+                        pMemType->propertyFlags = VK_MEMORY_PROPERTY_PROTECTED_BIT;
+                    }
+                    protectedMemoryTypeFound = true;
+                }
+            }
+
+            if (protectedMemoryTypeFound == false)
+            {
+                VK_ALERT_ALWAYS_MSG("No protected memory type.");
+                VK_NEVER_CALLED();
+            }
         }
 
         // Add device coherent memory type based on memory types which have been added in m_memoryProperties.memoryTypes
@@ -1031,8 +1067,8 @@ void PhysicalDevice::PopulateFormatProperties()
         VkFormatFeatureFlags optimalFlags = 0;
         VkFormatFeatureFlags bufferFlags  = 0;
 
-        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_LINEAR, &linearFlags);
-        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_OPTIMAL, &optimalFlags);
+        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_LINEAR, &linearFlags, GetRuntimeSettings());
+        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_OPTIMAL, &optimalFlags, GetRuntimeSettings());
 
         bufferFlags = linearFlags;
 
@@ -2683,7 +2719,12 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
             pSurfaceCapabilities->minImageCount = swapChainProperties.minImageCount;
             pSurfaceCapabilities->maxImageCount = swapChainProperties.maxImageCount;
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 610
+            pSurfaceCapabilities->supportedCompositeAlpha =
+                PalToVkSupportedCompositeAlphaMode(swapChainProperties.compositeAlphaMode);
+#else
             pSurfaceCapabilities->supportedCompositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+#endif
 
             pSurfaceCapabilities->supportedTransforms = swapChainProperties.supportedTransforms;
             pSurfaceCapabilities->currentTransform = PalToVkSurfaceTransform(swapChainProperties.currentTransforms);
@@ -3353,6 +3394,8 @@ static bool IsSingleChannelMinMaxFilteringSupported(
 }
 
 // =====================================================================================================================
+
+// =====================================================================================================================
 // Get available device extensions or populate the specified physical device with the extensions supported by it.
 //
 // If the device pointer is not nullptr, this function returns all extensions supported by that physical device.
@@ -3614,7 +3657,7 @@ VK_INLINE static bool IsNormalQueue(const T& engineCapabilities)
 // - We dynamically don't expose PAL queue types that don't have any queues present on the device
 void PhysicalDevice::PopulateQueueFamilies()
 {
-    static const uint32_t vkQueueFlags[] =
+    static uint32_t vkQueueFlags[] =
     {
         // Pal::EngineTypeUniversal
         VK_QUEUE_GRAPHICS_BIT |
@@ -3657,6 +3700,17 @@ void PhysicalDevice::PopulateQueueFamilies()
         VK_QUEUE_COMPUTE_BIT |
         VK_QUEUE_TRANSFER_BIT |
         VK_QUEUE_SPARSE_BINDING_BIT;
+
+    VkBool32 protectedMemorySupported = VK_FALSE;
+    GetPhysicalDeviceProtectedMemoryFeatures(&protectedMemorySupported);
+
+    if (protectedMemorySupported)
+    {
+        vkQueueFlags[Pal::EngineTypeUniversal] |= VK_QUEUE_PROTECTED_BIT;
+        vkQueueFlags[Pal::EngineTypeCompute]   |= VK_QUEUE_PROTECTED_BIT;
+        vkQueueFlags[Pal::EngineTypeDma]       |= VK_QUEUE_PROTECTED_BIT;
+        enabledQueueFlags                      |= VK_QUEUE_PROTECTED_BIT;
+    }
 
     // find out the sub engine index of VrHighPriority and indices for compute engines that aren't exclusive.
     {
@@ -3714,6 +3768,14 @@ void PhysicalDevice::PopulateQueueFamilies()
         if (engineProps.flags.supportVirtualMemoryRemap == 0)
         {
             supportedQueueFlags &= ~VK_QUEUE_SPARSE_BINDING_BIT;
+        }
+
+        // Vulkan requires a protected capable queue to support both protected and unprotected submissions.
+        if (protectedMemorySupported                                        &&
+           ((engineProps.tmzSupportLevel == Pal::TmzSupportLevel::PerQueue) ||
+            (engineProps.tmzSupportLevel == Pal::TmzSupportLevel::None)))
+        {
+            supportedQueueFlags &= ~VK_QUEUE_PROTECTED_BIT;
         }
 
         if ((engineProps.engineCount != 0) && ((vkQueueFlags[engineType] & supportedQueueFlags) != 0))
@@ -3790,6 +3852,21 @@ void PhysicalDevice::PopulateQueueFamilies()
 
             m_queueFamilyCount++;
         }
+    }
+
+    if (protectedMemorySupported)
+    {
+        bool protectedQueueFound = false;
+        for (uint32_t queueFamilyCount = 0; queueFamilyCount < m_queueFamilyCount; queueFamilyCount++)
+        {
+            VkQueueFamilyProperties* pQueueFamilyProps = &m_queueFamilies[queueFamilyCount].properties;
+
+            if (pQueueFamilyProps->queueFlags & VK_QUEUE_PROTECTED_BIT)
+            {
+                protectedQueueFound = true;
+            }
+        }
+        VK_ASSERT(protectedQueueFound);
     }
 
     // If PRT is not supported on the DMA engine, we have to fall-back on compute. Check that transfer and compute

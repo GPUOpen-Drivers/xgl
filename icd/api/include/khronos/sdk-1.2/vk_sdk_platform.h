@@ -45,4 +45,4 @@
 #endif
 #endif
 
-#endif  // VK_SDK_PLATFORM_H
+#endif

@@ -33,6 +33,7 @@
 #endif
 
 #include "include/compiler_solution.h"
+#include "include/vk_device.h"
 #include "include/vk_physical_device.h"
 
 namespace vk

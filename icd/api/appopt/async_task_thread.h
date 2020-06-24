@@ -148,4 +148,4 @@ protected:
 
 } // namespace vk
 
-#endif // __ASYNC_TASK_THREAD_H__
+#endif

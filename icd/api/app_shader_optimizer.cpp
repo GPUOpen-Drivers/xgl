@@ -831,6 +831,6 @@ void ShaderOptimizer::BuildRuntimeProfile()
         }
     }
 }
-#endif // ICD_RUNTIME_APP_PROFILE
+#endif
 
 };

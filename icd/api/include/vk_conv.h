@@ -218,50 +218,28 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format);
 #define PAL_TO_VK_RETURN_X(dstValue) \
         return VK_##dstValue; \
 
-// Helper structure for mapping Vulkan primitive topology to PAL primitive type + adjacency
-struct PalPrimTypeAdjacency
-{
-    PalPrimTypeAdjacency()
-        { }
-
-    PalPrimTypeAdjacency(
-        Pal::PrimitiveType primType,
-        bool               adjacency) :
-        primType(primType),
-        adjacency(adjacency)
-        { }
-
-    Pal::PrimitiveType primType;
-    bool               adjacency;
-};
-
-VK_TO_PAL_TABLE_COMPLEX(PRIMITIVE_TOPOLOGY, PrimitiveTopology, PalPrimTypeAdjacency, PrimTypeAdjacency,
+VK_TO_PAL_TABLE_COMPLEX(PRIMITIVE_TOPOLOGY, PrimitiveTopology, Pal::PrimitiveType, PrimitiveType,
 // =====================================================================================================================
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_POINT_LIST,                    PalPrimTypeAdjacency(Pal::PrimitiveType::Point,    false              ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_LINE_LIST,                     PalPrimTypeAdjacency(Pal::PrimitiveType::Line,     false              ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_LINE_STRIP,                    PalPrimTypeAdjacency(Pal::PrimitiveType::Line,     false              ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,                 PalPrimTypeAdjacency(Pal::PrimitiveType::Triangle, false              ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,                PalPrimTypeAdjacency(Pal::PrimitiveType::Triangle, false              ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,                  PalPrimTypeAdjacency(Pal::PrimitiveType::Triangle, false              ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,      PalPrimTypeAdjacency(Pal::PrimitiveType::Line,     true               ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,     PalPrimTypeAdjacency(Pal::PrimitiveType::Line,     true               ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,  PalPrimTypeAdjacency(Pal::PrimitiveType::Triangle, true               ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY, PalPrimTypeAdjacency(Pal::PrimitiveType::Triangle, true               ))
-VK_TO_PAL_STRUC_X(PRIMITIVE_TOPOLOGY_PATCH_LIST,                    PalPrimTypeAdjacency(Pal::PrimitiveType::Patch,    false              ))
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_POINT_LIST,                    PrimitiveType::Point    )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_LINE_LIST,                     PrimitiveType::Line     )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_LINE_STRIP,                    PrimitiveType::Line     )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_TRIANGLE_LIST,                 PrimitiveType::Triangle )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP,                PrimitiveType::Triangle )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,                  PrimitiveType::Triangle )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_LINE_LIST_WITH_ADJACENCY,      PrimitiveType::Line     )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_LINE_STRIP_WITH_ADJACENCY,     PrimitiveType::Line     )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_TRIANGLE_LIST_WITH_ADJACENCY,  PrimitiveType::Triangle )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_TRIANGLE_STRIP_WITH_ADJACENCY, PrimitiveType::Triangle )
+VK_TO_PAL_ENTRY_X(PRIMITIVE_TOPOLOGY_PATCH_LIST,                    PrimitiveType::Patch    )
 // =====================================================================================================================
 )
 
 // =====================================================================================================================
-// Converts Vulkan primitive topology to PAL primitive type + adjacency
-VK_INLINE void VkToPalPrimitiveTypeAdjacency(
-    VkPrimitiveTopology     topology,
-    Pal::PrimitiveType*     pPrimType,
-    bool*                   pAdjacency)
+// Converts Vulkan primitive topology to PAL primitive type
+VK_INLINE Pal::PrimitiveType VkToPalPrimitiveType(
+    VkPrimitiveTopology     topology)
 {
-    const PalPrimTypeAdjacency& pa = convert::PrimTypeAdjacency(topology);
-
-    *pPrimType  = pa.primType;
-    *pAdjacency = pa.adjacency;
+   return  convert::PrimitiveType(topology);
 }
 
 // =====================================================================================================================
@@ -1106,6 +1084,23 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
             }
             break;
         case Pal::ChNumFormat::P016:
+            if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
+            {
+                newFormat.format = Pal::ChNumFormat::X16_Unorm;
+                newFormat.swizzle.r = ChannelSwizzle::Zero;
+                newFormat.swizzle.g = ChannelSwizzle::X;
+                newFormat.swizzle.b = ChannelSwizzle::Zero;
+                newFormat.swizzle.a = ChannelSwizzle::One;
+            }
+            else if (subresRange.startSubres.aspect == Pal::ImageAspect::CbCr)
+            {
+                newFormat.format = Pal::ChNumFormat::X16Y16_Unorm;
+                newFormat.swizzle.r = ChannelSwizzle::Y;
+                newFormat.swizzle.g = ChannelSwizzle::Zero;
+                newFormat.swizzle.b = ChannelSwizzle::X;
+                newFormat.swizzle.a = ChannelSwizzle::One;
+            }
+            break;
         case Pal::ChNumFormat::P010:
         case Pal::ChNumFormat::P210:
             if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
@@ -2235,6 +2230,7 @@ VK_INLINE Pal::SwapChainMode VkToPalSwapChainMode(VkPresentModeKHR presentMode)
     return convert::SwapChainMode(presentMode);
 }
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 610
 namespace convert
 {
     VK_INLINE Pal::CompositeAlphaMode CompositeAlpha(VkCompositeAlphaFlagBitsKHR compositeAlpha)
@@ -2266,6 +2262,31 @@ VK_INLINE Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlag
 {
     return convert::CompositeAlpha(compositeAlpha);
 }
+#else
+// =====================================================================================================================
+// Converts Vulkan composite alpha flag to PAL equivalent.
+VK_INLINE Pal::CompositeAlphaMode VkToPalCompositeAlphaMode(VkCompositeAlphaFlagBitsKHR compositeAlpha)
+{
+    return static_cast<Pal::CompositeAlphaMode>(compositeAlpha);
+}
+
+// =====================================================================================================================
+// Converts Vulkan composite alpha flag to PAL equivalent.
+VK_INLINE VkCompositeAlphaFlagsKHR PalToVkSupportedCompositeAlphaMode(uint32 compositeAlpha)
+{
+    static_assert((static_cast<uint32>(VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR) ==
+                   static_cast<uint32>(Pal::CompositeAlphaMode::Opaque)) &&
+                  (static_cast<uint32>(VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR) ==
+                   static_cast<uint32>(Pal::CompositeAlphaMode::PreMultiplied)) &&
+                  (static_cast<uint32>(VK_COMPOSITE_ALPHA_POST_MULTIPLIED_BIT_KHR) ==
+                   static_cast<uint32>(Pal::CompositeAlphaMode::PostMultiplied)) &&
+                  (static_cast<uint32>(VK_COMPOSITE_ALPHA_INHERIT_BIT_KHR) ==
+                   static_cast<uint32>(Pal::CompositeAlphaMode::Inherit)),
+                  "Pal::CompositeAlphaMode is not matched with VkCompositeAlphaFlagBitsKHR.");
+
+    return static_cast<VkCompositeAlphaFlagsKHR>(compositeAlpha);
+}
+#endif
 
 // =====================================================================================================================
 // Converts Vulkan image creation flags to PAL image creation flags (unfortunately, PAL doesn't define a dedicated type

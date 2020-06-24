@@ -58,7 +58,7 @@ uint64_t ComputePipeline::BuildApiHash(
 
     baseHasher.Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
 
-    if (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE)
+    if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
     {
         apiHasher.Update(Pipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
     }

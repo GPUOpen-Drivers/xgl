@@ -1180,6 +1180,10 @@ VkResult CmdBuffer::Begin(
         while (deviceGroup.IterateNext());
     }
 
+    // Dirty all the dynamic states, the bit should be cleared with 0 when the corresponding state is
+    // static.
+    m_state.allGpuState.dirty.u32All = 0xFFFFFFFF;
+
     DbgBarrierPostCmd(DbgBarrierCmdBufStart);
 
     return PalToVkResult(result);

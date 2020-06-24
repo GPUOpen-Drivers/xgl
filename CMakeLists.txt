@@ -24,6 +24,110 @@
  #######################################################################################################################
 
 cmake_minimum_required(VERSION 3.5)
+
+# This part set before "project(XGL VERSION 1 LANGUAGES C CXX)".
+# In a system has both gcc and clang compiler. The cmake output log will be more reasonable.
+### Clang build ########################################################################################################
+option(XGL_USE_CLANG "Build with clang?" OFF)
+if(UNIX)
+    if(XGL_USE_CLANG)
+        set(CMAKE_CXX_COMPILER_ID "Clang")
+
+        foreach(major RANGE 8 20)
+            find_program(CLANG_VER clang-${major})
+            if(CLANG_VER)
+                set(CLANG_VER ${major})
+                break()
+            endif()
+        endforeach()
+
+        find_program(CLANG_C_COMPILER clang)
+        if (CLANG_C_COMPILER)
+             set(CMAKE_C_COMPILER ${CLANG_C_COMPILER} CACHE FILEPATH "" FORCE)
+        else()
+            find_program(CLANG_C_COMPILER clang-${CLANG_VER})
+            if (CLANG_C_COMPILER)
+                set(CMAKE_C_COMPILER ${CLANG_C_COMPILER} CACHE FILEPATH "" FORCE)
+            else()
+                message(FATAL_ERROR "clang cannot be found!")
+            endif()
+        endif()
+
+        find_program(CLANG_CXX_COMPILER clang++)
+        if (CLANG_CXX_COMPILER)
+             set(CMAKE_CXX_COMPILER ${CLANG_CXX_COMPILER} CACHE FILEPATH "" FORCE)
+        else()
+            find_program(CLANG_CXX_COMPILER clang++-${CLANG_VER})
+            if (CLANG_CXX_COMPILER)
+                 set(CMAKE_CXX_COMPILER ${CLANG_CXX_COMPILER} CACHE FILEPATH "" FORCE)
+            else()
+                message(FATAL_ERROR "clang++ cannot be found!")
+            endif()
+        endif()
+
+        find_program(CLANG_AR llvm-ar)
+        if (CLANG_AR)
+             set(CMAKE_AR ${CLANG_AR} CACHE FILEPATH "" FORCE)
+        else()
+            find_program(CLANG_AR llvm-ar-${CLANG_VER})
+            if (CLANG_AR)
+                 set(CMAKE_AR ${CLANG_AR} CACHE FILEPATH "" FORCE)
+            else()
+                message(FATAL_ERROR "llvm-ar cannot be found!")
+            endif()
+        endif()
+
+        find_program(CLANG_LINKER llvm-link)
+        if (CLANG_LINKER)
+             set(CMAKE_LINKER ${CLANG_LINKER} CACHE FILEPATH "" FORCE)
+        else()
+            find_program(CLANG_LINKER llvm-link-${CLANG_VER})
+            if (CLANG_LINKER)
+                 set(CMAKE_LINKER ${CLANG_LINKER} CACHE FILEPATH "" FORCE)
+            else()
+                message(FATAL_ERROR "llvm-link cannot be found!")
+            endif()
+        endif()
+
+        find_program(CLANG_NM llvm-nm)
+        if (CLANG_NM)
+             set(CMAKE_NM ${CLANG_NM} CACHE FILEPATH "" FORCE)
+        else()
+            find_program(CLANG_NM llvm-nm-${CLANG_VER})
+            if (CLANG_NM)
+                 set(CMAKE_NM ${CLANG_NM} CACHE FILEPATH "" FORCE)
+            else()
+                message(FATAL_ERROR "llvm-nm cannot be found!")
+            endif()
+        endif()
+
+        find_program(CLANG_OBJDUMP llvm-objdump)
+        if (CLANG_OBJDUMP)
+             set(CMAKE_OBJDUMP ${CLANG_OBJDUMP} CACHE FILEPATH "" FORCE)
+        else()
+            find_program(CLANG_OBJDUMP llvm-objdump-${CLANG_VER})
+            if (CLANG_OBJDUMP)
+                 set(CMAKE_OBJDUMP ${CLANG_OBJDUMP} CACHE FILEPATH "" FORCE)
+            else()
+                message(FATAL_ERROR "llvm-objdump cannot be found!")
+            endif()
+        endif()
+
+        find_program(CLANG_RANLIB llvm-ranlib)
+        if (CLANG_RANLIB)
+             set(CMAKE_RANLIB ${CLANG_RANLIB} CACHE FILEPATH "" FORCE)
+        else()
+            find_program(CLANG_RANLIB llvm-ranlib-${CLANG_VER})
+            if (CLANG_RANLIB)
+                 set(CMAKE_RANLIB ${CLANG_RANLIB} CACHE FILEPATH "" FORCE)
+            else()
+                message(FATAL_ERROR "llvm-ranlib cannot be found!")
+            endif()
+        endif()
+
+    endif()
+endif()
+
 project(XGL VERSION 1 LANGUAGES C CXX)
 
 # Before GCC7, when LTO is enabled, undefined reference error was observed when linking static libraries.
@@ -96,8 +200,6 @@ if(ICD_BUILD_LLPCONLY)
     set(ICD_BUILD_LLPC ON CACHE BOOL "ICD_BUILD_LLPCONLY override." FORCE)
 endif()
 
-option(ICD_BUILD_VIDEO "Build Video Support?" OFF)
-
 set(XGL_USE_SANITIZER "" CACHE STRING "Build with sanitizers, e.g. Address;Undefined")
 
 if(XGL_USE_SANITIZER)
@@ -105,6 +207,12 @@ if(XGL_USE_SANITIZER)
 endif()
 
 option(XGL_LLVM_UPSTREAM "Build with upstreamed LLVM?" OFF)
+
+option(XGL_ENABLE_ASSERTIONS "Enable assertions in release builds" OFF)
+
+if(XGL_ENABLE_ASSERTIONS)
+    set(LLVM_ENABLE_ASSERTIONS "${XGL_ENABLE_ASSERTIONS}" CACHE BOOL "LLVM_ENABLE_ASSERTIONS is overridden." FORCE)
+endif()
 
 if(NOT ICD_BUILD_LLPC)
     set(XGL_LLVM_UPSTREAM OFF CACHE BOOL "XGL_LLVM_UPSTREAM is overrided to false." FORCE)
@@ -119,6 +227,9 @@ option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" ON)
 option(BUILD_XLIB_XRANDR_SUPPORT "Build Xlib with xrandr 1.6 support" OFF)
 
 option(ICD_ANALYSIS_WARNINGS_AS_ERRORS "Warnings as errors?" OFF)
+set(VAM_ENABLE_WERROR ${ICD_ANALYSIS_WARNINGS_AS_ERRORS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(ADDR_ENABLE_WERROR ${ICD_ANALYSIS_WARNINGS_AS_ERRORS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(METROHASH_ENABLE_WERROR ${ICD_ANALYSIS_WARNINGS_AS_ERRORS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 # Option Overrides #################################################################################
 # These are options that override XGL subproject options.  As these overrides are managed and force
@@ -189,7 +300,6 @@ set(PAL_ENABLE_LTO ${XGL_ENABLE_LTO} CACHE BOOL "XGL override to build PAL with 
 
 set(PAL_MEMTRACK ${ICD_MEMTRACK} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GPUOPEN ${ICD_GPUOPEN_DEVMODE_BUILD} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-set(PAL_BUILD_VIDEO ${ICD_BUILD_VIDEO} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_RENOIR ${XGL_BUILD_RENOIR} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -279,6 +389,30 @@ string(APPEND CMAKE_SHARED_LINKER_FLAGS "${ICD_SANITIZER_LINK_FLAGS}")
 string(APPEND CMAKE_C_FLAGS "${ICD_SANITIZER_COMPILE_FLAGS}")
 string(APPEND CMAKE_CXX_FLAGS "${ICD_SANITIZER_COMPILE_FLAGS}")
 
+# Assertions
+if(XGL_ENABLE_ASSERTIONS)
+    # MSVC doesn't like _DEBUG on release builds.
+    if(NOT MSVC)
+        add_definitions(-D_DEBUG)
+    endif()
+    # On non-Debug builds CMake automatically defines NDEBUG, so we explicitly undefine it:
+    if(NOT CMAKE_BUILD_TYPE_DEBUG)
+        add_definitions(-UNDEBUG)
+
+        # Also remove /D NDEBUG to avoid MSVC warnings about conflicting defines.
+        foreach(flags_var_to_scrub
+            CMAKE_CXX_FLAGS_RELEASE
+            CMAKE_CXX_FLAGS_RELWITHDEBINFO
+            CMAKE_CXX_FLAGS_MINSIZEREL
+            CMAKE_C_FLAGS_RELEASE
+            CMAKE_C_FLAGS_RELWITHDEBINFO
+            CMAKE_C_FLAGS_MINSIZEREL)
+            string(REGEX REPLACE "(^| )[/-]D *NDEBUG($| )" " "
+                "${flags_var_to_scrub}" "${${flags_var_to_scrub}}")
+        endforeach()
+    endif()
+endif()
+
 ### Generator Dependencies #############################################################################################
 find_package(PythonInterp 3)
 if(NOT PYTHONINTERP_FOUND)
@@ -313,6 +447,7 @@ endif()
 
 if(EXISTS ${XGL_METROHASH_PATH} AND NOT TARGET metrohash)
     add_subdirectory(${XGL_METROHASH_PATH} ${PROJECT_BINARY_DIR}/metrohash)
+    set(PAL_METROHASH_PATH ${XGL_METROHASH_PATH} CACHE PATH "${PROJECT_NAME} override." FORCE)
 endif()
 
 ### cwpack #############################################################
@@ -324,6 +459,7 @@ endif()
 
 if(EXISTS ${XGL_CWPACK_PATH} AND NOT TARGET cwpack)
     add_subdirectory(${XGL_CWPACK_PATH} ${PROJECT_BINARY_DIR}/cwpack)
+    set(PAL_CWPACK_PATH ${XGL_CWPACK_PATH} CACHE PATH "${PROJECT_NAME} override." FORCE)
 endif()
 
 ### VKGC ###############################################################

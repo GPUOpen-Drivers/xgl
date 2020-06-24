@@ -1747,6 +1747,15 @@ VkResult Image::GetMemoryRequirements(
         pReqs->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
     }
 
+    // Add an extra memory padding. This can be enabled while capturing GFXR traces and disabled later. Capturing with this setting
+    // enabled helps in replaying GFXR traces. When this setting is not used while capture, GFXR might return a fatal error while replaying
+    // with different DCC threshold values. This is caused because gfxreconstruct (just like vktrace used to) records the memory sizes and
+    // offsets at the time of capture and always resends the same values during replay.
+    if (pDevice->GetRuntimeSettings().addMemoryPaddingToImageMemoryRequirements)
+    {
+        pReqs->size += (uint64_t)((pDevice->GetRuntimeSettings().memoryPaddingFactorForImageMemoryRequirements) * (pReqs->size));
+    }
+
     // Adjust the size to account for internal padding required to align the base address
     pReqs->size += CalcBaseAddrSizePadding(*pDevice, *pReqs);
 

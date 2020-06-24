@@ -3256,13 +3256,16 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue2(
     // queue creation flags then this code needs to be updated.
     VK_ASSERT(pQueueInfo->sType == VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2);
     VK_ASSERT(pQueueInfo->pNext == nullptr);
-    VK_ASSERT(pQueueInfo->flags != 0);  // by specs, the flags must not NOT be 0 when calling this function.
-    VK_NOT_IMPLEMENTED;
 
-    // Our driver currently doesn't support VK_DEVICE_QUEUE_CREATE_PROTECTED_BIT, and this function should be
-    // called with a non-zero queue creation flag, so the application has no valid way of calling it and we should
-    // always return VK_NULL_HANDLE in pQueue.
-    *pQueue = VK_NULL_HANDLE;
+    ApiDevice::ObjectFromHandle(device)->GetQueue(pQueueInfo->queueFamilyIndex, pQueueInfo->queueIndex, pQueue);
+
+    const Queue* queue = DispatchableQueue::ObjectFromHandle(*pQueue);
+
+    if (queue->GetFlags() != pQueueInfo->flags)
+    {
+        *pQueue = VK_NULL_HANDLE;
+    }
+
 }
 
 // =====================================================================================================================
