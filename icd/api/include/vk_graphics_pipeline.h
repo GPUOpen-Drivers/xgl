@@ -306,7 +306,8 @@ protected:
 
     static void GenerateHashFromViewportStateCreateInfo(
         Util::MetroHash128*                      pHasher,
-        const VkPipelineViewportStateCreateInfo& desc);
+        const VkPipelineViewportStateCreateInfo& desc,
+        const uint32_t                           staticStateMask);
 
     static void GenerateHashFromRasterizationStateCreateInfo(
         Util::MetroHash128*                           pBaseHasher,
@@ -333,6 +334,7 @@ protected:
 
     static uint64_t BuildApiHash(
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
+        const CreateInfo*                   pInfo,
         Util::MetroHash::Hash*              pBaseHash);
 
 private:

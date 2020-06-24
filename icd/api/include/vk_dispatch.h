@@ -247,7 +247,7 @@ public:
     {
         return reinterpret_cast<ObjectType*>(handle);
     }
-#endif // VK_TYPE_SAFE_COMPATIBLE_HANDLES
+#endif
 
     inline static const ApiType HandleFromObject(const ObjectType* object)
     {

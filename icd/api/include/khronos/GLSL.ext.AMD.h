@@ -92,4 +92,4 @@ static const Op OpSinNormalizedAMD = static_cast<Op>(5059);
 static const Op OpCosNormalizedAMD = static_cast<Op>(5060);
 #endif
 
-#endif  // #ifndef GLSLextAMD_H
+#endif

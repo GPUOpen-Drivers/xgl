@@ -169,12 +169,13 @@ void GraphicsPipeline::GenerateHashFromTessellationStateCreateInfo(
 // Pipeline compilation affected by: none
 void GraphicsPipeline::GenerateHashFromViewportStateCreateInfo(
     Util::MetroHash128*                      pHasher,
-    const VkPipelineViewportStateCreateInfo& desc)
+    const VkPipelineViewportStateCreateInfo& desc,
+    const uint32_t                           staticStateMask)
 {
     pHasher->Update(desc.flags);
     pHasher->Update(desc.viewportCount);
 
-    if (desc.pViewports != nullptr)
+    if ((staticStateMask & 1 << VK_DYNAMIC_STATE_VIEWPORT) && (desc.pViewports != nullptr))
     {
         for (uint32_t i = 0; i < desc.viewportCount; i++)
         {
@@ -184,7 +185,7 @@ void GraphicsPipeline::GenerateHashFromViewportStateCreateInfo(
 
     pHasher->Update(desc.scissorCount);
 
-    if (desc.pScissors != nullptr)
+    if ((staticStateMask & 1 << VK_DYNAMIC_STATE_SCISSOR) && (desc.pScissors != nullptr))
     {
         for (uint32_t i = 0; i < desc.scissorCount; i++)
         {
@@ -443,6 +444,7 @@ void GraphicsPipeline::GenerateHashFromDynamicStateCreateInfo(
 //     - pCreateInfo->subpass
 uint64_t GraphicsPipeline::BuildApiHash(
     const VkGraphicsPipelineCreateInfo* pCreateInfo,
+    const CreateInfo*                   pInfo,
     Util::MetroHash::Hash*              pBaseHash)
 {
     Util::MetroHash128 baseHasher;
@@ -466,14 +468,15 @@ uint64_t GraphicsPipeline::BuildApiHash(
         GenerateHashFromInputAssemblyStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pInputAssemblyState);
     }
 
-    if (pCreateInfo->pTessellationState != nullptr)
+    if ((pInfo->activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
+		&& (pCreateInfo->pTessellationState != nullptr))
     {
         GenerateHashFromTessellationStateCreateInfo(&baseHasher, *pCreateInfo->pTessellationState);
     }
 
-    if (pCreateInfo->pViewportState != nullptr)
+    if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pViewportState != nullptr))
     {
-        GenerateHashFromViewportStateCreateInfo(&apiHasher, *pCreateInfo->pViewportState);
+        GenerateHashFromViewportStateCreateInfo(&apiHasher, *pCreateInfo->pViewportState, pInfo->staticStateMask);
     }
 
     if (pCreateInfo->pRasterizationState != nullptr)
@@ -481,17 +484,17 @@ uint64_t GraphicsPipeline::BuildApiHash(
         GenerateHashFromRasterizationStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pRasterizationState);
     }
 
-    if (pCreateInfo->pMultisampleState != nullptr)
+    if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pMultisampleState != nullptr))
     {
         GenerateHashFromMultisampleStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pMultisampleState);
     }
 
-    if (pCreateInfo->pDepthStencilState != nullptr)
+    if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pDepthStencilState != nullptr))
     {
         GenerateHashFromDepthStencilStateCreateInfo(&apiHasher, *pCreateInfo->pDepthStencilState);
     }
 
-    if (pCreateInfo->pColorBlendState != nullptr)
+    if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pColorBlendState != nullptr))
     {
         GenerateHashFromColorBlendStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pColorBlendState);
     }
@@ -505,7 +508,7 @@ uint64_t GraphicsPipeline::BuildApiHash(
     baseHasher.Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
     baseHasher.Update(pCreateInfo->subpass);
 
-    if (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE)
+    if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
     {
         apiHasher.Update(Pipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
     }
@@ -841,22 +844,21 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
         pInfo->pipeline.iaState.vertexBufferCount                  = pVbInfo->bindingTableSize;
 
-        VkToPalPrimitiveTypeAdjacency(
-            pIa->topology,
-            &pInfo->pipeline.iaState.topologyInfo.primitiveType,
-            &pInfo->pipeline.iaState.topologyInfo.adjacency);
+        pInfo->pipeline.iaState.topologyInfo.primitiveType         = VkToPalPrimitiveType(pIa->topology);
 
-        EXTRACT_VK_STRUCTURES_0(
-            Tess,
-            PipelineTessellationStateCreateInfo,
-            pGraphicsPipelineCreateInfo->pTessellationState,
-            PIPELINE_TESSELLATION_STATE_CREATE_INFO)
+        if (pInfo->activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
+        {
+            EXTRACT_VK_STRUCTURES_0(
+                Tess,
+                PipelineTessellationStateCreateInfo,
+                pGraphicsPipelineCreateInfo->pTessellationState,
+                PIPELINE_TESSELLATION_STATE_CREATE_INFO)
 
-            if (pPipelineTessellationStateCreateInfo != nullptr)
-            {
-                pInfo->pipeline.iaState.topologyInfo.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
-            }
-
+                if (pPipelineTessellationStateCreateInfo != nullptr)
+                {
+                    pInfo->pipeline.iaState.topologyInfo.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
+                }
+        }
         pInfo->staticStateMask = 0;
 
         const VkPipelineDynamicStateCreateInfo* pDy = pGraphicsPipelineCreateInfo->pDynamicState;
@@ -895,7 +897,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
         const VkPipelineViewportStateCreateInfo* pVp = pGraphicsPipelineCreateInfo->pViewportState;
 
-        if (pVp != nullptr)
+        if ((pIn->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pVp != nullptr))
         {
             // From the spec, "scissorCount is the number of scissors and must match the number of viewports."
             VK_ASSERT(pVp->viewportCount <= Pal::MaxViewports);
@@ -965,7 +967,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
         const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;
 
-        if (pMs != nullptr)
+        if ((pIn->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pMs != nullptr))
         {
             // Sample Locations
             EXTRACT_VK_STRUCTURES_1(
@@ -1073,7 +1075,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         bool blendingEnabled = false;
         bool dualSourceBlend = false;
 
-        if (pCb == nullptr)
+        if ((pIn->pRasterizationState->rasterizerDiscardEnable == VK_TRUE) || (pCb == nullptr))
         {
             pInfo->pipeline.cbState.logicOp = Pal::LogicOp::Copy;
         }
@@ -1185,7 +1187,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
         constexpr uint8_t DefaultStencilOpValue = 1;
 
-        if (pDs != nullptr)
+        if ((pIn->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pDs != nullptr))
         {
             pInfo->immedInfo.depthStencilCreateInfo.front.stencilFailOp      = VkToPalStencilOp(pDs->front.failOp);
             pInfo->immedInfo.depthStencilCreateInfo.front.stencilPassOp      = VkToPalStencilOp(pDs->front.passOp);
@@ -1245,8 +1247,6 @@ VkResult GraphicsPipeline::Create(
     Util::MetroHash::Hash       cacheId[MaxPalDevices]             = {};
     Pal::Result                 palResult                          = Pal::Result::Success;
     PipelineCompiler*           pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
-    uint64_t                    apiPsoHash                         = BuildApiHash(pCreateInfo,
-                                                                        &binaryCreateInfo.basePipelineHash);
     Util::MetroHash64           palPipelineHasher;
 
     const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo = nullptr;
@@ -1254,6 +1254,7 @@ VkResult GraphicsPipeline::Create(
     VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
         pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo, &pPipelineCreationFeadbackCreateInfo);
     ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &vbInfo, &localPipelineInfo);
+    uint64_t apiPsoHash = BuildApiHash(pCreateInfo, &localPipelineInfo, &binaryCreateInfo.basePipelineHash);
 
     const uint32_t numPalDevices = pDevice->NumPalDevices();
     uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
@@ -1410,7 +1411,8 @@ VkResult GraphicsPipeline::Create(
 
                 // Force full sample shading if the app didn't enable it, but the shader wants
                 // per-sample shading by the use of SampleId or similar features.
-                if ((pMs != nullptr) && (pMs->sampleShadingEnable == false))
+                if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pMs != nullptr) &&
+                    (pMs->sampleShadingEnable == false))
                 {
                     const auto& info = pPalPipeline[deviceIdx]->GetInfo();
 
@@ -1853,15 +1855,18 @@ void GraphicsPipeline::BindToCmdBuffer(
                 m_flags.bindInputAssemblyState)
         {
             pPalCmdBuf->CmdSetInputAssemblyState(m_info.inputAssemblyState);
+
             pRenderState->allGpuState.staticTokens.inputAssemblyState = newTokens.inputAssemblyState;
+            pRenderState->allGpuState.dirty.inputAssembly             = 0;
         }
 
         if (CmdBuffer::IsStaticStateDifferent(oldTokens.triangleRasterState, newTokens.triangleRasterState) &&
                 m_flags.bindTriangleRasterState)
         {
             pPalCmdBuf->CmdSetTriangleRasterState(m_info.triangleRasterState);
+
             pRenderState->allGpuState.staticTokens.triangleRasterState = newTokens.triangleRasterState;
-            pRenderState->allGpuState.dirty.rasterState = 0;
+            pRenderState->allGpuState.dirty.rasterState                = 0;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::LINE_WIDTH) &&

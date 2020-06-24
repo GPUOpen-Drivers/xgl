@@ -277,4 +277,4 @@ VKAPI_ATTR void VKAPI_CALL vkResetQueryPool(
 
 } // namespace vk
 
-#endif //__VK_QUERY_H__
+#endif

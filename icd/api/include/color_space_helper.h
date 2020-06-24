@@ -100,4 +100,4 @@ private:
 
 } //namespace vk
 
-#endif // __COLOR_SPACE_HELPER_H__
+#endif

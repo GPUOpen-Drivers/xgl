@@ -306,42 +306,44 @@ def genProfile(dict, compiler, gfxip):
         if branch not in result:
             result[branch] = False
 
-    for entry in entries:
-        if checkValidKeys(entry, ENTRIES_TEMPLATE["entries"]):
-            pattern = entry["pattern"]
-            action = entry["action"]
+    if len(entries) != 0:
+        for entry in entries:
+            if checkValidKeys(entry, ENTRIES_TEMPLATE["entries"]):
+                pattern = entry["pattern"]
+                action = entry["action"]
 
-            success, cppPattern = parseJsonProfileEntryPattern(pattern)
-            actionResult, cppAction = parseJsonProfileEntryAction(action)
-            for branch in actionResult:
-                if actionResult[branch]:
-                    result[branch] = True
+                success, cppPattern = parseJsonProfileEntryPattern(pattern)
+                actionResult, cppAction = parseJsonProfileEntryAction(action)
+                for branch in actionResult:
+                    if actionResult[branch]:
+                        result[branch] = True
 
-            if gfxip == "generic":
-                cppCode = cppCode + IncrementEntryTemplate + cppPattern + cppAction + "\n"
-                cppCode = cppCode.replace("%EntryNum%", 'i')
+                if gfxip == "generic":
+                    cppCode = cppCode + IncrementEntryTemplate + cppPattern + cppAction + "\n"
+                    cppCode = cppCode.replace("%EntryNum%", 'i')
+                else:
+                    cppCode = cppCode + cppPattern + cppAction + "\n"
+                    cppCode = cppCode.replace("%EntryNum%", str(entryCount))
+                    entryCount = entryCount + 1
             else:
-                cppCode = cppCode + cppPattern + cppAction + "\n"
-                cppCode = cppCode.replace("%EntryNum%", str(entryCount))
-                entryCount = entryCount + 1
+                print("************ Parsing failed ****************")
+
+        if gfxip == "generic":
+            entryCountTemplate = ""
         else:
-            print("************ Parsing failed ****************")
+            entryCountTemplate = EntryCountTemplate.replace("%entryCount%", str(entryCount))
 
-    if gfxip == "generic":
-        entryCountTemplate = ""
-    else:
-        entryCountTemplate = EntryCountTemplate.replace("%entryCount%", str(entryCount))
+        var = ""
+        varTemplate = ""
 
-    var = ""
-    varTemplate = ""
+        if gfxip == "generic":
+            var = InitializedVarTemplate.replace("%DataType%", 'uint32_t')
+            var = var.replace("%VarName%", 'i')
+            var = var.replace("%DefaultValue%", str(0))
+            varTemplate = varTemplate + var + "\n"
 
-    if gfxip == "generic":
-        var = InitializedVarTemplate.replace("%DataType%", 'uint32_t')
-        var = var.replace("%VarName%", 'i')
-        var = var.replace("%DefaultValue%", str(0))
-        varTemplate = varTemplate + var + "\n"
+        cppCode = varTemplate + entryCountTemplate + cppCode
 
-    cppCode = varTemplate + entryCountTemplate + cppCode
     return dedentAll(cppCode.rstrip("\n"))
 
 # recursive function

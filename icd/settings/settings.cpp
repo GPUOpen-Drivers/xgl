@@ -173,6 +173,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         memset(pInfo, 0, sizeof(Pal::DeviceProperties));
         m_pDevice->GetProperties(pInfo);
 
+        // By allowing the enable/disable to be set by environment variable, any third party platform owners
+        // can enable or disable the feature based on their internal feedback and not have to wait for a driver
+        // update to catch issues
+
+        const char* pPipelineCacheEnvVar = getenv(m_settings.pipelineCachingEnvironmentVariable);
+
+        if (pPipelineCacheEnvVar != nullptr)
+        {
+            m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
+        }
+
         // In general, DCC is very beneficial for color attachments. If this is completely offset, maybe by increased
         // shader read latency or partial writes of DCC blocks, it should be debugged on a case by case basis.
         if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
@@ -263,7 +274,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (((appProfile == AppProfile::WolfensteinII) ||
             (appProfile == AppProfile::WolfensteinYoungblood) ||
             (appProfile == AppProfile::Doom)) &&
-            (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1))
+            (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1))
         {
             m_settings.asyncComputeQueueMaxWavesPerCu = 40;
             m_settings.nggSubgroupSizing = NggSubgroupExplicit;
@@ -362,6 +373,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::StrangeBrigade)
         {
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.dccBitsPerPixelThreshold = 64;
+                m_settings.enableNgg = 0x0;
+
+            }
 
         }
 
@@ -476,10 +493,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::DoomEternal)
         {
-
             m_settings.barrierFilterOptions = SkipStrayExecutionDependencies | ForceImageSharingModeExclusive;
 
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
                 m_settings.forceDccForColorAttachments = false;
@@ -487,8 +503,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 // Doom Eternal performs better with NGG disabled (3% gain on 4k), likely because idTech runs it's own
                 // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.
                 m_settings.enableNgg = false;
+            }
 
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
                 m_settings.asyncComputeQueueMaxWavesPerCu = 40;
+
+                if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
+                {
+                    m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
+                }
             }
 
             // PM4 optimizations give us 1% gain
@@ -506,17 +530,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::SaschaWillemsExamples)
         {
             m_settings.forceDepthClampBasedOnZExport = true;
-        }
-
-        // By allowing the enable/disable to be set by environment variable, any third party platform owners
-        // can enable or disable the feature based on their internal feedback and not have to wait for a driver
-        // update to catch issues
-
-        const char* pPipelineCacheEnvVar = getenv(m_settings.pipelineCachingEnvironmentVariable);
-
-        if (pPipelineCacheEnvVar != nullptr)
-        {
-            m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);

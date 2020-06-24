@@ -106,4 +106,4 @@ private:
 
 } //vk
 
-#endif // __SETTINGS_SETTINGS_H__
+#endif

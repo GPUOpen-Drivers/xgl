@@ -23,7 +23,7 @@
 #ifdef __cplusplus
 extern "C"
 {
-#endif // __cplusplus
+#endif
 
 /*
 ***************************************************************************************************
@@ -54,10 +54,10 @@ extern "C"
 
 #if !defined(VK_NO_STDINT_H)
         #include <stdint.h>
-#endif // !defined(VK_NO_STDINT_H)
+#endif
 
 #ifdef __cplusplus
 } // extern "C"
-#endif // __cplusplus
+#endif
 
 #endif

@@ -60,10 +60,17 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 
     if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         target_compile_options(xgl PRIVATE
+            # Output with color if in terminal: https://github.com/ninja-build/ninja/wiki/FAQ
+            -fdiagnostics-color=always
             -mpreferred-stack-boundary=6
             -fno-threadsafe-statics
             -fmerge-all-constants
             -fms-extensions
+        )
+    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+        target_compile_options(xgl PRIVATE
+            # Output with color if in terminal: https://github.com/ninja-build/ninja/wiki/FAQ
+            -fcolor-diagnostics
         )
     endif()
 
@@ -159,6 +166,12 @@ if (BUILD_WAYLAND_SUPPORT)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
     target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
 endif()
+
+set(XCB_REQUIRED ON)
+if(XCB_REQUIRED)
+    find_package(XCB)
+endif()
+
 if (${XCB_RANDR_LEASE})
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_XRANDR_EXT=1)
 endif()
@@ -439,13 +452,16 @@ if (UNIX)
         target_link_libraries(xgl PRIVATE -fabi-version=0 -static-intel)
     endif()
 
-    if(CMAKE_BUILD_TYPE_RELEASE)
+    if(CMAKE_BUILD_TYPE_RELEASE AND XGL_ENABLE_LTO)
         if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
             execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
             if (GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
                 target_link_libraries(xgl PRIVATE -flto=4  -fuse-linker-plugin -Wno-odr)
                 message(WARNING "LTO enabled for Linking")
             endif()
+        elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+            # LTO enabled for final Linking (clang)
+            target_link_libraries(xgl PRIVATE -flto=thin)
         endif()
     endif()
 

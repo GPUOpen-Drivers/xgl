@@ -80,4 +80,4 @@
 #include "vulkan_beta.h"
 #endif
 
-#endif // VULKAN_H_
+#endif

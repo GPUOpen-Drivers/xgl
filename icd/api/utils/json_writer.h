@@ -71,4 +71,4 @@ private:
 }
 
 }
-#endif // __JSON_WRITER_H__
+#endif

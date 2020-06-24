@@ -195,4 +195,4 @@ namespace vk
 
 }// namespace vk
 
-#endif//__VK_DEFINES_H__
+#endif

@@ -2135,5 +2135,5 @@ inline RayFlagsMask operator|(RayFlagsMask a, RayFlagsMask b) { return RayFlagsM
 
 }  // end namespace spv
 
-#endif  // #ifndef spirv_HPP
+#endif
 

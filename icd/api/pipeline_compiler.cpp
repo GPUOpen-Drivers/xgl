@@ -1112,6 +1112,12 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             pStageInfos[stage] = &pGraphicsPipelineCreateInfo->pStages[i];
         }
 
+        uint32 activeStages = {};
+        for (uint32_t i = 0; i < pGraphicsPipelineCreateInfo->stageCount; ++i)
+        {
+            activeStages = activeStages | pGraphicsPipelineCreateInfo->pStages[i].stage;
+        }
+
         VK_IGNORE(pGraphicsPipelineCreateInfo->flags & VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT);
 
         pRenderPass = RenderPass::ObjectFromHandle(pGraphicsPipelineCreateInfo->renderPass);
@@ -1131,28 +1137,31 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.iaState.topology           = pIa->topology;
         pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
 
-        EXTRACT_VK_STRUCTURES_1(
-            Tess,
-            PipelineTessellationStateCreateInfo,
-            PipelineTessellationDomainOriginStateCreateInfo,
-            pGraphicsPipelineCreateInfo->pTessellationState,
-            PIPELINE_TESSELLATION_STATE_CREATE_INFO,
-            PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO)
-
-        if (pPipelineTessellationStateCreateInfo != nullptr)
+        if (activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
         {
-            pCreateInfo->pipelineInfo.iaState.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
-        }
+            EXTRACT_VK_STRUCTURES_1(
+                Tess,
+                PipelineTessellationStateCreateInfo,
+                PipelineTessellationDomainOriginStateCreateInfo,
+                pGraphicsPipelineCreateInfo->pTessellationState,
+                PIPELINE_TESSELLATION_STATE_CREATE_INFO,
+                PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO)
 
-        if (pPipelineTessellationDomainOriginStateCreateInfo)
-        {
-            // Vulkan 1.0 incorrectly specified the tessellation u,v coordinate origin as lower left even though
-            // framebuffer and image coordinate origins are in the upper left.  This has since been fixed, but
-            // an extension exists to use the previous behavior.  Doing so with flat shading would likely appear
-            // incorrect, but Vulkan specifies that the provoking vertex is undefined when tessellation is active.
-            if (pPipelineTessellationDomainOriginStateCreateInfo->domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT)
+            if (pPipelineTessellationStateCreateInfo != nullptr)
             {
-                pCreateInfo->pipelineInfo.iaState.switchWinding = true;
+                pCreateInfo->pipelineInfo.iaState.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
+            }
+
+            if (pPipelineTessellationDomainOriginStateCreateInfo)
+            {
+                // Vulkan 1.0 incorrectly specified the tessellation u,v coordinate origin as lower left even though
+                // framebuffer and image coordinate origins are in the upper left.  This has since been fixed, but
+                // an extension exists to use the previous behavior.  Doing so with flat shading would likely appear
+                // incorrect, but Vulkan specifies that the provoking vertex is undefined when tessellation is active.
+                if (pPipelineTessellationDomainOriginStateCreateInfo->domainOrigin == VK_TESSELLATION_DOMAIN_ORIGIN_LOWER_LEFT)
+                {
+                    pCreateInfo->pipelineInfo.iaState.switchWinding = true;
+                }
             }
         }
 
@@ -1196,7 +1205,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
         pCreateInfo->pipelineInfo.rsState.numSamples = 1;
 
-        if (pMs != nullptr)
+        if ((pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable != VK_TRUE) && (pMs != nullptr))
         {
             bool multisampleEnable = (pMs->rasterizationSamples != 1);
 
@@ -1236,7 +1245,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         const VkPipelineColorBlendStateCreateInfo* pCb = pGraphicsPipelineCreateInfo->pColorBlendState;
         bool dualSourceBlend = false;
 
-        if (pCb != nullptr)
+        if ((pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable != VK_TRUE) && (pCb != nullptr))
         {
             const uint32_t numColorTargets = Util::Min(pCb->attachmentCount, Pal::MaxColorTargets);
 

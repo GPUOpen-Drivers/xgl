@@ -3238,7 +3238,7 @@
       "Name": "TransferGranularityDmaOverride"
     },
     {
-      "Description": "If this is option enabled, the following changes are introduced:  (1) Images with VK_IMAGE_TILING_OPTIMAL may not be bound to memory types with VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT.  (2) For each memory type that was previously host visible and usable with optimal images, an another memory type is created that is not host visible and can be used with optimally tiled images.",
+      "Description": "If this option is enabled, the following changes are introduced:  (1) Images with VK_IMAGE_TILING_OPTIMAL may not be bound to memory types with VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT.  (2) For each memory type that was previously host visible and usable with optimal images, an another memory type is created that is not host visible and can be used with optimally tiled images.",
       "Tags": [
         "Memory"
       ],
@@ -3249,6 +3249,32 @@
       "Type": "bool",
       "VariableName": "addHostInvisibleMemoryTypesForOptimalImages",
       "Name": "AddHostInvisibleMemoryTypesForOptimalImages"
+    },
+    {
+      "Description": "If this option is enabled, the driver returns an extra image memory requirement. The amount of memory is determined by memoryPaddingFactorForImageMemoryRequirements.This can be used while capturing GFXR traces and can be helpful for DCC tuning",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "addMemoryPaddingToImageMemoryRequirements",
+      "Name": "AddMemoryPaddingToImageMemoryRequirements"
+    },
+    {
+      "Description": "When AddMemoryPaddingToImageMemoryRequirements setting is enabled, this value determines how much extra memory is to be padded. By default, 10% extra is added.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": "0.1f"
+      },
+      "Scope": "Driver",
+      "Type": "float",
+      "VariableName": "memoryPaddingFactorForImageMemoryRequirements",
+      "Name": "MemoryPaddingFactorForImageMemoryRequirements"
     },
     {
       "Description": "Forces a particular AppProfile value.  The profile selected is the value of ForceAppProfileValue. ",
