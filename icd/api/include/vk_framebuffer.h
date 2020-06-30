@@ -97,7 +97,7 @@ public:
     }
 
 protected:
-    Framebuffer(const VkFramebufferCreateInfo& info, Attachment* pAttachments);
+    Framebuffer(const VkFramebufferCreateInfo& info, Attachment* pAttachments, const RuntimeSettings& runTimeSettings);
 
 private:
     inline void SetSubresRanges(
@@ -114,6 +114,7 @@ private:
 
     const uint32_t            m_attachmentCount;
     Pal::GlobalScissorParams  m_globalScissorParams;
+    const RuntimeSettings&    m_settings;
 };
 
 namespace entry

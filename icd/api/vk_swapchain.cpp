@@ -152,7 +152,8 @@ VkResult SwapChain::Create(
                 // The swap chain is stereo if imageArraySize is 2
                 properties.flags.stereo = (pVkSwapchainCreateInfoKHR->imageArrayLayers == 2) ? 1 : 0;
 
-                properties.imageCreateInfo.swizzledFormat     = VkToPalFormat(pVkSwapchainCreateInfoKHR->imageFormat);
+                properties.imageCreateInfo.swizzledFormat     = VkToPalFormat(pVkSwapchainCreateInfoKHR->imageFormat,
+                                                                              pDevice->GetRuntimeSettings());
                 properties.imageCreateInfo.flags.stereo       = properties.flags.stereo;
                 properties.imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
 
@@ -219,7 +220,8 @@ VkResult SwapChain::Create(
             // expects that to be excluded from the list.
             if (pViewFormats[i] != pCreateInfo->imageFormat)
             {
-                palFormatList[properties.imageCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i]);
+                palFormatList[properties.imageCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i],
+                                                                                pDevice->GetRuntimeSettings());
             }
         }
     }
@@ -683,7 +685,8 @@ void SwapChain::PostPresent(
 // Called after full screen has been acquired so the color params can bet set correctly
 void SwapChain::AcquireFullScreenProperties()
 {
-    m_colorParams.format     = VkToPalFormat(m_properties.fullscreenSurfaceFormat.format).format;
+    m_colorParams.format     = VkToPalFormat(m_properties.fullscreenSurfaceFormat.format,
+                                             m_pDevice->GetRuntimeSettings()).format;
     m_colorParams.colorSpace = VkToPalScreenSpace(m_properties.fullscreenSurfaceFormat);
 }
 
@@ -863,7 +866,7 @@ void SwapChain::SetHdrMetadata(
     auto ConvertUnits        = [] (float input) { return static_cast<uint32_t>(static_cast<double>(input) * 50000.0); };
     auto ConvertMinLuminance = [] (float input) { return static_cast<uint32_t>(static_cast<double>(input) * 10000.0); };
 
-    m_colorParams.format     = VkToPalFormat(m_properties.surfaceFormat.format).format;
+    m_colorParams.format     = VkToPalFormat(m_properties.surfaceFormat.format, m_pDevice->GetRuntimeSettings()).format;
     m_colorParams.colorSpace = VkToPalScreenSpace(m_properties.surfaceFormat);
 
     m_colorParams.userDefinedColorGamut.chromaticityRedX          = ConvertUnits(pMetadata->displayPrimaryRed.x);

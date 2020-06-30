@@ -337,6 +337,30 @@ constexpr AppProfilePatternEntry AppNameDoomEternal =
     "doometernal"
 };
 
+constexpr AppProfilePatternEntry AppNameZombieArmy4 =
+{
+    PatternAppNameLower,
+    "za4"
+};
+
+constexpr AppProfilePatternEntry AppEngineZombieArmy4
+{
+    PatternEngineNameLower,
+    "za4"
+};
+
+constexpr AppProfilePatternEntry AppNameGhostReconBreakpoint =
+{
+    PatternAppNameLower,
+    "ghost recon breakpoint"
+};
+
+constexpr AppProfilePatternEntry AppEngineAnvilNext =
+{
+    PatternEngineNameLower,
+    "anvilnext"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -663,6 +687,24 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameRDR2,
             AppEngineRAGE,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::ZombieArmy4,
+        {
+            AppNameZombieArmy4,
+            AppEngineZombieArmy4,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::GhostReconBreakpoint,
+        {
+            AppNameGhostReconBreakpoint,
+            AppEngineAnvilNext,
             PatternEnd
         }
     },

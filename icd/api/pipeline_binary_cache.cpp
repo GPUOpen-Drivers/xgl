@@ -36,13 +36,14 @@
 #include "include/vk_physical_device.h"
 
 #include "palArchiveFile.h"
+#include "palAutoBuffer.h"
 #include "palPlatformKey.h"
 #include "palSysMemory.h"
 #include "palVectorImpl.h"
-#include "palHashBaseImpl.h"
+#include "palHashMapImpl.h"
 #include "palFile.h"
 #if ICD_GPUOPEN_DEVMODE_BUILD
-#include "palPipelineAbiProcessorImpl.h"
+#include "palPipelineAbiReader.h"
 
 #include "devmode/devmode_mgr.h"
 #endif
@@ -411,23 +412,18 @@ Util::Result PipelineBinaryCache::StoreReinjectionBinary(
         uint32_t gfxIpMinor = 0u;
         uint32_t gfxIpStepping = 0u;
 
-        Util::Abi::PipelineAbiProcessor<PalAllocator> processor(m_pInstance->Allocator());
-        result = processor.LoadFromBuffer(pPipelineBinary, pipelineBinarySize);
+        Util::Abi::PipelineAbiReader reader(m_pInstance->Allocator(), pPipelineBinary);
+        reader.GetGfxIpVersion(&gfxIpMajor, &gfxIpMinor, &gfxIpStepping);
 
-        if (result == Util::Result::Success)
+        if (gfxIpMajor == m_gfxIp.major &&
+            gfxIpMinor == m_gfxIp.minor &&
+            gfxIpStepping == m_gfxIp.stepping)
         {
-            processor.GetGfxIpVersion(&gfxIpMajor, &gfxIpMinor, &gfxIpStepping);
-
-            if (gfxIpMajor == m_gfxIp.major &&
-                gfxIpMinor == m_gfxIp.minor &&
-                gfxIpStepping == m_gfxIp.stepping)
-            {
-                result = m_pReinjectionLayer->Store(pInternalPipelineHash, pPipelineBinary, pipelineBinarySize);
-            }
-            else
-            {
-                result = Util::Result::ErrorIncompatibleDevice;
-            }
+            result = m_pReinjectionLayer->Store(pInternalPipelineHash, pPipelineBinary, pipelineBinarySize);
+        }
+        else
+        {
+            result = Util::Result::ErrorIncompatibleDevice;
         }
     }
 

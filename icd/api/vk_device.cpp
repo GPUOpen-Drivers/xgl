@@ -229,6 +229,7 @@ Device::Device(
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue)
     , m_scalarBlockLayoutEnabled(false)
+
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
 
@@ -411,6 +412,7 @@ VkResult Device::Create(
     VkMemoryOverallocationBehaviorAMD overallocationBehavior          = VK_MEMORY_OVERALLOCATION_BEHAVIOR_DEFAULT_AMD;
     bool                              deviceCoherentMemoryEnabled     = false;
     bool                              scalarBlockLayoutEnabled        = false;
+    ExtendedRobustness                extendedRobustnessEnabled     = { false, false, false };
 
     for (pDeviceCreateInfo = pCreateInfo; ((pHeader != nullptr) && (vkResult == VK_SUCCESS)); pHeader = pHeader->pNext)
     {
@@ -794,6 +796,24 @@ VkResult Device::Create(
                 pPhysicalDevice,
                 reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader));
 
+            if ((vkResult == VK_SUCCESS) &&
+                reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustBufferAccess2)
+            {
+                extendedRobustnessEnabled.robustBufferAccess = true;
+            }
+
+            if ((vkResult == VK_SUCCESS) &&
+                reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->robustImageAccess2)
+            {
+                extendedRobustnessEnabled.robustImageAccess = true;
+            }
+
+            if ((vkResult == VK_SUCCESS) &&
+                reinterpret_cast<const VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader)->nullDescriptor)
+            {
+                extendedRobustnessEnabled.nullDescriptor = true;
+            }
+
             break;
         }
 
@@ -944,7 +964,8 @@ VkResult Device::Create(
     if (vkResult == VK_SUCCESS)
     {
         pMemory = pInstance->AllocMem(
-            apiDeviceSize + (totalQueues * apiQueueSize) + palQueueMemorySize,
+            apiDeviceSize + (totalQueues * apiQueueSize) + palQueueMemorySize
+            ,
             VK_DEFAULT_MEM_ALIGN,
             VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -1063,8 +1084,8 @@ VkResult Device::Create(
             }
         }
 
-        // No matter how we exited the loops above, convert the PAL result and decide if we should continue
-        // processing.
+       // No matter how we exited the loops above, convert the PAL result and decide if we should continue
+       // processing.
         vkResult = PalToVkResult(palResult);
 
         if (vkResult != VK_SUCCESS)
@@ -1092,7 +1113,8 @@ VkResult Device::Create(
                 enabledDeviceExtensions,
                 overallocationBehavior,
                 deviceCoherentMemoryEnabled,
-                scalarBlockLayoutEnabled);
+                scalarBlockLayoutEnabled,
+				extendedRobustnessEnabled);
 
             // If we've failed to Initialize, make sure we destroy anything we might have allocated.
             if (vkResult != VK_SUCCESS)
@@ -1110,6 +1132,12 @@ VkResult Device::Create(
 }
 
 // =====================================================================================================================
+
+// ==================================================================================================================== =
+
+// =====================================================================================================================
+
+// =====================================================================================================================
 // Bring up the Vulkan device.
 VkResult Device::Initialize(
     PhysicalDevice*                         pPhysicalDevice,
@@ -1117,7 +1145,8 @@ VkResult Device::Initialize(
     const DeviceExtensions::Enabled&        enabled,
     const VkMemoryOverallocationBehaviorAMD overallocationBehavior,
     const bool                              deviceCoherentMemoryEnabled,
-    bool                                    scalarBlockLayoutEnabled)
+    bool                                    scalarBlockLayoutEnabled,
+	const ExtendedRobustness&               extendedRobustnessEnabled)
 {
     // Initialize the internal memory manager
     VkResult result = m_internalMemMgr.Init();
@@ -1194,7 +1223,6 @@ VkResult Device::Initialize(
     }
 
     memcpy(&m_pQueues, pQueues, sizeof(m_pQueues));
-
     Pal::DeviceProperties deviceProps = {};
     result = PalToVkResult(PalDevice(DefaultDeviceIndex)->GetProperties(&deviceProps));
 
@@ -1225,6 +1253,7 @@ VkResult Device::Initialize(
 
     m_deviceCoherentMemoryEnabled = deviceCoherentMemoryEnabled;
     m_scalarBlockLayoutEnabled = scalarBlockLayoutEnabled;
+    m_extendedRobustnessEnabled = extendedRobustnessEnabled;
 
     if (result == VK_SUCCESS)
     {
@@ -2059,6 +2088,47 @@ VkResult Device::GetQueue(
     return VK_SUCCESS;
 }
 // =====================================================================================================================
+VkResult Device::GetQueue2(
+    const VkDeviceQueueInfo2* pQueueInfo,
+    VkQueue*                  pQueue)
+{
+    VkResult result = VK_SUCCESS;
+
+    VkDeviceQueueCreateFlags flags            = 0;
+    uint32_t                 queueFamilyIndex = 0;
+    uint32_t                 queueIndex       = 0;
+    union
+    {
+        const VkStructHeader*     pHeader;
+        const VkDeviceQueueInfo2* pQueueInfoInfo2;
+    };
+
+    for (pQueueInfoInfo2 = pQueueInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    {
+        switch (static_cast<uint32_t>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2:
+        {
+            flags            = pQueueInfoInfo2->flags;
+            queueFamilyIndex = pQueueInfoInfo2->queueFamilyIndex;
+            queueIndex       = pQueueInfoInfo2->queueIndex;
+            break;
+        }
+        default:
+            VK_NOT_IMPLEMENTED;
+            break;
+        };
+    }
+
+    {
+        DispatchableQueue* pFoundQueue = m_pQueues[queueFamilyIndex][queueIndex];
+        *pQueue = ((*pFoundQueue)->GetFlags() == flags) ? reinterpret_cast<VkQueue>(pFoundQueue) : nullptr;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
 Pal::PrtFeatureFlags Device::GetPrtFeatures() const
 {
     const Pal::PrtFeatureFlags featureFlags = VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures();
@@ -2070,6 +2140,8 @@ Pal::PrtFeatureFlags Device::GetPrtFeatures() const
 
     return featureFlags;
 }
+
+// =====================================================================================================================
 
 // =====================================================================================================================
 VkResult Device::WaitForFences(
@@ -3251,21 +3323,7 @@ VKAPI_ATTR void VKAPI_CALL vkGetDeviceQueue2(
     const VkDeviceQueueInfo2*                   pQueueInfo,
     VkQueue*                                    pQueue)
 {
-    // For now we assume we don't get any additional information here compared to vkGetDeviceQueue.
-    // If that changes due to having new structs added to the chain, adding support for protected queues, or other
-    // queue creation flags then this code needs to be updated.
-    VK_ASSERT(pQueueInfo->sType == VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2);
-    VK_ASSERT(pQueueInfo->pNext == nullptr);
-
-    ApiDevice::ObjectFromHandle(device)->GetQueue(pQueueInfo->queueFamilyIndex, pQueueInfo->queueIndex, pQueue);
-
-    const Queue* queue = DispatchableQueue::ObjectFromHandle(*pQueue);
-
-    if (queue->GetFlags() != pQueueInfo->flags)
-    {
-        *pQueue = VK_NULL_HANDLE;
-    }
-
+    ApiDevice::ObjectFromHandle(device)->GetQueue2(pQueueInfo, pQueue);
 }
 
 // =====================================================================================================================

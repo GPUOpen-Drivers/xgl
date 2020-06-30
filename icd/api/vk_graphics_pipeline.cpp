@@ -1097,7 +1097,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 if (pRenderPass)
                 {
                     cbFormat[i] = pRenderPass->GetColorAttachmentFormat(pGraphicsPipelineCreateInfo->subpass, i);
-                    pCbDst->swizzledFormat = VkToPalFormat(cbFormat[i]);
+                    pCbDst->swizzledFormat = VkToPalFormat(cbFormat[i], pDevice->GetRuntimeSettings());
                 }
 
                 // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not

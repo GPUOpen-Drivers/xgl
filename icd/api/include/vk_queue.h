@@ -124,8 +124,11 @@ public:
 
     enum
     {
-        MaxQueueFamilies    = Pal::EngineTypeCount,  // Maximum number of queue families
-        MaxQueuesPerFamily  = 8,                     // Maximum number of queues per family
+        MaxQueueFamilies   = Pal::QueueTypeCount,  // Maximum number of queue families
+        MaxQueuesPerFamily = 4,                    // Maximum number of queues per family
+        MaxMultiQueues     = 4,
+
+        MaxSubQueuesInGroup = MaxQueueFamilies * MaxQueuesPerFamily  // Maximum number of queues per group
     };
 
     VK_FORCEINLINE Pal::IQueue* PalQueue(int32_t idx) const

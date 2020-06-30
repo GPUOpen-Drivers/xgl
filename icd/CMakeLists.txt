@@ -171,7 +171,6 @@ set(XCB_REQUIRED ON)
 if(XCB_REQUIRED)
     find_package(XCB)
 endif()
-
 if (${XCB_RANDR_LEASE})
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_XRANDR_EXT=1)
 endif()

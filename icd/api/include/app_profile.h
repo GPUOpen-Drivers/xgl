@@ -77,6 +77,8 @@ enum class AppProfile : uint32_t
     WolfensteinYoungblood, // Wolfenstein Youngblood by Machine Games
     RedDeadRedemption2,    // Red Dead Redemption 2 by Rockstar
     DoomEternal,           // Doom Eternal by id Software
+    ZombieArmy4,           // Zombie Army 4: Dead War by Rebellion Developments
+    GhostReconBreakpoint,  // Ghost Recon Breakpoint
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)
@@ -86,6 +88,7 @@ enum class AppProfile : uint32_t
     NitrousEngine,         // Nitrous Engine by Oxide (Default)
     ApexEngine,            // Avalanche Open World Engine (Default)
     ScimitarEngine,        // Scimitar Engine by Ubisoft (Default)
+    AnvilNextEngine,       // AnvilNext Engine by Ubisoft (Default)
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
 };
 

@@ -70,7 +70,7 @@ VkResult BufferView::Create(
 
     Buffer* pBuffer = Buffer::ObjectFromHandle(pCreateInfo->buffer);
 
-    info.swizzledFormat = VkToPalFormat(pCreateInfo->format);
+    info.swizzledFormat = VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings());
     info.stride         = Pal::Formats::BytesPerPixel(info.swizzledFormat.format);
     if (pCreateInfo->range == VK_WHOLE_SIZE)
     {

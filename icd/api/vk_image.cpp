@@ -225,7 +225,7 @@ static void ConvertImageCreateInfo(
         Pal::MergedFormatPropertiesTable fmtProperties = {};
         pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalDevice()->GetFormatProperties(&fmtProperties);
 
-        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(pCreateInfo->format);
+        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings());
 
         const size_t formatIdx = static_cast<size_t>(swizzledFormat.format);
         const size_t tilingIdx = ((pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR) ? Pal::IsLinear : Pal::IsNonLinear);
@@ -240,7 +240,7 @@ static void ConvertImageCreateInfo(
     pPalCreateInfo->extent.height    = pCreateInfo->extent.height;
     pPalCreateInfo->extent.depth     = pCreateInfo->extent.depth;
     pPalCreateInfo->imageType        = VkToPalImageType(pCreateInfo->imageType);
-    pPalCreateInfo->swizzledFormat   = VkToPalFormat(pCreateInfo->format);
+    pPalCreateInfo->swizzledFormat   = VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings());
     pPalCreateInfo->mipLevels        = pCreateInfo->mipLevels;
     pPalCreateInfo->arraySize        = pCreateInfo->arrayLayers;
     pPalCreateInfo->samples          = pCreateInfo->samples;
@@ -593,9 +593,11 @@ VkResult Image::Create(
         {
             // Skip any entries that specify the same format as the base format of the image as the PAL interface
             // expects that to be excluded from the list.
-            if (VkToPalFormat(pViewFormats[i]).format != VkToPalFormat(pImageCreateInfo->format).format)
+            if (VkToPalFormat(pViewFormats[i], pDevice->GetRuntimeSettings()).format
+                != VkToPalFormat(pImageCreateInfo->format, pDevice->GetRuntimeSettings()).format)
             {
-                palFormatList[palCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i]);
+                palFormatList[palCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i],
+                                                                               pDevice->GetRuntimeSettings());
             }
         }
     }
@@ -1485,7 +1487,9 @@ VkResult Image::GetSubresourceLayout(
     Pal::SubresLayout palLayout = {};
     Pal::SubresId palSubResId = {};
 
-    palSubResId.aspect     = VkToPalImageAspectSingle(m_format, pSubresource->aspectMask);
+    palSubResId.aspect     = VkToPalImageAspectSingle(m_format,
+        pSubresource->aspectMask, pDevice->GetRuntimeSettings());
+
     palSubResId.mipLevel   = pSubresource->mipLevel;
     palSubResId.arraySlice = pSubresource->arrayLayer;
 

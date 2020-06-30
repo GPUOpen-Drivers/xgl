@@ -152,6 +152,14 @@ public:
         bool connectThroughThunderBolt;
     };
 
+    // Represent features in VK_EXT_robustness2
+    struct ExtendedRobustness
+    {
+        bool robustBufferAccess;
+        bool robustImageAccess;
+        bool nullDescriptor;
+    };
+
     static VkResult Create(
         PhysicalDevice*                             pPhysicalDevice,
         const VkDeviceCreateInfo*                   pCreateInfo,
@@ -170,6 +178,10 @@ public:
     VkResult GetQueue(
         uint32_t                                    queueFamilyIndex,
         uint32_t                                    queueIndex,
+        VkQueue*                                    pQueue);
+
+    VkResult GetQueue2(
+        const VkDeviceQueueInfo2*                   pQueueInfo,
         VkQueue*                                    pQueue);
 
     VkResult CreateEvent(
@@ -322,7 +334,8 @@ public:
         const DeviceExtensions::Enabled&            enabled,
         const VkMemoryOverallocationBehaviorAMD     overallocationBehavior,
         const bool                                  deviceCoherentMemoryEnabled,
-        bool                                        scalarBlockLayoutEnabled);
+        bool                                        scalarBlockLayoutEnabled,
+		const ExtendedRobustness&                   extendedRobustnessEnabled);
 
     void InitDispatchTable();
 
@@ -608,6 +621,21 @@ public:
         return m_scalarBlockLayoutEnabled;
     }
 
+    VK_INLINE bool IsRobustBufferAccess2Enabled() const
+    {
+        return m_extendedRobustnessEnabled.robustBufferAccess;
+    }
+
+    VK_INLINE bool IsRobustImageAccess2Enabled() const
+    {
+        return m_extendedRobustnessEnabled.robustImageAccess;
+    }
+
+    VK_INLINE bool IsNullDescriptorEnabled() const
+    {
+        return m_extendedRobustnessEnabled.nullDescriptor;
+    }
+
 VkResult SetDebugUtilsObjectName(const VkDebugUtilsObjectNameInfoEXT* pNameInfo);
 
 protected:
@@ -721,6 +749,9 @@ protected:
 
     // The state of enabled feature VK_EXT_scalar_block_layout.
     bool                                m_scalarBlockLayoutEnabled;
+
+    // The state of enabled features in VK_EXT_robustness2.
+    ExtendedRobustness                  m_extendedRobustnessEnabled;
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

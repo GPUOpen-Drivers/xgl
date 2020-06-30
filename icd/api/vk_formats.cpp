@@ -37,10 +37,13 @@ namespace vk
 // Helper function to calculate image texels based on whether an image is compressed or not. Element is compatible to
 // pal definition. For non-compressed format elements equal to texels. For compressed format elements are considered
 // as compressed blocks.
-VkExtent3D Formats::ElementsToTexels(VkFormat format, const VkExtent3D& extent)
+VkExtent3D Formats::ElementsToTexels(
+    VkFormat               format,
+    const VkExtent3D&      extent,
+    const RuntimeSettings& settings)
 {
     VkExtent3D texels = {};
-    const Pal::ChNumFormat palFormat = VkToPalFormat(format).format;
+    const Pal::ChNumFormat palFormat = VkToPalFormat(format, settings).format;
 
     if (Pal::Formats::IsBlockCompressed(palFormat))
     {
@@ -62,7 +65,8 @@ VkExtent3D Formats::ElementsToTexels(VkFormat format, const VkExtent3D& extent)
 // functions because we map certain Vulkan formats to "undefined" that we still technically expose through very limited
 // ways, and we need to know this particular piece of information about those formats.
 Pal::Formats::NumericSupportFlags Formats::GetNumberFormat(
-    VkFormat format)
+    VkFormat               format,
+    const RuntimeSettings& settings)
 {
     using namespace Pal::Formats;
 
@@ -71,8 +75,7 @@ Pal::Formats::NumericSupportFlags Formats::GetNumberFormat(
         "VkToPalFormat, and return a number type for them below in the switch-case (this is rare).");
 
     NumericSupportFlags numType;
-
-    const Pal::SwizzledFormat palFormat = VkToPalFormat(format);
+    const Pal::SwizzledFormat palFormat = VkToPalFormat(format, settings);
 
     if (palFormat.format != Pal::UndefinedSwizzledFormat.format)
     {
