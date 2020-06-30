@@ -62,7 +62,7 @@ constexpr uint32_t MaxRangePerAttachment        = 2;    // Depth/stencil images 
 static_assert((MaxRangePerAttachment == MaxPalDepthAspectsPerMask),
               "API's max depth/stencil ranges per attachment and PAL max depth aspects must match");
 
-VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format);
+VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings);
 
 #define VK_TO_PAL_TABLE_COMPLEX(srcType, srcTypeName, dstType, convertFunc, mapping) \
     VK_TO_PAL_TABLE_COMPLEX_WITH_SUFFIX(srcType, srcTypeName, dstType, convertFunc, mapping, )
@@ -693,8 +693,9 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
 // =====================================================================================================================
 // Selects a single PAL aspect that directly corresponds to the specified mask.
 VK_INLINE Pal::ImageAspect VkToPalImageAspectSingle(
-    VkFormat           format,
-    VkImageAspectFlags aspectMask)
+    VkFormat               format,
+    VkImageAspectFlags     aspectMask,
+    const RuntimeSettings& settings)
 {
     if (Formats::IsYuvFormat(format))
     {
@@ -707,7 +708,7 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectSingle(
         case VK_IMAGE_ASPECT_PLANE_0_BIT:
         case VK_IMAGE_ASPECT_PLANE_1_BIT:
         case VK_IMAGE_ASPECT_PLANE_2_BIT:
-            return VkToPalImageAspectExtract(VkToPalFormat(format).format, &aspectMask);
+            return VkToPalImageAspectExtract(VkToPalFormat(format, settings).format, &aspectMask);
         default:
             VK_ASSERT(!"Unsupported flag combination");
             return Pal::ImageAspect::Y;
@@ -1199,7 +1200,8 @@ VK_INLINE void VkToPalSubresRange(
     uint32_t                        mipLevels,
     uint32_t                        arraySize,
     Pal::SubresRange*               pPalSubresRanges,
-    uint32_t*                       pPalSubresRangeIndex)
+    uint32_t*                       pPalSubresRangeIndex,
+    const RuntimeSettings&          settings)
 {
     constexpr uint32_t WHOLE_SIZE_UINT32 = (uint32_t)VK_WHOLE_SIZE;
 
@@ -1211,7 +1213,7 @@ VK_INLINE void VkToPalSubresRange(
     palSubresRange.numSlices                = (range.layerCount == WHOLE_SIZE_UINT32) ? (arraySize - range.baseArrayLayer) : range.layerCount;
 
     VkImageAspectFlags aspectMask = range.aspectMask;
-    Pal::ChNumFormat palFormat = VkToPalFormat(format).format;
+    Pal::ChNumFormat palFormat = VkToPalFormat(format, settings).format;
 
     if ((Pal::Formats::IsYuv(palFormat)) &&
         (aspectMask == VK_IMAGE_ASPECT_COLOR_BIT))
@@ -1748,7 +1750,7 @@ constexpr VK_INLINE Pal::SwizzledFormat PalFmt(
 
 // =====================================================================================================================
 // Converts Vulkan format to PAL equivalent.
-VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format)
+VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettings& settings)
 {
     if (VK_ENUM_IN_RANGE(format, VK_FORMAT))
     {

@@ -411,7 +411,7 @@ static void GetFormatFeatureFlags(
     VkFormatFeatureFlags*                   pOutFormatFeatureFlags,
     const RuntimeSettings&                  settings)
 {
-    const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(format);
+    const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(format, settings);
 
     const size_t formatIdx = static_cast<size_t>(swizzledFormat.format);
     const size_t tilingIdx = ((imageTiling == VK_IMAGE_TILING_LINEAR) ? Pal::IsLinear : Pal::IsNonLinear);
@@ -433,7 +433,8 @@ static void GetFormatFeatureFlags(
     // the depth aspect for depth-stencil images we have to handle this case explicitly here.
     if (Formats::HasDepth(format) && ((retFlags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT) != 0))
     {
-        Pal::SwizzledFormat depthFormat = VkToPalFormat(Formats::GetAspectFormat(format, VK_IMAGE_ASPECT_DEPTH_BIT));
+        Pal::SwizzledFormat depthFormat = VkToPalFormat(
+            Formats::GetAspectFormat(format, VK_IMAGE_ASPECT_DEPTH_BIT), settings);
 
         const size_t depthFormatIdx = static_cast<size_t>(depthFormat.format);
 
@@ -1075,8 +1076,8 @@ void PhysicalDevice::PopulateFormatProperties()
         // Add support for USCALED/SSCALED formats for ISV customer.
         // The BLT tests are incorrect in the conformance test
         // TODO: This should be removed when the CTS errors are fixed
-        const Pal::SwizzledFormat palFormat = VkToPalFormat(format);
-        const auto numFmt = Formats::GetNumberFormat(format);
+        const Pal::SwizzledFormat palFormat = VkToPalFormat(format, GetRuntimeSettings());
+        const auto numFmt = Formats::GetNumberFormat(format, GetRuntimeSettings());
 
          if (numFmt == Pal::Formats::NumericSupportFlags::Uscaled ||
              numFmt == Pal::Formats::NumericSupportFlags::Sscaled)
@@ -1125,7 +1126,7 @@ void PhysicalDevice::PopulateFormatProperties()
 
         // Vulkan doesn't have a corresponding flag for multisampling support.  If there ends up being more cases
         // like this, just store the entire PAL format table in the physical device instead of using a bitfield.
-        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(format);
+        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(format, GetRuntimeSettings());
         const size_t              formatIdx      = static_cast<size_t>(swizzledFormat.format);
 
         if (fmtProperties.features[formatIdx][Pal::IsNonLinear] & Pal::FormatFeatureMsaaTarget)
@@ -1395,7 +1396,7 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     const auto& imageProps = PalProperties().imageProperties;
     const RuntimeSettings& settings = m_pSettingsLoader->GetSettings();
 
-    Pal::SwizzledFormat palFormat = VkToPalFormat(format);
+    Pal::SwizzledFormat palFormat = VkToPalFormat(format, GetRuntimeSettings());
 
     // NOTE: BytesPerPixel obtained from PAL is per block not per pixel for compressed formats.  Therefore,
     //       maxResourceSize/maxExtent are also in terms of blocks for compressed formats.  I.e. we don't
@@ -1646,7 +1647,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     };
     const uint32_t nAspects = sizeof(aspects) / sizeof(aspects[0]);
 
-    uint32_t bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(VkToPalFormat(format).format));
+    uint32_t bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(
+        VkToPalFormat(format, GetRuntimeSettings()).format));
 
     bool supported =
         // Multisampled sparse images depend on HW capability
@@ -1701,7 +1703,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
                 pProperties->aspectMask = pAspect->aspectVk;
 
                 const VkFormat aspectFormat = Formats::GetAspectFormat(format, pAspect->aspectVk);
-                bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(VkToPalFormat(aspectFormat).format));
+                bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(
+                    VkToPalFormat(aspectFormat, GetRuntimeSettings()).format));
 
                 // Determine pixel size index (log2 of the pixel byte size, used to index into the tables below)
                 // Note that we only support standard block shapes currently
@@ -1722,7 +1725,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
                     VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std2DBlockShapes));
 
                     pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
-                                                                              Std2DBlockShapes[pixelSizeIndex]);
+                                                                              Std2DBlockShapes[pixelSizeIndex],
+                                                                              GetRuntimeSettings());
                 }
                 else if (type == VK_IMAGE_TYPE_3D)
                 {
@@ -1741,7 +1745,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
                         VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(Std3DBlockShapes));
 
                         pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
-                                                                                  Std3DBlockShapes[pixelSizeIndex]);
+                                                                                  Std3DBlockShapes[pixelSizeIndex],
+                                                                                  GetRuntimeSettings());
                     }
                     else
                     {
@@ -1762,7 +1767,8 @@ void PhysicalDevice::GetSparseImageFormatProperties(
                         VK_ASSERT(pixelSizeIndex < VK_ARRAY_SIZE(NonStd3DBlockShapes));
 
                         pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
-                                                                                  NonStd3DBlockShapes[pixelSizeIndex]);
+                                                                                  NonStd3DBlockShapes[pixelSizeIndex],
+                                                                                   GetRuntimeSettings());
                     }
                 }
                 else if ((type == VK_IMAGE_TYPE_2D) && (samples != VK_SAMPLE_COUNT_1_BIT))
@@ -2525,7 +2531,7 @@ void PhysicalDevice::PopulateLimits()
 
             if (maxSamples > 1)
             {
-                const Pal::SwizzledFormat palFormat = VkToPalFormat(format);
+                const Pal::SwizzledFormat palFormat = VkToPalFormat(format, GetRuntimeSettings());
 
                 // Depth format
                 if (Formats::HasDepth(format))
@@ -3159,7 +3165,7 @@ VkResult PhysicalDevice::GetSurfaceFormats(
         for (uint32_t vkFmtIdx = VK_FORMAT_BEGIN_RANGE; vkFmtIdx <= VK_FORMAT_END_RANGE; vkFmtIdx++)
         {
             bool isFullscreenFormat = false;
-            const Pal::SwizzledFormat cmpFormat = VkToPalFormat(static_cast<VkFormat>(vkFmtIdx));
+            const Pal::SwizzledFormat cmpFormat = VkToPalFormat(static_cast<VkFormat>(vkFmtIdx), GetRuntimeSettings());
 
             for (uint32_t fmtIndx = 0; fmtIndx < numImgFormats; fmtIndx++)
             {
@@ -3518,6 +3524,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_CLOCK));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SPIRV_1_4));
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_USER_TYPE));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
@@ -5151,7 +5159,7 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
         }
         else
         {
-            const auto formatType = vk::Formats::GetNumberFormat(format);
+            const auto formatType = vk::Formats::GetNumberFormat(format, GetRuntimeSettings());
             const bool isInteger  = (formatType == Pal::Formats::NumericSupportFlags::Sint) ||
                                     (formatType == Pal::Formats::NumericSupportFlags::Uint);
 
@@ -5193,6 +5201,7 @@ void PhysicalDevice::GetDeviceProperties2(
         VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*      pVertexAttributeDivisorProperties;
         VkPhysicalDeviceFloatControlsProperties*                  pFloatControlsProperties;
         VkPhysicalDeviceInlineUniformBlockPropertiesEXT*          pInlineUniformBlockProperties;
+
         VkPhysicalDevicePCIBusInfoPropertiesEXT*                  pPCIBusInfoProperties;
         VkPhysicalDeviceTransformFeedbackPropertiesEXT*           pFeedbackProperties;
         VkPhysicalDeviceDepthStencilResolveProperties*            pDepthStencilResolveProperties;
@@ -5524,9 +5533,11 @@ void PhysicalDevice::GetDeviceProperties2(
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT:
         {
             // Properties are guaranteed by the comment for PAL's definition of CreateTypedBufferViewSrds().
-            pTexelBufferAlignmentProperties->storageTexelBufferOffsetAlignmentBytes = m_limits.minTexelBufferOffsetAlignment;
+            pTexelBufferAlignmentProperties->storageTexelBufferOffsetAlignmentBytes =
+                m_limits.minTexelBufferOffsetAlignment;
             pTexelBufferAlignmentProperties->storageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
-            pTexelBufferAlignmentProperties->uniformTexelBufferOffsetAlignmentBytes = m_limits.minTexelBufferOffsetAlignment;
+            pTexelBufferAlignmentProperties->uniformTexelBufferOffsetAlignmentBytes =
+                m_limits.minTexelBufferOffsetAlignment;
             pTexelBufferAlignmentProperties->uniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
             break;
         }

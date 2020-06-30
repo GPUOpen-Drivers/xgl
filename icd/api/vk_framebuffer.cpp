@@ -108,7 +108,7 @@ VkResult Framebuffer::Create(
     {
         Attachment* pAttachments = static_cast<Attachment*>(Util::VoidPtrInc(pSystemMem, apiSize));
 
-        VK_PLACEMENT_NEW(pSystemMem) Framebuffer(*pCreateInfo, pAttachments);
+        VK_PLACEMENT_NEW(pSystemMem) Framebuffer(*pCreateInfo, pAttachments, pDevice->GetRuntimeSettings());
 
         *pFramebuffer = Framebuffer::HandleFromVoidPointer(pSystemMem);
     }
@@ -135,8 +135,10 @@ static Pal::Extent3d ComputeLevelDimensions(
 
 // =====================================================================================================================
 Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
-                         Attachment*                    pAttachments)
-    : m_attachmentCount (info.attachmentCount)
+                         Attachment*                    pAttachments,
+                         const RuntimeSettings&         runTimeSettings)
+        : m_attachmentCount (info.attachmentCount),
+		  m_settings(runTimeSettings)
 {
     m_globalScissorParams.scissorRegion.offset.x      = 0;
     m_globalScissorParams.scissorRegion.offset.y      = 0;
@@ -153,7 +155,7 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
         Attachment* pAttachment       = &pAttachments[i];
         pAttachment->pView            = ImageView::ObjectFromHandle(info.pAttachments[i]);
         pAttachment->pImage           = pAttachment->pView->GetImage();
-        pAttachment->viewFormat       = VkToPalFormat(pAttachment->pView->GetViewFormat());
+        pAttachment->viewFormat       = VkToPalFormat(pAttachment->pView->GetViewFormat(), m_settings);
         pAttachment->zRange           = pAttachment->pView->GetZRange();
         pAttachment->subresRangeCount = 0;
 
@@ -193,7 +195,7 @@ void Framebuffer::SetImageViews(
 
         const Image* pImage        = pAttachments[i].pView->GetImage();
         pAttachments[i].pImage     = pImage;
-        pAttachments[i].viewFormat = VkToPalFormat(pImage->GetFormat());
+        pAttachments[i].viewFormat = VkToPalFormat(pImage->GetFormat(), m_settings);
 
         SetSubresRanges(pImage, &pAttachments[i]);
     }

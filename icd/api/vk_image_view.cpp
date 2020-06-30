@@ -423,12 +423,13 @@ VkResult ImageView::Create(
                        pImage->GetMipLevels(),
                        pImage->GetArraySize(),
                        palRanges,
-                       &palRangeCount);
+                       &palRangeCount,
+                       pDevice->GetRuntimeSettings());
 
     Pal::Result result = Pal::Result::Success;
 
     // Get the view format (without component mapping)
-    Pal::SwizzledFormat viewFormat = VkToPalFormat(pCreateInfo->format);
+    Pal::SwizzledFormat viewFormat = VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings());
 
     VK_ASSERT(viewFormat.format != Pal::ChNumFormat::Undefined);
 
@@ -438,7 +439,7 @@ VkResult ImageView::Create(
         void* pSrdMemory = Util::VoidPtrInc(pMemory, srdSegmentOffset);
 
         Pal::SwizzledFormat aspectFormat = VkToPalFormat(Formats::GetAspectFormat(pCreateInfo->format,
-            subresRange.aspectMask));
+                                                         subresRange.aspectMask), pDevice->GetRuntimeSettings());
 
         VK_ASSERT(aspectFormat.format != Pal::ChNumFormat::Undefined);
 

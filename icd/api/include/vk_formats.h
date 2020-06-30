@@ -36,7 +36,7 @@
 
 #include "include/vk_utils.h"
 #include "include/khronos/vulkan.h"
-
+#include "settings/g_settings.h"
 namespace vk
 {
 
@@ -65,8 +65,8 @@ struct Formats
 
     VK_INLINE static uint32_t GetIndex(VkFormat format);
     VK_INLINE static VkFormat FromIndex(uint32_t index);
-    static VkExtent3D ElementsToTexels(VkFormat format, const VkExtent3D& extent);
-    static Pal::Formats::NumericSupportFlags GetNumberFormat(VkFormat format);
+    static VkExtent3D ElementsToTexels(VkFormat format, const VkExtent3D& extent, const RuntimeSettings& settings);
+    static Pal::Formats::NumericSupportFlags GetNumberFormat(VkFormat format, const RuntimeSettings& settings);
 };
 
 #define VK_YUV_FORMAT_START         VK_FORMAT_G8B8G8R8_422_UNORM

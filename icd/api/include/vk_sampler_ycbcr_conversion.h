@@ -74,7 +74,7 @@ public:
 #endif
 
 protected:
-    SamplerYcbcrConversion(const VkSamplerYcbcrConversionCreateInfo* pCreateInfo);
+    SamplerYcbcrConversion(const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const RuntimeSettings& settings);
 
 private:
     uint32_t GetSqImgRsrcWord1(VkFormat format);
@@ -92,6 +92,7 @@ private:
 #else
     Llpc::SamplerYCbCrConversionMetaData m_metaData;
 #endif
+    const RuntimeSettings&               m_settings;
 };
 
 namespace entry

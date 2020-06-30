@@ -466,6 +466,8 @@ VkResult Queue::Submit(
 }
 
 // =====================================================================================================================
+
+// =====================================================================================================================
 // Wait for a queue to go idle
 VkResult Queue::WaitIdle(void)
 {
@@ -1105,7 +1107,9 @@ VkResult Queue::BindSparseEntry(
             Pal::SubresLayout subResLayout = {};
             Pal::SubresId     subResId     = {};
 
-            subResId.aspect     = VkToPalImageAspectSingle(image.GetFormat(), bind.subresource.aspectMask);
+            subResId.aspect     = VkToPalImageAspectSingle(image.GetFormat(),
+                bind.subresource.aspectMask, m_pDevice->GetRuntimeSettings());
+
             subResId.mipLevel   = bind.subresource.mipLevel;
             subResId.arraySlice = bind.subresource.arrayLayer;
 
@@ -1125,7 +1129,7 @@ VkResult Queue::BindSparseEntry(
             // tileSize is in texels, prtTileRowPitch and prtTileDepthPitch shall be adjusted for compressed
             // formats. depth of blockDim will always be 1 so skip the adjustment.
             const VkFormat aspectFormat = vk::Formats::GetAspectFormat(image.GetFormat(), bind.subresource.aspectMask);
-            const Pal::ChNumFormat palAspectFormat = VkToPalFormat(aspectFormat).format;
+            const Pal::ChNumFormat palAspectFormat = VkToPalFormat(aspectFormat, m_pDevice->GetRuntimeSettings()).format;
             if (Pal::Formats::IsBlockCompressed(palAspectFormat))
             {
                 Pal::Extent3d blockDim = Pal::Formats::CompressedBlockDim(palAspectFormat);

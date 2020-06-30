@@ -728,7 +728,7 @@ VkResult Memory::OpenExternalSharedImage(
 
     Pal::ExternalImageOpenInfo palOpenInfo = {};
 
-    palOpenInfo.swizzledFormat  = VkToPalFormat(pBoundImage->GetFormat());
+    palOpenInfo.swizzledFormat  = VkToPalFormat(pBoundImage->GetFormat(), pDevice->GetRuntimeSettings());
     palOpenInfo.usage           = VkToPalImageUsageFlags(pBoundImage->GetImageUsage(),
                                                          pBoundImage->GetFormat(),
                                                          1,

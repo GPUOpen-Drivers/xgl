@@ -48,7 +48,8 @@
 
 #include "include/pipeline_binary_cache.h"
 
-#include "palPipelineAbiProcessorImpl.h"
+#include "palElfReader.h"
+#include "palPipelineAbiReader.h"
 
 #if  LLPC_CLIENT_INTERFACE_MAJOR_VERSION>= 39
 #include "llpc.h"
@@ -393,34 +394,17 @@ void PipelineCompiler::DropPipelineBinaryInst(
 {
     if (settings.enableDropPipelineBinaryInst == true)
     {
-        const void* pPipelineCode = nullptr;
-        size_t pipelineCodeSize = 0;
+        Util::ElfReader::Reader elfReader(pPipelineBinary);
+        Util::ElfReader::SectionId codeSectionId = elfReader.FindSection(".text");
+        VK_ASSERT(codeSectionId != 0);
 
-        Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pDevice->VkInstance()->Allocator());
-        Pal::Result palResult = abiProcessor.LoadFromBuffer(pPipelineBinary, pipelineBinarySize);
-        if (palResult == Pal::Result::Success)
-        {
-            abiProcessor.GetPipelineCode(&pPipelineCode, &pipelineCodeSize);
-        }
+        const Util::Elf::SectionHeader& codeSection = elfReader.GetSection(codeSectionId);
 
-        VK_ASSERT(pPipelineCode != nullptr);
-        VK_ASSERT(pipelineCodeSize > 0);
+        size_t pipelineCodeSize = static_cast<size_t>(codeSection.sh_size);
+        void* pPipelineCode = const_cast<void*>(Util::VoidPtrInc(pPipelineBinary,
+            static_cast<size_t>(codeSection.sh_offset)));
+        uint32_t* pFirstInstruction = static_cast<uint32_t*>(pPipelineCode);
 
-        uint32_t firstInstruction = *(uint32_t*)pPipelineCode;
-        uint32_t* pFirstInstruction = nullptr;
-
-        for (uint32_t i = 0; i <= pipelineBinarySize - sizeof(uint32_t); i++)
-        {
-            uint32_t* p = reinterpret_cast<uint32_t*>(((uint8_t*)pPipelineBinary) + i);
-
-            if (*p == firstInstruction)
-            {
-                pFirstInstruction = p;
-                break;
-            }
-        }
-
-        VK_ASSERT(pFirstInstruction != nullptr);
         VK_ASSERT(settings.dropPipelineBinaryInstSize > 0);
 
         uint32_t refValue = settings.dropPipelineBinaryInstToken & settings.dropPipelineBinaryInstMask;
@@ -447,7 +431,7 @@ void PipelineCompiler::ReplacePipelineIsaCode(
     Device *     pDevice,
     uint64_t     pipelineHash,
     const void*  pPipelineBinary,
-    size_t pipelineBinarySize)
+    size_t       pipelineBinarySize)
 {
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
 
@@ -462,37 +446,24 @@ void PipelineCompiler::ReplacePipelineIsaCode(
         return;
     }
 
-    const void* pPipelineCode = nullptr;
-    size_t pipelineCodeSize = 0;
-
-    Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pDevice->VkInstance()->Allocator());
-    Pal::Result palResult = abiProcessor.LoadFromBuffer(pPipelineBinary, pipelineBinarySize);
-    if (palResult == Pal::Result::Success)
-    {
-        // the elf .text section ISA shader code
-        abiProcessor.GetPipelineCode(&pPipelineCode, &pipelineCodeSize);
-    }
-    else
+    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pPipelineBinary);
+    Pal::Result palResult = abiReader.Init();
+    if (palResult != Pal::Result::Success)
     {
         return;
     }
 
-    uint32_t firstInstruction = *(uint32_t*)pPipelineCode;
-    uint8_t* pFirstInstruction = nullptr;
+    Util::ElfReader::SectionId codeSectionId = abiReader.GetElfReader().FindSection(".text");
+    VK_ASSERT(codeSectionId != 0);
 
-    // Move the pipeline elf pointer to the .text section "shader isa"
-    for (uint32_t i = 0; i <= pipelineBinarySize - sizeof(uint32_t); i++)
-    {
-        uint8_t* p = ((uint8_t*)pPipelineBinary) + i;
+    const Util::Elf::SectionHeader& codeSection = abiReader.GetElfReader().GetSection(codeSectionId);
 
-        if (*reinterpret_cast<uint32_t*>(p) == firstInstruction)
-        {
-            pFirstInstruction = p;
-            break;
-        }
-    }
+    size_t pipelineCodeSize = static_cast<size_t>(codeSection.sh_size);
+    void* pPipelineCode = const_cast<void*>(Util::VoidPtrInc(pPipelineBinary,
+        static_cast<size_t>(codeSection.sh_offset)));
+    uint8_t* pFirstInstruction = static_cast<uint8_t*>(pPipelineCode);
 
-    std::vector<Util::Abi::PipelineSymbolEntry> shaderStageSymbols;
+    std::vector<const Util::Elf::SymbolTableEntry*> shaderStageSymbols;
     Util::Abi::PipelineSymbolType stageSymbolTypes[] =
     {
         Util::Abi::PipelineSymbolType::LsMainEntry,
@@ -503,12 +474,12 @@ void PipelineCompiler::ReplacePipelineIsaCode(
         Util::Abi::PipelineSymbolType::PsMainEntry,
         Util::Abi::PipelineSymbolType::CsMainEntry
     };
-    Util::Abi::PipelineSymbolEntry symbol;
     for (const auto& simbolTypeEntry : stageSymbolTypes)
     {
-        if (abiProcessor.HasPipelineSymbolEntry(simbolTypeEntry, &symbol))
+        const Util::Elf::SymbolTableEntry* pEntry = abiReader.GetPipelineSymbol(simbolTypeEntry);
+        if (pEntry != nullptr)
         {
-            shaderStageSymbols.push_back(symbol);
+            shaderStageSymbols.push_back(pEntry);
         }
     }
     /* modified code in the 0xAAA_replace.txt looks like
@@ -527,9 +498,9 @@ void PipelineCompiler::ReplacePipelineIsaCode(
             codeOffset[pOffsetEnd - codeLine] = '\0';
             uint32_t offset = strtoul(codeOffset, nullptr, 10);
             bool inRange = false;
-            for (const auto& simboEntry : shaderStageSymbols)
+            for (const auto symbolEntry : shaderStageSymbols)
             {
-                if ((offset >= simboEntry.value) && (offset < simboEntry.value + simboEntry.size))
+                if ((offset >= symbolEntry->st_value) && (offset < symbolEntry->st_value + symbolEntry->st_size))
                 {
                     inRange = true;
                     break;
@@ -537,9 +508,8 @@ void PipelineCompiler::ReplacePipelineIsaCode(
             }
             VK_ASSERT(inRange);
             pOffsetEnd++;
-            uint8_t* pCode = pFirstInstruction + offset;
             uint32_t replaceCode = strtoul(pOffsetEnd, nullptr, 16);
-            *reinterpret_cast<uint32_t*>(pCode) = replaceCode;
+            memcpy(pFirstInstruction + offset, &replaceCode, sizeof(replaceCode));
         }
     }
 
@@ -1546,6 +1516,19 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->shadowDescriptorTablePtrHigh =
           static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32);
 #endif
+
+    if (pDevice->IsRobustBufferAccess2Enabled())
+    {
+        pOptions->extendedRobustness.robustBufferAccess = true;
+    }
+    if (pDevice->IsRobustImageAccess2Enabled())
+    {
+        pOptions->extendedRobustness.robustImageAccess = true;
+    }
+    if (pDevice->IsNullDescriptorEnabled())
+    {
+        pOptions->extendedRobustness.nullDescriptor = true;
+    }
 }
 
 // =====================================================================================================================

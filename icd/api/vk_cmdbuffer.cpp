@@ -1097,7 +1097,7 @@ VkResult CmdBuffer::Begin(
         for (uint32_t i = 0; i < inheritedStateParams.colorTargetCount; i++)
         {
             inheritedStateParams.colorTargetSwizzledFormats[i] =
-                VkToPalFormat(pRenderPass->GetColorAttachmentFormat(currentSubPass, i));
+                VkToPalFormat(pRenderPass->GetColorAttachmentFormat(currentSubPass, i), m_pDevice->GetRuntimeSettings());
             inheritedStateParams.sampleCount[i] = pRenderPass->GetColorAttachmentSamples(currentSubPass, i);
         }
     }
@@ -2133,8 +2133,8 @@ void CmdBuffer::CopyImage(
         const Image* const pSrcImage    = Image::ObjectFromHandle(srcImage);
         const Image* const pDstImage    = Image::ObjectFromHandle(destImage);
 
-        const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat());
-        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat());
+        const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat(), m_pDevice->GetRuntimeSettings());
+        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat(), m_pDevice->GetRuntimeSettings());
 
         const Pal::ImageLayout palSrcImgLayout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
             srcImageLayout, GetQueueFamilyIndex());
@@ -2197,8 +2197,8 @@ void CmdBuffer::BlitImage(
         const Image* const pSrcImage    = Image::ObjectFromHandle(srcImage);
         const Image* const pDstImage    = Image::ObjectFromHandle(destImage);
 
-        const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat());
-        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat());
+        const Pal::SwizzledFormat srcFormat = VkToPalFormat(pSrcImage->GetFormat(), m_pDevice->GetRuntimeSettings());
+        const Pal::SwizzledFormat dstFormat = VkToPalFormat(pDstImage->GetFormat(), m_pDevice->GetRuntimeSettings());
 
         Pal::ScaledCopyInfo palCopyInfo = {};
 
@@ -2279,11 +2279,14 @@ void CmdBuffer::CopyBufferToImage(
             for (uint32_t i = 0; i < regionBatch; ++i)
             {
                 // For image-buffer copies we have to override the format for depth-only and stencil-only copies
-                Pal::SwizzledFormat dstFormat = VkToPalFormat(Formats::GetAspectFormat(
-                    pDstImage->GetFormat(), pRegions[regionIdx + i].imageSubresource.aspectMask));
+                Pal::SwizzledFormat dstFormat = VkToPalFormat(
+                    Formats::GetAspectFormat(
+                    pDstImage->GetFormat(),
+                    pRegions[regionIdx + i].imageSubresource.aspectMask),
+                    m_pDevice->GetRuntimeSettings());
 
                 Pal::ImageAspect aspectMask =  VkToPalImageAspectSingle(pDstImage->GetFormat(),
-                    pRegions[regionIdx + i].imageSubresource.aspectMask);
+                    pRegions[regionIdx + i].imageSubresource.aspectMask, m_pDevice->GetRuntimeSettings());
 
                 pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, aspectMask, srcMemOffset);
             }
@@ -2343,10 +2346,10 @@ void CmdBuffer::CopyImageToBuffer(
             {
                 // For image-buffer copies we have to override the format for depth-only and stencil-only copies
                 Pal::SwizzledFormat srcFormat = VkToPalFormat(Formats::GetAspectFormat(pSrcImage->GetFormat(),
-                    pRegions[regionIdx + i].imageSubresource.aspectMask));
+                    pRegions[regionIdx + i].imageSubresource.aspectMask), m_pDevice->GetRuntimeSettings());
 
                 Pal::ImageAspect aspectMask = VkToPalImageAspectSingle(pSrcImage->GetFormat(),
-                    pRegions[regionIdx + i].imageSubresource.aspectMask);
+                    pRegions[regionIdx + i].imageSubresource.aspectMask, m_pDevice->GetRuntimeSettings());
 
                 pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], srcFormat.format, aspectMask, dstMemOffset);
             }
@@ -2424,7 +2427,7 @@ void CmdBuffer::ClearColorImage(
 
     const Image* pImage = Image::ObjectFromHandle(image);
 
-    const Pal::SwizzledFormat palFormat = VkToPalFormat(pImage->GetFormat());
+    const Pal::SwizzledFormat palFormat = VkToPalFormat(pImage->GetFormat(), m_pDevice->GetRuntimeSettings());
 
     if (Pal::Formats::IsBlockCompressed(palFormat.format))
     {
@@ -2459,7 +2462,8 @@ void CmdBuffer::ClearColorImage(
                                    pImage->GetMipLevels(),
                                    pImage->GetArraySize(),
                                    pPalRanges,
-                                   &palRangeCount);
+                                   &palRangeCount,
+                                   m_pDevice->GetRuntimeSettings());
 
                 ++rangeIdx;
             }
@@ -2563,7 +2567,8 @@ void CmdBuffer::ClearDepthStencilImage(
                                    pImage->GetMipLevels(),
                                    pImage->GetArraySize(),
                                    pPalRanges,
-                                   &palRangeCount);
+                                   &palRangeCount,
+                                   m_pDevice->GetRuntimeSettings());
 
                 ++rangeIdx;
             }
@@ -2660,7 +2665,8 @@ void CmdBuffer::ClearBoundAttachments(
 
                 Pal::BoundColorTarget target { };
                 target.targetIndex    = tgtIdx;
-                target.swizzledFormat = VkToPalFormat(pRenderPass->GetColorAttachmentFormat(subpass, tgtIdx));
+                target.swizzledFormat = VkToPalFormat(pRenderPass->GetColorAttachmentFormat(subpass, tgtIdx),
+                                                      m_pDevice->GetRuntimeSettings());
                 target.samples        = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
                 target.fragments      = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
                 target.clearValue     = VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat);
@@ -3070,8 +3076,10 @@ void CmdBuffer::ResolveImage(
     {
         const Image* const pSrcImage              = Image::ObjectFromHandle(srcImage);
         const Image* const pDstImage              = Image::ObjectFromHandle(destImage);
-        const Pal::SwizzledFormat srcFormat       = VkToPalFormat(pSrcImage->GetFormat());
-        const Pal::SwizzledFormat dstFormat       = VkToPalFormat(pDstImage->GetFormat());
+        const Pal::SwizzledFormat srcFormat       = VkToPalFormat(pSrcImage->GetFormat(),
+                                                                  m_pDevice->GetRuntimeSettings());
+        const Pal::SwizzledFormat dstFormat       = VkToPalFormat(pDstImage->GetFormat(),
+                                                                  m_pDevice->GetRuntimeSettings());
 
         const Pal::ImageLayout palSrcImageLayout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
             srcImageLayout, GetQueueFamilyIndex());
@@ -3290,7 +3298,8 @@ void CmdBuffer::ExecuteBarriers(
             pImage->GetMipLevels(),
             pImage->GetArraySize(),
             palRanges,
-            &palRangeCount);
+            &palRangeCount,
+            m_pDevice->GetRuntimeSettings());
 
         if (layoutChanging && Formats::HasStencil(format))
         {

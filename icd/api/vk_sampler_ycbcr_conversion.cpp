@@ -57,7 +57,7 @@ VkResult SamplerYcbcrConversion::Create(
 
     if (result == VK_SUCCESS)
     {
-        VK_PLACEMENT_NEW(pMemory) SamplerYcbcrConversion(pCreateInfo);
+        VK_PLACEMENT_NEW(pMemory) SamplerYcbcrConversion(pCreateInfo, pDevice->GetRuntimeSettings());
 
         *pYcbcrConversion = SamplerYcbcrConversion::HandleFromVoidPointer(pMemory);
     }
@@ -128,7 +128,7 @@ BitDepth SamplerYcbcrConversion::GetYuvBitDepth(VkFormat format)
         return { 16, 16, 16, 0 };
     default:
         Pal::Formats::FormatInfo yuvFormatInfo;
-        yuvFormatInfo = Pal::Formats::FormatInfoTable[static_cast<uint32_t>(VkToPalFormat(format).format)];
+        yuvFormatInfo = Pal::Formats::FormatInfoTable[static_cast<uint32_t>(VkToPalFormat(format, m_settings).format)];
         BitDepth bitDepth;
         bitDepth.xBitCount = yuvFormatInfo.bitCount[0];
         bitDepth.yBitCount = yuvFormatInfo.bitCount[1];
@@ -255,11 +255,14 @@ uint32_t SamplerYcbcrConversion::MapSwizzle(
 // =====================================================================================================================
 // Assign Ycbcr Conversion MetaData during construction
 SamplerYcbcrConversion::SamplerYcbcrConversion(
-    const VkSamplerYcbcrConversionCreateInfo* pCreateInfo)
+    const VkSamplerYcbcrConversionCreateInfo* pCreateInfo,
+    const RuntimeSettings&                    settings)
+    :
+	m_settings(settings)
 {
     VK_ASSERT(pCreateInfo->pNext == nullptr);
 
-    const Pal::SwizzledFormat palFormat = VkToPalFormat(pCreateInfo->format);
+    const Pal::SwizzledFormat palFormat = VkToPalFormat(pCreateInfo->format, m_settings);
 
     if ((pCreateInfo->format == VK_FORMAT_B5G5R5A1_UNORM_PACK16) ||
         (pCreateInfo->format == VK_FORMAT_R5G5B5A1_UNORM_PACK16))

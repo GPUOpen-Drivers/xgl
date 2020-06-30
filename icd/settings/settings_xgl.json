@@ -1141,7 +1141,7 @@
         "IsBitmask": true
       },
       "Defaults": {
-        "Default": 4294967295
+        "Default": "GraphicsPipelineTypeVsFs | GraphicsPipelineTypeTess"
       },
       "ValidValues": {
         "Name": "GraphicsPipelineType"
@@ -1182,7 +1182,7 @@
         "IsEnum": true,
         "Values": [
           {
-            "Name": "NggCompactSubgroup",
+            "Name": "NggCompactDisable",
             "Value": 0
           },
           {
@@ -1192,7 +1192,7 @@
         ],
         "Name": "NggCompactMode"
       },
-      "Description": "Compaction mode after culling operations. 0 - Compaction is based on the whole sub-group 1 - Compaction is based on vertices ",
+      "Description": "Compaction mode after culling operations. 0 - Compaction is disabled 1 - Compaction is based on vertices ",
       "Tags": [
         "SPIRV Options"
       ],
@@ -1421,19 +1421,6 @@
       "Scope": "Driver",
       "Type": "float",
       "VariableName": "nggDisableCullingValuInstrThreshold"
-    },
-    {
-      "Name": "NggDisableCompaction",
-      "Description": "Disable subgroup compaction within the implicit primitive shader, possibly exporting more data than necessary to avoid multiple round trips through LDS to store the culling results.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "nggDisableCompaction"
     },
     {
       "Description": "Force HW to guarantee forward progress per wave on GFX10 0x00000000 - Disable (default) 0x00000001 - Enable for vertex shaders 0x00000002 - Enable for tessellation control shaders 0x00000004 - Enable for tessellation evaluation shaders 0x00000008 - Enable for geometry shaders 0x00000010 - Enable for fragment shaders 0x00000020 - Enable for compute shaders ",

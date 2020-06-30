@@ -382,6 +382,20 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         }
 
+        if (appProfile == AppProfile::ZombieArmy4)
+        {
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
+            {
+                m_settings.dccBitsPerPixelThreshold = 512;
+            }
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.dccBitsPerPixelThreshold = 64;
+                m_settings.enableNgg = 0x0;
+                m_settings.enableWgpMode = 0x20;
+            }
+        }
+
         if (appProfile == AppProfile::MadMax)
         {
             m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
@@ -462,7 +476,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.dccBitsPerPixelThreshold = 16;
             }
 
-            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 // Rage 2 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
                 m_settings.forceDccForColorAttachments = false;
@@ -491,11 +505,21 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.delayFullScreenAcquireToFirstPresent = true;
         }
 
+        if (appProfile == AppProfile::GhostReconBreakpoint)
+        {
+
+            m_settings.prefetchShaders = true;
+        }
+
         if (appProfile == AppProfile::DoomEternal)
         {
             m_settings.barrierFilterOptions = SkipStrayExecutionDependencies | ForceImageSharingModeExclusive;
 
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
+            {
+                m_settings.dccBitsPerPixelThreshold = 1;
+            }
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
                 m_settings.forceDccForColorAttachments = false;

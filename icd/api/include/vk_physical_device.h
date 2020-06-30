@@ -198,6 +198,12 @@ public:
         return m_queueFamilies[queueFamilyIndex].palQueueType;
     }
 
+    VK_INLINE bool GetQueueGroupCompatible(
+        uint32_t queueFamilyIndex) const
+    {
+        return m_queueFamilies[queueFamilyIndex].flags.queueGroupCompatible;
+    }
+
     VK_INLINE Pal::EngineType GetQueueFamilyPalEngineType(
         uint32_t queueFamilyIndex) const
     {
@@ -726,6 +732,17 @@ protected:
         VkShaderStageFlags           validShaderStages;
         uint32_t                     palImageLayoutFlag;
         VkQueueFamilyProperties      properties;
+
+        union
+        {
+            struct
+            {
+                uint32_t queueGroupCompatible : 1;
+                uint32_t reserved             : 31;
+            };
+            uint32_t u32All;
+        } flags;
+
     } m_queueFamilies[Queue::MaxQueueFamilies];
 
     // List of indices for compute engines that aren't exclusive.

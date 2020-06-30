@@ -38,8 +38,11 @@
 #include "palAutoBuffer.h"
 #include "palInlineFuncs.h"
 #include "palPipeline.h"
-#include "palPipelineAbiProcessorImpl.h"
+#include "palPipelineAbi.h"
+#include "palPipelineAbiReader.h"
 #include "palMetroHash.h"
+
+#include <algorithm>
 
 namespace vk
 {
@@ -211,11 +214,11 @@ VkResult Pipeline::GetShaderDisassembly(
     size_t*                       pBufferSize,
     void*                         pBuffer) const
 {
+    const PipelineBinaryInfo* pPipelineBinary = GetBinary();
+
     // To extract the shader code, we can re-parse the saved ELF binary and lookup the shader's program
     // instructions by examining the symbol table entry for that shader's entrypoint.
-    Util::Abi::PipelineAbiProcessor<PalAllocator> abiProcessor(pDevice->VkInstance()->Allocator());
-
-    const PipelineBinaryInfo* pPipelineBinary = GetBinary();
+    Util::Abi::PipelineAbiReader abiReader(pDevice->VkInstance()->Allocator(), pPipelineBinary->pBinary);
 
     if (pPipelineBinary == nullptr)
     {
@@ -227,7 +230,7 @@ VkResult Pipeline::GetShaderDisassembly(
     }
 
     VkResult    result    = VK_SUCCESS;
-    Pal::Result palResult = abiProcessor.LoadFromBuffer(pPipelineBinary->pBinary, pPipelineBinary->binaryByteSize);
+    Pal::Result palResult = abiReader.Init();
 
     if (palResult == Pal::Result::Success)
     {
@@ -268,114 +271,90 @@ VkResult Pipeline::GetShaderDisassembly(
         uint32_t hwStage = 0;
         if (Util::BitMaskScanForward(&hwStage, apiToHwShader.apiShaders[static_cast<uint32_t>(apiShaderType)]))
         {
-            Util::Abi::PipelineSymbolEntry symbol = {};
-            const void* pDisassemblySection = nullptr;
-            size_t      disassemblySectionLen = 0;
+            const Util::Elf::SymbolTableEntry* pSymbolEntry = nullptr;
+            const char* pSectionName = nullptr;
 
             if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly)
             {
-                symbolValid = abiProcessor.HasPipelineSymbolEntry(
+                pSymbolEntry = abiReader.GetPipelineSymbol(
                     Util::Abi::GetSymbolForStage(
                         Util::Abi::PipelineSymbolType::ShaderDisassembly,
-                        static_cast<Util::Abi::HardwareStage>(hwStage)),
-                    &symbol);
-
-                abiProcessor.GetDisassembly(&pDisassemblySection, &disassemblySectionLen);
+                        static_cast<Util::Abi::HardwareStage>(hwStage)));
+                pSectionName = Util::Abi::AmdGpuDisassemblyName;
             }
             else if (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderAmdIl)
             {
-                symbolValid = abiProcessor.HasPipelineSymbolEntry(
+                pSymbolEntry = abiReader.GetPipelineSymbol(
                     Util::Abi::GetSymbolForStage(
                         Util::Abi::PipelineSymbolType::ShaderAmdIl,
-                        apiShaderType),
-                    &symbol);
-
-                if (symbolValid)
-                {
-                    abiProcessor.GetAmdIl(&pDisassemblySection, &disassemblySectionLen);
-                }
-                else
-                {
-                    abiProcessor.GetLlvmIr(&pDisassemblySection, &disassemblySectionLen);
-                }
+                        apiShaderType));
+                pSectionName = Util::Abi::AmdGpuCommentLlvmIrName;
             }
 
-            if (symbolValid)
+            if (pSymbolEntry != nullptr)
             {
-                if (pBufferSize != nullptr)
-                {
-                    *pBufferSize = static_cast<size_t>(symbol.size);
-                }
-
-                if (pBuffer != nullptr)
-                {
-                    VK_ASSERT((symbol.size + symbol.value) <= disassemblySectionLen);
-
-                    // Copy disassemble code
-                    memcpy(pBuffer,
-                           Util::VoidPtrInc(pDisassemblySection, static_cast<size_t>(symbol.value)),
-                           static_cast<size_t>(symbol.size));
-                }
+                palResult = abiReader.GetElfReader().CopySymbol(*pSymbolEntry, pBufferSize, pBuffer);
+                symbolValid = palResult == Util::Result::Success;
             }
-            else if (pDisassemblySection != nullptr)
+            else if (pSectionName != nullptr)
             {
                 // NOTE: LLVM doesn't add disassemble symbol in ELF disassemble section, instead, it contains
                 // the entry name in disassemble section. so we have to search the entry name to split per
                 // stage disassemble info.
-                char* pDisassembly = const_cast<char*>(static_cast<const char*>(pDisassemblySection));
+                const auto& elfReader = abiReader.GetElfReader();
+                Util::ElfReader::SectionId disassemblySectionId = elfReader.FindSection(pSectionName);
 
-                // Force disassemble string to be a C-style string
-                char disassemblyEnd = pDisassembly[disassemblySectionLen - 1];
-                pDisassembly[disassemblySectionLen - 1] = 0;
-
-                // Search disassemble code for input shader stage
-                const char* pSymbolName = Util::Abi::PipelineAbiSymbolNameStrings[
-                    static_cast<uint32_t>(Util::Abi::GetSymbolForStage(
-                        Util::Abi::PipelineSymbolType::ShaderMainEntry,
-                        static_cast<Util::Abi::HardwareStage>(hwStage)))];
-                const size_t symbolNameLength = strlen(pSymbolName);
-                const char* ShaderSymbolPrefix = "_amdgpu_";
-                const char* ShaderSymbolSuffix =
-                    (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly) ?
-                        "_amdgpu_" : "; Function Attrs";
-
-                VK_ASSERT(strncmp(pSymbolName, ShaderSymbolPrefix, strlen(ShaderSymbolPrefix)) == 0);
-                VK_ASSERT(strlen(pDisassembly) + 1 == disassemblySectionLen);
-
-                const char* pSymbolBase = strstr(reinterpret_cast<const char*>(pDisassemblySection), pSymbolName);
-                if (pSymbolBase != nullptr)
+                if (disassemblySectionId != 0)
                 {
-                    // Search the end of disassemble code
-                    const char* pSymbolBody = pSymbolBase + symbolNameLength;
-                    const char* pSymbolEnd  = strstr(pSymbolBody, ShaderSymbolSuffix);
+                    const char* pDisassemblySection = static_cast<const char*>(
+                        elfReader.GetSectionData(disassemblySectionId));
+                    size_t disassemblySectionLen = static_cast<size_t>(
+                        elfReader.GetSection(disassemblySectionId).sh_size);
+                    const char* pDisassemblySectionEnd = pDisassemblySection + disassemblySectionLen;
 
-                    size_t symbolSize = (pSymbolEnd == nullptr) ?
-                        disassemblySectionLen - (pSymbolBase - pDisassembly) :
-                        (pSymbolEnd - pSymbolBase);
-                    symbolValid = true;
+                    // Search disassemble code for input shader stage
+                    const char* pSymbolName = Util::Abi::PipelineAbiSymbolNameStrings[
+                        static_cast<uint32_t>(Util::Abi::GetSymbolForStage(
+                            Util::Abi::PipelineSymbolType::ShaderMainEntry,
+                            static_cast<Util::Abi::HardwareStage>(hwStage)))];
+                    const size_t symbolNameLength = strlen(pSymbolName);
+                    const char* pSymbolNameEnd = pSymbolName + symbolNameLength;
 
-                    // Restore the last character
-                    pDisassembly[disassemblySectionLen - 1] = disassemblyEnd;
+                    const char* ShaderSymbolPrefix = "_amdgpu_";
+                    const char* ShaderSymbolSuffix =
+                        (pipelineSymbolType == Util::Abi::PipelineSymbolType::ShaderDisassembly) ?
+                            "_amdgpu_" : "; Function Attrs";
+                    const char* ShaderSymbolSuffixEnd = ShaderSymbolSuffix + strlen(ShaderSymbolSuffix);
 
-                    // Fill output
-                    if (pBufferSize != nullptr)
+                    VK_ASSERT(strncmp(pSymbolName, ShaderSymbolPrefix, strlen(ShaderSymbolPrefix)) == 0);
+
+                    const char* pSymbolBase = std::search(pDisassemblySection, pDisassemblySectionEnd,
+                        pSymbolName, pSymbolNameEnd);
+                    if (pSymbolBase != pDisassemblySectionEnd)
                     {
-                        *pBufferSize = static_cast<size_t>(symbolSize);
-                    }
+                        // Search the end of disassemble code
+                        const char* pSymbolBody = pSymbolBase + symbolNameLength;
+                        const char* pSymbolEnd  = std::search(pSymbolBody, pDisassemblySectionEnd,
+                            ShaderSymbolSuffix, ShaderSymbolSuffixEnd);
 
-                    if (pBuffer)
-                    {
-                        // Copy disassemble code
-                        memcpy(pBuffer, pSymbolBase, symbolSize);
+                        const size_t symbolSize = pSymbolEnd - pSymbolBase;
+                        symbolValid = true;
 
-                        // Null terminate the last char
-                        static_cast<char*>(pBuffer)[symbolSize - 1] = '\0';
+                        // Fill output
+                        if (pBufferSize != nullptr)
+                        {
+                            *pBufferSize = symbolSize + 1;
+                        }
+
+                        if (pBuffer != nullptr)
+                        {
+                            // Copy disassemble code
+                            memcpy(pBuffer, pSymbolBase, symbolSize);
+
+                            // Add null terminator
+                            static_cast<char*>(pBuffer)[symbolSize] = '\0';
+                        }
                     }
-                }
-                else
-                {
-                    // Restore the last character
-                    pDisassembly[disassemblySectionLen - 1] = disassemblyEnd;
                 }
             }
         }
