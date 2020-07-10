@@ -582,7 +582,7 @@ VkResult DescriptorSetLayout::Create(
     const size_t auxSize = bindingInfoAuxSize + immSamplerAuxSize + immYCbCrMetaDataSize;
     const size_t objSize = apiSize + auxSize;
 
-    void* pSysMem = pDevice->AllocApiObject(objSize, pAllocator);
+    void* pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pSysMem == nullptr)
     {
@@ -612,7 +612,7 @@ VkResult DescriptorSetLayout::Create(
 
     if (result != VK_SUCCESS)
     {
-        pAllocator->pfnFree(pAllocator->pUserData, pSysMem);
+        pDevice->FreeApiObject(pAllocator, pSysMem);
 
         return result;
     }
@@ -677,7 +677,7 @@ VkResult DescriptorSetLayout::Destroy(
 
     if (freeMemory)
     {
-        pAllocator->pfnFree(pAllocator->pUserData, this);
+        pDevice->FreeApiObject(pAllocator, this);
     }
 
     return VK_SUCCESS;

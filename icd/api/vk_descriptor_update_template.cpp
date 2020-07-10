@@ -39,7 +39,7 @@ namespace vk
 
 // =====================================================================================================================
 VkResult DescriptorUpdateTemplate::Create(
-    const Device*                                   pDevice,
+    Device*                                         pDevice,
     const VkDescriptorUpdateTemplateCreateInfo*     pCreateInfo,
     const VkAllocationCallbacks*                    pAllocator,
     VkDescriptorUpdateTemplate*                     pDescriptorUpdateTemplate)
@@ -51,10 +51,7 @@ VkResult DescriptorUpdateTemplate::Create(
     const size_t                entriesSize = numEntries * sizeof(TemplateUpdateInfo);
     const size_t                objSize     = apiSize + entriesSize;
 
-    void* pSysMem = pAllocator->pfnAllocation(pAllocator->pUserData,
-                                              objSize,
-                                              VK_DEFAULT_MEM_ALIGN,
-                                              VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pSysMem == nullptr)
     {
@@ -281,12 +278,12 @@ DescriptorUpdateTemplate::~DescriptorUpdateTemplate()
 
 // =====================================================================================================================
 VkResult DescriptorUpdateTemplate::Destroy(
-    const Device*                pDevice,
+    Device*                      pDevice,
     const VkAllocationCallbacks* pAllocator)
 {
     this->~DescriptorUpdateTemplate();
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }

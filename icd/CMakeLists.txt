@@ -175,7 +175,7 @@ if (${XCB_RANDR_LEASE})
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_XRANDR_EXT=1)
 endif()
 
-if(UNIX)
+if(UNIX AND XCB_REQUIRED)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XCB_KHR)
     target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_KHR)
 endif()
@@ -286,6 +286,7 @@ target_sources(xgl PRIVATE
     api/vk_pipeline.cpp
     api/vk_pipeline_layout.cpp
     api/vk_pipeline_cache.cpp
+    api/vk_private_data_slot.cpp
     api/vk_query.cpp
     api/vk_queue.cpp
     api/vk_render_pass.cpp

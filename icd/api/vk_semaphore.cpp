@@ -177,11 +177,9 @@ VkResult Semaphore::Create(
     }
 #endif
     // Allocate memory for VK_Semaphore and palSemaphore separately
-    void* pVKSemaphoreMemory = pAllocator->pfnAllocation(
-        pAllocator->pUserData,
-        sizeof(Semaphore),
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pVKSemaphoreMemory = pDevice->AllocApiObject(
+        pAllocator,
+        sizeof(Semaphore));
 
         void* pPalSemaphoreMemory = pDevice->VkInstance()->AllocMem(
         palSemaphoreSize,
@@ -232,7 +230,7 @@ VkResult Semaphore::Create(
     if (vkResult != VK_SUCCESS)
     {
         // Something broke. Free the memory.
-        pAllocator->pfnFree(pAllocator->pUserData, pVKSemaphoreMemory);
+        pDevice->FreeApiObject(pAllocator, pVKSemaphoreMemory);
         pDevice->VkInstance()->FreeMem(pPalSemaphoreMemory);
     }
 
@@ -346,13 +344,13 @@ VkResult Semaphore::ImportSemaphore(
 // =====================================================================================================================
 // vkDestroyObject entry point for queue semaphore objects.
 void Semaphore::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
     DestroyTemporarySemaphore(pDevice);
     DestroySemaphore(pDevice);
     Util::Destructor(this);
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 }
 
 // =====================================================================================================================
@@ -485,7 +483,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroySemaphore(
 {
     if (semaphore != VK_NULL_HANDLE)
     {
-        const Device*                pDevice  = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         Semaphore::ObjectFromHandle(semaphore)->Destroy(pDevice, pAllocCB);

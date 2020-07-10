@@ -188,7 +188,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         // shader read latency or partial writes of DCC blocks, it should be debugged on a case by case basis.
         if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
         {
-            m_settings.forceDccForColorAttachments = true;
+            m_settings.forceEnableDcc = ForceDccForColorAttachments;
         }
 
         if (appProfile == AppProfile::Doom)
@@ -299,7 +299,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // WWZ performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
-                m_settings.forceDccForColorAttachments = false;
+                m_settings.forceEnableDcc = ForceDccDefault;
             }
 
         }
@@ -410,7 +410,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // F1 2017 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
-                m_settings.forceDccForColorAttachments = false;
+                m_settings.forceEnableDcc = ForceDccDefault;
             }
         }
 
@@ -425,7 +425,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // DiRT 4 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
-                m_settings.forceDccForColorAttachments = false;
+                m_settings.forceEnableDcc = ForceDccDefault;
             }
 
             m_settings.forceDepthClampBasedOnZExport = true;
@@ -437,7 +437,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // what's best for now.
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
-                m_settings.forceDccForColorAttachments = false;
+                m_settings.forceEnableDcc = ForceDccDefault;
             }
         }
 
@@ -479,7 +479,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 // Rage 2 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
-                m_settings.forceDccForColorAttachments = false;
+                m_settings.forceEnableDcc = ForceDccDefault;
             }
 
         }
@@ -522,7 +522,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 //  Doom Eternal performs better when DCC is not forced on. 2% gain on 4k.
-                m_settings.forceDccForColorAttachments = false;
+                m_settings.forceEnableDcc = ForceDccDefault;
 
                 // Doom Eternal performs better with NGG disabled (3% gain on 4k), likely because idTech runs it's own
                 // triangle culling and there are no options in the game to turn it off making NGG somewhat redundant.

@@ -210,7 +210,9 @@ Device::Device(
     const DeviceBarrierPolicy&          barrierPolicy,
     const DeviceExtensions::Enabled&    enabledExtensions,
     const VkPhysicalDeviceFeatures*     pFeatures,
-    bool                                useComputeAsTransferQueue)
+    bool                                useComputeAsTransferQueue,
+    bool                                privateDataEnabled,
+    uint32                              privateDataSlotRequestCount)
     :
     m_pInstance(pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_settings(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings()),
@@ -228,7 +230,6 @@ Device::Device(
     m_pBarrierFilterLayer(nullptr),
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue)
-    , m_scalarBlockLayoutEnabled(false)
 
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
@@ -249,11 +250,19 @@ Device::Device(
 
     if (pFeatures != nullptr)
     {
-        memcpy(&m_enabledFeatures, pFeatures, sizeof(VkPhysicalDeviceFeatures));
+        if (pFeatures->robustBufferAccess)
+        {
+            m_enabledFeatures.robustBufferAccess = true;
+        }
+
+        if (pFeatures->sparseBinding)
+        {
+            m_enabledFeatures.sparseBinding = true;
+        }
     }
     else
     {
-        memset(&m_enabledFeatures, 0, sizeof(VkPhysicalDeviceFeatures));
+        memset(&m_enabledFeatures, 0, sizeof(DeviceFeatures));
     }
 
     if (m_settings.robustBufferAccess == FeatureForceEnable)
@@ -265,6 +274,8 @@ Device::Device(
         m_enabledFeatures.robustBufferAccess = false;
     }
 
+    m_enabledFeatures.scalarBlockLayout = false;
+
     m_allocatedCount = 0;
     m_maxAllocations = pPhysicalDevices[DefaultDeviceIndex]->GetLimits().maxMemoryAllocationCount;
 
@@ -272,6 +283,22 @@ Device::Device(
     m_resourceOptimizer.Init();
 
     memset(m_overallocationRequestedForPalHeap, 0, sizeof(m_overallocationRequestedForPalHeap));
+
+    m_nextPrivateDataSlot = 0;
+
+    m_privateDataRWLock.Init();
+
+    m_isPrivateDataEnabled = privateDataEnabled;
+    m_privateDataTotalSize = 0;
+
+    if (m_isPrivateDataEnabled)
+    {
+        m_privateDataSlotRequestCount = (privateDataSlotRequestCount > 0) ? privateDataSlotRequestCount : 1;
+
+        m_privateDataTotalSize = Util::Pow2Align(
+            sizeof(PrivateDataStorage) + sizeof(uint64_t) * (m_privateDataSlotRequestCount -1),
+            VK_DEFAULT_MEM_ALIGN);
+    }
 }
 
 // =====================================================================================================================
@@ -413,6 +440,9 @@ VkResult Device::Create(
     bool                              deviceCoherentMemoryEnabled     = false;
     bool                              scalarBlockLayoutEnabled        = false;
     ExtendedRobustness                extendedRobustnessEnabled     = { false, false, false };
+
+    uint32                            privateDataSlotRequestCount     = 0;
+    bool                              privateDataEnabled              = false;
 
     for (pDeviceCreateInfo = pCreateInfo; ((pHeader != nullptr) && (vkResult == VK_SUCCESS)); pHeader = pHeader->pNext)
     {
@@ -817,6 +847,28 @@ VkResult Device::Create(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceExtendedDynamicStateFeaturesEXT*>(pHeader));
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevicePrivateDataFeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDevicePrivateDataFeaturesEXT*>(pHeader));
+
+            if (vkResult == VK_SUCCESS)
+            {
+                privateDataEnabled = reinterpret_cast<const VkPhysicalDevicePrivateDataFeaturesEXT*>(pHeader)->privateData;
+            }
+            break;
+        }
+
         default:
             break;
         }
@@ -895,6 +947,15 @@ VkResult Device::Create(
                 VK_IGNORE(pMultiviewFeatures->multiviewGeometryShader);
                 VK_IGNORE(pMultiviewFeatures->multiviewTessellationShader);
 
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO_EXT:
+            {
+                const VkDevicePrivateDataCreateInfoEXT* pPrivateDataInfo =
+                    reinterpret_cast<const VkDevicePrivateDataCreateInfoEXT*>(pHeader);
+
+                privateDataSlotRequestCount += pPrivateDataInfo->privateDataSlotRequestCount;
                 break;
             }
 
@@ -989,7 +1050,9 @@ VkResult Device::Create(
             barrierPolicy,
             enabledDeviceExtensions,
             pEnabledFeatures,
-            useComputeAsTransferQueue));
+            useComputeAsTransferQueue,
+            privateDataEnabled,
+            privateDataSlotRequestCount));
 
         DispatchableDevice* pDispatchableDevice = static_cast<DispatchableDevice*>(pMemory);
         DispatchableQueue*  pDispatchableQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
@@ -1251,9 +1314,9 @@ VkResult Device::Initialize(
         deviceProps.engineProperties[Pal::EngineTypeDma].minTimestampAlignment :
         deviceProps.engineProperties[Pal::EngineTypeUniversal].minTimestampAlignment;
 
-    m_deviceCoherentMemoryEnabled = deviceCoherentMemoryEnabled;
-    m_scalarBlockLayoutEnabled = scalarBlockLayoutEnabled;
-    m_extendedRobustnessEnabled = extendedRobustnessEnabled;
+    m_enabledFeatures.deviceCoherentMemory = deviceCoherentMemoryEnabled;
+    m_enabledFeatures.scalarBlockLayout = scalarBlockLayoutEnabled;
+    m_enabledFeatures.extendedRobustness = extendedRobustnessEnabled;
 
     if (result == VK_SUCCESS)
     {
@@ -3261,6 +3324,67 @@ VkResult Device::SetDebugUtilsObjectName(
     }
 
     return VkResult::VK_SUCCESS;
+}
+
+// =====================================================================================================================
+bool Device::ReserveFastPrivateDataSlot(
+        uint64*                         pIndex)
+{
+    *pIndex = Util::AtomicIncrement64(&m_nextPrivateDataSlot) - 1;
+
+    return ((*pIndex) < m_privateDataSlotRequestCount) ? true : false;
+}
+
+// =====================================================================================================================
+// for extension private_data
+void* Device::AllocApiObject(
+        const VkAllocationCallbacks*    pAllocator,
+        const size_t                    totalObjectSize)
+{
+    VK_ASSERT(pAllocator != nullptr);
+
+    size_t privateDataTotalSize = GetPrivateDataTotalSize();
+    size_t actualObjectSize     = totalObjectSize + privateDataTotalSize;
+
+    void* pMemory = pAllocator->pfnAllocation(
+                    pAllocator->pUserData,
+                    actualObjectSize,
+                    VK_DEFAULT_MEM_ALIGN,
+                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if ((pMemory != nullptr) && (privateDataTotalSize > 0))
+    {
+        memset(pMemory, 0, privateDataTotalSize);
+        pMemory = Util::VoidPtrInc(pMemory, privateDataTotalSize);
+    }
+
+    return pMemory;
+}
+
+// =====================================================================================================================
+// for extension private_data
+void Device::FreeApiObject(
+        const VkAllocationCallbacks*    pAllocator,
+        void*                           pMemory)
+{
+    VK_ASSERT(pAllocator != nullptr);
+
+    size_t privateDataTotalSize = GetPrivateDataTotalSize();
+    void* pActualMemory         = pMemory;
+
+    if (m_isPrivateDataEnabled && (pMemory != nullptr))
+    {
+        pActualMemory = Util::VoidPtrDec(pActualMemory, privateDataTotalSize);
+        PrivateDataStorage* pPrivateDataStorage = reinterpret_cast<PrivateDataStorage*>(pActualMemory);
+
+        if (pPrivateDataStorage->pUnreserved != nullptr)
+        {
+            Util::Destructor(pPrivateDataStorage->pUnreserved);
+            VkInstance()->FreeMem(pPrivateDataStorage->pUnreserved);
+        }
+    }
+
+    pAllocator->pfnFree(pAllocator->pUserData, pActualMemory);
 }
 
 /**

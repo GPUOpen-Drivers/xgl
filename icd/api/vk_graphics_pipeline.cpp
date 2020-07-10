@@ -883,6 +883,47 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                         dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::LINE_STIPPLE_EXT)] = true;
                         break;
 
+                    case  VK_DYNAMIC_STATE_CULL_MODE_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::CULL_MODE_EXT)] = true;
+                        break;
+                    case  VK_DYNAMIC_STATE_FRONT_FACE_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FRONT_FACE_EXT)] = true;
+                        break;
+                    case VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::VIEWPORT_COUNT)] = true;
+                        dynamicStateFlags[VK_DYNAMIC_STATE_VIEWPORT]                                    = true;
+                        break;
+                    case VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::SCISSOR_COUNT)] = true;
+                        dynamicStateFlags[VK_DYNAMIC_STATE_SCISSOR]                                    = true;
+                        break;
+                    case  VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::PRIMITIVE_TOPOLOGY_EXT)] = true;
+                        break;
+                    case  VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::VERTEX_INPUT_BINDING_STRIDE_EXT)]
+                            = true;
+                        break;
+                    case  VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_TEST_ENABLE_EXT)] = true;
+                        break;
+                    case  VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_WRITE_ENABLE_EXT)] = true;
+                        break;
+                    case  VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_COMPARE_OP_EXT)] = true;
+                        break;
+                    case  VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_BOUNDS_TEST_ENABLE_EXT)]
+                            = true;
+                        break;
+                    case  VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::STENCIL_TEST_ENABLE_EXT)] = true;
+                        break;
+                    case  VK_DYNAMIC_STATE_STENCIL_OP_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::STENCIL_OP_EXT)] = true;
+                        break;
+
                     default:
                         // skip unknown dynamic state
                         break;
@@ -894,6 +935,70 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         pInfo->bindDepthStencilObject  = true;
         pInfo->bindTriangleRasterState = true;
         pInfo->bindInputAssemblyState  = true;
+
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::CULL_MODE_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::CULL_MODE_EXT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FRONT_FACE_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::FRONT_FACE_EXT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::VIEWPORT_COUNT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::VIEWPORT_COUNT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::SCISSOR_COUNT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::SCISSOR_COUNT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::PRIMITIVE_TOPOLOGY_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::PRIMITIVE_TOPOLOGY_EXT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::VERTEX_INPUT_BINDING_STRIDE_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::VERTEX_INPUT_BINDING_STRIDE_EXT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_TEST_ENABLE_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DEPTH_TEST_ENABLE_EXT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_WRITE_ENABLE_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DEPTH_WRITE_ENABLE_EXT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_COMPARE_OP_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DEPTH_COMPARE_OP_EXT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_BOUNDS_TEST_ENABLE_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DEPTH_BOUNDS_TEST_ENABLE_EXT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::STENCIL_TEST_ENABLE_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::STENCIL_TEST_ENABLE_EXT);
+        }
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::STENCIL_OP_EXT)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::STENCIL_OP_EXT);
+        }
+
+        pInfo->bindDepthStencilObject =
+            !(dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::STENCIL_OP_EXT)] ||
+              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::STENCIL_TEST_ENABLE_EXT)] ||
+              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_BOUNDS_TEST_ENABLE_EXT)] ||
+              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_COMPARE_OP_EXT)] ||
+              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_WRITE_ENABLE_EXT)] ||
+              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DEPTH_TEST_ENABLE_EXT)]);
+
+        pInfo->bindTriangleRasterState =
+            !(dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::CULL_MODE_EXT)] ||
+              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FRONT_FACE_EXT)]);
+
+        pInfo->bindInputAssemblyState =
+            !dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::PRIMITIVE_TOPOLOGY_EXT)];
 
         const VkPipelineViewportStateCreateInfo* pVp = pGraphicsPipelineCreateInfo->pViewportState;
 
@@ -1326,11 +1431,9 @@ VkResult GraphicsPipeline::Create(
             pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(localPipelineInfo.pipeline, &palResult);
         VK_ASSERT(palResult == Pal::Result::Success);
 
-        pSystemMem = pAllocator->pfnAllocation(
-            pAllocator->pUserData,
-            sizeof(GraphicsPipeline) + (palSize * numPalDevices),
-            VK_DEFAULT_MEM_ALIGN,
-            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        pSystemMem = pDevice->AllocApiObject(
+            pAllocator,
+            sizeof(GraphicsPipeline) + (palSize * numPalDevices));
 
         if (pSystemMem == nullptr)
         {
@@ -1530,7 +1633,7 @@ VkResult GraphicsPipeline::Create(
             pBinaryInfo->Destroy(pAllocator);
         }
 
-        pAllocator->pfnFree(pAllocator->pUserData, pSystemMem);
+        pDevice->FreeApiObject(pAllocator, pSystemMem);
     }
     if (result == VK_SUCCESS)
     {
@@ -1767,7 +1870,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pCmdBuffer->SetAllViewports(m_info.viewportParams, newTokens.viewport);
         }
     }
-    else
+    else if (ContainsStaticState(DynamicStatesInternal::VIEWPORT_COUNT))
     {
         utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
         do
@@ -1786,7 +1889,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             pCmdBuffer->SetAllScissors(m_info.scissorRectParams, newTokens.scissorRect);
         }
     }
-    else
+    else if (ContainsStaticState(DynamicStatesInternal::SCISSOR_COUNT))
     {
         utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
         do
@@ -1796,6 +1899,111 @@ void GraphicsPipeline::BindToCmdBuffer(
         while (deviceGroup.IterateNext());
 
         pRenderState->allGpuState.dirty.scissor = 1;
+    }
+
+    if (m_flags.bindDepthStencilObject == false)
+    {
+        Pal::DepthStencilStateCreateInfo* pDepthStencilCreateInfo = &(pRenderState->allGpuState.depthStencilCreateInfo);
+
+        if (ContainsStaticState(DynamicStatesInternal::DEPTH_TEST_ENABLE_EXT) &&
+            (pDepthStencilCreateInfo->depthEnable != m_info.depthStencilCreateInfo.depthEnable))
+        {
+            pDepthStencilCreateInfo->depthEnable = m_info.depthStencilCreateInfo.depthEnable;
+
+            pRenderState->allGpuState.dirty.depthStencil = 1;
+        }
+        if (ContainsStaticState(DynamicStatesInternal::DEPTH_WRITE_ENABLE_EXT) &&
+            (pDepthStencilCreateInfo->depthWriteEnable != m_info.depthStencilCreateInfo.depthWriteEnable))
+        {
+            pDepthStencilCreateInfo->depthWriteEnable = m_info.depthStencilCreateInfo.depthWriteEnable;
+
+            pRenderState->allGpuState.dirty.depthStencil = 1;
+        }
+        if (ContainsStaticState(DynamicStatesInternal::DEPTH_COMPARE_OP_EXT) &&
+            (pDepthStencilCreateInfo->depthFunc != m_info.depthStencilCreateInfo.depthFunc))
+        {
+            pDepthStencilCreateInfo->depthFunc = m_info.depthStencilCreateInfo.depthFunc;
+
+            pRenderState->allGpuState.dirty.depthStencil = 1;
+        }
+        if (ContainsStaticState(DynamicStatesInternal::DEPTH_BOUNDS_TEST_ENABLE_EXT) &&
+            (pDepthStencilCreateInfo->depthBoundsEnable != m_info.depthStencilCreateInfo.depthBoundsEnable))
+        {
+            pDepthStencilCreateInfo->depthBoundsEnable = m_info.depthStencilCreateInfo.depthBoundsEnable;
+
+            pRenderState->allGpuState.dirty.depthStencil = 1;
+        }
+        if (ContainsStaticState(DynamicStatesInternal::STENCIL_TEST_ENABLE_EXT) &&
+            (pDepthStencilCreateInfo->stencilEnable != m_info.depthStencilCreateInfo.stencilEnable))
+        {
+            pDepthStencilCreateInfo->stencilEnable = m_info.depthStencilCreateInfo.stencilEnable;
+
+            pRenderState->allGpuState.dirty.depthStencil = 1;
+        }
+        if (ContainsStaticState(DynamicStatesInternal::STENCIL_OP_EXT) &&
+            ((pDepthStencilCreateInfo->front.stencilFailOp != m_info.depthStencilCreateInfo.front.stencilFailOp) ||
+             (pDepthStencilCreateInfo->front.stencilPassOp != m_info.depthStencilCreateInfo.front.stencilPassOp) ||
+             (pDepthStencilCreateInfo->front.stencilDepthFailOp !=
+              m_info.depthStencilCreateInfo.front.stencilDepthFailOp) ||
+             (pDepthStencilCreateInfo->front.stencilFunc != m_info.depthStencilCreateInfo.front.stencilFunc) ||
+             (pDepthStencilCreateInfo->back.stencilFailOp != m_info.depthStencilCreateInfo.back.stencilFailOp) ||
+             (pDepthStencilCreateInfo->back.stencilPassOp != m_info.depthStencilCreateInfo.back.stencilPassOp) ||
+             (pDepthStencilCreateInfo->back.stencilDepthFailOp !=
+              m_info.depthStencilCreateInfo.back.stencilDepthFailOp) ||
+             (pDepthStencilCreateInfo->back.stencilFunc != m_info.depthStencilCreateInfo.back.stencilFunc)))
+        {
+            pDepthStencilCreateInfo->front = m_info.depthStencilCreateInfo.front;
+            pDepthStencilCreateInfo->back  = m_info.depthStencilCreateInfo.back;
+
+            pRenderState->allGpuState.dirty.depthStencil = 1;
+        }
+    }
+    else
+    {
+        // Update static state to cmdBuffer when it's static DS. It's necessary because
+        // it will be used to tell if the value is changed next time.
+        pRenderState->allGpuState.depthStencilCreateInfo = m_info.depthStencilCreateInfo;
+    }
+
+    if (m_flags.bindTriangleRasterState == false)
+    {
+        // Update the static states to renderState
+        pRenderState->allGpuState.triangleRasterState.frontFillMode   = m_info.triangleRasterState.frontFillMode;
+        pRenderState->allGpuState.triangleRasterState.backFillMode    = m_info.triangleRasterState.backFillMode;
+        pRenderState->allGpuState.triangleRasterState.provokingVertex = m_info.triangleRasterState.provokingVertex;
+        pRenderState->allGpuState.triangleRasterState.flags.u32All    = m_info.triangleRasterState.flags.u32All;
+
+        if (ContainsStaticState(DynamicStatesInternal::FRONT_FACE_EXT))
+        {
+            pRenderState->allGpuState.triangleRasterState.frontFace = m_info.triangleRasterState.frontFace;
+        }
+
+        if (ContainsStaticState(DynamicStatesInternal::CULL_MODE_EXT))
+        {
+            pRenderState->allGpuState.triangleRasterState.cullMode = m_info.triangleRasterState.cullMode;
+        }
+
+        pRenderState->allGpuState.dirty.rasterState = 1;
+    }
+    else
+    {
+        pRenderState->allGpuState.triangleRasterState = m_info.triangleRasterState;
+    }
+
+    if (m_flags.bindInputAssemblyState == false)
+    {
+        // Update the static states to renderState
+        pRenderState->allGpuState.inputAssemblyState.primitiveRestartIndex =
+            m_info.inputAssemblyState.primitiveRestartIndex;
+
+        pRenderState->allGpuState.inputAssemblyState.primitiveRestartEnable =
+            m_info.inputAssemblyState.primitiveRestartEnable;
+
+        pRenderState->allGpuState.dirty.inputAssembly = 1;
+    }
+    else
+    {
+        pRenderState->allGpuState.inputAssemblyState = m_info.inputAssemblyState;
     }
 
     utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());

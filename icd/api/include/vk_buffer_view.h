@@ -50,7 +50,7 @@ public:
         VkBufferView*                     pBufferView);
 
     VkResult Destroy(
-        const Device*                     pDevice,
+        Device*                           pDevice,
         const VkAllocationCallbacks*      pAllocator);
 
     const void* Descriptor(VkDescriptorType descType, int32_t deviceIdx) const

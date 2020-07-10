@@ -194,6 +194,9 @@ cmake_dependent_option(XGL_BUILD_NAVI14 "Build open source vulkan for Navi14" ON
 #if VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES
 option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
 #endif
+#if VKI_EXT_EXTENDED_DYNAMIC_STATE
+option(VKI_EXT_EXTENDED_DYNAMIC_STATE "Build vulkan with EXTENDED_DYNAMIC_STATE extention" OFF)
+#endif
 option(ICD_BUILD_LLPCONLY "Build LLPC Only?" OFF)
 
 if(ICD_BUILD_LLPCONLY)
@@ -225,6 +228,8 @@ option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})
 option(BUILD_WAYLAND_SUPPORT "Build XGL with Wayland support" ON)
 
 option(BUILD_XLIB_XRANDR_SUPPORT "Build Xlib with xrandr 1.6 support" OFF)
+
+option(BUILD_DRI3_SUPPORT "Build XGL with Dri3 support" ON)
 
 option(ICD_ANALYSIS_WARNINGS_AS_ERRORS "Warnings as errors?" OFF)
 set(VAM_ENABLE_WERROR ${ICD_ANALYSIS_WARNINGS_AS_ERRORS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -311,6 +316,11 @@ if (BUILD_WAYLAND_SUPPORT)
     set(PAL_BUILD_WAYLAND ON CACHE BOOL "Build PAL with Wayland support" FORCE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(WAYLAND REQUIRED wayland-client)
+endif()
+
+# Dri3
+if (BUILD_DRI3_SUPPORT)
+    set(PAL_BUILD_DRI3 ON CACHE BOOL "PAL build with Dri3 enabled" FORCE)
 endif()
 
 # Sanitizers

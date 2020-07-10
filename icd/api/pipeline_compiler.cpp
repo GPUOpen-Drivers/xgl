@@ -1497,7 +1497,7 @@ void PipelineCompiler::ApplyPipelineOptions(
     }
 
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT) ||
-        pDevice->IsScalarBlockLayoutEnabled())
+        pDevice->GetEnabledFeatures().scalarBlockLayout)
     {
         pOptions->scalarBlockLayout = true;
     }
@@ -1518,18 +1518,20 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->enableRelocatableShaderElf = m_pPhysicalDevice->GetRuntimeSettings().enableRelocatableShaders;
 #endif
 
-    if (pDevice->IsRobustBufferAccess2Enabled())
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 40
+    if (pDevice->GetEnabledFeatures().extendedRobustness.robustBufferAccess)
     {
         pOptions->extendedRobustness.robustBufferAccess = true;
     }
-    if (pDevice->IsRobustImageAccess2Enabled())
+    if (pDevice->GetEnabledFeatures().extendedRobustness.robustImageAccess)
     {
         pOptions->extendedRobustness.robustImageAccess = true;
     }
-    if (pDevice->IsNullDescriptorEnabled())
+    if (pDevice->GetEnabledFeatures().extendedRobustness.nullDescriptor)
     {
         pOptions->extendedRobustness.nullDescriptor = true;
     }
+#endif
 }
 
 // =====================================================================================================================

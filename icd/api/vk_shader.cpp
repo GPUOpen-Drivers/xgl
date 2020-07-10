@@ -149,14 +149,14 @@ ShaderModule::ShaderModule(
 
 // =====================================================================================================================
 VkResult ShaderModule::Create(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkShaderModuleCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*    pAllocator,
     VkShaderModule*                 pShaderModule)
 {
     const size_t objSize = sizeof(ShaderModule) + pCreateInfo->codeSize;
 
-    void* pMemory = pDevice->AllocApiObject(objSize, pAllocator);
+    void* pMemory = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pMemory == nullptr)
     {
@@ -193,7 +193,7 @@ VkResult ShaderModule::Init(const Device* pDevice, VkShaderModuleCreateFlags fla
 
 // =====================================================================================================================
 VkResult ShaderModule::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
     PipelineCompiler* pCompiler = pDevice->GetCompiler(DefaultDeviceIndex);
@@ -202,7 +202,7 @@ VkResult ShaderModule::Destroy(
 
     Util::Destructor(this);
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }
@@ -218,7 +218,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyShaderModule(
 {
     if (shaderModule != VK_NULL_HANDLE)
     {
-        const Device*                pDevice  = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         ShaderModule::ObjectFromHandle(shaderModule)->Destroy(pDevice, pAllocCB);

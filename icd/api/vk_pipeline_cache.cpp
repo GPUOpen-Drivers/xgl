@@ -64,7 +64,7 @@ PipelineCache::~PipelineCache()
 
 // =====================================================================================================================
 VkResult PipelineCache::Create(
-    const Device*                    pDevice,
+    Device*                          pDevice,
     const VkPipelineCacheCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*     pAllocator,
     VkPipelineCache*                 pPipelineCache)
@@ -123,7 +123,7 @@ VkResult PipelineCache::Create(
 
     // Allocate system memory for all objects
     const size_t objSize = sizeof(PipelineCache) + shaderCacheSize;
-    void* pMemory = pDevice->AllocApiObject(objSize, pAllocator);
+    void* pMemory = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pMemory == nullptr)
     {
@@ -212,7 +212,7 @@ VkResult PipelineCache::Create(
         }
         else
         {
-            pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+            pDevice->FreeApiObject(pAllocator, pMemory);
         }
     }
 
@@ -221,7 +221,7 @@ VkResult PipelineCache::Create(
 
 // =====================================================================================================================
 VkResult PipelineCache::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
     if (m_pBinaryCache != nullptr)
@@ -233,7 +233,7 @@ VkResult PipelineCache::Destroy(
 
     this->~PipelineCache();
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }
@@ -361,7 +361,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipelineCache(
 {
     if (pipelineCache != VK_NULL_HANDLE)
     {
-        const Device*                pDevice = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         PipelineCache::ObjectFromHandle(pipelineCache)->Destroy(pDevice, pAllocCB);

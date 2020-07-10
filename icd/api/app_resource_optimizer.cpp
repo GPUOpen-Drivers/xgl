@@ -201,6 +201,26 @@ void ResourceOptimizer::BuildAppProfile()
     // TODO: These need to be auto-generated from source JSON but for now we write profile programmatically
 
     // Resource parameters based on app profile should go here...
+    if (appProfile == AppProfile::Doom)
+    {
+        if (gfxIpLevel == Pal::GfxIpLevel::GfxIp9)
+        {
+            // Disable DCC for resource causing corruption on clear because of the change to reset FCE counts in
+            // the command buffer when an implicit reset is triggered.
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x0bb76acc72ad6492;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = 1;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // Same issue as above but for image when viewed via Renderdoc which adds the Transfer_Dst usage
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x1237495e0bf5594b;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = 1;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+        }
+    }
 }
 
 #if ICD_RUNTIME_APP_PROFILE

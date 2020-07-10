@@ -356,10 +356,28 @@ vkGetPipelineExecutableInternalRepresentationsKHR   @device     @dext(KHR_pipeli
 
 vkCmdSetLineStippleEXT                              @device     @dext(EXT_line_rasterization)
 
+vkCreatePrivateDataSlotEXT                          @device     @dext(EXT_private_data)
+vkDestroyPrivateDataSlotEXT                         @device     @dext(EXT_private_data)
+vkSetPrivateDataEXT                                 @device     @dext(EXT_private_data)
+vkGetPrivateDataEXT                                 @device     @dext(EXT_private_data)
+
 vkGetSemaphoreCounterValueKHR                       @device     @dext(KHR_timeline_semaphore)
 vkWaitSemaphoresKHR                                 @device     @dext(KHR_timeline_semaphore)
 vkSignalSemaphoreKHR                                @device     @dext(KHR_timeline_semaphore)
 
 vkCmdBeginConditionalRenderingEXT                   @device     @dext(EXT_conditional_rendering)
 vkCmdEndConditionalRenderingEXT                     @device     @dext(EXT_conditional_rendering)
+
+vkCmdSetCullModeEXT                                 @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetFrontFaceEXT                                @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetPrimitiveTopologyEXT                        @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetViewportWithCountEXT                        @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetScissorWithCountEXT                         @device     @dext(EXT_extended_dynamic_state)
+vkCmdBindVertexBuffers2EXT                          @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetDepthTestEnableEXT                          @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetDepthWriteEnableEXT                         @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetDepthCompareOpEXT                           @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetDepthBoundsTestEnableEXT                    @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetStencilTestEnableEXT                        @device     @dext(EXT_extended_dynamic_state)
+vkCmdSetStencilOpEXT                                @device     @dext(EXT_extended_dynamic_state)
 

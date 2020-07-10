@@ -50,13 +50,13 @@ class DescriptorUpdateTemplate : public NonDispatchable<VkDescriptorUpdateTempla
 {
 public:
     static VkResult Create(
-        const Device*                                   pDevice,
+        Device*                                         pDevice,
         const VkDescriptorUpdateTemplateCreateInfo*     pCreateInfo,
         const VkAllocationCallbacks*                    pAllocator,
         VkDescriptorUpdateTemplate*                     pDescriptorUpdateTemplate);
 
     VkResult Destroy(
-        const Device*                pDevice,
+        Device*                      pDevice,
         const VkAllocationCallbacks* pAllocator);
 
     void Update(

@@ -156,7 +156,7 @@ VkResult Memory::Create(
                 VkMemoryPropertyFlags propertyFlags = memoryProperties.memoryTypes[pInfo->memoryTypeIndex].propertyFlags;
 
                 if ((propertyFlags & VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD) &&
-                    pDevice->IsDeviceCoherentMemoryEnabled())
+                    pDevice->GetEnabledFeatures().deviceCoherentMemory)
                 {
                     createInfo.flags.gl2Uncached = 1;
                 }

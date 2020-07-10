@@ -131,7 +131,7 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 24
                 if (shaderCreate.apply.disableLoopUnrolls)
                 {
-                    options.pOptions->forceLoopUnrollCount = 1;
+                    options.pOptions->disableLoopUnroll = true;
                 }
 #endif
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 28

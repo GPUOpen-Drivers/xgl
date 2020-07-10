@@ -593,6 +593,23 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdBeginConditionalRenderingEXT               );
     INIT_DISPATCH_ENTRY(vkCmdEndConditionalRenderingEXT                 );
 
+    INIT_DISPATCH_ENTRY(vkCmdSetCullModeEXT                             );
+    INIT_DISPATCH_ENTRY(vkCmdSetFrontFaceEXT                            );
+    INIT_DISPATCH_ENTRY(vkCmdSetPrimitiveTopologyEXT                    );
+    INIT_DISPATCH_ENTRY(vkCmdSetViewportWithCountEXT                    );
+    INIT_DISPATCH_ENTRY(vkCmdSetScissorWithCountEXT                     );
+    INIT_DISPATCH_ENTRY(vkCmdBindVertexBuffers2EXT                      );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthTestEnableEXT                      );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthWriteEnableEXT                     );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthCompareOpEXT                       );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthBoundsTestEnableEXT                );
+    INIT_DISPATCH_ENTRY(vkCmdSetStencilTestEnableEXT                    );
+    INIT_DISPATCH_ENTRY(vkCmdSetStencilOpEXT                            );
+
+    INIT_DISPATCH_ENTRY(vkCreatePrivateDataSlotEXT                      );
+    INIT_DISPATCH_ENTRY(vkDestroyPrivateDataSlotEXT                     );
+    INIT_DISPATCH_ENTRY(vkSetPrivateDataEXT                             );
+    INIT_DISPATCH_ENTRY(vkGetPrivateDataEXT                             );
 }
 
 // =====================================================================================================================

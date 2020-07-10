@@ -129,11 +129,9 @@ VkResult Buffer::Create(
         VK_ASSERT(palResult == Pal::Result::Success);
 
         // Allocate enough system memory to also store the VA-only memory object
-        pMemory = pAllocator->pfnAllocation(
-            pAllocator->pUserData,
-            apiSize + (palMemSize * pDevice->NumPalDevices()),
-            VK_DEFAULT_MEM_ALIGN,
-            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        pMemory = pDevice->AllocApiObject(
+                        pAllocator,
+                        apiSize + (palMemSize * pDevice->NumPalDevices()));
 
         if (pMemory == nullptr)
         {
@@ -158,11 +156,9 @@ VkResult Buffer::Create(
     else
     {
         // Allocate memory only for the dispatchable object
-        pMemory = pAllocator->pfnAllocation(
-            pAllocator->pUserData,
-            apiSize,
-            VK_DEFAULT_MEM_ALIGN,
-            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        pMemory = pDevice->AllocApiObject(
+                        pAllocator,
+                        apiSize);
 
         if (pMemory == nullptr)
         {
@@ -377,7 +373,7 @@ VkResult Buffer::Destroy(
 
     Util::Destructor(this);
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }

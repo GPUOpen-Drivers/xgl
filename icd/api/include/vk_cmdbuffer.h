@@ -465,6 +465,37 @@ public:
         const Pal::ScissorRectParams&               params,
         uint32_t                                    staticToken);
 
+    void SetDepthTestEnableEXT(
+        VkBool32                                    depthTestEnable);
+
+    void SetDepthWriteEnableEXT(
+        VkBool32                                    depthWriteEnable);
+
+    void SetDepthCompareOpEXT(
+        VkCompareOp                                 depthCompareOp);
+
+    void SetDepthBoundsTestEnableEXT(
+        VkBool32                                    depthBoundsTestEnable);
+
+    void SetStencilTestEnableEXT(
+        VkBool32                                    stencilTestEnable);
+
+    void SetStencilOpEXT(
+        VkStencilFaceFlags                          faceMask,
+        VkStencilOp                                 failOp,
+        VkStencilOp                                 passOp,
+        VkStencilOp                                 depthFailOp,
+        VkCompareOp                                 compareOp);
+
+    void SetCullModeEXT(
+        VkCullModeFlags                             cullMode);
+
+    void SetFrontFaceEXT(
+        VkFrontFace                                 frontFace);
+
+    void SetPrimitiveTopologyEXT(
+        VkPrimitiveTopology                         primitiveTopology);
+
     void SetLineStippleEXT(
         const Pal::LineStippleStateParams&          params,
         uint32_t                                    staticToken);
@@ -1661,6 +1692,64 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginConditionalRenderingEXT(
 VKAPI_ATTR void VKAPI_CALL vkCmdEndConditionalRenderingEXT(
     VkCommandBuffer                           commandBuffer);
 
+VKAPI_ATTR void VKAPI_CALL vkCmdSetCullModeEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkCullModeFlags                             cullMode);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFaceEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkFrontFace                                 frontFace);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopologyEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPrimitiveTopology                         primitiveTopology);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetViewportWithCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    viewportCount,
+    const VkViewport*                           pViewports);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    scissorCount,
+    const VkRect2D*                             pScissors);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstBinding,
+    uint32_t                                    bindingCount,
+    const VkBuffer*                             pBuffers,
+    const VkDeviceSize*                         pOffsets,
+    const VkDeviceSize*                         pSizes,
+    const VkDeviceSize*                         pStrides);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthTestEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthWriteEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthWriteEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthCompareOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkCompareOp                                 depthCompareOp);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBoundsTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthBoundsTestEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    stencilTestEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkStencilFaceFlags                          faceMask,
+    VkStencilOp                                 failOp,
+    VkStencilOp                                 passOp,
+    VkStencilOp                                 depthFailOp,
+    VkCompareOp                                 compareOp);
 } // namespace entry
 
 } // namespace vk

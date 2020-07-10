@@ -54,13 +54,13 @@ class ShaderModule : public NonDispatchable<VkShaderModule, ShaderModule>
 {
 public:
     static VkResult Create(
-        const Device*                   pDevice,
+        Device*                         pDevice,
         const VkShaderModuleCreateInfo* pCreateInfo,
         const VkAllocationCallbacks*    pAllocator,
         VkShaderModule*                 pShaderModule);
 
     VkResult Destroy(
-        const Device*                   pDevice,
+        Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
     size_t GetCodeSize() const { return m_codeSize; }

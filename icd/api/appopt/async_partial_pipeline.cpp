@@ -59,7 +59,11 @@ PartialPipeline* PartialPipeline::Create(
     const VkAllocationCallbacks*    pAllocator)
 {
     const size_t objSize = sizeof(PartialPipeline);
-    void* pMemory = pDevice->AllocApiObject(objSize, pAllocator);
+    void* pMemory = pAllocator->pfnAllocation(
+        pAllocator->pUserData,
+        objSize,
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
     if (pMemory == nullptr)
     {
@@ -135,8 +139,11 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
     uint32_t totalNodes = pushConstSize != 0 ? resNodeDataCount + setCount + 1 : resNodeDataCount + setCount;
 
     Device* pDevice = pAsyncLayer->GetDevice();
-    auto pSets = static_cast<Vkgc::ResourceMappingNode*>(pDevice->AllocApiObject(
-            totalNodes * sizeof(Vkgc::ResourceMappingNode), m_pAllocator));
+    auto pSets = static_cast<Vkgc::ResourceMappingNode*>(m_pAllocator->pfnAllocation(
+        m_pAllocator->pUserData,
+        totalNodes * sizeof(Vkgc::ResourceMappingNode),
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
     auto pNodes = pSets + setCount + 1;
     uint32_t topLevelOffset = 0;
 

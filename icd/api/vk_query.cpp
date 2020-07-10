@@ -141,11 +141,7 @@ VkResult PalQueryPool::Create(
     const size_t size       = apiSize + (pDevice->NumPalDevices() * palSize);
 
     // Allocate enough system memory for the API query pool object and the PAL query pool object
-    void* pSystemMem = pAllocator->pfnAllocation(
-        pAllocator->pUserData,
-        size,
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pSystemMem = pDevice->AllocApiObject(pAllocator, size);
 
     if (pSystemMem == nullptr)
     {
@@ -209,7 +205,7 @@ VkResult PalQueryPool::Create(
         }
 
         // Failure in creating the PAL query pool object. Free system memory and return error.
-        pAllocator->pfnFree(pAllocator->pUserData, pSystemMem);
+        pDevice->FreeApiObject(pAllocator, pSystemMem);
     }
 
     return result;
@@ -237,7 +233,7 @@ VkResult PalQueryPool::Destroy(
     Util::Destructor(this);
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }
@@ -408,11 +404,7 @@ VkResult TimestampQueryPool::Create(
 
     if (result == VK_SUCCESS)
     {
-        pMemory = pAllocator->pfnAllocation(
-            pAllocator->pUserData,
-            totalSize,
-            VK_DEFAULT_MEM_ALIGN,
-            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        pMemory = pDevice->AllocApiObject(pAllocator, totalSize);
 
         if (pMemory == nullptr)
         {
@@ -529,7 +521,7 @@ VkResult TimestampQueryPool::Create(
     {
         pDevice->MemMgr()->FreeGpuMem(&internalMemory);
 
-        pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+        pDevice->FreeApiObject(pAllocator, pMemory);
     }
 
     return result;
@@ -548,7 +540,7 @@ VkResult TimestampQueryPool::Destroy(
     Util::Destructor(this);
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }

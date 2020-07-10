@@ -337,7 +337,7 @@ VkResult SwapChain::Create(
                                        palSwapChainSize +
                                        imageArraySize +
                                        memoryArraySize;
-    void*           pMemory          = pDevice->AllocApiObject(objSize, pAllocator);
+    void*           pMemory          = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pMemory == nullptr)
     {
@@ -498,7 +498,7 @@ VkResult SwapChain::Create(
         }
 
         // Delete allocated memory
-        pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+        pDevice->FreeApiObject(pAllocator, pMemory);
     }
 
     // the old swapchain should be flaged as deprecated no matter whether the new swapchain is created successfully.
@@ -570,7 +570,7 @@ VkResult SwapChain::Destroy(const VkAllocationCallbacks* pAllocator)
 
     Util::Destructor(this);
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    m_pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }

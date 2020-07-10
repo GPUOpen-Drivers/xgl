@@ -209,11 +209,9 @@ VkResult Sampler::Create(
 
     // Allocate system memory. Construct the sampler in memory and then wrap a Vulkan
     // object around it.
-    void* pMemory = pAllocator->pfnAllocation(
-        pAllocator->pUserData,
-        apiSize + palSize + yCbCrMetaDataSize,
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pMemory = pDevice->AllocApiObject(
+        pAllocator,
+        apiSize + palSize + yCbCrMetaDataSize);
 
     if (pMemory == nullptr)
     {
@@ -242,14 +240,14 @@ VkResult Sampler::Create(
 // ====================================================================================================================
 // Destroy a sampler object
 VkResult Sampler::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
     // Call destructor
     Util::Destructor(this);
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }
@@ -264,7 +262,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroySampler(
 {
     if (sampler != VK_NULL_HANDLE)
     {
-        const Device*                pDevice  = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         Sampler::ObjectFromHandle(sampler)->Destroy(pDevice, pAllocCB);

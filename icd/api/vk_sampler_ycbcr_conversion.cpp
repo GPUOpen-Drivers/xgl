@@ -45,10 +45,9 @@ VkResult SamplerYcbcrConversion::Create(
 {
     VkResult result = VK_SUCCESS;
 
-    void* pMemory = pAllocator->pfnAllocation(pAllocator->pUserData,
-                                              sizeof(SamplerYcbcrConversion),
-                                              VK_DEFAULT_MEM_ALIGN,
-                                              VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pMemory = pDevice->AllocApiObject(
+        pAllocator,
+        sizeof(SamplerYcbcrConversion));
 
     if (pMemory == nullptr)
     {
@@ -67,14 +66,14 @@ VkResult SamplerYcbcrConversion::Create(
 
 // =====================================================================================================================
 void SamplerYcbcrConversion::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
     // Call destructor
     Util::Destructor(this);
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 }
 
 // =====================================================================================================================

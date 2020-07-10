@@ -97,7 +97,7 @@ public:
         const Device*           pDevice);
 
     void Destroy(
-        const Device*                   pDevice,
+        Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
     VkResult GetShareHandle(
