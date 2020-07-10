@@ -243,7 +243,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
 // =====================================================================================================================
 // Creates a pipeline layout object.
 VkResult PipelineLayout::Create(
-    const Device*                     pDevice,
+    Device*                           pDevice,
     const VkPipelineLayoutCreateInfo* pCreateInfo,
     const VkAllocationCallbacks*      pAllocator,
     VkPipelineLayout*                 pPipelineLayout)
@@ -267,7 +267,7 @@ VkResult PipelineLayout::Create(
     const size_t objSize = apiSize + (pCreateInfo->setLayoutCount * sizeof(SetUserDataLayout)) +
         (pCreateInfo->setLayoutCount * sizeof(DescriptorSetLayout*)) + setLayoutsArraySize;
 
-    void* pSysMem = pDevice->AllocApiObject(objSize, pAllocator);
+    void* pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pSysMem == nullptr)
     {
@@ -287,7 +287,7 @@ VkResult PipelineLayout::Create(
 
     if (result != VK_SUCCESS)
     {
-        pAllocator->pfnFree(pAllocator->pUserData, pSysMem);
+        pDevice->FreeApiObject(pAllocator, pSysMem);
         return result;
     }
 
@@ -658,7 +658,7 @@ VkResult PipelineLayout::Destroy(
 
     this->~PipelineLayout();
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }

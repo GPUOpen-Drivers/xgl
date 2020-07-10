@@ -49,7 +49,11 @@ VkResult GpaSession::Create(
 
     pAllocator = (pAllocator != nullptr) ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
-    void* pStorage = pDevice->AllocApiObject(sizeof(GpaSession), pAllocator);
+    void* pStorage = pAllocator->pfnAllocation(
+        pAllocator->pUserData,
+        sizeof(GpaSession),
+        VK_DEFAULT_MEM_ALIGN,
+        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
     if (pStorage != nullptr)
     {

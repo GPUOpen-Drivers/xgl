@@ -204,11 +204,9 @@ VkResult ComputePipeline::Create(
             pDevice->PalDevice(DefaultDeviceIndex)->GetComputePipelineSize(localPipelineInfo.pipeline, &palResult);
         VK_ASSERT(palResult == Pal::Result::Success);
 
-        pSystemMem = pAllocator->pfnAllocation(
-            pAllocator->pUserData,
-            sizeof(ComputePipeline) + (pipelineSize * pDevice->NumPalDevices()),
-            VK_DEFAULT_MEM_ALIGN,
-            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        pSystemMem = pDevice->AllocApiObject(
+            pAllocator,
+            sizeof(ComputePipeline) + (pipelineSize * pDevice->NumPalDevices()));
 
         if (pSystemMem == nullptr)
         {
@@ -334,7 +332,7 @@ VkResult ComputePipeline::Create(
     if (result != VK_SUCCESS)
     {
         // Free system memory for pipeline object
-        pAllocator->pfnFree(pAllocator->pUserData, pSystemMem);
+        pDevice->FreeApiObject(pAllocator, pSystemMem);
 
         if (pBinary != nullptr)
         {

@@ -58,13 +58,13 @@ class PipelineCache : public NonDispatchable<VkPipelineCache, PipelineCache>
 {
 public:
     static VkResult Create(
-        const Device*                       pDevice,
+        Device*                             pDevice,
         const VkPipelineCacheCreateInfo*    pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
         VkPipelineCache*                    pPipelineCache);
 
     VkResult Destroy(
-        const Device*                       pDevice,
+        Device*                             pDevice,
         const VkAllocationCallbacks*        pAllocator);
 
     VkResult GetData(void* pData, size_t* pSize);

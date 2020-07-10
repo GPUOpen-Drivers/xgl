@@ -842,10 +842,10 @@
       "Name": "EnableRelocatableShaders",
       "Description": "Builds a pipeline by linking reloctable shader elf, which have been built individually.  Only valid when LLPC is the pipeline compiler.",
       "Tags": [
-	"SPIRV Options"
+        "SPIRV Options"
       ],
       "Defaults": {
-	"Default": false
+        "Default": false
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -1883,14 +1883,14 @@
     },
     {
       "Name": "AllowVkPipelineCachingToDisk",
-      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for saving shader ELFs. (Default: TRUE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
+      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for saving shader ELFs. (Default: FALSE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
       "Tags": [
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": true,
+        "Default": false,
         "WinDefault": true,
-        "LnxDefault": true
+        "LnxDefault": false
       },
       "Type": "bool",
       "VariableName": "usePalPipelineCaching",
@@ -3845,17 +3845,47 @@
       "Name": "DccBitsPerPixelThreshold"
     },
     {
-      "Name": "ForceDccForColorAttachments",
-      "Description": "This is a hint for PAL to ignore any performance hueristics when determining if images with color attachment usage get DCC. ",
+      "Name": "ForceEnableDcc",
+      "Description": "If not default, force enables DCC on the basis of resource and/or BPP",
       "Tags": [
         "Optimization"
       ],
       "Defaults": {
-        "Default": false
+        "Default": "ForceDccDefault"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "ForceDccDefault",
+            "Value": 0,
+            "Description": "Don't force enable DCC for Shader storage (UAVs) and/or color attachments (RTs)"
+          },
+          {
+            "Name": "ForceDccForColorAttachments",
+            "Value": 1,
+            "Description": "Force enable DCC for color attachments irrespective of BPP. This is a hint for PAL to ignore any performance hueristics when determining if images with color attachment usage get DCC"
+          },
+          {
+            "Name": "ForceDccFor32BppShaderStorage",
+            "Value": 2,
+            "Description": "bpp range from 32 to 64 resource shader storage"
+          },
+          {
+            "Name": "ForceDccFor64BppShaderStorage",
+            "Value": 4,
+            "Description": "64 bpp or deeper resource shader storage"
+          }
+        ],
+        "Name": "ForceEnableDcc"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "forceDccForColorAttachments"
+      "Type": "uint32",
+      "VariableName": "forceEnableDcc"
     },
     {
       "Name": "DisableSmallSurfColorCompressionSize",

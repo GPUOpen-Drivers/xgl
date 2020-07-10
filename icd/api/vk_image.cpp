@@ -647,18 +647,39 @@ VkResult Image::Create(
             ((gfxLevel > Pal::GfxIpLevel::GfxIp9) || (palCreateInfo.usageFlags.shaderWrite == false)))
         {
             // Enable DCC beyond what PAL does by default for color attachments
-            if ((settings.forceDccForColorAttachments) && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+            if ((settings.forceEnableDcc == ForceDccForColorAttachments) &&
+                (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
             {
                 palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
             }
 
-            // Turn DCC on/off for identified cases where memory bandwidth is not the bottleneck to improve latency.
-            // PAL may do this implicitly, so specify force enabled instead of default.
-            if ((settings.dccBitsPerPixelThreshold != UINT_MAX) && Formats::IsColorFormat(pCreateInfo->format))
+            if (Formats::IsColorFormat(pCreateInfo->format))
             {
-                palCreateInfo.metadataMode =
-                    (Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format) < settings.dccBitsPerPixelThreshold) ?
-                    Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
+                uint32_t bpp = Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format);
+
+                // Enable DCC for shader storage resource with 32 <= bpp < 64
+                if ((settings.forceEnableDcc == ForceDccFor32BppShaderStorage) &&
+                    (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+                    (bpp >= 32) && (bpp < 64))
+                {
+                    palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
+                }
+
+                // Enable DCC for shader storage resource with bpp >= 64
+                if ((settings.forceEnableDcc == ForceDccFor64BppShaderStorage) &&
+                    (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+                    (bpp >= 64))
+                {
+                     palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
+                }
+
+                // Turn DCC on/off for identified cases where memory bandwidth is not the bottleneck to improve latency.
+                // PAL may do this implicitly, so specify force enabled instead of default.
+                if (settings.dccBitsPerPixelThreshold != UINT_MAX)
+                {
+                    palCreateInfo.metadataMode = (bpp < settings.dccBitsPerPixelThreshold) ?
+                        Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
+                }
             }
         }
 
@@ -769,11 +790,7 @@ VkResult Image::Create(
         // Allocate system memory for objects
         if (result == VK_SUCCESS)
         {
-            pMemory = pAllocator->pfnAllocation(
-                pAllocator->pUserData,
-                totalSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+            pMemory = pDevice->AllocApiObject(pAllocator, totalSize);
 
             if (pMemory == nullptr)
             {
@@ -883,7 +900,7 @@ VkResult Image::Create(
             }
 
             // Failure in creating the PAL image object. Free system memory and return error.
-            pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+            pDevice->FreeApiObject(pAllocator, pMemory);
         }
     }
 
@@ -928,11 +945,7 @@ VkResult Image::CreateFromAndroidHwBufferHandle(
     totalSize = apiSize + palImgSize;
 
     // Allocate system memory for objects
-    pMemory = pAllocator->pfnAllocation(
-        pAllocator->pUserData,
-        totalSize,
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    pMemory = pDevice->AllocApiObject(pAllocator, totalSize);
 
     if (pMemory == nullptr)
     {
@@ -1006,7 +1019,7 @@ VkResult Image::CreateFromAndroidHwBufferHandle(
         }
 
         // Failure in creating the PAL image object. Free system memory and return error.
-        pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+        pDevice->FreeApiObject(pAllocator, pMemory);
     }
 
     return result;
@@ -1054,11 +1067,9 @@ VkResult Image::CreatePresentableImage(
         VK_ASSERT(memSize == palMemSize);
     }
 
-    void* pImgObjMemory = pAllocator->pfnAllocation(
-        pAllocator->pUserData,
-        ObjectSize(pDevice) + (palImgSize * numDevices),
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pImgObjMemory = pDevice->AllocApiObject(
+        pAllocator,
+        ObjectSize(pDevice) + (palImgSize * numDevices));
 
     if (pImgObjMemory == nullptr)
     {
@@ -1073,7 +1084,7 @@ VkResult Image::CreatePresentableImage(
 
     if (pMemObjMemory == nullptr)
     {
-        pAllocator->pfnFree(pAllocator->pUserData, pImgObjMemory);
+        pDevice->FreeApiObject(pAllocator, pImgObjMemory);
 
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
@@ -1186,7 +1197,7 @@ VkResult Image::CreatePresentableImage(
     }
     else
     {
-        pAllocator->pfnFree(pAllocator->pUserData, pImgObjMemory);
+        pDevice->FreeApiObject(pAllocator, pImgObjMemory);
         pAllocator->pfnFree(pAllocator->pUserData, pMemObjMemory);
     }
 
@@ -1236,7 +1247,7 @@ VkResult Image::Destroy(
 
     Util::Destructor(this);
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }

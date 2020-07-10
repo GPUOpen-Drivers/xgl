@@ -54,11 +54,7 @@ VkResult BufferView::Create(
     const size_t objSize = apiSize +
         (srdSize * pDevice->NumPalDevices());
 
-    void* pMemory = pAllocator->pfnAllocation(
-        pAllocator->pUserData,
-        objSize,
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pMemory = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pMemory == nullptr)
     {
@@ -128,12 +124,12 @@ BufferView::BufferView(
 // ===============================================================================================
 // Destroy a buffer object
 VkResult BufferView::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
     Util::Destructor(this);
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }
@@ -150,7 +146,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyBufferView(
 {
     if (bufferView != VK_NULL_HANDLE)
     {
-        const Device*                pDevice  = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         BufferView::ObjectFromHandle(bufferView)->Destroy(pDevice, pAllocCB);

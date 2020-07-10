@@ -1092,7 +1092,7 @@ void PhysicalDevice::PopulateFormatProperties()
              bufferFlags = linearFlags;
           }
 
-        if (Formats::IsYuvFormat(format))
+        if (Formats::IsYuvFormat(format) && (palFormat.format != Pal::UndefinedSwizzledFormat.format))
         {
             if (IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION))
             {
@@ -3574,6 +3574,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 #if defined(__unix__)
 #endif
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE));
+
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
     {
@@ -5041,6 +5043,24 @@ void PhysicalDevice::GetFeatures2(
                 pRobustness2Features->robustImageAccess2  = VK_FALSE;
                 pRobustness2Features->robustBufferAccess2 = VK_FALSE;
                 pRobustness2Features->nullDescriptor      = VK_FALSE;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_FEATURES_EXT:
+            {
+                VkPhysicalDeviceExtendedDynamicStateFeaturesEXT* pExtendedDynamicStateFeature =
+                    reinterpret_cast<VkPhysicalDeviceExtendedDynamicStateFeaturesEXT*>(pHeader);
+
+                pExtendedDynamicStateFeature->extendedDynamicState = VK_TRUE;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PRIVATE_DATA_FEATURES_EXT:
+            {
+                VkPhysicalDevicePrivateDataFeaturesEXT* pPrivateDataFeature =
+                    reinterpret_cast<VkPhysicalDevicePrivateDataFeaturesEXT*>(pHeader);
+
+                pPrivateDataFeature->privateData = VK_TRUE;
                 break;
             }
 

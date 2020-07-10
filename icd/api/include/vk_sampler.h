@@ -56,7 +56,7 @@ public:
     }
 
     VkResult Destroy(
-        const Device*                   pDevice,
+        Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
     VK_INLINE uint64_t GetApiHash() const

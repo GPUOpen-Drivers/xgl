@@ -62,7 +62,7 @@ public:
     VkResult GetStatus(void);
 
     VkResult Destroy(
-        const Device*                   pDevice,
+        Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
 #if defined(__unix__)

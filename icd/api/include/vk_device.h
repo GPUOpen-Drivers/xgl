@@ -39,6 +39,7 @@
 #include "include/vk_defines.h"
 #include "include/vk_dispatch.h"
 #include "include/vk_physical_device.h"
+#include "include/vk_private_data_slot.h"
 #include "include/vk_queue.h"
 
 #include "include/app_shader_optimizer.h"
@@ -114,6 +115,27 @@ struct ImportSemaphoreInfo
 class Device
 {
 public:
+    // Represent features in VK_EXT_robustness2
+    struct ExtendedRobustness
+    {
+        bool robustBufferAccess;
+        bool robustImageAccess;
+        bool nullDescriptor;
+    };
+
+    struct DeviceFeatures
+    {
+        VkBool32                robustBufferAccess;
+        VkBool32                sparseBinding;
+        // The state of enabled feature VK_EXT_scalar_block_layout.
+        VkBool32                scalarBlockLayout;
+        // The states of enabled feature DEVICE_COHERENT_MEMORY_FEATURES_AMD which is defined by
+        // extensions VK_AMD_device_coherent_memory
+        VkBool32                deviceCoherentMemory;
+        // The state of enabled features in VK_EXT_robustness2.
+        ExtendedRobustness      extendedRobustness;
+    };
+
     // Pipelines used for internal operations, e.g. certain resource copies
     struct InternalPipeline
     {
@@ -150,14 +172,6 @@ public:
         uint32_t timestampQueryPoolSlotSize;
 
         bool connectThroughThunderBolt;
-    };
-
-    // Represent features in VK_EXT_robustness2
-    struct ExtendedRobustness
-    {
-        bool robustBufferAccess;
-        bool robustImageAccess;
-        bool nullDescriptor;
     };
 
     static VkResult Create(
@@ -451,21 +465,10 @@ public:
         uint32_t                     bindInfoCount,
         const VkBindImageMemoryInfo* pBindInfos) const;
 
-    VK_INLINE const VkPhysicalDeviceFeatures& GetEnabledFeatures() const
-        { return m_enabledFeatures;}
+    VK_INLINE const DeviceFeatures& GetEnabledFeatures() const
+        { return m_enabledFeatures; }
 
     Pal::PrtFeatureFlags GetPrtFeatures() const;
-
-    VK_INLINE void* AllocApiObject(
-        size_t                       size,
-        const VkAllocationCallbacks* pAllocator) const
-    {
-        return pAllocator->pfnAllocation(
-                    pAllocator->pUserData,
-                    size,
-                    VK_DEFAULT_MEM_ALIGN,
-                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-    }
 
     Pal::Result AddMemReference(
         Pal::IDevice*       pPalDevice,
@@ -595,9 +598,6 @@ public:
     VK_INLINE bool UseStridedCopyQueryResults() const
         { return (m_properties.timestampQueryPoolSlotSize == 32); }
 
-    VK_INLINE const bool IsDeviceCoherentMemoryEnabled() const
-        { return m_deviceCoherentMemoryEnabled; }
-
     VK_INLINE const bool UseCompactDynamicDescriptors() const
         { return !GetRuntimeSettings().enableRelocatableShaders && !GetEnabledFeatures().robustBufferAccess;}
 
@@ -616,24 +616,25 @@ public:
 
     void UpdateFeatureSettings();
 
-    VK_INLINE bool IsScalarBlockLayoutEnabled() const
+    VK_INLINE size_t GetPrivateDataTotalSize() const
     {
-        return m_scalarBlockLayoutEnabled;
+        return m_privateDataTotalSize;
     }
 
-    VK_INLINE bool IsRobustBufferAccess2Enabled() const
-    {
-        return m_extendedRobustnessEnabled.robustBufferAccess;
-    }
+    bool ReserveFastPrivateDataSlot(
+        uint64*                         pIndex);
 
-    VK_INLINE bool IsRobustImageAccess2Enabled() const
-    {
-        return m_extendedRobustnessEnabled.robustImageAccess;
-    }
+    void* AllocApiObject(
+        const VkAllocationCallbacks*    pAllocator,
+        const size_t                    totalObjectSize);
 
-    VK_INLINE bool IsNullDescriptorEnabled() const
+    void FreeApiObject(
+        const VkAllocationCallbacks*    pAllocator,
+        void*                           pMemory);
+
+    VK_INLINE Util::RWLock* GetPrivateDataRWLock()
     {
-        return m_extendedRobustnessEnabled.nullDescriptor;
+        return &m_privateDataRWLock;
     }
 
 VkResult SetDebugUtilsObjectName(const VkDebugUtilsObjectNameInfoEXT* pNameInfo);
@@ -646,7 +647,9 @@ protected:
         const DeviceBarrierPolicy&       barrierPolicy,
         const DeviceExtensions::Enabled& enabledExtensions,
         const VkPhysicalDeviceFeatures*  pFeatures,
-        bool                             useComputeAsTransferQueue);
+        bool                             useComputeAsTransferQueue,
+        bool                             privateDataEnabled,
+        uint32                           privateDataSlotRequestCount);
 
     VkResult CreateInternalComputePipeline(
         size_t                           codeByteSize,
@@ -705,11 +708,7 @@ protected:
     Util::Mutex                         m_memoryMutex;             // Shared mutex used occasionally by memory objects
 
     // The states of m_enabledFeatures are provided by application
-    VkPhysicalDeviceFeatures            m_enabledFeatures;
-
-    // The states of enabled feature DEVICE_COHERENT_MEMORY_FEATURES_AMD which is defined by
-    // extensions VK_AMD_device_coherent_memory
-    bool                                m_deviceCoherentMemoryEnabled;
+    DeviceFeatures                      m_enabledFeatures;
 
     // The count of allocations that has been created from the logical device.
     uint32_t                            m_allocatedCount;
@@ -747,11 +746,14 @@ protected:
         return baseClassSize + ((numDevices - 1) * sizeof(PerGpuInfo));
     }
 
-    // The state of enabled feature VK_EXT_scalar_block_layout.
-    bool                                m_scalarBlockLayoutEnabled;
+    // This is from device create info, VkDevicePrivateDataCreateInfoEXT
+    uint32                              m_privateDataSlotRequestCount;
+    volatile uint64                     m_nextPrivateDataSlot;
 
-    // The state of enabled features in VK_EXT_robustness2.
-    ExtendedRobustness                  m_extendedRobustnessEnabled;
+    bool                                m_isPrivateDataEnabled;
+    size_t                              m_privateDataTotalSize;
+
+    Util::RWLock                        m_privateDataRWLock;
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

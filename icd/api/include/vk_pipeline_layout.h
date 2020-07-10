@@ -138,7 +138,7 @@ public:
         bool                                        isLastVertexStage) const;
 
     static VkResult Create(
-        const Device*                       pDevice,
+        Device*                             pDevice,
         const VkPipelineLayoutCreateInfo*   pCreateInfo,
         const VkAllocationCallbacks*        pAllocator,
         VkPipelineLayout*                   pPipelineLayout);

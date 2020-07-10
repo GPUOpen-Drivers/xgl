@@ -367,7 +367,7 @@ VkResult ImageView::Create(
         totalSize              = depthViewSegmentOffset + (depthViewSegmentSize * numDevices);
     }
 
-    void* pMemory = pDevice->AllocApiObject(totalSize, pAllocator);
+    void* pMemory = pDevice->AllocApiObject(pAllocator, totalSize);
 
     if (pMemory == nullptr)
     {
@@ -529,7 +529,7 @@ VkResult ImageView::Create(
     {
         // NOTE: None of PAL SRDs, color target views, and DS views require any clean-up other than their
         // memory freed.
-        pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+        pDevice->FreeApiObject(pAllocator, pMemory);
 
         return PalToVkResult(result);
     }
@@ -543,7 +543,7 @@ VkResult ImageView::Destroy(
 {
     Util::Destructor(this);
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }

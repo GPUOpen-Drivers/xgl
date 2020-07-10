@@ -101,7 +101,7 @@ VkResult Framebuffer::Create(
     const size_t attachmentSize = sizeof(Attachment) * pCreateInfo->attachmentCount;
     const size_t objSize        = apiSize + attachmentSize;
 
-    void* pSystemMem = pDevice->AllocApiObject(objSize, pAllocator);
+    void* pSystemMem = pDevice->AllocApiObject(pAllocator, objSize);
 
     // On success, wrap it up in a Vulkan object and return.
     if (pSystemMem != nullptr)
@@ -168,14 +168,14 @@ Framebuffer::Framebuffer(const VkFramebufferCreateInfo& info,
 // =====================================================================================================================
 // Destroy a framebuffer object
 VkResult Framebuffer::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
     // Call destructor
     Util::Destructor(this);
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     // Cannot fail
     return VK_SUCCESS;
@@ -263,7 +263,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyFramebuffer(
 {
     if (framebuffer != VK_NULL_HANDLE)
     {
-        const Device*                pDevice = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         Framebuffer::ObjectFromHandle(framebuffer)->Destroy(pDevice, pAllocCB);

@@ -436,7 +436,7 @@ VkResult CmdBuffer::Create(
     while ((result == VK_SUCCESS) && (allocCount < commandBufferCount))
     {
         // Allocate memory for the command buffer
-        void* pMemory = pInstance->AllocMem(cmdBufSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        void* pMemory = pDevice->AllocApiObject(pInstance->GetAllocCallbacks(), cmdBufSize);
 
         // Create the command buffer
         if (pMemory != nullptr)
@@ -1411,6 +1411,7 @@ void CmdBuffer::BindPipeline(
                 {
                     pPipeline->BindToCmdBuffer(this, &m_state, &m_stencilCombiner);
 
+                    if (pPipeline->ContainsStaticState(DynamicStatesInternal::VERTEX_INPUT_BINDING_STRIDE_EXT))
                     {
                         m_vbMgr.GraphicsPipelineChanged(this, pPipeline);
                     }
@@ -1607,7 +1608,7 @@ VkResult CmdBuffer::Destroy(void)
 
     Util::Destructor(this);
 
-    pInstance->FreeMem(ApiCmdBuffer::FromObject(this));
+    m_pDevice->FreeApiObject(pInstance->GetAllocCallbacks(), ApiCmdBuffer::FromObject(this));
 
     return VK_SUCCESS;
 }
@@ -6022,6 +6023,156 @@ void CmdBuffer::ValidateStates()
 }
 
 // =====================================================================================================================
+void CmdBuffer::SetCullModeEXT(
+    VkCullModeFlags cullMode)
+{
+    Pal::CullMode palCullMode = VkToPalCullMode(cullMode);
+
+    if (m_state.allGpuState.triangleRasterState.cullMode != palCullMode)
+    {
+        m_state.allGpuState.triangleRasterState.cullMode = palCullMode;
+        m_state.allGpuState.dirty.rasterState            = 1;
+    }
+
+    m_state.allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetFrontFaceEXT(
+    VkFrontFace frontFace)
+{
+    Pal::FaceOrientation palFrontFace = VkToPalFaceOrientation(frontFace);
+
+    if (m_state.allGpuState.triangleRasterState.frontFace != palFrontFace)
+    {
+        m_state.allGpuState.triangleRasterState.frontFace = palFrontFace;
+        m_state.allGpuState.dirty.rasterState             = 1;
+    }
+
+    m_state.allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetPrimitiveTopologyEXT(
+    VkPrimitiveTopology primitiveTopology)
+{
+    Pal::PrimitiveTopology palTopology = VkToPalPrimitiveTopology(primitiveTopology);
+
+    if (m_state.allGpuState.inputAssemblyState.topology != palTopology)
+    {
+        m_state.allGpuState.inputAssemblyState.topology = palTopology;
+        m_state.allGpuState.dirty.inputAssembly         = 1;
+    }
+
+    m_state.allGpuState.staticTokens.inputAssemblyState = DynamicRenderStateToken;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetDepthTestEnableEXT(
+    VkBool32 depthTestEnable)
+{
+    if (m_state.allGpuState.depthStencilCreateInfo.depthEnable != static_cast<bool>(depthTestEnable))
+    {
+        m_state.allGpuState.depthStencilCreateInfo.depthEnable = depthTestEnable;
+        m_state.allGpuState.dirty.depthStencil                 = 1;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetDepthWriteEnableEXT(
+    VkBool32 depthWriteEnable)
+{
+    if (m_state.allGpuState.depthStencilCreateInfo.depthWriteEnable != static_cast<bool>(depthWriteEnable))
+    {
+        m_state.allGpuState.depthStencilCreateInfo.depthWriteEnable = depthWriteEnable;
+        m_state.allGpuState.dirty.depthStencil                      = 1;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetDepthCompareOpEXT(
+    VkCompareOp depthCompareOp)
+{
+    Pal::CompareFunc compareOp = VkToPalCompareFunc(depthCompareOp);
+
+    if (m_state.allGpuState.depthStencilCreateInfo.depthFunc != compareOp)
+    {
+        m_state.allGpuState.depthStencilCreateInfo.depthFunc = compareOp;
+        m_state.allGpuState.dirty.depthStencil               = 1;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetDepthBoundsTestEnableEXT(
+    VkBool32 depthBoundsTestEnable)
+{
+    if (m_state.allGpuState.depthStencilCreateInfo.depthBoundsEnable != static_cast<bool>(depthBoundsTestEnable))
+    {
+        m_state.allGpuState.depthStencilCreateInfo.depthBoundsEnable = depthBoundsTestEnable;
+        m_state.allGpuState.dirty.depthStencil                       = 1;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetStencilTestEnableEXT(
+    VkBool32 stencilTestEnable)
+{
+    if (m_state.allGpuState.depthStencilCreateInfo.stencilEnable != static_cast<bool>(stencilTestEnable))
+    {
+        m_state.allGpuState.depthStencilCreateInfo.stencilEnable = stencilTestEnable;
+        m_state.allGpuState.dirty.depthStencil                   = 1;
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetStencilOpEXT(
+    VkStencilFaceFlags faceMask,
+    VkStencilOp        failOp,
+    VkStencilOp        passOp,
+    VkStencilOp        depthFailOp,
+    VkCompareOp        compareOp)
+{
+    Pal::StencilOp   palFailOp      = VkToPalStencilOp(failOp);
+    Pal::StencilOp   palPassOp      = VkToPalStencilOp(passOp);
+    Pal::StencilOp   palDepthFailOp = VkToPalStencilOp(depthFailOp);
+    Pal::CompareFunc palCompareOp   = VkToPalCompareFunc(compareOp);
+
+    Pal::DepthStencilStateCreateInfo* pCreateInfo = &(m_state.allGpuState.depthStencilCreateInfo);
+
+    if (faceMask & VK_STENCIL_FACE_FRONT_BIT)
+    {
+        if ((pCreateInfo->front.stencilFailOp != palFailOp) ||
+            (pCreateInfo->front.stencilPassOp != palPassOp) ||
+            (pCreateInfo->front.stencilDepthFailOp != palDepthFailOp) ||
+            (pCreateInfo->front.stencilFunc != palCompareOp))
+        {
+            pCreateInfo->front.stencilFailOp      = palFailOp;
+            pCreateInfo->front.stencilPassOp      = palPassOp;
+            pCreateInfo->front.stencilDepthFailOp = palDepthFailOp;
+            pCreateInfo->front.stencilFunc        = palCompareOp;
+
+            m_state.allGpuState.dirty.depthStencil = 1;
+        }
+    }
+
+    if (faceMask & VK_STENCIL_FACE_BACK_BIT)
+    {
+        if ((pCreateInfo->back.stencilFailOp != palFailOp) ||
+            (pCreateInfo->back.stencilPassOp != palPassOp) ||
+            (pCreateInfo->back.stencilDepthFailOp != palDepthFailOp) ||
+            (pCreateInfo->back.stencilFunc != palCompareOp))
+        {
+            pCreateInfo->back.stencilFailOp      = palFailOp;
+            pCreateInfo->back.stencilPassOp      = palPassOp;
+            pCreateInfo->back.stencilDepthFailOp = palDepthFailOp;
+            pCreateInfo->back.stencilFunc        = palCompareOp;
+
+            m_state.allGpuState.dirty.depthStencil = 1;
+        }
+    }
+}
+
+// =====================================================================================================================
 RenderPassInstanceState::RenderPassInstanceState(
     PalAllocator* pAllocator)
     :
@@ -6953,6 +7104,117 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndConditionalRenderingEXT(
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CmdEndConditionalRendering();
 }
 
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetCullModeEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkCullModeFlags                             cullMode)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetCullModeEXT(cullMode);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetFrontFaceEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkFrontFace                                 frontFace)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetFrontFaceEXT(frontFace);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveTopologyEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkPrimitiveTopology                         primitiveTopology)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetPrimitiveTopologyEXT(primitiveTopology);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetViewportWithCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    viewportCount,
+    const VkViewport*                           pViewports)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetViewportWithCount(viewportCount, pViewports);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetScissorWithCountEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    scissorCount,
+    const VkRect2D*                             pScissors)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetScissorWithCount(scissorCount, pScissors);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBindVertexBuffers2EXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    firstBinding,
+    uint32_t                                    bindingCount,
+    const VkBuffer*                             pBuffers,
+    const VkDeviceSize*                         pOffsets,
+    const VkDeviceSize*                         pSizes,
+    const VkDeviceSize*                         pStrides)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BindVertexBuffers(firstBinding,
+                                                                     bindingCount,
+                                                                     pBuffers,
+                                                                     pOffsets,
+                                                                     pSizes,
+                                                                     pStrides);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthTestEnable)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthTestEnableEXT(depthTestEnable);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthWriteEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthWriteEnable)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthWriteEnableEXT(depthWriteEnable);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthCompareOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkCompareOp                                 depthCompareOp)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthCompareOpEXT(depthCompareOp);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBoundsTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthBoundsTestEnable)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthBoundsTestEnableEXT(depthBoundsTestEnable);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilTestEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    stencilTestEnable)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetStencilTestEnableEXT(stencilTestEnable);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkStencilFaceFlags                          faceMask,
+    VkStencilOp                                 failOp,
+    VkStencilOp                                 passOp,
+    VkStencilOp                                 depthFailOp,
+    VkCompareOp                                 compareOp)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetStencilOpEXT(faceMask, failOp, passOp, depthFailOp, compareOp);
+}
 } // namespace entry
 
 } // namespace vk

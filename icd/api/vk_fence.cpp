@@ -83,11 +83,7 @@ VkResult Fence::Create(
     const size_t   totalSize        = apiSize + (palSize * numGroupedFences);
 
     // Allocate system memory
-    void* pMemory = pAllocator->pfnAllocation(
-        pAllocator->pUserData,
-        totalSize,
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pMemory = pDevice->AllocApiObject(pAllocator, totalSize);
 
     if (pMemory == nullptr)
     {
@@ -122,7 +118,7 @@ VkResult Fence::Create(
         return VK_SUCCESS;
     }
 
-    pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+    pDevice->FreeApiObject(pAllocator, pMemory);
 
     return PalToVkResult(palResult);
 }
@@ -130,7 +126,7 @@ VkResult Fence::Create(
 // =====================================================================================================================
 // Destroy fence object
 VkResult Fence::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
     VK_ASSERT(m_groupedFenceCount == pDevice->NumPalDevices());
@@ -146,7 +142,7 @@ VkResult Fence::Destroy(
     Util::Destructor(this);
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     // Cannot fail
     return VK_SUCCESS;
@@ -304,7 +300,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyFence(
 {
     if (fence != VK_NULL_HANDLE)
     {
-        const Device*                pDevice  = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         Fence::ObjectFromHandle(fence)->Destroy(pDevice, pAllocCB);

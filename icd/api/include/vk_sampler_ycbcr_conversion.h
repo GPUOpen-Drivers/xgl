@@ -64,7 +64,7 @@ public:
         VkSamplerYcbcrConversion*                   pYcbcrConversion);
 
     void Destroy(
-        const Device*                               pDevice,
+        Device*                                     pDevice,
         const VkAllocationCallbacks*                pAllocator);
 
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39

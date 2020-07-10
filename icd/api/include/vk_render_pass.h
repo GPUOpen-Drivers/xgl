@@ -223,7 +223,7 @@ public:
         const RenderPassExecuteInfo*    pExecuteInfo);
 
     VkResult Destroy(
-        const Device*                 pDevice,
+        Device*                       pDevice,
         const VkAllocationCallbacks*  pAllocator);
 
     VkFormat GetColorAttachmentFormat(uint32_t subPassIndex, uint32_t colorTarget) const;

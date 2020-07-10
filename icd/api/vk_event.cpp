@@ -68,11 +68,9 @@ VkResult Event::Create(
     const Pal::GpuEventCreateInfo eventCreateInfo = {};
     const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->GetGpuEventSize(eventCreateInfo, nullptr);
 
-    void* pSystemMem = pAllocator->pfnAllocation(
-                        pAllocator->pUserData,
-                        apiSize + (palSize * numDeviceEvents),
-                        VK_DEFAULT_MEM_ALIGN,
-                        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pSystemMem = pDevice->AllocApiObject(
+        pAllocator,
+        apiSize + (palSize * numDeviceEvents));
 
     // Bail on allocation failure
     if (pSystemMem == nullptr)
@@ -124,8 +122,8 @@ VkResult Event::Create(
         }
     }
 
-   if (result == VK_SUCCESS)
-   {
+    if (result == VK_SUCCESS)
+    {
         VK_PLACEMENT_NEW(pSystemMem) Event(pDevice, numDeviceEvents, pPalGpuEvents, &internalGpuMem);
 
         *pEvent = Event::HandleFromVoidPointer(pSystemMem);
@@ -143,7 +141,7 @@ VkResult Event::Create(
         pDevice->MemMgr()->FreeGpuMem(&internalGpuMem);
 
         // PAL event construction failed. Free system memory and return.
-        pAllocator->pfnFree(pAllocator->pUserData, pSystemMem);
+        pDevice->FreeApiObject(pAllocator, pSystemMem);
     }
 
     return result;
@@ -193,7 +191,7 @@ VkResult Event::Destroy(
     Util::Destructor(this);
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     // Cannot fail
     return VK_SUCCESS;

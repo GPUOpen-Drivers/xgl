@@ -62,7 +62,7 @@ public:
     VkResult Init();
 
     VkResult Destroy(
-        const Device*                   pDevice,
+        Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
     VkResult Reset(VkCommandPoolResetFlags flags);

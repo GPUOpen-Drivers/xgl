@@ -83,7 +83,7 @@ VkResult CmdPool::Create(
 {
     const RuntimeSettings* pSettings = &pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
 
-    void* pMemory = pDevice->AllocApiObject(sizeof(CmdPool), pAllocator);
+    void* pMemory = pDevice->AllocApiObject(pAllocator, sizeof(CmdPool));
 
     if (pMemory == nullptr)
     {
@@ -192,7 +192,7 @@ VkResult CmdPool::Create(
     }
     else
     {
-        pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+        pDevice->FreeApiObject(pAllocator, pMemory);
     }
 
     return result;
@@ -201,7 +201,7 @@ VkResult CmdPool::Create(
 // =====================================================================================================================
 // Destroy a command buffer pool object
 VkResult CmdPool::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
 
@@ -227,7 +227,7 @@ VkResult CmdPool::Destroy(
 
     Util::Destructor(this);
 
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     return VK_SUCCESS;
 }
@@ -311,7 +311,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyCommandPool(
 {
     if (commandPool != VK_NULL_HANDLE)
     {
-        const Device*                pDevice  = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         CmdPool::ObjectFromHandle(commandPool)->Destroy(pDevice, pAllocCB);

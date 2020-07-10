@@ -199,7 +199,7 @@ VkResult Pipeline::Destroy(
     this->~Pipeline();
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     // Cannot fail
     return VK_SUCCESS;

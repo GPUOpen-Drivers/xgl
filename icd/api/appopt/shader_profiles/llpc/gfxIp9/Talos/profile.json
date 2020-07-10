@@ -34,6 +34,17 @@
       "action": {
         "binningOverride": 1
       }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x8af14cff0496e80b d73aafa65ed26e2c"
+        }
+      },
+      "action": {
+        "binningOverride": 2
+      }
     }
   ]
 }

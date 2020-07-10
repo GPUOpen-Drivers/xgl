@@ -62,11 +62,7 @@ VkResult DescriptorPool::Create(
     const size_t apiSize = sizeof(DescriptorPool);
     const size_t objSize = apiSize;
 
-    void* pSysMem = pAllocator->pfnAllocation(
-        pAllocator->pUserData,
-        objSize,
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pSysMem == nullptr)
     {
@@ -259,7 +255,7 @@ VkResult DescriptorPool::Destroy(
     this->~DescriptorPool();
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     // Cannot fail
     return VK_SUCCESS;

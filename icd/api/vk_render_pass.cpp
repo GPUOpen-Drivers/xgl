@@ -814,7 +814,7 @@ static VkResult CreateRenderPass(
 
     const size_t memorySize = apiSize + infoMemorySize;
 
-    pMemory = pDevice->AllocApiObject(memorySize, pAllocator);
+    pMemory = pDevice->AllocApiObject(pAllocator, memorySize);
 
     if (pMemory == nullptr)
     {
@@ -859,7 +859,7 @@ static VkResult CreateRenderPass(
 
         if (pMemory != nullptr)
         {
-            pAllocator->pfnFree(pAllocator->pUserData, pMemory);
+            pDevice->FreeApiObject(pAllocator, pMemory);
         }
 
         return result;
@@ -1039,7 +1039,7 @@ const AttachmentDescription& RenderPass::GetAttachmentDesc(
 // =====================================================================================================================
 // Destroys a render pass object
 VkResult RenderPass::Destroy(
-    const Device*                   pDevice,
+    Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
     pAllocator->pfnFree(pAllocator->pUserData, const_cast<RenderPassExecuteInfo*>(m_pExecuteInfo));
@@ -1048,7 +1048,7 @@ VkResult RenderPass::Destroy(
     Util::Destructor(this);
 
     // Free memory
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 
     // Cannot fail
     return VK_SUCCESS;
@@ -1063,7 +1063,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyRenderPass(
 {
     if (renderPass != VK_NULL_HANDLE)
     {
-        const Device*                pDevice  = ApiDevice::ObjectFromHandle(device);
+        Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
         RenderPass::ObjectFromHandle(renderPass)->Destroy(pDevice, pAllocCB);

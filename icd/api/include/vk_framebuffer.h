@@ -76,7 +76,7 @@ public:
         VkFramebuffer*                  pFramebuffer);
 
     VkResult Destroy(
-        const Device*                   pDevice,
+        Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator);
 
     uint32_t GetAttachmentCount() const { return m_attachmentCount; }

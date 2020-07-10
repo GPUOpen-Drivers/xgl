@@ -74,7 +74,11 @@ VkResult ShaderModule::Create(
     if (result == VK_SUCCESS)
     {
         const size_t objSize = sizeof(ShaderModule);
-        void* pMemory = pDevice->AllocApiObject(objSize, pAllocator);
+        void* pMemory = pAllocator->pfnAllocation(
+            pAllocator->pUserData,
+            objSize,
+            VK_DEFAULT_MEM_ALIGN,
+            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
         if (pMemory == nullptr)
         {
