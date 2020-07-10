@@ -319,7 +319,7 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
     {
         if (pBufferInfo->buffer == VK_NULL_HANDLE)
         {
-            if ((pDevice->GetEnabledFeatures().robustBufferAccess == false) &&
+            if (pDevice->UseCompactDynamicDescriptors() &&
                 ((type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) ||
                  (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)))
             {
@@ -335,7 +335,7 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
         {
             info.gpuAddr = Buffer::ObjectFromHandle(pBufferInfo->buffer)->GpuVirtAddr(deviceIdx) + pBufferInfo->offset;
 
-            if ((pDevice->GetEnabledFeatures().robustBufferAccess == false) &&
+            if (pDevice->UseCompactDynamicDescriptors() &&
                 ((type == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC) ||
                  (type == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC)))
             {

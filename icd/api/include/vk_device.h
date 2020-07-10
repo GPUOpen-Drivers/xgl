@@ -598,6 +598,9 @@ public:
     VK_INLINE const bool IsDeviceCoherentMemoryEnabled() const
         { return m_deviceCoherentMemoryEnabled; }
 
+    VK_INLINE const bool UseCompactDynamicDescriptors() const
+        { return !GetRuntimeSettings().enableRelocatableShaders && !GetEnabledFeatures().robustBufferAccess;}
+
     Pal::IQueue* PerformSwCompositing(
         uint32_t         deviceIdx,
         uint32_t         presentationDeviceIdx,
