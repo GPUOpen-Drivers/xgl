@@ -158,7 +158,7 @@ static DevDriver::Result GetPipelineHashes(
             Util::QueryResult query = {};
 
             // Do not throw an error if entry is not found in cache (in case it was evicted)
-            if (pPipelineCache->QueryPipelineBinary(&cacheId, &query) == Util::Result::Success)
+            if (pPipelineCache->QueryPipelineBinary(&cacheId, 0, &query) == Util::Result::Success)
             {
                 pService->AddHash(internalPipelineHash, query.dataSize);
             }

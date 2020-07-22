@@ -247,7 +247,16 @@ static void ConvertImageCreateInfo(
     pPalCreateInfo->fragments        = pCreateInfo->samples;
     pPalCreateInfo->tiling           = VkToPalImageTiling(pCreateInfo->tiling);
     pPalCreateInfo->tilingOptMode    = settings.imageTilingOptMode;
-    pPalCreateInfo->tilingPreference = settings.imageTilingPreference;
+
+    if ((pCreateInfo->imageType == VK_IMAGE_TYPE_3D) && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+    {
+        pPalCreateInfo->tilingPreference = settings.imageTilingPreference3dColorAttachment;
+    }
+    else
+    {
+        pPalCreateInfo->tilingPreference = settings.imageTilingPreference;
+    }
+
     pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(pCreateInfo->flags, pCreateInfo->format);
     pPalCreateInfo->usageFlags       = VkToPalImageUsageFlags(
                                          imageUsage,
@@ -440,57 +449,41 @@ VkResult Image::Create(
     Pal::ImageCreateInfo palCreateInfo  = {};
     Pal::PresentableImageCreateInfo presentImageCreateInfo = {};
 
-    const RuntimeSettings&    settings         = pDevice->GetRuntimeSettings();
-    const VkImageCreateInfo*  pImageCreateInfo = nullptr;
-    uint32_t                  viewFormatCount  = 0;
-    const VkFormat*           pViewFormats     = nullptr;
+    const RuntimeSettings& settings        = pDevice->GetRuntimeSettings();
+    uint32_t               viewFormatCount = 0;
+    const VkFormat*        pViewFormats    = nullptr;
 
     const uint32_t numDevices = pDevice->NumPalDevices();
     const bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
     const bool     hasDepthStencilAspect = Formats::IsDepthStencilFormat(pCreateInfo->format);
-    VkResult       result     = VkResult::VK_SUCCESS;
+    VkResult       result     = VK_SUCCESS;
+
+    ConvertImageCreateInfo(pDevice, pCreateInfo, &palCreateInfo);
 
     // It indicates the stencil aspect will be read by shader, so it is only meaningful if the image contains the
-    // stencil aspect.
-    bool              stencilShaderRead = false;
-    VkImageUsageFlags stencilUsage      = pCreateInfo->usage;
+    // stencil aspect. The setting of stencilShaderRead will be overrode, if
+    // VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT exists.
+    bool stencilShaderRead = palCreateInfo.usageFlags.shaderRead | palCreateInfo.usageFlags.resolveSrc;
 
-    union
-    {
-        const VkStructHeader*                       pHeader;
-        const VkExternalMemoryImageCreateInfo*      pExternalMemoryImageCreateInfo;
-        const VkImageCreateInfo*                    pVkImageCreateInfo;
-        const VkImageSwapchainCreateInfoKHR*        pVkImageSwapchainCreateInfoKHR;
-        const VkImageFormatListCreateInfo*          pVkImageFormatListCreateInfo;
-        const VkImageStencilUsageCreateInfo*        pVkImageStencilUsageCreateInfo;
-    };
+    VkImageUsageFlags stencilUsage = pCreateInfo->usage;
 
     ImageFlags imageFlags;
 
     imageFlags.u32All = 0;
 
-    for (pVkImageCreateInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
     {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO:
-        {
-            VK_ASSERT(pCreateInfo == pVkImageCreateInfo);
-            pImageCreateInfo = pVkImageCreateInfo;
-            ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo);
-
-            // Fail image creation if the sample count is not supported based on the setting
-            result = ((settings.limitSampleCounts & pImageCreateInfo->samples) != 0) ? VK_SUCCESS
-                                                                                     : VK_ERROR_UNKNOWN;
-
-            // The setting of stencilShaderRead will be overrode, if
-            // VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO_EXT exists.
-            stencilShaderRead = palCreateInfo.usageFlags.shaderRead | palCreateInfo.usageFlags.resolveSrc;
-
-            break;
-        }
         case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
         {
+            const VkExternalMemoryImageCreateInfo* pExternalMemoryImageCreateInfo =
+                static_cast<const VkExternalMemoryImageCreateInfo*>(pNext);
+
             palCreateInfo.flags.invariant = 1;
 
             VkExternalMemoryProperties externalMemoryProperties = {};
@@ -528,7 +521,7 @@ VkResult Image::Create(
                 if (pExternalMemoryImageCreateInfo->handleTypes &
                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
                 {
-                   imageFlags.externalAhbHandle = true;
+                    imageFlags.externalAhbHandle = true;
                 }
             }
 
@@ -543,6 +536,9 @@ VkResult Image::Create(
         case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
         {
             // Processing of the actual contents of this happens later due to AutoBuffer scoping.
+            const VkImageFormatListCreateInfo* pVkImageFormatListCreateInfo =
+                static_cast<const VkImageFormatListCreateInfo*>(pNext);
+
             viewFormatCount = pVkImageFormatListCreateInfo->viewFormatCount;
             pViewFormats    = pVkImageFormatListCreateInfo->pViewFormats;
             break;
@@ -550,6 +546,9 @@ VkResult Image::Create(
 
         case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
         {
+            const VkImageStencilUsageCreateInfo* pVkImageStencilUsageCreateInfo =
+                static_cast<const VkImageStencilUsageCreateInfo*>(pNext);
+
             Pal::ImageUsageFlags usageFlags = VkToPalImageUsageFlags(
                                         pVkImageStencilUsageCreateInfo->stencilUsage,
                                         pCreateInfo->format,
@@ -568,6 +567,8 @@ VkResult Image::Create(
             // Skip any unknown extension structures
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 
     // When the VK image is sharable, the depthStencil PAL usage flag must be set in order for the underlying
@@ -594,7 +595,7 @@ VkResult Image::Create(
             // Skip any entries that specify the same format as the base format of the image as the PAL interface
             // expects that to be excluded from the list.
             if (VkToPalFormat(pViewFormats[i], pDevice->GetRuntimeSettings()).format
-                != VkToPalFormat(pImageCreateInfo->format, pDevice->GetRuntimeSettings()).format)
+                != VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings()).format)
             {
                 palFormatList[palCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i],
                                                                                pDevice->GetRuntimeSettings());
@@ -615,20 +616,18 @@ VkResult Image::Create(
     }
 
     // Disable Stencil read according to the application profile during the creation of an MSAA depth stencil target.
-    if ((pCreateInfo != nullptr)                                                  &&
-        (pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
+    if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
         ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
-        (settings.disableMsaaStencilShaderRead))
+        settings.disableMsaaStencilShaderRead)
     {
         palCreateInfo.usageFlags.noStencilShaderRead = true;
     }
 
     // Enable fullCopyDstOnly for MSAA color image with usage of transfer dst to maximize the texture copy performance.
-    if ((pCreateInfo != nullptr)                                          &&
-        (pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                    &&
+    if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                    &&
         ((pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) != 0) &&
         ((pCreateInfo->usage & VK_IMAGE_USAGE_TRANSFER_DST_BIT) != 0)     &&
-        (settings.enableFullCopyDstOnly))
+        settings.enableFullCopyDstOnly)
     {
         palCreateInfo.flags.fullCopyDstOnly = 1;
     }
@@ -636,94 +635,97 @@ VkResult Image::Create(
     palCreateInfo.metadataMode         = Pal::MetadataMode::Default;
     palCreateInfo.metadataTcCompatMode = Pal::MetadataTcCompatMode::Default;
 
-    if (pCreateInfo != nullptr)
+    // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
+    // compression, another performance optimization.
+    // Don't force DCC to be enabled for shader write image on pre-gfx10 ASICs as DCC is unsupported in shader write.
+    const Pal::GfxIpLevel gfxLevel = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
+    if (((palCreateInfo.extent.width * palCreateInfo.extent.height) >
+         (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize)) &&
+        ((gfxLevel > Pal::GfxIpLevel::GfxIp9) || (palCreateInfo.usageFlags.shaderWrite == false)))
     {
-        // Don't force DCC to be enabled for performance reasons unless the image is larger than the minimum size set for
-        // compression, another performance optimization.
-        // Don't force DCC to be enabled for shader write image on pre-gfx10 ASICs as DCC is unsupported in shader write.
-        const Pal::GfxIpLevel gfxLevel = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
-        if (((palCreateInfo.extent.width * palCreateInfo.extent.height) >
-             (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize)) &&
-            ((gfxLevel > Pal::GfxIpLevel::GfxIp9) || (palCreateInfo.usageFlags.shaderWrite == false)))
+        // Enable DCC beyond what PAL does by default for color attachments
+        if ((settings.forceEnableDcc == ForceDccForColorAttachments) &&
+            (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
         {
-            // Enable DCC beyond what PAL does by default for color attachments
-            if ((settings.forceEnableDcc == ForceDccForColorAttachments) &&
-                (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+            palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
+        }
+
+        if (Formats::IsColorFormat(pCreateInfo->format))
+        {
+            uint32_t bpp = Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format);
+
+            // Enable DCC for shader storage resource with 32 <= bpp < 64
+            if ((settings.forceEnableDcc == ForceDccFor32BppShaderStorage) &&
+                (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+                (bpp >= 32) && (bpp < 64))
             {
                 palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
             }
 
-            if (Formats::IsColorFormat(pCreateInfo->format))
+            // Enable DCC for shader storage resource with bpp >= 64
+            if ((settings.forceEnableDcc == ForceDccFor64BppShaderStorage) &&
+                (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+                (bpp >= 64))
             {
-                uint32_t bpp = Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format);
+                 palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
+            }
 
-                // Enable DCC for shader storage resource with 32 <= bpp < 64
-                if ((settings.forceEnableDcc == ForceDccFor32BppShaderStorage) &&
-                    (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
-                    (bpp >= 32) && (bpp < 64))
-                {
-                    palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
-                }
-
-                // Enable DCC for shader storage resource with bpp >= 64
-                if ((settings.forceEnableDcc == ForceDccFor64BppShaderStorage) &&
-                    (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
-                    (bpp >= 64))
-                {
-                     palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
-                }
-
-                // Turn DCC on/off for identified cases where memory bandwidth is not the bottleneck to improve latency.
-                // PAL may do this implicitly, so specify force enabled instead of default.
-                if (settings.dccBitsPerPixelThreshold != UINT_MAX)
-                {
-                    palCreateInfo.metadataMode = (bpp < settings.dccBitsPerPixelThreshold) ?
-                        Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
-                }
+            // Turn DCC on/off for identified cases where memory bandwidth is not the bottleneck to improve latency.
+            // PAL may do this implicitly, so specify force enabled instead of default.
+            if (settings.dccBitsPerPixelThreshold != UINT_MAX)
+            {
+                palCreateInfo.metadataMode = (bpp < settings.dccBitsPerPixelThreshold) ?
+                    Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
             }
         }
-
-        // a. If devs don't enable the extension: can keep DCC enabled for UAVs with mips
-        // b. If dev enables the extension: keep DCC enabled for UAVs with <= 4 mips
-        // c. Can app-detect un-disable DCC for cases where we know devs don't store to multiple mips
-        if ((gfxLevel == Pal::GfxIpLevel::GfxIp10_1) &&
-            pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_IMAGE_LOAD_STORE_LOD) &&
-            (pCreateInfo->mipLevels > 4) && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))
-        {
-            palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
-        }
-
-        // If DCC was disabled above, still attempt to use Fmask.
-        if ((palCreateInfo.samples > 1) && (palCreateInfo.usageFlags.colorTarget) &&
-            (palCreateInfo.metadataMode == Pal::MetadataMode::Disabled))
-        {
-            palCreateInfo.metadataMode = Pal::MetadataMode::FmaskOnly;
-        }
-
-        // Disable TC compatible reads in order to maximize texture fetch performance.
-        if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
-            ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
-            (settings.disableHtileBasedMsaaRead))
-        {
-            palCreateInfo.metadataTcCompatMode = Pal::MetadataTcCompatMode::Disabled;
-        }
-
-        // We must not use any metadata if sparse aliasing is enabled.
-        if (pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)
-        {
-            palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
-        }
-
-        ResourceOptimizerKey resourceKey;
-        BuildResourceKey(pCreateInfo, &resourceKey);
-
-        // Apply per application (or run-time) options
-        pDevice->GetResourceOptimizer()->OverrideImageCreateInfo(resourceKey, &palCreateInfo);
     }
 
+    // a. If devs don't enable the extension: can keep DCC enabled for UAVs with mips
+    // b. If dev enables the extension: keep DCC enabled for UAVs with <= 4 mips
+    // c. Can app-detect un-disable DCC for cases where we know devs don't store to multiple mips
+    if ((gfxLevel == Pal::GfxIpLevel::GfxIp10_1) &&
+        pDevice->IsExtensionEnabled(DeviceExtensions::AMD_SHADER_IMAGE_LOAD_STORE_LOD) &&
+        (pCreateInfo->mipLevels > 4) && (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT))
+    {
+        palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
+    }
+
+    // If DCC was disabled above, still attempt to use Fmask.
+    if ((palCreateInfo.samples > 1) && palCreateInfo.usageFlags.colorTarget &&
+        (palCreateInfo.metadataMode == Pal::MetadataMode::Disabled))
+    {
+        palCreateInfo.metadataMode = Pal::MetadataMode::FmaskOnly;
+    }
+
+    // Disable TC compatible reads in order to maximize texture fetch performance.
+    if ((pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT)                            &&
+        ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0) &&
+        (settings.disableHtileBasedMsaaRead))
+    {
+        palCreateInfo.metadataTcCompatMode = Pal::MetadataTcCompatMode::Disabled;
+    }
+
+    // We must not use any metadata if sparse aliasing is enabled.
+    if (pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)
+    {
+        palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
+    }
+
+    ResourceOptimizerKey resourceKey;
+    BuildResourceKey(pCreateInfo, &resourceKey);
+
+    // Apply per application (or run-time) options
+    pDevice->GetResourceOptimizer()->OverrideImageCreateInfo(resourceKey, &palCreateInfo);
+
     // If flags contains VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT, imageType must be VK_IMAGE_TYPE_3D
-    VK_ASSERT(((pImageCreateInfo->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) == 0) ||
-               (pImageCreateInfo->imageType == VK_IMAGE_TYPE_3D));
+    VK_ASSERT(((pCreateInfo->flags & VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT) == 0) ||
+              (pCreateInfo->imageType == VK_IMAGE_TYPE_3D));
+
+    // Fail image creation if the sample count is not supported based on the setting
+    if ((settings.limitSampleCounts & pCreateInfo->samples) == 0)
+    {
+        result = VK_ERROR_UNKNOWN;
+    }
 
     if ((result == VK_SUCCESS) && (imageFlags.androidPresentable))
     {
@@ -732,13 +734,13 @@ VkResult Image::Create(
             pDevice,
             &presentImageCreateInfo,
             pAllocator,
-            pImageCreateInfo->usage,
+            pCreateInfo->usage,
             Pal::PresentMode::Windowed,
             pImage,
-            pImageCreateInfo->format,
-            pImageCreateInfo->sharingMode,
-            pImageCreateInfo->queueFamilyIndexCount,
-            pImageCreateInfo->pQueueFamilyIndices,
+            pCreateInfo->format,
+            pCreateInfo->sharingMode,
+            pCreateInfo->queueFamilyIndexCount,
+            pCreateInfo->pQueueFamilyIndices,
             &pDeviceMemory);
 
         if (result == VK_SUCCESS)
@@ -761,7 +763,7 @@ VkResult Image::Create(
     {
         result = Image::CreateFromAndroidHwBufferHandle(
             pDevice,
-            pImageCreateInfo,
+            pCreateInfo,
             imageFlags.isExternalFormat,
             pImage);
 
@@ -835,7 +837,7 @@ VkResult Image::Create(
 
     if ((result == VK_SUCCESS) && isSparse)
     {
-        result = InitSparseVirtualMemory(pDevice, pImageCreateInfo, pAllocator, pPalImages,
+        result = InitSparseVirtualMemory(pDevice, pCreateInfo, pAllocator, pPalImages,
                                          pSparseMemory, &sparseMemCreateInfo, &sparseTileSize);
     }
 
@@ -844,30 +846,30 @@ VkResult Image::Create(
     if (result == VK_SUCCESS)
     {
         imageFlags.internalMemBound = isSparse;
-        imageFlags.linear           = (pImageCreateInfo->tiling == VK_IMAGE_TILING_LINEAR);
+        imageFlags.linear           = (pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR);
 
         // Create barrier policy for the image.
         ImageBarrierPolicy barrierPolicy(pDevice,
-                                         pImageCreateInfo->usage | stencilUsage,
-                                         pImageCreateInfo->sharingMode,
-                                         pImageCreateInfo->queueFamilyIndexCount,
-                                         pImageCreateInfo->pQueueFamilyIndices,
-                                         pImageCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT,
-                                         pImageCreateInfo->format);
+                                         pCreateInfo->usage | stencilUsage,
+                                         pCreateInfo->sharingMode,
+                                         pCreateInfo->queueFamilyIndexCount,
+                                         pCreateInfo->pQueueFamilyIndices,
+                                         pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT,
+                                         pCreateInfo->format);
 
         // Construct API image object.
         VK_PLACEMENT_NEW (pMemory) Image(
             pDevice,
-            pImageCreateInfo->flags,
+            pCreateInfo->flags,
             pPalImages,
             pSparseMemory,
             barrierPolicy,
             sparseTileSize,
             palCreateInfo.mipLevels,
             palCreateInfo.arraySize,
-            pImageCreateInfo->format,
-            pImageCreateInfo->samples,
-            pImageCreateInfo->usage,
+            pCreateInfo->format,
+            pCreateInfo->samples,
+            pCreateInfo->usage,
             stencilUsage,
             imageFlags);
 
@@ -1076,11 +1078,9 @@ VkResult Image::CreatePresentableImage(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    void* pMemObjMemory = pAllocator->pfnAllocation(
-        pAllocator->pUserData,
-        sizeof(Memory) + (palMemSize * numDevices),
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pMemObjMemory = pDevice->AllocApiObject(
+        pAllocator,
+        sizeof(Memory) + (palMemSize * numDevices));
 
     if (pMemObjMemory == nullptr)
     {
@@ -1198,7 +1198,7 @@ VkResult Image::CreatePresentableImage(
     else
     {
         pDevice->FreeApiObject(pAllocator, pImgObjMemory);
-        pAllocator->pfnFree(pAllocator->pUserData, pMemObjMemory);
+        pDevice->FreeApiObject(pAllocator, pMemObjMemory);
     }
 
     return PalToVkResult(result);

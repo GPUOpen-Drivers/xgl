@@ -92,8 +92,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(
     for (uint32_t i = 0; (i < createInfoCount) && (result == VK_SUCCESS); ++i)
     {
         VkGraphicsPipelineCreateInfo createInfo = pCreateInfos[i];
-        VkPipelineShaderStageCreateInfo stages[ShaderGfxStageCount];
-        VK_ASSERT(createInfo.stageCount <= ShaderGfxStageCount);
+        VkPipelineShaderStageCreateInfo stages[ShaderStage::ShaderStageGfxCount];
+        VK_ASSERT(createInfo.stageCount <= ShaderStage::ShaderStageGfxCount);
         for (uint32_t stage = 0; stage < createInfo.stageCount; ++stage)
         {
             stages[stage] = createInfo.pStages[stage];

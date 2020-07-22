@@ -228,7 +228,7 @@ VkResult PipelineLayout::ConvertCreateInfo(
     pPipelineInfo->tempStageSize += (pPipelineInfo->numDescRangeValueNodes * sizeof(Vkgc::DescriptorRangeValue));
 
     // Calculate scratch buffer size for building pipeline mappings for all shader stages based on this layout
-    pPipelineInfo->tempBufferSize = (ShaderStageNativeStageCount * pPipelineInfo->tempStageSize);
+    pPipelineInfo->tempBufferSize = (ShaderStage::ShaderStageNativeStageCount * pPipelineInfo->tempStageSize);
 
     // If we go past our user data limit, we can't support this pipeline
     if (pInfo->userDataRegCount >=
@@ -503,7 +503,7 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
 {
     VkResult result = VK_SUCCESS;
     // Vertex binding information should only be specified for the VS stage
-    VK_ASSERT(stage == ShaderStageVertex || (pVertexInput == nullptr && pVbInfo == nullptr));
+    VK_ASSERT(stage == ShaderStage::ShaderStageVertex || (pVertexInput == nullptr && pVbInfo == nullptr));
 
     uint32_t stageIndex = stage;
     uint32_t stageMask = (1 << stage);

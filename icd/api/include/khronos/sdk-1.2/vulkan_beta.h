@@ -12,9 +12,12 @@
 **
 */
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+
 
 #define VK_KHR_deferred_host_operations 1
 VK_DEFINE_NON_DISPATCHABLE_HANDLE(VkDeferredOperationKHR)
@@ -56,6 +59,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkDeferredOperationJoinKHR(
     VkDeferredOperationKHR                      operation);
 #endif
 
+
 #define VK_KHR_pipeline_library 1
 #define VK_KHR_PIPELINE_LIBRARY_SPEC_VERSION 1
 #define VK_KHR_PIPELINE_LIBRARY_EXTENSION_NAME "VK_KHR_pipeline_library"
@@ -65,6 +69,8 @@ typedef struct VkPipelineLibraryCreateInfoKHR {
     uint32_t             libraryCount;
     const VkPipeline*    pLibraries;
 } VkPipelineLibraryCreateInfoKHR;
+
+
 
 #define VK_KHR_ray_tracing 1
 #define VK_KHR_RAY_TRACING_SPEC_VERSION   8

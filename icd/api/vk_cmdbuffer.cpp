@@ -1411,7 +1411,7 @@ void CmdBuffer::BindPipeline(
                 {
                     pPipeline->BindToCmdBuffer(this, &m_state, &m_stencilCombiner);
 
-                    if (pPipeline->ContainsStaticState(DynamicStatesInternal::VERTEX_INPUT_BINDING_STRIDE_EXT))
+                    if (pPipeline->ContainsStaticState(DynamicStatesInternal::VertexInputBindingStrideExt))
                     {
                         m_vbMgr.GraphicsPipelineChanged(this, pPipeline);
                     }
@@ -4156,7 +4156,7 @@ void CmdBuffer::SetSampleLocations(
 {
     VK_ASSERT((m_state.allGpuState.pGraphicsPipeline != nullptr) &&
               (m_state.allGpuState.pGraphicsPipeline->ContainsStaticState(
-                    DynamicStatesInternal::SAMPLE_LOCATIONS_EXT) == false));
+                    DynamicStatesInternal::SampleLocationsExt) == false));
 
     Pal::MsaaQuadSamplePattern locations;
     uint32_t sampleLocationsPerPixel = (uint32_t)pSampleLocationsInfo->sampleLocationsPerPixel;

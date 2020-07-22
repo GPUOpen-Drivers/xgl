@@ -95,6 +95,34 @@ struct PipelineBinaryInfo
     void*  pBinary;
 };
 
+enum class DynamicStatesInternal : uint32_t
+{
+    Viewport = 0,
+    Scissor,
+    LineWidth,
+    DepthBias,
+    BlendConstants,
+    DepthBounds,
+    StencilCompareMask,
+    StencilWriteMask,
+    StencilReference,
+    SampleLocationsExt,
+    LineStippleExt,
+    ViewportCount,
+    ScissorCount,
+    CullModeExt,
+    FrontFaceExt,
+    PrimitiveTopologyExt,
+    VertexInputBindingStrideExt,
+    DepthTestEnableExt,
+    DepthWriteEnableExt,
+    DepthCompareOpExt,
+    DepthBoundsTestEnableExt,
+    StencilTestEnableExt,
+    StencilOpExt,
+    DynamicStatesInternalCount
+};
+
 // =====================================================================================================================
 // Base class of all pipeline objects.
 class Pipeline

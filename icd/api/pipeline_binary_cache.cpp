@@ -217,17 +217,23 @@ PipelineBinaryCache::PipelineBinaryCache(
     m_pArchiveLayer    { nullptr },
     m_openFiles        { pInstance->Allocator() },
     m_archiveLayers    { pInstance->Allocator() },
-    m_isInternalCache  { internal }
+    m_isInternalCache  { internal },
+    m_pCacheAdapter    { nullptr }
 {
     // Without copy constructor, a class type variable can't be initialized in initialization list with gcc 4.8.5.
     // Initialize m_gfxIp here instead to make gcc 4.8.5 work.
     m_gfxIp = gfxIp;
-
 }
 
 // =====================================================================================================================
 PipelineBinaryCache::~PipelineBinaryCache()
 {
+    if (m_pCacheAdapter != nullptr)
+    {
+        m_pCacheAdapter->Destroy();
+        m_pCacheAdapter = nullptr;
+    }
+
     for (FileVector::Iter i = m_openFiles.Begin(); i.IsValid(); i.Next())
     {
         i.Get()->Destroy();
@@ -260,15 +266,34 @@ PipelineBinaryCache::~PipelineBinaryCache()
 
 // =====================================================================================================================
 // Query if a pipeline binary exists in cache
+// Must call ReleaseCacheRef() when the flags contains AcquireEntryRef
 Util::Result PipelineBinaryCache::QueryPipelineBinary(
     const CacheId*     pCacheId,
+    uint32_t           flags,
     Util::QueryResult* pQuery)
 {
     VK_ASSERT(m_pTopLayer != nullptr);
 
-    return m_pTopLayer->Query(pCacheId, pQuery);
+    uint32_t policy = Util::ICacheLayer::LinkPolicy::LoadOnQuery;
+    // We have to make sure the Query is atomic, otherwise we could get unexpected result while running multi-thread
+    // test case.
+    m_entriesMutex.Lock();
+    Util::Result result = m_pTopLayer->Query(pCacheId, policy, flags, pQuery);
+    m_entriesMutex.Unlock();
+
+    return result;
 }
 
+// =====================================================================================================================
+// Query if a pipeline binary exists in cache
+// Must call ReleaseCacheRef() when the flags contains AcquireEntryRef
+Util::Result PipelineBinaryCache::WaitPipelineBinary(
+    const CacheId*     pCacheId)
+{
+    VK_ASSERT(m_pTopLayer != nullptr);
+
+    return m_pTopLayer->WaitForEntry(pCacheId);
+}
 // =====================================================================================================================
 // Attempt to load a graphics pipeline binary from cache
 Util::Result PipelineBinaryCache::LoadPipelineBinary(
@@ -279,7 +304,7 @@ Util::Result PipelineBinaryCache::LoadPipelineBinary(
     VK_ASSERT(m_pTopLayer != nullptr);
 
     Util::QueryResult query  = {};
-    Util::Result      result = m_pTopLayer->Query(pCacheId, &query);
+    Util::Result      result = m_pTopLayer->Query(pCacheId, 0, 0, &query);
 
     if (result == Util::Result::Success)
     {
@@ -317,6 +342,51 @@ Util::Result PipelineBinaryCache::StorePipelineBinary(
     VK_ASSERT(m_pTopLayer != nullptr);
 
     return m_pTopLayer->Store(pCacheId, pPipelineBinary, pipelineBinarySize);
+}
+
+// =====================================================================================================================
+Util::Result PipelineBinaryCache::ReleaseCacheRef(
+    const Util::QueryResult* pQuery) const
+{
+    VK_ASSERT(m_pTopLayer != nullptr);
+    return m_pTopLayer->ReleaseCacheRef(pQuery);
+}
+
+// =====================================================================================================================
+Util::Result PipelineBinaryCache::GetCacheDataPtr(
+    const Util::QueryResult* pQuery,
+    const void**             ppData) const
+{
+    VK_ASSERT(m_pTopLayer != nullptr);
+    return m_pTopLayer->GetCacheData(pQuery, ppData);
+}
+
+// =====================================================================================================================
+Util::Result PipelineBinaryCache::EvictEntry(
+    const Util::QueryResult* pQuery) const
+{
+    VK_ASSERT(m_pTopLayer != nullptr);
+
+    return m_pTopLayer->Evict(&pQuery->hashId);
+}
+
+// =====================================================================================================================
+Util::Result PipelineBinaryCache::MarkEntryBad(
+    const Util::QueryResult* pQuery) const
+{
+    VK_ASSERT(m_pTopLayer != nullptr);
+
+    return m_pTopLayer->MarkEntryBad(&pQuery->hashId);
+}
+
+// =====================================================================================================================
+Util::Result PipelineBinaryCache::GetPipelineBinary(
+    const Util::QueryResult* pQeuryId,
+    void*                    pPipelineBinary) const
+{
+    VK_ASSERT(m_pTopLayer != nullptr);
+
+    return m_pTopLayer->Load(pQeuryId, pPipelineBinary);
 }
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -368,7 +438,7 @@ Util::Result PipelineBinaryCache::LoadReinjectionBinary(
     if (m_pReinjectionLayer != nullptr)
     {
         Util::QueryResult query = {};
-        result = m_pReinjectionLayer->Query(pInternalPipelineHash, &query);
+        result = m_pReinjectionLayer->Query(pInternalPipelineHash, 0, 0, &query);
 
         if (result == Util::Result::Success)
         {
@@ -451,6 +521,8 @@ VkResult PipelineBinaryCache::Initialize(
 
     const RuntimeSettings& settings = pPhysicalDevice->GetRuntimeSettings();
 
+    m_entriesMutex.Init();
+
     if (result == VK_SUCCESS)
     {
         m_pPlatformKey = pPhysicalDevice->GetPlatformKey();
@@ -499,6 +571,12 @@ VkResult PipelineBinaryCache::Initialize(
         }
     }
 #endif
+
+    if (result == VK_SUCCESS)
+    {
+        m_pCacheAdapter = CacheAdapter::Create(m_pInstance, this);
+        VK_ALERT(m_pCacheAdapter == nullptr);
+    }
 
     return result;
 }

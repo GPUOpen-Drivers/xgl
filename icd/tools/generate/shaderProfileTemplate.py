@@ -1247,7 +1247,7 @@ SHADER_ACTION = {
             pPipelineProfile->entries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": shaderCreateDynamicShaderInfoTemplate,
         "jsonReaderTemplate": \
-            "    if (shaderStage != ShaderStageCompute)\n    {\n" +
+            "    if (shaderStage != ShaderStage::ShaderStageCompute)\n    {\n" +
             "        pActions->dynamicShaderInfo.apply.%Action% = true;\n" +
             "        pActions->dynamicShaderInfo.%Action%       = %Value%;" +
             "\n    }\n    else\n    {\n" +
@@ -1282,7 +1282,7 @@ SHADER_ACTION = {
             pPipelineProfile->entries[%EntryNum%].action.shaders[%ShaderStage%].dynamicShaderInfo.%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": shaderCreateDynamicShaderInfoTemplate,
         "jsonReaderTemplate": \
-            "    if (shaderStage == ShaderStageCompute)\n    {\n" +
+            "    if (shaderStage == ShaderStage::ShaderStageCompute)\n    {\n" +
             "        pActions->dynamicShaderInfo.apply.%Action% = true;\n" +
             "        pActions->dynamicShaderInfo.%Action%       = %Value%;" +
             "\n    }\n    else\n    {\n" +
@@ -1631,64 +1631,64 @@ ENTRIES_TEMPLATE = {
                 "vs": {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
-                    "shaderStage": "ShaderStageVertex"
+                    "shaderStage": "ShaderStage::ShaderStageVertex"
                 },
                 "hs": {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
-                    "shaderStage": "ShaderStageTessControl"
+                    "shaderStage": "ShaderStage::ShaderStageTessControl"
                 },
                 "ds": {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
-                    "shaderStage": "ShaderStageTessEvaluation"
+                    "shaderStage": "ShaderStage::ShaderStageTessEvaluation"
                 },
                 "gs": {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
-                    "shaderStage": "ShaderStageGeometry"
+                    "shaderStage": "ShaderStage::ShaderStageGeometry"
                 },
                 "ps": {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
-                    "shaderStage": "ShaderStageFragment"
+                    "shaderStage": "ShaderStage::ShaderStageFragment"
                 },
                 "cs": {
                     "type": [dict],
                     "branch": SHADER_PATTERN,
-                    "shaderStage": "ShaderStageCompute"
+                    "shaderStage": "ShaderStage::ShaderStageCompute"
                 },
             },
             "action": {
                 "vs": {
                     "type": [dict],
                     "branch": SHADER_ACTION,
-                    "shaderStage": "ShaderStageVertex"
+                    "shaderStage": "ShaderStage::ShaderStageVertex"
                 },
                 "hs": {
                     "type": [dict],
                     "branch": SHADER_ACTION,
-                    "shaderStage": "ShaderStageTessControl"
+                    "shaderStage": "ShaderStage::ShaderStageTessControl"
                 },
                 "ds": {
                     "type": [dict],
                     "branch": SHADER_ACTION,
-                    "shaderStage": "ShaderStageTessEvaluation"
+                    "shaderStage": "ShaderStage::ShaderStageTessEvaluation"
                 },
                 "gs": {
                     "type": [dict],
                     "branch": SHADER_ACTION,
-                    "shaderStage": "ShaderStageGeometry"
+                    "shaderStage": "ShaderStage::ShaderStageGeometry"
                 },
                 "ps": {
                     "type": [dict],
                     "branch": SHADER_ACTION,
-                    "shaderStage": "ShaderStageFragment"
+                    "shaderStage": "ShaderStage::ShaderStageFragment"
                 },
                 "cs": {
                     "type": [dict],
                     "branch": SHADER_ACTION,
-                    "shaderStage": "ShaderStageCompute"
+                    "shaderStage": "ShaderStage::ShaderStageCompute"
                 }
             },
             # The "BuildTypes" key is not used by the genShaderProfile script in any way. It is included here simply to
@@ -2076,17 +2076,17 @@ std::string ShaderProfile::getShaderStageName(uint32_t i)
     //returns shader stage name
     switch (i)
     {
-    case ShaderStageVertex:
+    case ShaderStage::ShaderStageVertex:
         return "vs";
-    case ShaderStageTessControl:
+    case ShaderStage::ShaderStageTessControl:
         return "hs";
-    case ShaderStageTessEvaluation:
+    case ShaderStage::ShaderStageTessEvaluation:
         return "ds";
-    case ShaderStageGeometry:
+    case ShaderStage::ShaderStageGeometry:
         return "gs";
-    case ShaderStageFragment:
+    case ShaderStage::ShaderStageFragment:
         return "ps";
-    case ShaderStageCompute:
+    case ShaderStage::ShaderStageCompute:
         return "cs";
     default:
         return "unknown";

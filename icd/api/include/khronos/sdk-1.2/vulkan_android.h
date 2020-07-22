@@ -12,9 +12,12 @@
 **
 */
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+
 
 #define VK_KHR_android_surface 1
 struct ANativeWindow;
@@ -37,6 +40,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateAndroidSurfaceKHR(
     const VkAllocationCallbacks*                pAllocator,
     VkSurfaceKHR*                               pSurface);
 #endif
+
 
 #define VK_ANDROID_external_memory_android_hardware_buffer 1
 struct AHardwareBuffer;

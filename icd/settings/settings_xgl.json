@@ -1165,19 +1165,6 @@
       "Scope": "Driver"
     },
     {
-      "Name": "NggEnableGsUse",
-      "Description": "[LLPC ONLY] Enable NGG use on geometry shader.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "VariableName": "nggEnableGsUse",
-      "Scope": "Driver"
-    },
-    {
       "Description": "[LLPC ONLY] Force NGG to run in non pass-through mode.",
       "Tags": [
         "SPIRV Options"
@@ -3577,6 +3564,49 @@
       "Type": "enum",
       "VariableName": "imageTilingPreference",
       "Name": "ImageTilingPreference"
+    },
+    {
+      "ValidValues": {
+        "Values": [
+          {
+            "Name": "Default",
+            "Value": 0,
+            "Description": "No swizzle mode is preferred."
+          },
+          {
+            "Name": "Standard",
+            "Value": 1,
+            "Description": "Prefer standard swizzle modes."
+          },
+          {
+            "Name": "XMajor",
+            "Value": 2,
+            "Description": "Prefer x-coordinate major swizzle modes."
+          },
+          {
+            "Name": "YMajor",
+            "Value": 3,
+            "Description": "Prefer y-coordinate major swizzle modes."
+          },
+          {
+            "Name": "Interleaved",
+            "Value": 4,
+            "Description": "Prefer interleaved coordinate swizzle modes."
+          }
+        ],
+        "Name": "Pal::ImageTilingPattern"
+      },
+      "Description": "Override the ImageTilingPreference setting value for 3D images used as color attachments.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "Pal::ImageTilingPattern::Default"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "VariableName": "imageTilingPreference3dColorAttachment",
+      "Name": "ImageTilingPreference3dColorAttachment"
     },
     {
       "Description": "Enable FMASK based MSAA texture reads. ",

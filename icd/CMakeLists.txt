@@ -207,10 +207,8 @@ target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
 ### XGL Subprojects ####################################################################################################
 ### PAL ########################################################################
-# For Open source, MSVC build is for amdllpc only which does not depend on pal.
-if(NOT "${CMAKE_CXX_COMPILER_ID}" STREQUAL "MSVC")
-    add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
-endif()
+add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
+
 ### XGL Sources ########################################################################################################
 
 ### ICD api ####################################################################
@@ -251,6 +249,7 @@ target_sources(xgl PRIVATE
     api/internal_mem_mgr.cpp
     api/pipeline_compiler.cpp
     api/pipeline_binary_cache.cpp
+    api/cache_adapter.cpp
     api/shader_cache.cpp
     api/stencil_ops_combiner.cpp
     api/vert_buf_binding_mgr.cpp
@@ -441,11 +440,11 @@ target_sources(xgl PRIVATE
 )
 
 ### XGL VKGC ####
-target_link_libraries(xgl PRIVATE vkgc dl stdc++)
+target_link_libraries(xgl PRIVATE vkgc)
 
 ### Link Libraries #####################################################################################################
 if (UNIX)
-    target_link_libraries(xgl PRIVATE c stdc++ ${CMAKE_DL_LIBS} pthread)
+    target_link_libraries(xgl PRIVATE dl c stdc++ ${CMAKE_DL_LIBS} pthread)
 
     if("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Intel")
         message(WARNING "Intel ICC untested in CMake.")
@@ -483,5 +482,6 @@ if (UNIX)
 endif()
 
 target_link_libraries(xgl PRIVATE pal)
+
 ### Visual Studio Filters ##############################################################################################
 target_vs_filters(xgl)

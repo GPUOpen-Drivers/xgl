@@ -56,7 +56,8 @@ CompilerSolution::~CompilerSolution()
 // Initialize CompilerSolution class
 VkResult CompilerSolution::Initialize(
     Vkgc::GfxIpVersion gfxIp,
-    Pal::GfxIpLevel    gfxIpLevel)
+    Pal::GfxIpLevel    gfxIpLevel,
+    Vkgc::ICache*      pCache)
 {
     m_gfxIp      = gfxIp;
     m_gfxIpLevel = gfxIpLevel;

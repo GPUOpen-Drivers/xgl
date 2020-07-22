@@ -50,7 +50,7 @@ public:
 public:
     // Overidded functions
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-    virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel);
+    virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel, Vkgc::ICache* pCache);
 #else
     virtual VkResult Initialize(Llpc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel);
 #endif
@@ -126,7 +126,7 @@ public:
         const void*                 pPipelineBinary,
         size_t                      binarySize);
 private:
-    VkResult CreateLlpcCompiler();
+    VkResult CreateLlpcCompiler(Vkgc::ICache* pCache);
 
 private:
     Llpc::ICompiler*    m_pLlpc;               // LLPC compiler object

@@ -937,13 +937,17 @@ static const wchar_t* FindProfileData(
                 haveGoodData = true;
             }
 
-            pStart  = pEnd + 2;
-            pEnd    = wcschr(pStart, L';'); // search pattern ";;" forward
-            pMiddle = wcschr(pStart, L':'); // search pattern "::" forward
+            if (pEnd != nullptr)
+            {
+                pStart = pEnd + 2;
+                pEnd = wcschr(pStart, L';'); // search pattern ";;" forward
+                pMiddle = wcschr(pStart, L':'); // search pattern "::" forward
+            }
 
             if ((pEnd == nullptr) &&
                 (!haveGoodData) &&
-                (!ignoreGpuID))
+                (!ignoreGpuID) &&
+                (wcharData != nullptr))
             {
                 // We could not find our target GPU ID, so we will use the data for
                 // the GPU that was listed first

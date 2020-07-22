@@ -468,11 +468,9 @@ VkResult Memory::CreateGpuMemory(
 
         // Allocate enough for the PAL memory object and our own dispatchable memory
         pSystemMem = static_cast<uint8_t*>(
-            pAllocator->pfnAllocation(
-                pAllocator->pUserData,
-                apiSize + palSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+            pDevice->AllocApiObject(
+                pAllocator,
+                apiSize + palSize));
 
         if (pSystemMem != nullptr)
         {
@@ -531,7 +529,7 @@ VkResult Memory::CreateGpuMemory(
                     }
                 }
 
-                pAllocator->pfnFree(pAllocator->pUserData, pSystemMem);
+                pDevice->FreeApiObject(pAllocator, pSystemMem);
 
                 if (palResult == Pal::Result::ErrorOutOfGpuMemory)
                 {
@@ -552,11 +550,9 @@ VkResult Memory::CreateGpuMemory(
     {
         // Allocate memory only for the dispatchable object
         pSystemMem = static_cast<uint8_t*>(
-            pAllocator->pfnAllocation(
-                pAllocator->pUserData,
-                sizeof(Memory),
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+            pDevice->AllocApiObject(
+                pAllocator,
+                sizeof(Memory)));
 
         if (pSystemMem != nullptr)
         {
@@ -636,11 +632,9 @@ VkResult Memory::CreateGpuPinnedMemory(
     {
         // Allocate enough for the PAL memory object and our own dispatchable memory
         pSystemMem = static_cast<uint8_t*>(
-            pAllocator->pfnAllocation(
-                pAllocator->pUserData,
-                apiSize + palSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+            pDevice->AllocApiObject(
+                pAllocator,
+                apiSize + palSize));
 
         // Check for out of memory
         if (pSystemMem != nullptr)
@@ -699,7 +693,7 @@ VkResult Memory::CreateGpuPinnedMemory(
                     }
                 }
 
-                pAllocator->pfnFree(pAllocator->pUserData, pSystemMem);
+                pDevice->FreeApiObject(pAllocator, pSystemMem);
 
                 vkResult = VK_ERROR_INVALID_EXTERNAL_HANDLE;
             }
@@ -753,10 +747,9 @@ VkResult Memory::OpenExternalSharedImage(
 
     const size_t totalSize = palImgSize + sizeof(Memory) + palMemSize;
 
-    void* pMemMemory = static_cast<uint8_t*>(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->AllocMem(
-        totalSize,
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+    void* pMemMemory = static_cast<uint8_t*>(pDevice->AllocApiObject(
+        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->GetAllocCallbacks(),
+        totalSize));
 
     if (pMemMemory == nullptr)
     {
@@ -804,7 +797,9 @@ VkResult Memory::OpenExternalSharedImage(
 
         if (palResult != Pal::Result::Success)
         {
-            pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->FreeMem(pMemMemory);
+            pDevice->FreeApiObject(
+                pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->GetAllocCallbacks(),
+                pMemMemory);
         }
     }
 
@@ -938,7 +933,7 @@ void Memory::Free(
     Util::Destructor(this);
 
     // Free outer container
-    pAllocator->pfnFree(pAllocator->pUserData, this);
+    pDevice->FreeApiObject(pAllocator, this);
 }
 
 // =====================================================================================================================
@@ -977,10 +972,9 @@ VkResult Memory::OpenExternalMemory(
     VK_ASSERT(palResult == Pal::Result::Success);
 
     // Allocate enough for the PAL memory object and our own dispatchable memory
-    pSystemMem = static_cast<uint8_t*>(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->AllocMem(
-        gpuMemorySize + sizeof(Memory),
-        VK_DEFAULT_MEM_ALIGN,
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+    pSystemMem = static_cast<uint8_t*>(pDevice->AllocApiObject(
+        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->GetAllocCallbacks(),
+        gpuMemorySize + sizeof(Memory)));
 
     // Check for out of memory
     if (pSystemMem == nullptr)
@@ -1019,7 +1013,9 @@ VkResult Memory::OpenExternalMemory(
     if (palResult != Pal::Result::Success)
     {
         // Construction of PAL memory object failed. Free the memory before returning to application.
-        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->FreeMem(pSystemMem);
+        pDevice->FreeApiObject(
+            pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->GetAllocCallbacks(),
+            pSystemMem);
     }
 
     return PalToVkResult(palResult);

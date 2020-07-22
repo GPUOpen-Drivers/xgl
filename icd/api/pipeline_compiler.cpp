@@ -158,11 +158,7 @@ VkResult PipelineCompiler::Initialize()
     // Create compiler objects
     VkResult result = VK_SUCCESS;
 
-    if (result == VK_SUCCESS)
-    {
-        result = m_compilerSolutionLlpc.Initialize(m_gfxIp, info.gfxLevel);
-    }
-
+    Vkgc::ICache* pCacheAdapter = nullptr;
     if ((result == VK_SUCCESS) &&
         ((settings.usePalPipelineCaching) ||
          (m_pPhysicalDevice->VkInstance()->GetDevModeMgr() != nullptr)))
@@ -172,6 +168,15 @@ VkResult PipelineCompiler::Initialize()
 
         // This isn't a terminal failure, the device can continue without the pipeline cache if need be.
         VK_ALERT(m_pBinaryCache == nullptr);
+        if (m_pBinaryCache != nullptr)
+        {
+            pCacheAdapter = m_pBinaryCache->GetCacheAdapter();
+        }
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        result = m_compilerSolutionLlpc.Initialize(m_gfxIp, info.gfxLevel, pCacheAdapter);
     }
 
     return result;
@@ -235,7 +240,7 @@ bool PipelineCompiler::LoadReplaceShaderBinary(
     const RuntimeSettings* pSettings = &m_pPhysicalDevice->GetRuntimeSettings();
     bool findShader = false;
 
-    char replaceFileName[4096] = {};
+    char replaceFileName[Pal::MaxPathStrLen] = {};
     Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/Shader_0x%016llX_replace.spv",
         pSettings->shaderReplaceDir, shaderHash);
 
@@ -321,11 +326,11 @@ bool PipelineCompiler::ReplacePipelineBinary(
     const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
-    char fileName[128];
-    Vkgc::IPipelineDumper::GetPipelineName(pPipelineBuildInfo, fileName, 128);
+    char fileName[Pal::MaxFileNameStrLen] = {};
+    Vkgc::IPipelineDumper::GetPipelineName(pPipelineBuildInfo, fileName, sizeof(fileName));
 
-    char replaceFileName[256];
-    int32_t length = Util::Snprintf(replaceFileName, 256, "%s/%s_replace.elf", settings.shaderReplaceDir, fileName);
+    char replaceFileName[Pal::MaxPathStrLen] = {};
+    int32_t length = Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/%s_replace.elf", settings.shaderReplaceDir, fileName);
     VK_ASSERT(length > 0 && (static_cast<uint32_t>(length) < sizeof(replaceFileName)));
 
     Util::Result result = Util::File::Exists(replaceFileName) ? Util::Result::Success : Util::Result::ErrorUnavailable;
@@ -430,14 +435,23 @@ void PipelineCompiler::DropPipelineBinaryInst(
 void PipelineCompiler::ReplacePipelineIsaCode(
     Device *     pDevice,
     uint64_t     pipelineHash,
+    uint32_t     pipelineIndex,
     const void*  pPipelineBinary,
     size_t       pipelineBinarySize)
 {
     const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
 
-    char replaceFileName[256];
-    int32_t length = Util::Snprintf(replaceFileName, 256, "%s/" "0x%016" PRIX64 "_replace.txt",
-        settings.shaderReplaceDir, pipelineHash);
+    char replaceFileName[Pal::MaxPathStrLen] = {};
+    if (pipelineIndex > 0)
+    {
+        Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/" "0x%016" PRIX64 "_replace.txt.%u",
+            settings.shaderReplaceDir, pipelineHash, pipelineIndex);
+    }
+    else
+    {
+        Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/" "0x%016" PRIX64 "_replace.txt",
+            settings.shaderReplaceDir, pipelineHash);
+    }
 
     Util::File isaCodeFile;
     if (isaCodeFile.Open(replaceFileName, Util::FileAccessRead) != Util::Result::Success)
@@ -547,7 +561,7 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
         if (*pIsUserCacheHit)
         {
             Util::QueryResult query = {};
-            cacheResult = m_pBinaryCache->QueryPipelineBinary(pCacheId, &query);
+            cacheResult = m_pBinaryCache->QueryPipelineBinary(pCacheId, 0, &query);
         }
         else
         {
@@ -610,11 +624,11 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
 
     void* pPipelineDumpHandle = nullptr;
-    const void* moduleDataBaks[ShaderGfxStageCount];
-    ShaderModuleHandle shaderModuleReplaceHandles[ShaderGfxStageCount];
+    const void* moduleDataBaks[ShaderStage::ShaderStageGfxCount];
+    ShaderModuleHandle shaderModuleReplaceHandles[ShaderStage::ShaderStageGfxCount];
     bool shaderModuleReplaced = false;
 
-    Vkgc::PipelineShaderInfo* shaderInfos[ShaderGfxStageCount] =
+    Vkgc::PipelineShaderInfo* shaderInfos[ShaderStage::ShaderStageGfxCount] =
     {
         &pCreateInfo->pipelineInfo.vs,
         &pCreateInfo->pipelineInfo.tcs,
@@ -638,7 +652,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         if (strstr(settings.shaderReplacePipelineHashes, pipelineHashString) != nullptr)
         {
             memset(shaderModuleReplaceHandles, 0, sizeof(shaderModuleReplaceHandles));
-            for (uint32_t i = 0; i < ShaderGfxStageCount; ++i)
+            for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
             {
                 moduleDataBaks[i] = shaderInfos[i]->pModuleData;
                 shaderModuleReplaced |= ReplacePipelineShaderModule(pDevice,
@@ -772,7 +786,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
-        ReplacePipelineIsaCode(pDevice, pipelineHash, *ppPipelineBinary, *pPipelineBinarySize);
+        ReplacePipelineIsaCode(pDevice, pipelineHash, 0, *ppPipelineBinary, *pPipelineBinarySize);
     }
 
     if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
@@ -789,7 +803,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     if (shaderModuleReplaced)
     {
-        for (uint32_t i = 0; i < ShaderGfxStageCount; ++i)
+        for (uint32_t i = 0; i < ShaderStage::ShaderStageGfxCount; ++i)
         {
             shaderInfos[i]->pModuleData = moduleDataBaks[i];
             FreeShaderModule(&shaderModuleReplaceHandles[i]);
@@ -963,7 +977,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     m_totalBinaries++;
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
-        ReplacePipelineIsaCode(pDevice, pipelineHash, *ppPipelineBinary, *pPipelineBinarySize);
+        ReplacePipelineIsaCode(pDevice, pipelineHash, 0, *ppPipelineBinary, *pPipelineBinarySize);
     }
 
     if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
@@ -1071,14 +1085,14 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     // Fill in necessary non-zero defaults in case some information is missing
     const RenderPass* pRenderPass = nullptr;
     const PipelineLayout* pLayout = nullptr;
-    const VkPipelineShaderStageCreateInfo* pStageInfos[ShaderGfxStageCount] = {};
+    const VkPipelineShaderStageCreateInfo* pStageInfos[ShaderStage::ShaderStageGfxCount] = {};
 
     if (pGraphicsPipelineCreateInfo != nullptr)
     {
         for (uint32_t i = 0; i < pGraphicsPipelineCreateInfo->stageCount; ++i)
         {
             ShaderStage stage = ShaderFlagBitToStage(pGraphicsPipelineCreateInfo->pStages[i].stage);
-            VK_ASSERT(stage < ShaderGfxStageCount);
+            VK_ASSERT(stage < ShaderStage::ShaderStageGfxCount);
             pStageInfos[stage] = &pGraphicsPipelineCreateInfo->pStages[i];
         }
 
@@ -1259,15 +1273,17 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
     if (m_gfxIp.major >= 10)
     {
-        const bool                 hasGs        = pStageInfos[ShaderStageGeometry] != nullptr;
-        const bool                 hasTess      = pStageInfos[ShaderStageTessControl] != nullptr;
+        const bool                 hasGs        = pStageInfos[ShaderStage::ShaderStageGeometry] != nullptr;
+        const bool                 hasTess      = pStageInfos[ShaderStage::ShaderStageTessControl] != nullptr;
         const GraphicsPipelineType pipelineType =
             hasTess ? (hasGs ? GraphicsPipelineTypeTessGs : GraphicsPipelineTypeTess) :
                       (hasGs ? GraphicsPipelineTypeGs : GraphicsPipelineTypeVsFs);
 
         pCreateInfo->pipelineInfo.nggState.enableNgg                  =
             Util::TestAnyFlagSet(settings.enableNgg, pipelineType);
-        pCreateInfo->pipelineInfo.nggState.enableGsUse                = settings.nggEnableGsUse;
+        pCreateInfo->pipelineInfo.nggState.enableGsUse = Util::TestAnyFlagSet(
+            settings.enableNgg,
+            GraphicsPipelineTypeGs | GraphicsPipelineTypeTessGs);
         pCreateInfo->pipelineInfo.nggState.forceNonPassthrough        = settings.nggForceNonPassthrough;
         pCreateInfo->pipelineInfo.nggState.alwaysUsePrimShaderTable   = settings.nggAlwaysUsePrimShaderTable;
         pCreateInfo->pipelineInfo.nggState.compactMode                =
@@ -1358,20 +1374,20 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     pCreateInfo->pipelineInfo.pInstance      = pInstance;
     pCreateInfo->pipelineInfo.pfnOutputAlloc = AllocateShaderOutput;
 
-    ShaderStage lastVertexStage = ShaderStageVertex;
-    for (int32_t i = ShaderGfxStageCount-1; i >= 0; --i)
+    ShaderStage lastVertexStage = ShaderStage::ShaderStageVertex;
+    for (int32_t i = ShaderStage::ShaderStageGfxCount-1; i >= 0; --i)
     {
         ShaderStage stage = static_cast<ShaderStage>(i);
         if (pStageInfos[stage] == nullptr) continue;
 
-        if (stage != ShaderStageFragment)
+        if (stage != ShaderStage::ShaderStageFragment)
         {
             lastVertexStage = stage;
             break;
         }
     }
 
-    for (uint32_t stage = 0; stage < ShaderGfxStageCount; ++stage)
+    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
         auto pStage = pStageInfos[stage];
         auto pShaderInfo = shaderInfos[stage];
@@ -1391,7 +1407,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         // understand.
         if (pLayout != nullptr)
         {
-            const bool vertexShader = (stage == ShaderStageVertex);
+            const bool vertexShader = (stage == ShaderStage::ShaderStageVertex);
             result = pLayout->BuildLlpcPipelineMapping(
                 static_cast<ShaderStage>(stage),
                 pCreateInfo->pMappingBuffer,
@@ -1423,7 +1439,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     }
 
     pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
-    for (uint32_t stage = 0; stage < ShaderGfxStageCount; ++stage)
+    for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
         auto pStage = pStageInfos[stage];
         auto pShaderInfo = shaderInfos[stage];
@@ -1607,7 +1623,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     if (pLayout != nullptr)
     {
         result = pLayout->BuildLlpcPipelineMapping(
-            ShaderStageCompute,
+            ShaderStage::ShaderStageCompute,
             pCreateInfo->pMappingBuffer,
             nullptr,
             &pCreateInfo->pipelineInfo.cs,
@@ -1618,12 +1634,12 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
     pCreateInfo->pipelineInfo.cs.pModuleData = pShaderModule->GetShaderData(pCreateInfo->compilerType);
 
-    ApplyDefaultShaderOptions(ShaderStageCompute,
+    ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
                               &pCreateInfo->pipelineInfo.cs.options
                               );
 
     ApplyProfileOptions(pDevice,
-                        ShaderStageCompute,
+                        ShaderStage::ShaderStageCompute,
                         pShaderModule,
                         nullptr,
                         &pCreateInfo->pipelineInfo.cs,
@@ -1645,22 +1661,22 @@ void PipelineCompiler::ApplyDefaultShaderOptions(
 
     switch (stage)
     {
-    case ShaderStageVertex:
+    case ShaderStage::ShaderStageVertex:
         pShaderOptions->waveSize = settings.vsWaveSize;
         break;
-    case ShaderStageTessControl:
+    case ShaderStage::ShaderStageTessControl:
         pShaderOptions->waveSize = settings.tcsWaveSize;
         break;
-    case ShaderStageTessEvaluation:
+    case ShaderStage::ShaderStageTessEvaluation:
         pShaderOptions->waveSize = settings.tesWaveSize;
         break;
-    case ShaderStageGeometry:
+    case ShaderStage::ShaderStageGeometry:
         pShaderOptions->waveSize = settings.gsWaveSize;
         break;
-    case ShaderStageFragment:
+    case ShaderStage::ShaderStageFragment:
         pShaderOptions->waveSize = settings.fsWaveSize;
         break;
-    case ShaderStageCompute:
+    case ShaderStage::ShaderStageCompute:
         pShaderOptions->waveSize = settings.csWaveSize;
         break;
     default:
@@ -1781,6 +1797,7 @@ void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
     }
 }
 
+// =====================================================================================================================
 #if ICD_GPUOPEN_DEVMODE_BUILD
 Util::Result PipelineCompiler::RegisterAndLoadReinjectionBinary(
     const Pal::PipelineHash*     pInternalPipelineHash,

@@ -63,13 +63,14 @@ CompilerSolutionLlpc::~CompilerSolutionLlpc()
 // Initialize CompilerSolutionLlpc class
 VkResult CompilerSolutionLlpc::Initialize(
     Vkgc::GfxIpVersion gfxIp,
-    Pal::GfxIpLevel    gfxIpLevel)
+    Pal::GfxIpLevel    gfxIpLevel,
+    Vkgc::ICache*      pCache)
 {
-    VkResult result = CompilerSolution::Initialize(gfxIp, gfxIpLevel);
+    VkResult result = CompilerSolution::Initialize(gfxIp, gfxIpLevel, pCache);
 
     if (result == VK_SUCCESS)
     {
-        result = CreateLlpcCompiler();
+        result = CreateLlpcCompiler(pCache);
     }
 
     return result;
@@ -309,6 +310,10 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
     pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
     pPipelineBuildInfo->iaState.deviceIndex = deviceIdx;
+    if (pPipelineCache != nullptr)
+    {
+        pPipelineBuildInfo->cache = pPipelineCache->GetCacheAdapter();
+    }
 
     // By default the client hash provided to PAL is more accurate than the one used by pipeline
     // profiles.
@@ -318,7 +323,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     // while building a pipeline profile which uses the profile hash.
     if (settings.pipelineUseProfileHashAsClientHash)
     {
-        for (uint32_t stage = 0; stage < ShaderGfxStageCount; ++stage)
+        for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
         {
             ppShadersInfo[stage]->options.clientHash.lower = pCreateInfo->pipelineProfileKey.shaders[stage].codeHash.lower;
             ppShadersInfo[stage]->options.clientHash.upper = pCreateInfo->pipelineProfileKey.shaders[stage].codeHash.upper;
@@ -403,6 +408,10 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
     pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
+    if (pPipelineCache != nullptr)
+    {
+        pPipelineBuildInfo->cache = pPipelineCache->GetCacheAdapter();
+    }
 
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 28
     // Force enable automatic workgroup reconfigure.
@@ -420,8 +429,10 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     // while building a pipeline profile which uses the profile hash.
     if (settings.pipelineUseProfileHashAsClientHash)
     {
-        pPipelineBuildInfo->cs.options.clientHash.lower = pCreateInfo->pipelineProfileKey.shaders[ShaderStageCompute].codeHash.lower;
-        pPipelineBuildInfo->cs.options.clientHash.upper = pCreateInfo->pipelineProfileKey.shaders[ShaderStageCompute].codeHash.upper;
+        pPipelineBuildInfo->cs.options.clientHash.lower =
+            pCreateInfo->pipelineProfileKey.shaders[ShaderStage::ShaderStageCompute].codeHash.lower;
+        pPipelineBuildInfo->cs.options.clientHash.upper =
+            pCreateInfo->pipelineProfileKey.shaders[ShaderStage::ShaderStageCompute].codeHash.upper;
     }
 
     // Build pipline binary
@@ -451,13 +462,13 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
         if (result == VK_SUCCESS)
         {
             char extraInfo[256];
-            ShaderOptimizerKey* pShaderKey = &pCreateInfo->pipelineProfileKey.shaders[static_cast<ShaderStage>(ShaderStageCompute)];
+            ShaderOptimizerKey* pShaderKey = &pCreateInfo->pipelineProfileKey.shaders[ShaderStage::ShaderStageCompute];
             Util::Snprintf(extraInfo, sizeof(extraInfo), "\n\n;PipelineOptimizer\n");
             Vkgc::IPipelineDumper::DumpPipelineExtraInfo(pPipelineDumpHandle, extraInfo);
 
             if (pShaderKey->codeHash.upper || pShaderKey->codeHash.lower)
             {
-                const char* pName = GetShaderStageName(static_cast<ShaderStage>(ShaderStageCompute));
+                const char* pName = GetShaderStageName(ShaderStage::ShaderStageCompute);
                 Util::Snprintf(
                     extraInfo,
                     sizeof(extraInfo),
@@ -495,7 +506,8 @@ void CompilerSolutionLlpc::FreeComputePipelineBinary(
 
 // =====================================================================================================================
 // Create the LLPC compiler
-VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
+VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
+    Vkgc::ICache* pCache)
 {
     const uint32_t         OptionBufferSize = 4096;
     const uint32_t         MaxLlpcOptions   = 32;
@@ -702,7 +714,7 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler()
     VK_ASSERT(numOptions <= MaxLlpcOptions);
 
     // Create LLPC compiler
-    Vkgc::Result llpcResult = Llpc::ICompiler::Create(m_gfxIp, numOptions, llpcOptions, &pCompiler);
+    Vkgc::Result llpcResult = Llpc::ICompiler::Create(m_gfxIp, numOptions, llpcOptions, &pCompiler, pCache);
     VK_ASSERT(llpcResult == Vkgc::Result::Success);
 
     m_pLlpc = pCompiler;

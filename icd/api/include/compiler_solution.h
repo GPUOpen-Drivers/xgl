@@ -119,7 +119,7 @@ public:
     virtual ~CompilerSolution();
 
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-    virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel) = 0;
+    virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel, Vkgc::ICache* pCache) = 0;
 #else
     virtual VkResult Initialize(Llpc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel) = 0;
 #endif
