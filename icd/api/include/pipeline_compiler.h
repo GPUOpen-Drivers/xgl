@@ -73,6 +73,8 @@ public:
 
     PipelineCompilerType GetShaderCacheType();
 
+    PipelineBinaryCache* GetBinaryCache() const { return m_pBinaryCache; }
+
     void ApplyPipelineOptions(
         const Device*          pDevice,
         VkPipelineCreateFlags  flags,
@@ -222,6 +224,7 @@ private:
     void ReplacePipelineIsaCode(
         Device*                pDevice,
         uint64_t               pipelineHash,
+        uint32_t               pipelineIndex,
         const void*            pPipelineBinary,
         size_t                 pipelineBinarySize);
 
@@ -249,6 +252,7 @@ private:
         bool*                        pIsInternalCacheHit,
         bool*                        pElfWasCached,
         PipelineCreationFeedback*    pPipelineFeedback);
+
     // -----------------------------------------------------------------------------------------------------------------
 
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
@@ -260,8 +264,6 @@ private:
 
     CompilerSolutionLlpc m_compilerSolutionLlpc;
 
-    // PipelineBinaryCache is only available for closed source at this time.
-    // PipelineBinaryCache is only enabled for Windows at this time.
     PipelineBinaryCache* m_pBinaryCache;       // Pipeline binary cache object
 
     // Metrics

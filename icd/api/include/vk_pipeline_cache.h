@@ -29,6 +29,7 @@
 #include "include/vk_defines.h"
 #include "include/vk_dispatch.h"
 #include "include/pipeline_compiler.h"
+#include "pipeline_binary_cache.h"
 
 namespace vk
 {
@@ -78,6 +79,8 @@ public:
     VkResult Merge(uint32_t srcCacheCount, const PipelineCache** ppSrcCaches);
 
     VK_INLINE PipelineBinaryCache* GetPipelineCache() const { return m_pBinaryCache; }
+    Vkgc::ICache* GetCacheAdapter() const { return m_pBinaryCache->GetCacheAdapter(); }
+
 protected:
     PipelineCache(const Device*  pDevice,
             ShaderCache*         pShaderCaches,

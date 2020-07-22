@@ -28,13 +28,14 @@
 * @brief Declaration of Vulkan interface for a PAL layered cache specializing in pipeline binaries
 ***********************************************************************************************************************
 */
-
+#pragma once
 #include "pipeline_compiler.h"
 
 #include "palHashMap.h"
 #include "palMetroHash.h"
 #include "palVector.h"
 #include "palCacheLayer.h"
+#include "cache_adapter.h"
 
 namespace Util
 {
@@ -44,6 +45,7 @@ class IPlatformKey;
 namespace vk
 {
 
+class CacheAdapter;
 struct BinaryCacheEntry
 {
     Util::MetroHash::Hash hashId;
@@ -84,7 +86,11 @@ public:
 
     Util::Result QueryPipelineBinary(
         const CacheId*     pCacheId,
+        uint32_t           flags,
         Util::QueryResult* pQuery);
+
+    Util::Result WaitPipelineBinary(
+        const CacheId* pCacheId);
 
     Util::Result LoadPipelineBinary(
         const CacheId*  pCacheId,
@@ -95,6 +101,23 @@ public:
         const CacheId*  pCacheId,
         size_t          pipelineBinarySize,
         const void*     pPipelineBinary);
+
+    Util::Result GetPipelineBinary(
+        const Util::QueryResult* pQeuryId,
+        void*                    pPipelineBinary) const;
+
+    Util::Result ReleaseCacheRef(
+        const Util::QueryResult* pQuery) const;
+
+    Util::Result GetCacheDataPtr(
+        const Util::QueryResult* pQuery,
+        const void**             ppData) const;
+
+    Util::Result EvictEntry(
+        const Util::QueryResult* pQuery) const;
+
+    Util::Result MarkEntryBad(
+        const Util::QueryResult* pQuery) const;
 
     VkResult Serialize(
         void*   pBlob,
@@ -134,6 +157,8 @@ public:
     void FreePipelineBinary(const void* pPipelineBinary);
 
     void Destroy() { this->~PipelineBinaryCache(); }
+
+    CacheAdapter* GetCacheAdapter() { return m_pCacheAdapter; }
 
 private:
 
@@ -227,6 +252,10 @@ private:
     LayerVector         m_archiveLayers;
 
     bool                m_isInternalCache;
+
+    CacheAdapter*       m_pCacheAdapter;
+
+    Util::Mutex         m_entriesMutex;      // Mutex that will be used to get cache state by Query
 };
 
 } // namespace vk

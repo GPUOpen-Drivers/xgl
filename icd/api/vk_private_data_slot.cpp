@@ -100,37 +100,48 @@ uint64* PrivateDataSlotEXT::GetPrivateDataItemAddr(
         const VkObjectType              objectType,
         const uint64                    objectHandle)
 {
+    //VK_OBJECT_TYPE_PERFORMANCE_CONFIGURATION_INTEL
+    //VK_OBJECT_TYPE_INDIRECT_COMMANDS_LAYOUT_NV
+    //above object types are not supported by driver
+
+    //Private data can only be used with the device and children of the device.
+    VK_ASSERT(
+        (objectType != VK_OBJECT_TYPE_INSTANCE) &&
+        (objectType != VK_OBJECT_TYPE_PHYSICAL_DEVICE) &&
+        (objectType != VK_OBJECT_TYPE_SURFACE_KHR) &&
+        (objectType != VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT) &&
+        (objectType != VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT) &&
+        (objectType != VK_OBJECT_TYPE_VALIDATION_CACHE_EXT) &&
+        (objectType != VK_OBJECT_TYPE_UNKNOWN));
+
     uint64* pItem = nullptr;
 
     switch (objectType)
     {
-    case VK_OBJECT_TYPE_BUFFER:
-    case VK_OBJECT_TYPE_PRIVATE_DATA_SLOT_EXT:
-    case VK_OBJECT_TYPE_BUFFER_VIEW:
-    case VK_OBJECT_TYPE_IMAGE:
-    case VK_OBJECT_TYPE_IMAGE_VIEW:
-    case VK_OBJECT_TYPE_SEMAPHORE:
-    case VK_OBJECT_TYPE_EVENT:
-    case VK_OBJECT_TYPE_FENCE:
-    case VK_OBJECT_TYPE_QUERY_POOL:
-    case VK_OBJECT_TYPE_SAMPLER:
-    case VK_OBJECT_TYPE_SHADER_MODULE:
-    case VK_OBJECT_TYPE_PIPELINE_CACHE:
-    case VK_OBJECT_TYPE_PIPELINE_LAYOUT:
-    case VK_OBJECT_TYPE_RENDER_PASS:
-    case VK_OBJECT_TYPE_PIPELINE:
-    case VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT:
-    case VK_OBJECT_TYPE_DESCRIPTOR_POOL:
-    case VK_OBJECT_TYPE_FRAMEBUFFER:
-    case VK_OBJECT_TYPE_COMMAND_POOL:
-    case VK_OBJECT_TYPE_COMMAND_BUFFER:
-    case VK_OBJECT_TYPE_SWAPCHAIN_KHR:
-    case VK_OBJECT_TYPE_SAMPLER_YCBCR_CONVERSION:
-    case VK_OBJECT_TYPE_DESCRIPTOR_UPDATE_TEMPLATE:
-    case VK_OBJECT_TYPE_ACCELERATION_STRUCTURE_KHR:
-    case VK_OBJECT_TYPE_DEFERRED_OPERATION_KHR:
+    case VK_OBJECT_TYPE_DESCRIPTOR_SET:
+    case VK_OBJECT_TYPE_DISPLAY_KHR:
+    case VK_OBJECT_TYPE_DISPLAY_MODE_KHR:
     {
-        PrivateDataStorage* pPrivateDataStorage = reinterpret_cast<PrivateDataStorage*>(objectHandle - pDevice->GetPrivateDataTotalSize());
+        //This is a temporary path while incrementally add fast support for all objects.
+        if (isSet)
+        {
+            Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> lock(pDevice->GetPrivateDataRWLock());
+
+            bool existed = false;
+            m_hashedPrivateData.FindAllocate(objectHandle, &existed, &pItem);
+        }
+        else
+        {
+            Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> lock(pDevice->GetPrivateDataRWLock());
+
+            pItem = m_hashedPrivateData.FindKey(objectHandle);
+        }
+        break;
+    }
+
+    default:
+    {
+        PrivateDataStorage* pPrivateDataStorage = reinterpret_cast<PrivateDataStorage*>(objectHandle - pDevice->GetPrivateDataSize());
 
         if (m_isReserved)
         {
@@ -165,23 +176,6 @@ uint64* PrivateDataSlotEXT::GetPrivateDataItemAddr(
         break;
     }
 
-    default:
-        //This is a temporary path while incrementally add fast support for all objects.
-        if (isSet)
-        {
-            Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> lock(pDevice->GetPrivateDataRWLock());
-
-            bool existed = false;
-            m_hashedPrivateData.FindAllocate(objectHandle, &existed, &pItem);
-        }
-        else
-        {
-            Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> lock(pDevice->GetPrivateDataRWLock());
-
-            pItem = m_hashedPrivateData.FindKey(objectHandle);
-        }
-
-        break;
     }
 
     return pItem;

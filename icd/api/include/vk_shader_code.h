@@ -27,52 +27,42 @@
 
 #include "khronos/vulkan.h"
 #include "vk_instance.h"
+#include "vkgcDefs.h"
 
 namespace vk
 {
 
-/// Enumerates various shader stages.
-enum ShaderStage : uint32_t
-{
-    ShaderStageVertex = 0,                                ///< Vertex shader
-    ShaderStageTessControl,                               ///< Tessellation control shader
-    ShaderStageTessEvaluation,                            ///< Tessellation evaluation shader
-    ShaderStageGeometry,                                  ///< Geomtry shader
-    ShaderStageFragment,                                  ///< Fragment shader
-    ShaderStageCompute,                                   ///< Compute shader
-    ShaderStageCount,                                     ///< Count of shader stages
-    ShaderStageInvalid = ~0u,                             ///< Invalid shader stage
-    ShaderStageNativeStageCount = ShaderStageCompute + 1, ///< Native supported shader stage count
-    ShaderGfxStageCount = ShaderStageFragment + 1,        ///< Count of graphics shader stages
-};
+typedef Vkgc::ShaderStage ShaderStage;
+#define ShaderStageTessEvaluation ShaderStageTessEval
+constexpr uint32_t ShaderStageCount = ShaderStage::ShaderStageCount;
 
 /// Translate shader stage flag bits to corresponding shader stage.
 VK_INLINE ShaderStage ShaderFlagBitToStage(const VkShaderStageFlagBits& shaderBits)
 {
-    ShaderStage stage = ShaderStageCount; // Initialize it with an invalid value
+    ShaderStage stage = ShaderStage::ShaderStageCount; // Initialize it with an invalid value
     if (shaderBits & VK_SHADER_STAGE_VERTEX_BIT)
     {
-        stage = ShaderStageVertex;
+        stage = ShaderStage::ShaderStageVertex;
     }
     else if(shaderBits & VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT)
     {
-        stage = ShaderStageTessControl;
+        stage = ShaderStage::ShaderStageTessControl;
     }
     else if (shaderBits & VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT)
     {
-        stage = ShaderStageTessEvaluation;
+        stage = ShaderStage::ShaderStageTessEvaluation;
     }
     else if (shaderBits & VK_SHADER_STAGE_GEOMETRY_BIT)
     {
-        stage = ShaderStageGeometry;
+        stage = ShaderStage::ShaderStageGeometry;
     }
     else if (shaderBits & VK_SHADER_STAGE_FRAGMENT_BIT)
     {
-        stage = ShaderStageFragment;
+        stage = ShaderStage::ShaderStageFragment;
     }
     else if (shaderBits & VK_SHADER_STAGE_COMPUTE_BIT)
     {
-        stage = ShaderStageCompute;
+        stage = ShaderStage::ShaderStageCompute;
     }
 
     return stage;

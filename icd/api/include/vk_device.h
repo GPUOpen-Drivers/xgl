@@ -616,9 +616,9 @@ public:
 
     void UpdateFeatureSettings();
 
-    VK_INLINE size_t GetPrivateDataTotalSize() const
+    VK_INLINE size_t GetPrivateDataSize() const
     {
-        return m_privateDataTotalSize;
+        return m_privateDataSize;
     }
 
     bool ReserveFastPrivateDataSlot(
@@ -631,6 +631,9 @@ public:
     void FreeApiObject(
         const VkAllocationCallbacks*    pAllocator,
         void*                           pMemory);
+
+    void FreeUnreservedPrivateData(
+        void*                           pMemory) const;
 
     VK_INLINE Util::RWLock* GetPrivateDataRWLock()
     {
@@ -648,8 +651,8 @@ protected:
         const DeviceExtensions::Enabled& enabledExtensions,
         const VkPhysicalDeviceFeatures*  pFeatures,
         bool                             useComputeAsTransferQueue,
-        bool                             privateDataEnabled,
-        uint32                           privateDataSlotRequestCount);
+        uint32                           privateDataSlotRequestCount,
+        size_t                           privateDataSize);
 
     VkResult CreateInternalComputePipeline(
         size_t                           codeByteSize,
@@ -749,10 +752,7 @@ protected:
     // This is from device create info, VkDevicePrivateDataCreateInfoEXT
     uint32                              m_privateDataSlotRequestCount;
     volatile uint64                     m_nextPrivateDataSlot;
-
-    bool                                m_isPrivateDataEnabled;
-    size_t                              m_privateDataTotalSize;
-
+    size_t                              m_privateDataSize;
     Util::RWLock                        m_privateDataRWLock;
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in

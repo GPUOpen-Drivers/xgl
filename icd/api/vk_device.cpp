@@ -211,8 +211,8 @@ Device::Device(
     const DeviceExtensions::Enabled&    enabledExtensions,
     const VkPhysicalDeviceFeatures*     pFeatures,
     bool                                useComputeAsTransferQueue,
-    bool                                privateDataEnabled,
-    uint32                              privateDataSlotRequestCount)
+    uint32                              privateDataSlotRequestCount,
+    size_t                              privateDataSize)
     :
     m_pInstance(pPhysicalDevices[DefaultDeviceIndex]->VkInstance()),
     m_settings(pPhysicalDevices[DefaultDeviceIndex]->GetRuntimeSettings()),
@@ -230,7 +230,6 @@ Device::Device(
     m_pBarrierFilterLayer(nullptr),
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue)
-
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
 
@@ -285,20 +284,9 @@ Device::Device(
     memset(m_overallocationRequestedForPalHeap, 0, sizeof(m_overallocationRequestedForPalHeap));
 
     m_nextPrivateDataSlot = 0;
-
     m_privateDataRWLock.Init();
-
-    m_isPrivateDataEnabled = privateDataEnabled;
-    m_privateDataTotalSize = 0;
-
-    if (m_isPrivateDataEnabled)
-    {
-        m_privateDataSlotRequestCount = (privateDataSlotRequestCount > 0) ? privateDataSlotRequestCount : 1;
-
-        m_privateDataTotalSize = Util::Pow2Align(
-            sizeof(PrivateDataStorage) + sizeof(uint64_t) * (m_privateDataSlotRequestCount -1),
-            VK_DEFAULT_MEM_ALIGN);
-    }
+    m_privateDataSize = privateDataSize;
+    m_privateDataSlotRequestCount = privateDataSlotRequestCount;
 }
 
 // =====================================================================================================================
@@ -443,6 +431,7 @@ VkResult Device::Create(
 
     uint32                            privateDataSlotRequestCount     = 0;
     bool                              privateDataEnabled              = false;
+    size_t                            privateDataSize                 = 0;
 
     for (pDeviceCreateInfo = pCreateInfo; ((pHeader != nullptr) && (vkResult == VK_SUCCESS)); pHeader = pHeader->pNext)
     {
@@ -986,6 +975,15 @@ VkResult Device::Create(
     uint32_t queueFamilyIndex;
     uint32_t queueIndex;
 
+    if (privateDataEnabled)
+    {
+        privateDataSlotRequestCount = (privateDataSlotRequestCount > 0) ? privateDataSlotRequestCount : 1;
+
+        privateDataSize = Util::Pow2Align(
+            sizeof(PrivateDataStorage) + sizeof(uint64_t) * (privateDataSlotRequestCount - 1),
+            VK_DEFAULT_MEM_ALIGN);
+    }
+
     for (queueFamilyIndex = 0; queueFamilyIndex < Queue::MaxQueueFamilies; queueFamilyIndex++)
     {
         for (queueIndex = 0; (queueIndex < queueCounts[queueFamilyIndex]) && (vkResult == VK_SUCCESS); queueIndex++)
@@ -1025,10 +1023,16 @@ VkResult Device::Create(
     if (vkResult == VK_SUCCESS)
     {
         pMemory = pInstance->AllocMem(
-            apiDeviceSize + (totalQueues * apiQueueSize) + palQueueMemorySize
+            privateDataSize + apiDeviceSize + (totalQueues * (privateDataSize + apiQueueSize)) + palQueueMemorySize
             ,
             VK_DEFAULT_MEM_ALIGN,
             VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        if (privateDataEnabled && (pMemory != nullptr))
+        {
+             memset(pMemory, 0, privateDataSize);
+             pMemory = Util::VoidPtrInc(pMemory, privateDataSize);
+        }
 
         vkResult = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
@@ -1051,14 +1055,14 @@ VkResult Device::Create(
             enabledDeviceExtensions,
             pEnabledFeatures,
             useComputeAsTransferQueue,
-            privateDataEnabled,
-            privateDataSlotRequestCount));
+            privateDataSlotRequestCount,
+            privateDataSize));
 
         DispatchableDevice* pDispatchableDevice = static_cast<DispatchableDevice*>(pMemory);
         DispatchableQueue*  pDispatchableQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily] = {};
 
         void* pApiQueueMemory = Util::VoidPtrInc(pMemory, apiDeviceSize);
-        void* pPalQueueMemory = Util::VoidPtrInc(pApiQueueMemory, (apiQueueSize * totalQueues));
+        void* pPalQueueMemory = Util::VoidPtrInc(pApiQueueMemory, ((privateDataSize + apiQueueSize) * totalQueues));
 
         Pal::IQueue* pPalQueues[MaxPalDevices] = {};
         size_t       palQueueMemoryOffset      = 0;
@@ -1125,6 +1129,12 @@ VkResult Device::Create(
                 if (palResult == Pal::Result::Success)
                 {
                     // Create the vk::Queue object
+                    if (privateDataEnabled && (pApiQueueMemory != nullptr))
+                    {
+                        memset(pApiQueueMemory, 0, privateDataSize);
+                        pApiQueueMemory = Util::VoidPtrInc(pApiQueueMemory, privateDataSize);
+                    }
+
                     VK_INIT_DISPATCHABLE(Queue, pApiQueueMemory, (
                         *pDispatchableDevice,
                         queueFamilyIndex,
@@ -1166,7 +1176,7 @@ VkResult Device::Create(
             }
 
             // Free memory
-            pInstance->FreeMem(pMemory);
+            (*pDispatchableDevice)->FreeApiObject(pInstance->GetAllocCallbacks(), pMemory);
         }
         else
         {
@@ -1177,7 +1187,7 @@ VkResult Device::Create(
                 overallocationBehavior,
                 deviceCoherentMemoryEnabled,
                 scalarBlockLayoutEnabled,
-				extendedRobustnessEnabled);
+                extendedRobustnessEnabled);
 
             // If we've failed to Initialize, make sure we destroy anything we might have allocated.
             if (vkResult != VK_SUCCESS)
@@ -1808,6 +1818,14 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
     {
         for (uint32_t j = 0; (j < Queue::MaxQueuesPerFamily) && (m_pQueues[i][j] != nullptr); ++j)
         {
+            void* pMemory = ApiQueue::FromObject(static_cast<Queue*>(*m_pQueues[i][j]));
+
+            if (m_privateDataSize > 0)
+            {
+                pMemory = Util::VoidPtrDec(pMemory, m_privateDataSize);
+                FreeUnreservedPrivateData(pMemory);
+            }
+
             Util::Destructor(static_cast<Queue*>(*m_pQueues[i][j]));
         }
     }
@@ -1856,7 +1874,7 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
     Util::Destructor(this);
 
-    VkInstance()->FreeMem(ApiDevice::FromObject(this));
+    FreeApiObject(VkInstance()->GetAllocCallbacks(), ApiDevice::FromObject(this));
 
     return VK_SUCCESS;
 }
@@ -1931,7 +1949,7 @@ VkResult Device::CreateInternalComputePipeline(
         pShaderInfo->pUserDataNodes      = pUserDataNodes;
         pShaderInfo->userDataNodeCount   = numUserDataNodes;
 
-        pCompiler->ApplyDefaultShaderOptions(ShaderStageCompute,
+        pCompiler->ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
                                              &pShaderInfo->options
                                              );
 
@@ -3343,8 +3361,7 @@ void* Device::AllocApiObject(
 {
     VK_ASSERT(pAllocator != nullptr);
 
-    size_t privateDataTotalSize = GetPrivateDataTotalSize();
-    size_t actualObjectSize     = totalObjectSize + privateDataTotalSize;
+    size_t actualObjectSize = totalObjectSize + m_privateDataSize;
 
     void* pMemory = pAllocator->pfnAllocation(
                     pAllocator->pUserData,
@@ -3352,10 +3369,10 @@ void* Device::AllocApiObject(
                     VK_DEFAULT_MEM_ALIGN,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
-    if ((pMemory != nullptr) && (privateDataTotalSize > 0))
+    if ((m_privateDataSize > 0) && (pMemory != nullptr))
     {
-        memset(pMemory, 0, privateDataTotalSize);
-        pMemory = Util::VoidPtrInc(pMemory, privateDataTotalSize);
+        memset(pMemory, 0, m_privateDataSize);
+        pMemory = Util::VoidPtrInc(pMemory, m_privateDataSize);
     }
 
     return pMemory;
@@ -3369,22 +3386,28 @@ void Device::FreeApiObject(
 {
     VK_ASSERT(pAllocator != nullptr);
 
-    size_t privateDataTotalSize = GetPrivateDataTotalSize();
-    void* pActualMemory         = pMemory;
+    void* pActualMemory = pMemory;
 
-    if (m_isPrivateDataEnabled && (pMemory != nullptr))
+    if ((m_privateDataSize > 0) && (pMemory != nullptr))
     {
-        pActualMemory = Util::VoidPtrDec(pActualMemory, privateDataTotalSize);
-        PrivateDataStorage* pPrivateDataStorage = reinterpret_cast<PrivateDataStorage*>(pActualMemory);
-
-        if (pPrivateDataStorage->pUnreserved != nullptr)
-        {
-            Util::Destructor(pPrivateDataStorage->pUnreserved);
-            VkInstance()->FreeMem(pPrivateDataStorage->pUnreserved);
-        }
+        pActualMemory = Util::VoidPtrDec(pActualMemory, m_privateDataSize);
+        FreeUnreservedPrivateData(pActualMemory);
     }
 
     pAllocator->pfnFree(pAllocator->pUserData, pActualMemory);
+}
+
+// =====================================================================================================================
+void Device::FreeUnreservedPrivateData(
+        void*                           pMemory) const
+{
+    PrivateDataStorage* pPrivateDataStorage = static_cast<PrivateDataStorage*>(pMemory);
+
+    if (pPrivateDataStorage->pUnreserved != nullptr)
+    {
+        Util::Destructor(pPrivateDataStorage->pUnreserved);
+        VkInstance()->FreeMem(pPrivateDataStorage->pUnreserved);
+    }
 }
 
 /**

@@ -2110,7 +2110,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectNameEXT(
                 }
             }
 
-            if (pMeta->debugNameCapacity >= nameSize)
+            if ((pMeta->debugNameCapacity >= nameSize) && (pMeta->pDebugName != nullptr))
             {
                 memcpy(pMeta->pDebugName, pNameInfo->pObjectName, nameSize);
             }
@@ -2180,7 +2180,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectNameEXT(
                 }
             }
 
-            if (pMeta->debugNameCapacity >= nameSize)
+            if ((pMeta->debugNameCapacity >= nameSize) && (pMeta->pDebugName != nullptr))
             {
                 memcpy(pMeta->pDebugName, pNameInfo->pObjectName, nameSize);
             }
