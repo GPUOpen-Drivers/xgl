@@ -73,7 +73,7 @@ VkResult DescriptorPool::Create(
 
     VkDescriptorPool handle = DescriptorPool::HandleFromVoidPointer(pSysMem);
 
-    VkResult result = DescriptorPool::ObjectFromHandle(handle)->Init<numPalDevices>(pDevice, pCreateInfo);
+    VkResult result = DescriptorPool::ObjectFromHandle(handle)->Init<numPalDevices>(pDevice, pCreateInfo, pAllocator);
 
     if (result == VK_SUCCESS)
     {
@@ -101,18 +101,19 @@ DescriptorPool::DescriptorPool(
 template <uint32_t numPalDevices>
 VkResult DescriptorPool::Init(
     Device*                                pDevice,
-    const VkDescriptorPoolCreateInfo*      pCreateInfo)
+    const VkDescriptorPoolCreateInfo*      pCreateInfo,
+    const VkAllocationCallbacks*           pAllocator)
 {
     VkDescriptorPoolCreateFlags poolUsage   = pCreateInfo->flags;
     uint32_t                    maxSets     = pCreateInfo->maxSets;
 
     VkResult result = VK_SUCCESS;
 
-    result = m_setHeap.Init<numPalDevices>(pDevice, poolUsage, maxSets);
+    result = m_setHeap.Init<numPalDevices>(pDevice, pAllocator, poolUsage, maxSets);
 
     if (result == VK_SUCCESS)
     {
-        result = m_gpuMemHeap.Init(pDevice, poolUsage, maxSets, pCreateInfo->poolSizeCount, pCreateInfo->pPoolSizes);
+        result = m_gpuMemHeap.Init(pDevice, pAllocator, poolUsage, maxSets, pCreateInfo->poolSizeCount, pCreateInfo->pPoolSizes);
 
         if (result != VK_SUCCESS)
         {
@@ -165,8 +166,11 @@ VkResult DescriptorPool::Init(
     {
         uint32 memRequired = sizeof(Pal::ResourceDescriptionDescriptorPool) +
                              (sizeof(Pal::ResourceDescriptionPoolSize) * pCreateInfo->poolSizeCount);
-        void* pMem =
-            m_pDevice->VkInstance()->AllocMem(memRequired, VkSystemAllocationScope::VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        void* pMem = pAllocator->pfnAllocation(
+            pAllocator->pUserData,
+            memRequired,
+            VK_DEFAULT_MEM_ALIGN,
+            VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
 
         if (pMem != nullptr)
         {
@@ -197,7 +201,7 @@ VkResult DescriptorPool::Init(
                 &data,
                 sizeof(Pal::ResourceCreateEventData));
 
-            m_pDevice->VkInstance()->FreeMem(pMem);
+            pAllocator->pfnFree(pAllocator->pUserData, pMem);
 
             Pal::GpuMemoryResourceBindEventData bindData = {};
             bindData.pObj               = this;
@@ -242,8 +246,8 @@ VkResult DescriptorPool::Destroy(
         sizeof(Pal::ResourceDestroyEventData));
 
     // Destroy children heaps
-    m_setHeap.Destroy(pDevice);
-    m_gpuMemHeap.Destroy(pDevice);
+    m_setHeap.Destroy(pDevice, pAllocator);
+    m_gpuMemHeap.Destroy(pDevice, pAllocator);
 
     // Free internal GPU memory allocation used by the object
     if (m_staticInternalMem.PalMemory(DefaultDeviceIndex) != nullptr)
@@ -295,8 +299,7 @@ VkResult DescriptorPool::AllocDescriptorSets(
 
                 uint32_t lastBindingIdx = pLayout->Info().count - 1;
 
-                if (pLayout->Binding(lastBindingIdx).bindingFlags &
-                    VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)
+                if (pLayout->Binding(lastBindingIdx).bindingFlags.variableDescriptorCount)
                 {
                     variableDescriptorCounts = pVariableDescriptorCount->pDescriptorCounts[allocCount];
                     VK_ASSERT(variableDescriptorCounts <= pLayout->Binding(lastBindingIdx).info.descriptorCount);
@@ -311,6 +314,18 @@ VkResult DescriptorPool::AllocDescriptorSets(
                 // Allocation succeeded: Mark this
                 // Reallocate this descriptor set to use the allocated GPU range and layout
                 DescriptorSet<numPalDevices>* pSet = DescriptorSet<numPalDevices>::StateFromHandle(pDescriptorSets[allocCount]);
+
+                size_t privateDataSize = m_setHeap.GetPrivateDataSize();
+
+                if (privateDataSize > 0)
+                {
+                    void* pMem = reinterpret_cast<void*>(pDescriptorSets[allocCount]);
+
+                    //just memset the reserved slots here
+                    privateDataSize -= sizeof(HashedPrivateDataMap*);
+                    pMem = Util::VoidPtrDec(pMem, privateDataSize);
+                    memset(pMem, 0, privateDataSize);
+                }
 
                 pSet->Reassign(pLayout,
                                setGpuMemOffset,
@@ -402,6 +417,7 @@ m_numPalDevices(0)
 // Initializes a DescriptorGpuMemHeap.  Allocates any internal GPU memory for it if needed.
 VkResult DescriptorGpuMemHeap::Init(
     Device*                      pDevice,
+    const VkAllocationCallbacks* pAllocator,
     VkDescriptorPoolCreateFlags  poolUsage,
     uint32_t                     maxSets,
     const uint32_t               count,
@@ -430,7 +446,8 @@ VkResult DescriptorGpuMemHeap::Init(
         size_t blockIndexStackSize  = m_dynamicAllocBlockCount * sizeof(uint32_t);
 
         // Allocate system memory for the management structures
-        void* pMemory = pDevice->VkInstance()->AllocMem(
+        void* pMemory = pAllocator->pfnAllocation(
+            pAllocator->pUserData,
             blockStorageSize + blockIndexStackSize,
             VK_DEFAULT_MEM_ALIGN,
             VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
@@ -462,7 +479,8 @@ VkResult DescriptorGpuMemHeap::Init(
 // =====================================================================================================================
 // Destroys a DescriptorGpuMemHeap
 void DescriptorGpuMemHeap::Destroy(
-    Device* pDevice)
+    Device* pDevice,
+    const VkAllocationCallbacks* pAllocator)
 {
     for (uint32_t deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
     {
@@ -474,7 +492,7 @@ void DescriptorGpuMemHeap::Destroy(
 
     if (m_pDynamicAllocBlocks != nullptr)
     {
-        pDevice->VkInstance()->FreeMem(m_pDynamicAllocBlocks);
+        pAllocator->pfnFree(pAllocator->pUserData, m_pDynamicAllocBlocks);
     }
 }
 
@@ -909,6 +927,8 @@ m_nextFreeHandle(0),
 m_maxSets(0),
 m_pFreeIndexStack(nullptr),
 m_freeIndexStackCount(0),
+m_privateDataSize(0),
+m_setSize(0),
 m_pSetMemory(nullptr)
 {
 
@@ -918,6 +938,7 @@ m_pSetMemory(nullptr)
 template <uint32_t numPalDevices>
 VkResult DescriptorSetHeap::Init(
     Device*                         pDevice,
+    const VkAllocationCallbacks*    pAllocator,
     VkDescriptorPoolCreateFlags     poolUsage,
     uint32_t                        maxSets)
 {
@@ -927,12 +948,24 @@ VkResult DescriptorSetHeap::Init(
     m_maxSets = maxSets;
 
     // Allocate memory for all sets
-    size_t setSize = SetSize<numPalDevices>();
+    m_setSize = SetSize<numPalDevices>();
+    m_privateDataSize = pDevice->GetPrivateDataSize();
+
+    size_t setMemorySize = (maxSets * (m_privateDataSize + m_setSize));
+    size_t freeIndexStackSize = 0;
 
     bool oneShot = (poolUsage & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT) == 0;
 
-    m_pSetMemory = pDevice->VkInstance()->AllocMem(
-        maxSets * setSize,
+    if (oneShot == false)
+    {
+        // Allocate additional memory for the free index stack
+        freeIndexStackSize = (sizeof(uint32_t) * maxSets);
+    }
+
+    // Use the passed allocator
+    m_pSetMemory = pAllocator->pfnAllocation(
+        pAllocator->pUserData,
+        setMemorySize + freeIndexStackSize,
         PAL_CACHE_LINE_BYTES,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
@@ -944,10 +977,7 @@ VkResult DescriptorSetHeap::Init(
     // Allocate memory for the free index stack
     if (oneShot == false) //dynamic usage
     {
-        m_pFreeIndexStack = reinterpret_cast<uint32_t*>(pDevice->VkInstance()->AllocMem(
-            sizeof(uint32_t) * maxSets,
-            VK_DEFAULT_MEM_ALIGN,
-            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+        m_pFreeIndexStack = reinterpret_cast<uint32_t*>(Util::VoidPtrInc(m_pSetMemory, setMemorySize));
 
         if (m_pFreeIndexStack == nullptr)
         {
@@ -958,7 +988,15 @@ VkResult DescriptorSetHeap::Init(
     // Initialize all sets
     for (uint32_t index = 0; index < maxSets; ++index)
     {
-        void* pSetMem = Util::VoidPtrInc(m_pSetMemory, index * setSize);
+        void* pSetMem = Util::VoidPtrInc(m_pSetMemory, index * (m_privateDataSize + m_setSize));
+
+        if (m_privateDataSize > 0)
+        {
+            PrivateDataStorage* pPrivateDataStorage = static_cast<PrivateDataStorage*>(pSetMem);
+
+            pPrivateDataStorage->pUnreserved = nullptr;
+            pSetMem = Util::VoidPtrInc(pSetMem, m_privateDataSize);
+        }
 
         VK_PLACEMENT_NEW (pSetMem) DescriptorSet<numPalDevices>(index);
     }
@@ -969,10 +1007,20 @@ VkResult DescriptorSetHeap::Init(
 // =====================================================================================================================
 // Destroys a DescriptorSetHeap
 void DescriptorSetHeap::Destroy(
-    Device* pDevice)
+    Device*                         pDevice,
+    const VkAllocationCallbacks*    pAllocator)
 {
-    pDevice->VkInstance()->FreeMem(m_pSetMemory);
-    pDevice->VkInstance()->FreeMem(m_pFreeIndexStack);
+    if (m_privateDataSize > 0)
+    {
+        for (uint32 index = 0; index < m_maxSets; ++index)
+        {
+            void* pSetMem = Util::VoidPtrInc(m_pSetMemory, index * (m_privateDataSize + m_setSize));
+
+            pDevice->FreeUnreservedPrivateData(pSetMem);
+        }
+    }
+
+    pAllocator->pfnFree(pAllocator->pUserData, m_pSetMemory);
 }
 
 // =====================================================================================================================
@@ -981,7 +1029,10 @@ template <uint32_t numPalDevices>
 VkDescriptorSet DescriptorSetHeap::DescriptorSetHandleFromIndex(
     uint32_t idx) const
 {
-    void* pMem = Util::VoidPtrInc(m_pSetMemory, (SetSize<numPalDevices>() * idx));
+    size_t setSize = SetSize<numPalDevices>();
+    void* pMem = Util::VoidPtrInc(m_pSetMemory, ((m_privateDataSize + setSize) * idx));
+
+    pMem = Util::VoidPtrInc(pMem, m_privateDataSize);
 
     return DescriptorSet<numPalDevices>::HandleFromVoidPointer(pMem);
 }
@@ -1056,8 +1107,7 @@ void DescriptorSetHeap::Reset()
 
     for (uint32_t index = 0; index < m_maxSets; ++index)
     {
-        VkDescriptorSet setHandle =
-            DescriptorSet<numPalDevices>::HandleFromVoidPointer(Util::VoidPtrInc(m_pSetMemory, index * setSize));
+        VkDescriptorSet setHandle = DescriptorSetHandleFromIndex<numPalDevices>(index);
 
         DescriptorSet<numPalDevices>::ObjectFromHandle(setHandle)->Reset();
     }

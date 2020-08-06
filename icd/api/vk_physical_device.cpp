@@ -3571,6 +3571,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_NON_SEMANTIC_INFO));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIVATE_DATA));
+
 #if defined(__unix__)
 #endif
 
@@ -4273,6 +4275,7 @@ void PhysicalDevice::GetPhysicalDeviceTimelineSemaphoreProperties(
 // =====================================================================================================================
 VkResult PhysicalDevice::GetExternalMemoryProperties(
     bool                                    isSparse,
+    bool                                    isImageUsage,
     VkExternalMemoryHandleTypeFlagBits      handleType,
     VkExternalMemoryProperties*             pExternalMemoryProperties
 ) const
@@ -4382,7 +4385,14 @@ void PhysicalDevice::GetPhysicalDeviceSamplerYcbcrConversionFeatures(
     VkBool32* pSamplerYcbcrConversion
     ) const
 {
-    *pSamplerYcbcrConversion = VK_FALSE;
+    if (IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION))
+    {
+        *pSamplerYcbcrConversion = VK_TRUE;
+    }
+    else
+    {
+        *pSamplerYcbcrConversion = VK_FALSE;
+    }
 }
 
 // =====================================================================================================================
@@ -5132,8 +5142,10 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
         }
         case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_IMAGE_FORMAT_PROPERTIES:
         {
-            pSamplerYcbcrConversionImageFormatProperties = reinterpret_cast<VkSamplerYcbcrConversionImageFormatProperties*>(pHeader2);
-            pSamplerYcbcrConversionImageFormatProperties->combinedImageSamplerDescriptorCount = 1;
+            pSamplerYcbcrConversionImageFormatProperties =
+                reinterpret_cast<VkSamplerYcbcrConversionImageFormatProperties*>(pHeader2);
+            pSamplerYcbcrConversionImageFormatProperties->combinedImageSamplerDescriptorCount =
+                Formats::GetYuvPlaneCounts(pImageFormatInfo->format);
             break;
         }
         default:
@@ -5163,6 +5175,7 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
         {
             result = GetExternalMemoryProperties(
                             ((pImageFormatInfo->flags & Image::SparseEnablingFlags) != 0),
+                            true,
                             pExternalImageFormatInfo->handleType,
                             &pExternalImageProperties->externalMemoryProperties);
         }
@@ -5656,6 +5669,7 @@ void PhysicalDevice::GetExternalBufferProperties(
     VK_ASSERT(pExternalBufferInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_BUFFER_INFO);
 
     GetExternalMemoryProperties(((pExternalBufferInfo->flags & Buffer::SparseEnablingFlags) != 0),
+                                false,
                                 pExternalBufferInfo->handleType,
                                 &pExternalBufferProperties->externalMemoryProperties);
 }

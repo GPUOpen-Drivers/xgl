@@ -181,6 +181,7 @@ VkResult Buffer::Create(
 
             pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetExternalMemoryProperties(
                 isSparse,
+                false,
                 static_cast<VkExternalMemoryHandleTypeFlagBits>(pExternalInfo->handleTypes),
                 &externalMemoryProperties);
 

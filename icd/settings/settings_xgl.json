@@ -1870,14 +1870,14 @@
     },
     {
       "Name": "AllowVkPipelineCachingToDisk",
-      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for saving shader ELFs. (Default: FALSE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
+      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for saving shader ELFs. (Default: TRUE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
       "Tags": [
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": false,
+        "Default": true,
         "WinDefault": true,
-        "LnxDefault": false
+        "LnxDefault": true
       },
       "Type": "bool",
       "VariableName": "usePalPipelineCaching",

@@ -425,6 +425,8 @@ void DevModeMgr::Finalize(
         }
     }
 
+    m_pDevDriverServer->GetDriverControlServer()->StartLateDeviceInit();
+
     // Finalize the devmode manager
     m_pDevDriverServer->Finalize();
 

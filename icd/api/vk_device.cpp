@@ -1325,8 +1325,8 @@ VkResult Device::Initialize(
         deviceProps.engineProperties[Pal::EngineTypeUniversal].minTimestampAlignment;
 
     m_enabledFeatures.deviceCoherentMemory = deviceCoherentMemoryEnabled;
-    m_enabledFeatures.scalarBlockLayout = scalarBlockLayoutEnabled;
-    m_enabledFeatures.extendedRobustness = extendedRobustnessEnabled;
+    m_enabledFeatures.scalarBlockLayout    = scalarBlockLayoutEnabled;
+    m_enabledFeatures.extendedRobustness   = extendedRobustnessEnabled;
 
     if (result == VK_SUCCESS)
     {
@@ -3407,6 +3407,8 @@ void Device::FreeUnreservedPrivateData(
     {
         Util::Destructor(pPrivateDataStorage->pUnreserved);
         VkInstance()->FreeMem(pPrivateDataStorage->pUnreserved);
+
+        pPrivateDataStorage->pUnreserved = nullptr;
     }
 }
 

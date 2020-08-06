@@ -57,13 +57,6 @@ VkResult Memory::Create(
 
     VkResult vkResult   = VK_SUCCESS;
 
-    union
-    {
-        const VkStructHeader*                   pHeader;
-        const VkMemoryAllocateInfo*             pInfo;
-        const VkImportMemoryHostPointerInfoEXT* pImportMemoryInfo;
-    };
-
     VK_ASSERT(pDevice != nullptr);
     VK_ASSERT(pAllocInfo != nullptr);
     VK_ASSERT(pMemoryHandle != nullptr);
@@ -103,76 +96,79 @@ VkResult Memory::Create(
     VkImage  dedicatedImage   = VK_NULL_HANDLE;
     VkBuffer dedicatedBuffer  = VK_NULL_HANDLE;
 
-    for (pInfo = pAllocInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    VK_ASSERT(pAllocInfo->sType == VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO);
+
+    createInfo.size = pAllocInfo->allocationSize;
+
+    // Calculate the required base address alignment for the given memory type.  These alignments are
+    // roughly worst-case alignments required by images that may be hosted within this memory object.
+    // The base address alignment of the memory object is large enough to cover the base address
+    // requirements of most images, and images add internal padding for the most extreme alignment
+    // requirements.
+    if (createInfo.size != 0)
     {
-        switch (pHeader->sType)
+        createInfo.alignment = pDevice->GetMemoryBaseAddrAlignment(1UL << pAllocInfo->memoryTypeIndex);
+    }
+
+    createInfo.heapCount = 1;
+    createInfo.heaps[0] = pDevice->GetPalHeapFromVkTypeIndex(pAllocInfo->memoryTypeIndex);
+
+    if (pDevice->NumPalDevices() > 1)
+    {
+        const uint32_t heapIndex = memoryProperties.memoryTypes[pAllocInfo->memoryTypeIndex].heapIndex;
+        multiInstanceHeap = (memoryProperties.memoryHeaps[heapIndex].flags & VK_MEMORY_HEAP_MULTI_INSTANCE_BIT) != 0;
+
+        if (multiInstanceHeap)
         {
-            case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO:
-            {
-                createInfo.size = pInfo->allocationSize;
+            // In the MGPU scenario, the peerWritable is required to allocate the local video memory
+            // We should not set the peerWritable for remote heap.
+            createInfo.flags.peerWritable = 1;
 
-                // Calculate the required base address alignment for the given memory type.  These alignments are
-                // roughly worst-case alignments required by images that may be hosted within this memory object.
-                // The base address alignment of the memory object is large enough to cover the base address
-                // requirements of most images, and images add internal padding for the most extreme alignment
-                // requirements.
-                if (createInfo.size != 0)
-                {
-                    createInfo.alignment = pDevice->GetMemoryBaseAddrAlignment(1UL << pInfo->memoryTypeIndex);
-                }
+            allocationMask = pDevice->GetPalDeviceMask();
+        }
+        else
+        {
+            VK_ASSERT((createInfo.heaps[0] == Pal::GpuHeapGartCacheable) ||
+                (createInfo.heaps[0] == Pal::GpuHeapGartUswc));
 
-                createInfo.heapCount = 1;
-                createInfo.heaps[0]  = pDevice->GetPalHeapFromVkTypeIndex(pInfo->memoryTypeIndex);
+            createInfo.flags.shareable = 1;
+            allocationMask = 1 << DefaultMemoryInstanceIdx;
+        }
+    }
 
-                if (pDevice->NumPalDevices() > 1)
-                {
-                    const uint32_t heapIndex = memoryProperties.memoryTypes[pInfo->memoryTypeIndex].heapIndex;
-                    multiInstanceHeap        = (memoryProperties.memoryHeaps[heapIndex].flags &
-                                                VK_MEMORY_HEAP_MULTI_INSTANCE_BIT) != 0;
+    if (pDevice->ShouldAddRemoteBackupHeap(DefaultDeviceIndex, pAllocInfo->memoryTypeIndex, createInfo.heaps[0]))
+    {
+        createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
+    }
 
-                    if (multiInstanceHeap)
-                    {
-                        // In the MGPU scenario, the peerWritable is required to allocate the local video memory
-                        // We should not set the peerWritable for remote heap.
-                        createInfo.flags.peerWritable = 1;
+    VkMemoryPropertyFlags propertyFlags = memoryProperties.memoryTypes[pAllocInfo->memoryTypeIndex].propertyFlags;
 
-                        allocationMask = pDevice->GetPalDeviceMask();
-                    }
-                    else
-                    {
-                        VK_ASSERT((createInfo.heaps[0] == Pal::GpuHeapGartCacheable) ||
-                                  (createInfo.heaps[0] == Pal::GpuHeapGartUswc));
+    if ((propertyFlags & VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD) &&
+        pDevice->GetEnabledFeatures().deviceCoherentMemory)
+    {
+        createInfo.flags.gl2Uncached = 1;
+    }
 
-                        createInfo.flags.shareable = 1;
-                        allocationMask = 1 << DefaultMemoryInstanceIdx;
-                    }
-                }
+    if ((propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0)
+    {
+        createInfo.flags.cpuInvisible = 1;
+    }
 
-                if (pDevice->ShouldAddRemoteBackupHeap(DefaultDeviceIndex, pInfo->memoryTypeIndex, createInfo.heaps[0]))
-                {
-                    createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
-                }
+    if ((propertyFlags & VK_MEMORY_PROPERTY_PROTECTED_BIT) != 0)
+    {
+        createInfo.flags.tmzProtected = 1;
+    }
 
-                VkMemoryPropertyFlags propertyFlags = memoryProperties.memoryTypes[pInfo->memoryTypeIndex].propertyFlags;
+    const VkImportMemoryHostPointerInfoEXT* pImportMemoryInfo = nullptr;
 
-                if ((propertyFlags & VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD) &&
-                    pDevice->GetEnabledFeatures().deviceCoherentMemory)
-                {
-                    createInfo.flags.gl2Uncached = 1;
-                }
+    const void* pNext = pAllocInfo->pNext;
 
-                if ((propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == 0)
-                {
-                    createInfo.flags.cpuInvisible = 1;
-                }
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
 
-                if ((propertyFlags & VK_MEMORY_PROPERTY_PROTECTED_BIT) != 0)
-                {
-                    createInfo.flags.tmzProtected = 1;
-                }
-            }
-            break;
-
+        switch (static_cast<int32_t>(pHeader->sType))
+        {
 #if defined(__unix__)
             case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
             {
@@ -269,32 +265,30 @@ VkResult Memory::Create(
             break;
 #endif
 
+            case VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT:
+            {
+                VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_EXTERNAL_MEMORY_HOST));
+                pImportMemoryInfo = reinterpret_cast<const VkImportMemoryHostPointerInfoEXT*>(pNext);
+
+                VK_ASSERT(pImportMemoryInfo->handleType &
+                    (VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT |
+                    VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT));
+
+                if (pImportMemoryInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT)
+                {
+                    isHostMappedForeign = true;
+                }
+
+                pPinnedHostPtr = pImportMemoryInfo->pHostPointer;
+            }
+            break;
+
             default:
-                switch (static_cast<uint32_t>(pHeader->sType))
-                {
-                case VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT:
-                {
-                    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_EXTERNAL_MEMORY_HOST));
-
-                    VK_ASSERT(pImportMemoryInfo->handleType &
-                        (VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT |
-                        VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT));
-
-                    if (pImportMemoryInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT)
-                    {
-                        isHostMappedForeign = true;
-                    }
-
-                    pPinnedHostPtr = pImportMemoryInfo->pHostPointer;
-                }
-                break;
-
-                default:
-                    // Skip any unknown extension structures
-                    break;
-                }
+                // Skip any unknown extension structures
                 break;
         }
+
+        pNext = pHeader->pNext;
     }
 
     // Check for OOM before actually allocating to avoid overhead. Do not account for the memory allocation yet
@@ -773,6 +767,12 @@ VkResult Memory::OpenExternalSharedImage(
 
         if (palResult == Pal::Result::Success)
         {
+            if (pExternalImage->GetImageCreateInfo().flags.optimalShareable == 1)
+            {
+                // Vulkan informs other Pal-clients that it is going to read and write shared metadata.
+                pExternalImage->SetOptimalSharingLevel(Pal::MetadataSharingLevel::FullOptimal);
+            }
+
             // Add the GPU memory object to the residency list
             palResult = pDevice->AddMemReference(pDevice->PalDevice(DefaultDeviceIndex), pPalMemory[DefaultDeviceIndex]);
 

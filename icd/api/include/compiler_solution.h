@@ -74,6 +74,12 @@ struct PipelineCreationFeedback
 };
 
 // =====================================================================================================================
+// Represents pipeline metadata included in the pipeline ELF.
+struct PipelineMetadata {
+  bool reservedForFutureHw1;
+};
+
+// =====================================================================================================================
 struct GraphicsPipelineCreateInfo
 {
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
@@ -87,7 +93,7 @@ struct GraphicsPipelineCreateInfo
     VkFormat                               dbFormat;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
-    bool                                   elfWasCached;
+    bool                                   freeWithCompiler;
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
 };
@@ -105,7 +111,7 @@ struct ComputePipelineCreateInfo
     size_t                                 tempBufferStageSize;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
-    bool                                   elfWasCached;
+    bool                                   freeWithCompiler;
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
 };

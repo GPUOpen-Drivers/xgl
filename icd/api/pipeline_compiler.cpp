@@ -538,7 +538,7 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
     const void**                 ppPipelineBinary,
     bool*                        pIsUserCacheHit,
     bool*                        pIsInternalCacheHit,
-    bool*                        pElfWasCached,
+    bool*                        pFreeWithCompiler,
     PipelineCreationFeedback*    pPipelineFeedback)
 {
     Util::Result cacheResult = Util::Result::Success;
@@ -574,7 +574,7 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
     }
     if (*pIsUserCacheHit || *pIsInternalCacheHit)
     {
-        *pElfWasCached = true;
+        *pFreeWithCompiler = false;
         cacheResult = Util::Result::Success;
         m_cacheHits++;
     }
@@ -721,7 +721,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         hash.Finalize(pCacheId->bytes);
 
         cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
-            &isUserCacheHit, &isInternalCacheHit, &pCreateInfo->elfWasCached, &pCreateInfo->pipelineFeedback);
+            &isUserCacheHit, &isInternalCacheHit, &pCreateInfo->freeWithCompiler, &pCreateInfo->pipelineFeedback);
         if (cacheResult == Util::Result::Success)
         {
             shouldCompile = false;
@@ -754,6 +754,11 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
                     &compileTime);
             }
 
+            if (result == VK_SUCCESS)
+            {
+                pCreateInfo->freeWithCompiler = true;
+
+            }
         }
     }
 
@@ -781,7 +786,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
     }
 
-    m_totalTimeSpent += pCreateInfo->elfWasCached ? cacheTime : compileTime;
+    m_totalTimeSpent += shouldCompile ? compileTime : cacheTime;
     m_totalBinaries++;
 
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
@@ -915,7 +920,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         hash.Finalize(pCacheId->bytes);
 
         cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
-            &isUserCacheHit, &isInternalCacheHit, &pCreateInfo->elfWasCached, &pCreateInfo->pipelineFeedback);
+            &isUserCacheHit, &isInternalCacheHit, &pCreateInfo->freeWithCompiler, &pCreateInfo->pipelineFeedback);
         if (cacheResult == Util::Result::Success)
         {
             shouldCompile = false;
@@ -946,6 +951,10 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
                     &compileTime);
             }
 
+            if (result == VK_SUCCESS)
+            {
+                pCreateInfo->freeWithCompiler = true;
+            }
         }
     }
 
@@ -973,7 +982,7 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         VK_ASSERT(Util::IsErrorResult(cacheResult) == false);
     }
 
-    m_totalTimeSpent += pCreateInfo->elfWasCached ? cacheTime : compileTime;
+    m_totalTimeSpent += shouldCompile ? compileTime : cacheTime;
     m_totalBinaries++;
     if (settings.shaderReplaceMode == ShaderReplaceShaderISA)
     {
@@ -1451,7 +1460,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pShaderInfo->pModuleData = pShaderModule->GetShaderData(pCreateInfo->compilerType);
     }
 
-    pCreateInfo->elfWasCached = false;
+    pCreateInfo->freeWithCompiler = true;
 
     return result;
 }
@@ -1734,17 +1743,17 @@ void PipelineCompiler::FreeComputePipelineBinary(
     const void*                pPipelineBinary,
     size_t                     binarySize)
 {
-    if (pCreateInfo->elfWasCached)
-    {
-        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
-    }
-    else
+    if (pCreateInfo->freeWithCompiler)
     {
         if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
         {
             m_compilerSolutionLlpc.FreeComputePipelineBinary(pPipelineBinary, binarySize);
         }
 
+    }
+    else
+    {
+        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
     }
 }
 
@@ -1755,17 +1764,17 @@ void PipelineCompiler::FreeGraphicsPipelineBinary(
     const void*                 pPipelineBinary,
     size_t                      binarySize)
 {
-    if (pCreateInfo->elfWasCached)
-    {
-        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
-    }
-    else
+    if (pCreateInfo->freeWithCompiler)
     {
         if (pCreateInfo->compilerType == PipelineCompilerTypeLlpc)
         {
             m_compilerSolutionLlpc.FreeGraphicsPipelineBinary(pPipelineBinary, binarySize);
         }
 
+    }
+    else
+    {
+        m_pPhysicalDevice->Manager()->VkInstance()->FreeMem(const_cast<void*>(pPipelineBinary));
     }
 }
 

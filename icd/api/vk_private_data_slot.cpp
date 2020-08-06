@@ -84,11 +84,7 @@ PrivateDataSlotEXT::PrivateDataSlotEXT(
         Device*                         pDevice,
         const bool                      isReserved,
         const uint64                    index)
-    :
-    m_hashedPrivateData(32u, pDevice->VkInstance()->Allocator())
 {
-    m_hashedPrivateData.Init();
-
     m_index                 = index;
     m_isReserved            = isReserved;
 }
@@ -109,6 +105,8 @@ uint64* PrivateDataSlotEXT::GetPrivateDataItemAddr(
         (objectType != VK_OBJECT_TYPE_INSTANCE) &&
         (objectType != VK_OBJECT_TYPE_PHYSICAL_DEVICE) &&
         (objectType != VK_OBJECT_TYPE_SURFACE_KHR) &&
+        (objectType != VK_OBJECT_TYPE_DISPLAY_KHR) &&
+        (objectType != VK_OBJECT_TYPE_DISPLAY_MODE_KHR) &&
         (objectType != VK_OBJECT_TYPE_DEBUG_REPORT_CALLBACK_EXT) &&
         (objectType != VK_OBJECT_TYPE_DEBUG_UTILS_MESSENGER_EXT) &&
         (objectType != VK_OBJECT_TYPE_VALIDATION_CACHE_EXT) &&
@@ -116,66 +114,37 @@ uint64* PrivateDataSlotEXT::GetPrivateDataItemAddr(
 
     uint64* pItem = nullptr;
 
-    switch (objectType)
+    PrivateDataStorage* pPrivateDataStorage = reinterpret_cast<PrivateDataStorage*>(objectHandle - pDevice->GetPrivateDataSize());
+
+    if (m_isReserved)
     {
-    case VK_OBJECT_TYPE_DESCRIPTOR_SET:
-    case VK_OBJECT_TYPE_DISPLAY_KHR:
-    case VK_OBJECT_TYPE_DISPLAY_MODE_KHR:
+        pItem = &(pPrivateDataStorage->reserved[m_index]);
+    }
+    else
     {
-        //This is a temporary path while incrementally add fast support for all objects.
         if (isSet)
         {
             Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> lock(pDevice->GetPrivateDataRWLock());
 
-            bool existed = false;
-            m_hashedPrivateData.FindAllocate(objectHandle, &existed, &pItem);
+            HashedPrivateDataMap* pHashed = GetUnreservedPrivateDataAddr<isSet>(pDevice, pPrivateDataStorage);
+
+            if (pHashed != nullptr)
+            {
+                bool existed = false;
+                pHashed->FindAllocate(m_index, &existed, &pItem);
+            }
         }
         else
         {
             Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> lock(pDevice->GetPrivateDataRWLock());
 
-            pItem = m_hashedPrivateData.FindKey(objectHandle);
-        }
-        break;
-    }
+            HashedPrivateDataMap* pHashed = GetUnreservedPrivateDataAddr<isSet>(pDevice, pPrivateDataStorage);
 
-    default:
-    {
-        PrivateDataStorage* pPrivateDataStorage = reinterpret_cast<PrivateDataStorage*>(objectHandle - pDevice->GetPrivateDataSize());
-
-        if (m_isReserved)
-        {
-            pItem = &(pPrivateDataStorage->reserved[m_index]);
-        }
-        else
-        {
-            if (isSet)
+            if (pHashed != nullptr)
             {
-                Util::RWLockAuto<Util::RWLock::LockType::ReadWrite> lock(pDevice->GetPrivateDataRWLock());
-
-                HashedPrivateDataMap* pHashed = GetUnreservedPrivateDataAddr<isSet>(pDevice, pPrivateDataStorage);
-
-                if (pHashed != nullptr)
-                {
-                    bool existed = false;
-                    pHashed->FindAllocate(m_index, &existed, &pItem);
-                }
-            }
-            else
-            {
-                Util::RWLockAuto<Util::RWLock::LockType::ReadOnly> lock(pDevice->GetPrivateDataRWLock());
-
-                HashedPrivateDataMap* pHashed = GetUnreservedPrivateDataAddr<isSet>(pDevice, pPrivateDataStorage);
-
-                if (pHashed != nullptr)
-                {
-                    pItem = pHashed->FindKey(m_index);
-                }
+                pItem = pHashed->FindKey(m_index);
             }
         }
-        break;
-    }
-
     }
 
     return pItem;

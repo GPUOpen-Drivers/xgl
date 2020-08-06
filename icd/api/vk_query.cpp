@@ -85,12 +85,6 @@ VkResult PalQueryPool::Create(
     Pal::Result palResult;
     VkResult result = VK_SUCCESS;
 
-    union
-    {
-        const VkStructHeader*               pHeader;
-        const VkQueryPoolCreateInfo*        pQueryPoolInfo;
-    };
-
     Pal::QueryPoolCreateInfo createInfo = {};
 
     Pal::QueryType           queryType = Pal::QueryType::Occlusion;
@@ -100,39 +94,16 @@ VkResult PalQueryPool::Create(
         createInfo.queryPoolType = Pal::QueryPoolType::StreamoutStats;
     }
 
-    const VkQueryPoolCreateInfo* pVkInfo = nullptr;
-
-    for (pQueryPoolInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    if (VK_ENUM_IN_RANGE(pCreateInfo->queryType, VK_QUERY_TYPE))
     {
-        switch (pHeader->sType)
-        {
-        case VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO:
-            {
-                pVkInfo = pQueryPoolInfo;
-
-                if (VK_ENUM_IN_RANGE(pQueryPoolInfo->queryType, VK_QUERY_TYPE))
-                {
-                    queryType                = VkToPalQueryType(pQueryPoolInfo->queryType);
-                    createInfo.queryPoolType = VkToPalQueryPoolType(pQueryPoolInfo->queryType);
-                }
-
-                createInfo.numSlots      = pQueryPoolInfo->queryCount;
-                createInfo.enabledStats  = VkToPalQueryPipelineStatsFlags(pQueryPoolInfo->pipelineStatistics);
-
-                createInfo.flags.enableCpuAccess = true;
-            }
-            break;
-
-        default:
-            // Skip any unknown extension structures
-            break;
-        }
+        queryType = VkToPalQueryType(pCreateInfo->queryType);
+        createInfo.queryPoolType = VkToPalQueryPoolType(pCreateInfo->queryType);
     }
 
-    if (pVkInfo == nullptr)
-    {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
+    createInfo.numSlots = pCreateInfo->queryCount;
+    createInfo.enabledStats = VkToPalQueryPipelineStatsFlags(pCreateInfo->pipelineStatistics);
+
+    createInfo.flags.enableCpuAccess = true;
 
     const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->GetQueryPoolSize(createInfo, &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
@@ -186,7 +157,7 @@ VkResult PalQueryPool::Create(
     {
         PalQueryPool* pObject = VK_PLACEMENT_NEW(pSystemMem) PalQueryPool(
             pDevice,
-            pVkInfo->queryType,
+            pCreateInfo->queryType,
             queryType,
             pPalQueryPools,
             &internalMem);

@@ -183,9 +183,31 @@ uint32_t DescriptorSetLayout::GetSingleDescStaticSize(const Device* pDevice, VkD
 
 // =====================================================================================================================
 // Returns the dword size required in the static section for a particular type of descriptor.
-uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(const Device* pDevice, const  VkDescriptorSetLayoutBinding *descriptorInfo)
+uint32_t DescriptorSetLayout::GetDescStaticSectionDwSize(
+    const Device* pDevice,
+    const VkDescriptorSetLayoutBinding *descriptorInfo,
+    const DescriptorBindingFlags bindingFlags)
 {
     uint32_t size = GetSingleDescStaticSize(pDevice, descriptorInfo->descriptorType);
+
+    if ((descriptorInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) &&
+        (descriptorInfo->pImmutableSamplers != nullptr) &&
+        (bindingFlags.ycbcrConversionUsage != 0))
+    {
+        const VkSampler* multiPlaneSampler = descriptorInfo->pImmutableSamplers;
+        uint32_t maxMultiPlaneCount = Sampler::ObjectFromHandle(*multiPlaneSampler)->GetMultiPlaneCount();
+
+        // Go through the descriptor array to find the maximum multiplane count.
+        for (uint32_t idx = 1; (idx < descriptorInfo->descriptorCount) && (maxMultiPlaneCount < 3); ++idx)
+        {
+            uint32_t multiPlaneCount = Sampler::ObjectFromHandle(multiPlaneSampler[idx])->GetMultiPlaneCount();
+            maxMultiPlaneCount = multiPlaneCount > maxMultiPlaneCount ? multiPlaneCount : maxMultiPlaneCount;
+        }
+
+        size = pDevice->GetProperties().descriptorSizes.imageView;
+
+        size *= maxMultiPlaneCount;
+    }
 
     if (descriptorInfo->descriptorType == VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT)
     {
@@ -322,7 +344,8 @@ void DescriptorSetLayout::ConvertImmutableInfo(
     const VkDescriptorSetLayoutBinding* pBindingInfo,
     uint32_t                            descSizeInDw,
     ImmSectionInfo*                     pSectionInfo,
-    BindingSectionInfo*                 pBindingSectionInfo)
+    BindingSectionInfo*                 pBindingSectionInfo,
+    const DescriptorBindingFlags        bindingFlags)
 {
     if ((pBindingInfo->pImmutableSamplers != nullptr) &&
         ((pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) ||
@@ -335,18 +358,7 @@ void DescriptorSetLayout::ConvertImmutableInfo(
         pBindingSectionInfo->dwOffset = pSectionInfo->numImmutableSamplers * descSizeInDw +
                                         pSectionInfo->numImmutableYCbCrMetaData * yCbCrMetaDataSizeInDW;
 
-        // By default, we assume the YCbCr meta data is not included.
-        bool isYCbCrMetaDataIncluded = false;
-
-        // For this binding section, it will be marked if any smapler contains ycbcr meta data,
-        // this is used to control the dw array stride.
-        for (uint32_t i = 0; i < descCount; ++i)
-        {
-            if (Sampler::ObjectFromHandle(pBindingInfo->pImmutableSamplers[i])->IsYCbCrSampler())
-            {
-                isYCbCrMetaDataIncluded = true;
-            }
-        }
+        bool isYCbCrMetaDataIncluded = bindingFlags.ycbcrConversionUsage;
 
         // Array stride in dwords.
         // If YCbCr meta data is included, then the dwArrayStride should contains both desc and ycbcr meta data size
@@ -458,8 +470,8 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                     for (uint32_t inIndex = 0; inIndex < pInfo->bindingCount; ++inIndex)
                     {
                         const VkDescriptorSetLayoutBinding& currentBinding = pInfo->pBindings[inIndex];
-                        pOutBindings[currentBinding.binding].bindingFlags  =
-                            pDescriptorSetLayoutBindingFlagsCreateInfo->pBindingFlags[inIndex];
+                        pOutBindings[currentBinding.binding].bindingFlags = VkToInternalDescriptorBindingFlag(
+                            pDescriptorSetLayoutBindingFlagsCreateInfo->pBindingFlags[inIndex]);
                     }
                 }
 
@@ -474,6 +486,21 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                 {
                     const VkDescriptorSetLayoutBinding & currentBinding = pInfo->pBindings[inIndex];
                     pOutBindings[currentBinding.binding].info = currentBinding;
+
+                    if (currentBinding.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                    {
+                        // For this binding section, it will be marked if any sampler contains ycbcr meta data,
+                        // this is used to control the dw array stride.
+                        for (uint32_t i = 0; i < currentBinding.descriptorCount; ++i)
+                        {
+                            if ((currentBinding.pImmutableSamplers != nullptr) &&
+                                Sampler::ObjectFromHandle(currentBinding.pImmutableSamplers[i])->IsYCbCrSampler())
+                            {
+                                pOutBindings[currentBinding.binding].bindingFlags.ycbcrConversionUsage = 1;
+                                break;
+                            }
+                        }
+                    }
                 }
 
                 // Now iterate over our output array to convert the binding info.  Any gaps in
@@ -487,8 +514,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                     uint32_t descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32_t);
 
                     // If the last binding has the VARIABLE_DESCRIPTOR_COUNT_BIT set, write the varDescDwStride
-                    if ((bindingNumber == (pOut->count - 1)) &&
-                        (pBinding->bindingFlags & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT))
+                    if ((bindingNumber == (pOut->count - 1)) && pBinding->bindingFlags.variableDescriptorCount)
                     {
                         pOut->varDescStride = GetSingleDescStaticSize(pDevice, pBinding->info.descriptorType);
                     }
@@ -496,7 +522,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                     // Construct the information specific to the static section of the descriptor set layout.
                     ConvertBindingInfo(
                         &pBinding->info,
-                        GetDescStaticSectionDwSize(pDevice, &pBinding->info),
+                        GetDescStaticSectionDwSize(pDevice, &pBinding->info, pBinding->bindingFlags),
                         descAlignmentInDw,
                         &pOut->sta,
                         &pBinding->sta);
@@ -514,7 +540,8 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
                         &pBinding->info,
                         GetDescImmutableSectionDwSize(pDevice, pBinding->info.descriptorType),
                         &pOut->imm,
-                        &pBinding->imm);
+                        &pBinding->imm,
+                        pBinding->bindingFlags);
 
                     if ((pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
                         (pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))

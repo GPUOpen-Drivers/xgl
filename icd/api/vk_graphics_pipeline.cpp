@@ -1257,7 +1257,8 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             pInfo->immedInfo.depthStencilCreateInfo.depthFunc         = VkToPalCompareFunc(pDs->depthCompareOp);
             pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable = (pDs->depthBoundsTestEnable == VK_TRUE);
 
-            if ((pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable) &&
+            if ((pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable ||
+                 dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnableExt)]) &&
                 (dynamicStateFlags[VK_DYNAMIC_STATE_DEPTH_BOUNDS] == false))
             {
                 pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BOUNDS;
@@ -1352,6 +1353,7 @@ VkResult GraphicsPipeline::Create(
     Util::MetroHash::Hash       cacheId[MaxPalDevices]             = {};
     Pal::Result                 palResult                          = Pal::Result::Success;
     PipelineCompiler*           pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
+    const RuntimeSettings&      settings                           = pDevice->GetRuntimeSettings();
     Util::MetroHash64           palPipelineHasher;
 
     const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo = nullptr;
@@ -1644,7 +1646,6 @@ VkResult GraphicsPipeline::Create(
             pPipelineCreationFeadbackCreateInfo,
             &binaryCreateInfo.pipelineFeedback);
 
-        const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
         // The hash is same as pipline dump file name, we can easily analyze further.
         AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", pipelineHash, duration);
     }

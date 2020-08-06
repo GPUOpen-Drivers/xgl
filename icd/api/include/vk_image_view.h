@@ -45,6 +45,14 @@ class ImageView : public NonDispatchable<VkImageView, ImageView>
 public:
     typedef VkImageView ApiType;
 
+    // Types of supported SRD contained within this view (chosen based on layout)
+    enum SrdIndexType
+    {
+        SrdReadOnly = 0, // SRD compatible for read-only shader ops
+        SrdWritable = 1, // SRD compatible with writable shader ops
+        SrdCount
+    };
+
     static VkResult Create(
         Device*                      pDevice,
         const VkImageViewCreateInfo* pCreateInfo,
@@ -126,14 +134,6 @@ protected:
         void*                     pPalViewMemory,
         Pal::IDepthStencilView**  pDepthStencilView,
         const RuntimeSettings&    settings);
-
-    // Types of supported SRD contained within this view (chosen based on layout)
-    enum SrdIndexType
-    {
-        SrdReadOnly = 0, // SRD compatible for read-only shader ops
-        SrdWritable = 1, // SRD compatible with writable shader ops
-        SrdCount
-    };
 
     VK_INLINE ImageView(
         Pal::IColorTargetView**  pColorTargetView,

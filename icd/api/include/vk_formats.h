@@ -54,7 +54,6 @@ struct Formats
     VK_INLINE static bool IsYuvFormat(VkFormat format);
     VK_INLINE static bool IsYuvPlanar(VkFormat format);
     VK_INLINE static bool IsYuvPacked(VkFormat format);
-    VK_INLINE static bool IsYuvTileOptimal(VkFormat format);
     VK_INLINE static bool IsYuvXChromaSubsampled(VkFormat format);
     VK_INLINE static bool IsYuvYChromaSubsampled(VkFormat format);
     VK_INLINE static uint32_t GetYuvPlaneCounts(VkFormat format);
@@ -311,22 +310,6 @@ uint32_t Formats::GetYuvPlaneCounts(VkFormat format)
         return 3;
     default:
         return 1;
-    }
-}
-
-// =====================================================================================================================
-// Returns ture if the given format is a yuv format which could be tiling optimal.
-bool Formats::IsYuvTileOptimal(VkFormat format)
-{
-    switch (format)
-    {
-    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
-    case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
-    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
-    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
-        return true;
-    default:
-        return false;
     }
 }
 

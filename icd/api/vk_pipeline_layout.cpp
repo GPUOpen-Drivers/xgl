@@ -394,7 +394,7 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
                 const uint32_t* pImmutableSamplerData = pLayout->Info().imm.pImmutableSamplerData +
                                                         binding.imm.dwOffset;
 
-                if (binding.imm.dwArrayStride == 4)
+                if (binding.bindingFlags.ycbcrConversionUsage == 0)
                 {
                     pDescriptorRangeValue->type = Vkgc::ResourceMappingNodeType::DescriptorSampler;
                 }

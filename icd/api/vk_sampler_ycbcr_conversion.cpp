@@ -138,94 +138,6 @@ BitDepth SamplerYcbcrConversion::GetYuvBitDepth(VkFormat format)
 }
 
 // =====================================================================================================================
-// Returns the constructed DST_SEL_* value for yuv conersion usage.
-//     struct SQ_IMG_RSRC_WORD3 {
-//         unsigned int DST_SEL_X  : 3;
-//         unsigned int DST_SEL_Y  : 3;
-//         unsigned int DST_SEL_Z  : 3;
-//         unsigned int DST_SEL_W  : 3;
-//         unsigned int BASE_LEVEL : 4;
-//         unsigned int LAST_LEVEL : 4;
-//         unsigned int SW_MODE    : 5;
-//         unsigned int            : 3;
-//         unsigned int TYPE       : 4;
-//     } bits, bitfields;
-// E.g VK_FORMAT_B8G8R8G8_422_UNORM,
-//              ____ ____ ____ ____ ____ ____ ____ ____ ___
-// (HEX)       |   0|   0|   0|   0|   0|   F|   2|   E|   |
-// (BIN)       |0000|0000|0000|0000|0000|1111|0010|1110|   |
-//             |                        //   ||   \\   \\  |
-// (BIN)       |                     |111| |100| |101| |110|
-// (DST_SEL_*) |                     | W | | Z | | Y | | X |
-// (DEC)       |                     | 7 | | 4 | | 5 | | 6 |
-// (SQ_SEL_*)  |                     | W | | X | | Y | | Z |
-// (RGBA)      |                     | A | | B | | G | | R |
-// (Y'CbCr)    |                     | A | | Cb| | Y'| | Cr|
-// Then all the yuv formats are forced to be output in
-// the order of XYZ <-> RGB(VYU).
-uint32_t SamplerYcbcrConversion::GetDstSelXYZW(VkFormat format)
-{
-    switch (format)
-    {
-    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
-    case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
-        return 0x105;
-    case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
-    case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
-    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
-    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
-    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
-    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
-        return 0x305;
-    case VK_FORMAT_G8B8G8R8_422_UNORM:
-        return 0x977;
-    case VK_FORMAT_B8G8R8G8_422_UNORM:
-        return 0xF2E;
-    default:
-        return 0x000;
-    }
-}
-
-// =====================================================================================================================
-// Returns the constructed SqImgRsrcWord1 value for yuv conersion usage, only be availble for CbCr(plane).
-//     struct SQ_IMG_RSRC_WORD1 {
-//         unsigned int BASE_ADDRESS_HI :  8;
-//         unsigned int MIN_LOD         : 12;
-//         unsigned int DATA_FORMAT     :  6;
-//         unsigned int NUM_FORMAT      :  4;
-//         unsigned int NV              :  1;
-//         unsigned int META_DIRECT     :  1;
-//     } bits, bitfields;
-// E.g VK_FORMAT_G8_B8R8_2PLANE_420_UNORM,
-//              ____ ____ ____ ____ ____ ____ ____ ____
-// (HEX)       |   0|   0|   3|   0|   0|   0|   0|   0|
-// (BIN)       |0000|0000|0011|0000|0000|0000|0000|0000|
-//             |       |000011|                        |
-//             |          ||                           |
-//             |     |IMG_DATA_FORMAT_8_8|             |
-uint32_t SamplerYcbcrConversion::GetSqImgRsrcWord1(VkFormat format)
-{
-    switch (format)
-    {
-    case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:
-    case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:
-        return 0x00300000;
-    case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:
-    case VK_FORMAT_G16_B16R16_2PLANE_422_UNORM:
-    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:
-    case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:
-    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_420_UNORM_3PACK16:
-    case VK_FORMAT_G12X4_B12X4R12X4_2PLANE_422_UNORM_3PACK16:
-        return 0x00500000;
-    case VK_FORMAT_G8B8G8R8_422_UNORM:
-    case VK_FORMAT_B8G8R8G8_422_UNORM:
-        return 0x00A00000;
-    default:
-        return 0x00100000;
-    }
-}
-
-// =====================================================================================================================
 // Returns the mapped swizzle which eliminates identity case and adjust the value of enum to
 // match llpc YCbCr sampler setting, where: Zero = 0, One = 1, R = 4, G = 5, B = 6, A = 7
 uint32_t SamplerYcbcrConversion::MapSwizzle(
@@ -288,19 +200,16 @@ SamplerYcbcrConversion::SamplerYcbcrConversion(
     m_metaData.word1.chromaFilter  = pCreateInfo->chromaFilter;
     m_metaData.word1.xChromaOffset = pCreateInfo->xChromaOffset;
     m_metaData.word1.yChromaOffset = pCreateInfo->yChromaOffset;
-    m_metaData.word1.dstSelXYZW    = GetDstSelXYZW(pCreateInfo->format);
+
     m_metaData.word1.planes        = Formats::GetYuvPlaneCounts(pCreateInfo->format);
     m_metaData.word1.xSubSampled   = Formats::IsYuvXChromaSubsampled(pCreateInfo->format);
     m_metaData.word1.ySubSampled   = Formats::IsYuvYChromaSubsampled(pCreateInfo->format);
-    m_metaData.word1.tileOptimal   = Formats::IsYuvTileOptimal(pCreateInfo->format);
 
     Pal::Formats::FormatInfo yuvFormatInfo = Pal::Formats::FormatInfoTable[static_cast<uint32_t>(palFormat.format)];
     m_metaData.word2.bitCounts.xBitCount = yuvFormatInfo.bitCount[0];
     m_metaData.word2.bitCounts.yBitCount = yuvFormatInfo.bitCount[1];
     m_metaData.word2.bitCounts.zBitCount = yuvFormatInfo.bitCount[2];
     m_metaData.word2.bitCounts.wBitCount = yuvFormatInfo.bitCount[3];
-
-    m_metaData.word3.sqImgRsrcWord1 = GetSqImgRsrcWord1(pCreateInfo->format);
 }
 
 namespace entry

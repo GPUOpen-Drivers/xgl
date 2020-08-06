@@ -130,22 +130,34 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
         {
             if (dstBinding.imm.dwSize != 0)
             {
-                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize, true, true, numPalDevices>;
+                if (dstBinding.bindingFlags.ycbcrConversionUsage != 0)
+                {
+                    pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
+                        true, true, true, numPalDevices>;
+                }
+                else
+                {
+                    pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
+                        true, true, false, numPalDevices>;
+                }
             }
             else
             {
-                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize, true, false, numPalDevices>;
+                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
+                    true, false, false, numPalDevices>;
             }
         }
         else
         {
             if (dstBinding.imm.dwSize != 0)
             {
-                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize, false, true, numPalDevices>;
+                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
+                    false, true, false, numPalDevices>;
             }
             else
             {
-                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize, false, false, numPalDevices>;
+                pFunc = &UpdateEntryCombinedImageSampler<imageDescSize, fmaskDescSize, samplerDescSize,
+                    false, false, false, numPalDevices>;
             }
         }
         break;
@@ -306,7 +318,7 @@ void DescriptorUpdateTemplate::Update(
 
 // =====================================================================================================================
 template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, bool updateFmask, bool immutable,
-    uint32_t numPalDevices>
+    bool ycbcrUsage, uint32_t numPalDevices>
 void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
     const Device*               pDevice,
     VkDescriptorSet             descriptorSet,
@@ -325,15 +337,28 @@ void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
 
         if (immutable)
         {
-            // If the sampler part of the combined image sampler is immutable then we should only update the image
-            // descriptors, but have to make sure to still use the appropriate stride.
-            DescriptorUpdate::WriteImageDescriptors<imageDescSize>(
-                pImageInfo,
-                deviceIdx,
-                pDestAddr,
-                entry.descriptorCount,
-                entry.dstBindStaDwArrayStride,
-                entry.srcStride);
+            if (ycbcrUsage == false)
+            {
+                // If the sampler part of the combined image sampler is immutable then we should only update the image
+                // descriptors, but have to make sure to still use the appropriate stride.
+                DescriptorUpdate::WriteImageDescriptors<imageDescSize>(
+                    pImageInfo,
+                    deviceIdx,
+                    pDestAddr,
+                    entry.descriptorCount,
+                    entry.dstBindStaDwArrayStride,
+                    entry.srcStride);
+            }
+            else
+            {
+                DescriptorUpdate::WriteImageDescriptorsYcbcr<imageDescSize>(
+                    pImageInfo,
+                    deviceIdx,
+                    pDestAddr,
+                    entry.descriptorCount,
+                    entry.dstBindStaDwArrayStride,
+                    entry.srcStride);
+            }
         }
         else
         {

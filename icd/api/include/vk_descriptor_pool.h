@@ -57,12 +57,15 @@ public:
 
     VkResult Init(
         Device*                          pDevice,
+        const VkAllocationCallbacks*     pAllocator,
         VkDescriptorPoolCreateFlags      poolUsage,
         uint32_t                         maxSets,
         const uint32_t                   count,
         const VkDescriptorPoolSize*      pTypeCount);
 
-    void Destroy(Device* pDevice);
+    void Destroy(
+        Device* pDevice,
+        const VkAllocationCallbacks* pAllocator);
 
     bool AllocSetGpuMem(
         const DescriptorSetLayout*  pLayout,
@@ -147,10 +150,13 @@ public:
     template <uint32_t numPalDevices>
     VkResult Init(
         Device*                         pDevice,
+        const VkAllocationCallbacks*    pAllocator,
         VkDescriptorPoolCreateFlags     poolUsage,
         uint32_t                        maxSets);
 
-    void Destroy(Device* pDevice);
+    void Destroy(
+        Device*                         pDevice,
+        const VkAllocationCallbacks*    pAllocator);
 
     template <uint32_t numPalDevices>
     bool AllocSetState(VkDescriptorSet* pSet);
@@ -160,6 +166,11 @@ public:
 
     template <uint32_t numPalDevices>
     void Reset();
+
+    VK_INLINE size_t GetPrivateDataSize() const
+    {
+        return m_privateDataSize;
+    }
 
 private:
 
@@ -174,6 +185,9 @@ private:
 
     uint32_t*            m_pFreeIndexStack;
     uint32_t             m_freeIndexStackCount;
+
+    size_t               m_privateDataSize;
+    size_t               m_setSize;
 
     void*                m_pSetMemory;
 };
@@ -220,7 +234,8 @@ private:
     template <uint32_t numPalDevices>
     VkResult Init(
         Device*                               pDevice,
-        const VkDescriptorPoolCreateInfo*     pCreateInfo);
+        const VkDescriptorPoolCreateInfo*     pCreateInfo,
+        const VkAllocationCallbacks*          pAllocator);
 
     DescriptorPool(Device* pDevice);
 

@@ -65,13 +65,20 @@ public:
     VK_INLINE bool IsYCbCrSampler() const
         { return m_isYCbCrSampler; }
 
+    VK_INLINE uint32_t GetMultiPlaneCount() const
+    {
+        return m_multiPlaneCount;
+    }
+
 protected:
     Sampler(
         uint64_t apiHash,
-        bool     isYCbCrSampler)
+        bool     isYCbCrSampler,
+        uint32_t multiPlaneCount)
         :
         m_apiHash(apiHash),
-        m_isYCbCrSampler(isYCbCrSampler)
+        m_isYCbCrSampler(isYCbCrSampler),
+        m_multiPlaneCount(multiPlaneCount)
     {
     }
 
@@ -80,6 +87,7 @@ protected:
 
     const uint64_t          m_apiHash;
     const bool              m_isYCbCrSampler;
+    const uint32_t          m_multiPlaneCount;
 };
 
 namespace entry

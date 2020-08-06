@@ -255,6 +255,15 @@ public:
         uint32_t                        dwStride,
         size_t                          descriptorStrideInBytes = 0);
 
+    template <size_t imageDescSize>
+    static void WriteImageDescriptorsYcbcr(
+        const VkDescriptorImageInfo*    pDescriptors,
+        uint32_t                        deviceIdx,
+        uint32_t*                       pDestAddr,
+        uint32_t                        count,
+        uint32_t                        dwStride,
+        size_t                          descriptorStrideInBytes = 0);
+
     template <size_t imageDescSize, size_t fmaskDescSize>
     static void WriteFmaskDescriptors(
         const VkDescriptorImageInfo*    pDescriptors,

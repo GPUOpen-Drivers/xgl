@@ -84,12 +84,6 @@ public:
         const VkAllocationCallbacks*    pAllocator,
         Pal::IImage**                   pPalImage);
 
-    static VkResult CreateFromAndroidHwBufferHandle(
-        Device*                                 pDevice,
-        const VkImageCreateInfo*                pImageCreateInfo,
-        bool                                    isExternalImage,
-        VkImage*                                pImage);
-
     static VkResult CreatePresentableImage(
         Device*                                 pDevice,
         const Pal::PresentableImageCreateInfo*  pCreateInfo,
@@ -263,7 +257,8 @@ private:
             uint32_t is2DArrayCompat        : 1;  // VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT
             uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
             uint32_t linear                 : 1;  // True if the image has VK_IMAGE_TILING_LINEAR
-            uint32_t reserved               : 13;
+            uint32_t isProtected            : 1;  // VK_IMAGE_CREATE_PROTECTED_BIT
+            uint32_t reserved               : 12;
         };
         uint32_t     u32All;
     };
@@ -313,6 +308,12 @@ private:
     static void BuildResourceKey(
         const VkImageCreateInfo* pCreateInfo,
         ResourceOptimizerKey*    pResourceKey);
+
+    static VkResult CreateFromAndroidHwBufferHandle(
+        Device*                  pDevice,
+        const VkImageCreateInfo* pImageCreateInfo,
+        ImageFlags               internalFlags,
+        VkImage*                 pImage);
 
     uint32_t                m_mipLevels;          // This is the amount of mip levels contained in the image.
                                                   // We need this to support VK_WHOLE_SIZE during

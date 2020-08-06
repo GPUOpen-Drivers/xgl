@@ -982,7 +982,6 @@ VkResult CmdBuffer::Begin(
     }
 
     Pal::CmdBufferBuildInfo   cmdInfo = { 0 };
-    Pal::CmdBufferBuildFlags& palFlags = cmdInfo.flags;
 
     union
     {
@@ -996,17 +995,17 @@ VkResult CmdBuffer::Begin(
 
     m_cbBeginDeviceMask = m_pDevice->GetPalDeviceMask();
 
-    palFlags.u32All = 0;
-    palFlags.prefetchCommands = m_flags.prefetchCommands;
+    cmdInfo.flags.u32All = 0;
+    cmdInfo.flags.prefetchCommands = m_flags.prefetchCommands;
 
     if (IsProtected())
     {
-        palFlags.enableTmz = 1;
+        cmdInfo.flags.enableTmz = 1;
     }
 
     if (m_pDevice->GetRuntimeSettings().prefetchShaders)
     {
-        palFlags.prefetchShaders = 1;
+        cmdInfo.flags.prefetchShaders = 1;
     }
 
     Pal::InheritedStateParams inheritedStateParams = {};
@@ -1018,22 +1017,22 @@ VkResult CmdBuffer::Begin(
         {
             // Convert Vulkan flags to PAL flags.
         case VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO:
-            palFlags.optimizeOneTimeSubmit = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) ? 1 : 0;
-            palFlags.optimizeExclusiveSubmit = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ? 0 : 1;
+            cmdInfo.flags.optimizeOneTimeSubmit = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) ? 1 : 0;
+            cmdInfo.flags.optimizeExclusiveSubmit = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ? 0 : 1;
 
             switch (m_pDevice->GetRuntimeSettings().optimizeCmdbufMode)
             {
             case EnableOptimizeForRenderPassContinue:
-                palFlags.optimizeGpuSmallBatch = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
+                cmdInfo.flags.optimizeGpuSmallBatch = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
                 break;
             case EnableOptimizeCmdbuf:
-                palFlags.optimizeGpuSmallBatch = 1;
+                cmdInfo.flags.optimizeGpuSmallBatch = 1;
                 break;
             case DisableOptimizeCmdbuf:
-                palFlags.optimizeGpuSmallBatch = 0;
+                cmdInfo.flags.optimizeGpuSmallBatch = 0;
                 break;
             default:
-                palFlags.optimizeGpuSmallBatch = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
+                cmdInfo.flags.optimizeGpuSmallBatch = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
                 break;
             }
 

@@ -625,18 +625,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
         llpcOptions[numOptions++] = "-amdgpu-max-memory-clause=1";
     }
 
-    // Force enable cache to disk to improve user experience
-    if ((shaderCacheMode == ShaderCacheEnableRuntimeOnly) &&
-         ((appProfile == AppProfile::MadMax) ||
-          (appProfile == AppProfile::SeriousSamFusion) ||
-          (appProfile == AppProfile::F1_2017) ||
-          (appProfile == AppProfile::Feral3DEngine) ||
-          (appProfile == AppProfile::DawnOfWarIII)))
-    {
-        // Force to use internal disk cache.
-        shaderCacheMode = ShaderCacheForceInternalCacheOnDisk;
-    }
-
     optionLength = Util::Snprintf(pOptionBuffer, bufSize, "-executable-name=%s", pExecutablePtr);
     ++optionLength;
     llpcOptions[numOptions++] = pOptionBuffer;

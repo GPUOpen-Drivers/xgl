@@ -77,11 +77,7 @@ protected:
     SamplerYcbcrConversion(const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const RuntimeSettings& settings);
 
 private:
-    uint32_t GetSqImgRsrcWord1(VkFormat format);
-
     BitDepth GetYuvBitDepth(VkFormat format);
-
-    uint32_t GetDstSelXYZW(VkFormat format);
 
     static uint32_t MapSwizzle(
         VkComponentSwizzle    inputSwizzle,

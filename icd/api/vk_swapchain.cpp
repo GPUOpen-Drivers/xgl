@@ -83,6 +83,13 @@ SwapChain::SwapChain(
     m_presentMode(presentMode),
     m_deprecated(false)
 {
+    // Initialize the color gamut with the native values.
+    if (m_pFullscreenMgr != nullptr)
+    {
+        Pal::ScreenColorCapabilities capabilities = {};
+        m_pFullscreenMgr->GetPalScreen()->GetColorCapabilities(&capabilities);
+        m_colorParams.userDefinedColorGamut = capabilities.nativeColorGamut;
+    }
 }
 
 // =====================================================================================================================

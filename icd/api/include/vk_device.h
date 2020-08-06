@@ -349,7 +349,7 @@ public:
         const VkMemoryOverallocationBehaviorAMD     overallocationBehavior,
         const bool                                  deviceCoherentMemoryEnabled,
         bool                                        scalarBlockLayoutEnabled,
-		const ExtendedRobustness&                   extendedRobustnessEnabled);
+        const ExtendedRobustness&                   extendedRobustnessEnabled);
 
     void InitDispatchTable();
 
@@ -640,7 +640,7 @@ public:
         return &m_privateDataRWLock;
     }
 
-VkResult SetDebugUtilsObjectName(const VkDebugUtilsObjectNameInfoEXT* pNameInfo);
+    VkResult SetDebugUtilsObjectName(const VkDebugUtilsObjectNameInfoEXT* pNameInfo);
 
 protected:
     Device(

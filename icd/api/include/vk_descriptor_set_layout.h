@@ -47,6 +47,21 @@ class MetroHash64;
 namespace vk
 {
 
+// Internal descriptor binding flags, which contains mapping of VkDescriptorBindingFlagBits
+struct DescriptorBindingFlags
+{
+    union
+    {
+        struct
+        {
+            uint32_t variableDescriptorCount :  1; // Map from VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT
+            uint32_t ycbcrConversionUsage    :  1; // Indicate a binding contains Ycbcr conversion sampler
+            uint32_t reserved                : 30;
+        };
+        uint32_t u32all;
+    };
+};
+
 class Device;
 
 // =====================================================================================================================
@@ -68,11 +83,11 @@ public:
     // Information about an individual binding within this layout
     struct BindingInfo
     {
-        VkDescriptorSetLayoutBinding info;  // Vulkan binding information
-        uint32_t bindingFlags;              // Binding flags for descriptor binding
-        BindingSectionInfo  sta;            // Information specific to the static section of the descriptor binding
-        BindingSectionInfo  dyn;            // Information specific to the dynamic section of the descriptor binding
-        BindingSectionInfo  imm;            // Information specific to the immutable section of the descriptor binding
+        VkDescriptorSetLayoutBinding info;   // Vulkan binding information
+        DescriptorBindingFlags bindingFlags; // Binding flags for descriptor binding
+        BindingSectionInfo  sta;             // Information specific to the static section of the descriptor binding
+        BindingSectionInfo  dyn;             // Information specific to the dynamic section of the descriptor binding
+        BindingSectionInfo  imm;             // Information specific to the immutable section of the descriptor binding
     };
 
     // Information about a specific section of a descriptor set layout
@@ -153,7 +168,11 @@ public:
 
     static uint32_t GetSingleDescStaticSize(const Device* pDevice, VkDescriptorType type);
 
-    static uint32_t GetDescStaticSectionDwSize(const Device* pDevice, const VkDescriptorSetLayoutBinding* type);
+    static uint32_t GetDescStaticSectionDwSize(
+        const Device* pDevice,
+        const VkDescriptorSetLayoutBinding* type,
+        const DescriptorBindingFlags bindingFlags);
+
     static uint32_t GetDescDynamicSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDescImmutableSectionDwSize(const Device* pDevice, VkDescriptorType type);
     static uint32_t GetDynamicBufferDescDwSize(const Device* pDevice);
@@ -201,7 +220,8 @@ protected:
         const VkDescriptorSetLayoutBinding* pBindingInfo,
         uint32_t                            descSizeInDw,
         ImmSectionInfo*                     pSectionInfo,
-        BindingSectionInfo*                 pBindingSectionInfo);
+        BindingSectionInfo*                 pBindingSectionInfo,
+        const DescriptorBindingFlags        bindingFlags);
 
     static void GenerateHashFromBinding(
         Util::MetroHash64*                  pHasher,

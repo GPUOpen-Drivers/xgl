@@ -471,6 +471,11 @@ VkResult Image::Create(
 
     imageFlags.u32All = 0;
 
+    if ((pCreateInfo->flags & VK_IMAGE_CREATE_PROTECTED_BIT) != 0)
+    {
+        imageFlags.isProtected = true;
+    }
+
     const void* pNext = pCreateInfo->pNext;
 
     while (pNext != nullptr)
@@ -484,12 +489,14 @@ VkResult Image::Create(
             const VkExternalMemoryImageCreateInfo* pExternalMemoryImageCreateInfo =
                 static_cast<const VkExternalMemoryImageCreateInfo*>(pNext);
 
-            palCreateInfo.flags.invariant = 1;
+            palCreateInfo.flags.invariant        = 1;
+            palCreateInfo.flags.optimalShareable = 1;
 
             VkExternalMemoryProperties externalMemoryProperties = {};
 
             pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetExternalMemoryProperties(
                 isSparse,
+                true,
                 static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExternalMemoryImageCreateInfo->handleTypes),
                 &externalMemoryProperties);
 
@@ -764,7 +771,7 @@ VkResult Image::Create(
         result = Image::CreateFromAndroidHwBufferHandle(
             pDevice,
             pCreateInfo,
-            imageFlags.isExternalFormat,
+            imageFlags,
             pImage);
 
         return result;
@@ -914,7 +921,7 @@ VkResult Image::Create(
 VkResult Image::CreateFromAndroidHwBufferHandle(
     Device*                                pDevice,
     const VkImageCreateInfo*               pImageCreateInfo,
-    bool                                   isExternalFormat,
+    ImageFlags                             internalFlags,
     VkImage*                               pImage)
 {
     VkResult             result             = VkResult::VK_SUCCESS;
@@ -925,16 +932,9 @@ VkResult Image::CreateFromAndroidHwBufferHandle(
     Pal::ImageCreateInfo palCreateInfo      = {};
     Pal::Result          palResult          = Pal::Result::Success;
     const VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
-    ImageFlags imageFlags;
-
-    imageFlags.u32All = 0;
-    imageFlags.externallyShareable  = true;
-    imageFlags.externalAhbHandle    = true;
-    imageFlags.dedicatedRequired    = true;
-    imageFlags.isExternalFormat     = isExternalFormat;
 
     //TODO: handle external format (mainly the YUV formats) with YCbCrSamplers later
-    if (isExternalFormat)
+    if (internalFlags.isExternalFormat)
     {
         VK_NOT_IMPLEMENTED;
         return VK_ERROR_UNKNOWN;
@@ -1000,7 +1000,7 @@ VkResult Image::CreateFromAndroidHwBufferHandle(
             pImageCreateInfo->samples,
             pImageCreateInfo->usage,
             pImageCreateInfo->usage,
-            imageFlags);
+            internalFlags);
 
         imageHandle = Image::HandleFromVoidPointer(pMemory);
     }
@@ -1753,6 +1753,11 @@ VkResult Image::GetMemoryRequirements(
     if (m_internalFlags.externallyShareable)
     {
         pReqs->memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
+    }
+
+    if (m_internalFlags.isProtected)
+    {
+        pReqs->memoryTypeBits &= pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
     }
 
     // Optional: if the image is optimally tiled, don't allow it with host visible memory types.

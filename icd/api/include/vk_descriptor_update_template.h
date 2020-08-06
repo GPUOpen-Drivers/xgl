@@ -146,7 +146,7 @@ private:
             const TemplateUpdateInfo&   entry);
 
     template <size_t imageDescSize, size_t fmaskDescSize, size_t samplerDescSize, bool updateFmask, bool immutable,
-        uint32_t numPalDevices>
+        bool ycbcrUsage, uint32_t numPalDevices>
     static void UpdateEntryCombinedImageSampler(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,

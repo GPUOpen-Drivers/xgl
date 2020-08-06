@@ -28,6 +28,7 @@
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
 #include "include/vk_object.h"
+#include "include/vk_sampler_ycbcr_conversion.h"
 
 #include "palColorTargetView.h"
 #include "palDepthStencilView.h"
@@ -251,11 +252,67 @@ VkResult ImageView::Create(
     // Determine the amount of memory needed by all of the different kinds of views based on the image's declared
     // usage flags.
     const Image* const pImage = Image::ObjectFromHandle(pCreateInfo->image);
-
     const auto & gfxipProperties = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxipProperties;
-
     const uint32_t numDevices    = pDevice->NumPalDevices();
-    const size_t   srdSize       = gfxipProperties.srdSizes.imageView;
+
+    const Pal::IImage* pPalImage          = pImage->PalImage(DefaultDeviceIndex);
+    const Pal::ImageCreateInfo& imageInfo = pPalImage->GetImageCreateInfo();
+    bool needsFmaskViewSrds               = false;
+
+    // When the image type is a 3D texture, a single level-layer 3D texture subresource describes all depth slices of
+    // that texture.  This is implied by Table 8 of the spec, where the description for shader reads from a 3D texture
+    // of arbitrary depth through VK_IMAGE_VIEW_TYPE_3D requires that the PAL subresource range be set to
+    // arraySlice = 0, numSlices = 1.  However, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT permits rendering to 3D
+    // slices as 2D by specifying a baseArrayLayer >= 0 and layerCount >= 1 in VkImageSubresourceRange, which doesn't
+    // directly map to the PAL subresource range anymore.  Separate this information from the subresource range and
+    // have the view keep track of a 3D texture zRange for attachment operations like clears.
+    VkImageSubresourceRange subresRange = pCreateInfo->subresourceRange;
+    Pal::Range              zRange;
+
+    if (imageInfo.imageType == Pal::ImageType::Tex3d)
+    {
+        const uint32_t subresDepth = Util::Max(1U, imageInfo.extent.depth >> subresRange.baseMipLevel);
+
+        if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_3D)
+        {
+            zRange.offset = 0;
+            zRange.extent = subresDepth;
+        }
+        else
+        {
+            VK_ASSERT(pImage->Is2dArrayCompatible());
+            VK_ASSERT(subresRange.layerCount <= subresDepth);
+            VK_ASSERT((pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D) ||
+                      (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY));
+
+            zRange.offset = subresRange.baseArrayLayer;
+            zRange.extent = subresRange.layerCount;
+        }
+
+        subresRange.baseArrayLayer = 0;
+        subresRange.layerCount     = 1;
+    }
+    else
+    {
+        zRange.offset = 0;
+        zRange.extent = 1;
+    }
+
+    // We may need multiple entries here for images with multiple planes but we're only actually going to
+    // use the first one.
+    Pal::SubresRange palRanges[MaxPalAspectsPerMask];
+    uint32_t palRangeCount = 0;
+
+    VkToPalSubresRange(pImage->GetFormat(),
+                       subresRange,
+                       pImage->GetMipLevels(),
+                       pImage->GetArraySize(),
+                       palRanges,
+                       &palRangeCount,
+                       pDevice->GetRuntimeSettings());
+
+    const size_t   imageDescSize = gfxipProperties.srdSizes.imageView;
+    const size_t   srdSize       = imageDescSize * palRangeCount;
     const size_t   fmaskDescSize = gfxipProperties.srdSizes.fmaskView;
     const size_t   apiSize       = sizeof(ImageView);
 
@@ -311,10 +368,6 @@ VkResult ImageView::Create(
             break;
         }
     }
-
-    const Pal::IImage* pPalImage          = pImage->PalImage(DefaultDeviceIndex);
-    const Pal::ImageCreateInfo& imageInfo = pPalImage->GetImageCreateInfo();
-    bool needsFmaskViewSrds               = false;
 
     // NOTE: The SRDs must be the first "segment" of data after the API because the GetDescriptor() functions
     // assumes this.
@@ -374,58 +427,6 @@ VkResult ImageView::Create(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    // When the image type is a 3D texture, a single level-layer 3D texture subresource describes all depth slices of
-    // that texture.  This is implied by Table 8 of the spec, where the description for shader reads from a 3D texture
-    // of arbitrary depth through VK_IMAGE_VIEW_TYPE_3D requires that the PAL subresource range be set to
-    // arraySlice = 0, numSlices = 1.  However, VK_IMAGE_CREATE_2D_ARRAY_COMPATIBLE_BIT permits rendering to 3D
-    // slices as 2D by specifying a baseArrayLayer >= 0 and layerCount >= 1 in VkImageSubresourceRange, which doesn't
-    // directly map to the PAL subresource range anymore.  Separate this information from the subresource range and
-    // have the view keep track of a 3D texture zRange for attachment operations like clears.
-    VkImageSubresourceRange subresRange = pCreateInfo->subresourceRange;
-    Pal::Range              zRange;
-
-    if (imageInfo.imageType == Pal::ImageType::Tex3d)
-    {
-        const uint32_t subresDepth = Util::Max(1U, imageInfo.extent.depth >> subresRange.baseMipLevel);
-
-        if (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_3D)
-        {
-            zRange.offset = 0;
-            zRange.extent = subresDepth;
-        }
-        else
-        {
-            VK_ASSERT(pImage->Is2dArrayCompatible());
-            VK_ASSERT(subresRange.layerCount <= subresDepth);
-            VK_ASSERT((pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D) ||
-                      (pCreateInfo->viewType == VK_IMAGE_VIEW_TYPE_2D_ARRAY));
-
-            zRange.offset = subresRange.baseArrayLayer;
-            zRange.extent = subresRange.layerCount;
-        }
-
-        subresRange.baseArrayLayer = 0;
-        subresRange.layerCount     = 1;
-    }
-    else
-    {
-        zRange.offset = 0;
-        zRange.extent = 1;
-    }
-
-    // We may need multiple entries here for images with multiple planes but we're only actually going to
-    // use the first one.
-    Pal::SubresRange palRanges[MaxPalAspectsPerMask];
-    uint32_t palRangeCount = 0;
-
-    VkToPalSubresRange(pImage->GetFormat(),
-                       subresRange,
-                       pImage->GetMipLevels(),
-                       pImage->GetArraySize(),
-                       palRanges,
-                       &palRangeCount,
-                       pDevice->GetRuntimeSettings());
-
     Pal::Result result = Pal::Result::Success;
 
     // Get the view format (without component mapping)
@@ -436,22 +437,28 @@ VkResult ImageView::Create(
     // Build the PAL image view SRDs if needed
     if (srdSegmentSize > 0)
     {
-        void* pSrdMemory = Util::VoidPtrInc(pMemory, srdSegmentOffset);
+        void* pSrdMemorys[MaxPalAspectsPerMask] = {};
+
+        pSrdMemorys[0] = Util::VoidPtrInc(pMemory, srdSegmentOffset);
 
         Pal::SwizzledFormat aspectFormat = VkToPalFormat(Formats::GetAspectFormat(pCreateInfo->format,
                                                          subresRange.aspectMask), pDevice->GetRuntimeSettings());
 
         VK_ASSERT(aspectFormat.format != Pal::ChNumFormat::Undefined);
 
-        BuildImageSrds(pDevice,
-                       srdSize,
-                       pImage,
-                       aspectFormat,
-                       palRanges[0],
-                       imageViewUsage,
-                       minLod,
-                       pCreateInfo,
-                       pSrdMemory);
+        for (uint32 i = 0; i < palRangeCount; ++i)
+        {
+            BuildImageSrds(pDevice,
+                           imageDescSize,
+                           pImage,
+                           aspectFormat,
+                           palRanges[i],
+                           imageViewUsage,
+                           minLod,
+                           pCreateInfo,
+                           pSrdMemorys[i]);
+            pSrdMemorys[i+1] = Util::VoidPtrInc(pSrdMemorys[i], imageDescSize  * SrdCount);
+        }
     }
 
     //Build Fmask View SRDS if needed

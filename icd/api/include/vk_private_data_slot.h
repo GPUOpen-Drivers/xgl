@@ -102,8 +102,6 @@ private:
                         const VkObjectType                      objectType,
                         const uint64                            objectHandle);
 
-    HashedPrivateDataMap    m_hashedPrivateData;
-
     uint64                  m_index;
     bool                    m_isReserved;
 };

@@ -209,6 +209,49 @@ void DescriptorUpdate::WriteImageDescriptors(
 }
 
 // =====================================================================================================================
+// Write image view descriptors
+template <size_t imageDescSize>
+void DescriptorUpdate::WriteImageDescriptorsYcbcr(
+    const VkDescriptorImageInfo*    pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes)
+{
+    const VkDescriptorImageInfo* pImageInfo      = pDescriptors;
+    const size_t                 imageInfoStride = (descriptorStrideInBytes != 0) ? descriptorStrideInBytes
+                                                                                  : sizeof(VkDescriptorImageInfo);
+
+    uint32_t pOutImageDescStride = Util::NumBytesToNumDwords(imageDescSize);
+
+    for (uint32_t arrayElem = 0; arrayElem < count; ++arrayElem, pDestAddr += dwStride)
+    {
+        if (pImageInfo->imageView == VK_NULL_HANDLE)
+        {
+            memset(pDestAddr, 0, imageDescSize);
+        }
+        else
+        {
+            const uint32_t multiPlaneCount =
+                Formats::GetYuvPlaneCounts(ImageView::ObjectFromHandle(pImageInfo->imageView)->GetViewFormat());
+            const void* pImageDesc = ImageView::ObjectFromHandle(pImageInfo->imageView)->
+                Descriptor(pImageInfo->imageLayout, deviceIdx, imageDescSize * multiPlaneCount);
+
+            uint32_t* pOutImageDesc = pDestAddr;
+
+            for (uint32_t plane = 0; plane < multiPlaneCount; ++plane, pOutImageDesc += pOutImageDescStride)
+            {
+                memcpy(pOutImageDesc, pImageDesc, imageDescSize);
+                pImageDesc = Util::VoidPtrInc(pImageDesc, imageDescSize * ImageView::SrdIndexType::SrdCount);
+            }
+        }
+
+        pImageInfo = static_cast<const VkDescriptorImageInfo*>(Util::VoidPtrInc(pImageInfo, imageInfoStride));
+    }
+}
+
+// =====================================================================================================================
 // Write fmask descriptors
 template <size_t imageDescSize, size_t fmaskDescSize>
 void DescriptorUpdate::WriteFmaskDescriptors(
@@ -424,14 +467,26 @@ void DescriptorUpdate::WriteDescriptorSets(
         case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER:
             if (hasImmutableSampler)
             {
-                // If the sampler part of the combined image sampler is immutable then we should only update the image
-                // descriptors, but have to make sure to still use the appropriate stride.
-                WriteImageDescriptors<imageDescSize>(
-                    params.pImageInfo,
-                    deviceIdx,
-                    pDestAddr,
-                    params.descriptorCount,
-                    destBinding.sta.dwArrayStride);
+                if (destBinding.bindingFlags.ycbcrConversionUsage == 0)
+                {
+                    // If the sampler part of the combined image sampler is immutable then we should only update the image
+                    // descriptors, but have to make sure to still use the appropriate stride.
+                    WriteImageDescriptors<imageDescSize>(
+                        params.pImageInfo,
+                        deviceIdx,
+                        pDestAddr,
+                        params.descriptorCount,
+                        destBinding.sta.dwArrayStride);
+                }
+                else
+                {
+                    WriteImageDescriptorsYcbcr<imageDescSize>(
+                        params.pImageInfo,
+                        deviceIdx,
+                        pDestAddr,
+                        params.descriptorCount,
+                        destBinding.sta.dwArrayStride);
+                }
             }
             else
             {
@@ -886,6 +941,15 @@ void DescriptorUpdate::WriteImageSamplerDescriptors<32, 16>(
 
 template
 void DescriptorUpdate::WriteImageDescriptors<32>(
+    const VkDescriptorImageInfo*    pDescriptors,
+    uint32_t                        deviceIdx,
+    uint32_t*                       pDestAddr,
+    uint32_t                        count,
+    uint32_t                        dwStride,
+    size_t                          descriptorStrideInBytes);
+
+template
+void DescriptorUpdate::WriteImageDescriptorsYcbcr<32>(
     const VkDescriptorImageInfo*    pDescriptors,
     uint32_t                        deviceIdx,
     uint32_t*                       pDestAddr,

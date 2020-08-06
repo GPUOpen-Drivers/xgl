@@ -31,6 +31,7 @@
 #include "include/vk_utils.h"
 #include "include/vk_formats.h"
 #include "include/khronos/vk_icd.h"
+#include "include/vk_descriptor_set_layout.h"
 #include "settings/g_settings.h"
 
 #include "pal.h"
@@ -2306,6 +2307,9 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
     // We must not use any metadata if sparse aliasing is enabled
     palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)    ? 1 : 0;
 #endif
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 616
+    palImageCreateInfo.flags.tmzProtected       = (imageCreateFlags & VK_IMAGE_CREATE_PROTECTED_BIT)         ? 1 : 0;
+#endif
     // Always provide pQuadSamplePattern to PalCmdResolveImage for depth formats to allow optimizations
     palImageCreateInfo.flags.sampleLocsAlwaysKnown = Formats::HasDepth(format) ? 1 : 0;
 
@@ -2336,11 +2340,12 @@ VK_INLINE VkImageCreateFlags PalToVkImageCreateFlags(Pal::ImageCreateFlags image
         vkImageCreateFlags |= VK_IMAGE_CREATE_ALIAS_BIT;
     }
 
-    //TODO: Enable protect flags conversion when adding protect memory/queue support.
-    //if (imageCreateFlags.protected  == 1)
-    //{
-    //    vkImageCreateFlags |= VK_IMAGE_CREATE_PROTECTED_BIT;
-    //}
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 616
+    if (imageCreateFlags.tmzProtected  == 1)
+    {
+        vkImageCreateFlags |= VK_IMAGE_CREATE_PROTECTED_BIT;
+    }
+#endif
 
     return vkImageCreateFlags;
 }
@@ -3067,6 +3072,20 @@ VK_INLINE Pal::ResourceDescriptionDescriptorType VkToPalDescriptorType(
             break;
     }
     return retType;
+}
+
+// =====================================================================================================================
+VK_INLINE DescriptorBindingFlags VkToInternalDescriptorBindingFlag(
+        VkDescriptorBindingFlags vkFlagBits)
+{
+    DescriptorBindingFlags internalFlagBits = {};
+
+    if (vkFlagBits & VK_DESCRIPTOR_BINDING_VARIABLE_DESCRIPTOR_COUNT_BIT)
+    {
+        internalFlagBits.variableDescriptorCount = 1;
+    }
+
+    return internalFlagBits;
 }
 
 } // namespace vk

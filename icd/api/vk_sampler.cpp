@@ -229,8 +229,11 @@ VkResult Sampler::Create(
         memcpy(Util::VoidPtrInc(pMemory, apiSize + palSize), pSamplerYCbCrConversionMetaData, yCbCrMetaDataSize);
     }
 
+    uint32_t multiPlaneCount = pSamplerYCbCrConversionMetaData != nullptr ? pSamplerYCbCrConversionMetaData->word1.planes : 1;
+
     VK_PLACEMENT_NEW (pMemory) Sampler(apiHash,
-                                      (pSamplerYCbCrConversionMetaData != nullptr));
+                                      (pSamplerYCbCrConversionMetaData != nullptr),
+                                      multiPlaneCount);
 
     *pSampler = Sampler::HandleFromVoidPointer(pMemory);
 

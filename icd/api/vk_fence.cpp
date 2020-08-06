@@ -50,24 +50,21 @@ VkResult Fence::Create(
 {
     Instance* pInstance = pDevice->VkInstance();
     VK_ASSERT(pCreateInfo != nullptr);
+    VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_FENCE_CREATE_INFO);
 
-    union
-    {
-        const VkStructHeader*                  pHeader;
-        const VkFenceCreateInfo*               pVkFenceCreateInfo;
-        const VkExportFenceCreateInfo*         pVkExportCreateInfo;
-    };
+    const VkExportFenceCreateInfo*         pVkExportCreateInfo = nullptr;
 
     Pal::FenceCreateInfo palFenceCreateInfo = {};
-    for (pVkFenceCreateInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    palFenceCreateInfo.flags.signaled = (pCreateInfo->flags & VK_FENCE_CREATE_SIGNALED_BIT) != 0;
+
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
     {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
         switch (static_cast<uint32_t>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_FENCE_CREATE_INFO:
-        {
-            palFenceCreateInfo.flags.signaled = (pVkFenceCreateInfo->flags & VK_FENCE_CREATE_SIGNALED_BIT) != 0;
-            break;
-        }
         case VK_STRUCTURE_TYPE_EXPORT_FENCE_CREATE_INFO:
         {
             break;
@@ -76,6 +73,8 @@ VkResult Fence::Create(
             VK_NOT_IMPLEMENTED;
             break;
         }
+
+        pNext = pHeader->pNext;
     }
     const uint32_t numGroupedFences = pDevice->NumPalDevices();
     const uint32_t apiSize          = sizeof(Fence);

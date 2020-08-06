@@ -250,7 +250,7 @@ private:
         const void**                 ppPipelineBinary,
         bool*                        pIsUserCacheHit,
         bool*                        pIsInternalCacheHit,
-        bool*                        pElfWasCached,
+        bool*                        pFreeWithCompiler,
         PipelineCreationFeedback*    pPipelineFeedback);
 
     // -----------------------------------------------------------------------------------------------------------------

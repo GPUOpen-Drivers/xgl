@@ -124,5 +124,5 @@ VK_KHR_sampler_ycbcr_conversion
 VK_KHR_shader_non_semantic_info
 VK_GOOGLE_user_type
 VK_KHR_incremental_present
-VK_EXT_robustness_2
+VK_EXT_robustness2
 VK_EXT_extended_dynamic_state

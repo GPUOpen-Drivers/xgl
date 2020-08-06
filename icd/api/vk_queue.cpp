@@ -305,37 +305,33 @@ VkResult Queue::Submit(
             const VkSubmitInfo& submitInfo = pSubmits[submitIdx];
             const VkDeviceGroupSubmitInfo* pDeviceGroupInfo = nullptr;
             const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = nullptr;
+            const VkProtectedSubmitInfo* pProtectedSubmitInfo = nullptr;
             bool  protectedSubmit = false;
 
+            const void* pNext = submitInfo.pNext;
+
+            while (pNext != nullptr)
             {
-                union
-                {
-                    const VkStructHeader*                          pHeader;
-                    const VkSubmitInfo*                            pVkSubmitInfo;
-                    const VkTimelineSemaphoreSubmitInfo*           pVkTimelineSemaphoreSubmitInfo;
-                    const VkDeviceGroupSubmitInfo*                 pVkDeviceGroupSubmitInfo;
-                    const VkProtectedSubmitInfo*                   pVkProtectedSubmitInfo;
+                const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
 
-                };
-
-                for (pVkSubmitInfo = &submitInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+                switch (static_cast<int32_t>(pHeader->sType))
                 {
-                    switch (static_cast<int32_t>(pHeader->sType))
-                    {
-                    case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO:
-                        pDeviceGroupInfo = pVkDeviceGroupSubmitInfo;
-                        break;
-                    case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
-                        pTimelineSemaphoreInfo = pVkTimelineSemaphoreSubmitInfo;
-                        break;
-                    case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO:
-                        protectedSubmit = pVkProtectedSubmitInfo->protectedSubmit;
-                        break;
-                    default:
-                        // Skip any unknown extension structures
-                        break;
-                    }
+                case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO:
+                    pDeviceGroupInfo = static_cast<const VkDeviceGroupSubmitInfo*>(pNext);
+                    break;
+                case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
+                    pTimelineSemaphoreInfo = static_cast<const VkTimelineSemaphoreSubmitInfo*>(pNext);
+                    break;
+                case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO:
+                    pProtectedSubmitInfo = static_cast<const VkProtectedSubmitInfo*>(pNext);
+                    protectedSubmit = pProtectedSubmitInfo->protectedSubmit;
+                    break;
+                default:
+                    // Skip any unknown extension structures
+                    break;
                 }
+
+                pNext = pHeader->pNext;
             }
 
             if ((result == VK_SUCCESS) && (submitInfo.waitSemaphoreCount > 0))
@@ -684,45 +680,50 @@ VkResult Queue::Present(
     uint32_t presentationDeviceIdx = 0;
     bool     needSemaphoreFlush    = false;
 
-    const VkPresentInfoKHR*    pVkInfo    = nullptr;
     const VkPresentRegionsKHR* pVkRegions = nullptr;
+    const VkDeviceGroupPresentInfoKHR* pDeviceGroupPresentInfoKHR = nullptr;
 
+    if (pPresentInfo == nullptr)
     {
-        union
+#if ICD_GPUOPEN_DEVMODE_BUILD
+        if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
-            const VkStructHeader*              pHeader;
-            const VkPresentInfoKHR*            pVkPresentInfoKHR;
-            const VkDeviceGroupPresentInfoKHR* pVkDeviceGroupPresentInfoKHR;
-            const VkPresentRegionsKHR*         pVkPresentRegionsKHR;
-        };
-
-        for (pVkPresentInfoKHR = pPresentInfo; pHeader != nullptr; pHeader = pHeader->pNext)
-        {
-            switch (static_cast<uint32_t>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_PRESENT_INFO_KHR:
-                pVkInfo = pVkPresentInfoKHR;
-                break;
-
-            case VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR:
-            {
-                VK_ASSERT(pVkDeviceGroupPresentInfoKHR->swapchainCount == 1);
-                const uint32_t deviceMask = *pVkDeviceGroupPresentInfoKHR->pDeviceMasks;
-                VK_ASSERT(Util::CountSetBits(deviceMask) == 1);
-                Util::BitMaskScanForward(&presentationDeviceIdx, deviceMask);
-                break;
-            }
-            case VK_STRUCTURE_TYPE_PRESENT_REGIONS_KHR:
-            {
-                VK_ASSERT(pVkPresentRegionsKHR->swapchainCount == pPresentInfo->swapchainCount);
-                pVkRegions = pVkPresentRegionsKHR;
-                break;
-            }
-            default:
-                // Skip any unknown extension structures
-                break;
-            }
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueuePresent);
+            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueuePresent);
         }
+#endif
+        return VK_ERROR_INITIALIZATION_FAILED;
+    }
+
+    const void* pNext = pPresentInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32_t>(pHeader->sType))
+        {
+        case VK_STRUCTURE_TYPE_DEVICE_GROUP_PRESENT_INFO_KHR:
+        {
+            pDeviceGroupPresentInfoKHR = static_cast<const VkDeviceGroupPresentInfoKHR*>(pNext);
+            VK_ASSERT(pDeviceGroupPresentInfoKHR->swapchainCount == 1);
+            const uint32_t deviceMask = *pDeviceGroupPresentInfoKHR->pDeviceMasks;
+            VK_ASSERT(Util::CountSetBits(deviceMask) == 1);
+            Util::BitMaskScanForward(&presentationDeviceIdx, deviceMask);
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PRESENT_REGIONS_KHR:
+        {
+            pVkRegions = static_cast<const VkPresentRegionsKHR*>(pNext);
+            VK_ASSERT(pVkRegions->swapchainCount == pPresentInfo->swapchainCount);
+            break;
+        }
+        default:
+            // Skip any unknown extension structures
+            break;
+        }
+
+        pNext = pHeader->pNext;
     }
 
     VkResult result = VK_SUCCESS;
@@ -741,18 +742,6 @@ VkResult Queue::Present(
             // Update the feature settings from the app profile or the global settings.
             m_pDevice->UpdateFeatureSettings();
         }
-    }
-
-    if (pPresentInfo == nullptr)
-    {
-#if ICD_GPUOPEN_DEVMODE_BUILD
-        if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
-        {
-            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueuePresent);
-            m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueuePresent);
-        }
-#endif
-        return VK_ERROR_INITIALIZATION_FAILED;
     }
 
     if (pPresentInfo->waitSemaphoreCount > 0)
@@ -1157,15 +1146,19 @@ VkResult Queue::BindSparseEntry(
             VkDeviceSize sizePerRow = extentInTiles.width * prtTileSize;
             VkDeviceSize realOffset = bind.memoryOffset;
 
+            const VkDeviceSize tileOffsetX = offsetInTiles.x * prtTileSize;
+            const VkDeviceSize tileOffsetY = offsetInTiles.y * prtTileRowPitch;
+            const VkDeviceSize tileOffsetZ = offsetInTiles.z * prtTileDepthPitch;
+
+            const VkDeviceSize virtualOffsetBase = subResLayout.offset + tileOffsetX + tileOffsetY + tileOffsetZ;
+
             for (uint32_t tileZ = 0; tileZ < extentInTiles.depth; ++tileZ)
             {
+                const VkDeviceSize virtualOffsetBaseY = virtualOffsetBase + tileZ * prtTileDepthPitch;
+
                 for (uint32_t tileY = 0; tileY < extentInTiles.height; ++tileY)
                 {
-                    VkDeviceSize virtualOffset =
-                        subResLayout.offset +
-                        offsetInTiles.x * prtTileSize +
-                        (offsetInTiles.y + tileY) * prtTileRowPitch +
-                        (offsetInTiles.z + tileZ) * prtTileDepthPitch;
+                    const VkDeviceSize virtualOffset = virtualOffsetBaseY + tileY * prtTileRowPitch;
 
                     result = AddVirtualRemapRange(
                         resourceDeviceIndex,
