@@ -126,48 +126,49 @@ VkResult Semaphore::Create(
     const VkAllocationCallbacks*  pAllocator,
     VkSemaphore*                  pSemaphore)
 {
+    VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO);
+
     Pal::QueueSemaphoreCreateInfo palCreateInfo = {};
     palCreateInfo.maxCount = 1;
 
     Pal::QueueSemaphoreExportInfo exportInfo = {};
-
     // Allocate sufficient memory
     VkResult vkResult = VK_SUCCESS;
     Pal::Result palResult;
     const size_t palSemaphoreSize = pDevice->PalDevice(DefaultDeviceIndex)->GetQueueSemaphoreSize(palCreateInfo, &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
-    union
+
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
     {
-        const VkStructHeader*                pHeader;
-        const VkSemaphoreCreateInfo*         pInfo;
-        const VkSemaphoreTypeCreateInfo*     pTypeInfo;
-        const VkExportSemaphoreCreateInfo*   pExportSemaphoreCreateInfo;
-    };
-    for (pInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
-    {
-        switch (static_cast<uint32_t>(pHeader->sType))
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO:
-        {
-            break;
-        }
         case VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO:
         {
-            // mark this semaphore is timeline or not
-            palCreateInfo.flags.timeline = (pTypeInfo->semaphoreType == VK_SEMAPHORE_TYPE_TIMELINE);
-            palCreateInfo.initialCount   = pTypeInfo->initialValue;
+            const auto* pExtInfo = static_cast<const VkSemaphoreTypeCreateInfo*>(pNext);
+
+            // Mark this semaphore is timeline or not
+            palCreateInfo.flags.timeline = (pExtInfo->semaphoreType == VK_SEMAPHORE_TYPE_TIMELINE);
+            palCreateInfo.initialCount   = pExtInfo->initialValue;
 
             break;
         }
         case VK_STRUCTURE_TYPE_EXPORT_SEMAPHORE_CREATE_INFO:
         {
-            // mark this semaphore as shareable.
+            const auto* pExtInfo = static_cast<const VkExportSemaphoreCreateInfo*>(pNext);
+
+            // Mark this semaphore as shareable.
             palCreateInfo.flags.shareable = 1;
             break;
         }
         default:
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 #if defined(__unix__)
     if (pDevice->NumPalDevices() > 1)

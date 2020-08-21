@@ -504,8 +504,12 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdDispatchBase                               );
     INIT_DISPATCH_ENTRY(vkCreateDescriptorUpdateTemplate                );
     INIT_DISPATCH_ENTRY(vkCreateSamplerYcbcrConversion                  );
+    INIT_DISPATCH_ALIAS(vkCreateSamplerYcbcrConversionKHR               ,
+                        vkCreateSamplerYcbcrConversion                  );
     INIT_DISPATCH_ENTRY(vkDestroyDescriptorUpdateTemplate               );
     INIT_DISPATCH_ENTRY(vkDestroySamplerYcbcrConversion                 );
+    INIT_DISPATCH_ALIAS(vkDestroySamplerYcbcrConversionKHR              ,
+                        vkDestroySamplerYcbcrConversion                 );
     INIT_DISPATCH_ENTRY(vkEnumeratePhysicalDeviceGroups                 );
     INIT_DISPATCH_ENTRY(vkGetBufferMemoryRequirements2                  );
     INIT_DISPATCH_ENTRY(vkGetDescriptorSetLayoutSupport                 );

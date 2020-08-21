@@ -43,13 +43,14 @@ namespace vk
 
 // =====================================================================================================================
 Buffer::Buffer(
-    Device*                     pDevice,
-    VkBufferCreateFlags         flags,
-    VkBufferUsageFlags          usage,
-    Pal::IGpuMemory**           pGpuMemory,
-    const BufferBarrierPolicy&  barrierPolicy,
-    VkDeviceSize                size,
-    BufferFlags                 internalFlags)
+    Device*                      pDevice,
+    const VkAllocationCallbacks* pAllocator,
+    VkBufferCreateFlags          flags,
+    VkBufferUsageFlags           usage,
+    Pal::IGpuMemory**            pGpuMemory,
+    const BufferBarrierPolicy&   barrierPolicy,
+    VkDeviceSize                 size,
+    BufferFlags                  internalFlags)
     :
     m_size(size),
     m_memOffset(0),
@@ -59,6 +60,7 @@ Buffer::Buffer(
     m_internalFlags.usageUniformBuffer    = (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
     m_internalFlags.createSparseBinding   = (flags & VK_BUFFER_CREATE_SPARSE_BINDING_BIT)   ? 1 : 0;
     m_internalFlags.createSparseResidency = (flags & VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT) ? 1 : 0;
+    m_internalFlags.createProtected       = (flags & VK_BUFFER_CREATE_PROTECTED_BIT)        ? 1 : 0;
     // Note: The VK_BUFFER_CREATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT is only used in vk_memory objects.
 
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
@@ -74,6 +76,7 @@ Buffer::Buffer(
             m_perGpu[deviceIdx].gpuVirtAddr = 0;
         }
     }
+
 }
 
 // =====================================================================================================================
@@ -216,6 +219,7 @@ VkResult Buffer::Create(
 
         // Construct API buffer object.
         VK_PLACEMENT_NEW (pMemory) Buffer (pDevice,
+                                           pAllocator,
                                            pCreateInfo->flags,
                                            pCreateInfo->usage,
                                            pGpuMemory,
@@ -484,6 +488,17 @@ VkResult Buffer::GetMemoryRequirements(
     if (m_internalFlags.externallyShareable)
     {
         pMemoryRequirements->memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
+    }
+
+    if (m_internalFlags.createProtected)
+    {
+        // If the buffer is protected only keep the protected type
+        pMemoryRequirements->memoryTypeBits &= pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
+    }
+    else
+    {
+        // Remove the protected types
+        pMemoryRequirements->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
     }
 
     return VK_SUCCESS;

@@ -222,9 +222,9 @@ public:
     VK_FORCEINLINE bool HasDepthAndStencil() const
         { return (m_internalFlags.hasDepth & m_internalFlags.hasStencil) == 1; }
 
-	// Returns true if the image has a yuv format.
-	VK_FORCEINLINE bool IsYuvFormat() const
-	    { return m_internalFlags.isYuvFormat == 1; }
+    // Returns true if the image has a yuv format.
+    VK_FORCEINLINE bool IsYuvFormat() const
+        { return m_internalFlags.isYuvFormat == 1; }
 
 private:
     // SwapChain object needs to be able to instantiate API image objects for presentable images
@@ -274,19 +274,20 @@ private:
     };
 
     Image(
-        Device*                     pDevice,
-        VkImageCreateFlags          flags,
-        Pal::IImage**               pPalImage,
-        Pal::IGpuMemory**           pPalMemory,
-        const ImageBarrierPolicy&   barrierPolicy,
-        VkExtent3D                  tileSize,
-        uint32_t                    mipLevels,
-        uint32_t                    arraySize,
-        VkFormat                    imageFormat,
-        VkSampleCountFlagBits       imageSamples,
-        VkImageUsageFlags           usage,
-        VkImageUsageFlags           stencilUsage,
-        ImageFlags                  internalFlags);
+        Device*                      pDevice,
+        const VkAllocationCallbacks* pAllocator,
+        VkImageCreateFlags           flags,
+        Pal::IImage**                pPalImage,
+        Pal::IGpuMemory**            pPalMemory,
+        const ImageBarrierPolicy&    barrierPolicy,
+        VkExtent3D                   tileSize,
+        uint32_t                     mipLevels,
+        uint32_t                     arraySize,
+        VkFormat                     imageFormat,
+        VkSampleCountFlagBits        imageSamples,
+        VkImageUsageFlags            usage,
+        VkImageUsageFlags            stencilUsage,
+        ImageFlags                   internalFlags);
 
     // Compute size required for the object.  One copy of PerGpuInfo is included in the object and we need
     // to add space for any additional GPUs.

@@ -826,7 +826,7 @@ Memory::Memory(
     bool                            multiInstance,
     uint32_t                        primaryIndex,
     Pal::IImage*                    pExternalImage)
-:
+    :
     m_pDevice(pDevice),
     m_info(info),
     m_priority(info.priority, info.priorityOffset),
@@ -846,7 +846,7 @@ Memory::Memory(
     Pal::IGpuMemory** ppPalMemory,
     bool              multiInstance,
     uint32_t          primaryIndex)
-:
+    :
     m_pDevice(pDevice),
     m_multiInstance(multiInstance),
     m_allocationCounted(false),
@@ -863,8 +863,8 @@ Memory::Memory(
 // =====================================================================================================================
 // Free a GPU memory object - also destroys the API memory object
 void Memory::Free(
-    Device*                         pDevice,
-    const VkAllocationCallbacks*    pAllocator)
+    Device*                      pDevice,
+    const VkAllocationCallbacks* pAllocator)
 {
     if (m_pExternalPalImage != nullptr)
     {
@@ -1194,7 +1194,9 @@ MemoryPriority MemoryPriority::FromVkMemoryPriority(
 
 // =====================================================================================================================
 // Provide the PalMemory according to the combination of resourceIndex and memoryIndex
-Pal::IGpuMemory* Memory::PalMemory(uint32_t resourceIndex, uint32_t memoryIndex)
+Pal::IGpuMemory* Memory::PalMemory(
+    uint32_t resourceIndex,
+    uint32_t memoryIndex)
 {
     // if it is not m_multiInstance, each PalMemory in peer device is imported from m_primaryDeviceIndex.
     // We could always return the PalMemory with memory index m_primaryDeviceIndex.
@@ -1296,10 +1298,14 @@ VKAPI_ATTR void VKAPI_CALL vkFreeMemory(
 {
     if (memory != VK_NULL_HANDLE)
     {
-        Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
-        const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+        Device* pDevice = ApiDevice::ObjectFromHandle(device);
+        Memory* pMemory = Memory::ObjectFromHandle(memory);
 
-        Memory::ObjectFromHandle(memory)->Free(pDevice, pAllocCB);
+        {
+            const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+
+            pMemory->Free(pDevice, pAllocCB);
+        }
     }
 }
 

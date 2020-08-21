@@ -330,8 +330,11 @@ void DescriptorSetLayout::ConvertBindingInfo(
         // Update total number of ResourceMappingNodes required by this binding.
         pSectionInfo->numRsrcMapNodes++;
 
-        // Combined image sampler descriptors in static section need an additional ResourceMappingNode.
-        if (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+        // Combined image sampler, storage image, and input attachment descriptors in static section need an
+        // additional ResourceMappingNode.
+        if ((pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) ||
+            (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_IMAGE) ||
+            (pBindingInfo->descriptorType == VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT))
         {
             pSectionInfo->numRsrcMapNodes++;
         }

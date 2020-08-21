@@ -1,0 +1,55 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x05240ad326c14f2c cd9739a9c35ebd5b"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 8,
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x2ea7831a09905a97 5c9ca20ad6346d03"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 48,
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x6facb97bdf207624 1314dafef65eac10"
+        }
+      },
+      "action": {
+        "cs": {
+          "disableLoopUnrolls": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xb39f2eec1fab4c8a 3b263a3c47c03e5e"
+        }
+      },
+      "action": {
+        "binningOverride": 2,
+        "ps": {
+          "allowReZ": 1
+        }
+      }
+    }
+  ]
+}

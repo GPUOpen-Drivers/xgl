@@ -39,6 +39,8 @@
 #include "include/vk_shader.h"
 #include "palListImpl.h"
 
+#include <limits.h>
+
 namespace vk
 {
 
@@ -110,10 +112,10 @@ static const uint32_t OffsetStrideInDwords = 12;
 // =====================================================================================================================
 // Creat ResourceMappingNode from module data
 void PartialPipeline::CreatePipelineLayoutFromModuleData(
-    AsyncLayer*                         pAsyncLayer,
-    Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
-    const Vkgc::ResourceMappingNode**   ppResourceMappingNode,
-    uint32_t*                           pMappingNodeCount)
+    AsyncLayer*                           pAsyncLayer,
+    Vkgc::ShaderModuleEntryData*          pShaderModuleEntryData,
+    const Vkgc::ResourceMappingRootNode** ppResourceMappingNode,
+    uint32_t*                             pMappingNodeCount)
 {
     const Vkgc::ResourceNodeData* pResourceNodeData = pShaderModuleEntryData->pResNodeDatas;
     uint32_t resNodeDataCount = pShaderModuleEntryData->resNodeDataCount;
@@ -139,12 +141,12 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
     uint32_t totalNodes = pushConstSize != 0 ? resNodeDataCount + setCount + 1 : resNodeDataCount + setCount;
 
     Device* pDevice = pAsyncLayer->GetDevice();
-    auto pSets = static_cast<Vkgc::ResourceMappingNode*>(m_pAllocator->pfnAllocation(
+    auto pSets = static_cast<Vkgc::ResourceMappingRootNode*>(m_pAllocator->pfnAllocation(
         m_pAllocator->pUserData,
-        totalNodes * sizeof(Vkgc::ResourceMappingNode),
+        totalNodes * sizeof(Vkgc::ResourceMappingRootNode),
         VK_DEFAULT_MEM_ALIGN,
         VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
-    auto pNodes = pSets + setCount + 1;
+    auto pNodes = reinterpret_cast<Vkgc::ResourceMappingNode*>(pSets + setCount + 1);
     uint32_t topLevelOffset = 0;
 
     for (uint32_t i = 0; i < resNodeDataCount; ++i)
@@ -157,13 +159,14 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
         if ((i == 0) || (set != pNodes[i].srdRange.set))
         {
             set = pNodes[i].srdRange.set;
-            pSets[set].tablePtr.pNext = &pNodes[i];
-            pSets[set].type = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
-            pSets[set].sizeInDwords = 1;
-            pSets[set].offsetInDwords = topLevelOffset;
-            topLevelOffset += pSets[set].sizeInDwords;
+            pSets[set].node.tablePtr.pNext = &pNodes[i];
+            pSets[set].node.type = Vkgc::ResourceMappingNodeType::DescriptorTableVaPtr;
+            pSets[set].node.sizeInDwords = 1;
+            pSets[set].node.offsetInDwords = topLevelOffset;
+            pSets[set].visibility = UINT_MAX;
+            topLevelOffset += pSets[set].node.sizeInDwords;
         }
-        ++pSets[pResourceNodeData[i].set].tablePtr.nodeCount;
+        ++pSets[pResourceNodeData[i].set].node.tablePtr.nodeCount;
     }
 
     // Add UseDynamic options for below cases:
@@ -173,9 +176,9 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
     if (pushConstSize)
     {
         // Add a node for push consts at the end of root descriptor list.
-        pSets[resNodeDataCount + setCount].type = Vkgc::ResourceMappingNodeType::PushConst;
-        pSets[resNodeDataCount + setCount].sizeInDwords = pushConstSize;
-        pSets[resNodeDataCount + setCount].offsetInDwords = topLevelOffset;
+        pSets[resNodeDataCount + setCount].node.type = Vkgc::ResourceMappingNodeType::PushConst;
+        pSets[resNodeDataCount + setCount].node.sizeInDwords = pushConstSize;
+        pSets[resNodeDataCount + setCount].node.offsetInDwords = topLevelOffset;
     }
 
     *pMappingNodeCount = setCount;
@@ -381,8 +384,8 @@ void PartialPipeline::Execute(
     {
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {
-            const Vkgc::ResourceMappingNode*    pResourceMappingNode = nullptr;
-            uint32_t                            mappingNodeCount = 0;
+            const Vkgc::ResourceMappingRootNode* pResourceMappingNode = nullptr;
+            uint32_t                             mappingNodeCount = 0;
             CreatePipelineLayoutFromModuleData(pAsyncLayer, pShaderModuleEntryData, &pResourceMappingNode, &mappingNodeCount);
 
             auto result = pDevice->GetCompiler(deviceIdx)->CreatePartialPipelineBinary(deviceIdx,

@@ -585,12 +585,12 @@ Util::Result PipelineCompiler::GetCachedPipelineBinary(
 // =====================================================================================================================
 // Creates partial pipeline binary.
 VkResult PipelineCompiler::CreatePartialPipelineBinary(
-    uint32_t                            deviceIdx,
-    void*                               pShaderModuleData,
-    Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
-    const Vkgc::ResourceMappingNode*    pResourceMappingNode,
-    uint32_t                            mappingNodeCount,
-    Vkgc::ColorTarget*                  pColorTarget)
+    uint32_t                             deviceIdx,
+    void*                                pShaderModuleData,
+    Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
+    const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
+    uint32_t                             mappingNodeCount,
+    Vkgc::ColorTarget*                   pColorTarget)
 {
     uint32_t compilerMask = GetCompilerCollectionMask();
     VkResult result = VK_SUCCESS;
@@ -1342,33 +1342,6 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     pCreateInfo->flags = flags;
     ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options);
 
-    if (pLayout != nullptr)
-    {
-        pCreateInfo->tempBufferStageSize = pLayout->GetPipelineInfo()->tempStageSize;
-        size_t tempBufferSize = pLayout->GetPipelineInfo()->tempBufferSize;
-
-        // Allocate the temp buffer
-        if (tempBufferSize > 0)
-        {
-            pCreateInfo->pMappingBuffer = pInstance->AllocMem(
-                tempBufferSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-            if (pCreateInfo->pMappingBuffer == nullptr)
-            {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-            }
-            else
-            {
-                // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
-                // fields of resource mapping nodes are unused for certain node types. We must initialize
-                // them to zeroes.
-                memset(pCreateInfo->pMappingBuffer, 0, tempBufferSize);
-            }
-        }
-    }
-
     // Build the LLPC pipeline
     Vkgc::PipelineShaderInfo* shaderInfos[] =
     {
@@ -1383,19 +1356,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     pCreateInfo->pipelineInfo.pInstance      = pInstance;
     pCreateInfo->pipelineInfo.pfnOutputAlloc = AllocateShaderOutput;
 
-    ShaderStage lastVertexStage = ShaderStage::ShaderStageVertex;
-    for (int32_t i = ShaderStage::ShaderStageGfxCount-1; i >= 0; --i)
-    {
-        ShaderStage stage = static_cast<ShaderStage>(i);
-        if (pStageInfos[stage] == nullptr) continue;
-
-        if (stage != ShaderStage::ShaderStageFragment)
-        {
-            lastVertexStage = stage;
-            break;
-        }
-    }
-
+    uint32_t stageMask = 0;
     for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
         auto pStage = pStageInfos[stage];
@@ -1404,6 +1365,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         if (pStage == nullptr)
             continue;
 
+        stageMask |= (1 << stage);
+
         auto pShaderModule = ShaderModule::ObjectFromHandle(pStage->module);
         pShaderInfo->pModuleData           = pShaderModule->GetFirstValidShaderData();
         pShaderInfo->pSpecializationInfo   = pStage->pSpecializationInfo;
@@ -1411,20 +1374,6 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
         pShaderInfo->entryStage = static_cast<Vkgc::ShaderStage>(stage);
 #endif
-        // Build the resource mapping description for LLPC.  This data contains things about how shader
-        // inputs like descriptor set bindings are communicated to this pipeline in a form that LLPC can
-        // understand.
-        if (pLayout != nullptr)
-        {
-            const bool vertexShader = (stage == ShaderStage::ShaderStageVertex);
-            result = pLayout->BuildLlpcPipelineMapping(
-                static_cast<ShaderStage>(stage),
-                pCreateInfo->pMappingBuffer,
-                vertexShader ? pCreateInfo->pipelineInfo.pVertexInput : nullptr,
-                pShaderInfo,
-                vertexShader ? pVbInfo : nullptr,
-                lastVertexStage == static_cast<ShaderStage>(stage));
-        }
 
         ApplyDefaultShaderOptions(static_cast<ShaderStage>(stage),
                                   &pShaderInfo->options
@@ -1445,6 +1394,101 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                             &pCreateInfo->pipelineProfileKey,
                             &pCreateInfo->pipelineInfo.nggState
                             );
+    }
+
+    if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
+    {
+
+        size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+        genericMappingBufferSize += (pGraphicsPipelineCreateInfo->stageCount) * pLayout->GetPipelineInfo()->mappingBufferSize;
+#endif
+
+        size_t tempBufferSize    = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
+        pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
+                                                       VK_DEFAULT_MEM_ALIGN,
+                                                       VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+        if (pCreateInfo->pTempBuffer == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            pCreateInfo->pMappingBuffer = Util::VoidPtrInc(pCreateInfo->pTempBuffer, genericMappingBufferSize);
+
+            // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
+            // fields of resource mapping nodes are unused for certain node types. We must initialize
+            // them to zeroes.
+            memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
+
+            // Build the LLPC resource mapping description. This data contains things about how shader
+            // inputs like descriptor set bindings are communicated to this pipeline in a form that
+            // LLPC can understand.
+            result = pLayout->BuildLlpcPipelineMapping(stageMask,
+                                                       pCreateInfo->pTempBuffer,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+                                                       &pCreateInfo->resourceMapping,
+#else
+                                                       &pCreateInfo->pipelineInfo.resourceMapping,
+#endif
+                                                       pCreateInfo->pipelineInfo.pVertexInput,
+                                                       pVbInfo);
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+            if (result == VK_SUCCESS)
+            {
+                uint32_t stageCount = 0;
+
+                for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
+                {
+                    auto pStage      = pStageInfos[stage];
+                    auto pShaderInfo = shaderInfos[stage];
+
+                    if (pStage == nullptr)
+                        continue;
+
+                    auto pUserDataNodes = static_cast<Vkgc::ResourceMappingNode*>(
+                        Util::VoidPtrInc(pCreateInfo->pTempBuffer,
+                                         (stageCount + 1) * pLayout->GetPipelineInfo()->mappingBufferSize));
+
+                    pShaderInfo->pUserDataNodes = pUserDataNodes;
+                    pShaderInfo->pDescriptorRangeValues =
+                        reinterpret_cast<Vkgc::DescriptorRangeValue*>(pUserDataNodes +
+                            pLayout->GetPipelineInfo()->numUserDataNodes);
+
+                    for (uint32_t i = 0; i < pCreateInfo->resourceMapping.userDataNodeCount; ++i)
+                    {
+                        if ((pCreateInfo->resourceMapping.pUserDataNodes[i].visibility & (1 << stage)) != 0)
+                        {
+                            memcpy(&pUserDataNodes[pShaderInfo->userDataNodeCount],
+                                   &pCreateInfo->resourceMapping.pUserDataNodes[i],
+                                   sizeof(Vkgc::ResourceMappingNode));
+
+                            ++pShaderInfo->userDataNodeCount;
+                            VK_ASSERT(pShaderInfo->userDataNodeCount <= pCreateInfo->resourceMapping.userDataNodeCount);
+                        }
+                    }
+
+                    for (uint32_t i = 0; i < pCreateInfo->resourceMapping.staticDescriptorValueCount; ++i)
+                    {
+                        if ((pCreateInfo->resourceMapping.pStaticDescriptorValues[i].visibility & (1 << stage)) != 0)
+                        {
+                            memcpy(&pShaderInfo->pDescriptorRangeValues[pShaderInfo->descriptorRangeValueCount],
+                                   &pCreateInfo->resourceMapping.pStaticDescriptorValues[i],
+                                   sizeof(Vkgc::DescriptorRangeValue));
+
+                            ++pShaderInfo->descriptorRangeValueCount;
+                            VK_ASSERT(pShaderInfo->descriptorRangeValueCount <= pCreateInfo->resourceMapping.staticDescriptorValueCount);
+                        }
+                    }
+
+                    ++stageCount;
+                    VK_ASSERT(stageCount <= pGraphicsPipelineCreateInfo->stageCount);
+                }
+            }
+#endif
+        }
     }
 
     pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
@@ -1584,33 +1628,6 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     pCreateInfo->flags  = pIn->flags;
     ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
 
-    if (pLayout != nullptr)
-    {
-        pCreateInfo->tempBufferStageSize = pLayout->GetPipelineInfo()->tempStageSize;
-        size_t tempBufferSize = pLayout->GetPipelineInfo()->tempBufferSize;
-
-        // Allocate the temp buffer
-        if (tempBufferSize > 0)
-        {
-            pCreateInfo->pMappingBuffer = pInstance->AllocMem(
-                tempBufferSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
-
-            if (pCreateInfo->pMappingBuffer == nullptr)
-            {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-            }
-            else
-            {
-                // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
-                // fields of resource mapping nodes are unused for certain node types. We must initialize
-                // them to zeroes.
-                memset(pCreateInfo->pMappingBuffer, 0, tempBufferSize);
-            }
-        }
-    }
-
     ShaderModule* pShaderModule = ShaderModule::ObjectFromHandle(pIn->stage.module);
     pCreateInfo->pipelineInfo.cs.pModuleData         = pShaderModule->GetFirstValidShaderData();
     pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
@@ -1626,18 +1643,80 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     }
 #endif
 
-    // Build the resource mapping description for LLPC.  This data contains things about how shader
-    // inputs like descriptor set bindings interact with this pipeline in a form that LLPC can
-    // understand.
-    if (pLayout != nullptr)
+    if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
     {
-        result = pLayout->BuildLlpcPipelineMapping(
-            ShaderStage::ShaderStageCompute,
-            pCreateInfo->pMappingBuffer,
-            nullptr,
-            &pCreateInfo->pipelineInfo.cs,
-            nullptr,
-            false);
+
+        size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+        genericMappingBufferSize += pLayout->GetPipelineInfo()->mappingBufferSize;
+#endif
+
+        size_t tempBufferSize    = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
+        pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
+                                                       VK_DEFAULT_MEM_ALIGN,
+                                                       VK_SYSTEM_ALLOCATION_SCOPE_COMMAND);
+
+        if (pCreateInfo->pTempBuffer == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            pCreateInfo->pMappingBuffer = Util::VoidPtrInc(pCreateInfo->pTempBuffer, genericMappingBufferSize);
+
+            // NOTE: Zero the allocated space that is used to create pipeline resource mappings. Some
+            // fields of resource mapping nodes are unused for certain node types. We must initialize
+            // them to zeroes.
+            memset(pCreateInfo->pTempBuffer, 0, tempBufferSize);
+
+            // Build the LLPC resource mapping description. This data contains things about how shader
+            // inputs like descriptor set bindings are communicated to this pipeline in a form that
+            // LLPC can understand.
+            result = pLayout->BuildLlpcPipelineMapping(Vkgc::ShaderStageComputeBit,
+                                                       pCreateInfo->pTempBuffer,
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+                                                       &pCreateInfo->resourceMapping,
+#else
+                                                       &pCreateInfo->pipelineInfo.resourceMapping,
+#endif
+                                                       nullptr,
+                                                       nullptr);
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+            if (result == VK_SUCCESS)
+            {
+                auto pShaderInfo = &pCreateInfo->pipelineInfo.cs;
+
+                auto pUserDataNodes = static_cast<Vkgc::ResourceMappingNode*>(
+                    Util::VoidPtrInc(pCreateInfo->pTempBuffer, pLayout->GetPipelineInfo()->mappingBufferSize));
+
+                pShaderInfo->pUserDataNodes = pUserDataNodes;
+                pShaderInfo->pDescriptorRangeValues =
+                    reinterpret_cast<Vkgc::DescriptorRangeValue*>(pUserDataNodes +
+                        pLayout->GetPipelineInfo()->numUserDataNodes);
+
+                for (uint32_t i = 0; i < pCreateInfo->resourceMapping.userDataNodeCount; ++i)
+                {
+                    memcpy(&pUserDataNodes[pShaderInfo->userDataNodeCount],
+                           &pCreateInfo->resourceMapping.pUserDataNodes[i],
+                           sizeof(Vkgc::ResourceMappingNode));
+
+                    ++pShaderInfo->userDataNodeCount;
+                    VK_ASSERT(pShaderInfo->userDataNodeCount <= pCreateInfo->resourceMapping.userDataNodeCount);
+                }
+
+                for (uint32_t i = 0; i < pCreateInfo->resourceMapping.staticDescriptorValueCount; ++i)
+                {
+                    memcpy(&pShaderInfo->pDescriptorRangeValues[pShaderInfo->descriptorRangeValueCount],
+                           &pCreateInfo->resourceMapping.pStaticDescriptorValues[i],
+                           sizeof(Vkgc::DescriptorRangeValue));
+
+                    ++pShaderInfo->descriptorRangeValueCount;
+                    VK_ASSERT(pShaderInfo->descriptorRangeValueCount <= pCreateInfo->resourceMapping.staticDescriptorValueCount);
+                }
+            }
+#endif
+        }
     }
 
     pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
@@ -1785,10 +1864,10 @@ void PipelineCompiler::FreeComputePipelineCreateInfo(
 {
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
-    if (pCreateInfo->pMappingBuffer != nullptr)
+    if (pCreateInfo->pTempBuffer != nullptr)
     {
-        pInstance->FreeMem(pCreateInfo->pMappingBuffer);
-        pCreateInfo->pMappingBuffer = nullptr;
+        pInstance->FreeMem(pCreateInfo->pTempBuffer);
+        pCreateInfo->pTempBuffer = nullptr;
     }
 }
 
@@ -1799,10 +1878,10 @@ void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
 {
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
-    if (pCreateInfo->pMappingBuffer != nullptr)
+    if (pCreateInfo->pTempBuffer != nullptr)
     {
-        pInstance->FreeMem(pCreateInfo->pMappingBuffer);
-        pCreateInfo->pMappingBuffer = nullptr;
+        pInstance->FreeMem(pCreateInfo->pTempBuffer);
+        pCreateInfo->pTempBuffer = nullptr;
     }
 }
 

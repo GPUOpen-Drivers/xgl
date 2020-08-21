@@ -126,3 +126,5 @@ VK_GOOGLE_user_type
 VK_KHR_incremental_present
 VK_EXT_robustness2
 VK_EXT_extended_dynamic_state
+VK_EXT_image_robustness
+VK_EXT_4444_formats

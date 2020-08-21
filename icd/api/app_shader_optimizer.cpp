@@ -164,6 +164,12 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pOptions->unrollThreshold = shaderCreate.tuningOptions.unrollThreshold;
                 }
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 40
+                if (shaderCreate.apply.fp32DenormalMode)
+                {
+                    options.pOptions->fp32DenormalMode = shaderCreate.tuningOptions.fp32DenormalMode;
+                }
+#endif
                 if (shaderCreate.apply.waveSize)
                 {
                     options.pOptions->waveSize = shaderCreate.tuningOptions.waveSize;

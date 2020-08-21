@@ -1,0 +1,76 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x2ea7831a09905a97 5c9ca20ad6346d03"
+        }
+      },
+      "action": {
+        "cs": {
+          "vgprLimit": 64,
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xeb6d11546e813b52 ebdc4467fdcdd5c0"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32,
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xac7dc3df17393922 812238ae4b2776f0"
+        }
+      },
+      "action": {
+        "ps": {
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x51e4223f302efc57 3593f285104c0ba8"
+        }
+      },
+      "action": {
+        "binningOverride": 1
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xb39f2eec1fab4c8a 3b263a3c47c03e5e"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x5cd1e5d4cbd4e138 ce5f47f906e68769"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1
+        }
+      }
+    }
+  ]
+}

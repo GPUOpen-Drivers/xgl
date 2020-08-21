@@ -60,7 +60,6 @@
 namespace Pal
 {
 class IPipeline;
-struct ResourceMappingNode;
 };
 
 namespace Util
@@ -73,13 +72,9 @@ namespace Llpc
 class ICompiler;
 };
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
 namespace Vkgc
-#else
-namespace Llpc
-#endif
 {
-struct ResourceMappingNode;
+struct ResourceMappingRootNode;
 }
 
 namespace vk
@@ -655,15 +650,11 @@ protected:
         size_t                           privateDataSize);
 
     VkResult CreateInternalComputePipeline(
-        size_t                           codeByteSize,
-        const uint8_t*                   pCode,
-        uint32_t                         numUserDataNodes,
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-        const Vkgc::ResourceMappingNode* pUserDataNodes,
-#else
-        const Llpc::ResourceMappingNode* pUserDataNodes,
-#endif
-        InternalPipeline*                pInternalPipeline);
+        size_t                         codeByteSize,
+        const uint8_t*                 pCode,
+        uint32_t                       numUserDataNodes,
+        Vkgc::ResourceMappingRootNode* pUserDataNodes,
+        InternalPipeline*              pInternalPipeline);
 
     VkResult CreateInternalPipelines();
 

@@ -251,6 +251,9 @@ vkCmdDrawIndirectCountAMD                           @device     @dext(AMD_draw_i
 vkCmdDrawIndirectCountKHR                           @device     @dext(KHR_draw_indirect_count)
 vkCmdDrawIndexedIndirectCountKHR                    @device     @dext(KHR_draw_indirect_count)
 
+vkCreateSamplerYcbcrConversionKHR                   @device     @dext(KHR_sampler_ycbcr_conversion)
+vkDestroySamplerYcbcrConversionKHR                  @device     @dext(KHR_sampler_ycbcr_conversion)
+
 vkGetShaderInfoAMD                                  @device     @dext(AMD_shader_info)
 
 vkCmdDebugMarkerBeginEXT                            @device     @dext(EXT_debug_marker)

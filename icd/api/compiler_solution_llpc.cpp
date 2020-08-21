@@ -201,77 +201,116 @@ void CompilerSolutionLlpc::FreeShaderModule(ShaderModuleHandle* pShaderModule)
 // =====================================================================================================================
 // Creates partial pipeline binary for compute shader and fragment shader
 VkResult CompilerSolutionLlpc::CreatePartialPipelineBinary(
-    uint32_t                            deviceIdx,
-    void*                               pShaderModuleData,
-    Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
-    const Vkgc::ResourceMappingNode*    pResourceMappingNode,
-    uint32_t                            mappingNodeCount,
-    Vkgc::ColorTarget*                  pColorTarget)
+    uint32_t                             deviceIdx,
+    void*                                pShaderModuleData,
+    Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
+    const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
+    uint32_t                             mappingNodeCount,
+    Vkgc::ColorTarget*                   pColorTarget)
 {
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
     VkResult result = VK_SUCCESS;
 
-    auto pShaderModuleDataEx = reinterpret_cast<Vkgc::ShaderModuleDataEx*>(pShaderModuleData);
-    if (pShaderModuleEntryData->stage == Vkgc::ShaderStageCompute)
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+    Vkgc::ResourceMappingNode* pRawNodes =
+        static_cast<Vkgc::ResourceMappingNode*>(pInstance->AllocMem(mappingNodeCount * sizeof(Vkgc::ResourceMappingNodeType),
+                                                VK_DEFAULT_MEM_ALIGN,
+                                                VK_SYSTEM_ALLOCATION_SCOPE_COMMAND));
+
+    if (pRawNodes != nullptr)
     {
-        Vkgc::ComputePipelineBuildInfo pipelineBuildInfo = {};
-        Llpc::ComputePipelineBuildOut  pipelineOut = {};
-        void* pLlpcPipelineBuffer = nullptr;
-
-        // Fill pipeline create info for LLPC
-        pipelineBuildInfo.pInstance      = pInstance;
-        pipelineBuildInfo.pfnOutputAlloc = AllocateShaderOutput;
-        pipelineBuildInfo.pUserData      = &pLlpcPipelineBuffer;
-        pipelineBuildInfo.deviceIndex    = deviceIdx;
-        pipelineBuildInfo.cs.pModuleData = pShaderModuleData;
-        pipelineBuildInfo.cs.pUserDataNodes = pResourceMappingNode;
-        pipelineBuildInfo.cs.userDataNodeCount = mappingNodeCount;
-
-        auto llpcResult = m_pLlpc->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut, nullptr);
-        if (llpcResult != Vkgc::Result::Success)
+        for (uint32_t i = 0; i < mappingNodeCount; ++i)
         {
-            // There shouldn't be anything to free for the failure case
-            VK_ASSERT(pLlpcPipelineBuffer == nullptr);
-            result = VK_ERROR_INITIALIZATION_FAILED;
+            pRawNodes[i] = pResourceMappingNode[i].node;
         }
-        pInstance->FreeMem(const_cast<void*>(pipelineOut.pipelineBin.pCode));
     }
     else
     {
-        Vkgc::GraphicsPipelineBuildInfo pipelineBuildInfo = {};
-        // Build the LLPC pipeline
-        Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
-        void* pLlpcPipelineBuffer = nullptr;
-
-        // Fill pipeline create info for LLPC
-        pipelineBuildInfo.pInstance      = pInstance;
-        pipelineBuildInfo.pfnOutputAlloc = AllocateShaderOutput;
-        pipelineBuildInfo.pUserData      = &pLlpcPipelineBuffer;
-        pipelineBuildInfo.iaState.deviceIndex = deviceIdx;
-        pipelineBuildInfo.fs.pModuleData = pShaderModuleData;
-
-        pipelineBuildInfo.fs.pEntryTarget = pShaderModuleEntryData->pEntryName;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
-        pipelineBuildInfo.fs.entryStage = pShaderModuleEntryData->stage;
-#endif
-        pipelineBuildInfo.fs.pUserDataNodes = pResourceMappingNode;
-        pipelineBuildInfo.fs.userDataNodeCount = mappingNodeCount;
-
-        VK_ASSERT(pColorTarget != 0);
-        for (uint32_t i = 0; i < Vkgc::MaxColorTargets; ++i)
-        {
-            pipelineBuildInfo.cbState.target[i] = pColorTarget[i];
-        }
-        auto llpcResult = m_pLlpc->BuildGraphicsPipeline(&pipelineBuildInfo, &pipelineOut, nullptr);
-        if (llpcResult != Vkgc::Result::Success)
-        {
-            // There shouldn't be anything to free for the failure case
-            VK_ASSERT(pLlpcPipelineBuffer == nullptr);
-            result = VK_ERROR_INITIALIZATION_FAILED;
-        }
-        pInstance->FreeMem(const_cast<void*>(pipelineOut.pipelineBin.pCode));
+        result = VK_ERROR_OUT_OF_HOST_MEMORY;
     }
+#endif
+
+    if (result == VK_SUCCESS)
+    {
+        auto pShaderModuleDataEx = reinterpret_cast<Vkgc::ShaderModuleDataEx*>(pShaderModuleData);
+        if (pShaderModuleEntryData->stage == Vkgc::ShaderStageCompute)
+        {
+            Vkgc::ComputePipelineBuildInfo pipelineBuildInfo = {};
+            Llpc::ComputePipelineBuildOut  pipelineOut = {};
+            void* pLlpcPipelineBuffer = nullptr;
+
+            // Fill pipeline create info for LLPC
+            pipelineBuildInfo.pInstance = pInstance;
+            pipelineBuildInfo.pfnOutputAlloc = AllocateShaderOutput;
+            pipelineBuildInfo.pUserData = &pLlpcPipelineBuffer;
+            pipelineBuildInfo.deviceIndex = deviceIdx;
+            pipelineBuildInfo.cs.pModuleData = pShaderModuleData;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+            pipelineBuildInfo.cs.pUserDataNodes = pRawNodes;
+            pipelineBuildInfo.cs.userDataNodeCount = mappingNodeCount;
+#else
+            pipelineBuildInfo.resourceMapping.pUserDataNodes = pResourceMappingNode;
+            pipelineBuildInfo.resourceMapping.userDataNodeCount = mappingNodeCount;
+#endif
+
+            auto llpcResult = m_pLlpc->BuildComputePipeline(&pipelineBuildInfo, &pipelineOut, nullptr);
+            if (llpcResult != Vkgc::Result::Success)
+            {
+                // There shouldn't be anything to free for the failure case
+                VK_ASSERT(pLlpcPipelineBuffer == nullptr);
+                result = VK_ERROR_INITIALIZATION_FAILED;
+            }
+            pInstance->FreeMem(const_cast<void*>(pipelineOut.pipelineBin.pCode));
+        }
+        else
+        {
+            Vkgc::GraphicsPipelineBuildInfo pipelineBuildInfo = {};
+            // Build the LLPC pipeline
+            Llpc::GraphicsPipelineBuildOut  pipelineOut = {};
+            void* pLlpcPipelineBuffer = nullptr;
+
+            // Fill pipeline create info for LLPC
+            pipelineBuildInfo.pInstance = pInstance;
+            pipelineBuildInfo.pfnOutputAlloc = AllocateShaderOutput;
+            pipelineBuildInfo.pUserData = &pLlpcPipelineBuffer;
+            pipelineBuildInfo.iaState.deviceIndex = deviceIdx;
+            pipelineBuildInfo.fs.pModuleData = pShaderModuleData;
+
+            pipelineBuildInfo.fs.pEntryTarget = pShaderModuleEntryData->pEntryName;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
+            pipelineBuildInfo.fs.entryStage = pShaderModuleEntryData->stage;
+#endif
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+            pipelineBuildInfo.fs.pUserDataNodes = pRawNodes;
+            pipelineBuildInfo.fs.userDataNodeCount = mappingNodeCount;
+#else
+            pipelineBuildInfo.resourceMapping.pUserDataNodes = pResourceMappingNode;
+            pipelineBuildInfo.resourceMapping.userDataNodeCount = mappingNodeCount;
+#endif
+
+            VK_ASSERT(pColorTarget != 0);
+            for (uint32_t i = 0; i < Vkgc::MaxColorTargets; ++i)
+            {
+                pipelineBuildInfo.cbState.target[i] = pColorTarget[i];
+            }
+            auto llpcResult = m_pLlpc->BuildGraphicsPipeline(&pipelineBuildInfo, &pipelineOut, nullptr);
+            if (llpcResult != Vkgc::Result::Success)
+            {
+                // There shouldn't be anything to free for the failure case
+                VK_ASSERT(pLlpcPipelineBuffer == nullptr);
+                result = VK_ERROR_INITIALIZATION_FAILED;
+            }
+            pInstance->FreeMem(const_cast<void*>(pipelineOut.pipelineBin.pCode));
+        }
+    }
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+    if (pRawNodes != nullptr)
+    {
+        pInstance->FreeMem(pRawNodes);
+    }
+#endif
 
     return result;
 }

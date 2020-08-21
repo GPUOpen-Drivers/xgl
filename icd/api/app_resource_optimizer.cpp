@@ -221,6 +221,27 @@ void ResourceOptimizer::BuildAppProfile()
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
         }
     }
+
+    if (appProfile == AppProfile::DoomEternal)
+    {
+        if (gfxIpLevel > Pal::GfxIpLevel::GfxIp10_1)
+        {
+            // Disable DCC for texture causing corruption due to undefined layout transitions when
+            // ForceDccForColorAttachments is set to true.
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xad4094b212ff6083;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = 1;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // Same issue as above, but when viewed via RenderDoc which adds the Transfer_Dst usage
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x3a70c52a65527761;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = 1;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+        }
+    }
 }
 
 #if ICD_RUNTIME_APP_PROFILE

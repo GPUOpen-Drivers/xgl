@@ -30,6 +30,7 @@
 
 #include "include/vk_utils.h"
 #include "include/vk_formats.h"
+#include "include/vk_shader_code.h"
 #include "include/khronos/vk_icd.h"
 #include "include/vk_descriptor_set_layout.h"
 #include "settings/g_settings.h"
@@ -46,6 +47,12 @@
 #include "palQueryPool.h"
 #include "palScreen.h"
 #include "palSwapChain.h"
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
+#include "vkgcDefs.h"
+#else
+#include "llpc.h"
+#endif
 
 namespace vk
 {
@@ -1775,6 +1782,10 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettin
             Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
         case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:    return PalFmt(Pal::ChNumFormat::P210,
             Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT:   return PalFmt(Pal::ChNumFormat::X4Y4Z4W4_Unorm,
+            Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::W);
+        case VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT:   return PalFmt(Pal::ChNumFormat::X4Y4Z4W4_Unorm,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
         }
         return Pal::UndefinedSwizzledFormat;
     }
@@ -3023,6 +3034,7 @@ VK_INLINE Pal::ResolveMode VkToPalResolveMode(
     }
 }
 
+// =====================================================================================================================
 VK_INLINE Pal::ResourceDescriptionDescriptorType VkToPalDescriptorType(
     VkDescriptorType vkType)
 {
@@ -3086,6 +3098,17 @@ VK_INLINE DescriptorBindingFlags VkToInternalDescriptorBindingFlag(
     }
 
     return internalFlagBits;
+}
+
+// =====================================================================================================================
+VK_INLINE uint32_t VkToVkgcShaderStageMask(VkShaderStageFlags vkShaderStageFlags)
+{
+    // The graphics and compute bits map directly
+    uint32_t vkgcShaderMask = (VK_SHADER_STAGE_ALL_GRAPHICS | VK_SHADER_STAGE_COMPUTE_BIT) & vkShaderStageFlags;
+
+    static_assert(Vkgc::ShaderStageCount == 6, "Please update VkToVkgcShaderStageFlags.");
+
+    return vkgcShaderMask;
 }
 
 } // namespace vk

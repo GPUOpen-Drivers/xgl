@@ -135,19 +135,20 @@ void Image::CalcMemoryPriority(
 
 // =====================================================================================================================
 Image::Image(
-    Device*                     pDevice,
-    VkImageCreateFlags          flags,
-    Pal::IImage**               pPalImages,
-    Pal::IGpuMemory**           pPalMemory,
-    const ImageBarrierPolicy&   barrierPolicy,
-    VkExtent3D                  tileSize,
-    uint32_t                    mipLevels,
-    uint32_t                    arraySize,
-    VkFormat                    imageFormat,
-    VkSampleCountFlagBits       imageSamples,
-    VkImageUsageFlags           usage,
-    VkImageUsageFlags           stencilUsage,
-    ImageFlags                  internalFlags)
+    Device*                      pDevice,
+    const VkAllocationCallbacks* pAllocator,
+    VkImageCreateFlags           flags,
+    Pal::IImage**                pPalImages,
+    Pal::IGpuMemory**            pPalMemory,
+    const ImageBarrierPolicy&    barrierPolicy,
+    VkExtent3D                   tileSize,
+    uint32_t                     mipLevels,
+    uint32_t                     arraySize,
+    VkFormat                     imageFormat,
+    VkSampleCountFlagBits        imageSamples,
+    VkImageUsageFlags            usage,
+    VkImageUsageFlags            stencilUsage,
+    ImageFlags                   internalFlags)
     :
     m_mipLevels(mipLevels),
     m_arraySize(arraySize),
@@ -204,6 +205,7 @@ Image::Image(
     }
 
     CalcMemoryPriority(pDevice);
+
 }
 
 // =====================================================================================================================
@@ -867,6 +869,7 @@ VkResult Image::Create(
         // Construct API image object.
         VK_PLACEMENT_NEW (pMemory) Image(
             pDevice,
+            pAllocator,
             pCreateInfo->flags,
             pPalImages,
             pSparseMemory,
@@ -989,6 +992,7 @@ VkResult Image::CreateFromAndroidHwBufferHandle(
         // Construct API image object.
         VK_PLACEMENT_NEW (pMemory) Image(
             pDevice,
+            pAllocator,
             pImageCreateInfo->flags,
             pPalImages,
             nullptr,
@@ -1170,6 +1174,7 @@ VkResult Image::CreatePresentableImage(
         // Construct API image object.
         VK_PLACEMENT_NEW (pImgObjMemory) Image(
             pDevice,
+            pAllocator,
             0,
             pPalImage,
             nullptr,
@@ -1755,16 +1760,22 @@ VkResult Image::GetMemoryRequirements(
         pReqs->memoryTypeBits &= pDevice->GetMemoryTypeMaskForExternalSharing();
     }
 
-    if (m_internalFlags.isProtected)
-    {
-        pReqs->memoryTypeBits &= pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
-    }
-
     // Optional: if the image is optimally tiled, don't allow it with host visible memory types.
     if ((m_internalFlags.linear == 0) &&
         pDevice->GetRuntimeSettings().addHostInvisibleMemoryTypesForOptimalImages)
     {
         pReqs->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
+    }
+
+    if (m_internalFlags.isProtected)
+    {
+        // If the image is protected only keep the protected type
+        pReqs->memoryTypeBits &= pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
+    }
+    else
+    {
+        // If the image isn't protected remove the protected types
+        pReqs->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
     }
 
     // Add an extra memory padding. This can be enabled while capturing GFXR traces and disabled later. Capturing with this setting

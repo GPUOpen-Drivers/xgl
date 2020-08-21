@@ -87,15 +87,19 @@ struct GraphicsPipelineCreateInfo
 #else
     Llpc::GraphicsPipelineBuildInfo        pipelineInfo;
 #endif
-    VkPipelineCreateFlags                  flags;
+    void*                                  pTempBuffer;
     void*                                  pMappingBuffer;
-    size_t                                 tempBufferStageSize;
+    size_t                                 mappingBufferSize;
+    VkPipelineCreateFlags                  flags;
     VkFormat                               dbFormat;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     bool                                   freeWithCompiler;
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+    Vkgc::ResourceMappingData              resourceMapping;
+#endif
 };
 
 // =====================================================================================================================
@@ -106,14 +110,18 @@ struct ComputePipelineCreateInfo
 #else
     Llpc::ComputePipelineBuildInfo         pipelineInfo;
 #endif
-    VkPipelineCreateFlags                  flags;
+    void*                                  pTempBuffer;
     void*                                  pMappingBuffer;
-    size_t                                 tempBufferStageSize;
+    size_t                                 mappingBufferSize;
+    VkPipelineCreateFlags                  flags;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     bool                                   freeWithCompiler;
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+    Vkgc::ResourceMappingData              resourceMapping;
+#endif
 };
 
 // =====================================================================================================================
@@ -151,18 +159,18 @@ public:
     virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) = 0;
 
     virtual VkResult CreatePartialPipelineBinary(
-        uint32_t                            deviceIdx,
-        void*                               pShaderModuleData,
+        uint32_t                             deviceIdx,
+        void*                                pShaderModuleData,
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-        Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
-        const Vkgc::ResourceMappingNode*    pResourceMappingNode,
-        uint32_t                            mappingNodeCount,
-        Vkgc::ColorTarget*                  pColorTarget) = 0;
+        Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
+        const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
+        uint32_t                             mappingNodeCount,
+        Vkgc::ColorTarget*                   pColorTarget) = 0;
 #else
-        Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
-        const Llpc::ResourceMappingNode*    pResourceMappingNode,
-        uint32_t                            mappingNodeCount,
-        Llpc::ColorTarget*                  pColorTarget) = 0;
+        Llpc::ShaderModuleEntryData*         pShaderModuleEntryData,
+        const Llpc::ResourceMappingRootNode* pResourceMappingNode,
+        uint32_t                             mappingNodeCount,
+        Llpc::ColorTarget*                   pColorTarget) = 0;
 #endif
 
     virtual VkResult CreateGraphicsPipelineBinary(

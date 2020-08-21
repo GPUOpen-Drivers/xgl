@@ -48,6 +48,7 @@
 #include "include/vk_fence.h"
 #include "include/vk_formats.h"
 #include "include/vk_framebuffer.h"
+#include "include/vk_pipeline_layout.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_image.h"
 #include "include/vk_image_view.h"
@@ -390,11 +391,6 @@ VkResult Device::Create(
 
     VkResult vkResult = VK_SUCCESS;
     void*    pMemory  = nullptr;
-    union
-    {
-        const VkStructHeader*       pHeader;
-        const VkDeviceCreateInfo*   pDeviceCreateInfo;
-    };
 
     DeviceExtensions::Enabled enabledDeviceExtensions;
 
@@ -433,7 +429,11 @@ VkResult Device::Create(
     bool                              privateDataEnabled              = false;
     size_t                            privateDataSize                 = 0;
 
-    for (pDeviceCreateInfo = pCreateInfo; ((pHeader != nullptr) && (vkResult == VK_SUCCESS)); pHeader = pHeader->pNext)
+    const VkStructHeader* pHeader = nullptr;
+
+    for (pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+        ((pHeader != nullptr) && (vkResult == VK_SUCCESS));
+        pHeader = pHeader->pNext)
     {
         switch (static_cast<int>(pHeader->sType))
         {
@@ -858,6 +858,35 @@ VkResult Device::Create(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT:
+        {
+            const VkPhysicalDeviceImageRobustnessFeaturesEXT* pImageRobustnessFeatures =
+                reinterpret_cast<const VkPhysicalDeviceImageRobustnessFeaturesEXT*>(pHeader);
+
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceImageRobustnessFeaturesEXT>(
+                pPhysicalDevice,
+                pImageRobustnessFeatures);
+
+            if ((vkResult == VK_SUCCESS) &&
+                pImageRobustnessFeatures->robustImageAccess)
+            {
+                extendedRobustnessEnabled.robustImageAccess = true;
+            }
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT:
+        {
+            const auto* pFeatures = reinterpret_cast<const VkPhysicalDevice4444FormatsFeaturesEXT*>(pHeader);
+
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDevice4444FormatsFeaturesEXT>(
+                pPhysicalDevice,
+                pFeatures);
+
+            break;
+        }
+
         default:
             break;
         }
@@ -876,59 +905,55 @@ VkResult Device::Create(
         return vkResult;
     }
 
-    uint32_t totalQueues = 0;
+    uint32 totalQueues = 0;
 
     Pal::DeviceProperties properties = {};
     pPhysicalDevice->PalDevice()->GetProperties(&properties);
 
-    for (pDeviceCreateInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    for (uint32 i = 0; i < pCreateInfo->queueCreateInfoCount; i++)
     {
-        switch (pHeader->sType)
+        const VkDeviceQueueCreateInfo* pQueueInfo = &pCreateInfo->pQueueCreateInfos[i];
+
+        queueCounts[pQueueInfo->queueFamilyIndex] = pQueueInfo->queueCount;
+        totalQueues += pQueueInfo->queueCount;
+
+        queueFlags[pQueueInfo->queueFamilyIndex]  = pQueueInfo->flags;
+
+        // handle global priority
+        for (const VkStructHeader* pSubHeader = static_cast<const VkStructHeader*>(pQueueInfo->pNext);
+             pSubHeader != nullptr;
+             pSubHeader = pSubHeader->pNext)
         {
-            case VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO:
-                for (uint32_t i = 0; i < pDeviceCreateInfo->queueCreateInfoCount; i++)
+
+            uint32 totalDedicatedComputeUnits = 0;
+
+            switch (static_cast<uint32>(pSubHeader->sType))
+            {
+            case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT:
+            {
+                const auto* pPriorityInfo =
+                    reinterpret_cast<const VkDeviceQueueGlobalPriorityCreateInfoEXT*>(pSubHeader);
+
+                for (uint32 queueId = 0; queueId < pQueueInfo->queueCount; queueId++)
                 {
-                    const VkDeviceQueueCreateInfo* pQueueInfo = &pDeviceCreateInfo->pQueueCreateInfos[i];
-
-                    queueCounts[pQueueInfo->queueFamilyIndex] = pQueueInfo->queueCount;
-                    totalQueues += pQueueInfo->queueCount;
-
-                    queueFlags[pQueueInfo->queueFamilyIndex] = pQueueInfo->flags;
-
-                    // handle global priority
-                    union
-                    {
-                        const VkStructHeader*                                  pSubHeader;
-                        const VkDeviceQueueGlobalPriorityCreateInfoEXT*        pPriorityInfo;
-                    };
-
-                    for (pSubHeader = reinterpret_cast<const VkStructHeader*>(pQueueInfo->pNext);
-                         pSubHeader != nullptr;
-                         pSubHeader = pSubHeader->pNext)
-                    {
-
-                        uint32_t totalDedicatedComputeUnits = 0;
-
-                        switch (static_cast<uint32_t>(pSubHeader->sType))
-                        {
-                            case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT:
-                                for (uint32_t queueId = 0; queueId < pQueueInfo->queueCount; queueId++)
-                                {
-                                    queuePriority[pQueueInfo->queueFamilyIndex][queueId] = pPriorityInfo->globalPriority;
-                                }
-                                break;
-                            default:
-                                // Skip any unknown extension structures
-                                break;
-                        }
-                    }
+                    queuePriority[pQueueInfo->queueFamilyIndex][queueId] = pPriorityInfo->globalPriority;
                 }
+            }
+            break;
+            default:
+                // Skip any unknown extension structures
                 break;
+            }
+        }
+    }
 
+    for (pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext); pHeader != nullptr; pHeader = pHeader->pNext)
+    {
+        switch (static_cast<uint32>(pHeader->sType))
+        {
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_FEATURES:
             {
-                const VkPhysicalDeviceMultiviewFeatures* pMultiviewFeatures =
-                    reinterpret_cast<const VkPhysicalDeviceMultiviewFeatures*>(pHeader);
+                const auto* pMultiviewFeatures = reinterpret_cast<const VkPhysicalDeviceMultiviewFeatures*>(pHeader);
 
                 // The implementation of multiview does not require special handling,
                 // therefore the multview features can be ignored.
@@ -941,8 +966,7 @@ VkResult Device::Create(
 
             case VK_STRUCTURE_TYPE_DEVICE_PRIVATE_DATA_CREATE_INFO_EXT:
             {
-                const VkDevicePrivateDataCreateInfoEXT* pPrivateDataInfo =
-                    reinterpret_cast<const VkDevicePrivateDataCreateInfoEXT*>(pHeader);
+                const auto* pPrivateDataInfo = reinterpret_cast<const VkDevicePrivateDataCreateInfoEXT*>(pHeader);
 
                 privateDataSlotRequestCount += pPrivateDataInfo->privateDataSlotRequestCount;
                 break;
@@ -1461,10 +1485,11 @@ VkResult Device::Initialize(
         result = PalToVkResult(m_memoryMutex.Init());
     }
 
+    const Pal::DeviceProperties& palProps = pPhysicalDevice->PalProperties();
+
     if (result == VK_SUCCESS)
     {
         // For apps running on APU, disable allocation size tracking, allocate remote heap instead when local heap is used up.
-        const Pal::DeviceProperties& palProps = pPhysicalDevice->PalProperties();
         if (palProps.gpuType == Pal::GpuType::Integrated)
         {
             m_allocationSizeTracking = false;
@@ -1909,11 +1934,11 @@ Pal::EngineType Device::GetQueueFamilyPalEngineType(
 
 // =====================================================================================================================
 VkResult Device::CreateInternalComputePipeline(
-    size_t                           codeByteSize,
-    const uint8_t*                   pCode,
-    uint32_t                         numUserDataNodes,
-    const Vkgc::ResourceMappingNode* pUserDataNodes,
-    InternalPipeline*                pInternalPipeline)
+    size_t                         codeByteSize,
+    const uint8_t*                 pCode,
+    uint32_t                       numUserDataNodes,
+    Vkgc::ResourceMappingRootNode* pUserDataNodes,
+    InternalPipeline*              pInternalPipeline)
 {
     VK_ASSERT(numUserDataNodes <= VK_ARRAY_SIZE(pInternalPipeline->userDataNodeOffsets));
 
@@ -1946,8 +1971,35 @@ VkResult Device::CreateInternalComputePipeline(
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
         pShaderInfo->entryStage          = Vkgc::ShaderStageCompute;
 #endif
-        pShaderInfo->pUserDataNodes      = pUserDataNodes;
-        pShaderInfo->userDataNodeCount   = numUserDataNodes;
+
+#if   (LLPC_CLIENT_INTERFACE_MAJOR_VERSION< 41)
+        static const size_t MappingBufferSize =
+            MaxInternalPipelineUserNodeCount *
+                    sizeof(Vkgc::ResourceMappingRootNode)
+            ;
+        uint8_t tempBuffs[MappingBufferSize];
+#endif
+
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
+        pipelineBuildInfo.resourceMapping.pUserDataNodes = pUserDataNodes;
+        pipelineBuildInfo.resourceMapping.userDataNodeCount = numUserDataNodes;
+
+        Vkgc::ResourceMappingNode* pUserDataLegacyNodes = reinterpret_cast<Vkgc::ResourceMappingNode*>(tempBuffs);
+        pShaderInfo->pUserDataNodes = pUserDataLegacyNodes;
+
+        for (uint32_t i = 0; i < pipelineBuildInfo.resourceMapping.userDataNodeCount; ++i)
+        {
+            memcpy(&pUserDataLegacyNodes[pShaderInfo->userDataNodeCount],
+                   &pipelineBuildInfo.resourceMapping.pUserDataNodes[i],
+                   sizeof(Vkgc::ResourceMappingNode));
+
+            ++pShaderInfo->userDataNodeCount;
+            VK_ASSERT(pShaderInfo->userDataNodeCount <= pipelineBuildInfo.resourceMapping.userDataNodeCount);
+        }
+#else
+        pipelineBuildInfo.pipelineInfo.resourceMapping.pUserDataNodes = pUserDataNodes;
+        pipelineBuildInfo.pipelineInfo.resourceMapping.userDataNodeCount = numUserDataNodes;
+#endif
 
         pCompiler->ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
                                              &pShaderInfo->options
@@ -2006,7 +2058,7 @@ VkResult Device::CreateInternalComputePipeline(
 
         for (uint32_t i = 0; i < numUserDataNodes; ++i)
         {
-            pInternalPipeline->userDataNodeOffsets[i] = pUserDataNodes[i].offsetInDwords;
+            pInternalPipeline->userDataNodeOffsets[i] = pUserDataNodes[i].node.offsetInDwords;
         }
         memcpy(pInternalPipeline->pPipeline, pPipeline, sizeof(pPipeline));
     }
@@ -2049,30 +2101,33 @@ VkResult Device::CreateInternalPipelines()
     const size_t spvCodeSize = useStridedShader ?
         sizeof(CopyTimestampQueryPoolStridedSpv) : sizeof(CopyTimestampQueryPoolSpv);
 
-    Vkgc::ResourceMappingNode userDataNodes[3] = {};
+    Vkgc::ResourceMappingRootNode userDataNodes[3] = {};
 
     const uint32_t uavViewSize = m_properties.descriptorSizes.bufferView / sizeof(uint32_t);
 
     // Timestamp counter storage view
-    userDataNodes[0].type = useStridedShader ?
+    userDataNodes[0].node.type = useStridedShader ?
         Vkgc::ResourceMappingNodeType::DescriptorBuffer : Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
-    userDataNodes[0].offsetInDwords = 0;
-    userDataNodes[0].sizeInDwords = uavViewSize;
-    userDataNodes[0].srdRange.set = 0;
-    userDataNodes[0].srdRange.binding = 0;
+    userDataNodes[0].node.offsetInDwords = 0;
+    userDataNodes[0].node.sizeInDwords = uavViewSize;
+    userDataNodes[0].node.srdRange.set = 0;
+    userDataNodes[0].node.srdRange.binding = 0;
+    userDataNodes[0].visibility = Vkgc::ShaderStageComputeBit;
 
     // Copy destination storage view
-    userDataNodes[1].type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
-    userDataNodes[1].offsetInDwords = uavViewSize;
-    userDataNodes[1].sizeInDwords = uavViewSize;
-    userDataNodes[1].srdRange.set = 0;
-    userDataNodes[1].srdRange.binding = 1;
+    userDataNodes[1].node.type = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+    userDataNodes[1].node.offsetInDwords = uavViewSize;
+    userDataNodes[1].node.sizeInDwords = uavViewSize;
+    userDataNodes[1].node.srdRange.set = 0;
+    userDataNodes[1].node.srdRange.binding = 1;
+    userDataNodes[1].visibility = Vkgc::ShaderStageComputeBit;
 
     // Inline constant data
-    userDataNodes[2].type = Vkgc::ResourceMappingNodeType::PushConst;
-    userDataNodes[2].offsetInDwords = 2 * uavViewSize;
-    userDataNodes[2].sizeInDwords = 4;
-    userDataNodes[2].srdRange.set = Vkgc::InternalDescriptorSetId;
+    userDataNodes[2].node.type = Vkgc::ResourceMappingNodeType::PushConst;
+    userDataNodes[2].node.offsetInDwords = 2 * uavViewSize;
+    userDataNodes[2].node.sizeInDwords = 4;
+    userDataNodes[2].node.srdRange.set = Vkgc::InternalDescriptorSetId;
+    userDataNodes[2].visibility = Vkgc::ShaderStageComputeBit;
 
     result = CreateInternalComputePipeline(
         spvCodeSize,
@@ -2173,32 +2228,27 @@ VkResult Device::GetQueue2(
     const VkDeviceQueueInfo2* pQueueInfo,
     VkQueue*                  pQueue)
 {
+    VK_ASSERT(pQueueInfo->sType == VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2);
+
     VkResult result = VK_SUCCESS;
 
-    VkDeviceQueueCreateFlags flags            = 0;
-    uint32_t                 queueFamilyIndex = 0;
-    uint32_t                 queueIndex       = 0;
-    union
-    {
-        const VkStructHeader*     pHeader;
-        const VkDeviceQueueInfo2* pQueueInfoInfo2;
-    };
+    VkDeviceQueueCreateFlags  flags             = pQueueInfo->flags;;
+    uint32                    queueFamilyIndex  = pQueueInfo->queueFamilyIndex;
+    uint32                    queueIndex        = pQueueInfo->queueIndex;
+    const void*               pNext             = pQueueInfo->pNext;
 
-    for (pQueueInfoInfo2 = pQueueInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    while (pNext != nullptr)
     {
-        switch (static_cast<uint32_t>(pHeader->sType))
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2:
-        {
-            flags            = pQueueInfoInfo2->flags;
-            queueFamilyIndex = pQueueInfoInfo2->queueFamilyIndex;
-            queueIndex       = pQueueInfoInfo2->queueIndex;
-            break;
-        }
         default:
             VK_NOT_IMPLEMENTED;
             break;
         };
+
+        pNext = pHeader->pNext;
     }
 
     {
@@ -2624,34 +2674,28 @@ VkResult Device::BindBufferMemory(
     uint32_t                        bindInfoCount,
     const VkBindBufferMemoryInfo*   pBindInfos) const
 {
-    union
+    for (uint32 bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
-        const VkStructHeader*                    pHeader;
-        const VkBindBufferMemoryInfo*            pVkBindBufferMemoryInfo;
-        const VkBindBufferMemoryDeviceGroupInfo* pVkBindBufferMemoryDeviceGroupInfo;
-    };
+        uint32                        deviceIndexCount  = 0;
+        const uint32*                 pDeviceIndices    = nullptr;
+        const VkBindBufferMemoryInfo& info              = pBindInfos[bindIdx];
 
-    for (uint32_t bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
-    {
-        const VkBindBufferMemoryInfo& info = pBindInfos[bindIdx];
+        VK_ASSERT(info.sType == VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO);
 
-        uint32_t        deviceIndexCount = 0;
-        const uint32_t* pDeviceIndices   = nullptr;
+        const void* pNext = info.pNext;
 
-        for (pVkBindBufferMemoryInfo = &info; pHeader != nullptr; pHeader = pHeader->pNext)
+        while (pNext != nullptr)
         {
-            switch (static_cast<uint32_t>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_INFO:
-            {
-                VK_ASSERT(pVkBindBufferMemoryInfo == &info);
-                break;
-            }
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
 
+            switch (static_cast<uint32>(pHeader->sType))
+            {
             case VK_STRUCTURE_TYPE_BIND_BUFFER_MEMORY_DEVICE_GROUP_INFO:
             {
-                deviceIndexCount = pVkBindBufferMemoryDeviceGroupInfo->deviceIndexCount;
-                pDeviceIndices   = pVkBindBufferMemoryDeviceGroupInfo->pDeviceIndices;
+                const auto* pExtInfo = static_cast<const VkBindBufferMemoryDeviceGroupInfo*>(pNext);
+
+                deviceIndexCount = pExtInfo->deviceIndexCount;
+                pDeviceIndices   = pExtInfo->pDeviceIndices;
                 break;
             }
 
@@ -2659,6 +2703,8 @@ VkResult Device::BindBufferMemory(
                 VK_NOT_IMPLEMENTED;
                 break;
             }
+
+            pNext = pHeader->pNext;
         }
 
         VK_ASSERT((deviceIndexCount == 0) || (deviceIndexCount == NumPalDevices()));
@@ -2674,50 +2720,46 @@ VkResult Device::BindImageMemory(
     uint32_t                          bindInfoCount,
     const VkBindImageMemoryInfo*      pBindInfos) const
 {
-    union
+    for (uint32 bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
     {
-        const VkStructHeader*                        pHeader;
-        const VkBindImageMemoryInfo*                 pVkBindImageMemoryInfo;
-        const VkBindImageMemorySwapchainInfoKHR*     pVkBindImageMemorySwapchainInfo;
-        const VkBindImageMemoryDeviceGroupInfo*      pVkBindImageMemoryDeviceGroupInfo;
-    };
+        uint32          deviceIndexCount    = 0;
+        const uint32*   pDeviceIndices      = nullptr;
 
-    for (uint32_t bindIdx = 0; bindIdx < bindInfoCount; bindIdx++)
-    {
-        uint32_t        deviceIndexCount    = 0;
-        const uint32_t* pDeviceIndices      = nullptr;
-
-        uint32_t        SFRRectCount        = 0;
+        uint32          SFRRectCount        = 0;
         const VkRect2D* pSFRRects           = nullptr;
 
-        uint32_t        swapChainImageIndex = 0;
+        uint32          swapChainImageIndex = 0;
         SwapChain*      pSwapchain          = nullptr;
 
         const VkBindImageMemoryInfo& info = pBindInfos[bindIdx];
 
-        for (pVkBindImageMemoryInfo = &info; pHeader != nullptr; pHeader = pHeader->pNext)
-        {
-            switch (static_cast<uint32_t>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO:
-            {
-                VK_ASSERT(pVkBindImageMemoryInfo == &info);
-                break;
-            }
+        VK_ASSERT(info.sType == VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_INFO);
 
+        const void* pNext = info.pNext;
+
+        while (pNext != nullptr)
+        {
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (static_cast<uint32>(pHeader->sType))
+            {
             case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_DEVICE_GROUP_INFO:
             {
-                deviceIndexCount = pVkBindImageMemoryDeviceGroupInfo->deviceIndexCount;
-                pDeviceIndices = pVkBindImageMemoryDeviceGroupInfo->pDeviceIndices;
-                SFRRectCount = pVkBindImageMemoryDeviceGroupInfo->splitInstanceBindRegionCount;
-                pSFRRects = pVkBindImageMemoryDeviceGroupInfo->pSplitInstanceBindRegions;
+                const auto* pExtInfo = static_cast<const VkBindImageMemoryDeviceGroupInfo*>(pNext);
+
+                deviceIndexCount = pExtInfo->deviceIndexCount;
+                pDeviceIndices   = pExtInfo->pDeviceIndices;
+                SFRRectCount     = pExtInfo->splitInstanceBindRegionCount;
+                pSFRRects        = pExtInfo->pSplitInstanceBindRegions;
                 break;
             }
 
             case VK_STRUCTURE_TYPE_BIND_IMAGE_MEMORY_SWAPCHAIN_INFO_KHR:
             {
-                pSwapchain = SwapChain::ObjectFromHandle(pVkBindImageMemorySwapchainInfo->swapchain);
-                swapChainImageIndex = pVkBindImageMemorySwapchainInfo->imageIndex;
+                const auto* pExtInfo = static_cast<const VkBindImageMemorySwapchainInfoKHR*>(pNext);
+
+                pSwapchain = SwapChain::ObjectFromHandle(pExtInfo->swapchain);
+                swapChainImageIndex = pExtInfo->imageIndex;
                 break;
             }
 
@@ -2725,6 +2767,8 @@ VkResult Device::BindImageMemory(
                 VK_NOT_IMPLEMENTED;
                 break;
             }
+
+            pNext = pHeader->pNext;
         }
 
         VK_ASSERT((deviceIndexCount == 0) || (deviceIndexCount == NumPalDevices()));
@@ -3797,8 +3841,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkAllocateMemory(
     const VkAllocationCallbacks*                pAllocator,
     VkDeviceMemory*                             pMemory)
 {
-    Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
-    const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    const VkAllocationCallbacks* pAllocCB = (pAllocator != nullptr)
+                                            ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
     return pDevice->AllocMemory(pAllocateInfo, pAllocCB, pMemory);
 }

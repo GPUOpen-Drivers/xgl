@@ -44,13 +44,15 @@ namespace vk
 
 // =====================================================================================================================
 CmdPool::CmdPool(
-    Device*                   pDevice,
-    Pal::ICmdAllocator**      pPalCmdAllocators,
-    uint32_t                  queueFamilyIndex,
-    VkCommandPoolCreateFlags  flags,
-    bool                      sharedCmdAllocator)
+    Device*                      pDevice,
+    Pal::ICmdAllocator**         pPalCmdAllocators,
+    const VkAllocationCallbacks* pAllocator,
+    uint32_t                     queueFamilyIndex,
+    VkCommandPoolCreateFlags     flags,
+    bool                         sharedCmdAllocator)
     :
     m_pDevice(pDevice),
+    m_pAllocator(pAllocator),
     m_queueFamilyIndex(queueFamilyIndex),
     m_sharedCmdAllocator(sharedCmdAllocator),
     m_cmdBufferRegistry(32, pDevice->VkInstance()->Allocator())
@@ -172,6 +174,7 @@ VkResult CmdPool::Create(
         VK_PLACEMENT_NEW(pMemory) CmdPool(
             pDevice,
             pPalCmdAllocator,
+            pAllocator,
             pCreateInfo->queueFamilyIndex,
             pCreateInfo->flags,
             pSettings->useSharedCmdAllocator);

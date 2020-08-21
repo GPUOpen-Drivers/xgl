@@ -1011,7 +1011,10 @@ VkResult Queue::BindSparseEntry(
 
             if (bind.memory != VK_NULL_HANDLE)
             {
-                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(resourceDeviceIndex, memoryDeviceIndex);
+                Memory* pMemory = Memory::ObjectFromHandle(bind.memory);
+
+                pRealGpuMem = pMemory->PalMemory(resourceDeviceIndex, memoryDeviceIndex);
+
             }
 
             VK_ASSERT(bind.flags == 0);
@@ -1048,7 +1051,10 @@ VkResult Queue::BindSparseEntry(
 
             if (bind.memory != VK_NULL_HANDLE)
             {
-                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(resourceDeviceIndex, memoryDeviceIndex);
+                Memory* pMemory = Memory::ObjectFromHandle(bind.memory);
+
+                pRealGpuMem = pMemory->PalMemory(resourceDeviceIndex, memoryDeviceIndex);
+
             }
 
             result = AddVirtualRemapRange(
@@ -1088,7 +1094,10 @@ VkResult Queue::BindSparseEntry(
 
             if (bind.memory != VK_NULL_HANDLE)
             {
-                pRealGpuMem = Memory::ObjectFromHandle(bind.memory)->PalMemory(resourceDeviceIndex, memoryDeviceIndex);
+                Memory* pMemory = Memory::ObjectFromHandle(bind.memory);
+
+                pRealGpuMem = pMemory->PalMemory(resourceDeviceIndex, memoryDeviceIndex);
+
             }
 
             // Get the subresource layout to be able to figure out its offset

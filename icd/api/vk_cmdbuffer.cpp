@@ -379,47 +379,26 @@ VkResult CmdBuffer::Create(
     const VkCommandBufferAllocateInfo* pAllocateInfo,
     VkCommandBuffer*                   pCommandBuffers)
 {
-    union
-    {
-        const VkStructHeader*              pHeader;
-        const VkCommandBufferAllocateInfo* pAllocInfo;
-    };
+    VK_ASSERT(pAllocateInfo->sType == VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO);
 
     // Get information about the Vulkan command buffer
     Pal::CmdBufferCreateInfo palCreateInfo = {};
-    CmdPool* pCmdPool = nullptr;
-    uint32_t queueFamilyIndex = 0;
-    uint32_t commandBufferCount = 0;
 
-    for (pAllocInfo = pAllocateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
-    {
-        switch (pHeader->sType)
-        {
-        case VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO:
-            {
-                pCmdPool = CmdPool::ObjectFromHandle(pAllocateInfo->commandPool);
-                queueFamilyIndex            = pCmdPool->GetQueueFamilyIndex();
-                commandBufferCount          = pAllocInfo->commandBufferCount;
-                palCreateInfo.pCmdAllocator = pCmdPool->PalCmdAllocator(DefaultDeviceIndex);
-                palCreateInfo.queueType     = pDevice->GetQueueFamilyPalQueueType(queueFamilyIndex);
-                palCreateInfo.engineType    = pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex);
-                palCreateInfo.flags.nested  = (pAllocInfo->level > VK_COMMAND_BUFFER_LEVEL_PRIMARY) ? 1 : 0;
-            }
-            break;
-
-        default:
-            // Skip any unknown extension structures
-            break;
-        }
-    }
+    CmdPool* pCmdPool           = CmdPool::ObjectFromHandle(pAllocateInfo->commandPool);
+    uint32 queueFamilyIndex     = pCmdPool->GetQueueFamilyIndex();
+    uint32 commandBufferCount   = pAllocateInfo->commandBufferCount;
+    palCreateInfo.pCmdAllocator = pCmdPool->PalCmdAllocator(DefaultDeviceIndex);
+    palCreateInfo.queueType     = pDevice->GetQueueFamilyPalQueueType(queueFamilyIndex);
+    palCreateInfo.engineType    = pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex);
+    palCreateInfo.flags.nested  = (pAllocateInfo->level > VK_COMMAND_BUFFER_LEVEL_PRIMARY) ? 1 : 0;
 
     // Allocate system memory for the command buffer objects
     Pal::Result palResult;
 
-    const uint32_t numGroupedCmdBuffers = pDevice->NumPalDevices();
-    const size_t apiSize = sizeof(ApiCmdBuffer);
-    const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->
-                                        GetCmdBufferSize(palCreateInfo, &palResult) * numGroupedCmdBuffers;
+    const uint32    numGroupedCmdBuffers = pDevice->NumPalDevices();
+    const size_t    apiSize              = sizeof(ApiCmdBuffer);
+    const size_t    palSize              = pDevice->PalDevice(DefaultDeviceIndex)->
+                                               GetCmdBufferSize(palCreateInfo, &palResult) * numGroupedCmdBuffers;
 
     const size_t cmdBufSize = apiSize + palSize;
 
@@ -428,7 +407,7 @@ VkResult CmdBuffer::Create(
     VkResult result = VK_SUCCESS;
     Instance* pInstance = pDevice->VkInstance();
 
-    uint32_t allocCount = 0;
+    uint32 allocCount = 0;
 
     // Use device's barrier policy to create command buffer.
     const DeviceBarrierPolicy& barrierPolicy = pDevice->GetBarrierPolicy();
@@ -436,8 +415,7 @@ VkResult CmdBuffer::Create(
     while ((result == VK_SUCCESS) && (allocCount < commandBufferCount))
     {
         // Allocate memory for the command buffer
-        void* pMemory = pDevice->AllocApiObject(pInstance->GetAllocCallbacks(), cmdBufSize);
-
+        void* pMemory = pDevice->AllocApiObject(pCmdPool->GetCmdPoolAllocator(), cmdBufSize);
         // Create the command buffer
         if (pMemory != nullptr)
         {
@@ -969,6 +947,7 @@ void CmdBuffer::PalCmdCopyImageToMemory(
 VkResult CmdBuffer::Begin(
     const VkCommandBufferBeginInfo* pBeginInfo)
 {
+    VK_ASSERT(pBeginInfo->sType == VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO);
     VK_ASSERT(!m_flags.isRecording);
 
     // Beginning a command buffer implicitly resets its state if it is not reset before.
@@ -983,14 +962,7 @@ VkResult CmdBuffer::Begin(
 
     Pal::CmdBufferBuildInfo   cmdInfo = { 0 };
 
-    union
-    {
-        const VkStructHeader*                       pHeader;
-        const VkCommandBufferBeginInfo*             pInfo;
-        const VkDeviceGroupCommandBufferBeginInfo*  pDeviceGroupInfo;
-    };
-
-    RenderPass*  pRenderPass = nullptr;
+    RenderPass*  pRenderPass  = nullptr;
     Framebuffer* pFramebuffer = nullptr;
 
     m_cbBeginDeviceMask = m_pDevice->GetPalDeviceMask();
@@ -1010,67 +982,72 @@ VkResult CmdBuffer::Begin(
 
     Pal::InheritedStateParams inheritedStateParams = {};
 
-    uint32_t currentSubPass = 0;
-    for (pInfo = pBeginInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    uint32 currentSubPass = 0;
+
+    cmdInfo.flags.optimizeOneTimeSubmit   = (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) ? 1 : 0;
+    cmdInfo.flags.optimizeExclusiveSubmit = (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ? 0 : 1;
+
+    switch (m_pDevice->GetRuntimeSettings().optimizeCmdbufMode)
     {
-        switch (static_cast<uint32_t>(pHeader->sType))
+    case EnableOptimizeForRenderPassContinue:
+        cmdInfo.flags.optimizeGpuSmallBatch = (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
+        break;
+    case EnableOptimizeCmdbuf:
+        cmdInfo.flags.optimizeGpuSmallBatch = 1;
+        break;
+    case DisableOptimizeCmdbuf:
+        cmdInfo.flags.optimizeGpuSmallBatch = 0;
+        break;
+    default:
+        cmdInfo.flags.optimizeGpuSmallBatch = (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
+        break;
+    }
+
+    if (m_flags.is2ndLvl && (pBeginInfo->pInheritanceInfo != nullptr))
+    {
+        // Only provide valid inherited state pointer for 2nd level command buffers
+        cmdInfo.pInheritedState = &inheritedStateParams;
+
+        pRenderPass     = RenderPass::ObjectFromHandle(pBeginInfo->pInheritanceInfo->renderPass);
+        pFramebuffer    = Framebuffer::ObjectFromHandle(pBeginInfo->pInheritanceInfo->framebuffer);
+        currentSubPass  = pBeginInfo->pInheritanceInfo->subpass;
+
+        if (pBeginInfo->pInheritanceInfo->occlusionQueryEnable)
+        {
+            inheritedStateParams.stateFlags.occlusionQuery = 1;
+        }
+
+        const void* pNext = pBeginInfo->pInheritanceInfo->pNext;
+
+        while (pNext != nullptr)
+        {
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            if (pHeader->sType == VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT)
+            {
+                const auto* pExtInfo = static_cast<const VkCommandBufferInheritanceConditionalRenderingInfoEXT*>(pNext);
+
+                inheritedStateParams.stateFlags.predication = pExtInfo->conditionalRenderingEnable;
+                m_flags.hasConditionalRendering             = pExtInfo->conditionalRenderingEnable;
+            }
+
+            pNext = pHeader->pNext;
+        }
+    }
+
+    const void* pNext = pBeginInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
         {
             // Convert Vulkan flags to PAL flags.
-        case VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO:
-            cmdInfo.flags.optimizeOneTimeSubmit = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) ? 1 : 0;
-            cmdInfo.flags.optimizeExclusiveSubmit = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ? 0 : 1;
-
-            switch (m_pDevice->GetRuntimeSettings().optimizeCmdbufMode)
-            {
-            case EnableOptimizeForRenderPassContinue:
-                cmdInfo.flags.optimizeGpuSmallBatch = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
-                break;
-            case EnableOptimizeCmdbuf:
-                cmdInfo.flags.optimizeGpuSmallBatch = 1;
-                break;
-            case DisableOptimizeCmdbuf:
-                cmdInfo.flags.optimizeGpuSmallBatch = 0;
-                break;
-            default:
-                cmdInfo.flags.optimizeGpuSmallBatch = (pInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
-                break;
-            }
-
-            if (m_flags.is2ndLvl && (pInfo->pInheritanceInfo != nullptr))
-            {
-                // Only provide valid inherited state pointer for 2nd level command buffers
-                cmdInfo.pInheritedState = &inheritedStateParams;
-
-                pRenderPass = RenderPass::ObjectFromHandle(pInfo->pInheritanceInfo->renderPass);
-                pFramebuffer = Framebuffer::ObjectFromHandle(pInfo->pInheritanceInfo->framebuffer);
-                currentSubPass = pInfo->pInheritanceInfo->subpass;
-                if (pInfo->pInheritanceInfo->occlusionQueryEnable)
-                {
-                    inheritedStateParams.stateFlags.occlusionQuery = 1;
-                }
-
-                const void* pNext = pInfo->pInheritanceInfo->pNext;
-
-                while (pNext != nullptr)
-                {
-                    const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-                    if (pHeader->sType == VK_STRUCTURE_TYPE_COMMAND_BUFFER_INHERITANCE_CONDITIONAL_RENDERING_INFO_EXT)
-                    {
-                        const VkCommandBufferInheritanceConditionalRenderingInfoEXT* pConditionalRenderingInfo =
-                            static_cast<const VkCommandBufferInheritanceConditionalRenderingInfoEXT*>(pNext);
-
-                        inheritedStateParams.stateFlags.predication = pConditionalRenderingInfo->conditionalRenderingEnable;
-                        m_flags.hasConditionalRendering             = pConditionalRenderingInfo->conditionalRenderingEnable;
-                    }
-
-                    pNext = pHeader->pNext;
-                }
-            }
-            break;
-
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_COMMAND_BUFFER_BEGIN_INFO:
         {
+            const auto* pDeviceGroupInfo = static_cast<const VkDeviceGroupCommandBufferBeginInfo*>(pNext);
+
             // Check that the application did not set any bits outside of our device group mask.
             VK_ASSERT((m_cbBeginDeviceMask & pDeviceGroupInfo->deviceMask) == pDeviceGroupInfo->deviceMask);
 
@@ -1082,6 +1059,8 @@ VkResult CmdBuffer::Begin(
             // Skip any unknown extension structures
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 
     m_curDeviceMask = m_cbBeginDeviceMask;
@@ -1607,8 +1586,7 @@ VkResult CmdBuffer::Destroy(void)
 
     Util::Destructor(this);
 
-    m_pDevice->FreeApiObject(pInstance->GetAllocCallbacks(), ApiCmdBuffer::FromObject(this));
-
+    m_pDevice->FreeApiObject(m_pCmdPool->GetCmdPoolAllocator(), ApiCmdBuffer::FromObject(this));
     return VK_SUCCESS;
 }
 

@@ -100,99 +100,87 @@ VkResult SwapChain::Create(
     const VkAllocationCallbacks*            pAllocator,
     VkSwapchainKHR*                         pSwapChain)
 {
-    VkResult result = VK_SUCCESS;
+    VK_ASSERT((pCreateInfo != nullptr) && (pCreateInfo->sType == VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR));
 
-    const VkDeviceGroupSwapchainCreateInfoKHR*  pDeviceGroupExt = nullptr;
+    VkResult result = VK_SUCCESS;
 
     Properties properties = {};
 
-    bool                      fullScreenExclusiveEnabled = false;
-    bool                      mutableFormat              = false;
-    uint32_t                  viewFormatCount            = 0;
-    const VkFormat*           pViewFormats               = nullptr;
+    uint32          viewFormatCount = 0;
+    const VkFormat* pViewFormats    = nullptr;
 
-    union
+    Surface* pSurface = Surface::ObjectFromHandle(pCreateInfo->surface);
+
+    properties.pSurface      = pSurface;
+    properties.surfaceFormat = { pCreateInfo->imageFormat, pCreateInfo->imageColorSpace };
+
+    result = PhysicalDevice::UnpackDisplayableSurface(pSurface, &properties.displayableInfo);
+
+    if (pDevice->VkInstance()->GetProperties().supportExplicitPresentMode)
     {
-        const VkStructHeader*                      pHeader;
-        const VkSwapchainCreateInfoKHR*            pVkSwapchainCreateInfoKHR;
-        const VkDeviceGroupSwapchainCreateInfoKHR* pVkDeviceGroupSwapchainCreateInfoKHR;
-        const VkImageFormatListCreateInfoKHR*      pVkImageFormatListCreateInfoKHR;
-
-    };
-
-    for (pVkSwapchainCreateInfoKHR = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+        properties.imagePresentSupport = Pal::PresentMode::Windowed;
+    }
+    else
     {
-        switch (static_cast<uint32_t>(pHeader->sType))
+        // According to the design, when explicitPresentModes is not supported by platform,
+        // the present mode set by client is just a hint.
+        // The fullscreen present mode is always a preferred mode but platform would make the final call.
+        // To be fixed! The dota2 1080p + ultra mode noticed a performance drop.
+        // Dislabe the flip mode for now.
+        if (pDevice->GetRuntimeSettings().useFlipHint)
         {
-        case VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR:
-            {
-                VK_ASSERT(pCreateInfo == pVkSwapchainCreateInfoKHR);
+            properties.imagePresentSupport = Pal::PresentMode::Fullscreen;
+        }
+        else
+        {
+            properties.imagePresentSupport = Pal::PresentMode::Windowed;
+        }
+    }
+    // The swap chain is stereo if imageArraySize is 2
+    properties.flags.stereo                       = (pCreateInfo->imageArrayLayers == 2) ? 1 : 0;
 
-                Surface* pSurface = Surface::ObjectFromHandle(pVkSwapchainCreateInfoKHR->surface);
+    properties.imageCreateInfo.swizzledFormat     = VkToPalFormat(pCreateInfo->imageFormat,
+                                                                  pDevice->GetRuntimeSettings());
+    properties.imageCreateInfo.flags.stereo       = properties.flags.stereo;
+    properties.imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
 
-                properties.pSurface      = pSurface;
-                properties.surfaceFormat = { pVkSwapchainCreateInfoKHR->imageFormat,
-                                             pVkSwapchainCreateInfoKHR->imageColorSpace };
+    VkFormatProperties formatProperties;
+    pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetFormatProperties(pCreateInfo->imageFormat, &formatProperties);
+    VkImageUsageFlags imageUsage = pCreateInfo->imageUsage;
+    imageUsage &= VkFormatFeatureFlagsToImageUsageFlags(formatProperties.optimalTilingFeatures);
 
-                result = PhysicalDevice::UnpackDisplayableSurface(pSurface, &properties.displayableInfo);
+    properties.imageCreateInfo.usage    = VkToPalImageUsageFlags(imageUsage,
+                                                                 pCreateInfo->imageFormat,
+                                                                 1,
+                                                                 (VkImageUsageFlags)(0),
+                                                                 (VkImageUsageFlags)(0));
+    properties.imageCreateInfo.extent   = VkToPalExtent2d(pCreateInfo->imageExtent);
+    properties.imageCreateInfo.hDisplay = properties.displayableInfo.displayHandle;
+    properties.imageCreateInfo.hWindow  = properties.displayableInfo.windowHandle;
 
-                if (pDevice->VkInstance()->GetProperties().supportExplicitPresentMode)
-                {
-                    properties.imagePresentSupport = Pal::PresentMode::Windowed;
-                }
-                else
-                {
-                    // According to the design, when explicitPresentModes is not supported by platform,
-                    // the present mode set by client is just a hint.
-                    // The fullscreen present mode is always a preferred mode but platform would make the final call.
-                    // To be fixed! The dota2 1080p + ultra mode noticed a performance drop.
-                    // Dislabe the flip mode for now.
-                    if (pDevice->GetRuntimeSettings().useFlipHint)
-                    {
-                        properties.imagePresentSupport = Pal::PresentMode::Fullscreen;
-                    }
-                    else
-                    {
-                        properties.imagePresentSupport = Pal::PresentMode::Windowed;
-                    }
-                }
-                // The swap chain is stereo if imageArraySize is 2
-                properties.flags.stereo = (pVkSwapchainCreateInfoKHR->imageArrayLayers == 2) ? 1 : 0;
+    bool mutableFormat = ((pCreateInfo->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR) != 0);
 
-                properties.imageCreateInfo.swizzledFormat     = VkToPalFormat(pVkSwapchainCreateInfoKHR->imageFormat,
-                                                                              pDevice->GetRuntimeSettings());
-                properties.imageCreateInfo.flags.stereo       = properties.flags.stereo;
-                properties.imageCreateInfo.flags.peerWritable = (pDevice->NumPalDevices() > 1) ? 1 : 0;
+    const void* pNext = pCreateInfo->pNext;
 
-                VkFormatProperties formatProperties;
-                pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetFormatProperties(pVkSwapchainCreateInfoKHR->imageFormat,
-                                                                 &formatProperties);
-                VkImageUsageFlags imageUsage = pVkSwapchainCreateInfoKHR->imageUsage;
-                imageUsage &=
-                    VkFormatFeatureFlagsToImageUsageFlags(formatProperties.optimalTilingFeatures);
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
 
-                properties.imageCreateInfo.usage    = VkToPalImageUsageFlags(imageUsage,
-                                                                             pVkSwapchainCreateInfoKHR->imageFormat,
-                                                                             1,
-                                                                             (VkImageUsageFlags)(0),
-                                                                             (VkImageUsageFlags)(0));
-                properties.imageCreateInfo.extent   = VkToPalExtent2d(pVkSwapchainCreateInfoKHR->imageExtent);
-                properties.imageCreateInfo.hDisplay = properties.displayableInfo.displayHandle;
-                properties.imageCreateInfo.hWindow  = properties.displayableInfo.windowHandle;
-
-                mutableFormat = ((pVkSwapchainCreateInfoKHR->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR) != 0);
-            }
-            break;
-
+        switch (static_cast<uint32>(pHeader->sType))
+        {
         case VK_STRUCTURE_TYPE_DEVICE_GROUP_SWAPCHAIN_CREATE_INFO_KHR:
-            pDeviceGroupExt = pVkDeviceGroupSwapchainCreateInfoKHR;
-            properties.flags.summedImage = (pDeviceGroupExt->modes & VK_DEVICE_GROUP_PRESENT_MODE_SUM_BIT_KHR) != 0;
+        {
+            const auto* pExtInfo = static_cast<const VkDeviceGroupSwapchainCreateInfoKHR*>(pNext);
+
+            properties.flags.summedImage = (pExtInfo->modes & VK_DEVICE_GROUP_PRESENT_MODE_SUM_BIT_KHR) != 0;
             break;
+        }
         case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO_KHR:
         {
             // Processing of the actual contents of this happens later due to AutoBuffer scoping.
-            viewFormatCount = pVkImageFormatListCreateInfoKHR->viewFormatCount;
-            pViewFormats    = pVkImageFormatListCreateInfoKHR->pViewFormats;
+            const auto* pExtInfo = static_cast<const VkImageFormatListCreateInfoKHR*>(pNext);
+            viewFormatCount = pExtInfo->viewFormatCount;
+            pViewFormats    = pExtInfo->pViewFormats;
             break;
         }
 
@@ -200,11 +188,8 @@ VkResult SwapChain::Create(
             // Skip any unknown extension structures
             break;
         }
-    }
 
-    if (pCreateInfo == nullptr)
-    {
-        return VK_ERROR_INITIALIZATION_FAILED;
+        pNext = pHeader->pNext;
     }
 
     if (result != VK_SUCCESS)

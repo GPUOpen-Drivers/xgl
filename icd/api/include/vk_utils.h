@@ -340,6 +340,9 @@ private:
     size_t  m_stride;
 };
 
+template<typename T>
+constexpr T StaticMax(T a, T b) { return (a > b) ? a : b; };
+
 } // namespace utils
 
 } // namespace vk

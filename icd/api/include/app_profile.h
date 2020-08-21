@@ -79,6 +79,7 @@ enum class AppProfile : uint32_t
     DoomEternal,           // Doom Eternal by id Software
     ZombieArmy4,           // Zombie Army 4: Dead War by Rebellion Developments
     GhostReconBreakpoint,  // Ghost Recon Breakpoint
+    DetroitBecomeHuman,    // Detroit Become Human by Quantic Dream
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)
@@ -89,6 +90,7 @@ enum class AppProfile : uint32_t
     ApexEngine,            // Avalanche Open World Engine (Default)
     ScimitarEngine,        // Scimitar Engine by Ubisoft (Default)
     AnvilNextEngine,       // AnvilNext Engine by Ubisoft (Default)
+    QuanticDreamEngine,    // Quantic Dream Engine by Quantic Dream
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
 };
 

@@ -116,72 +116,73 @@ VkResult Sampler::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkSampler*                      pSampler)
 {
-    uint64_t         apiHash     = BuildApiHash(pCreateInfo);
+    VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO);
+
+    uint64           apiHash     = BuildApiHash(pCreateInfo);
     Pal::SamplerInfo samplerInfo = {};
     samplerInfo.filterMode       = Pal::TexFilterMode::Blend;  // Initialize "legacy" behavior
     Vkgc::SamplerYCbCrConversionMetaData* pSamplerYCbCrConversionMetaData = nullptr;
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
-    union
+    samplerInfo.filter     = VkToPalTexFilter(pCreateInfo->anisotropyEnable,
+                                              pCreateInfo->magFilter,
+                                              pCreateInfo->minFilter,
+                                              pCreateInfo->mipmapMode);
+    samplerInfo.addressU   = VkToPalTexAddressMode(pCreateInfo->addressModeU);
+    samplerInfo.addressV   = VkToPalTexAddressMode(pCreateInfo->addressModeV);
+    samplerInfo.addressW   = VkToPalTexAddressMode(pCreateInfo->addressModeW);
+    samplerInfo.mipLodBias = pCreateInfo->mipLodBias;
+
+    samplerInfo.maxAnisotropy           = static_cast<uint32_t>(pCreateInfo->maxAnisotropy);
+    samplerInfo.compareFunc             = VkToPalCompareFunc(pCreateInfo->compareOp);
+    samplerInfo.minLod                  = pCreateInfo->minLod;
+    samplerInfo.maxLod                  = pCreateInfo->maxLod;
+    samplerInfo.borderColorType         = VkToPalBorderColorType(pCreateInfo->borderColor);
+    samplerInfo.borderColorPaletteIndex = 0;
+
+    switch (settings.preciseAnisoMode)
     {
-        const VkStructHeader*                   pHeader;
-        const VkSamplerCreateInfo*              pSamplerInfo;
-        const VkSamplerReductionModeCreateInfo* pVkSamplerReductionModeCreateInfo;
-        const VkSamplerYcbcrConversionInfo*     pVkSamplerYCbCrConversionInfo;
-    };
+    case EnablePreciseAniso:
+        samplerInfo.flags.preciseAniso = 1;
+        break;
+    case DisablePreciseAnisoAll:
+        samplerInfo.flags.preciseAniso = 0;
+        break;
+    case DisablePreciseAnisoAfOnly:
+        samplerInfo.flags.preciseAniso = (pCreateInfo->anisotropyEnable == VK_FALSE) ? 1 : 0;
+        break;
+    default:
+        break;
+    }
+
+    samplerInfo.flags.useAnisoThreshold        = (pDevice->GetRuntimeSettings().useAnisoThreshold == true);
+    samplerInfo.anisoThreshold                 = pDevice->GetRuntimeSettings().anisoThreshold;
+    samplerInfo.flags.unnormalizedCoords       = (pCreateInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
+    samplerInfo.flags.prtBlendZeroMode         = 0;
+    samplerInfo.flags.seamlessCubeMapFiltering = 1;
+    samplerInfo.flags.truncateCoords           = ((pCreateInfo->magFilter == VK_FILTER_NEAREST) &&
+                                                  (pCreateInfo->minFilter == VK_FILTER_NEAREST))
+                                                  ? 1 : 0;
 
     // Parse the creation info.
-    for (pSamplerInfo = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    const void* pNext = pCreateInfo->pNext;
+
+    while (pNext != nullptr)
     {
-        switch (static_cast<uint32_t>(pHeader->sType))
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO:
-            samplerInfo.filter   = VkToPalTexFilter(pSamplerInfo->anisotropyEnable,
-                                                    pSamplerInfo->magFilter,
-                                                    pSamplerInfo->minFilter,
-                                                    pSamplerInfo->mipmapMode);
-            samplerInfo.addressU = VkToPalTexAddressMode(pSamplerInfo->addressModeU);
-            samplerInfo.addressV = VkToPalTexAddressMode(pSamplerInfo->addressModeV);
-            samplerInfo.addressW = VkToPalTexAddressMode(pSamplerInfo->addressModeW);
-
-            samplerInfo.mipLodBias      = pSamplerInfo->mipLodBias;
-
-            samplerInfo.maxAnisotropy   = static_cast<uint32_t>(pSamplerInfo->maxAnisotropy);
-            samplerInfo.compareFunc     = VkToPalCompareFunc(pSamplerInfo->compareOp);
-            samplerInfo.minLod          = pSamplerInfo->minLod;
-            samplerInfo.maxLod          = pSamplerInfo->maxLod;
-            samplerInfo.borderColorType = VkToPalBorderColorType(pSamplerInfo->borderColor);
-            samplerInfo.borderColorPaletteIndex = 0;
-
-            switch (settings.preciseAnisoMode)
-            {
-            case EnablePreciseAniso:
-                samplerInfo.flags.preciseAniso = 1;
-                break;
-            case DisablePreciseAnisoAll:
-                samplerInfo.flags.preciseAniso = 0;
-                break;
-            case DisablePreciseAnisoAfOnly:
-                samplerInfo.flags.preciseAniso = (pCreateInfo->anisotropyEnable == VK_FALSE) ? 1 : 0;
-                break;
-            default:
-                break;
-            }
-
-            samplerInfo.flags.useAnisoThreshold        = (pDevice->GetRuntimeSettings().useAnisoThreshold == true);
-            samplerInfo.anisoThreshold                 = pDevice->GetRuntimeSettings().anisoThreshold;
-            samplerInfo.flags.unnormalizedCoords       = (pSamplerInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
-            samplerInfo.flags.prtBlendZeroMode         = 0;
-            samplerInfo.flags.seamlessCubeMapFiltering = 1;
-            samplerInfo.flags.truncateCoords           = ((pSamplerInfo->magFilter == VK_FILTER_NEAREST) &&
-                                                          (pSamplerInfo->minFilter == VK_FILTER_NEAREST))
-                                                          ? 1 : 0;
-            break;
         case VK_STRUCTURE_TYPE_SAMPLER_REDUCTION_MODE_CREATE_INFO_EXT:
-            samplerInfo.filterMode = VkToPalTexFilterMode(pVkSamplerReductionModeCreateInfo->reductionMode);
+        {
+            const auto* pExtInfo = static_cast<const VkSamplerReductionModeCreateInfo*>(pNext);
+            samplerInfo.filterMode = VkToPalTexFilterMode(pExtInfo->reductionMode);
             break;
+        }
         case VK_STRUCTURE_TYPE_SAMPLER_YCBCR_CONVERSION_INFO:
-            pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pVkSamplerYCbCrConversionInfo->conversion)->GetMetaData();
+        {
+            const auto* pExtInfo = static_cast<const VkSamplerYcbcrConversionInfo*>(pNext);
+            pSamplerYCbCrConversionMetaData = SamplerYcbcrConversion::ObjectFromHandle(pExtInfo->conversion)->GetMetaData();
             pSamplerYCbCrConversionMetaData->word1.lumaFilter = samplerInfo.filter.minification;
 
             if (pSamplerYCbCrConversionMetaData->word0.forceExplicitReconstruct)
@@ -189,11 +190,14 @@ VkResult Sampler::Create(
                 samplerInfo.flags.truncateCoords = 0;
             }
             break;
+        }
 
         default:
             // Skip any unknown extension structures
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 
     // Figure out how big a sampler SRD is. This is not the most efficient way of doing
@@ -201,11 +205,11 @@ VkResult Sampler::Create(
     Pal::DeviceProperties props;
     pDevice->PalDevice(DefaultDeviceIndex)->GetProperties(&props);
 
-    const uint32_t apiSize = sizeof(Sampler);
-    const uint32_t palSize = props.gfxipProperties.srdSizes.sampler;
+    const uint32 apiSize = sizeof(Sampler);
+    const uint32 palSize = props.gfxipProperties.srdSizes.sampler;
 
-    const uint32_t yCbCrMetaDataSize = (pSamplerYCbCrConversionMetaData == nullptr) ?
-                                    0 : sizeof(Vkgc::SamplerYCbCrConversionMetaData);
+    const uint32 yCbCrMetaDataSize = (pSamplerYCbCrConversionMetaData == nullptr) ?
+                                        0 : sizeof(Vkgc::SamplerYCbCrConversionMetaData);
 
     // Allocate system memory. Construct the sampler in memory and then wrap a Vulkan
     // object around it.

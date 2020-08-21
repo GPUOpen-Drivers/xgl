@@ -1235,27 +1235,27 @@ VkResult PhysicalDevice::GetQueueFamilyProperties(
 
     *pCount = Util::Min(m_queueFamilyCount, *pCount);
 
-    for (uint32_t i = 0; i < *pCount; ++i)
+    for (uint32 i = 0; i < *pCount; ++i)
     {
-        union
-        {
-            const VkStructHeader*     pHeader;
-            VkQueueFamilyProperties2* pQueueProps;
-        };
+        VkQueueFamilyProperties2* pQueueProps = &pQueueProperties[i];
+        VK_ASSERT(pQueueProps->sType == VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2);
 
-        for (pQueueProps = &pQueueProperties[i]; pHeader != nullptr; pHeader = pHeader->pNext)
+        pQueueProps->queueFamilyProperties = m_queueFamilies[i].properties;
+
+        void* pNext = pQueueProps->pNext;
+
+        while (pNext != nullptr)
         {
-            switch (static_cast<uint32_t>(pHeader->sType))
+            auto* pHeader = static_cast<VkStructHeaderNonConst*>(pNext);
+
+            switch (static_cast<uint32>(pHeader->sType))
             {
-                case VK_STRUCTURE_TYPE_QUEUE_FAMILY_PROPERTIES_2:
-                {
-                    pQueueProps->queueFamilyProperties = m_queueFamilies[i].properties;
-                    break;
-                }
                 default:
                     // Skip any unknown extension structures
                     break;
             }
+
+            pNext = pHeader->pNext;
         }
     }
 
@@ -2572,13 +2572,6 @@ void PhysicalDevice::PopulateLimits()
         minSampledStencilCount = (minSampledStencilCount == UINT_MAX) ? 0 : minSampledStencilCount;
         minStorageCount        = (minStorageCount        == UINT_MAX) ? 0 : minStorageCount;
 
-        // This is a sanity check on the above logic.
-        // Make sure that the sample count masks in the settings were not set when checking this.
-        VK_ASSERT((settings.limitSampleCounts != 0xFFFFFFFF) || minSampledCount == 8);
-        VK_ASSERT((settings.limitSampleCounts != 0xFFFFFFFF) || minSampledIntCount == 8);
-        VK_ASSERT((settings.limitSampleCounts != 0xFFFFFFFF) || minSampledDepthCount == 8);
-        VK_ASSERT((settings.limitSampleCounts != 0xFFFFFFFF) || minSampledStencilCount == 8);
-
         // Sample counts supported for all non-integer, integer, depth, and stencil sampled images, respectively
         m_limits.sampledImageColorSampleCounts      = MaxSampleCountToSampleCountFlags(minSampledCount);
         m_limits.sampledImageIntegerSampleCounts    = MaxSampleCountToSampleCountFlags(minSampledIntCount);
@@ -2767,52 +2760,46 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
     const VkPhysicalDeviceSurfaceInfo2KHR*  pSurfaceInfo,
     VkSurfaceCapabilities2KHR*              pSurfaceCapabilities) const
 {
-    union
-    {
-        const VkStructHeader*                     pHeader;
-        const VkPhysicalDeviceSurfaceInfo2KHR*    pVkPhysicalDeviceSurfaceInfo2KHR;
-        VkSurfaceCapabilities2KHR*                pVkSurfaceCapabilities2KHR;
-        VkHdrMetadataEXT*                         pVkHdrMetadataEXT;
-    };
-
     VkResult                 result                    = VK_SUCCESS;
     bool                     fullScreenExplicitEnabled = false;
     Pal::OsDisplayHandle     displayHandle             = 0;
     VkSurfaceKHR             surface                   = VK_NULL_HANDLE;
 
-    for (pVkPhysicalDeviceSurfaceInfo2KHR = pSurfaceInfo; pHeader != nullptr; pHeader = pHeader->pNext)
-    {
-        switch (static_cast<uint32_t>(pHeader->sType))
-        {
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR:
-            {
-                surface = pVkPhysicalDeviceSurfaceInfo2KHR->surface;
-                break;
-            }
+    VK_ASSERT(pSurfaceInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR);
 
+    surface           = pSurfaceInfo->surface;
+    const void* pNext = pSurfaceInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
+        {
             default:
                 break;
         }
+
+        pNext = pHeader->pNext;
     }
 
-    for (pVkSurfaceCapabilities2KHR = pSurfaceCapabilities;
-        (pHeader != nullptr) && (result == VK_SUCCESS);
-        pHeader = pHeader->pNext)
-    {
-        switch (static_cast<uint32_t>(pHeader->sType))
-        {
-            case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR:
-            {
-                VK_ASSERT(surface != VK_NULL_HANDLE);
-                result = GetSurfaceCapabilities(
-                            surface,
-                            displayHandle,
-                            &pVkSurfaceCapabilities2KHR->surfaceCapabilities);
-                break;
-            }
+    VK_ASSERT(pSurfaceCapabilities->sType == VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_KHR);
+    VK_ASSERT(surface != VK_NULL_HANDLE);
 
+    result = GetSurfaceCapabilities(surface, displayHandle, &pSurfaceCapabilities->surfaceCapabilities);
+
+    void* pCapsNext = pSurfaceCapabilities->pNext;
+
+    while ((pCapsNext != nullptr) && (result == VK_SUCCESS))
+    {
+        auto* pHeader = static_cast<VkStructHeaderNonConst*>(pCapsNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
+        {
             case VK_STRUCTURE_TYPE_HDR_METADATA_EXT:
             {
+                auto* pVkHdrMetadataEXT = static_cast<VkHdrMetadataEXT*>(pCapsNext);
+
                 VkHdrMetadataEXT& vkMetadata = *pVkHdrMetadataEXT;
 
                 Surface* pSurface = Surface::ObjectFromHandle(surface);
@@ -2832,8 +2819,9 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
 
                     const Pal::ColorGamut& colorGamut = screenCaps.nativeColorGamut;
 
-                    constexpr double scale             = 1.0 / 50000.0;
-                    constexpr double minLuminanceScale = 1.0 / 10000.0;
+                    // Values returned from DAL in PAL are scaled by 10000 in DISPLAYDDCINFOEX.
+                    // See SwapChain::SetHdrMetaData() for more info.
+                    constexpr double scale             = 1.0 / 10000.0;
 
                     vkMetadata.displayPrimaryRed.x       = static_cast<float>(colorGamut.chromaticityRedX        * scale);
                     vkMetadata.displayPrimaryRed.y       = static_cast<float>(colorGamut.chromaticityRedY        * scale);
@@ -2843,8 +2831,7 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
                     vkMetadata.displayPrimaryBlue.y      = static_cast<float>(colorGamut.chromaticityBlueY       * scale);
                     vkMetadata.whitePoint.x              = static_cast<float>(colorGamut.chromaticityWhitePointX * scale);
                     vkMetadata.whitePoint.y              = static_cast<float>(colorGamut.chromaticityWhitePointY * scale);
-
-                    vkMetadata.minLuminance = static_cast<float>(colorGamut.minLuminance * minLuminanceScale);
+                    vkMetadata.minLuminance              = static_cast<float>(colorGamut.minLuminance            * scale);
                     vkMetadata.maxLuminance              = static_cast<float>(colorGamut.maxLuminance);
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 512
                     vkMetadata.maxFrameAverageLightLevel = static_cast<float>(colorGamut.maxFrameAverageLightLevel);
@@ -2874,6 +2861,8 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
             default:
                 break;
         }
+
+        pCapsNext = pHeader->pNext;
     }
 
     return result;
@@ -3552,6 +3541,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     {
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONDITIONAL_RENDERING));
     }
+
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_ROBUSTNESS));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_HOST_QUERY_RESET));
 
@@ -5074,6 +5065,22 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT:
+            {
+                VkPhysicalDeviceImageRobustnessFeaturesEXT* pImageRobustnessFeatures =
+                    reinterpret_cast<VkPhysicalDeviceImageRobustnessFeaturesEXT*>(pHeader);
+                pImageRobustnessFeatures->robustImageAccess = VK_TRUE;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT:
+            {
+                auto* pExtFeatures = reinterpret_cast<VkPhysicalDevice4444FormatsFeaturesEXT*>(pHeader);
+                pExtFeatures->formatA4R4G4B4 = VK_TRUE;
+                pExtFeatures->formatA4B4G4R4 = VK_TRUE;
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -5211,53 +5218,25 @@ void PhysicalDevice::GetDeviceProperties2(
 
     GetDeviceProperties(&pProperties->properties);
 
-    union
+    void* pNext = pProperties->pNext;
+
+    while (pNext != nullptr)
     {
-        const VkStructHeader*                                     pHeader;
-        VkPhysicalDeviceProperties2*                              pProp;
-        VkPhysicalDevicePointClippingProperties*                  pPointClippingProperties;
-        VkPhysicalDeviceIDProperties*                             pIDProperties;
-        VkPhysicalDeviceSampleLocationsPropertiesEXT*             pSampleLocationsPropertiesEXT;
-        VkPhysicalDeviceGpaPropertiesAMD*                         pGpaProperties;
-        VkPhysicalDeviceMaintenance3Properties*                   pMaintenance3Properties;
-        VkPhysicalDeviceMultiviewProperties*                      pMultiviewProperties;
-        VkPhysicalDeviceProtectedMemoryProperties*                pProtectedMemoryProperties;
-        VkPhysicalDeviceSubgroupProperties*                       pSubgroupProperties;
-        VkPhysicalDeviceExternalMemoryHostPropertiesEXT*          pExternalMemoryHostProperties;
-        VkPhysicalDeviceSamplerFilterMinmaxProperties*            pMinMaxProperties;
-        VkPhysicalDeviceShaderCorePropertiesAMD*                  pShaderCoreProperties;
-        VkPhysicalDeviceShaderCoreProperties2AMD*                 pShaderCoreProperties2;
-        VkPhysicalDeviceDescriptorIndexingProperties*             pDescriptorIndexingProperties;
-        VkPhysicalDeviceConservativeRasterizationPropertiesEXT*   pConservativeRasterizationProperties;
+        auto* pHeader = static_cast<VkStructHeaderNonConst*>(pNext);
 
-        VkPhysicalDeviceDriverProperties*                         pDriverProperties;
-        VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*      pVertexAttributeDivisorProperties;
-        VkPhysicalDeviceFloatControlsProperties*                  pFloatControlsProperties;
-        VkPhysicalDeviceInlineUniformBlockPropertiesEXT*          pInlineUniformBlockProperties;
-
-        VkPhysicalDevicePCIBusInfoPropertiesEXT*                  pPCIBusInfoProperties;
-        VkPhysicalDeviceTransformFeedbackPropertiesEXT*           pFeedbackProperties;
-        VkPhysicalDeviceDepthStencilResolveProperties*            pDepthStencilResolveProperties;
-        VkPhysicalDeviceTimelineSemaphoreProperties*              pTimelineSemaphoreProperties;
-        VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*         pSubgroupSizeControlProperties;
-        VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT*        pTexelBufferAlignmentProperties;
-        VkPhysicalDeviceRobustness2PropertiesEXT*                 pRobustness2Properties;
-        VkPhysicalDeviceLineRasterizationPropertiesEXT*           pLineRasterizationProperties;
-        VkPhysicalDeviceVulkan11Properties*                       pVulkan11Properties;
-        VkPhysicalDeviceVulkan12Properties*                       pVulkan12Properties;
-    };
-
-    for (pProp = pProperties; pHeader != nullptr; pHeader = pHeader->pNext)
-    {
         switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_POINT_CLIPPING_PROPERTIES:
         {
-            GetPhysicalDevicePointClippingProperties(&pPointClippingProperties->pointClippingBehavior);
+            auto* pProps = static_cast<VkPhysicalDevicePointClippingProperties*>(pNext);
+
+            GetPhysicalDevicePointClippingProperties(&pProps->pointClippingBehavior);
             break;
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ID_PROPERTIES:
         {
+            auto* pIDProperties = static_cast<VkPhysicalDeviceIDProperties*>(pNext);
+
             GetPhysicalDeviceIDProperties(
                 &pIDProperties->deviceUUID[0],
                 &pIDProperties->driverUUID[0],
@@ -5268,109 +5247,123 @@ void PhysicalDevice::GetDeviceProperties2(
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLE_LOCATIONS_PROPERTIES_EXT:
         {
-            pSampleLocationsPropertiesEXT->sampleLocationSampleCounts       = m_sampleLocationSampleCounts;
-            pSampleLocationsPropertiesEXT->maxSampleLocationGridSize.width  = Pal::MaxGridSize.width;
-            pSampleLocationsPropertiesEXT->maxSampleLocationGridSize.height = Pal::MaxGridSize.height;
-            pSampleLocationsPropertiesEXT->sampleLocationCoordinateRange[0] = 0.0f;
-            pSampleLocationsPropertiesEXT->sampleLocationCoordinateRange[1] = 1.0f;
-            pSampleLocationsPropertiesEXT->sampleLocationSubPixelBits       = Pal::SubPixelBits;
-            pSampleLocationsPropertiesEXT->variableSampleLocations          = VK_TRUE;
+            auto* pProps = static_cast<VkPhysicalDeviceSampleLocationsPropertiesEXT*>(pNext);
+
+            pProps->sampleLocationSampleCounts       = m_sampleLocationSampleCounts;
+            pProps->maxSampleLocationGridSize.width  = Pal::MaxGridSize.width;
+            pProps->maxSampleLocationGridSize.height = Pal::MaxGridSize.height;
+            pProps->sampleLocationCoordinateRange[0] = 0.0f;
+            pProps->sampleLocationCoordinateRange[1] = 1.0f;
+            pProps->sampleLocationSubPixelBits       = Pal::SubPixelBits;
+            pProps->variableSampleLocations          = VK_TRUE;
             break;
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GPA_PROPERTIES_AMD:
         {
+            auto* pGpaProperties = static_cast<VkPhysicalDeviceGpaPropertiesAMD*>(pNext);
             GetDeviceGpaProperties(pGpaProperties);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MAINTENANCE_3_PROPERTIES:
         {
-            GetPhysicalDeviceMaintenance3Properties(
-                &pMaintenance3Properties->maxPerSetDescriptors,
-                &pMaintenance3Properties->maxMemoryAllocationSize);
+            auto* pProps = static_cast<VkPhysicalDeviceMaintenance3Properties*>(pNext);
+
+            GetPhysicalDeviceMaintenance3Properties(&pProps->maxPerSetDescriptors, &pProps->maxMemoryAllocationSize);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROTECTED_MEMORY_PROPERTIES:
         {
-            GetPhysicalDeviceProtectedMemoryProperties(&pProtectedMemoryProperties->protectedNoFault);
+            auto* pProps = static_cast<VkPhysicalDeviceProtectedMemoryProperties*>(pNext);
+
+            GetPhysicalDeviceProtectedMemoryProperties(&pProps->protectedNoFault);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MULTIVIEW_PROPERTIES:
         {
-            GetPhysicalDeviceMultiviewProperties(
-                &pMultiviewProperties->maxMultiviewViewCount,
-                &pMultiviewProperties->maxMultiviewInstanceIndex);
+            auto* pProps = static_cast<VkPhysicalDeviceMultiviewProperties*>(pNext);
+
+            GetPhysicalDeviceMultiviewProperties(&pProps->maxMultiviewViewCount, &pProps->maxMultiviewInstanceIndex);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES:
         {
+            auto* pProps = static_cast<VkPhysicalDeviceSubgroupProperties*>(pNext);
+
             GetPhysicalDeviceSubgroupProperties(
-                &pSubgroupProperties->subgroupSize,
-                &pSubgroupProperties->supportedStages,
-                &pSubgroupProperties->supportedOperations,
-                &pSubgroupProperties->quadOperationsInAllStages);
+                &pProps->subgroupSize,
+                &pProps->supportedStages,
+                &pProps->supportedOperations,
+                &pProps->quadOperationsInAllStages);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SAMPLER_FILTER_MINMAX_PROPERTIES_EXT:
         {
+            auto* pProps = static_cast<VkPhysicalDeviceSamplerFilterMinmaxProperties*>(pNext);
+
             GetPhysicalDeviceSamplerFilterMinmaxProperties(
-                &pMinMaxProperties->filterMinmaxSingleComponentFormats,
-                &pMinMaxProperties->filterMinmaxImageComponentMapping);
+                &pProps->filterMinmaxSingleComponentFormats,
+                &pProps->filterMinmaxImageComponentMapping);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTERNAL_MEMORY_HOST_PROPERTIES_EXT:
         {
+            auto* pProps = static_cast<VkPhysicalDeviceExternalMemoryHostPropertiesEXT*>(pNext);
+
             const Pal::DeviceProperties& palProps = PalProperties();
 
-            pExternalMemoryHostProperties->minImportedHostPointerAlignment =
-                palProps.gpuMemoryProperties.realMemAllocGranularity;
+            pProps->minImportedHostPointerAlignment = palProps.gpuMemoryProperties.realMemAllocGranularity;
 
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_AMD:
         {
-            const Pal::DeviceProperties& props = PalProperties();
+            auto* pProps = static_cast<VkPhysicalDeviceShaderCorePropertiesAMD*>(pNext);
 
-            pShaderCoreProperties->shaderEngineCount = props.gfxipProperties.shaderCore.numShaderEngines;
-            pShaderCoreProperties->shaderArraysPerEngineCount = props.gfxipProperties.shaderCore.numShaderArrays;
-            pShaderCoreProperties->computeUnitsPerShaderArray = props.gfxipProperties.shaderCore.numCusPerShaderArray;
-            pShaderCoreProperties->simdPerComputeUnit = props.gfxipProperties.shaderCore.numSimdsPerCu;
-            pShaderCoreProperties->wavefrontsPerSimd = props.gfxipProperties.shaderCore.numWavefrontsPerSimd;
-            pShaderCoreProperties->wavefrontSize = props.gfxipProperties.shaderCore.maxWavefrontSize;
+            const Pal::DeviceProperties& palProps = PalProperties();
+
+            pProps->shaderEngineCount          = palProps.gfxipProperties.shaderCore.numShaderEngines;
+            pProps->shaderArraysPerEngineCount = palProps.gfxipProperties.shaderCore.numShaderArrays;
+            pProps->computeUnitsPerShaderArray = palProps.gfxipProperties.shaderCore.numCusPerShaderArray;
+            pProps->simdPerComputeUnit         = palProps.gfxipProperties.shaderCore.numSimdsPerCu;
+            pProps->wavefrontsPerSimd          = palProps.gfxipProperties.shaderCore.numWavefrontsPerSimd;
+            pProps->wavefrontSize              = palProps.gfxipProperties.shaderCore.maxWavefrontSize;
 
             // Scalar General Purpose Registers (SGPR)
-            pShaderCoreProperties->sgprsPerSimd = props.gfxipProperties.shaderCore.sgprsPerSimd;
-            pShaderCoreProperties->minSgprAllocation = props.gfxipProperties.shaderCore.minSgprAlloc;
-            pShaderCoreProperties->maxSgprAllocation = props.gfxipProperties.shaderCore.numAvailableSgprs;
-            pShaderCoreProperties->sgprAllocationGranularity = props.gfxipProperties.shaderCore.sgprAllocGranularity;
+            pProps->sgprsPerSimd               = palProps.gfxipProperties.shaderCore.sgprsPerSimd;
+            pProps->minSgprAllocation          = palProps.gfxipProperties.shaderCore.minSgprAlloc;
+            pProps->maxSgprAllocation          = palProps.gfxipProperties.shaderCore.numAvailableSgprs;
+            pProps->sgprAllocationGranularity  = palProps.gfxipProperties.shaderCore.sgprAllocGranularity;
 
             // Vector General Purpose Registers (VGPR)
-            pShaderCoreProperties->vgprsPerSimd = props.gfxipProperties.shaderCore.vgprsPerSimd;
-            pShaderCoreProperties->minVgprAllocation = props.gfxipProperties.shaderCore.minVgprAlloc;
-            pShaderCoreProperties->maxVgprAllocation = props.gfxipProperties.shaderCore.numAvailableVgprs;
-            pShaderCoreProperties->vgprAllocationGranularity = props.gfxipProperties.shaderCore.vgprAllocGranularity;
+            pProps->vgprsPerSimd               = palProps.gfxipProperties.shaderCore.vgprsPerSimd;
+            pProps->minVgprAllocation          = palProps.gfxipProperties.shaderCore.minVgprAlloc;
+            pProps->maxVgprAllocation          = palProps.gfxipProperties.shaderCore.numAvailableVgprs;
+            pProps->vgprAllocationGranularity  = palProps.gfxipProperties.shaderCore.vgprAllocGranularity;
 
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_CORE_PROPERTIES_2_AMD:
         {
-            const Pal::DeviceProperties& props = PalProperties();
+            auto* pProps = static_cast<VkPhysicalDeviceShaderCoreProperties2AMD*>(pNext);
 
-            pShaderCoreProperties2->shaderCoreFeatures = 0;
-            pShaderCoreProperties2->activeComputeUnitCount = 0;
-            for (uint32_t i = 0; i < props.gfxipProperties.shaderCore.numShaderEngines; ++i)
+            const Pal::DeviceProperties& palProps = PalProperties();
+
+            pProps->shaderCoreFeatures = 0;
+            pProps->activeComputeUnitCount = 0;
+            for (uint32_t i = 0; i < palProps.gfxipProperties.shaderCore.numShaderEngines; ++i)
             {
-                for (uint32_t j = 0; j < props.gfxipProperties.shaderCore.numShaderArrays; ++j)
+                for (uint32_t j = 0; j < palProps.gfxipProperties.shaderCore.numShaderArrays; ++j)
                 {
-                    pShaderCoreProperties2->activeComputeUnitCount +=
-                        Util::CountSetBits(props.gfxipProperties.shaderCore.activeCuMask[i][j]);
+                    pProps->activeComputeUnitCount +=
+                        Util::CountSetBits(palProps.gfxipProperties.shaderCore.activeCuMask[i][j]);
                 }
             }
 
@@ -5379,64 +5372,73 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_INDEXING_PROPERTIES:
         {
-            GetPhysicalDeviceDescriptorIndexingProperties(pDescriptorIndexingProperties);
+            auto* pProps = static_cast<VkPhysicalDeviceDescriptorIndexingProperties*>(pNext);
+
+            GetPhysicalDeviceDescriptorIndexingProperties(pProps);
             break;
         }
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONSERVATIVE_RASTERIZATION_PROPERTIES_EXT:
         {
-            pConservativeRasterizationProperties->primitiveOverestimationSize                   = 0;
-            pConservativeRasterizationProperties->maxExtraPrimitiveOverestimationSize           = 0;
-            pConservativeRasterizationProperties->extraPrimitiveOverestimationSizeGranularity   = 0;
-            pConservativeRasterizationProperties->primitiveUnderestimation                      = VK_TRUE;
-            pConservativeRasterizationProperties->conservativePointAndLineRasterization         = VK_FALSE;
-            pConservativeRasterizationProperties->degenerateTrianglesRasterized                 = VK_TRUE;
-            pConservativeRasterizationProperties->degenerateLinesRasterized                     = VK_FALSE;
-            pConservativeRasterizationProperties->fullyCoveredFragmentShaderInputVariable       = VK_FALSE;
-            pConservativeRasterizationProperties->conservativeRasterizationPostDepthCoverage    = IsExtensionSupported(DeviceExtensions::EXT_POST_DEPTH_COVERAGE) ? VK_TRUE : VK_FALSE;
+            auto* pProps = static_cast<VkPhysicalDeviceConservativeRasterizationPropertiesEXT*>(pNext);
+
+            pProps->primitiveOverestimationSize                   = 0;
+            pProps->maxExtraPrimitiveOverestimationSize           = 0;
+            pProps->extraPrimitiveOverestimationSizeGranularity   = 0;
+            pProps->primitiveUnderestimation                      = VK_TRUE;
+            pProps->conservativePointAndLineRasterization         = VK_FALSE;
+            pProps->degenerateTrianglesRasterized                 = VK_TRUE;
+            pProps->degenerateLinesRasterized                     = VK_FALSE;
+            pProps->fullyCoveredFragmentShaderInputVariable       = VK_FALSE;
+            pProps->conservativeRasterizationPostDepthCoverage    =
+                IsExtensionSupported(DeviceExtensions::EXT_POST_DEPTH_COVERAGE) ? VK_TRUE : VK_FALSE;
 
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DRIVER_PROPERTIES:
         {
-            GetPhysicalDeviceDriverProperties(
-                &pDriverProperties->driverID,
-                pDriverProperties->driverName,
-                pDriverProperties->driverInfo,
-                &pDriverProperties->conformanceVersion);
+            auto* pProps = static_cast<VkPhysicalDeviceDriverProperties*>(pNext);
+            GetPhysicalDeviceDriverProperties(&pProps->driverID, pProps->driverName, pProps->driverInfo, &pProps->conformanceVersion);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VERTEX_ATTRIBUTE_DIVISOR_PROPERTIES_EXT:
         {
-            pVertexAttributeDivisorProperties->maxVertexAttribDivisor = UINT32_MAX;
+            auto* pProps = static_cast<VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT*>(pNext);
+
+            pProps->maxVertexAttribDivisor = UINT32_MAX;
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FLOAT_CONTROLS_PROPERTIES:
         {
-            GetPhysicalDeviceFloatControlsProperties(pFloatControlsProperties);
+            auto* pProps = static_cast<VkPhysicalDeviceFloatControlsProperties*>(pNext);
+
+            GetPhysicalDeviceFloatControlsProperties(pProps);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PCI_BUS_INFO_PROPERTIES_EXT:
         {
+            auto* pProps = static_cast<VkPhysicalDevicePCIBusInfoPropertiesEXT*>(pNext);
             const Pal::DeviceProperties& palProps = PalProperties();
 
-            pPCIBusInfoProperties->pciDomain   = palProps.pciProperties.domainNumber;
-            pPCIBusInfoProperties->pciBus      = palProps.pciProperties.busNumber;
-            pPCIBusInfoProperties->pciDevice   = palProps.pciProperties.deviceNumber;
-            pPCIBusInfoProperties->pciFunction = palProps.pciProperties.functionNumber;
+            pProps->pciDomain   = palProps.pciProperties.domainNumber;
+            pProps->pciBus      = palProps.pciProperties.busNumber;
+            pProps->pciDevice   = palProps.pciProperties.deviceNumber;
+            pProps->pciFunction = palProps.pciProperties.functionNumber;
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_INLINE_UNIFORM_BLOCK_PROPERTIES_EXT:
         {
-            pInlineUniformBlockProperties->maxInlineUniformBlockSize                                = 64*1024;
-            pInlineUniformBlockProperties->maxPerStageDescriptorInlineUniformBlocks                 = 16;
-            pInlineUniformBlockProperties->maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks  = 16;
-            pInlineUniformBlockProperties->maxDescriptorSetInlineUniformBlocks                      = 16;
-            pInlineUniformBlockProperties->maxDescriptorSetUpdateAfterBindInlineUniformBlocks       = 16;
+            auto* pProps = static_cast<VkPhysicalDeviceInlineUniformBlockPropertiesEXT*>(pNext);
+
+            pProps->maxInlineUniformBlockSize                                = 64*1024;
+            pProps->maxPerStageDescriptorInlineUniformBlocks                 = 16;
+            pProps->maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks  = 16;
+            pProps->maxDescriptorSetInlineUniformBlocks                      = 16;
+            pProps->maxDescriptorSetUpdateAfterBindInlineUniformBlocks       = 16;
 
             break;
         }
@@ -5446,58 +5448,69 @@ void PhysicalDevice::GetDeviceProperties2(
             // VGT_STRMOUT_DRAW_OPAQUE_VERTEX_STRIDE used in this method only has 9 bits, which means the register can
             // represent 511 bytes at most. Due to this limitation, the max values of StreamDataSize, BufferDataSize
             // and DataStride are all hardcode to 512, partly because 512 is VK spec's minimum requirement.
-            pFeedbackProperties->maxTransformFeedbackStreamDataSize         = 512;
-            pFeedbackProperties->maxTransformFeedbackBufferDataSize         = 512;
-            pFeedbackProperties->maxTransformFeedbackBufferDataStride       = 512;
-            pFeedbackProperties->maxTransformFeedbackBufferSize             = 0xffffffff;
-            pFeedbackProperties->maxTransformFeedbackBuffers                = Pal::MaxStreamOutTargets;
-            pFeedbackProperties->maxTransformFeedbackStreams                = Pal::MaxStreamOutTargets;
-            pFeedbackProperties->transformFeedbackDraw                      = true;
-            pFeedbackProperties->transformFeedbackQueries                   = true;
-            pFeedbackProperties->transformFeedbackStreamsLinesTriangles     = true;
-            pFeedbackProperties->transformFeedbackRasterizationStreamSelect = false;
+            auto* pProps = static_cast<VkPhysicalDeviceTransformFeedbackPropertiesEXT*>(pNext);
+
+            pProps->maxTransformFeedbackStreamDataSize         = 512;
+            pProps->maxTransformFeedbackBufferDataSize         = 512;
+            pProps->maxTransformFeedbackBufferDataStride       = 512;
+            pProps->maxTransformFeedbackBufferSize             = 0xffffffff;
+            pProps->maxTransformFeedbackBuffers                = Pal::MaxStreamOutTargets;
+            pProps->maxTransformFeedbackStreams                = Pal::MaxStreamOutTargets;
+            pProps->transformFeedbackDraw                      = true;
+            pProps->transformFeedbackQueries                   = true;
+            pProps->transformFeedbackStreamsLinesTriangles     = true;
+            pProps->transformFeedbackRasterizationStreamSelect = false;
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DEPTH_STENCIL_RESOLVE_PROPERTIES:
         {
+            auto* pProps = static_cast<VkPhysicalDeviceDepthStencilResolveProperties*>(pNext);
+
             GetPhysicalDeviceDepthStencilResolveProperties(
-                &pDepthStencilResolveProperties->supportedDepthResolveModes,
-                &pDepthStencilResolveProperties->supportedStencilResolveModes,
-                &pDepthStencilResolveProperties->independentResolveNone,
-                &pDepthStencilResolveProperties->independentResolve);
+                &pProps->supportedDepthResolveModes,
+                &pProps->supportedStencilResolveModes,
+                &pProps->independentResolveNone,
+                &pProps->independentResolve);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TIMELINE_SEMAPHORE_PROPERTIES:
         {
-            GetPhysicalDeviceTimelineSemaphoreProperties(
-                &pTimelineSemaphoreProperties->maxTimelineSemaphoreValueDifference);
+            auto* pProps = static_cast<VkPhysicalDeviceTimelineSemaphoreProperties*>(pNext);
+
+            GetPhysicalDeviceTimelineSemaphoreProperties(&pProps->maxTimelineSemaphoreValueDifference);
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES_EXT:
         {
-            pSubgroupSizeControlProperties->minSubgroupSize = m_properties.gfxipProperties.shaderCore.minWavefrontSize;
-            pSubgroupSizeControlProperties->maxSubgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
+            auto* pProps = static_cast<VkPhysicalDeviceSubgroupSizeControlPropertiesEXT*>(pNext);
+
+            pProps->minSubgroupSize = m_properties.gfxipProperties.shaderCore.minWavefrontSize;
+            pProps->maxSubgroupSize = m_properties.gfxipProperties.shaderCore.maxWavefrontSize;
 
             // No limits on the maximum number of subgroups allowed within a workgroup.
-            pSubgroupSizeControlProperties->maxComputeWorkgroupSubgroups = UINT32_MAX;
+            pProps->maxComputeWorkgroupSubgroups = UINT32_MAX;
 
             // Do not support setting a required subgroup size in any stage.
-            pSubgroupSizeControlProperties->requiredSubgroupSizeStages = 0;
+            pProps->requiredSubgroupSizeStages = 0;
 
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_LINE_RASTERIZATION_PROPERTIES_EXT:
         {
-            pLineRasterizationProperties->lineSubPixelPrecisionBits = Pal::SubPixelBits;
+            auto* pProps = static_cast<VkPhysicalDeviceLineRasterizationPropertiesEXT*>(pNext);
+
+            pProps->lineSubPixelPrecisionBits = Pal::SubPixelBits;
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_1_PROPERTIES:
         {
+            auto* pVulkan11Properties = static_cast<VkPhysicalDeviceVulkan11Properties*>(pNext);
+
             GetPhysicalDeviceIDProperties(
                 &pVulkan11Properties->deviceUUID[0],
                 &pVulkan11Properties->driverUUID[0],
@@ -5530,6 +5543,8 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_VULKAN_1_2_PROPERTIES:
         {
+            auto* pVulkan12Properties = static_cast<VkPhysicalDeviceVulkan12Properties*>(pNext);
+
             GetPhysicalDeviceDriverProperties(
                 &pVulkan12Properties->driverID,
                 &pVulkan12Properties->driverName[0],
@@ -5565,26 +5580,30 @@ void PhysicalDevice::GetDeviceProperties2(
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT:
         {
+            auto* pProps = static_cast<VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT*>(pNext);
+
             // Properties are guaranteed by the comment for PAL's definition of CreateTypedBufferViewSrds().
-            pTexelBufferAlignmentProperties->storageTexelBufferOffsetAlignmentBytes =
-                m_limits.minTexelBufferOffsetAlignment;
-            pTexelBufferAlignmentProperties->storageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
-            pTexelBufferAlignmentProperties->uniformTexelBufferOffsetAlignmentBytes =
-                m_limits.minTexelBufferOffsetAlignment;
-            pTexelBufferAlignmentProperties->uniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+            pProps->storageTexelBufferOffsetAlignmentBytes       = m_limits.minTexelBufferOffsetAlignment;
+            pProps->storageTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
+            pProps->uniformTexelBufferOffsetAlignmentBytes       = m_limits.minTexelBufferOffsetAlignment;
+            pProps->uniformTexelBufferOffsetSingleTexelAlignment = VK_TRUE;
             break;
         }
 
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_PROPERTIES_EXT:
         {
-            pRobustness2Properties->robustStorageBufferAccessSizeAlignment = 4;
-            pRobustness2Properties->robustUniformBufferAccessSizeAlignment = 4;
+            auto* pProps = static_cast<VkPhysicalDeviceRobustness2PropertiesEXT*>(pNext);
+
+            pProps->robustStorageBufferAccessSizeAlignment = 4;
+            pProps->robustUniformBufferAccessSizeAlignment = 4;
             break;
         }
 
         default:
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 }
 
@@ -5602,27 +5621,29 @@ void PhysicalDevice::GetMemoryProperties2(
     VkPhysicalDeviceMemoryProperties2*          pMemoryProperties)
 {
     VK_ASSERT(pMemoryProperties->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_PROPERTIES_2);
+
     pMemoryProperties->memoryProperties = GetMemoryProperties();
 
-    union
-    {
-        const VkStructHeader*                      pHeader;
-        VkPhysicalDeviceMemoryProperties2*         pMemProps;
-        VkPhysicalDeviceMemoryBudgetPropertiesEXT* pMemBudgetProps;
-    };
+    void* pNext = pMemoryProperties->pNext;
 
-    for (pMemProps = pMemoryProperties; pHeader != nullptr; pHeader = pHeader->pNext)
+    while (pNext != nullptr)
     {
-        switch (static_cast<uint32_t>(pHeader->sType))
+        auto* pHeader = static_cast<VkStructHeaderNonConst*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_MEMORY_BUDGET_PROPERTIES_EXT:
         {
+            auto* pMemBudgetProps = static_cast<VkPhysicalDeviceMemoryBudgetPropertiesEXT*>(pNext);
+
             GetMemoryBudgetProperties(pMemBudgetProps);
             break;
         }
         default:
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 }
 
@@ -6563,28 +6584,10 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2EXT(
     VkSurfaceCapabilities2EXT*  pSurfaceCapabilitiesExt
     ) const
 {
-    VkResult result = VK_SUCCESS;
+    VK_ASSERT(pSurfaceCapabilitiesExt->sType == VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_EXT);
+
     Pal::OsDisplayHandle osDisplayHandle = 0;
-
-    union
-    {
-        const VkStructHeader*       pHeader;
-        VkSurfaceCapabilities2EXT*  pVkSurfaceCapabilities2EXT;
-    };
-
-    for (pVkSurfaceCapabilities2EXT = pSurfaceCapabilitiesExt;
-        (pHeader != nullptr) && (result == VK_SUCCESS);
-        pHeader = pHeader->pNext)
-    {
-        switch (static_cast<uint32_t>(pHeader->sType))
-        {
-        case VK_STRUCTURE_TYPE_SURFACE_CAPABILITIES_2_EXT:
-            result = GetSurfaceCapabilities(surface, osDisplayHandle, pVkSurfaceCapabilities2EXT);
-            break;
-        default:
-            break;
-        }
-    }
+    VkResult result = GetSurfaceCapabilities(surface, osDisplayHandle, pSurfaceCapabilitiesExt);
 
     return result;
 }
@@ -6860,31 +6863,29 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceSurfaceFormats2KHR(
     uint32_t*                                   pSurfaceFormatCount,
     VkSurfaceFormat2KHR*                        pSurfaceFormats)
 {
-    union
-    {
-        const VkStructHeader*                  pHeader;
-        const VkPhysicalDeviceSurfaceInfo2KHR* pVkPhysicalDeviceSurfaceInfo2KHR;
-    };
-
     Pal::OsDisplayHandle osDisplayhandle           = 0;
     VkResult             result                    = VK_SUCCESS;
     VkSurfaceKHR         surface                   = VK_NULL_HANDLE;
     bool                 fullScreenExplicitEnabled = false;
 
-    for (pVkPhysicalDeviceSurfaceInfo2KHR = pSurfaceInfo;
-        (pHeader != nullptr) && ((result == VK_SUCCESS) || (result == VK_INCOMPLETE));
-        pHeader = pHeader->pNext)
-    {
-        switch (static_cast<uint32_t>(pHeader->sType))
-        {
-            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR:
-                surface = pVkPhysicalDeviceSurfaceInfo2KHR->surface;
-                VK_ASSERT(surface != VK_NULL_HANDLE);
-                break;
+    VK_ASSERT(pSurfaceInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SURFACE_INFO_2_KHR);
 
+    surface = pSurfaceInfo->surface;
+    VK_ASSERT(surface != VK_NULL_HANDLE);
+
+    const void* pNext = pSurfaceInfo->pNext;
+
+    while (pNext != nullptr)
+    {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
+        {
             default:
                 break;
         }
+
+        pNext = pHeader->pNext;
     }
 
     if (surface != VK_NULL_HANDLE)

@@ -501,6 +501,53 @@ TypeValues = {
 BRANCHES = [
     ]
 
+def jsonEnumWriterTemplate(values, prefix=""):
+    template = ""
+    elseValue = ""
+    for value in values:
+        valueTemplate = \
+            "    %Else%if (shader.shaderCreate.tuningOptions.%Flag% == %Prefix%%Value%)\n" + \
+            "    {\n" + \
+            "        pWriter->Key(\"%Flag%\");\n" + \
+            "        pWriter->Value(\"%Value%\");\n" + \
+            "    }\n"
+        template += valueTemplate \
+          .replace("%Else%", elseValue) \
+          .replace("%Prefix%", prefix) \
+          .replace("%Value%", value)
+        elseValue = "else "
+    return template
+
+def jsonEnumReaderTemplate(values, prefix=""):
+    template = \
+      "    if (pItem->pStringValue != nullptr)\n" + \
+      "    {\n"
+    elseValue = ""
+    for value in values:
+        valueTemplate = \
+          "        %Else%if (strcmp(pItem->pStringValue, \"%Value%\") == 0)\n" + \
+          "        {\n" + \
+          "            pActions->shaderCreate.apply.%Action%         = true;\n" + \
+          "            pActions->shaderCreate.tuningOptions.%Action% = %Prefix%%Value%;\n" + \
+          "        }\n"
+        template += valueTemplate \
+          .replace("%Else%", elseValue) \
+          .replace("%Prefix%", prefix) \
+          .replace("%Value%", value)
+        elseValue = "else "
+    template += \
+      "        else\n" + \
+      "        {\n" + \
+      "            success = false;\n" + \
+      "        }\n"
+    template += \
+      "    }\n" + \
+      "    else\n" + \
+      "    {\n"  + \
+      "        success = false;\n" + \
+      "    }"
+    return template
+
 ###################################################################################################################
 # The following schema is used for both json parsing as well as defining structures for
 ###################################################################################################################
@@ -1413,6 +1460,43 @@ SHADER_ACTION = {
             pPipelineProfile->entries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.%FieldName% = %IntValue%u;\n""",
         "jsonWriterTemplate": shaderCreateTuningOptionsTemplate,
         "jsonReaderTemplate": ShaderCreateTuningOptionsRuntimeTemplate
+    },
+
+    "fp32DenormalMode": {
+        "type": [int],
+        "jsonReadable": True,
+        "entityInfo": [
+            {
+                "parent": "shaderCreate.anonStruct",
+                "entity": "bitField",
+                "varName": "fp32DenormalMode",
+                "dataType": "uint32_t",
+                "defaultValue": 1,
+                "jsonWritable": True,
+                "buildTypes": {},
+            },
+            {
+                "parent": "ShaderTuningOptions",
+                "entity": "var",
+                "varName": "fp32DenormalMode",
+                "dataType": "Vkgc::DenormalMode",
+                "defaultValue": "",
+                "jsonWritable": True,
+                "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+            },
+        ],
+        "validValues": {
+            0: "Auto",
+            1: "FlushToZero",
+            2: "Preserve"
+        },
+        "buildTypes": {"andType": ["ICD_BUILD_LLPC"]},
+        "codeTemplate": """\
+            pPipelineProfile->entries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.apply.%FieldName% = true;
+            pPipelineProfile->entries[%EntryNum%].action.shaders[%ShaderStage%].shaderCreate.tuningOptions.
+            %FieldName% = Vkgc::DenormalMode::%EnumValue%;\n""",
+        "jsonWriterTemplate": jsonEnumWriterTemplate(["Auto", "FlushToZero", "Preserve"], prefix="Vkgc::DenormalMode::"),
+        "jsonReaderTemplate": jsonEnumReaderTemplate(["Auto", "FlushToZero", "Preserve"], prefix="Vkgc::DenormalMode::")
     },
 }
 

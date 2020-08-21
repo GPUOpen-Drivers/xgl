@@ -572,7 +572,8 @@ void DeviceBarrierPolicy::InitQueueFamilyPolicies(
                                              | Pal::LayoutCopySrc
                                              | Pal::LayoutCopyDst
                                              | Pal::LayoutResolveSrc
-                                             | Pal::LayoutResolveDst;
+                                             | Pal::LayoutResolveDst
+                                             ;
 
             // Always prefer executing ownership transfer barriers on the universal queue.
             policy.ownershipTransferPriority = OwnershipTransferPriority::High;

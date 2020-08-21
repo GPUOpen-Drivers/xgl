@@ -141,8 +141,6 @@ public:
 
     void ElevatePriority(MemoryPriority priority);
 
-public:
-
     Pal::IGpuMemory* PalMemory(uint32_t resourceIndex, uint32_t memoryIndex);
 
     VK_INLINE Pal::IGpuMemory* PalMemory(uint32_t resourceIndex) const

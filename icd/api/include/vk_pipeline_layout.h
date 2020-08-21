@@ -41,18 +41,6 @@
 
 #include "palPipeline.h"
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-namespace Vkgc
-#else
-namespace Llpc
-#endif
-{
-struct PipelineShaderInfo;
-struct ResourceMappingNode;
-struct DescriptorRangeValue;
-enum class ResourceMappingNodeType : uint32_t;
-};
-
 namespace vk
 {
 
@@ -82,6 +70,10 @@ public:
     // Magic number describing an invalid or unmapped user data entry
     static constexpr uint32_t InvalidReg = UINT32_MAX;
 
+    static constexpr size_t GetMaxResMappingRootNodeSize();
+    static constexpr size_t GetMaxResMappingNodeSize();
+    static constexpr size_t GetMaxStaticDescValueSize();
+
     // Set-specific user data layout information
     struct SetUserDataLayout
     {
@@ -110,10 +102,8 @@ public:
     // This information is specific for pipeline construction:
     struct PipelineInfo
     {
-        // The total amount of buffer space needed in the helper buffer.
-        size_t              tempBufferSize;
-        // Size in the buffer required per shader stage.
-        size_t              tempStageSize;
+        // The amount of buffer space needed in the mapping buffer.
+        size_t              mappingBufferSize;
         // Max. number of ResourceMappingNodes needed by all layouts in the chain, including the extra nodes
         // required by the extra set pointers, and any resource nodes required by potential internal tables.
         uint32_t            numRsrcMapNodes;
@@ -126,16 +116,11 @@ public:
     typedef VkPipelineLayout ApiType;
 
     VkResult BuildLlpcPipelineMapping(
-        ShaderStage                                 stage,
+        uint32_t                                    stageMask,
         void*                                       pBuffer,
+        Vkgc::ResourceMappingData*                  pResourceMapping,
         const VkPipelineVertexInputStateCreateInfo* pVertexInput,
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-        Vkgc::PipelineShaderInfo*                   pShaderInfo,
-#else
-        Llpc::PipelineShaderInfo*                   pShaderInfo,
-#endif
-        VbBindingInfo*                              pVbInfo,
-        bool                                        isLastVertexStage) const;
+        VbBindingInfo*                              pVbInfo) const;
 
     static VkResult Create(
         Device*                             pDevice,
@@ -191,23 +176,16 @@ protected:
     ~PipelineLayout() { }
 
     VkResult BuildLlpcSetMapping(
-        uint32_t                     setIndex,
-        const DescriptorSetLayout*   pLayout,
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-        Vkgc::ResourceMappingNode*   pStaNodes,
-        uint32_t*                    pStaNodeCount,
-        Vkgc::ResourceMappingNode*   pDynNodes,
-        uint32_t*                    pDynNodeCount,
-        Vkgc::DescriptorRangeValue*  pDescriptorRangeValue,
-#else
-        Llpc::ResourceMappingNode*   pStaNodes,
-        uint32_t*                    pStaNodeCount,
-        Llpc::ResourceMappingNode*   pDynNodes,
-        uint32_t*                    pDynNodeCount,
-        Llpc::DescriptorRangeValue*  pDescriptorRangeValue,
-#endif
-        uint32_t*                    pDescriptorRangeCount,
-        uint32_t                     userDataRegBase) const;
+        uint32_t                       visibility,
+        uint32_t                       setIndex,
+        const DescriptorSetLayout*     pLayout,
+        Vkgc::ResourceMappingRootNode* pStaNodes,
+        uint32_t*                      pStaNodeCount,
+        Vkgc::ResourceMappingNode*     pDynNodes,
+        uint32_t*                      pDynNodeCount,
+        Vkgc::StaticDescriptorValue*   pDescriptorRangeValue,
+        uint32_t*                      pDescriptorRangeCount,
+        uint32_t                       userDataRegBase) const;
 
     int32_t BuildLlpcVertexInputDescriptors(
         const VkPipelineVertexInputStateCreateInfo* pInput,
@@ -216,13 +194,8 @@ protected:
     static uint64_t BuildApiHash(
         const VkPipelineLayoutCreateInfo* pCreateInfo);
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
     static Vkgc::ResourceMappingNodeType MapLlpcResourceNodeType(
         VkDescriptorType descriptorType);
-#else
-    static Llpc::ResourceMappingNodeType MapLlpcResourceNodeType(
-        VkDescriptorType descriptorType);
-#endif
 
     const Info              m_info;
     const PipelineInfo      m_pipelineInfo;

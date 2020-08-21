@@ -333,6 +333,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             // Dota 2 will be the pilot for pal pipeline caching.
             m_settings.usePalPipelineCaching = true;
+
+            // Disable image type checking on Navi10 to avoid 2% loss.
+            m_settings.disableImageResourceTypeCheck = true;
         }
 
         if (appProfile == AppProfile::Source2Engine)
@@ -469,6 +472,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Forcing these images to use VK_SHARING_MODE_EXCLUSIVE gives us around 5% perf increase.
             m_settings.barrierFilterOptions = BarrierFilterOptions::ForceImageSharingModeExclusive;
 
+            // Disable image type checking to avoid 1% loss.
+            m_settings.disableImageResourceTypeCheck = true;
+
             // Vega 20 seems to be do better on Rage 2 when dccBitsPerPixelThreshold is set to 16
             // 3-5% gain when exclusive sharing mode is enabled.
             if (pInfo->revision == Pal::AsicRevision::Vega20)
@@ -556,6 +562,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.forceDepthClampBasedOnZExport = true;
         }
 
+        if ((appProfile == AppProfile::AshesOfTheSingularity) ||
+            (appProfile == AppProfile::DetroitBecomeHuman))
+        {
+            // Disable image type checking on Navi10 to avoid 2.5% loss in Ashes and
+            // 1.5% loss in Detroit
+            m_settings.disableImageResourceTypeCheck = true;
+        }
+
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
     }
 
@@ -604,7 +618,23 @@ VkResult VulkanSettingsLoader::ProcessSettings(
 {
     VkResult result = VkResult::VK_SUCCESS;
 
-    const AppProfile origProfile = *pAppProfile;
+    // The following lines to load profile settings have been copied from g_settings.cpp
+    static_cast<Pal::IDevice*>(m_pDevice)->ReadSetting(pForceAppProfileEnableStr,
+                                                       Pal::SettingScope::Driver,
+                                                       Util::ValueType::Boolean,
+                                                       &m_settings.forceAppProfileEnable);
+    static_cast<Pal::IDevice*>(m_pDevice)->ReadSetting(pForceAppProfileValueStr,
+                                                       Pal::SettingScope::Driver,
+                                                       Util::ValueType::Uint,
+                                                       &m_settings.forceAppProfileValue);
+
+    // Check for forced application profile
+    if (m_settings.forceAppProfileEnable)
+    {
+        // Update application profile to the one from the panel
+        *pAppProfile = static_cast<AppProfile>(m_settings.forceAppProfileValue);
+    }
+
     // Override defaults based on application profile
     result = OverrideProfiledSettings(pAllocCb, appVersion, *pAppProfile);
 
@@ -621,25 +651,9 @@ VkResult VulkanSettingsLoader::ProcessSettings(
 
         DumpAppProfileChanges(*pAppProfile);
 
-        if (m_settings.forceAppProfileEnable)
-        {
-            // Update application profile to the one from the panel
-            *pAppProfile = static_cast<AppProfile>(m_settings.forceAppProfileValue);
-        }
-
-        // If we are changing profile via panel setting (i.e. forcing a specific profile), then
-        // reload all settings.  This is because certain app profiles may override the default
-        // values, and this allows the panel-mandated profile to override those defaults as well.
-        if (*pAppProfile != origProfile)
-        {
-            result = ProcessSettings(pAllocCb, appVersion, pAppProfile);
-        }
-        else
-        {
-            // Register with the DevDriver settings service
-            DevDriverRegister();
-            m_state = Pal::SettingsLoaderState::LateInit;
-        }
+        // Register with the DevDriver settings service
+        DevDriverRegister();
+        m_state = Pal::SettingsLoaderState::LateInit;
     }
 
     return result;

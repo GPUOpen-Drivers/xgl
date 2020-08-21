@@ -79,22 +79,26 @@ public:
 
     VK_INLINE uint32_t GetQueueFamilyIndex() const { return m_queueFamilyIndex; }
 
+    const VkAllocationCallbacks* GetCmdPoolAllocator() const { return m_pAllocator; }
+
     bool IsProtected() const { return m_flags.isProtected ? true : false; }
 
 private:
     CmdPool(
-        Device*                   pDevice,
-        Pal::ICmdAllocator**      pPalCmdAllocators,
-        uint32_t                  queueFamilyIndex,
-        VkCommandPoolCreateFlags  flags,
-        bool                      sharedCmdAllocator);
+        Device*                      pDevice,
+        Pal::ICmdAllocator**         pPalCmdAllocators,
+        const VkAllocationCallbacks* pAllocator,
+        uint32_t                     queueFamilyIndex,
+        VkCommandPoolCreateFlags     flags,
+        bool                         sharedCmdAllocator);
 
     VkResult ResetCmdAllocator();
 
-    Device*             m_pDevice;
-    Pal::ICmdAllocator* m_pPalCmdAllocators[MaxPalDevices];
-    const uint32_t      m_queueFamilyIndex;
-    const bool          m_sharedCmdAllocator;
+    Device*                      m_pDevice;
+    Pal::ICmdAllocator*          m_pPalCmdAllocators[MaxPalDevices];
+    const VkAllocationCallbacks* m_pAllocator;
+    const uint32_t               m_queueFamilyIndex;
+    const bool                   m_sharedCmdAllocator;
 
     union
     {

@@ -620,15 +620,7 @@ void GraphicsPipeline::BuildRasterizationState(
     CreateInfo*                                   pInfo,
     const bool                                    dynamicStateFlags[])
 {
-    union
-    {
-        const VkStructHeader*                                           pHeader;
-        const VkPipelineRasterizationStateCreateInfo*                   pRs;
-        const VkPipelineRasterizationStateRasterizationOrderAMD*        pRsOrder;
-        const VkPipelineRasterizationConservativeStateCreateInfoEXT*    pRsConservative;
-        const VkPipelineRasterizationStateStreamCreateInfoEXT*          pRsStream;
-        const VkPipelineRasterizationLineStateCreateInfoEXT*            pRsRasterizationLine;
-    };
+    VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO);
 
     // By default rasterization is disabled, unless rasterization creation info is present
 
@@ -638,145 +630,151 @@ void GraphicsPipeline::BuildRasterizationState(
     // Enable perpendicular end caps if we report strictLines semantics
     pInfo->pipeline.rsState.perpLineEndCapsEnable = (limits.strictLines == VK_TRUE);
 
-    for (pRs = pIn; pHeader != nullptr; pHeader = pHeader->pNext)
+    // For optimal performance, depth clamping should be enabled by default. Only disable it if dealing
+    // with depth values outside of [0.0, 1.0] range.
+    // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
+    if ((pIn->depthClampEnable == VK_FALSE) &&
+        (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_DEPTH_RANGE_UNRESTRICTED)))
     {
-        switch (pHeader->sType)
+        pInfo->pipeline.rsState.depthClampDisable = true;
+    }
+    else
+    {
+        // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
+        // Clipping is updated in pipeline compiler.
+        pInfo->pipeline.rsState.depthClampDisable = false;
+    }
+
+    pInfo->immedInfo.triangleRasterState.frontFillMode          = VkToPalFillMode(pIn->polygonMode);
+    pInfo->immedInfo.triangleRasterState.backFillMode           = VkToPalFillMode(pIn->polygonMode);
+    pInfo->immedInfo.triangleRasterState.cullMode               = VkToPalCullMode(pIn->cullMode);
+    pInfo->immedInfo.triangleRasterState.frontFace              = VkToPalFaceOrientation(pIn->frontFace);
+
+    pInfo->immedInfo.triangleRasterState.flags.depthBiasEnable  = pIn->depthBiasEnable;
+    pInfo->immedInfo.depthBiasParams.depthBias                  = pIn->depthBiasConstantFactor;
+    pInfo->immedInfo.depthBiasParams.depthBiasClamp             = pIn->depthBiasClamp;
+    pInfo->immedInfo.depthBiasParams.slopeScaledDepthBias       = pIn->depthBiasSlopeFactor;
+
+    if (pIn->depthBiasEnable && (dynamicStateFlags[VK_DYNAMIC_STATE_DEPTH_BIAS] == false))
+    {
+        pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BIAS;
+    }
+
+    // point size must be set via gl_PointSize, otherwise it must be 1.0f.
+    constexpr float DefaultPointSize = 1.0f;
+
+    pInfo->immedInfo.pointLineRasterParams.lineWidth    = pIn->lineWidth;
+    pInfo->immedInfo.pointLineRasterParams.pointSize    = DefaultPointSize;
+    pInfo->immedInfo.pointLineRasterParams.pointSizeMin = limits.pointSizeRange[0];
+    pInfo->immedInfo.pointLineRasterParams.pointSizeMax = limits.pointSizeRange[1];
+
+    if (dynamicStateFlags[VK_DYNAMIC_STATE_LINE_WIDTH] == false)
+    {
+        pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_LINE_WIDTH;
+    }
+
+    const void* pNext = pIn->pNext;
+
+    while (pNext != nullptr)
+    {
+        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<int32>(pHeader->sType))
         {
-        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO:
+        // Handle  extension specific structures
+        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD:
             {
-                // For optimal performance, depth clamping should be enabled by default. Only disable it if dealing
-                // with depth values outside of [0.0, 1.0] range.
-                // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
-                if ((pRs->depthClampEnable == VK_FALSE) &&
-                    (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_DEPTH_RANGE_UNRESTRICTED)))
+                const auto* pRsOrder = static_cast<const VkPipelineRasterizationStateRasterizationOrderAMD*>(pNext);
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 493
+                if (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportOutOfOrderPrimitives)
+#endif
                 {
-                    pInfo->pipeline.rsState.depthClampDisable = true;
+                    pInfo->pipeline.rsState.outOfOrderPrimsEnable = VkToPalRasterizationOrder(pRsOrder->rasterizationOrder);
                 }
-                else
+                break;
+            }
+        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT:
+            {
+                const auto* pRsConservative =
+                    static_cast<const VkPipelineRasterizationConservativeStateCreateInfoEXT*>(pNext);
+
+                // VK_EXT_conservative_rasterization must be enabled
+                VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CONSERVATIVE_RASTERIZATION));
+                VK_ASSERT(pRsConservative->flags == 0);
+                VK_ASSERT(pRsConservative->conservativeRasterizationMode >= VK_CONSERVATIVE_RASTERIZATION_MODE_BEGIN_RANGE_EXT);
+                VK_ASSERT(pRsConservative->conservativeRasterizationMode <= VK_CONSERVATIVE_RASTERIZATION_MODE_END_RANGE_EXT);
+                VK_IGNORE(pRsConservative->extraPrimitiveOverestimationSize);
+
+                switch (pRsConservative->conservativeRasterizationMode)
                 {
-                    // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
-                    // Clipping is updated in pipeline compiler.
-                    pInfo->pipeline.rsState.depthClampDisable = false;
+                case VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT:
+                    {
+                        pInfo->msaa.flags.enableConservativeRasterization = false;
+                    }
+                    break;
+                case VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT:
+                    {
+                        pInfo->msaa.flags.enableConservativeRasterization = true;
+                        pInfo->msaa.conservativeRasterizationMode = Pal::ConservativeRasterizationMode::Overestimate;
+                    }
+                    break;
+                case VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT:
+                    {
+                        pInfo->msaa.flags.enableConservativeRasterization = true;
+                        pInfo->msaa.conservativeRasterizationMode = Pal::ConservativeRasterizationMode::Underestimate;
+                    }
+                    break;
+
+                default:
+                    break;
                 }
 
-                pInfo->immedInfo.triangleRasterState.frontFillMode = VkToPalFillMode(pRs->polygonMode);
-                pInfo->immedInfo.triangleRasterState.backFillMode  = VkToPalFillMode(pRs->polygonMode);
-                pInfo->immedInfo.triangleRasterState.cullMode  = VkToPalCullMode(pRs->cullMode);
-                pInfo->immedInfo.triangleRasterState.frontFace = VkToPalFaceOrientation(pRs->frontFace);
-                pInfo->immedInfo.triangleRasterState.flags.depthBiasEnable = pRs->depthBiasEnable;
+            }
+            break;
+        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
+            {
+                const auto* pRsStream = static_cast<const VkPipelineRasterizationStateStreamCreateInfoEXT*>(pNext);
 
-                pInfo->immedInfo.depthBiasParams.depthBias = pRs->depthBiasConstantFactor;
-                pInfo->immedInfo.depthBiasParams.depthBiasClamp = pRs->depthBiasClamp;
-                pInfo->immedInfo.depthBiasParams.slopeScaledDepthBias = pRs->depthBiasSlopeFactor;
+                pInfo->rasterizationStream = pRsStream->rasterizationStream;
+            }
+            break;
+        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT:
+            {
+                const auto* pRsRasterizationLine =
+                    static_cast<const VkPipelineRasterizationLineStateCreateInfoEXT*>(pNext);
 
-                if (pRs->depthBiasEnable && (dynamicStateFlags[VK_DYNAMIC_STATE_DEPTH_BIAS] == false))
+                pInfo->bresenhamEnable =
+                    (pRsRasterizationLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT);
+
+                // Bresenham Lines need axis aligned end caps
+                if (pInfo->bresenhamEnable)
                 {
-                    pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BIAS;
+                    pInfo->pipeline.rsState.perpLineEndCapsEnable = false;
+                }
+                else if (pRsRasterizationLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT)
+                {
+                    pInfo->pipeline.rsState.perpLineEndCapsEnable = true;
                 }
 
-                // point size must be set via gl_PointSize, otherwise it must be 1.0f.
-                constexpr float DefaultPointSize = 1.0f;
+                pInfo->msaa.flags.enableLineStipple                   = pRsRasterizationLine->stippledLineEnable;
 
-                pInfo->immedInfo.pointLineRasterParams.lineWidth    = pRs->lineWidth;
-                pInfo->immedInfo.pointLineRasterParams.pointSize    = DefaultPointSize;
-                pInfo->immedInfo.pointLineRasterParams.pointSizeMin = limits.pointSizeRange[0];
-                pInfo->immedInfo.pointLineRasterParams.pointSizeMax = limits.pointSizeRange[1];
+                pInfo->immedInfo.lineStippleParams.lineStippleScale   = (pRsRasterizationLine->lineStippleFactor - 1);
+                pInfo->immedInfo.lineStippleParams.lineStippleValue   = pRsRasterizationLine->lineStipplePattern;
 
-                if (dynamicStateFlags[VK_DYNAMIC_STATE_LINE_WIDTH] == false)
+                if (pRsRasterizationLine->stippledLineEnable &&
+                    (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt)] == false))
                 {
-                    pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_LINE_WIDTH;
+                    pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt);
                 }
             }
             break;
 
         default:
-            // Handle  extension specific structures
-            // (a separate switch-case is used to allow the main switch-case to be optimized into a lookup table)
-            switch (static_cast<int32>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD:
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 493
-                if (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportOutOfOrderPrimitives)
-#endif
-                {
-                    pInfo->pipeline.rsState.outOfOrderPrimsEnable =
-                        VkToPalRasterizationOrder(pRsOrder->rasterizationOrder);
-                }
-                break;
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT:
-                {
-                    // VK_EXT_conservative_rasterization must be enabled
-                    VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CONSERVATIVE_RASTERIZATION));
-                    VK_ASSERT(pRsConservative->flags == 0);
-                    VK_ASSERT(pRsConservative->conservativeRasterizationMode >= VK_CONSERVATIVE_RASTERIZATION_MODE_BEGIN_RANGE_EXT);
-                    VK_ASSERT(pRsConservative->conservativeRasterizationMode <= VK_CONSERVATIVE_RASTERIZATION_MODE_END_RANGE_EXT);
-                    VK_IGNORE(pRsConservative->extraPrimitiveOverestimationSize);
-
-                    switch (pRsConservative->conservativeRasterizationMode)
-                    {
-                    case VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT:
-                        {
-                            pInfo->msaa.flags.enableConservativeRasterization = false;
-                        }
-                        break;
-                    case VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT:
-                        {
-                            pInfo->msaa.flags.enableConservativeRasterization = true;
-                            pInfo->msaa.conservativeRasterizationMode         = Pal::ConservativeRasterizationMode::Overestimate;
-                        }
-                        break;
-                    case VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT:
-                        {
-                            pInfo->msaa.flags.enableConservativeRasterization = true;
-                            pInfo->msaa.conservativeRasterizationMode         = Pal::ConservativeRasterizationMode::Underestimate;
-                        }
-                        break;
-
-                    default:
-                        break;
-                    }
-
-                }
-                break;
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
-                {
-                    pInfo->rasterizationStream = pRsStream->rasterizationStream;
-                }
-                break;
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT:
-                {
-                    pInfo->bresenhamEnable =
-                        (pRsRasterizationLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT);
-
-                    // Bresenham Lines need axis aligned end caps
-                    if (pInfo->bresenhamEnable)
-                    {
-                        pInfo->pipeline.rsState.perpLineEndCapsEnable = false;
-                    }
-                    else if (pRsRasterizationLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT)
-                    {
-                        pInfo->pipeline.rsState.perpLineEndCapsEnable = true;
-                    }
-
-                    pInfo->msaa.flags.enableLineStipple                   = pRsRasterizationLine->stippledLineEnable;
-
-                    pInfo->immedInfo.lineStippleParams.lineStippleScale   = (pRsRasterizationLine->lineStippleFactor - 1);
-                    pInfo->immedInfo.lineStippleParams.lineStippleValue   = pRsRasterizationLine->lineStipplePattern;
-
-                    if (pRsRasterizationLine->stippledLineEnable &&
-                       (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt)] == false))
-                    {
-                        pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt);
-                    }
-                }
-                break;
-
-            default:
-                // Skip any unknown extension structures
-                break;
-            }
+            // Skip any unknown extension structures
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 }
 
@@ -1083,13 +1081,10 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                 PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
 
-            bool multisampleEnable     = (pMs->rasterizationSamples != 1) &&
-                                         (pInfo->bresenhamEnable == false);
-
             bool customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
                                           (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
 
-            if (multisampleEnable || customSampleLocations)
+            if ((pInfo->bresenhamEnable == false) || customSampleLocations)
             {
                 VK_ASSERT(pRenderPass != nullptr);
 

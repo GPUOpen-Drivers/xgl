@@ -92,18 +92,18 @@ public:
         ShaderModuleHandle*       pModule);
 
     virtual VkResult CreatePartialPipelineBinary(
-        uint32_t                            deviceIdx,
-        void*                               pShaderModuleData,
+        uint32_t                             deviceIdx,
+        void*                                pShaderModuleData,
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-        Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
-        const Vkgc::ResourceMappingNode*    pResourceMappingNode,
-        uint32_t                            mappingNodeCount,
-        Vkgc::ColorTarget*                  pColorTarget);
+        Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
+        const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
+        uint32_t                             mappingNodeCount,
+        Vkgc::ColorTarget*                   pColorTarget);
 #else
-        Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
-        const Llpc::ResourceMappingNode*    pResourceMappingNode,
-        uint32_t                            mappingNodeCount,
-        Llpc::ColorTarget*                  pColorTarget);
+        Llpc::ShaderModuleEntryData*         pShaderModuleEntryData,
+        const Llpc::ResourceMappingRootNode* pResourceMappingNode,
+        uint32_t                             mappingNodeCount,
+        Llpc::ColorTarget*                   pColorTarget);
 #endif
 
     VkResult CreateGraphicsPipelineBinary(

@@ -113,8 +113,9 @@ private:
             uint32_t usageUniformBuffer    : 1;   // VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
             uint32_t createSparseBinding   : 1;   // VK_BUFFER_CREATE_SPARSE_BINDING_BIT
             uint32_t createSparseResidency : 1;   // VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT
+            uint32_t createProtected       : 1;   // VK_BUFFER_CREATE_PROTECTED_BIT
 
-            uint32_t reserved              : 25;
+            uint32_t reserved              : 24;
         };
         uint32_t     u32All;
     };
@@ -126,6 +127,7 @@ private:
     };
 
     Buffer(Device*                      pDevice,
+           const VkAllocationCallbacks* pAllocator,
            VkBufferCreateFlags          flags,
            VkBufferUsageFlags           usage,
            Pal::IGpuMemory**            pGpuMemory,

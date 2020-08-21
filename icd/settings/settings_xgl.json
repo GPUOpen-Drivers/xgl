@@ -2926,6 +2926,32 @@
       "VariableName": "alwaysReportHdrFormats"
     },
     {
+      "Name": "EnableEmitSqttFunctionCrc",
+      "Description": "Emit 64-bit AMDIL CRC to SQTT.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableEmitSqttFunctionCrc"
+    },
+    {
+      "Name": "DisableImageResourceTypeCheck",
+      "Description": "Defines the default behavior for image resource type checking within the shader. The driver may override this behavior on a per-app and per-shader basis.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "disableImageResourceTypeCheck"
+    },
+    {
       "Description": "Custom device allocation count limitation, when larger than 0.",
       "Tags": [
         "Memory"
@@ -4004,6 +4030,45 @@
       "Name": "WaveSizeDecision"
     },
     {
+      "Description": "Enable fragment shader threshold to control wave size selection model by a confidence score.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 0.0
+      },
+      "Scope": "Driver",
+      "Type": "float",
+      "VariableName": "fsWaveSizeThreshold",
+      "Name": "FsWaveSizeThreshold"
+    },
+    {
+      "Description": "Enable compute shader threshold to control wave size selection model by a confidence score.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 0.0
+      },
+      "Scope": "Driver",
+      "Type": "float",
+      "VariableName": "csWaveSizeThreshold",
+      "Name": "CsWaveSizeThreshold"
+    },
+    {
+      "Description": "Enable threshold to control scheduling strategy selection model by a confidence score",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 0.0
+      },
+      "Scope": "Driver",
+      "Type": "float",
+      "VariableName": "mlSchedConfidenceThreshold",
+      "Name": "MlSchedConfidenceThreshold"
+    },
+    {
       "Description": "Enable async compile for shader module and pipelines.",
       "Tags": [
         "Optimization"
@@ -4028,6 +4093,40 @@
       "Type": "bool",
       "VariableName": "enablePartialPipelineCompile",
       "Name": "EnablePartialPipelineCompile"
+    },
+    {
+      "Description": "If set, enables whole-program optimizations for this pipeline, which includes using dead-code removal across its shaders to remove unnecessary data being passed between shaders (can reduce HW resoure usage such as LDS, shader rings, parameter cache, etc.) ans removing potentially complex logic in the shader(s) used to compute those unused outputs. A side effect of this is that any shader which was compiled early will be re-compiled in order to make use of these optimizations since they could not have been done up front without the entire pipeline state being known",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "enableWholePipelineOptimization",
+      "Name": "EnableWholePipelineOptimization"
+    },
+    {
+      "Description": "Attributes between PS and the stage before it will be tightly packed (which can potentially save parameter cache space) when enabled. This opt requires that EnableWholePipelineOptimization be set to TRUE.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "DependsOn": {
+        "Settings": [
+          {
+            "Values": [
+              true
+            ],
+            "Name": "EnableWholePipelineOptimization"
+          }
+        ]
+      },
+      "Type": "bool",
+      "VariableName": "enablePackVsPsAttrs",
+      "Name": "EnablePackVsPsAttrs"
     },
     {
       "Description": "Specifies the maximum threshold in bytes for linear transfer commands to use CP DMA, which have less overhead than CS/Gfx copies, but also less throughput for large copies.",

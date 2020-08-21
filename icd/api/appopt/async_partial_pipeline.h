@@ -59,15 +59,15 @@ public:
     VkResult Destroy();
 
     void CreatePipelineLayoutFromModuleData(
-        AsyncLayer*                         pAsyncLayer,
+        AsyncLayer*                           pAsyncLayer,
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
-        Vkgc::ShaderModuleEntryData*        pShaderModuleEntryData,
-        const Vkgc::ResourceMappingNode**   ppResourceMappingNode,
+        Vkgc::ShaderModuleEntryData*          pShaderModuleEntryData,
+        const Vkgc::ResourceMappingRootNode** ppResourceMappingNode,
 #else
-        Llpc::ShaderModuleEntryData*        pShaderModuleEntryData,
-        const Llpc::ResourceMappingNode**   ppResourceMappingNode,
+        Llpc::ShaderModuleEntryData*          pShaderModuleEntryData,
+        const Llpc::ResourceMappingRootNode** ppResourceMappingNode,
 #endif
-        uint32_t*                           pMappingNodeCount);
+        uint32_t*                             pMappingNodeCount);
 
     void CreateColorTargetFromModuleData(
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
