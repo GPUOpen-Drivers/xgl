@@ -3355,7 +3355,7 @@ VkResult PhysicalDevice::GetPhysicalDevicePresentRectangles(
 static bool IsConditionalRenderingSupported(
     const PhysicalDevice* pPhysicalDevice)
 {
-    bool isSupported = false;
+    bool isSupported = true;
 
     if (isSupported && (pPhysicalDevice != nullptr))
     {
