@@ -5853,7 +5853,7 @@ void CmdBuffer::CmdBeginConditionalRendering(
             nullptr,
             0,
             pBuffer->PalMemory(deviceGroup.Index()),
-            pConditionalRenderingBegin->offset,
+            pBuffer->MemOffset() + pConditionalRenderingBegin->offset,
             Pal::PredicateType::Boolean32,
             predPolarity,
             false,
