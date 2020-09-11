@@ -28,10 +28,6 @@
 * @brief Contains implementation of CompilerSolutionLlpc
 ***********************************************************************************************************************
 */
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #include "include/compiler_solution_llpc.h"
 #include "include/vk_device.h"
 #include "include/vk_physical_device.h"
@@ -66,11 +62,18 @@ VkResult CompilerSolutionLlpc::Initialize(
     Pal::GfxIpLevel    gfxIpLevel,
     Vkgc::ICache*      pCache)
 {
-    VkResult result = CompilerSolution::Initialize(gfxIp, gfxIpLevel, pCache);
+    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    Vkgc::ICache* pInternalCache = pCache;
+    if (settings.shaderCacheMode == ShaderCacheDisable)
+    {
+        pInternalCache = nullptr;
+    }
+
+    VkResult result = CompilerSolution::Initialize(gfxIp, gfxIpLevel, pInternalCache);
 
     if (result == VK_SUCCESS)
     {
-        result = CreateLlpcCompiler(pCache);
+        result = CreateLlpcCompiler(pInternalCache);
     }
 
     return result;
@@ -105,33 +108,8 @@ VkResult CompilerSolutionLlpc::CreateShaderCache(
     ShaderCache* pShaderCache)
 {
     VK_IGNORE(pShaderCacheMem);
-    VkResult result = VK_SUCCESS;
-    ShaderCache::ShaderCachePtr shaderCachePtr = {};
 
-    // Create shader cache for LLPC
-    Llpc::ShaderCacheCreateInfo llpcCacheCreateInfo = {};
-
-    llpcCacheCreateInfo.pInitialData    = pInitialData;
-    llpcCacheCreateInfo.initialDataSize = initialDataSize;
-
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 38
-    Vkgc::Result llpcResult = m_pLlpc->CreateShaderCache(
-        &llpcCacheCreateInfo,
-        &shaderCachePtr.pLlpcShaderCache);
-
-    if (llpcResult == Vkgc::Result::Success)
-    {
-        pShaderCache->Init(PipelineCompilerTypeLlpc, shaderCachePtr);
-    }
-    else
-    {
-        result = VK_ERROR_INITIALIZATION_FAILED;
-    }
-#else
-    result = VK_ERROR_INITIALIZATION_FAILED;
-#endif
-
-    return result;
+    return VK_ERROR_INITIALIZATION_FAILED;
 }
 
 // =====================================================================================================================
@@ -159,11 +137,10 @@ VkResult CompilerSolutionLlpc::BuildShaderModule(
     moduleInfo.pUserData      = &pShaderMemory;
     moduleInfo.shaderBin.pCode    = pCode;
     moduleInfo.shaderBin.codeSize = codeSize;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 32
+
     auto pPipelineCompiler = m_pPhysicalDevice->GetCompiler();
     pPipelineCompiler->ApplyPipelineOptions(pDevice, 0, &moduleInfo.options.pipelineOptions);
     moduleInfo.options.enableOpt = (flags & VK_SHADER_MODULE_ENABLE_OPT_BIT) ? true : false;
-#endif
 
     Vkgc::Result llpcResult = m_pLlpc->BuildShaderModule(&moduleInfo, &buildOut);
 
@@ -278,9 +255,7 @@ VkResult CompilerSolutionLlpc::CreatePartialPipelineBinary(
             pipelineBuildInfo.fs.pModuleData = pShaderModuleData;
 
             pipelineBuildInfo.fs.pEntryTarget = pShaderModuleEntryData->pEntryName;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
             pipelineBuildInfo.fs.entryStage = pShaderModuleEntryData->stage;
-#endif
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
             pipelineBuildInfo.fs.pUserDataNodes = pRawNodes;
             pipelineBuildInfo.fs.userDataNodeCount = mappingNodeCount;
@@ -349,7 +324,7 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
     pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
     pPipelineBuildInfo->iaState.deviceIndex = deviceIdx;
-    if (pPipelineCache != nullptr)
+    if ((pPipelineCache != nullptr) && (settings.shaderCacheMode != ShaderCacheDisable))
     {
         pPipelineBuildInfo->cache = pPipelineCache->GetCacheAdapter();
     }
@@ -447,18 +422,16 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     pPipelineBuildInfo->pInstance      = pInstance;
     pPipelineBuildInfo->pfnOutputAlloc = AllocateShaderOutput;
     pPipelineBuildInfo->pUserData      = &pLlpcPipelineBuffer;
-    if (pPipelineCache != nullptr)
+    if ((pPipelineCache != nullptr) && (settings.shaderCacheMode != ShaderCacheDisable))
     {
         pPipelineBuildInfo->cache = pPipelineCache->GetCacheAdapter();
     }
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 28
     // Force enable automatic workgroup reconfigure.
     if (appProfile == AppProfile::DawnOfWarIII)
     {
         pPipelineBuildInfo->options.reconfigWorkgroupLayout = true;
     }
-#endif
 
     // By default the client hash provided to PAL is more accurate than the one used by pipeline
     // profiles.
@@ -575,19 +548,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     // Enable shadow descriptor table
     Pal::DeviceProperties info;
     m_pPhysicalDevice->PalDevice()->GetProperties(&info);
-
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 38
-    llpcOptions[numOptions++] = "-enable-shadow-desc";
-    optionLength = Util::Snprintf(pOptionBuffer,
-                                  bufSize,
-                                  "-shadow-desc-table-ptr-high=%u",
-                                  static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32));
-
-    ++optionLength;
-    llpcOptions[numOptions++] = pOptionBuffer;
-    pOptionBuffer += optionLength;
-    bufSize       -= optionLength;
-#endif
 
     // LLPC log options
     llpcOptions[numOptions++] = (settings.enableLog & 1) ? "-enable-errs=1" : "-enable-errs=0";

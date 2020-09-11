@@ -23,20 +23,49 @@
  #
  #######################################################################################################################
 
-# This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
-# that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.  It must
-# be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-ICD_PAL_CLIENT_MAJOR_VERSION = 624
-ICD_PAL_CLIENT_MINOR_VERSION = 0
+if(UNIX)
+    find_package(PkgConfig)
+    pkg_check_modules(PKG_DRM QUIET libdrm)
 
-# This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.  It describes
-# the interface version of the gpuopen shared module (part of PAL) that the ICD supports.
-ICD_GPUOPEN_CLIENT_MAJOR_VERSION = 42
-ICD_GPUOPEN_CLIENT_MINOR_VERSION = 0
+    set(DRM_DEFINITIONS ${PKG_DRM_CFLAGS_OTHER})
+    set(DRM_VERSION ${PKG_DRM_VERSION})
 
-# This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.  It describes the version of the
-# interface version of LLPC that the ICD supports.
-ICD_LLPC_CLIENT_MAJOR_VERSION = 41
+    find_path(DRM_INCLUDE_DIRS
+        NAMES
+            xf86drm.h
+        HINTS
+            ${PKG_DRM_INCLUDE_DIRSS}
+    )
+    find_library(DRM_LIBRARIES
+        NAMES
+            drm
+        HINTS
+            ${PKG_DRM_LIBRARIES_DIRS}
+    )
 
-# When ICD_LLPC_CLIENT_MAJOR_VERSION >= 39, Set ENABLE_VKGC to 1 to use Vkgc namespace instead of Llpc namespace in ICD
-ENABLE_VKGC=1
+    include(FindPackageHandleStandardArgs)
+    find_package_handle_standard_args(DRM
+        FOUND_VAR
+            DRM_FOUND
+        REQUIRED_VARS
+            DRM_LIBRARIES
+            DRM_INCLUDE_DIRS
+        VERSION_VAR
+            DRM_VERSION
+    )
+
+    if(DRM_FOUND AND NOT TARGET DRM::DRM)
+        add_library(DRM::DRM UNKNOWN IMPORTED)
+        set_target_properties(DRM::DRM PROPERTIES
+            IMPORTED_LOCATION "${DRM_LIBRARIES}"
+            INTERFACE_COMPILE_OPTIONS "${DRM_DEFINITIONS}"
+            INTERFACE_INCLUDE_DIRECTORIES "${DRM_INCLUDE_DIRS}"
+            INTERFACE_INCLUDE_DIRECTORIES "${DRM_INCLUDE_DIRS}/libdrm"
+        )
+    endif()
+
+    mark_as_advanced(DRM_LIBRARIES DRM_INCLUDE_DIRS)
+
+elseif()
+    set(DRM_FOUND FALSE)
+endif()

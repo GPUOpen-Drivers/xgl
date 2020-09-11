@@ -37,11 +37,7 @@
 #include "include/vk_shader_code.h"
 #include "appopt/g_shader_profile.h"
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
 #include "vkgcDefs.h"
-#else
-#include "llpc.h"
-#endif
 
 // Forward declare PAL classes used in this file
 namespace Pal
@@ -74,15 +70,9 @@ struct PipelineOptimizerKey
 // This struct represents unified shader compiler options
 struct PipelineShaderOptionsPtr
 {
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
     Vkgc::PipelineOptions*       pPipelineOptions;
     Vkgc::PipelineShaderOptions* pOptions;
     Vkgc::NggState*              pNggState;
-#else
-    Llpc::PipelineOptions*       pPipelineOptions;
-    Llpc::PipelineShaderOptions* pOptions;
-    Llpc::NggState*              pNggState;
-#endif
 
 };
 
@@ -110,7 +100,7 @@ public:
         const PipelineOptimizerKey&       pipelineKey,
         VkShaderStageFlagBits             shaderStages,
         Pal::GraphicsPipelineCreateInfo*  pPalCreateInfo,
-        Pal::DynamicGraphicsShaderInfos*  pGraphicsWaveLimitParams);
+        Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos);
 
     void OverrideComputePipelineCreateInfo(
         const PipelineOptimizerKey&      pipelineKey,
@@ -128,7 +118,7 @@ private:
         const PipelineOptimizerKey&       pipelineKey,
         VkShaderStageFlagBits             shaderStages,
         Pal::GraphicsPipelineCreateInfo*  pPalCreateInfo,
-        Pal::DynamicGraphicsShaderInfos*  pGraphicsWaveLimitParams);
+        Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos);
 
     void ApplyProfileToComputePipelineCreateInfo(
         const PipelineProfile&           profile,

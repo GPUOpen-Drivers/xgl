@@ -1101,7 +1101,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
         sampleConfig.type                                = GpuUtil::GpaSampleType::Trace;
 
         // Configure SQTT
-        sampleConfig.sqtt.seMask                         = m_seMask;
+        sampleConfig.sqtt.seDetailedMask                 = m_seMask;
         sampleConfig.sqtt.gpuMemoryLimit                 = (settings.devModeSqttGpuMemoryLimit == 0) ?
                                                                m_traceGpuMemLimit : settings.devModeSqttGpuMemoryLimit;
         sampleConfig.sqtt.flags.enable                   = true;

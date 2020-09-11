@@ -130,8 +130,8 @@ VkResult InternalMemMgr::Init()
 
         m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heapCount              = 3;
         m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heaps[0]               = Pal::GpuHeapLocal;
-        m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heaps[1]               = Pal::GpuHeapGartCacheable;
-        m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heaps[2]               = Pal::GpuHeapGartUswc;
+        m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heaps[1]               = Pal::GpuHeapGartUswc;
+        m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible].heaps[2]               = Pal::GpuHeapGartCacheable;
 
         result = CalcSubAllocationPool(
             m_commonPoolProps[InternalPoolGpuReadOnlyCpuVisible],

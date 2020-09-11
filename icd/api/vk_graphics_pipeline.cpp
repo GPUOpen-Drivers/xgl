@@ -24,7 +24,6 @@
  **********************************************************************************************************************/
 
 #include "include/log.h"
-#include "include/stencil_ops_combiner.h"
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_graphics_pipeline.h"
@@ -79,33 +78,32 @@ void GraphicsPipeline::GenerateHashFromVertexInputStateCreateInfo(
 
     if (desc.pNext != nullptr)
     {
-        union
-        {
-            const VkStructHeader*                                 pInfo;
-            const VkPipelineVertexInputDivisorStateCreateInfoEXT* pDivisorStateCreateInfo;
-        };
+        const void* pNext = desc.pNext;
 
-        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
-
-        while (pInfo != nullptr)
+        while (pNext != nullptr)
         {
-            switch (static_cast<uint32_t>(pInfo->sType))
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (static_cast<uint32>(pHeader->sType))
             {
             case VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT:
-                pHasher->Update(pDivisorStateCreateInfo->sType);
-                pHasher->Update(pDivisorStateCreateInfo->vertexBindingDivisorCount);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineVertexInputDivisorStateCreateInfoEXT*>(pNext);
+                pHasher->Update(pExtInfo->sType);
+                pHasher->Update(pExtInfo->vertexBindingDivisorCount);
 
-                for (uint32_t i = 0; i < pDivisorStateCreateInfo->vertexBindingDivisorCount; i++)
+                for (uint32 i = 0; i < pExtInfo->vertexBindingDivisorCount; i++)
                 {
-                    pHasher->Update(pDivisorStateCreateInfo->pVertexBindingDivisors[i]);
+                    pHasher->Update(pExtInfo->pVertexBindingDivisors[i]);
                 }
 
                 break;
+            }
             default:
                 break;
             }
 
-            pInfo = pInfo->pNext;
+            pNext = pHeader->pNext;
         }
     }
 }
@@ -138,28 +136,27 @@ void GraphicsPipeline::GenerateHashFromTessellationStateCreateInfo(
 
     if (desc.pNext != nullptr)
     {
-        union
-        {
-            const VkStructHeader*                                    pInfo;
-            const VkPipelineTessellationDomainOriginStateCreateInfo* pDomainOriginStateCreateInfo;
-        };
+        const void* pNext = desc.pNext;
 
-        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
-
-        while (pInfo != nullptr)
+        while (pNext != nullptr)
         {
-            switch (static_cast<uint32_t>(pInfo->sType))
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (static_cast<uint32>(pHeader->sType))
             {
             case VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO:
-                pHasher->Update(pDomainOriginStateCreateInfo->sType);
-                pHasher->Update(pDomainOriginStateCreateInfo->domainOrigin);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineTessellationDomainOriginStateCreateInfo*>(pNext);
+                pHasher->Update(pExtInfo->sType);
+                pHasher->Update(pExtInfo->domainOrigin);
 
                 break;
+            }
             default:
                 break;
             }
 
-            pInfo = pInfo->pNext;
+            pNext = pHeader->pNext;
         }
     }
 }
@@ -223,57 +220,63 @@ void GraphicsPipeline::GenerateHashFromRasterizationStateCreateInfo(
 
     if (desc.pNext != nullptr)
     {
-        union
-        {
-            const VkStructHeader*                                        pInfo;
-            const VkPipelineRasterizationConservativeStateCreateInfoEXT* pConservativeStateCreateInfo;
-            const VkPipelineRasterizationStateRasterizationOrderAMD*     pRasterizationOrder;
-            const VkPipelineRasterizationStateStreamCreateInfoEXT*       pStreamCreateInfo;
-            const VkPipelineRasterizationDepthClipStateCreateInfoEXT*    pRsDepthClip;
-            const VkPipelineRasterizationLineStateCreateInfoEXT*         pLineState;
-        };
+        const void* pNext = desc.pNext;
 
-        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
-
-        while (pInfo != nullptr)
+        while (pNext != nullptr)
         {
-            switch (static_cast<uint32_t>(pInfo->sType))
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (static_cast<uint32>(pHeader->sType))
             {
             case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT:
-                pApiHasher->Update(pConservativeStateCreateInfo->sType);
-                pApiHasher->Update(pConservativeStateCreateInfo->flags);
-                pApiHasher->Update(pConservativeStateCreateInfo->conservativeRasterizationMode);
-                pApiHasher->Update(pConservativeStateCreateInfo->extraPrimitiveOverestimationSize);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineRasterizationConservativeStateCreateInfoEXT*>(pNext);
+                pApiHasher->Update(pExtInfo->sType);
+                pApiHasher->Update(pExtInfo->flags);
+                pApiHasher->Update(pExtInfo->conservativeRasterizationMode);
+                pApiHasher->Update(pExtInfo->extraPrimitiveOverestimationSize);
 
                 break;
+            }
             case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD:
-                pApiHasher->Update(pRasterizationOrder->sType);
-                pApiHasher->Update(pRasterizationOrder->rasterizationOrder);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineRasterizationStateRasterizationOrderAMD*>(pNext);
+                pApiHasher->Update(pExtInfo->sType);
+                pApiHasher->Update(pExtInfo->rasterizationOrder);
 
                 break;
+            }
             case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
-                pBaseHasher->Update(pStreamCreateInfo->sType);
-                pBaseHasher->Update(pStreamCreateInfo->flags);
-                pBaseHasher->Update(pStreamCreateInfo->rasterizationStream);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineRasterizationStateStreamCreateInfoEXT*>(pNext);
+                pBaseHasher->Update(pExtInfo->sType);
+                pBaseHasher->Update(pExtInfo->flags);
+                pBaseHasher->Update(pExtInfo->rasterizationStream);
 
                 break;
+            }
             case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT:
-                pBaseHasher->Update(pRsDepthClip->depthClipEnable);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(pNext);
+                pBaseHasher->Update(pExtInfo->depthClipEnable);
 
                 break;
+            }
             case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT:
-                pBaseHasher->Update(pLineState->lineRasterizationMode);
-                pBaseHasher->Update(pLineState->stippledLineEnable);
-                pBaseHasher->Update(pLineState->lineStippleFactor);
-                pBaseHasher->Update(pLineState->lineStipplePattern);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineRasterizationLineStateCreateInfoEXT*>(pNext);
+                pBaseHasher->Update(pExtInfo->lineRasterizationMode);
+                pBaseHasher->Update(pExtInfo->stippledLineEnable);
+                pBaseHasher->Update(pExtInfo->lineStippleFactor);
+                pBaseHasher->Update(pExtInfo->lineStipplePattern);
 
                 break;
-
+            }
             default:
                 break;
             }
 
-            pInfo = pInfo->pNext;
+            pNext = pHeader->pNext;
         }
     }
 }
@@ -308,37 +311,36 @@ void GraphicsPipeline::GenerateHashFromMultisampleStateCreateInfo(
 
     if (desc.pNext != nullptr)
     {
-        union
-        {
-            const VkStructHeader*                              pInfo;
-            const VkPipelineSampleLocationsStateCreateInfoEXT* pSampleLocationsStateCreateInfo;
-        };
+        const void* pNext = desc.pNext;
 
-        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
-
-        while (pInfo != nullptr)
+        while (pNext != nullptr)
         {
-            switch (static_cast<uint32_t>(pInfo->sType))
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (static_cast<uint32>(pHeader->sType))
             {
             case VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT:
-                pApiHasher->Update(pSampleLocationsStateCreateInfo->sType);
-                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsEnable);
-                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.sType);
-                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.sampleLocationsPerPixel);
-                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.sampleLocationGridSize);
-                pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.sampleLocationsCount);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineSampleLocationsStateCreateInfoEXT*>(pNext);
+                pApiHasher->Update(pExtInfo->sType);
+                pApiHasher->Update(pExtInfo->sampleLocationsEnable);
+                pApiHasher->Update(pExtInfo->sampleLocationsInfo.sType);
+                pApiHasher->Update(pExtInfo->sampleLocationsInfo.sampleLocationsPerPixel);
+                pApiHasher->Update(pExtInfo->sampleLocationsInfo.sampleLocationGridSize);
+                pApiHasher->Update(pExtInfo->sampleLocationsInfo.sampleLocationsCount);
 
-                for (uint32_t i = 0; i < pSampleLocationsStateCreateInfo->sampleLocationsInfo.sampleLocationsCount; i++)
+                for (uint32 i = 0; i < pExtInfo->sampleLocationsInfo.sampleLocationsCount; i++)
                 {
-                    pApiHasher->Update(pSampleLocationsStateCreateInfo->sampleLocationsInfo.pSampleLocations[i]);
+                    pApiHasher->Update(pExtInfo->sampleLocationsInfo.pSampleLocations[i]);
                 }
 
                 break;
+            }
             default:
                 break;
             }
 
-            pInfo = pInfo->pNext;
+            pNext = pHeader->pNext;
         }
     }
 }
@@ -376,7 +378,7 @@ void GraphicsPipeline::GenerateHashFromColorBlendStateCreateInfo(
     pApiHasher->Update(desc.logicOp);
     pBaseHasher->Update(desc.attachmentCount);
 
-    for (uint32_t i = 0; i < desc.attachmentCount; i++)
+    for (uint32 i = 0; i < desc.attachmentCount; i++)
     {
         pBaseHasher->Update(desc.pAttachments[i]);
     }
@@ -385,30 +387,29 @@ void GraphicsPipeline::GenerateHashFromColorBlendStateCreateInfo(
 
     if (desc.pNext != nullptr)
     {
-        union
-        {
-            const VkStructHeader*                                 pInfo;
-            const VkPipelineColorBlendAdvancedStateCreateInfoEXT* pAdvancedStateCreateInfo;
-        };
+        const void* pNext = desc.pNext;
 
-        pInfo = static_cast<const VkStructHeader*>(desc.pNext);
-
-        while (pInfo != nullptr)
+        while (pNext != nullptr)
         {
-            switch (static_cast<uint32_t>(pInfo->sType))
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (static_cast<uint32>(pHeader->sType))
             {
             case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
-                pApiHasher->Update(pAdvancedStateCreateInfo->sType);
-                pApiHasher->Update(pAdvancedStateCreateInfo->srcPremultiplied);
-                pApiHasher->Update(pAdvancedStateCreateInfo->dstPremultiplied);
-                pApiHasher->Update(pAdvancedStateCreateInfo->blendOverlap);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineColorBlendAdvancedStateCreateInfoEXT*>(pNext);
+                pApiHasher->Update(pExtInfo->sType);
+                pApiHasher->Update(pExtInfo->srcPremultiplied);
+                pApiHasher->Update(pExtInfo->dstPremultiplied);
+                pApiHasher->Update(pExtInfo->blendOverlap);
 
                 break;
+            }
             default:
                 break;
             }
 
-            pInfo = pInfo->pNext;
+            pNext = pHeader->pNext;
         }
     }
 }
@@ -517,38 +518,37 @@ uint64_t GraphicsPipeline::BuildApiHash(
 
     if (pCreateInfo->pNext != nullptr)
     {
-        union
-        {
-            const VkStructHeader*                                    pInfo;
-            const VkPipelineDiscardRectangleStateCreateInfoEXT*      pDiscardRectangleStateCreateInfo;
-        };
+        const void* pNext = pCreateInfo->pNext;
 
-        pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
-
-        while (pInfo != nullptr)
+        while (pNext != nullptr)
         {
-            switch (static_cast<uint32_t>(pInfo->sType))
+            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (static_cast<uint32>(pHeader->sType))
             {
             case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
-                apiHasher.Update(pDiscardRectangleStateCreateInfo->sType);
-                apiHasher.Update(pDiscardRectangleStateCreateInfo->flags);
-                apiHasher.Update(pDiscardRectangleStateCreateInfo->discardRectangleMode);
-                apiHasher.Update(pDiscardRectangleStateCreateInfo->discardRectangleCount);
+            {
+                const auto* pExtInfo = static_cast<const VkPipelineDiscardRectangleStateCreateInfoEXT*>(pNext);
+                apiHasher.Update(pExtInfo->sType);
+                apiHasher.Update(pExtInfo->flags);
+                apiHasher.Update(pExtInfo->discardRectangleMode);
+                apiHasher.Update(pExtInfo->discardRectangleCount);
 
-                if (pDiscardRectangleStateCreateInfo->pDiscardRectangles != nullptr)
+                if (pExtInfo->pDiscardRectangles != nullptr)
                 {
-                    for (uint32_t i = 0; i < pDiscardRectangleStateCreateInfo->discardRectangleCount; i++)
+                    for (uint32 i = 0; i < pExtInfo->discardRectangleCount; i++)
                     {
-                        apiHasher.Update(pDiscardRectangleStateCreateInfo->pDiscardRectangles[i]);
+                        apiHasher.Update(pExtInfo->pDiscardRectangles[i]);
                     }
                 }
 
                 break;
+            }
             default:
                 break;
             }
 
-            pInfo = pInfo->pNext;
+            pNext = pHeader->pNext;
         }
     }
 
@@ -932,6 +932,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
         pInfo->bindDepthStencilObject  = true;
         pInfo->bindTriangleRasterState = true;
+        pInfo->bindStencilRefMasks     = true;
         pInfo->bindInputAssemblyState  = true;
 
         if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::CullModeExt)] == false)
@@ -994,6 +995,11 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         pInfo->bindTriangleRasterState =
             !(dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::CullModeExt)] ||
               dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FrontFaceExt)]);
+
+        pInfo->bindStencilRefMasks =
+            !(dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilCompareMask)] ||
+              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilWriteMask)] ||
+              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilReference)]);
 
         pInfo->bindInputAssemblyState =
             !dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt)];
@@ -1286,8 +1292,6 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             pInfo->immedInfo.depthStencilCreateInfo.stencilEnable     = false;
         }
 
-        constexpr uint8_t DefaultStencilOpValue = 1;
-
         if ((pIn->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pDs != nullptr))
         {
             pInfo->immedInfo.depthStencilCreateInfo.front.stencilFailOp      = VkToPalStencilOp(pDs->front.failOp);
@@ -1408,7 +1412,7 @@ VkResult GraphicsPipeline::Create(
             binaryCreateInfo.pipelineProfileKey,
             localPipelineInfo.activeStages,
             &localPipelineInfo.pipeline,
-            &localPipelineInfo.immedInfo.graphicsWaveLimitParams);
+            &localPipelineInfo.immedInfo.graphicsShaderInfos);
 
         palPipelineHasher.Update(localPipelineInfo.pipeline);
     }
@@ -1548,6 +1552,9 @@ VkResult GraphicsPipeline::Create(
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                     pPalDepthStencil);
             }
+
+            // Reset the PAL stencil maskupdate flags
+            localPipelineInfo.immedInfo.stencilRefMasks.flags.u8All = 0xff;
         }
 
         result = PalToVkResult(palResult);
@@ -1581,6 +1588,7 @@ VkResult GraphicsPipeline::Create(
             localPipelineInfo.staticStateMask,
             localPipelineInfo.bindDepthStencilObject,
             localPipelineInfo.bindTriangleRasterState,
+            localPipelineInfo.bindStencilRefMasks,
             localPipelineInfo.bindInputAssemblyState,
             vbInfo,
             pPalMsaa,
@@ -1657,6 +1665,7 @@ GraphicsPipeline::GraphicsPipeline(
     uint32_t                               staticStateMask,
     bool                                   bindDepthStencilObject,
     bool                                   bindTriangleRasterState,
+    bool                                   bindStencilRefMasks,
     bool                                   bindInputAssemblyState,
     const VbBindingInfo&                   vbInfo,
     Pal::IMsaaState**                      pPalMsaa,
@@ -1671,7 +1680,6 @@ GraphicsPipeline::GraphicsPipeline(
     Pipeline(pDevice),
     m_info(immedInfo),
     m_vbInfo(vbInfo),
-    m_coverageSamples(coverageSamples),
     m_flags()
 {
     Pipeline::Init(pPalPipeline, pLayout, pBinary, staticStateMask, apiHash);
@@ -1683,8 +1691,8 @@ GraphicsPipeline::GraphicsPipeline(
     m_flags.viewIndexFromDeviceIndex = viewIndexFromDeviceIndex;
     m_flags.bindDepthStencilObject   = bindDepthStencilObject;
     m_flags.bindTriangleRasterState  = bindTriangleRasterState;
+    m_flags.bindStencilRefMasks      = bindStencilRefMasks;
     m_flags.bindInputAssemblyState   = bindInputAssemblyState;
-
     CreateStaticState();
 
     pPalPipelineHasher->Update(m_palPipelineHash);
@@ -1708,7 +1716,6 @@ void GraphicsPipeline::CreateStaticState()
     pStaticTokens->viewport                   = DynamicRenderStateToken;
     pStaticTokens->scissorRect                = DynamicRenderStateToken;
     pStaticTokens->samplePattern              = DynamicRenderStateToken;
-    pStaticTokens->waveLimits                 = DynamicRenderStateToken;
     pStaticTokens->lineStippleState           = DynamicRenderStateToken;
 
     if (m_flags.bindInputAssemblyState)
@@ -1833,10 +1840,9 @@ GraphicsPipeline::~GraphicsPipeline()
 // Binds this graphics pipeline's state to the given command buffer (using waveLimits created from the pipeline)
 void GraphicsPipeline::BindToCmdBuffer(
     CmdBuffer*                             pCmdBuffer,
-    CmdBufferRenderState*                  pRenderState,
-    StencilOpsCombiner*                    pStencilCombiner) const
+    CmdBufferRenderState*                  pRenderState) const
 {
-    BindToCmdBuffer(pCmdBuffer, pRenderState, pStencilCombiner, m_info.graphicsWaveLimitParams);
+    BindToCmdBuffer(pCmdBuffer, pRenderState, m_info.graphicsShaderInfos);
 }
 
 // =====================================================================================================================
@@ -1844,7 +1850,6 @@ void GraphicsPipeline::BindToCmdBuffer(
 void GraphicsPipeline::BindToCmdBuffer(
     CmdBuffer*                             pCmdBuffer,
     CmdBufferRenderState*                  pRenderState,
-    StencilOpsCombiner*                    pStencilCombiner,
     const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos) const
 {
     // Get this pipeline's static tokens
@@ -1986,6 +1991,44 @@ void GraphicsPipeline::BindToCmdBuffer(
         pRenderState->allGpuState.triangleRasterState = m_info.triangleRasterState;
     }
 
+    Pal::StencilRefMaskParams prevStencilRefMasks = pRenderState->allGpuState.stencilRefMasks;
+
+    if (m_flags.bindStencilRefMasks == false)
+    {
+        // Until we expose Stencil Op Value, we always inherit the PSO value, which is currently Default == 1
+        pRenderState->allGpuState.stencilRefMasks.frontOpValue   = m_info.stencilRefMasks.frontOpValue;
+        pRenderState->allGpuState.stencilRefMasks.backOpValue    = m_info.stencilRefMasks.backOpValue;
+
+        // We don't have to use tokens for these since the combiner does a redundancy check on the full value
+        if (ContainsStaticState(DynamicStatesInternal::StencilCompareMask))
+        {
+            pRenderState->allGpuState.stencilRefMasks.frontReadMask  = m_info.stencilRefMasks.frontReadMask;
+            pRenderState->allGpuState.stencilRefMasks.backReadMask   = m_info.stencilRefMasks.backReadMask;
+        }
+
+        if (ContainsStaticState(DynamicStatesInternal::StencilWriteMask))
+        {
+            pRenderState->allGpuState.stencilRefMasks.frontWriteMask = m_info.stencilRefMasks.frontWriteMask;
+            pRenderState->allGpuState.stencilRefMasks.backWriteMask  = m_info.stencilRefMasks.backWriteMask;
+        }
+
+        if (ContainsStaticState(DynamicStatesInternal::StencilReference))
+        {
+            pRenderState->allGpuState.stencilRefMasks.frontRef       = m_info.stencilRefMasks.frontRef;
+            pRenderState->allGpuState.stencilRefMasks.backRef        = m_info.stencilRefMasks.backRef;
+        }
+    }
+    else
+    {
+        pRenderState->allGpuState.stencilRefMasks = m_info.stencilRefMasks;
+    }
+
+    // Check whether the dirty bit should be set
+    if (memcmp(&pRenderState->allGpuState.stencilRefMasks, &prevStencilRefMasks, sizeof(Pal::StencilRefMaskParams)) != 0)
+    {
+        pRenderState->allGpuState.dirty.stencilRef = 1;
+    }
+
     if (m_flags.bindInputAssemblyState == false)
     {
         // Update the static states to renderState
@@ -2118,49 +2161,17 @@ void GraphicsPipeline::BindToCmdBuffer(
     }
     while (deviceGroup.IterateNext());
 
-    const bool stencilMasks = ContainsStaticState(DynamicStatesInternal::StencilCompareMask) |
-                              ContainsStaticState(DynamicStatesInternal::StencilWriteMask)   |
-                              ContainsStaticState(DynamicStatesInternal::StencilReference);
-
-    // Until we expose Stencil Op Value, we always inherit the PSO value, which is currently Default == 1
-    pStencilCombiner->Set(StencilRefMaskParams::FrontOpValue, m_info.stencilRefMasks.frontOpValue);
-    pStencilCombiner->Set(StencilRefMaskParams::BackOpValue,  m_info.stencilRefMasks.backOpValue);
-
-    if (stencilMasks)
-    {
-        // We don't have to use tokens for these since the combiner does a redundancy check on the full value
-        if (ContainsStaticState(DynamicStatesInternal::StencilCompareMask))
-        {
-            pStencilCombiner->Set(StencilRefMaskParams::FrontReadMask, m_info.stencilRefMasks.frontReadMask);
-            pStencilCombiner->Set(StencilRefMaskParams::BackReadMask,  m_info.stencilRefMasks.backReadMask);
-        }
-        if (ContainsStaticState(DynamicStatesInternal::StencilWriteMask))
-        {
-            pStencilCombiner->Set(StencilRefMaskParams::FrontWriteMask, m_info.stencilRefMasks.frontWriteMask);
-            pStencilCombiner->Set(StencilRefMaskParams::BackWriteMask,  m_info.stencilRefMasks.backWriteMask);
-        }
-        if (ContainsStaticState(DynamicStatesInternal::StencilReference))
-        {
-            pStencilCombiner->Set(StencilRefMaskParams::FrontRef, m_info.stencilRefMasks.frontRef);
-            pStencilCombiner->Set(StencilRefMaskParams::BackRef,  m_info.stencilRefMasks.backRef);
-        }
-
-        // Generate the PM4 if any of the Stencil state is to be statically bound
-        // knowing we will likely overwrite it.
-        pStencilCombiner->PalCmdSetStencilState(pCmdBuffer);
-    }
-
     // Binding GraphicsPipeline affects ViewMask,
     // because when VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT is specified
     // ViewMask for each VkPhysicalDevice is defined by DeviceIndex
     // not by current subpass during a render pass instance.
-    const bool oldViewIndexFromDeviceIndex = pRenderState->allGpuState.ViewIndexFromDeviceIndex;
+    const bool oldViewIndexFromDeviceIndex = pRenderState->allGpuState.viewIndexFromDeviceIndex;
     const bool newViewIndexFromDeviceIndex = ViewIndexFromDeviceIndex();
-    const bool  isViewIndexFromDeviceIndexChanging = oldViewIndexFromDeviceIndex != newViewIndexFromDeviceIndex;
-    if (isViewIndexFromDeviceIndexChanging)
+
+    if (oldViewIndexFromDeviceIndex != newViewIndexFromDeviceIndex)
     {
         // Update value of ViewIndexFromDeviceIndex for currently bound pipeline.
-        pRenderState->allGpuState.ViewIndexFromDeviceIndex = newViewIndexFromDeviceIndex;
+        pRenderState->allGpuState.viewIndexFromDeviceIndex = newViewIndexFromDeviceIndex;
 
         // Sync ViewMask state in CommandBuffer.
         pCmdBuffer->SetViewInstanceMask(pCmdBuffer->GetDeviceMask());

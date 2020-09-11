@@ -85,14 +85,7 @@ protected:
     // are in place.
     struct ImmedInfo
     {
-        Pal::DynamicComputeShaderInfo computeWaveLimitParams;
-
-        // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
-        // state programming during pipeline binds.
-        struct
-        {
-            uint32_t waveLimits;
-        } staticTokens;
+        Pal::DynamicComputeShaderInfo computeShaderInfo;
     };
 
     ComputePipeline(

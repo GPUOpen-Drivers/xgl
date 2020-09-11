@@ -539,12 +539,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.asyncComputeQueueMaxWavesPerCu = 40;
 
+                m_settings.enableWgpMode = 0x20;
+
                 if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
                 {
                     m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
                 }
             }
-
             // PM4 optimizations give us 1% gain
             m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
 
@@ -562,12 +563,22 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.forceDepthClampBasedOnZExport = true;
         }
 
-        if ((appProfile == AppProfile::AshesOfTheSingularity) ||
-            (appProfile == AppProfile::DetroitBecomeHuman))
+        if (appProfile == AppProfile::AshesOfTheSingularity)
         {
-            // Disable image type checking on Navi10 to avoid 2.5% loss in Ashes and
-            // 1.5% loss in Detroit
+            // Disable image type checking on Navi10 to avoid 2.5% loss in Ashes
             m_settings.disableImageResourceTypeCheck = true;
+        }
+
+        if (appProfile == AppProfile::DetroitBecomeHuman)
+        {
+            // Disable image type checking on Navi10 to avoid 1.5% loss in Detroit
+            m_settings.disableImageResourceTypeCheck = true;
+
+            if ((pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1) &&
+                (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false))
+            {
+                m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
+            }
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
@@ -634,6 +645,13 @@ VkResult VulkanSettingsLoader::ProcessSettings(
         // Update application profile to the one from the panel
         *pAppProfile = static_cast<AppProfile>(m_settings.forceAppProfileValue);
     }
+
+#if ICD_X86_BUILD
+    if (m_settings.shaderCacheMode == ShaderCacheEnableRuntimeOnly)
+    {
+        m_settings.shaderCacheMode = ShaderCacheDisable;
+    }
+#endif
 
     // Override defaults based on application profile
     result = OverrideProfiledSettings(pAllocCb, appVersion, *pAppProfile);

@@ -23,20 +23,34 @@
  #
  #######################################################################################################################
 
-# This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
-# that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.  It must
-# be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-ICD_PAL_CLIENT_MAJOR_VERSION = 624
-ICD_PAL_CLIENT_MINOR_VERSION = 0
+# Find the kernel release
+execute_process(
+    COMMAND uname -r
+    OUTPUT_VARIABLE KERNEL_RELEASE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
 
-# This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.  It describes
-# the interface version of the gpuopen shared module (part of PAL) that the ICD supports.
-ICD_GPUOPEN_CLIENT_MAJOR_VERSION = 42
-ICD_GPUOPEN_CLIENT_MINOR_VERSION = 0
+# Find the headers
+find_path(KERNEL_HEADERS_DIR
+    include/linux/user.h
+    PATHS /usr/src/linux-headers-${KERNEL_RELEASE}
+)
 
-# This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.  It describes the version of the
-# interface version of LLPC that the ICD supports.
-ICD_LLPC_CLIENT_MAJOR_VERSION = 41
+message(STATUS "Kernel release: ${KERNEL_RELEASE}")
+message(STATUS "Kernel headers: ${KERNEL_HEADERS_DIR}")
 
-# When ICD_LLPC_CLIENT_MAJOR_VERSION >= 39, Set ENABLE_VKGC to 1 to use Vkgc namespace instead of Llpc namespace in ICD
-ENABLE_VKGC=1
+if (KERNEL_HEADERS_DIR)
+    set(KERNEL_HEADERS_INCLUDE_DIRS
+        #${KERNEL_HEADERS_DIR}/include
+        ${KERNEL_HEADERS_DIR}/include/config/drm
+        ${KERNEL_HEADERS_DIR}/include/uapi/drm
+        #${KERNEL_HEADERS_DIR}/arch/x86/include
+        ${KERNEL_HEADERS_DIR}/arch/x86/include/generated
+        CACHE PATH "Kernel headers include directories."
+    )
+    set(KERNEL_HEADERS_FOUND 1 CACHE STRING "Set to 1 if kernel headers were found.")
+else()
+  set(KERNEL_HEADERS_FOUND 0 CACHE STRING "Set to 1 if kernel headers were found.")
+endif()
+
+mark_as_advanced(KERNEL_HEADERS_FOUND)

@@ -130,6 +130,81 @@ endif()
 
 project(XGL VERSION 1 LANGUAGES C CXX)
 
+### Helper Macros #####################################################################################################
+macro(target_find_headers _target)
+    get_target_property(${_target}_INCLUDES_DIRS ${_target} INCLUDE_DIRECTORIES)
+
+    if(${_target}_INCLUDES_DIRS)
+        foreach(_include_dir IN ITEMS ${${_target}_INCLUDES_DIRS})
+            file(GLOB_RECURSE _include_files
+                LIST_DIRECTORIES false
+                "${_include_dir}/*.h"
+                "${_include_dir}/*.hpp"
+            )
+
+            list(APPEND ${_target}_INCLUDES ${_include_files})
+        endforeach()
+
+        target_sources(${_target} PRIVATE ${${_target}_INCLUDES})
+    endif()
+endmacro()
+
+# Source Groups Helper #############################################################################
+# This helper creates source groups for generators that support them. This is primarily MSVC and
+# XCode, but there are other generators that support IDE project files.
+#
+# Note: this only adds files that have been added to the target's SOURCES property. To add headers
+# to this list, be sure that you call target_find_headers before you call target_source_groups.
+
+macro(target_source_groups _target)
+    get_target_property(${_target}_SOURCES ${_target} SOURCES)
+    foreach(_source IN ITEMS ${${_target}_SOURCES})
+        set(_source ${_source})
+        get_filename_component(_source_path "${_source}" ABSOLUTE)
+        file(RELATIVE_PATH _source_path_rel "${PROJECT_SOURCE_DIR}" "${_source_path}")
+        get_filename_component(_source_path_rel "${_source_path_rel}" DIRECTORY)
+        string(REPLACE "/" "\\" _group_path "${_source_path_rel}")
+        source_group("${_group_path}" FILES "${_source}")
+    endforeach()
+endmacro()
+
+### CMake Includes #####################################################################################################
+list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules)
+if(EXISTS ${PROJECT_SOURCE_DIR}/../cmake)
+    list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/../cmake)
+endif()
+
+### Set BUILD TYPE related variables ###################################################################################
+if (CMAKE_CONFIGURATION_TYPES)
+    set(CMAKE_BUILD_TYPE_DEBUG $<CONFIG:Debug>)
+    set(CMAKE_BUILD_TYPE_RELEASE $<CONFIG:Release>)
+    set(CMAKE_BUILD_TYPE_RELWITHDEBINFO $<CONFIG:RelWithDebInfo>)
+else()
+    string(TOUPPER "${CMAKE_BUILD_TYPE}" capital_CMAKE_BUILD_TYPE)
+
+    if (CMAKE_BUILD_TYPE AND
+        NOT capital_CMAKE_BUILD_TYPE MATCHES "^(DEBUG|RELEASE|RELWITHDEBINFO|MINSIZEREL)$")
+        message(FATAL_ERROR "Invalid value for CMAKE_BUILD_TYPE: ${CMAKE_BUILD_TYPE}")
+    endif()
+
+    if(capital_CMAKE_BUILD_TYPE STREQUAL "DEBUG")
+        set(CMAKE_BUILD_TYPE_DEBUG ON)
+        set(CMAKE_BUILD_TYPE_RELEASE OFF)
+    else()
+        set(CMAKE_BUILD_TYPE_DEBUG OFF)
+        set(CMAKE_BUILD_TYPE_RELEASE ON)
+    endif()
+endif()
+
+### Set TARGET_ARCHITECTURE_BITS #######################################################################################
+if(NOT DEFINED TARGET_ARCHITECTURE_BITS)
+    if( CMAKE_SIZEOF_VOID_P EQUAL 8 )
+        set(TARGET_ARCHITECTURE_BITS 64)
+    else( CMAKE_SIZEOF_VOID_P EQUAL 4 )
+        set(TARGET_ARCHITECTURE_BITS 32)
+    endif()
+endif()
+
 # Before GCC7, when LTO is enabled, undefined reference error was observed when linking static libraries.
 # Use the gcc-ar wrapper instead of ar, this invokes ar with the right plugin arguments
 # --plugin /usr/lib/gcc/.../liblto_plugin.so
@@ -156,18 +231,12 @@ if (NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
   set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type (default Release)" FORCE)
 endif()
 
-### CMake Includes #####################################################################################################
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/../pal/cmake/Modules)
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/icd/imported/pal/cmake/Modules)
-set(GLOBAL_ROOT_SRC_DIR ${PROJECT_SOURCE_DIR}/../../ CACHE PATH "" FORCE)
-
 # Generate a CompilationDatabase (compile_commands.json file) for our build
 # for intellisense used by VScode, YouCompleteMe, etc
 set(CMAKE_EXPORT_COMPILE_COMMANDS 1)
 
 include(CMakeDependentOption)
-include(AmdCmakeHelper)
-include(SetupAmdGlobalRoots)
+include(XglSetupAmdGlobalRoots)
 
 ### Strip the symbols for release build ################################################################################
 if(UNIX)

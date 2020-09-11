@@ -507,6 +507,11 @@ VkResult CmdBuffer::Initialize(
     if (result == Pal::Result::Success)
     {
         m_flags.is2ndLvl = groupCreateInfo.flags.nested;
+        m_state.allGpuState.stencilRefMasks.flags.u8All = 0xff;
+
+        // Set up the default front/back op values == 1
+        m_state.allGpuState.stencilRefMasks.frontOpValue = DefaultStencilOpValue;
+        m_state.allGpuState.stencilRefMasks.backOpValue = DefaultStencilOpValue;
     }
 
     // Initialize SQTT command buffer state if thread tracing support is enabled (gpuopen developer mode).
@@ -1196,7 +1201,6 @@ VkResult CmdBuffer::End(void)
 // and during vkResetCommandBuffer  (inside CmdBuffer::ResetState()) and during vkExecuteCommands
 void CmdBuffer::ResetPipelineState()
 {
-    m_stencilCombiner.Reset();
     m_vbMgr.Reset();
 
     memset(&m_state.allGpuState.staticTokens, 0u, sizeof(m_state.allGpuState.staticTokens));
@@ -1387,7 +1391,7 @@ void CmdBuffer::BindPipeline(
 
                 if (pPipeline != m_state.allGpuState.pGraphicsPipeline)
                 {
-                    pPipeline->BindToCmdBuffer(this, &m_state, &m_stencilCombiner);
+                    pPipeline->BindToCmdBuffer(this, &m_state);
 
                     if (pPipeline->ContainsStaticState(DynamicStatesInternal::VertexInputBindingStrideExt))
                     {
@@ -5060,7 +5064,7 @@ void CmdBuffer::SetViewInstanceMask(
 
         uint32_t viewMask = 0x0;
 
-        if (m_state.allGpuState.ViewIndexFromDeviceIndex)
+        if (m_state.allGpuState.viewIndexFromDeviceIndex)
         {
             // VK_KHR_multiview interaction with VK_KHR_device_group.
             // When GraphicsPipeline is created with flag
@@ -5445,21 +5449,16 @@ void CmdBuffer::SetStencilCompareMask(
     VkStencilFaceFlags  faceMask,
     uint32_t            stencilCompareMask)
 {
-    DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
-
     if (faceMask & VK_STENCIL_FACE_FRONT_BIT)
     {
-        m_stencilCombiner.Set(StencilRefMaskParams::FrontReadMask, static_cast<uint8_t>(stencilCompareMask));
+        m_state.allGpuState.stencilRefMasks.frontReadMask = static_cast<uint8_t>(stencilCompareMask);
     }
     if (faceMask & VK_STENCIL_FACE_BACK_BIT)
     {
-        m_stencilCombiner.Set(StencilRefMaskParams::BackReadMask, static_cast<uint8_t>(stencilCompareMask));
+        m_state.allGpuState.stencilRefMasks.backReadMask = static_cast<uint8_t>(stencilCompareMask);
     }
-    // Flush the stencil setting, knowing a subsequent vkCmdSetStencilxxx call will also write its own PM4 packets
-    // It is done this way to avoid draw-time validation
 
-    m_stencilCombiner.PalCmdSetStencilState(this);
-    DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+    m_state.allGpuState.dirty.stencilRef = 1;
 }
 
 // =====================================================================================================================
@@ -5467,22 +5466,16 @@ void CmdBuffer::SetStencilWriteMask(
     VkStencilFaceFlags  faceMask,
     uint32_t            stencilWriteMask)
 {
-    DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
-
     if (faceMask & VK_STENCIL_FACE_FRONT_BIT)
     {
-        m_stencilCombiner.Set(StencilRefMaskParams::FrontWriteMask, static_cast<uint8_t>(stencilWriteMask));
+        m_state.allGpuState.stencilRefMasks.frontWriteMask = static_cast<uint8_t>(stencilWriteMask);
     }
     if (faceMask & VK_STENCIL_FACE_BACK_BIT)
     {
-        m_stencilCombiner.Set(StencilRefMaskParams::BackWriteMask, static_cast<uint8_t>(stencilWriteMask));
+        m_state.allGpuState.stencilRefMasks.backWriteMask = static_cast<uint8_t>(stencilWriteMask);
     }
 
-    // Flush the stencil setting, knowing a subsequent vkCmdSetStencilxxx call will also write its own PM4 packets
-    // It is done this way to avoid draw-time validation
-    m_stencilCombiner.PalCmdSetStencilState(this);
-
-    DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+    m_state.allGpuState.dirty.stencilRef = 1;
 }
 
 // =====================================================================================================================
@@ -5490,22 +5483,16 @@ void CmdBuffer::SetStencilReference(
     VkStencilFaceFlags  faceMask,
     uint32_t            stencilReference)
 {
-    DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
-
     if (faceMask & VK_STENCIL_FACE_FRONT_BIT)
     {
-        m_stencilCombiner.Set(StencilRefMaskParams::FrontRef, static_cast<uint8_t>(stencilReference));
+        m_state.allGpuState.stencilRefMasks.frontRef = static_cast<uint8_t>(stencilReference);
     }
     if (faceMask & VK_STENCIL_FACE_BACK_BIT)
     {
-        m_stencilCombiner.Set(StencilRefMaskParams::BackRef, static_cast<uint8_t>(stencilReference));
+        m_state.allGpuState.stencilRefMasks.backRef = static_cast<uint8_t>(stencilReference);
     }
 
-    // Flush the stencil setting, knowing a subsequent vkCmdSetStencilxxx call will also write its own PM4 packets
-    // It is done this way to avoid draw-time validation
-    m_stencilCombiner.PalCmdSetStencilState(this);
-
-    DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+    m_state.allGpuState.dirty.stencilRef = 1;
 }
 
 // =====================================================================================================================
@@ -5920,6 +5907,15 @@ void CmdBuffer::ValidateStates()
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
                 PalCmdBuffer(deviceIdx)->CmdSetTriangleRasterState(m_state.allGpuState.triangleRasterState);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+
+            if (m_state.allGpuState.dirty.stencilRef)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                PalCmdBuffer(deviceIdx)->CmdSetStencilRefMasks(m_state.allGpuState.stencilRefMasks);
 
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }

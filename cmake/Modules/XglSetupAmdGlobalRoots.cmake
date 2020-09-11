@@ -23,20 +23,23 @@
  #
  #######################################################################################################################
 
-# This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
-# that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.  It must
-# be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-ICD_PAL_CLIENT_MAJOR_VERSION = 624
-ICD_PAL_CLIENT_MINOR_VERSION = 0
+# find_dk_root must be available
+if(NOT DEFINED GLOBAL_ROOT_DK_DIR)
+    execute_process(
+        COMMAND find_dk_root
+        OUTPUT_VARIABLE GLOBAL_ROOT_DK_DIR
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+    )
+    if(NOT ("${GLOBAL_ROOT_DK_DIR}" STREQUAL ""))
+        set(GLOBAL_ROOT_DK_DIR ${GLOBAL_ROOT_DK_DIR} CACHE PATH "Global root dk directory..")
+    endif()
+endif()
 
-# This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.  It describes
-# the interface version of the gpuopen shared module (part of PAL) that the ICD supports.
-ICD_GPUOPEN_CLIENT_MAJOR_VERSION = 42
-ICD_GPUOPEN_CLIENT_MINOR_VERSION = 0
-
-# This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.  It describes the version of the
-# interface version of LLPC that the ICD supports.
-ICD_LLPC_CLIENT_MAJOR_VERSION = 41
-
-# When ICD_LLPC_CLIENT_MAJOR_VERSION >= 39, Set ENABLE_VKGC to 1 to use Vkgc namespace instead of Llpc namespace in ICD
-ENABLE_VKGC=1
+if(NOT DEFINED GLOBAL_ROOT_SRC_DIR)
+    if(EXISTS ${PROJECT_SOURCE_DIR}/../../drivers)
+        get_filename_component(GLOBAL_ROOT_SRC_DIR ${PROJECT_SOURCE_DIR}/../.. ABSOLUTE)
+    else()
+        get_filename_component(GLOBAL_ROOT_SRC_DIR ${PROJECT_SOURCE_DIR}/.. ABSOLUTE)
+    endif()
+    set(GLOBAL_ROOT_SRC_DIR ${GLOBAL_ROOT_SRC_DIR} CACHE STRING "Global root source directory.")
+endif()

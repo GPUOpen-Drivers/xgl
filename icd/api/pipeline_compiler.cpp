@@ -28,10 +28,6 @@
  * @brief Contains implementation of Vulkan pipeline compiler
  ***********************************************************************************************************************
  */
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #include "include/log.h"
 #include "include/pipeline_compiler.h"
 #include "include/vk_device.h"
@@ -51,9 +47,7 @@
 #include "palElfReader.h"
 #include "palPipelineAbiReader.h"
 
-#if  LLPC_CLIENT_INTERFACE_MAJOR_VERSION>= 39
 #include "llpc.h"
-#endif
 
 #include <inttypes.h>
 
@@ -673,13 +667,10 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
         dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
         dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
+
         Vkgc::PipelineBuildInfo pipelineInfo = {};
         pipelineInfo.pGraphicsInfo = &pCreateInfo->pipelineInfo;
         pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo);
-#else
-        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, nullptr, &pCreateInfo->pipelineInfo);
-#endif
     }
 
     // PAL Pipeline caching
@@ -853,13 +844,10 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
         dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
         dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
         dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
+
         Vkgc::PipelineBuildInfo pipelineInfo = {};
         pipelineInfo.pComputeInfo = &pCreateInfo->pipelineInfo;
         pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo);
-#else
-        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, &pCreateInfo->pipelineInfo, nullptr);
-#endif
     }
 
     if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
@@ -1328,13 +1316,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
         pCreateInfo->pipelineInfo.nggState.backfaceExponent           = settings.nggBackfaceExponent;
         pCreateInfo->pipelineInfo.nggState.subgroupSizing             =
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 26
             static_cast<Vkgc::NggSubgroupSizingType>(settings.nggSubgroupSizing);
-#else
-            (settings.nggSubgroupSizing == NggSubgroupSizingType::NggSubgroupAuto) ?
-            Vkgc::NggSubgroupSizingType::MaximumSize :
-            static_cast<Vkgc::NggSubgroupSizingType>(static_cast<uint32_t>(settings.nggSubgroupSizing) - 1);
-#endif
+
         pCreateInfo->pipelineInfo.nggState.primsPerSubgroup           = settings.nggPrimsPerSubgroup;
         pCreateInfo->pipelineInfo.nggState.vertsPerSubgroup           = settings.nggVertsPerSubgroup;
     }
@@ -1371,20 +1354,16 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pShaderInfo->pModuleData           = pShaderModule->GetFirstValidShaderData();
         pShaderInfo->pSpecializationInfo   = pStage->pSpecializationInfo;
         pShaderInfo->pEntryTarget          = pStage->pName;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
         pShaderInfo->entryStage = static_cast<Vkgc::ShaderStage>(stage);
-#endif
 
         ApplyDefaultShaderOptions(static_cast<ShaderStage>(stage),
                                   &pShaderInfo->options
                                   );
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 31
         if ((pStage->flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
         {
             pShaderInfo->options.allowVaryWaveSize = true;
         }
-#endif
 
         ApplyProfileOptions(pDevice,
                             static_cast<ShaderStage>(stage),
@@ -1560,9 +1539,6 @@ void PipelineCompiler::ApplyPipelineOptions(
     {
         pOptions->includeDisassembly = true;
         pOptions->includeIr = true;
-#if (LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 25) && (LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 27)
-        pOptions->includeIrBinary = true;
-#endif
     }
 
     if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_SCALAR_BLOCK_LAYOUT) ||
@@ -1571,23 +1547,18 @@ void PipelineCompiler::ApplyPipelineOptions(
         pOptions->scalarBlockLayout = true;
     }
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 23
     if (pDevice->GetEnabledFeatures().robustBufferAccess)
     {
         pOptions->robustBufferAccess = true;
     }
-#endif
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 38
     // Setup shadow descriptor table pointer
     const auto& info = m_pPhysicalDevice->PalProperties();
     pOptions->shadowDescriptorTableUsage = Vkgc::ShadowDescriptorTableUsage::Enable;
     pOptions->shadowDescriptorTablePtrHigh =
           static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32);
     pOptions->enableRelocatableShaderElf = m_pPhysicalDevice->GetRuntimeSettings().enableRelocatableShaders;
-#endif
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 40
     if (pDevice->GetEnabledFeatures().extendedRobustness.robustBufferAccess)
     {
         pOptions->extendedRobustness.robustBufferAccess = true;
@@ -1600,7 +1571,6 @@ void PipelineCompiler::ApplyPipelineOptions(
     {
         pOptions->extendedRobustness.nullDescriptor = true;
     }
-#endif
 }
 
 // =====================================================================================================================
@@ -1632,16 +1602,12 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     pCreateInfo->pipelineInfo.cs.pModuleData         = pShaderModule->GetFirstValidShaderData();
     pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
     pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
     pCreateInfo->pipelineInfo.cs.entryStage          = Vkgc::ShaderStageCompute;
-#endif
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 31
     if ((pIn->stage.flags & VK_PIPELINE_SHADER_STAGE_CREATE_ALLOW_VARYING_SUBGROUP_SIZE_BIT_EXT) != 0)
     {
         pCreateInfo->pipelineInfo.cs.options.allowVaryWaveSize = true;
     }
-#endif
 
     if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
     {

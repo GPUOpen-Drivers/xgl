@@ -22,10 +22,6 @@
  *  SOFTWARE.
  *
  **********************************************************************************************************************/
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
