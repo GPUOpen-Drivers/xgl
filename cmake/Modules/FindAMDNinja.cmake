@@ -23,20 +23,26 @@
  #
  #######################################################################################################################
 
-# This will become the value of PAL_CLIENT_INTERFACE_MAJOR_VERSION.  It describes the version of the PAL interface
-# that the ICD supports.  PAL uses this value to enable backwards-compatibility for older interface versions.  It must
-# be updated on each PAL promotion after handling all of the interface changes described in palLib.h.
-ICD_PAL_CLIENT_MAJOR_VERSION = 624
-ICD_PAL_CLIENT_MINOR_VERSION = 0
+# Output
+# Ninja_FOUND
+# Ninja_DIR
+# Ninja_EXECUTABLE
 
-# This will become the value of GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION if ICD_GPUOPEN_DEVMODE_BUILD=1.  It describes
-# the interface version of the gpuopen shared module (part of PAL) that the ICD supports.
-ICD_GPUOPEN_CLIENT_MAJOR_VERSION = 42
-ICD_GPUOPEN_CLIENT_MINOR_VERSION = 0
+if(NOT DEFINED Ninja_FOUND)
+    if(NOT DEFINED AMDNinja_FIND_VERSION)
+        message(FATAL_ERROR "A version to search for must be specified.")
+    endif()
+    if(NOT DEFINED GLOBAL_ROOT_DK_DIR)
+        message(FATAL_ERROR "GLOBAL_ROOT_DK_DIR must be specified.")
+    endif()
 
-# This will become the value of LLPC_CLIENT_INTERFACE_MAJOR_VERSION if ICD_BUILD_LLPC=1.  It describes the version of the
-# interface version of LLPC that the ICD supports.
-ICD_LLPC_CLIENT_MAJOR_VERSION = 41
+    set(Ninja_DIR ${GLOBAL_ROOT_DK_DIR}/ninja/${AMDNinja_FIND_VERSION} CACHE FILEPATH "Ninja Direction")
+    mark_as_advanced(Ninja_DIR)
+    set(Ninja_EXECUTABLE ${Ninja_DIR}/ninja.exe CACHE FILEPATH "Ninja Executable")
+    mark_as_advanced(Ninja_EXECUTABLE)
 
-# When ICD_LLPC_CLIENT_MAJOR_VERSION >= 39, Set ENABLE_VKGC to 1 to use Vkgc namespace instead of Llpc namespace in ICD
-ENABLE_VKGC=1
+    message(STATUS "Ninja: ${Ninja_EXECUTABLE}")
+
+    set(Ninja_FOUND ${Ninja_FOUND} CACHE STRING "Was Ninja found?")
+    mark_as_advanced(Ninja_FOUND)
+endif()

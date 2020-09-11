@@ -28,10 +28,6 @@
  * @brief Contains implementation of Vulkan device object.
  ***********************************************************************************************************************
  */
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #ifdef VK_USE_PLATFORM_XCB_KHR
 #include <xcb/xcb.h>
 #endif
@@ -98,6 +94,7 @@
 #include "palSysMemory.h"
 #include "palQueue.h"
 #include "palQueueSemaphore.h"
+#include "palAutoBuffer.h"
 
 namespace vk
 {
@@ -1968,9 +1965,7 @@ VkResult Device::CreateInternalComputePipeline(
         pShaderInfo->pModuleData         = shaderModule.pLlpcShaderModule;
         pShaderInfo->pSpecializationInfo = nullptr;
         pShaderInfo->pEntryTarget        = "main";
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 21
         pShaderInfo->entryStage          = Vkgc::ShaderStageCompute;
-#endif
 
 #if   (LLPC_CLIENT_INTERFACE_MAJOR_VERSION< 41)
         static const size_t MappingBufferSize =

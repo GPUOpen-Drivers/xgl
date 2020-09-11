@@ -222,12 +222,6 @@ public:
         return m_universalQueueEnginesNdx[queueIndex];
     }
 
-    VK_INLINE uint32_t GetVideoQueueEngineIndex(
-        const uint32_t queueIndex) const
-    {
-        return m_videoQueueEnginesNdx[queueIndex];
-    }
-
     VK_INLINE uint32_t GetQueueFamilyPalImageLayoutFlag(
         uint32_t queueFamilyIndex) const
     {
@@ -757,9 +751,6 @@ protected:
 
     // List of indices for universal engines that aren't exclusive.
     uint32_t m_universalQueueEnginesNdx[Queue::MaxQueuesPerFamily];
-
-    // List of indices for video engines based on video instance.
-    uint32_t m_videoQueueEnginesNdx[Queue::MaxQueuesPerFamily];
 
     const AppProfile                 m_appProfile;
     bool                             m_prtOnDmaSupported;

@@ -251,7 +251,6 @@ target_sources(xgl PRIVATE
     api/pipeline_binary_cache.cpp
     api/cache_adapter.cpp
     api/shader_cache.cpp
-    api/stencil_ops_combiner.cpp
     api/vert_buf_binding_mgr.cpp
     api/virtual_stack_mgr.cpp
     api/vk_alloccb.cpp
@@ -484,4 +483,7 @@ endif()
 target_link_libraries(xgl PRIVATE pal)
 
 ### Visual Studio Filters ##############################################################################################
-target_vs_filters(xgl)
+target_find_headers(xgl)
+if(MSVC)
+    target_source_groups(xgl)
+endif()

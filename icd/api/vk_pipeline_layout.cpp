@@ -28,10 +28,6 @@
  * @brief Contains implementation of Vulkan pipeline layout objects.
  ***********************************************************************************************************************
  */
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_descriptor_set_layout.h"
 #include "include/vk_shader.h"

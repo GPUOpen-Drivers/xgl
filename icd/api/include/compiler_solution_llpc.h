@@ -32,9 +32,7 @@
 #define __COMPILER_SOLUTION_LLPC_H__
 #include "include/compiler_solution.h"
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
 #include "llpc.h"
-#endif
 
 namespace vk
 {
@@ -49,11 +47,7 @@ public:
 
 public:
     // Overidded functions
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
     virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel, Vkgc::ICache* pCache);
-#else
-    virtual VkResult Initialize(Llpc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel);
-#endif
 
     virtual void Destroy();
 
@@ -78,17 +72,10 @@ public:
     virtual VkResult CreatePartialPipelineBinary(
         uint32_t                             deviceIdx,
         void*                                pShaderModuleData,
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
         Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
         const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
         uint32_t                             mappingNodeCount,
         Vkgc::ColorTarget*                   pColorTarget);
-#else
-        Llpc::ShaderModuleEntryData*         pShaderModuleEntryData,
-        const Llpc::ResourceMappingRootNode* pResourceMappingNode,
-        uint32_t                             mappingNodeCount,
-        Llpc::ColorTarget*                   pColorTarget);
-#endif
 
     virtual VkResult CreateGraphicsPipelineBinary(
         Device*                     pDevice,
@@ -98,11 +85,7 @@ public:
         size_t*                     pPipelineBinarySize,
         const void**                ppPipelineBinary,
         uint32_t                    rasterizationStream,
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
         Vkgc::PipelineShaderInfo**  ppShadersInfo,
-#else
-        Llpc::PipelineShaderInfo**  ppShadersInfo,
-#endif
         void*                       pPipelineDumpHandle,
         uint64_t                    pipelineHash,
         int64_t*                    pCompileTime);

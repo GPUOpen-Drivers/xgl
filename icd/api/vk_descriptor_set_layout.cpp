@@ -28,10 +28,6 @@
  * @brief Contains implementation of Vulkan descriptor set layout objects.
  ***********************************************************************************************************************
  */
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #include "include/vk_descriptor_set_layout.h"
 #include "include/vk_device.h"
 #include "include/vk_sampler.h"
@@ -77,40 +73,38 @@ uint64_t DescriptorSetLayout::BuildApiHash(
     hasher.Update(pCreateInfo->flags);
     hasher.Update(pCreateInfo->bindingCount);
 
-    for (uint32_t i = 0; i < pCreateInfo->bindingCount; i++)
+    for (uint32 i = 0; i < pCreateInfo->bindingCount; i++)
     {
         GenerateHashFromBinding(&hasher, pCreateInfo->pBindings[i]);
     }
 
     if (pCreateInfo->pNext != nullptr)
     {
-        union
-        {
-            const VkStructHeader*                              pInfo;
-            const VkDescriptorSetLayoutBindingFlagsCreateInfo* pBindingFlagsCreateInfo;
-        };
+        const void* pNext = pCreateInfo->pNext;
 
-        pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
-
-        while (pInfo != nullptr)
+        while (pNext != nullptr)
         {
-            switch (static_cast<uint32_t>(pInfo->sType))
+            const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+            switch (static_cast<uint32>(pHeader->sType))
             {
             case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO:
-                hasher.Update(pBindingFlagsCreateInfo->sType);
-                hasher.Update(pBindingFlagsCreateInfo->bindingCount);
+            {
+                const auto* pExtInfo = reinterpret_cast<const VkDescriptorSetLayoutBindingFlagsCreateInfo*>(pNext);
+                hasher.Update(pExtInfo->sType);
+                hasher.Update(pExtInfo->bindingCount);
 
-                for (uint32_t i = 0; i < pBindingFlagsCreateInfo->bindingCount; i++)
+                for (uint32 i = 0; i < pExtInfo->bindingCount; i++)
                 {
-                    hasher.Update(pBindingFlagsCreateInfo->pBindingFlags[i]);
+                    hasher.Update(pExtInfo->pBindingFlags[i]);
                 }
-
                 break;
+            }
             default:
                 break;
             }
 
-            pInfo = pInfo->pNext;
+            pNext = pHeader->pNext;
         }
     }
 
@@ -426,17 +420,7 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
     CreateInfo*                            pOut,
     BindingInfo*                           pOutBindings)
 {
-    if (pIn == nullptr)
-    {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-
-    union
-    {
-        const VkStructHeader*                              pHeader;
-        const VkDescriptorSetLayoutCreateInfo*             pInfo;
-        const VkDescriptorSetLayoutBindingFlagsCreateInfo* pBindingFlags;
-    };
+    VK_ASSERT((pIn != nullptr) && (pIn->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO));
 
     pOut->activeStageMask = VK_SHADER_STAGE_ALL; // TODO set this up properly enumerating the active stages.
                                                  // currently this flag is only tested for non zero, so
@@ -453,111 +437,100 @@ VkResult DescriptorSetLayout::ConvertCreateInfo(
     pOut->imm.numImmutableYCbCrMetaData = 0;
     pOut->imm.numImmutableSamplers      = 0;
 
-    for (pInfo = pIn; pHeader != nullptr; pHeader = pHeader->pNext)
+    VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO);
+
+    const auto* pBindingFlags = static_cast<const VkDescriptorSetLayoutBindingFlagsCreateInfo*>(pIn->pNext);
+
+    EXTRACT_VK_STRUCTURES_0(
+        BindingFlag,
+        DescriptorSetLayoutBindingFlagsCreateInfo,
+        pBindingFlags,
+        DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO)
+
+    if (pDescriptorSetLayoutBindingFlagsCreateInfo != nullptr)
     {
-        switch (static_cast<uint32_t>(pHeader->sType))
+        VK_ASSERT(pDescriptorSetLayoutBindingFlagsCreateInfo->bindingCount == pIn->bindingCount);
+
+        for (uint32 inIndex = 0; inIndex < pIn->bindingCount; ++inIndex)
         {
-        case VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO:
+            const VkDescriptorSetLayoutBinding& currentBinding = pIn->pBindings[inIndex];
+            pOutBindings[currentBinding.binding].bindingFlags = VkToInternalDescriptorBindingFlag(
+                pDescriptorSetLayoutBindingFlagsCreateInfo->pBindingFlags[inIndex]);
+        }
+    }
+
+    // Bindings numbers are allowed to come in out-of-order, as well as with gaps.
+    // We compute offsets using the size we've seen so far as we iterate, so we need to handle
+    // the bindings in binding-number order, rather than array order.
+
+    VK_IGNORE(pIn->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
+
+    // First, copy the binding info into our output array in order.
+    for (uint32 inIndex = 0; inIndex < pIn->bindingCount; ++inIndex)
+    {
+        const VkDescriptorSetLayoutBinding & currentBinding = pIn->pBindings[inIndex];
+        pOutBindings[currentBinding.binding].info = currentBinding;
+
+        if (currentBinding.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+        {
+            // For this binding section, it will be marked if any sampler contains ycbcr meta data,
+            // this is used to control the dw array stride.
+            for (uint32 i = 0; i < currentBinding.descriptorCount; ++i)
             {
-
-               EXTRACT_VK_STRUCTURES_0(
-                   BindingFlag,
-                   DescriptorSetLayoutBindingFlagsCreateInfo,
-                   pBindingFlags,
-                   DESCRIPTOR_SET_LAYOUT_BINDING_FLAGS_CREATE_INFO)
-
-                if (pDescriptorSetLayoutBindingFlagsCreateInfo != nullptr)
+                if ((currentBinding.pImmutableSamplers != nullptr) &&
+                    Sampler::ObjectFromHandle(currentBinding.pImmutableSamplers[i])->IsYCbCrSampler())
                 {
-                    VK_ASSERT(pDescriptorSetLayoutBindingFlagsCreateInfo->bindingCount == pInfo->bindingCount);
-
-                    for (uint32_t inIndex = 0; inIndex < pInfo->bindingCount; ++inIndex)
-                    {
-                        const VkDescriptorSetLayoutBinding& currentBinding = pInfo->pBindings[inIndex];
-                        pOutBindings[currentBinding.binding].bindingFlags = VkToInternalDescriptorBindingFlag(
-                            pDescriptorSetLayoutBindingFlagsCreateInfo->pBindingFlags[inIndex]);
-                    }
-                }
-
-                // Bindings numbers are allowed to come in out-of-order, as well as with gaps.
-                // We compute offsets using the size we've seen so far as we iterate, so we need to handle
-                // the bindings in binding-number order, rather than array order.
-
-                VK_IGNORE(pInfo->flags & VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT);
-
-                // First, copy the binding info into our output array in order.
-                for (uint32_t inIndex = 0; inIndex < pInfo->bindingCount; ++inIndex)
-                {
-                    const VkDescriptorSetLayoutBinding & currentBinding = pInfo->pBindings[inIndex];
-                    pOutBindings[currentBinding.binding].info = currentBinding;
-
-                    if (currentBinding.descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
-                    {
-                        // For this binding section, it will be marked if any sampler contains ycbcr meta data,
-                        // this is used to control the dw array stride.
-                        for (uint32_t i = 0; i < currentBinding.descriptorCount; ++i)
-                        {
-                            if ((currentBinding.pImmutableSamplers != nullptr) &&
-                                Sampler::ObjectFromHandle(currentBinding.pImmutableSamplers[i])->IsYCbCrSampler())
-                            {
-                                pOutBindings[currentBinding.binding].bindingFlags.ycbcrConversionUsage = 1;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                // Now iterate over our output array to convert the binding info.  Any gaps in
-                // the input binding numbers will be dummy entries in this array, but it
-                // should be safe to call ConvertBindingInfo on those as well.
-                for (uint32_t bindingNumber = 0; bindingNumber < pOut->count; ++bindingNumber)
-                {
-                    BindingInfo* pBinding = &pOutBindings[bindingNumber];
-
-                    // Determine the alignment requirement of descriptors in dwords.
-                    uint32_t descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32_t);
-
-                    // If the last binding has the VARIABLE_DESCRIPTOR_COUNT_BIT set, write the varDescDwStride
-                    if ((bindingNumber == (pOut->count - 1)) && pBinding->bindingFlags.variableDescriptorCount)
-                    {
-                        pOut->varDescStride = GetSingleDescStaticSize(pDevice, pBinding->info.descriptorType);
-                    }
-
-                    // Construct the information specific to the static section of the descriptor set layout.
-                    ConvertBindingInfo(
-                        &pBinding->info,
-                        GetDescStaticSectionDwSize(pDevice, &pBinding->info, pBinding->bindingFlags),
-                        descAlignmentInDw,
-                        &pOut->sta,
-                        &pBinding->sta);
-
-                    // Construct the information specific to the dynamic section of the descriptor set layout.
-                    ConvertBindingInfo(
-                        &pBinding->info,
-                        GetDescDynamicSectionDwSize(pDevice, pBinding->info.descriptorType),
-                        descAlignmentInDw,
-                        &pOut->dyn,
-                        &pBinding->dyn);
-
-                    // Construct the information specific to the immutable section of the descriptor set layout.
-                    ConvertImmutableInfo(
-                        &pBinding->info,
-                        GetDescImmutableSectionDwSize(pDevice, pBinding->info.descriptorType),
-                        &pOut->imm,
-                        &pBinding->imm,
-                        pBinding->bindingFlags);
-
-                    if ((pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
-                        (pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
-                    {
-                        pOut->numDynamicDescriptors += pBinding->info.descriptorCount;
-                    }
+                    pOutBindings[currentBinding.binding].bindingFlags.ycbcrConversionUsage = 1;
+                    break;
                 }
             }
-            break;
+        }
+    }
 
-        default:
-            // Skip any unknown extension structures
-            break;
+    // Now iterate over our output array to convert the binding info.  Any gaps in
+    // the input binding numbers will be dummy entries in this array, but it
+    // should be safe to call ConvertBindingInfo on those as well.
+    for (uint32 bindingNumber = 0; bindingNumber < pOut->count; ++bindingNumber)
+    {
+        BindingInfo* pBinding = &pOutBindings[bindingNumber];
+
+        // Determine the alignment requirement of descriptors in dwords.
+        uint32 descAlignmentInDw = pDevice->GetProperties().descriptorSizes.alignment / sizeof(uint32);
+
+        // If the last binding has the VARIABLE_DESCRIPTOR_COUNT_BIT set, write the varDescDwStride
+        if ((bindingNumber == (pOut->count - 1)) && pBinding->bindingFlags.variableDescriptorCount)
+        {
+            pOut->varDescStride = GetSingleDescStaticSize(pDevice, pBinding->info.descriptorType);
+        }
+
+        // Construct the information specific to the static section of the descriptor set layout.
+        ConvertBindingInfo(
+            &pBinding->info,
+            GetDescStaticSectionDwSize(pDevice, &pBinding->info, pBinding->bindingFlags),
+            descAlignmentInDw,
+            &pOut->sta,
+            &pBinding->sta);
+
+        // Construct the information specific to the dynamic section of the descriptor set layout.
+        ConvertBindingInfo(
+            &pBinding->info,
+            GetDescDynamicSectionDwSize(pDevice, pBinding->info.descriptorType),
+            descAlignmentInDw,
+            &pOut->dyn,
+            &pBinding->dyn);
+
+        // Construct the information specific to the immutable section of the descriptor set layout.
+        ConvertImmutableInfo(
+            &pBinding->info,
+            GetDescImmutableSectionDwSize(pDevice, pBinding->info.descriptorType),
+            &pOut->imm,
+            &pBinding->imm,
+            pBinding->bindingFlags);
+
+        if ((pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC) ||
+            (pBinding->info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC))
+        {
+            pOut->numDynamicDescriptors += pBinding->info.descriptorCount;
         }
     }
 

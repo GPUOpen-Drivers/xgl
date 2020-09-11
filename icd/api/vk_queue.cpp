@@ -653,9 +653,6 @@ VkResult Queue::UpdateFlipStatus(
         memset(&m_flipStatus, 0, sizeof(m_flipStatus));
     }
 
-    palResult = pPalDevice->PollFullScreenFrameMetadataControl(vidPnSourceId, &m_palFrameMetadataControl);
-    VK_ASSERT(palResult == Pal::Result::Success);
-
     return PalToVkResult(palResult);
 }
 
@@ -805,6 +802,16 @@ VkResult Queue::Present(
         Pal::IGpuMemory* pGpuMemory = pSwapChain->UpdatePresentInfo(presentationDeviceIdx, imageIndex, &presentInfo);
 
         CmdBufState* pCmdBufState = AcquireInternalCmdBuf(presentationDeviceIdx);
+
+        // Ensure metadata is available before post processing.
+        if (pSwapChain->GetFullscreenMgr() != nullptr)
+        {
+            Pal::Result palResult = m_pDevice->PalDevice(DefaultDeviceIndex)->PollFullScreenFrameMetadataControl(
+                pSwapChain->GetFullscreenMgr()->GetVidPnSourceId(),
+                &m_palFrameMetadataControl);
+
+            VK_ASSERT(palResult == Pal::Result::Success);
+        }
 
         // This must happen after the fullscreen manager has updated its overlay information and before the software
         // compositor has an opportunity to copy the presentable image in order to include the overlay itself.
@@ -1201,41 +1208,41 @@ static void PeekDeviceGroupBindSparseDeviceIndicesAndSemaphoreInfo(
     uint32_t*               pMemoryDeviceIndex,
     const VkTimelineSemaphoreSubmitInfo** ppTimelineSemaphoreInfo)
 {
-    union
-    {
-        const VkStructHeader*                pHeader;
-        const VkTimelineSemaphoreSubmitInfo* pSemaphoreInfo;
-        const VkDeviceGroupBindSparseInfo*   pDeviceGroupBindSparseInfo;
-    };
+    const void* pNext = bindInfo.pNext;
 
-    for (pHeader  = static_cast<const VkStructHeader*>(bindInfo.pNext);
-         pHeader != nullptr;
-         pHeader  = pHeader->pNext)
+    while (pNext != nullptr)
     {
-        switch (static_cast<uint32_t>(pHeader->sType))
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+        switch (static_cast<uint32>(pHeader->sType))
         {
             case VK_STRUCTURE_TYPE_DEVICE_GROUP_BIND_SPARSE_INFO:
             {
+                const auto* pExtInfo = static_cast<const VkDeviceGroupBindSparseInfo*>(pNext);
+
                 if (pResourceDeviceIndex != nullptr)
                 {
-                    *pResourceDeviceIndex = pDeviceGroupBindSparseInfo->resourceDeviceIndex;
+                    *pResourceDeviceIndex = pExtInfo->resourceDeviceIndex;
                 }
                 if (pMemoryDeviceIndex != nullptr)
                 {
-                    *pMemoryDeviceIndex = pDeviceGroupBindSparseInfo->memoryDeviceIndex;
+                    *pMemoryDeviceIndex = pExtInfo->memoryDeviceIndex;
                 }
 
                 break;
             }
             case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
             {
-                *ppTimelineSemaphoreInfo = pSemaphoreInfo;
+                const auto* pExtInfo = static_cast<const VkTimelineSemaphoreSubmitInfo*>(pNext);
+                *ppTimelineSemaphoreInfo = pExtInfo;
                 break;
             }
             default:
                 // Skip any unknown extension structures
                 break;
         }
+
+        pNext = pHeader->pNext;
     }
 }
 // =====================================================================================================================
@@ -1616,6 +1623,9 @@ bool Queue::BuildPostProcessCommands(
             frameInfo.presentMode = Pal::PresentMode::Unknown;
         }
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 625
+        frameInfo.fullScreenFrameMetadataControlFlags.u32All = m_palFrameMetadataControl.flags.u32All;
+#endif
         bool wasGpuWorkAdded = false;
         pCmdBuf->CmdPostProcessFrame(frameInfo, &wasGpuWorkAdded);
 

@@ -159,37 +159,36 @@ VkResult Memory::Create(
         createInfo.flags.tmzProtected = 1;
     }
 
-    const VkImportMemoryHostPointerInfoEXT* pImportMemoryInfo = nullptr;
-
     const void* pNext = pAllocInfo->pNext;
 
     while (pNext != nullptr)
     {
-        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
 
-        switch (static_cast<int32_t>(pHeader->sType))
+        switch (static_cast<int32>(pHeader->sType))
         {
 #if defined(__unix__)
             case VK_STRUCTURE_TYPE_IMPORT_MEMORY_FD_INFO_KHR:
             {
-                const VkImportMemoryFdInfoKHR* pImportMemoryFdInfo =
-                    reinterpret_cast<const VkImportMemoryFdInfoKHR *>(pHeader);
-                VK_ASSERT(pImportMemoryFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
-                handle = pImportMemoryFdInfo->fd;
+                const auto* pExtInfo = reinterpret_cast<const VkImportMemoryFdInfoKHR *>(pHeader);
+                VK_ASSERT(pExtInfo->handleType &
+                    (VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT   |
+                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT));
+                handle = pExtInfo->fd;
                 isExternal = true;
             }
             break;
 #endif
             case VK_STRUCTURE_TYPE_EXPORT_MEMORY_ALLOCATE_INFO:
             {
-                const VkExportMemoryAllocateInfo* pExportMemory =
-                    reinterpret_cast<const VkExportMemoryAllocateInfo *>(pHeader);
+                const auto* pExtInfo = reinterpret_cast<const VkExportMemoryAllocateInfo *>(pHeader);
 #if defined(__unix__)
-                    VK_ASSERT(pExportMemory->handleTypes &
-                           (VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT |
+                    VK_ASSERT(pExtInfo->handleTypes &
+                           (VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT      |
+                            VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT    |
                             VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID));
 
-                    if (pExportMemory->handleTypes &
+                    if (pExtInfo->handleTypes &
                         VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
                     {
                         sharedViaAndroidHwBuf   = true;
@@ -203,21 +202,20 @@ VkResult Memory::Create(
 
             case VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_FLAGS_INFO:
             {
-                const VkMemoryAllocateFlagsInfo * pMemoryAllocateFlags =
-                    reinterpret_cast<const VkMemoryAllocateFlagsInfo *>(pHeader);
+                const auto * pExtInfo = reinterpret_cast<const VkMemoryAllocateFlagsInfo *>(pHeader);
 
-                if ((pMemoryAllocateFlags->flags & VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT) != 0)
+                if ((pExtInfo->flags & VK_MEMORY_ALLOCATE_DEVICE_MASK_BIT) != 0)
                 {
-                    VK_ASSERT(pMemoryAllocateFlags->deviceMask != 0);
-                    VK_ASSERT((pDevice->GetPalDeviceMask() & pMemoryAllocateFlags->deviceMask) ==
-                        pMemoryAllocateFlags->deviceMask);
+                    VK_ASSERT(pExtInfo->deviceMask != 0);
+                    VK_ASSERT((pDevice->GetPalDeviceMask() & pExtInfo->deviceMask) ==
+                        pExtInfo->deviceMask);
 
-                    allocationMask = pMemoryAllocateFlags->deviceMask;
+                    allocationMask = pExtInfo->deviceMask;
                 }
 
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
                 // Test if capture replay has been specified for the memory allocation
-                if (pMemoryAllocateFlags->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT)
+                if (pExtInfo->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT)
                 {
                     createInfo.vaRange = Pal::VaRange::CaptureReplay;
                 }
@@ -227,34 +225,31 @@ VkResult Memory::Create(
 
             case VK_STRUCTURE_TYPE_MEMORY_DEDICATED_ALLOCATE_INFO:
             {
-                const VkMemoryDedicatedAllocateInfo* pDedicatedInfo =
-                    reinterpret_cast<const VkMemoryDedicatedAllocateInfo *>(pHeader);
-                if (pDedicatedInfo->image != VK_NULL_HANDLE)
+                const auto* pExtInfo = reinterpret_cast<const VkMemoryDedicatedAllocateInfo *>(pHeader);
+                if (pExtInfo->image != VK_NULL_HANDLE)
                 {
-                    pBoundImage       = Image::ObjectFromHandle(pDedicatedInfo->image);
+                    pBoundImage       = Image::ObjectFromHandle(pExtInfo->image);
                     createInfo.pImage = pBoundImage->PalImage(DefaultDeviceIndex);
                 }
-                dedicatedImage  = pDedicatedInfo->image;
-                dedicatedBuffer = pDedicatedInfo->buffer;
+                dedicatedImage  = pExtInfo->image;
+                dedicatedBuffer = pExtInfo->buffer;
             }
             break;
 
             case VK_STRUCTURE_TYPE_MEMORY_PRIORITY_ALLOCATE_INFO_EXT:
             {
-                const VkMemoryPriorityAllocateInfoEXT* pMemPriorityInfo =
-                    reinterpret_cast<const VkMemoryPriorityAllocateInfoEXT *>(pHeader);
+                const auto* pExtInfo = reinterpret_cast<const VkMemoryPriorityAllocateInfoEXT *>(pHeader);
 
-                priority = MemoryPriority::FromVkMemoryPriority(pMemPriorityInfo->priority);
+                priority = MemoryPriority::FromVkMemoryPriority(pExtInfo->priority);
             }
             break;
 
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
             case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO:
             {
-                const VkMemoryOpaqueCaptureAddressAllocateInfo* pMemOpaqueCaptureAddressAllocateInfo =
-                    reinterpret_cast<const VkMemoryOpaqueCaptureAddressAllocateInfo *>(pHeader);
+                const auto* pExtInfo = reinterpret_cast<const VkMemoryOpaqueCaptureAddressAllocateInfo *>(pHeader);
 
-                VkDeviceAddress baseVaAddress = pMemOpaqueCaptureAddressAllocateInfo->opaqueCaptureAddress;
+                VkDeviceAddress baseVaAddress = pExtInfo->opaqueCaptureAddress;
                 if (baseVaAddress != 0)
                 {
                     // For Replay Specify VA Range and Base Address
@@ -268,18 +263,18 @@ VkResult Memory::Create(
             case VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT:
             {
                 VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_EXTERNAL_MEMORY_HOST));
-                pImportMemoryInfo = reinterpret_cast<const VkImportMemoryHostPointerInfoEXT*>(pNext);
+                const auto* pExtInfo = reinterpret_cast<const VkImportMemoryHostPointerInfoEXT*>(pNext);
 
-                VK_ASSERT(pImportMemoryInfo->handleType &
+                VK_ASSERT(pExtInfo->handleType &
                     (VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT |
                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT));
 
-                if (pImportMemoryInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT)
+                if (pExtInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_MAPPED_FOREIGN_MEMORY_BIT_EXT)
                 {
                     isHostMappedForeign = true;
                 }
 
-                pPinnedHostPtr = pImportMemoryInfo->pHostPointer;
+                pPinnedHostPtr = pExtInfo->pHostPointer;
             }
             break;
 
@@ -1367,7 +1362,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdKHR(
     const VkMemoryGetFdInfoKHR*             pGetFdInfo,
     int*                                    pFd)
 {
-    VK_ASSERT(pGetFdInfo->handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT);
+    VK_ASSERT(pGetFdInfo->handleType &
+        (VK_EXTERNAL_MEMORY_HANDLE_TYPE_OPAQUE_FD_BIT   |
+         VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT));
 
     *pFd = Memory::ObjectFromHandle(pGetFdInfo->memory)->GetShareHandle(pGetFdInfo->handleType);
 

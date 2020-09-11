@@ -48,11 +48,7 @@
 #include "palScreen.h"
 #include "palSwapChain.h"
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
 #include "vkgcDefs.h"
-#else
-#include "llpc.h"
-#endif
 
 namespace vk
 {

@@ -484,12 +484,11 @@ VkResult Image::Create(
     {
         const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
 
-        switch (static_cast<uint32_t>(pHeader->sType))
+        switch (static_cast<uint32>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_EXTERNAL_MEMORY_IMAGE_CREATE_INFO:
         {
-            const VkExternalMemoryImageCreateInfo* pExternalMemoryImageCreateInfo =
-                static_cast<const VkExternalMemoryImageCreateInfo*>(pNext);
+            const auto* pExtInfo = static_cast<const VkExternalMemoryImageCreateInfo*>(pNext);
 
             palCreateInfo.flags.invariant        = 1;
             palCreateInfo.flags.optimalShareable = 1;
@@ -499,7 +498,7 @@ VkResult Image::Create(
             pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetExternalMemoryProperties(
                 isSparse,
                 true,
-                static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExternalMemoryImageCreateInfo->handleTypes),
+                static_cast<VkExternalMemoryHandleTypeFlagBitsKHR>(pExtInfo->handleTypes),
                 &externalMemoryProperties);
 
             if (externalMemoryProperties.externalMemoryFeatures & VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT)
@@ -512,7 +511,7 @@ VkResult Image::Create(
             {
                 imageFlags.externallyShareable = true;
 
-                if ((pExternalMemoryImageCreateInfo->handleTypes &
+                if ((pExtInfo->handleTypes &
                     (VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_BIT     |
                      VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D11_TEXTURE_KMT_BIT |
                      VK_EXTERNAL_MEMORY_HANDLE_TYPE_D3D12_HEAP_BIT        |
@@ -521,14 +520,12 @@ VkResult Image::Create(
                     imageFlags.externalD3DHandle = true;
                 }
 
-                if ((pExternalMemoryImageCreateInfo->handleTypes &
-                     VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT) != 0)
+                if ((pExtInfo->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT) != 0)
                 {
                     imageFlags.externalPinnedHost = true;
                 }
 
-                if (pExternalMemoryImageCreateInfo->handleTypes &
-                    VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
+                if (pExtInfo->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
                 {
                     imageFlags.externalAhbHandle = true;
                 }
@@ -545,28 +542,26 @@ VkResult Image::Create(
         case VK_STRUCTURE_TYPE_IMAGE_FORMAT_LIST_CREATE_INFO:
         {
             // Processing of the actual contents of this happens later due to AutoBuffer scoping.
-            const VkImageFormatListCreateInfo* pVkImageFormatListCreateInfo =
-                static_cast<const VkImageFormatListCreateInfo*>(pNext);
+            const auto* pExtInfo = static_cast<const VkImageFormatListCreateInfo*>(pNext);
 
-            viewFormatCount = pVkImageFormatListCreateInfo->viewFormatCount;
-            pViewFormats    = pVkImageFormatListCreateInfo->pViewFormats;
+            viewFormatCount = pExtInfo->viewFormatCount;
+            pViewFormats    = pExtInfo->pViewFormats;
             break;
         }
 
         case VK_STRUCTURE_TYPE_IMAGE_STENCIL_USAGE_CREATE_INFO:
         {
-            const VkImageStencilUsageCreateInfo* pVkImageStencilUsageCreateInfo =
-                static_cast<const VkImageStencilUsageCreateInfo*>(pNext);
+            const auto* pExtInfo = static_cast<const VkImageStencilUsageCreateInfo*>(pNext);
 
             Pal::ImageUsageFlags usageFlags = VkToPalImageUsageFlags(
-                                        pVkImageStencilUsageCreateInfo->stencilUsage,
+                                        pExtInfo->stencilUsage,
                                         pCreateInfo->format,
                                         pCreateInfo->samples,
                                         (VkImageUsageFlags)(settings.optImgMaskToApplyShaderReadUsageForTransferSrc),
                                         (VkImageUsageFlags)(settings.optImgMaskToApplyShaderWriteUsageForTransferDst));
 
             stencilShaderRead = usageFlags.shaderRead | usageFlags.resolveSrc;
-            stencilUsage      = pVkImageStencilUsageCreateInfo->stencilUsage;
+            stencilUsage      = pExtInfo->stencilUsage;
 
             palCreateInfo.usageFlags.u32All |= usageFlags.u32All;
 

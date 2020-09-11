@@ -28,10 +28,6 @@
 * @brief Functions for tuning specific shader compile parameters for optimized code generation.
 **************************************************************************************************
 */
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
 #include "include/vk_physical_device.h"
@@ -128,13 +124,10 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pOptions->allowReZ = true;
                 }
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 24
                 if (shaderCreate.apply.disableLoopUnrolls)
                 {
                     options.pOptions->disableLoopUnroll = true;
                 }
-#endif
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 28
                 if (shaderCreate.tuningOptions.useSiScheduler)
                 {
                     options.pOptions->useSiScheduler = true;
@@ -143,33 +136,26 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                 {
                     options.pPipelineOptions->reconfigWorkgroupLayout = true;
                 }
-#endif
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 33
                 if (shaderCreate.tuningOptions.enableLoadScalarizer)
                 {
                     options.pOptions->enableLoadScalarizer = true;
                 }
-#endif
                 if (shaderCreate.tuningOptions.forceLoopUnrollCount != 0)
                 {
                     options.pOptions->forceLoopUnrollCount = shaderCreate.tuningOptions.forceLoopUnrollCount;
                 }
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 35
                 if (shaderCreate.tuningOptions.disableLicm)
                 {
                     options.pOptions->disableLicm = true;
                 }
-#endif
                 if (shaderCreate.tuningOptions.unrollThreshold != 0)
                 {
                     options.pOptions->unrollThreshold = shaderCreate.tuningOptions.unrollThreshold;
                 }
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 40
                 if (shaderCreate.apply.fp32DenormalMode)
                 {
                     options.pOptions->fp32DenormalMode = shaderCreate.tuningOptions.fp32DenormalMode;
                 }
-#endif
                 if (shaderCreate.apply.waveSize)
                 {
                     options.pOptions->waveSize = shaderCreate.tuningOptions.waveSize;
@@ -252,17 +238,17 @@ void ShaderOptimizer::OverrideGraphicsPipelineCreateInfo(
     const PipelineOptimizerKey&       pipelineKey,
     VkShaderStageFlagBits             shaderStages,
     Pal::GraphicsPipelineCreateInfo*  pPalCreateInfo,
-    Pal::DynamicGraphicsShaderInfos*  pGraphicsWaveLimitParams)
+    Pal::DynamicGraphicsShaderInfos*  pGraphicsShaderInfos)
 {
     ApplyProfileToGraphicsPipelineCreateInfo(
-        m_appProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsWaveLimitParams);
+        m_appProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsShaderInfos);
 
     ApplyProfileToGraphicsPipelineCreateInfo(
-        m_tuningProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsWaveLimitParams);
+        m_tuningProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsShaderInfos);
 
 #if ICD_RUNTIME_APP_PROFILE
     ApplyProfileToGraphicsPipelineCreateInfo(
-        m_runtimeProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsWaveLimitParams);
+        m_runtimeProfile, pipelineKey, shaderStages, pPalCreateInfo, pGraphicsShaderInfos);
 #endif
 }
 
@@ -544,6 +530,16 @@ void ShaderOptimizer::BuildTuningProfile()
     if (m_settings.overrideReconfigWorkgroupLayout)
     {
         action.shaderCreate.tuningOptions.reconfigWorkgroupLayout = true;
+    }
+
+    if (m_settings.overrideDisableLicm)
+    {
+        action.shaderCreate.tuningOptions.disableLicm = true;
+    }
+
+    if (m_settings.overrideEnableLoadScalarizer)
+    {
+        action.shaderCreate.tuningOptions.enableLoadScalarizer = true;
     }
 
     switch (m_settings.overrideWaveSize)

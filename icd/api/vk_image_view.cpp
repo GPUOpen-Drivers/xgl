@@ -341,28 +341,27 @@ VkResult ImageView::Create(
         imageViewUsage = pImage->GetImageStencilUsage();
     }
 
-    union
-    {
-        const VkStructHeader*                pHeader;
-        const VkImageViewUsageCreateInfo*    pUsageInfo;
-        const VkSamplerYcbcrConversionInfo*  pVkSamplerYcbcrConversionInfo;
-    };
-
     VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
 
-    for (pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext); pHeader != nullptr; pHeader = pHeader->pNext)
+    for (const auto* pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
+         pHeader != nullptr;
+         pHeader = pHeader->pNext)
     {
-        switch (static_cast<uint32_t>(pHeader->sType))
+        switch (static_cast<uint32>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO:
+        {
             // The image view usage must be a subset of the usage of the image it is created from.  For uncompressed
             // views of compressed images or format compatible image views, VK_IMAGE_CREATE_EXTENDED_USAGE_BIT
             // allows the image to be created with usage flags that are not supported for the format the image is created
             // with but are supported for the format of the VkImageView.
+
+            const auto* pUsageInfo = reinterpret_cast<const VkImageViewUsageCreateInfo*>(pHeader);
             VK_ASSERT((imageViewUsage | pUsageInfo->usage) == imageViewUsage);
 
             imageViewUsage = pUsageInfo->usage;
             break;
+        }
         default:
             // Skip any unknown extension structures
             break;

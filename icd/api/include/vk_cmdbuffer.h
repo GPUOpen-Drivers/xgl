@@ -45,7 +45,6 @@
 #include "include/vk_utils.h"
 
 #include "include/internal_mem_mgr.h"
-#include "include/stencil_ops_combiner.h"
 #include "include/vert_buf_binding_mgr.h"
 #include "include/virtual_stack_mgr.h"
 #include "include/barrier_policy.h"
@@ -102,6 +101,8 @@ constexpr uint32_t MaxDynDescRegCount   = MaxDynamicDescriptors * PipelineLayout
 constexpr uint32_t MaxBindingRegCount   = MaxDescSetRegCount + MaxDynDescRegCount;
 constexpr uint32_t MaxPushConstRegCount = MaxPushConstants / 4;
 
+constexpr uint8_t DefaultStencilOpValue = 1;
+
 // This structure contains information about currently written user data entries within the command buffer
 struct PipelineBindState
 {
@@ -131,7 +132,9 @@ union DirtyState
         uint32 depthStencil  :  1;
         uint32 rasterState   :  1;
         uint32 inputAssembly :  1;
-        uint32 reserved      : 27;
+        uint32 stencilRef    :  1;
+        uint32 reserved1     :  1;
+        uint32 reserved      : 25;
     };
 
     uint32 u32All;
@@ -193,7 +196,7 @@ struct AllGpuRenderState
 
     // Value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
     // defined by the last bound GraphicsPipeline, which was not nullptr.
-    bool ViewIndexFromDeviceIndex;
+    bool viewIndexFromDeviceIndex;
 
 // =====================================================================================================================
 // The first part of the structure will be cleared with a memset in CmdBuffer::ResetState().
@@ -210,8 +213,10 @@ struct AllGpuRenderState
 
     Pal::LineStippleStateParams      lineStipple;
     Pal::TriangleRasterStateParams   triangleRasterState;
+    Pal::StencilRefMaskParams        stencilRefMasks;
     Pal::InputAssemblyStateParams    inputAssemblyState;
     Pal::DepthStencilStateCreateInfo depthStencilCreateInfo;
+
 };
 
 // This structure describes current render state within a command buffer during its building.
@@ -1097,7 +1102,6 @@ private:
     CmdBufferRenderState          m_state; // Render state tracked during command buffer building
 
     VertBufBindingMgr             m_vbMgr;           // Manages current vertex buffer bindings
-    StencilOpsCombiner            m_stencilCombiner; // Manages internal stencil combined state
     CmdBufferFlags                m_flags;
     VkResult                      m_recordingResult; // Tracks the result of recording commands to capture OOM errors
 

@@ -108,22 +108,6 @@ ComputePipeline::ComputePipeline(
     m_info(immedInfo)
 {
     Pipeline::Init(pPalPipeline, pPipelineLayout, pPipelineBinary, staticStateMask, apiHash);
-
-    CreateStaticState();
-}
-
-// =====================================================================================================================
-// Creates instances of static pipeline state.  Much of this information can be cached at the device-level to help speed
-// up pipeline-bind operations.
-void ComputePipeline::CreateStaticState()
-{
-}
-
-// =====================================================================================================================
-// Destroys static pipeline state.
-void ComputePipeline::DestroyStaticState(
-    const VkAllocationCallbacks* pAllocator)
-{
 }
 
 // =====================================================================================================================
@@ -131,8 +115,6 @@ VkResult ComputePipeline::Destroy(
     Device*                      pDevice,
     const VkAllocationCallbacks* pAllocator)
 {
-    DestroyStaticState(pAllocator);
-
     return Pipeline::Destroy(pDevice, pAllocator);
 }
 
@@ -360,7 +342,7 @@ VkResult ComputePipeline::Create(
 // =====================================================================================================================
 void ComputePipeline::BindToCmdBuffer(CmdBuffer* pCmdBuffer) const
 {
-    BindToCmdBuffer(pCmdBuffer, m_info.computeWaveLimitParams);
+    BindToCmdBuffer(pCmdBuffer, m_info.computeShaderInfo);
 }
 
 // =====================================================================================================================

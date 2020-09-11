@@ -218,6 +218,10 @@
           "Description": "Tess pipeline with GS"
         }
       ]
+    },
+    {
+      "Name": "BvhBuildMode",
+      "Values": []
     }
   ],
   "Settings": [
@@ -1487,7 +1491,7 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Choose a region size, if any, to force the end of the wavefront before the next available quad that falls outside the region. 0x0 - None     - No wave break by region 0x1 - 8x8      - Break outside a 8x8 pixel region 0x2 - 16x16    - Break outside a 16x16 pixel region 0x3 - 32x32    - Break outside a 32x32 pixel region 0xF - DrawTime - Choose wave break size per draw (default) ",
+      "Description": "Choose a region size, if any, to force the end of the wavefront before the next available quad that falls outside the region. 0x0 - None (default)     - No wave break by region 0x1 - 8x8      - Break outside a 8x8 pixel region 0x2 - 16x16    - Break outside a 16x16 pixel region 0x3 - 32x32    - Break outside a 32x32 pixel region 0xF ",
       "Tags": [
         "SPIRV Options"
       ],
@@ -1495,7 +1499,7 @@
         "IsHex": true
       },
       "Defaults": {
-        "Default": 15
+        "Default": 0
       },
       "Type": "uint32",
       "VariableName": "waveBreakSize",
@@ -4707,6 +4711,71 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Determines the MaxOccupancyOptions SC bitfield for the shader specified by overrideShaderCrcUpper/Lower. Setting this value will enable the MaxOccupancy shader intent by default, which can be overwritten by OverrideShaderIntents.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "overrideMinVgprsStrategy",
+      "Name": "OverrideMinVgprsStrategy",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Determines the LowLatencyOptions SC bitfield for the shader specified by  overrideShaderCrcUpper/Lower. Setting this value will enable the ThreadLatency shader  intent by default, which can be overwritten by OverrideShaderIntents.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "overrideThreadLatencyStrategy",
+      "Name": "OverrideThreadLatencyStrategy",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable SC's liveness-based instruction scheduling for the shader specified by overrideShaderCrcUpper/Lower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideLiveness",
+      "Name": "OverrideLiveness",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable SC's groups-based instruction scheduling for the shader specified by overrideShaderCrcUpper/Lower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideGroups",
+      "Name": "OverrideGroups",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable SC's rematerialization VGPR limit configuration for the shader specified by overrideShaderCrcUpper/Lower",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideRemat",
+      "Name": "OverrideRemat",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Override default setting to disable loop unrolls",
       "Tags": [
         "Shader Tuning"
@@ -4746,6 +4815,123 @@
       "Scope": "Driver"
     },
     {
+      "Description": "[LLPC ONLY] Disable the LLVM backend's LICM pass",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideDisableLicm",
+      "Name": "OverrideDisableLicm",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[LLPC ONLY] Enable LLPC load scalarizer optimization",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideEnableLoadScalarizer",
+      "Name": "OverrideEnableLoadScalarizer",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Set the SC option (experimental and for GFX9 only) to use more D16",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseMoreD16",
+      "Name": "OverrideUseMoreD16",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Set the SC option for the unsafe MAD mix",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseUnsafeMadMix",
+      "Name": "OverrideUseUnsafeMadMix",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Set the SC option for aggressive hoist",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseAggressiveHoist",
+      "Name": "OverrideUseAggressiveHoist",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Set the SC option to enable XNack support",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseXnackEnable",
+      "Name": "OverrideUseXnackEnable",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Set the SC option to enable PBQP register allocator",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUsePbqp",
+      "Name": "OverrideUsePbqp",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Set the SC option to enable Latency2 scheduler",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseLatency2",
+      "Name": "OverrideUseLatency2",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Override DisableBulkCodeMotion for the shader specified by OverrideShaderHashUpper/Lower.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideDisableBulkCodeMotion",
+      "Name": "OverrideDisableBulkCodeMotion",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Enable selective inlining behavior in the compiler.",
       "Tags": [
         "Shader Tuning"
@@ -4769,6 +4955,58 @@
       "Type": "bool",
       "VariableName": "overrideEnableSubvector",
       "Name": "OverrideEnableSubvector",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Set the SC option to enable use of legacy non-ieee FP instructions",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseNonIeeeFpInstr",
+      "Name": "OverrideUseNonIeeeFpInstructions",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Sets the ShaderIntent for the shader specified by OverrideShaderHashUpper/Lower: 0x00000000: Unset 0x00000001: Balanced 0x00000002: MaxOccupancy 0x00000003: ThreadLatency ",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Type": "uint32",
+      "VariableName": "overrideShaderIntents",
+      "Name": "OverrideShaderIntents",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideUseBlocking",
+      "Description": "Override EnableBlocking for the shader specified by OverrideShaderHashUpper/Lower.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideUseBlocking",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "OverrideWavePrioOnStartup",
+      "Description": "Override WavePrioOnStartup for the shader specified by OverrideShaderHashUpper/Lower.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "overrideWavePrioOnStartup",
       "Scope": "Driver"
     },
     {

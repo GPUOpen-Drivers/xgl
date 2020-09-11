@@ -28,10 +28,6 @@
 * @brief Contains implementation of ShaderCache
 ***********************************************************************************************************************
 */
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #include "include/shader_cache.h"
 #include "include/pipeline_compiler.h"
 #include "include/vk_conv.h"

@@ -46,7 +46,6 @@ namespace vk
 
 class Device;
 class PipelineCache;
-class StencilOpsCombiner;
 class CmdBuffer;
 struct CmdBufferRenderState;
 
@@ -150,6 +149,7 @@ static void ConvertToPalMsaaQuadSamplePattern(
     }
 }
 
+// =====================================================================================================================
 bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pColorBlendAttachmentState);
 
 // =====================================================================================================================
@@ -173,13 +173,11 @@ public:
 
     void BindToCmdBuffer(
         CmdBuffer*                             pCmdBuffer,
-        CmdBufferRenderState*                  pRenderState,
-        StencilOpsCombiner*                    pStencilCombiner) const;
+        CmdBufferRenderState*                  pRenderState) const;
 
     void BindToCmdBuffer(
         CmdBuffer*                             pCmdBuffer,
         CmdBufferRenderState*                  pRenderState,
-        StencilOpsCombiner*                    pStencilCombiner,
         const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos) const;
 
     const Pal::IMsaaState* const* GetMsaaStates() const { return m_pPalMsaa; }
@@ -216,7 +214,7 @@ protected:
         Pal::ScissorRectParams                scissorRectParams;
         Pal::StencilRefMaskParams             stencilRefMasks;
         SamplePattern                         samplePattern;
-        Pal::DynamicGraphicsShaderInfos       graphicsWaveLimitParams;
+        Pal::DynamicGraphicsShaderInfos       graphicsShaderInfos;
         Pal::DepthStencilStateCreateInfo      depthStencilCreateInfo;
 
         // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
@@ -233,7 +231,6 @@ protected:
             uint32_t viewport;
             uint32_t scissorRect;
             uint32_t samplePattern;
-            uint32_t waveLimits;
         } staticTokens;
     };
 
@@ -245,6 +242,7 @@ protected:
         uint32_t                               staticStateMask,
         bool                                   bindDepthStencilObject,
         bool                                   bindTriangleRasterState,
+        bool                                   bindStencilRefMasks,
         bool                                   bindInputAssemblyState,
         const VbBindingInfo&                   vbInfo,
         Pal::IMsaaState**                      pPalMsaa,
@@ -276,6 +274,7 @@ protected:
         bool                                        bresenhamEnable;
         bool                                        bindDepthStencilObject;
         bool                                        bindTriangleRasterState;
+        bool                                        bindStencilRefMasks;
         bool                                        bindInputAssemblyState;
     };
 
@@ -343,18 +342,19 @@ private:
     Pal::IColorBlendState*    m_pPalColorBlend[MaxPalDevices];    // PAL color blend state object
     Pal::IDepthStencilState*  m_pPalDepthStencil[MaxPalDevices];  // PAL depth stencil state object
     VbBindingInfo             m_vbInfo;                           // Information about vertex buffer bindings
-    uint32_t                  m_coverageSamples;
 
     union
     {
-        uint8_t value;
+        uint8 value;
         struct
         {
-            uint8_t viewIndexFromDeviceIndex : 1;
-            uint8_t bindDepthStencilObject   : 1;
-            uint8_t bindTriangleRasterState  : 1;
-            uint8_t bindInputAssemblyState   : 1;
-            uint8_t reserved                 : 4;
+            uint8 viewIndexFromDeviceIndex : 1;
+            uint8 bindDepthStencilObject   : 1;
+            uint8 bindTriangleRasterState  : 1;
+            uint8 bindStencilRefMasks      : 1;
+            uint8 bindInputAssemblyState   : 1;
+            uint8 reserved1                : 1;
+            uint8 reserved                 : 2;
         };
     } m_flags;
 };

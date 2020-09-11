@@ -28,10 +28,6 @@
 * @brief Implementation of the Vulkan interface for PAL layered caching.
 ***********************************************************************************************************************
 */
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #include "include/pipeline_binary_cache.h"
 #include "include/vk_physical_device.h"
 
