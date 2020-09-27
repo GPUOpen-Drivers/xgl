@@ -182,6 +182,12 @@ public:
 
     const Pal::IMsaaState* const* GetMsaaStates() const { return m_pPalMsaa; }
 
+    const Pal::MsaaQuadSamplePattern* GetSampleLocations() const
+        { return &m_info.samplePattern.locations; }
+
+     const bool CustomSampleLocationsEnabled() const
+         { return m_flags.customSampleLocations; }
+
     static void BindNullPipeline(CmdBuffer* pCmdBuffer);
 
     // Returns value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
@@ -244,6 +250,7 @@ protected:
         bool                                   bindTriangleRasterState,
         bool                                   bindStencilRefMasks,
         bool                                   bindInputAssemblyState,
+        bool                                   customSampleLocations,
         const VbBindingInfo&                   vbInfo,
         Pal::IMsaaState**                      pPalMsaa,
         Pal::IColorBlendState**                pPalColorBlend,
@@ -276,6 +283,7 @@ protected:
         bool                                        bindTriangleRasterState;
         bool                                        bindStencilRefMasks;
         bool                                        bindInputAssemblyState;
+        bool                                        customSampleLocations;
     };
 
     static void ConvertGraphicsPipelineInfo(
@@ -353,8 +361,9 @@ private:
             uint8 bindTriangleRasterState  : 1;
             uint8 bindStencilRefMasks      : 1;
             uint8 bindInputAssemblyState   : 1;
+            uint8 customSampleLocations    : 1;
             uint8 reserved1                : 1;
-            uint8 reserved                 : 2;
+            uint8 reserved                 : 1;
         };
     } m_flags;
 };

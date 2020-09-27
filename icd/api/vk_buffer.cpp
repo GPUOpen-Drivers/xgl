@@ -435,21 +435,21 @@ VkResult Buffer::GetMemoryRequirements(
     const Device*         pDevice,
     VkMemoryRequirements* pMemoryRequirements)
 {
-    const VkDeviceSize ubRequiredAlignment = static_cast<VkDeviceSize>(sizeof(float) * 4);
-    const bool         sparseUsageEnabled  =  m_internalFlags.createSparseBinding;
-    const bool         ubUsageEnabled      =  m_internalFlags.usageUniformBuffer;
+    pMemoryRequirements->alignment = 4;
 
-    if (sparseUsageEnabled)
+    // In case of sparse buffers the alignment and granularity is the page size
+    if (m_internalFlags.createSparseBinding)
     {
-        // In case of sparse buffers the alignment and granularity is the page size
-        pMemoryRequirements->alignment = pDevice->GetProperties().virtualMemPageSize;
+        pMemoryRequirements->alignment = Util::Max(pMemoryRequirements->alignment,
+                                                   pDevice->GetProperties().virtualMemPageSize);
     }
-    else
+
+    if (m_internalFlags.usageUniformBuffer)
     {
-        // Otherwise the granularity is the size itself and there's no special alignment requirement,
-        // however, we'll specify such an alignment requirement which should fit formatted buffer use
-        // with any kind of format
-        pMemoryRequirements->alignment = (ubUsageEnabled) ? ubRequiredAlignment : 4;
+        constexpr VkDeviceSize UniformBufferAlignment = static_cast<VkDeviceSize>(sizeof(float) * 4);
+
+        pMemoryRequirements->alignment = Util::Max(pMemoryRequirements->alignment,
+                                                   UniformBufferAlignment);
     }
 
     pMemoryRequirements->size = Util::RoundUpToMultiple(m_size, pMemoryRequirements->alignment);

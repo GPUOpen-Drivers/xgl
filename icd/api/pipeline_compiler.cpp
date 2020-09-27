@@ -1067,6 +1067,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
     auto                   flags     = pIn->flags;
+
     EXTRACT_VK_STRUCTURES_0(
         gfxPipeline,
         GraphicsPipelineCreateInfo,
@@ -1079,6 +1080,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             reinterpret_cast<const VkStructHeader*>(pIn->pNext),
             ppPipelineCreationFeadbackCreateInfo);
     }
+
     // Fill in necessary non-zero defaults in case some information is missing
     const RenderPass* pRenderPass = nullptr;
     const PipelineLayout* pLayout = nullptr;
@@ -1094,6 +1096,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         }
 
         uint32 activeStages = {};
+
         for (uint32_t i = 0; i < pGraphicsPipelineCreateInfo->stageCount; ++i)
         {
             activeStages = activeStages | pGraphicsPipelineCreateInfo->pStages[i].stage;
@@ -1111,6 +1114,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.pVertexInput = pGraphicsPipelineCreateInfo->pVertexInputState;
 
         const VkPipelineInputAssemblyStateCreateInfo* pIa = pGraphicsPipelineCreateInfo->pInputAssemblyState;
+
         // According to the spec this should never be null
         VK_ASSERT(pIa != nullptr);
 
@@ -1147,8 +1151,10 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         }
 
         const VkPipelineRasterizationStateCreateInfo* pRs = pGraphicsPipelineCreateInfo->pRasterizationState;
+
         // By default rasterization is disabled, unless rasterization creation info is present
         pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = true;
+
         if (pRs != nullptr)
         {
             pCreateInfo->pipelineInfo.vpState.depthClipEnable         = (pRs->depthClampEnable == VK_FALSE);
@@ -1220,6 +1226,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 pCreateInfo->pipelineInfo.rsState.samplePatternIdx =
                     Device::GetDefaultSamplePatternIndex(subpassCoverageSampleCount) * Pal::MaxMsaaRasterizerSamples;
             }
+
             pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE);
         }
 
@@ -1258,9 +1265,11 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 dualSourceBlend |= GetDualSourceBlendEnableState(src);
             }
         }
+
         pCreateInfo->pipelineInfo.cbState.dualSourceBlendEnable = dualSourceBlend;
 
-        VkFormat dbFormat = { };
+        VkFormat dbFormat = {};
+
         if (pRenderPass != nullptr)
         {
             dbFormat = pRenderPass->GetDepthStencilAttachmentFormat(pGraphicsPipelineCreateInfo->subpass);
@@ -1323,6 +1332,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     }
 
     pCreateInfo->flags = flags;
+
     ApplyPipelineOptions(pDevice, flags, &pCreateInfo->pipelineInfo.options);
 
     // Build the LLPC pipeline
@@ -1340,6 +1350,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     pCreateInfo->pipelineInfo.pfnOutputAlloc = AllocateShaderOutput;
 
     uint32_t stageMask = 0;
+
     for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
         auto pStage = pStageInfos[stage];
@@ -1373,6 +1384,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                             &pCreateInfo->pipelineProfileKey,
                             &pCreateInfo->pipelineInfo.nggState
                             );
+
     }
 
     if ((pLayout != nullptr) && (pLayout->GetPipelineInfo()->mappingBufferSize > 0))
@@ -1463,6 +1475,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                     }
 
                     ++stageCount;
+
                     VK_ASSERT(stageCount <= pGraphicsPipelineCreateInfo->stageCount);
                 }
             }
@@ -1471,6 +1484,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     }
 
     pCreateInfo->compilerType = CheckCompilerType(&pCreateInfo->pipelineInfo);
+
     for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
     {
         auto pStage = pStageInfos[stage];
@@ -1582,23 +1596,29 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo)
 {
     VkResult result    = VK_SUCCESS;
+
     auto     pInstance = m_pPhysicalDevice->Manager()->VkInstance();
     auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
 
     PipelineLayout* pLayout = nullptr;
+
     VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO);
 
     GetPipelineCreationInfoNext(
         reinterpret_cast<const VkStructHeader*>(pIn->pNext),
         ppPipelineCreationFeadbackCreateInfo);
+
     if (pIn->layout != VK_NULL_HANDLE)
     {
         pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
     }
+
     pCreateInfo->flags  = pIn->flags;
+
     ApplyPipelineOptions(pDevice, pIn->flags, &pCreateInfo->pipelineInfo.options);
 
     ShaderModule* pShaderModule = ShaderModule::ObjectFromHandle(pIn->stage.module);
+
     pCreateInfo->pipelineInfo.cs.pModuleData         = pShaderModule->GetFirstValidShaderData();
     pCreateInfo->pipelineInfo.cs.pSpecializationInfo = pIn->stage.pSpecializationInfo;
     pCreateInfo->pipelineInfo.cs.pEntryTarget        = pIn->stage.pName;
@@ -1613,6 +1633,7 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     {
 
         size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
+
 #if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
         genericMappingBufferSize += pLayout->GetPipelineInfo()->mappingBufferSize;
 #endif

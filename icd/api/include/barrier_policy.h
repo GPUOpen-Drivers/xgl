@@ -55,6 +55,8 @@ public:
     void ApplyBarrierCacheFlags(
         VkAccessFlags                       srcAccess,
         VkAccessFlags                       dstAccess,
+        VkImageLayout                       srcLayout,
+        VkImageLayout                       dstLayout,
         Pal::BarrierTransition*             pResult) const;
 
     VK_FORCEINLINE uint32_t GetSupportedOutputCacheMask() const

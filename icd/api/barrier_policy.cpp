@@ -185,8 +185,51 @@ protected:
 static const LayoutUsageHelper g_LayoutUsageHelper;
 
 // =====================================================================================================================
+// Converts ImageLayout to Cache masks, for use with VK_ACCESS_MEMORY_WRITE and VK_ACCESS_MEMORY_READ only.
+static VK_INLINE uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
+{
+    uint32_t cacheMask = 0;
+
+    switch (imageLayout)
+    {
+    // It is likely more correct to use Pal::CoherAllUsages but it seems better to avoid CPU sync and just use
+    // a general set of cache maks with the unsupported masks eventually being masked out by the barrier policy.
+    case VK_IMAGE_LAYOUT_GENERAL:
+        cacheMask |= Pal::CoherShader | Pal::CoherColorTarget | Pal::CoherDepthStencilTarget |
+                     Pal::CoherClear | Pal::CoherResolve | Pal::CoherCopy;
+        break;
+    case VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL:
+        cacheMask |= Pal::CoherColorTarget;
+        break;
+    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL:
+    case VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL:
+    case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_STENCIL_ATTACHMENT_OPTIMAL:
+    case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_STENCIL_READ_ONLY_OPTIMAL:
+    case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
+    case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL:
+    case VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL:
+    case VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL:
+        cacheMask |= Pal::CoherDepthStencilTarget;
+        break;
+    case VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL:
+        cacheMask |= Pal::CoherShader;
+        break;
+    case VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL:
+    case VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL:
+    case VK_IMAGE_LAYOUT_PRESENT_SRC_KHR:
+    case VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR:
+        cacheMask |= Pal::CoherCopy | Pal::CoherResolve | Pal::CoherClear | Pal::CoherShader | Pal::CoherTimestamp;
+        break;
+    default:
+        break;
+    }
+
+    return cacheMask;
+}
+
+// =====================================================================================================================
 // Converts source access flags to source cache coherency flags.
-static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask)
+static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask, VkImageLayout imageLayout)
 {
     uint32_t cacheMask = 0;
 
@@ -217,7 +260,7 @@ static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask)
 
     if (accessMask & VK_ACCESS_MEMORY_WRITE_BIT)
     {
-        cacheMask |= Pal::CoherMemory;
+        cacheMask |= Pal::CoherMemory | ImageLayoutToCacheMask(imageLayout);
     }
 
     if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_WRITE_BIT_EXT)
@@ -232,7 +275,7 @@ static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask)
 
     if (accessMask & VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT)
     {
-        cacheMask |= Pal::CoherMemory;
+        cacheMask |= Pal::CoherMemory | Pal::CoherIndirectArgs;
     }
 
     // CoherQueueAtomic: Not used
@@ -245,7 +288,7 @@ static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask)
 
 // =====================================================================================================================
 // Converts destination access flags to destination cache coherency flags.
-static VK_INLINE uint32_t DstAccessToCacheMask(VkAccessFlags accessMask)
+static VK_INLINE uint32_t DstAccessToCacheMask(VkAccessFlags accessMask, VkImageLayout imageLayout)
 {
     uint32_t cacheMask = 0;
 
@@ -291,7 +334,7 @@ static VK_INLINE uint32_t DstAccessToCacheMask(VkAccessFlags accessMask)
 
     if (accessMask & VK_ACCESS_MEMORY_READ_BIT)
     {
-        cacheMask |= Pal::CoherMemory;
+        cacheMask |= Pal::CoherMemory | ImageLayoutToCacheMask(imageLayout);
     }
 
     if (accessMask & VK_ACCESS_TRANSFORM_FEEDBACK_COUNTER_READ_BIT_EXT)
@@ -301,7 +344,7 @@ static VK_INLINE uint32_t DstAccessToCacheMask(VkAccessFlags accessMask)
 
     if (accessMask & VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT)
     {
-        cacheMask |= Pal::CoherMemory;
+        cacheMask |= Pal::CoherMemory | Pal::CoherIndirectArgs;
     }
 
     return cacheMask;
@@ -399,11 +442,13 @@ void BarrierPolicy::InitCachePolicy(
 void BarrierPolicy::ApplyBarrierCacheFlags(
     VkAccessFlags                       srcAccess,
     VkAccessFlags                       dstAccess,
+    VkImageLayout                       srcLayout,
+    VkImageLayout                       dstLayout,
     Pal::BarrierTransition*             pResult) const
 {
     // Convert access masks to cache coherency masks and exclude any coherency flags that are not supported.
-    uint32_t srcCacheMask = SrcAccessToCacheMask(srcAccess) & m_supportedOutputCacheMask;
-    uint32_t dstCacheMask = DstAccessToCacheMask(dstAccess) & m_supportedInputCacheMask;
+    uint32_t srcCacheMask = SrcAccessToCacheMask(srcAccess, srcLayout) & m_supportedOutputCacheMask;
+    uint32_t dstCacheMask = DstAccessToCacheMask(dstAccess, dstLayout) & m_supportedInputCacheMask;
 
     // Calculate the union of both masks that are used for handling the domains that are always kept coherent and the
     // domains that are avoided to be kept coherent unless explicitly requested.
@@ -1033,7 +1078,7 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
     }
 
     // Apply barrier cache flags to the PAL barrier transition.
-    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, pPalBarrier);
+    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, barrier.oldLayout, barrier.newLayout, pPalBarrier);
 
     // We can further restrict the cache masks to the ones supported by the corresponding queue families or by other
     // queue families that are allowed to concurrently access the image.
@@ -1200,7 +1245,8 @@ void BufferBarrierPolicy::ApplyBufferMemoryBarrier(
     VK_ASSERT((srcQueueFamilyIndex == currentQueueFamilyIndex) || (dstQueueFamilyIndex == currentQueueFamilyIndex));
 
     // Apply barrier cache flags to the PAL barrier transition.
-    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, pPalBarrier);
+    ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, VK_IMAGE_LAYOUT_GENERAL,
+                           VK_IMAGE_LAYOUT_GENERAL, pPalBarrier);
 
     // We can further restrict the cache masks to the ones supported by the corresponding queue families or by other
     // queue families that are allowed to concurrently access the image.

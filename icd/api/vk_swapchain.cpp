@@ -56,6 +56,8 @@
 
 namespace vk
 {
+    // Default to true
+    bool FullscreenMgr::s_forceFullscreenReacquire = true;
 
 static bool EnableFullScreen(
     const Device*                   pDevice,
@@ -157,6 +159,9 @@ VkResult SwapChain::Create(
     properties.imageCreateInfo.extent   = VkToPalExtent2d(pCreateInfo->imageExtent);
     properties.imageCreateInfo.hDisplay = properties.displayableInfo.displayHandle;
     properties.imageCreateInfo.hWindow  = properties.displayableInfo.windowHandle;
+
+    // The swapchain image can be used as a blit source for driver post processing on present.
+    properties.imageCreateInfo.usage.shaderRead = 1;
 
     bool mutableFormat = ((pCreateInfo->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR) != 0);
 
@@ -917,6 +922,13 @@ FullscreenMgr::FullscreenMgr(
 bool FullscreenMgr::TryEnterExclusive(
     SwapChain* pSwapChain)
 {
+    // If we need to force resync with PAL
+    if (s_forceFullscreenReacquire == true)
+    {
+        m_exclusiveModeFlags.acquired = 0;
+        s_forceFullscreenReacquire = false;
+    }
+
     // If we are not perma-disabled
     if (m_exclusiveModeFlags.disabled == 0)
     {
@@ -998,9 +1010,11 @@ bool FullscreenMgr::TryExitExclusive(
     }
 
     // if we acquired full screen ownership before with this fullscreenmanager.
-    if ((m_pScreen != nullptr) && m_exclusiveModeFlags.acquired)
+    if ((m_pScreen != nullptr))
     {
         Pal::Result palResult = m_pScreen->ReleaseFullscreenOwnership();
+
+        s_forceFullscreenReacquire = true;
         VK_ASSERT(palResult == Pal::Result::Success);
     }
 

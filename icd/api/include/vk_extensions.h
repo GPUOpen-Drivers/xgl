@@ -42,18 +42,23 @@
 #define VK_INSTANCE_EXTENSION(id)       VK_XX_EXTENSION(Instance, id)
 #define VK_DEVICE_EXTENSION(id)         VK_XX_EXTENSION(Device, id)
 
-#define VK_AMD_SHADER_CORE_PROPERTIES2_SPEC_VERSION         VK_AMD_SHADER_CORE_PROPERTIES_2_SPEC_VERSION
-
+// These macros are sorted in the same order as they appear in Khronos spec: KHR, EXT, vendors. They are
+// alphabetical within each section.
+// KHR macros
+#define VK_KHR_BIND_MEMORY2_SPEC_VERSION                    VK_KHR_BIND_MEMORY_2_SPEC_VERSION
+#define VK_KHR_CREATE_RENDERPASS2_SPEC_VERSION              VK_KHR_CREATE_RENDERPASS_2_SPEC_VERSION
+#define VK_KHR_GET_DISPLAY_PROPERTIES2_SPEC_VERSION         VK_KHR_GET_DISPLAY_PROPERTIES_2_SPEC_VERSION
+#define VK_KHR_GET_MEMORY_REQUIREMENTS2_SPEC_VERSION        VK_KHR_GET_MEMORY_REQUIREMENTS_2_SPEC_VERSION
 #define VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES2_SPEC_VERSION VK_KHR_GET_PHYSICAL_DEVICE_PROPERTIES_2_SPEC_VERSION
 #define VK_KHR_GET_SURFACE_CAPABILITIES2_SPEC_VERSION       VK_KHR_GET_SURFACE_CAPABILITIES_2_SPEC_VERSION
-#define VK_KHR_GET_MEMORY_REQUIREMENTS2_SPEC_VERSION        VK_KHR_GET_MEMORY_REQUIREMENTS_2_SPEC_VERSION
-#define VK_KHR_BIND_MEMORY2_SPEC_VERSION                    VK_KHR_BIND_MEMORY_2_SPEC_VERSION
-#define VK_EXT_ROBUSTNESS2_SPEC_VERSION                     VK_EXT_ROBUSTNESS_2_SPEC_VERSION
-#define VK_KHR_GET_DISPLAY_PROPERTIES2_SPEC_VERSION         VK_KHR_GET_DISPLAY_PROPERTIES_2_SPEC_VERSION
-#define VK_KHR_CREATE_RENDERPASS2_SPEC_VERSION              VK_KHR_CREATE_RENDERPASS_2_SPEC_VERSION
 
+// EXT macros
+#define VK_EXT_ROBUSTNESS2_SPEC_VERSION                     VK_EXT_ROBUSTNESS_2_SPEC_VERSION
 #define VK_EXT_SWAPCHAIN_COLORSPACE_EXTENSION_NAME          VK_EXT_SWAPCHAIN_COLOR_SPACE_EXTENSION_NAME
 #define VK_EXT_SWAPCHAIN_COLORSPACE_SPEC_VERSION            VK_EXT_SWAPCHAIN_COLOR_SPACE_SPEC_VERSION
+
+// AMD macros
+#define VK_AMD_SHADER_CORE_PROPERTIES2_SPEC_VERSION         VK_AMD_SHADER_CORE_PROPERTIES_2_SPEC_VERSION
 
 namespace vk
 {
@@ -178,7 +183,8 @@ class InstanceExtensions : public Extensions<InstanceExtensions>
 public:
     enum ExtensionId
     {
-        // These extensions are sorted in the same order as they appear in Khronos spec: KHR, EXT, vendors.
+        // These extensions are sorted in the same order as they appear in Khronos spec: KHR, EXT, vendors. They are
+        // alphabetical within each section.
         // KHR Extensions
         KHR_DEVICE_GROUP_CREATION,
         KHR_DISPLAY,
@@ -216,7 +222,8 @@ class DeviceExtensions : public Extensions<DeviceExtensions>
 public:
     enum ExtensionId
     {
-        // These extensions are sorted in the same order as they appear in Khronos spec: KHR, EXT, vendors.
+        // These extensions are sorted in the same order as they appear in Khronos spec: KHR, EXT, vendors. They are
+        // alphabetical within each section.
         // KHR Extensions
         KHR_16BIT_STORAGE,
         KHR_8BIT_STORAGE,

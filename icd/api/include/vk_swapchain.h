@@ -276,6 +276,9 @@ private:
 
     uint32_t            m_vidPnSourceId;            // Video present source identifier
     Mode                m_mode;                     // Indicates the Presentation mode we are using
+
+    static bool s_forceFullscreenReacquire;         // Used to force fullscreen reacquire when dealing with multiple
+                                                    // instances of this class across swapchains
 };
 
 // =====================================================================================================================

@@ -1087,10 +1087,10 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
                 PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
 
-            bool customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
-                                          (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
+            pInfo->customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
+                                            (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
 
-            if ((pInfo->bresenhamEnable == false) || customSampleLocations)
+            if ((pInfo->bresenhamEnable == false) || pInfo->customSampleLocations)
             {
                 VK_ASSERT(pRenderPass != nullptr);
 
@@ -1137,7 +1137,7 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 pInfo->msaa.occlusionQuerySamples  = subpassDepthSampleCount;
                 pInfo->sampleCoverage              = subpassCoverageSampleCount;
 
-                if (customSampleLocations)
+                if (pInfo->customSampleLocations)
                 {
                     // Enable single-sampled custom sample locations if necessary
                     pInfo->msaa.flags.enable1xMsaaSampleLocations = (pInfo->msaa.coverageSamples == 1);
@@ -1590,6 +1590,7 @@ VkResult GraphicsPipeline::Create(
             localPipelineInfo.bindTriangleRasterState,
             localPipelineInfo.bindStencilRefMasks,
             localPipelineInfo.bindInputAssemblyState,
+            localPipelineInfo.customSampleLocations,
             vbInfo,
             pPalMsaa,
             pPalColorBlend,
@@ -1667,6 +1668,7 @@ GraphicsPipeline::GraphicsPipeline(
     bool                                   bindTriangleRasterState,
     bool                                   bindStencilRefMasks,
     bool                                   bindInputAssemblyState,
+    bool                                   customSampleLocations,
     const VbBindingInfo&                   vbInfo,
     Pal::IMsaaState**                      pPalMsaa,
     Pal::IColorBlendState**                pPalColorBlend,
@@ -1693,6 +1695,7 @@ GraphicsPipeline::GraphicsPipeline(
     m_flags.bindTriangleRasterState  = bindTriangleRasterState;
     m_flags.bindStencilRefMasks      = bindStencilRefMasks;
     m_flags.bindInputAssemblyState   = bindInputAssemblyState;
+	m_flags.customSampleLocations    = customSampleLocations;
     CreateStaticState();
 
     pPalPipelineHasher->Update(m_palPipelineHash);
