@@ -111,11 +111,12 @@ private:
             uint32_t externalPinnedHost    : 1;   // True if backing memory for this buffer may be imported from a pinned
                                                   // host allocation.
             uint32_t usageUniformBuffer    : 1;   // VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT
+            uint32_t reserved1             : 1;
             uint32_t createSparseBinding   : 1;   // VK_BUFFER_CREATE_SPARSE_BINDING_BIT
             uint32_t createSparseResidency : 1;   // VK_BUFFER_CREATE_SPARSE_RESIDENCY_BIT
             uint32_t createProtected       : 1;   // VK_BUFFER_CREATE_PROTECTED_BIT
 
-            uint32_t reserved              : 24;
+            uint32_t reserved              : 23;
         };
         uint32_t     u32All;
     };

@@ -235,7 +235,13 @@ VkResult Queue::NotifyFlipMetadataBeforePresent(
     const Pal::IGpuMemory*           pGpuMemory,
     bool                             forceSubmit)
 {
-    FullscreenFrameMetadataFlags flags = {};
+    FullscreenFrameMetadataFlags flags       = {};
+    const Pal::DeviceProperties& deviceProps = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+
+    if (deviceProps.osProperties.flags.requireFrameEnd == 1)
+    {
+        flags.frameEndFlag = 1;
+    }
 
     return NotifyFlipMetadata(deviceIdx, pPresentQueue, pCmdBufState, pGpuMemory, flags, forceSubmit);
 }

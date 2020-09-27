@@ -3202,6 +3202,8 @@ void CmdBuffer::ExecuteBarriers(
         m_barrierPolicy.ApplyBarrierCacheFlags(
             pMemoryBarriers[i].srcAccessMask,
             pMemoryBarriers[i].dstAccessMask,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_IMAGE_LAYOUT_GENERAL,
             pNextMain);
 
         pNextMain->imageInfo.pImage = nullptr;
@@ -4392,9 +4394,16 @@ void CmdBuffer::BeginRenderPass(
 
             if (subpassMaxSampleCount > 0)
             {
+                // If sample patterns are set in a bound pipeline, use those as the defaults
+                const Pal::MsaaQuadSamplePattern* pipelineSampleLocations =
+                    ((m_state.allGpuState.pGraphicsPipeline != nullptr) &&
+                      m_state.allGpuState.pGraphicsPipeline->CustomSampleLocationsEnabled()) ?
+                        m_state.allGpuState.pGraphicsPipeline->GetSampleLocations() : nullptr;
+
+                // Set render pass instance sample patterns
                 m_renderPassInstance.pSamplePatterns[subpassIndex].sampleCount = subpassMaxSampleCount;
-                m_renderPassInstance.pSamplePatterns[subpassIndex].locations =
-                    *Device::GetDefaultQuadSamplePattern(subpassMaxSampleCount);
+                m_renderPassInstance.pSamplePatterns[subpassIndex].locations   = (pipelineSampleLocations != nullptr) ?
+                    *pipelineSampleLocations : *Device::GetDefaultQuadSamplePattern(subpassMaxSampleCount);
             }
         }
 
@@ -4635,6 +4644,8 @@ void CmdBuffer::RPSyncPoint(
         m_barrierPolicy.ApplyBarrierCacheFlags(
             rpBarrier.srcAccessMask,
             rpBarrier.dstAccessMask,
+            VK_IMAGE_LAYOUT_GENERAL,
+            VK_IMAGE_LAYOUT_GENERAL,
             &globalTransition);
 
         barrier.globalSrcCacheMask = globalTransition.srcCacheMask | rpBarrier.implicitSrcCacheMask;

@@ -205,6 +205,12 @@ target_include_directories(xgl PRIVATE
 
 target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
+#if VKI_EXPOSE_EXT_CONDITIONAL_RENDERING
+if(VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
+    target_compile_definitions(xgl PRIVATE VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
+endif()
+#endif
+
 ### XGL Subprojects ####################################################################################################
 ### PAL ########################################################################
 add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)

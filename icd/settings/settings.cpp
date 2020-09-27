@@ -228,6 +228,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
+                m_settings.forceEnableDcc = ForceDccDefault;
+
                 if (pInfo->revision == Pal::AsicRevision::Navi14)
                 {
                     m_settings.barrierFilterOptions = SkipImageLayoutUndefined;

@@ -6,7 +6,7 @@
     "Pipeline Options",
     "Present",
     "SPIRV Options",
-    "Raytracing",
+    "Ray Tracing",
     "Debugging",
     "General",
     "Memory",
@@ -4146,6 +4146,19 @@
       "Name": "CpDmaCmdCopyMemoryMaxBytes"
     },
     {
+      "Description": "Enable the use of SC heuristic machine learning culling for NGG culling, culling is enabled for Gfx10.3 by default.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "enableMlHeuristicCulling",
+      "Name": "EnableMlHeuristicCulling"
+    },
+    {
       "Description": "Determines the string that's used to trigger a start-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameBegin\" by default.",
       "Tags": [
         "Developer Mode"
@@ -5150,6 +5163,49 @@
       },
       "Type": "bool",
       "VariableName": "overrideUseNgg",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "FloatingPointPrecision",
+      "Description": "Force SC flags related to floating point refactoring and FMA.",
+      "Tags": [
+        "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": "ScFpPrecisionDefault"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "ScFpPrecision",
+        "Values": [
+          {
+            "Name": "ScFpPrecisionDefault",
+            "Value": 0
+          },
+          {
+            "Name": "ScFpPrecisionEnableFma",
+            "Value": 1
+          },
+          {
+            "Name": "ScFpPrecisionDisableFma",
+            "Value": 2
+          },
+          {
+            "Name": "ScFpPrecisionEnableRefactoring",
+            "Value": 3
+          },
+          {
+            "Name": "ScFpPrecisionDisableRefactoring",
+            "Value": 4
+          },
+          {
+            "Name": "ScFpPrecisionEnableRefactoringAndDisableFma",
+            "Value": 5
+          }
+        ]
+      },
+      "Type": "enum",
+      "VariableName": "floatingPointRefactoring",
       "Scope": "Driver"
     },
     {

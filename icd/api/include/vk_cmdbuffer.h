@@ -591,9 +591,9 @@ public:
         VkQueryResultFlags                          flags);
 
     void WriteTimestamp(
-        VkPipelineStageFlagBits   pipelineStage,
-        const TimestampQueryPool* pQueryPool,
-        uint32_t                  query);
+        VkPipelineStageFlagBits                     pipelineStage,
+        const TimestampQueryPool*                   pQueryPool,
+        uint32_t                                    query);
 
     void SetSampleLocations(
         const VkSampleLocationsInfoEXT* pSampleLocationsInfo);

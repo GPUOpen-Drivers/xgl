@@ -1326,20 +1326,20 @@ VkResult Image::BindMemory(
     uint32_t           rectCount,
     const VkRect2D*    pRects)
 {
+    Memory* pMemory = (mem != VK_NULL_HANDLE) ? Memory::ObjectFromHandle(mem) : nullptr;
+
+    if (m_internalFlags.externallyShareable && (pMemory->GetExternalPalImage() != nullptr))
+    {
+        // For MGPU, the external sharing resource only uses the first PAL image.
+        m_perGpu[DefaultDeviceIndex].pPalImage->Destroy();
+        m_perGpu[DefaultDeviceIndex].pPalImage = pMemory->GetExternalPalImage();
+        m_internalFlags.boundToExternalMemory = 1;
+    }
+
     VkMemoryRequirements reqs = {};
 
     if (GetMemoryRequirements(pDevice, &reqs) == VK_SUCCESS)
     {
-        Memory* pMemory = (mem != VK_NULL_HANDLE) ? Memory::ObjectFromHandle(mem) : nullptr;
-
-        if (m_internalFlags.externallyShareable && (pMemory->GetExternalPalImage() != nullptr))
-        {
-            // For MGPU, the external sharing resource only uses the first PAL image.
-            m_perGpu[DefaultDeviceIndex].pPalImage->Destroy();
-            m_perGpu[DefaultDeviceIndex].pPalImage = pMemory->GetExternalPalImage();
-            m_internalFlags.boundToExternalMemory = 1;
-        }
-
         Pal::Result result = Pal::Result::Success;
 
         const uint32_t numDevices = pDevice->NumPalDevices();

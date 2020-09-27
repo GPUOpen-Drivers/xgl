@@ -3516,7 +3516,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SPIRV_1_4));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_USER_TYPE));
-
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_HLSL_FUNCTIONALITY1));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(GOOGLE_DECORATE_STRING));
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SCALAR_BLOCK_LAYOUT));
@@ -3537,11 +3536,6 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION));
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PIPELINE_CREATION_CACHE_CONTROL));
-
-    if (IsConditionalRenderingSupported(pPhysicalDevice))
-    {
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONDITIONAL_RENDERING));
-    }
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_IMAGE_ROBUSTNESS));
 
@@ -3565,10 +3559,24 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
     availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_PRIVATE_DATA));
 
+    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE));
+
 #if defined(__unix__)
 #endif
 
-    availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE));
+        if ((pPhysicalDevice == nullptr) ||
+            IsConditionalRenderingSupported(pPhysicalDevice))
+        {
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONDITIONAL_RENDERING));
+        }
+
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_BUFFER_DEVICE_ADDRESS));
+
+        if ((pPhysicalDevice == nullptr) ||
+            (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))
+        {
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
+        }
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -4530,10 +4538,13 @@ void PhysicalDevice::GetPhysicalDeviceBufferAddressFeatures(
     VkBool32* pBufferDeviceAddressMultiDevice
     ) const
 {
-    *pBufferDeviceAddress              = VK_FALSE;
-    *pBufferDeviceAddressCaptureReplay = VK_FALSE;
-    *pBufferDeviceAddressMultiDevice   = VK_FALSE;
-
+    {
+        *pBufferDeviceAddress              = VK_TRUE;
+        *pBufferDeviceAddressCaptureReplay =
+            PalProperties().gfxipProperties.flags.supportCaptureReplay ? VK_TRUE : VK_FALSE;
+        *pBufferDeviceAddressMultiDevice   =
+            PalProperties().gfxipProperties.flags.supportCaptureReplay ? VK_TRUE : VK_FALSE;
+    }
 }
 
 // =====================================================================================================================
@@ -4980,6 +4991,14 @@ void PhysicalDevice::GetFeatures2(
                 pExtInfo->robustImageAccess2  = VK_FALSE;
                 pExtInfo->robustBufferAccess2 = VK_FALSE;
                 pExtInfo->nullDescriptor      = VK_FALSE;
+
+                if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)
+                {
+                    pExtInfo->robustImageAccess2  = VK_TRUE;
+                    pExtInfo->robustBufferAccess2 = VK_TRUE;
+                    pExtInfo->nullDescriptor      = VK_TRUE;
+                }
+
                 break;
             }
 
@@ -5006,9 +5025,9 @@ void PhysicalDevice::GetFeatures2(
 
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_4444_FORMATS_FEATURES_EXT:
             {
-                auto* pExtFeatures = reinterpret_cast<VkPhysicalDevice4444FormatsFeaturesEXT*>(pHeader);
-                pExtFeatures->formatA4R4G4B4 = VK_TRUE;
-                pExtFeatures->formatA4B4G4R4 = VK_TRUE;
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDevice4444FormatsFeaturesEXT*>(pHeader);
+                pExtInfo->formatA4R4G4B4 = VK_TRUE;
+                pExtInfo->formatA4B4G4R4 = VK_TRUE;
                 break;
             }
 
@@ -6206,7 +6225,6 @@ static void VerifyExtensions(
     if (apiVersion >= VK_API_VERSION_1_2)
     {
         VK_ASSERT(dev.IsExtensionSupported(DeviceExtensions::KHR_8BIT_STORAGE)
-//             && dev.IsExtensionSupported(DeviceExtensions::KHR_BUFFER_DEVICE_ADDRESS)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_CREATE_RENDERPASS2)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_DEPTH_STENCIL_RESOLVE)
                && dev.IsExtensionSupported(DeviceExtensions::EXT_DESCRIPTOR_INDEXING)
@@ -6230,6 +6248,9 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_TIMELINE_SEMAPHORE)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_UNIFORM_BUFFER_STANDARD_LAYOUT)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_VULKAN_MEMORY_MODEL));
+        {
+            VK_ASSERT(dev.IsExtensionSupported(DeviceExtensions::KHR_BUFFER_DEVICE_ADDRESS));
+        }
     }
 }
 

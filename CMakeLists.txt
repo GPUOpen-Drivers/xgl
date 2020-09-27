@@ -22,8 +22,7 @@
  #  SOFTWARE.
  #
  #######################################################################################################################
-
-cmake_minimum_required(VERSION 3.5)
+cmake_minimum_required(VERSION 3.13.4)
 
 # This part set before "project(XGL VERSION 1 LANGUAGES C CXX)".
 # In a system has both gcc and clang compiler. The cmake output log will be more reasonable.
@@ -381,8 +380,8 @@ set(PAL_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FO
 set(PAL_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 # Wayland
+set(PAL_BUILD_WAYLAND ${BUILD_WAYLAND_SUPPORT} CACHE BOOL "Build PAL with Wayland support" FORCE)
 if (BUILD_WAYLAND_SUPPORT)
-    set(PAL_BUILD_WAYLAND ON CACHE BOOL "Build PAL with Wayland support" FORCE)
     find_package(PkgConfig REQUIRED)
     pkg_check_modules(WAYLAND REQUIRED wayland-client)
 endif()
