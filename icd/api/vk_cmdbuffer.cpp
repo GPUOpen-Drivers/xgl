@@ -1161,6 +1161,7 @@ VkResult CmdBuffer::Begin(
             PalCmdBuffer(deviceIdx)->CmdSetGlobalScissor(scissorParams);
         }
         while (deviceGroup.IterateNext());
+
     }
 
     // Dirty all the dynamic states, the bit should be cleared with 0 when the corresponding state is
@@ -1209,6 +1210,7 @@ void CmdBuffer::ResetPipelineState()
            sizeof(m_state.allGpuState.depthStencilCreateInfo));
 
     uint32_t bindIdx = 0;
+
     do
     {
         memset(&(m_state.allGpuState.pipelineState[bindIdx].userDataLayout),
@@ -1229,6 +1231,7 @@ void CmdBuffer::ResetPipelineState()
 
     const uint32_t numPalDevices = m_pDevice->NumPalDevices();
     uint32_t deviceIdx           = 0;
+
     do
     {
         m_state.perGpuState[deviceIdx].pMsaaState         = nullptr;
@@ -5679,15 +5682,8 @@ void CmdBuffer::BeginTransformFeedback(
             const uint32_t deviceIdx = deviceGroup.Index();
             if (pCounterBuffers != nullptr)
             {
-                for (uint32_t i = firstCounterBuffer; i < (firstCounterBuffer + counterBufferCount); i++)
-                {
-                    if ((pCounterBuffers[i] != VK_NULL_HANDLE) &&
-                        (m_pTransformFeedbackState->bindMask & (1 << i)))
-                    {
-                        Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
-                        counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
-                    }
-                }
+                CalcCounterBufferAddrs(firstCounterBuffer, counterBufferCount, pCounterBuffers, pCounterBufferOffsets,
+                                       counterBufferAddr, deviceIdx);
             }
 
             if (m_pTransformFeedbackState->bindMask != 0)
@@ -5728,22 +5724,8 @@ void CmdBuffer::EndTransformFeedback(
             const uint32_t deviceIdx = deviceGroup.Index();
             if (pCounterBuffers != nullptr)
             {
-                for (uint32_t i = firstCounterBuffer; i < (firstCounterBuffer + counterBufferCount); i++)
-                {
-                    if ((pCounterBuffers[i] != VK_NULL_HANDLE) &&
-                        (m_pTransformFeedbackState->bindMask & (1 << i)))
-                    {
-                        Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
-                        if (pCounterBufferOffsets != nullptr)
-                        {
-                            counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
-                        }
-                        else
-                        {
-                            counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx);
-                        }
-                    }
-                }
+                CalcCounterBufferAddrs(firstCounterBuffer, counterBufferCount, pCounterBuffers, pCounterBufferOffsets,
+                                       counterBufferAddr, deviceIdx);
             }
 
             if (m_pTransformFeedbackState->bindMask != 0)
@@ -5757,6 +5739,33 @@ void CmdBuffer::EndTransformFeedback(
             }
         }
         while (deviceGroup.IterateNext());
+    }
+}
+
+// =====================================================================================================================
+VK_INLINE void CmdBuffer::CalcCounterBufferAddrs(
+    uint32_t            firstCounterBuffer,
+    uint32_t            counterBufferCount,
+    const VkBuffer*     pCounterBuffers,
+    const VkDeviceSize* pCounterBufferOffsets,
+    uint64_t*           counterBufferAddr,
+    uint32_t            deviceIdx)
+{
+    for (uint32_t i = firstCounterBuffer; i < (firstCounterBuffer + counterBufferCount); i++)
+    {
+        if ((pCounterBuffers[i] != VK_NULL_HANDLE) &&
+            (m_pTransformFeedbackState->bindMask & (1 << i)))
+        {
+            Buffer* pCounterBuffer = Buffer::ObjectFromHandle(pCounterBuffers[i]);
+            if (pCounterBufferOffsets != nullptr)
+            {
+                counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx) + pCounterBufferOffsets[i];
+            }
+            else
+            {
+                counterBufferAddr[i] = pCounterBuffer->GpuVirtAddr(deviceIdx);
+            }
+        }
     }
 }
 

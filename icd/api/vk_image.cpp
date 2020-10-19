@@ -250,9 +250,10 @@ static void ConvertImageCreateInfo(
     pPalCreateInfo->tiling           = VkToPalImageTiling(pCreateInfo->tiling);
     pPalCreateInfo->tilingOptMode    = settings.imageTilingOptMode;
 
-    if ((pCreateInfo->imageType == VK_IMAGE_TYPE_3D) && (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+    if ((pCreateInfo->imageType == VK_IMAGE_TYPE_3D) &&
+        (pCreateInfo->usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_STORAGE_BIT)))
     {
-        pPalCreateInfo->tilingPreference = settings.imageTilingPreference3dColorAttachment;
+        pPalCreateInfo->tilingPreference = settings.imageTilingPreference3dGpuWritable;
     }
     else
     {
@@ -709,8 +710,10 @@ VkResult Image::Create(
         palCreateInfo.metadataTcCompatMode = Pal::MetadataTcCompatMode::Disabled;
     }
 
-    // We must not use any metadata if sparse aliasing is enabled.
-    if (pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)
+    // We must not use any metadata if sparse aliasing is enabled or
+    // settings.forceEnableDcc is equal to ForceDisableDcc.
+    if ((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT) ||
+        (settings.forceEnableDcc == ForceDisableDcc))
     {
         palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
     }

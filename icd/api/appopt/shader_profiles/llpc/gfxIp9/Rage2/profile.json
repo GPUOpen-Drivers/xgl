@@ -1,0 +1,55 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x23e63a150e6012d9 9ba39133a29f4f47"
+        }
+      },
+      "action": {
+        "ps": {
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xf5ab252b63e9618a 97ff5dff3ceb8d4d"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1,
+          "disableLoopUnrolls": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x0596c40b7d193021 3788eba5a15d6542"
+        }
+      },
+      "action": {
+        "binningOverride": 1,
+        "ps": {
+          "useSiScheduler": 1,
+          "disableLicm": true
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "codeHash": "0x5d57d7de1344947e 15d3f1264dda4995"
+        }
+      },
+      "action": {
+        "cs": {
+          "maxWavesPerCu": 8
+        }
+      }
+    }
+  ]
+}

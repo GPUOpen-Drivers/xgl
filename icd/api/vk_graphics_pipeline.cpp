@@ -645,6 +645,9 @@ void GraphicsPipeline::BuildRasterizationState(
         pInfo->pipeline.rsState.depthClampDisable = false;
     }
 
+    pInfo->pipeline.viewportInfo.depthClipEnable                = (pIn->depthClampEnable == VK_FALSE);
+    pInfo->pipeline.viewportInfo.depthRange                     = Pal::DepthRange::ZeroToOne;
+
     pInfo->immedInfo.triangleRasterState.frontFillMode          = VkToPalFillMode(pIn->polygonMode);
     pInfo->immedInfo.triangleRasterState.backFillMode           = VkToPalFillMode(pIn->polygonMode);
     pInfo->immedInfo.triangleRasterState.cullMode               = VkToPalCullMode(pIn->cullMode);
@@ -766,6 +769,14 @@ void GraphicsPipeline::BuildRasterizationState(
                 {
                     pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt);
                 }
+            }
+            break;
+        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT:
+            {
+                const auto* pRsRasterizationDepthClipState =
+                    static_cast<const VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(pNext);
+
+                pInfo->pipeline.viewportInfo.depthClipEnable = (pRsRasterizationDepthClipState->depthClipEnable == VK_TRUE);
             }
             break;
 

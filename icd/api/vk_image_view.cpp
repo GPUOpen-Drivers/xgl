@@ -81,6 +81,7 @@ void ImageView::BuildImageSrds(
     void*                        pSrdMemory)
 {
     Pal::ImageViewInfo info = {};
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
     Pal::ImageTiling imageTiling = pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().tiling;
 
@@ -115,6 +116,7 @@ void ImageView::BuildImageSrds(
 
         info.pImage = pImage->PalImage(deviceIdx);
 
+        // Create a read-only SRD
         VK_ASSERT(Pal::Result::Success == pDevice->PalDevice(deviceIdx)->ValidateImageViewInfo(info));
 
         pDevice->PalDevice(deviceIdx)->CreateImageViewSrds(1, &info, pReadOnlySrd);
@@ -123,6 +125,7 @@ void ImageView::BuildImageSrds(
 
         if (imageViewUsage & VK_IMAGE_USAGE_STORAGE_BIT)
         {
+            // Create a read-write storage SRD
             info.possibleLayouts.usages = info.possibleLayouts.usages | Pal::ImageLayoutUsageFlags::LayoutShaderWrite;
 
             VK_ASSERT(Pal::Result::Success == pDevice->PalDevice(deviceIdx)->ValidateImageViewInfo(info));
@@ -173,6 +176,7 @@ Pal::Result ImageView::BuildColorTargetView(
     const Pal::IDevice*       pPalDevice,
     const Pal::IImage*        pPalImage,
     VkImageViewType           viewType,
+    VkImageUsageFlags         imageViewUsage,
     const Pal::SwizzledFormat viewFormat,
     const Pal::SubresRange&   subresRange,
     const Pal::Range&         zRange,
@@ -210,6 +214,7 @@ Pal::Result ImageView::BuildDepthStencilView(
     const Pal::IDevice*       pPalDevice,
     const Pal::IImage*        pPalImage,
     VkImageViewType           viewType,
+    VkImageUsageFlags         imageViewUsage,
     const Pal::SwizzledFormat viewFormat,
     const Pal::SubresRange&   subresRange,
     const Pal::Range&         zRange,
@@ -483,6 +488,7 @@ VkResult ImageView::Create(
             result = BuildColorTargetView(pDevice->PalDevice(deviceIdx),
                                           pImage->PalImage(deviceIdx),
                                           pCreateInfo->viewType,
+                                          imageViewUsage,
                                           viewFormat,
                                           palRanges[0],
                                           zRange,
@@ -505,6 +511,7 @@ VkResult ImageView::Create(
             result = BuildDepthStencilView(pDevice->PalDevice(deviceIdx),
                                            pImage->PalImage(deviceIdx),
                                            pCreateInfo->viewType,
+                                           imageViewUsage,
                                            viewFormat,
                                            palRanges[0],
                                            zRange,

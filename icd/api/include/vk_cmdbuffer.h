@@ -964,6 +964,14 @@ private:
 
     void ResetState();
 
+    VK_INLINE void CalcCounterBufferAddrs(
+        uint32_t            firstCounterBuffer,
+        uint32_t            counterBufferCount,
+        const VkBuffer*     pCounterBuffers,
+        const VkDeviceSize* pCounterBufferOffsets,
+        uint64_t*           counterBufferAddr,
+        uint32_t            deviceIdx);
+
     void FlushBarriers(
         Pal::BarrierInfo*              pBarrier,
         Pal::BarrierTransition* const  pTransitions,

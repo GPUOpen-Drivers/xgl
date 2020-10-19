@@ -89,8 +89,10 @@ VkResult Memory::Create(
     // Copy Vulkan API allocation info to local PAL version
     Pal::GpuMemoryCreateInfo createInfo = {};
 
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
     // Assign default priority based on panel setting (this may get elevated later by memory binds)
-    MemoryPriority priority = MemoryPriority::FromSetting(pDevice->GetRuntimeSettings().memoryPriorityDefault);
+    MemoryPriority priority = MemoryPriority::FromSetting(settings.memoryPriorityDefault);
 
     Image*  pBoundImage       = nullptr;
     VkImage  dedicatedImage   = VK_NULL_HANDLE;
@@ -112,6 +114,11 @@ VkResult Memory::Create(
 
     createInfo.heapCount = 1;
     createInfo.heaps[0] = pDevice->GetPalHeapFromVkTypeIndex(pAllocInfo->memoryTypeIndex);
+
+    if (pDevice->ShouldAddRemoteBackupHeap(DefaultDeviceIndex, pAllocInfo->memoryTypeIndex, createInfo.heaps[0]))
+    {
+        createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
+    }
 
     if (pDevice->NumPalDevices() > 1)
     {
@@ -135,10 +142,21 @@ VkResult Memory::Create(
             allocationMask = 1 << DefaultMemoryInstanceIdx;
         }
     }
-
-    if (pDevice->ShouldAddRemoteBackupHeap(DefaultDeviceIndex, pAllocInfo->memoryTypeIndex, createInfo.heaps[0]))
+    else if ((((settings.overrideHeapChoiceToLocal & OverrideChoiceForGartUswc) &&
+               (createInfo.heaps[0] == Pal::GpuHeapGartUswc)) ||
+              ((settings.overrideHeapChoiceToLocal & OverrideChoiceForGartCacheable) &&
+               (createInfo.heaps[0] == Pal::GpuHeapGartCacheable))) &&
+             pDevice->VkPhysicalDevice(DefaultDeviceIndex)->IsOverrideHeapChoiceToLocalWithinBudget(createInfo.size))
     {
-        createInfo.heaps[createInfo.heapCount++] = Pal::GpuHeapGartUswc;
+        // When this setting is active (not supported by MGPU), prefer local visible before the requested heap until
+        // the allowable budget for it is reached. ShouldAddRemoteBackupHeap's choice may be updated here.
+        createInfo.heaps[1] = createInfo.heaps[0];
+        createInfo.heaps[0] = Pal::GpuHeapLocal;
+    }
+
+    if (settings.overrideHeapGartCacheableToUswc && (createInfo.heaps[0] == Pal::GpuHeapGartCacheable))
+    {
+        createInfo.heaps[0] = Pal::GpuHeapGartUswc;
     }
 
     VkMemoryPropertyFlags propertyFlags = memoryProperties.memoryTypes[pAllocInfo->memoryTypeIndex].propertyFlags;

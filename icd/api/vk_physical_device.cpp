@@ -483,6 +483,25 @@ static void GetFormatFeatureFlags(
 }
 
 // =====================================================================================================================
+// Get linear sampler bits for YCbCr plane.
+static void GetLinearSampleBits(
+    const Pal::MergedFormatPropertiesTable& formatProperties,
+    const Pal::ChNumFormat&                 palFormat,
+    Pal::ImageTiling                        imageTiling,
+    VkFormatFeatureFlags*                   formatFeatureFlags)
+{
+    uint32 tilingIdx = static_cast<uint32>(imageTiling);
+    const size_t formatIdx = static_cast<size_t>(palFormat);
+
+    VkFormatFeatureFlags formatRetFlags = PalToVkFormatFeatureFlags(formatProperties.features[formatIdx][tilingIdx]);
+    if ((formatRetFlags & Pal::FormatFeatureImageFilterLinear) == 0)
+    {
+        *formatFeatureFlags &= ~ VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT;
+        *formatFeatureFlags &= ~ VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT;
+    }
+}
+
+// =====================================================================================================================
 // Checks to see if memory is available for PhysicalDevice local allocations made by the application (externally) and
 // reports OOM if necessary
 VkResult PhysicalDevice::TryIncreaseAllocatedMemorySize(
@@ -520,6 +539,17 @@ void PhysicalDevice::DecreaseAllocatedMemorySize(
     VK_ASSERT(m_memoryUsageTracker.allocatedMemorySize[heapIdx] >= allocationSize);
 
     m_memoryUsageTracker.allocatedMemorySize[heapIdx] -= allocationSize;
+}
+
+// =====================================================================================================================
+// Determines if the allocation can fit within the allowed budget for the overrideHeapChoiceToLocal setting.
+bool PhysicalDevice::IsOverrideHeapChoiceToLocalWithinBudget(
+    Pal::gpusize size
+    ) const
+{
+    return ((m_memoryUsageTracker.allocatedMemorySize[Pal::GpuHeapLocal] + size) <
+            m_memoryUsageTracker.totalMemorySize[Pal::GpuHeapLocal] *
+                (GetRuntimeSettings().overrideHeapChoiceToLocalBudget / 100.0f));
 }
 
 // =====================================================================================================================
@@ -1104,6 +1134,25 @@ void PhysicalDevice::PopulateFormatProperties()
                                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT |
                                 VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_CHROMA_RECONSTRUCTION_EXPLICIT_FORCEABLE_BIT |
                                 VK_FORMAT_FEATURE_COSITED_CHROMA_SAMPLES_BIT;
+
+                Pal::SubresRange subresRange = {};
+                VkImageAspectFlags aspectMask = PalYuvFormatToVkImageAspectPlane(palFormat.format);
+                VkComponentMapping mapping = {};
+
+                do
+                {
+                    // Get aspect for each plane.
+                    subresRange.startSubres.aspect = VkToPalImageAspectExtract(palFormat.format, &aspectMask);
+
+                    Pal::SwizzledFormat palLinearFormat =
+                        RemapFormatComponents(palFormat, subresRange, mapping, m_pPalDevice, Pal::ImageTiling::Linear);
+                    GetLinearSampleBits(fmtProperties, palLinearFormat.format, Pal::ImageTiling::Linear, &linearFlags);
+
+                    Pal::SwizzledFormat palOptimalFormat =
+                        RemapFormatComponents(palFormat, subresRange, mapping, m_pPalDevice, Pal::ImageTiling::Optimal);
+                    GetLinearSampleBits(fmtProperties, palOptimalFormat.format, Pal::ImageTiling::Optimal, &optimalFlags);
+                }
+                while (aspectMask != 0);
             }
         }
 
@@ -1114,6 +1163,17 @@ void PhysicalDevice::PopulateFormatProperties()
         if ((format == VK_FORMAT_R64_SINT) || (format == VK_FORMAT_R64_UINT))
         {
             memset(&m_formatFeaturesTable[i], 0, sizeof(VkFormatProperties));
+
+            if (IsExtensionSupported(DeviceExtensions::EXT_SHADER_IMAGE_ATOMIC_INT64))
+            {
+                m_formatFeaturesTable[i].optimalTilingFeatures = (optimalFlags &
+                    (VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT |
+                     VK_FORMAT_FEATURE_TRANSFER_SRC_BIT  |
+                     VK_FORMAT_FEATURE_TRANSFER_DST_BIT)) |
+                    VK_FORMAT_FEATURE_STORAGE_IMAGE_ATOMIC_BIT;
+
+                VK_ASSERT((optimalFlags & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT) == VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
+            }
         }
         else
         {
@@ -3564,6 +3624,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 #if defined(__unix__)
 #endif
 
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_SHADER_IMAGE_ATOMIC_INT64));
+
         if ((pPhysicalDevice == nullptr) ||
             IsConditionalRenderingSupported(pPhysicalDevice))
         {
@@ -4744,6 +4806,14 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT*>(pHeader);
                 pExtInfo->shaderDemoteToHelperInvocation = VK_TRUE;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT*>(pHeader);
+                pExtInfo->shaderImageInt64Atomics = VK_TRUE;
+                pExtInfo->sparseImageInt64Atomics = VK_TRUE;
                 break;
             }
 

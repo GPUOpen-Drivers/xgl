@@ -596,6 +596,12 @@ public:
     VK_INLINE const bool UseCompactDynamicDescriptors() const
         { return !GetRuntimeSettings().enableRelocatableShaders && !GetEnabledFeatures().robustBufferAccess;}
 
+    VK_INLINE const bool SupportDepthStencilResolve() const
+    {
+        return (IsExtensionEnabled(DeviceExtensions::KHR_DEPTH_STENCIL_RESOLVE) ||
+                (VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 2, 0)));
+    }
+
     Pal::IQueue* PerformSwCompositing(
         uint32_t         deviceIdx,
         uint32_t         presentationDeviceIdx,

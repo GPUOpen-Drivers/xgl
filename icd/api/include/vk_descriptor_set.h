@@ -246,7 +246,7 @@ public:
         uint32_t                        dwStride,
         size_t                          descriptorStrideInBytes = 0);
 
-    template <size_t imageDescSize>
+    template <size_t imageDescSize, bool isShaderStorageDesc>
     static void WriteImageDescriptors(
         const VkDescriptorImageInfo*    pDescriptors,
         uint32_t                        deviceIdx,

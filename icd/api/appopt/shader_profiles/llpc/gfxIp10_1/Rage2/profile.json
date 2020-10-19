@@ -1,0 +1,62 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "ps": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0x0d3bb534d7f86407 30acc351f2e2c8ae"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xd23f3cb2b6ea1926 b74b7d8cc150e984"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32,
+          "useSiScheduler": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "ps": {
+          "codeHash": "0xf5ab252b63e9618a 97ff5dff3ceb8d4d"
+        }
+      },
+      "action": {
+        "ps": {
+          "allowReZ": 1,
+          "waveSize": 64
+        }
+      }
+    }
+  ]
+}

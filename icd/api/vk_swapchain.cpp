@@ -233,9 +233,17 @@ VkResult SwapChain::Create(
     // Two on the slave (1 to render, 1 to copy). 3 on the master (1 to present, 1 to recieve copy, 1 render)
     // (This was also verified with looking at GPU traces)
     // TODO: Rework PAL to release image after the copy and in Vulkan allocate 3 images on GPU0 and 2 images on GPU1.
-    const uint32_t           swapImageCount      = (pDevice->NumPalDevices() > 1) ?
-                                                        Util::Max<uint32_t>(5, pCreateInfo->minImageCount) :
-                                                        pCreateInfo->minImageCount;
+    uint32_t           swapImageCount      = (pDevice->NumPalDevices() > 1) ?
+                                                    Util::Max<uint32_t>(5, pCreateInfo->minImageCount) :
+                                                    pCreateInfo->minImageCount;
+
+    // Need 5 images to support MAILBOX mode. (1. CPU  2. GPU render 3. idle 4. queued for flip 5. presenting)
+    // Tests show that performance of 5 images is better than 4 images. (6% performance gain in xplane 4k low benchmark.)
+    if (pCreateInfo->presentMode == VK_PRESENT_MODE_MAILBOX_KHR)
+    {
+        swapImageCount = Util::Max<uint32_t>(5, swapImageCount);
+    }
+
     swapChainCreateInfo.flags.tmzProtected  = (pCreateInfo->flags & VK_SWAPCHAIN_CREATE_PROTECTED_BIT_KHR) ? 1 : 0;
     swapChainCreateInfo.hDisplay            = properties.imageCreateInfo.hDisplay;
     swapChainCreateInfo.hWindow             = properties.displayableInfo.windowHandle;
@@ -805,31 +813,37 @@ Pal::IQueue* SwapChain::PrePresent(
 
 // =====================================================================================================================
 // Check if surface properties of a device have changed since the swapchain's creation.
-bool SwapChain::IsSuboptimal(uint32_t  deviceIdx)
+bool SwapChain::IsSuboptimal(uint32_t deviceIdx)
 {
     bool                     suboptimal          = false;
-    VkSurfaceCapabilitiesKHR surfaceCapabilities = {};
-    Pal::OsDisplayHandle     displayHandle = 0;
+    VkSurfaceCapabilitiesKHR surfaceCapabilities = { };
+    Pal::OsDisplayHandle     displayHandle       = 0;
+    VkResult                 result              = VK_SUCCESS;
 
     if (m_pDevice->GetRuntimeSettings().ignoreSuboptimalSwapchainSize == false)
     {
         VK_ASSERT(m_properties.pSurface != nullptr);
 
-        const VkResult result = m_pDevice->VkPhysicalDevice(deviceIdx)->GetSurfaceCapabilities(
-            Surface::HandleFromObject(m_properties.pSurface),
-            displayHandle,
-            &surfaceCapabilities);
-
-        if (result == VK_SUCCESS)
+#if VK_IS_PAL_VERSION_AT_LEAST(633, 1)
+        if (m_pPalSwapChain->NeedWindowSizeChangedCheck())
+#endif
         {
-            // Magic width/height value meaning that the surface is resized to match the swapchain's extent.
-            constexpr uint32_t SwapchainBasedSize = 0xFFFFFFFF;
+            result = m_pDevice->VkPhysicalDevice(deviceIdx)->GetSurfaceCapabilities(
+                Surface::HandleFromObject(m_properties.pSurface),
+                displayHandle,
+                &surfaceCapabilities);
 
-            if ((surfaceCapabilities.currentExtent.width  != SwapchainBasedSize) ||
-                (surfaceCapabilities.currentExtent.height != SwapchainBasedSize))
+            if (result == VK_SUCCESS)
             {
-                suboptimal = ((surfaceCapabilities.currentExtent.width  != m_properties.imageCreateInfo.extent.width) ||
-                              (surfaceCapabilities.currentExtent.height != m_properties.imageCreateInfo.extent.height));
+                // Magic width/height value meaning that the surface is resized to match the swapchain's extent.
+                constexpr uint32_t SwapchainBasedSize = 0xFFFFFFFF;
+
+                if ((surfaceCapabilities.currentExtent.width  != SwapchainBasedSize) ||
+                        (surfaceCapabilities.currentExtent.height != SwapchainBasedSize))
+                {
+                    suboptimal = ((surfaceCapabilities.currentExtent.width != m_properties.imageCreateInfo.extent.width)
+                        || (surfaceCapabilities.currentExtent.height != m_properties.imageCreateInfo.extent.height));
+                }
             }
         }
     }

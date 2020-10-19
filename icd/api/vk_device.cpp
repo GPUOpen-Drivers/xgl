@@ -76,8 +76,6 @@
 #include "appopt/barrier_filter_layer.h"
 #include "appopt/strange_brigade_layer.h"
 
-#include "appopt/wolfenstein2_layer.h"
-
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "devmode/devmode_mgr.h"
 #endif
@@ -594,6 +592,14 @@ VkResult Device::Create(
             vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT>(
                 pPhysicalDevice,
                 reinterpret_cast<const VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT*>(pHeader));
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_IMAGE_ATOMIC_INT64_FEATURES_EXT:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT*>(pHeader));
 
             break;
         }
@@ -1428,23 +1434,6 @@ VkResult Device::Initialize(
 
             break;
         }
-        case AppProfile::WolfensteinII:
-        case AppProfile::WolfensteinYoungblood:
-            // This application optimization layer is currently GFX10-specific
-            if (deviceProps.gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
-            {
-                void* pMemory = VkInstance()->AllocMem(sizeof(Wolfenstein2Layer), VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
-
-                if (pMemory != nullptr)
-                {
-                    m_pAppOptLayer = VK_PLACEMENT_NEW(pMemory) Wolfenstein2Layer();
-                }
-                else
-                {
-                    result = VK_ERROR_OUT_OF_HOST_MEMORY;
-                }
-            }
-            break;
         default:
             break;
         }
@@ -1521,6 +1510,9 @@ VkResult Device::Initialize(
 
             if (enabled.IsExtensionEnabled(DeviceExtensions::ExtensionId::AMD_MEMORY_OVERALLOCATION_BEHAVIOR))
             {
+                // This setting is for app detects only and violates AMD_MEMORY_OVERALLOCATION_BEHAVIOR rules.
+                VK_ASSERT(m_settings.overrideHeapChoiceToLocal == 0);
+
                 switch (overallocationBehavior)
                 {
                 case VK_MEMORY_OVERALLOCATION_BEHAVIOR_ALLOWED_AMD:
@@ -1534,6 +1526,13 @@ VkResult Device::Initialize(
                 default:
                     break;
                 }
+            }
+            else if ((m_settings.overrideHeapChoiceToLocal != 0) && (palProps.gpuType == Pal::GpuType::Discrete))
+            {
+                // This setting utilizes overallocation behavior's heap size tracking. Overallocation to the local
+                // visible heap is not desired but permitted as a precaution.
+                m_allocationSizeTracking = true;
+                m_overallocationRequestedForPalHeap[Pal::GpuHeap::GpuHeapLocal] = true;
             }
         }
     }

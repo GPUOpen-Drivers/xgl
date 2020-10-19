@@ -57,6 +57,7 @@
 #include "protocols/rgpServer.h"
 #include "protocols/driverControlServer.h"
 #include "protocols/ddPipelineUriService.h"
+#include "protocols/ddEventServer.h"
 
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT
 #include "protocols/etwClient.h"
