@@ -71,8 +71,12 @@ struct PipelineCreationFeedback
 
 // =====================================================================================================================
 // Represents pipeline metadata included in the pipeline ELF.
-struct PipelineMetadata {
-  bool reservedForFutureHw1;
+struct PipelineMetadata
+{
+    bool     reservedForFutureHw1;
+    bool     reservedForFutureHw2;
+    uint16_t reservedForFutureHw3;
+    uint16_t reservedForFutureHw4;
 };
 
 // =====================================================================================================================

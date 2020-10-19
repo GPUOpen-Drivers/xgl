@@ -200,7 +200,6 @@ void ResourceOptimizer::BuildAppProfile()
 
     // TODO: These need to be auto-generated from source JSON but for now we write profile programmatically
 
-    // Resource parameters based on app profile should go here...
     if (appProfile == AppProfile::Doom)
     {
         if (gfxIpLevel == Pal::GfxIpLevel::GfxIp9)
@@ -221,8 +220,7 @@ void ResourceOptimizer::BuildAppProfile()
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
         }
     }
-
-    if (appProfile == AppProfile::DoomEternal)
+    else if (appProfile == AppProfile::DoomEternal)
     {
         if (gfxIpLevel > Pal::GfxIpLevel::GfxIp10_1)
         {
@@ -240,6 +238,46 @@ void ResourceOptimizer::BuildAppProfile()
             m_appProfile.entries[i].pattern.targetKey.apiHash = 0x3a70c52a65527761;
             m_appProfile.entries[i].action.resourceCreate.apply.dccMode = 1;
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+        }
+    }
+    else if (appProfile == AppProfile::WolfensteinII)
+    {
+        //     VK_IMAGE_USAGE_STORAGE_BIT & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+        // except for format:
+        //     VK_FORMAT_R8G8B8A8_UNORM
+        if (gfxIpLevel >= Pal::GfxIpLevel::GfxIp10_1)
+        {
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xf07d02f4cd182cfc;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
+
+            // This resource is just for RenderDoc
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xa93766a8cca3df9d;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
+        }
+    }
+    else if (appProfile == AppProfile::WolfensteinYoungblood)
+    {
+        // Reuse Wolfenstein II tuning for Navi1x.
+        if (gfxIpLevel == Pal::GfxIpLevel::GfxIp10_1)
+        {
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xf07d02f4cd182cfc;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
+
+            // This resource is just for RenderDoc
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xa93766a8cca3df9d;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
         }
     }
 }

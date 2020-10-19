@@ -681,6 +681,8 @@ public:
     VK_INLINE bool ShouldAddRemoteBackupHeap(uint32_t vkIndex) const
         { return m_memoryVkIndexAddRemoteBackupHeap[vkIndex]; }
 
+    bool IsOverrideHeapChoiceToLocalWithinBudget(Pal::gpusize size) const;
+
     Util::IPlatformKey* GetPlatformKey() const { return m_pPlatformKey; }
 
 protected:

@@ -304,7 +304,7 @@
         "Command Buffer Options"
       ],
       "Defaults": {
-        "Default": true
+        "Default": false
       },
       "Scope": "Driver",
       "Type": "bool",
@@ -3294,6 +3294,65 @@
       "Name": "MemoryPaddingFactorForImageMemoryRequirements"
     },
     {
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "OverrideChoiceForGartUswc",
+            "Value": 1,
+            "Description": "Force another heap in place of GART USWC allocations"
+          },
+          {
+            "Name": "OverrideChoiceForGartCacheable",
+            "Value": 2,
+            "Description": "Force another heap in place of GART cacheable allocations"
+          }
+        ],
+        "Name": "OverrideChoiceForHeapFlags"
+      },
+      "Description": "Allocations for selected heaps get redirected to local visible. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "overrideHeapChoiceToLocal",
+      "Name": "OverrideHeapChoiceToLocal"
+    },
+    {
+      "Description": "If overrideHeapChoiceToLocal is set, GpuHeapLocal is replaces requested heap use until this budget is met. Valid value is [0, 100]. ",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": 70
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "VariableName": "overrideHeapChoiceToLocalBudget",
+      "Name": "OverrideHeapChoiceToLocalBudget"
+    },
+    {
+      "Description": "Forces allocations for GART cacheable to be allocated as GART USWC",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "overrideHeapGartCacheableToUswc",
+      "Name": "OverrideHeapGartCacheableToUswc"
+    },
+    {
       "Description": "Forces a particular AppProfile value.  The profile selected is the value of ForceAppProfileValue. ",
       "Tags": [
         "Optimization"
@@ -3626,7 +3685,7 @@
         ],
         "Name": "Pal::ImageTilingPattern"
       },
-      "Description": "Override the ImageTilingPreference setting value for 3D images used as color attachments.",
+      "Description": "Override the ImageTilingPreference setting value for 3D images used as color attachments or shader storage.",
       "Tags": [
         "Optimization"
       ],
@@ -3635,8 +3694,8 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "imageTilingPreference3dColorAttachment",
-      "Name": "ImageTilingPreference3dColorAttachment"
+      "VariableName": "imageTilingPreference3dGpuWritable",
+      "Name": "ImageTilingPreference3dGpuWritable"
     },
     {
       "Description": "Enable FMASK based MSAA texture reads. ",
@@ -3649,6 +3708,19 @@
       "Type": "bool",
       "VariableName": "enableFmaskBasedMsaaRead",
       "Name": "EnableFmaskBasedMsaaRead",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "When Fmask based MSAA read is enabled, this can instruct il converter to optimize any fetch from sampleIndex 0 to fetch from Color 0 instead. This also may eliminate any dummy fmask lookups from depth surfaces.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "enableFmaskLookUpOptSampleIndexZero",
+      "Name": "EnableFmaskLookUpOptSampleIndexZero",
       "Scope": "Driver"
     },
     {
@@ -3935,6 +4007,11 @@
             "Name": "ForceDccFor64BppShaderStorage",
             "Value": 4,
             "Description": "64 bpp or deeper resource shader storage"
+          },
+          {
+            "Name": "ForceDisableDcc",
+            "Value": 5,
+            "Description": "Force disable DCC."
           }
         ],
         "Name": "ForceEnableDcc"

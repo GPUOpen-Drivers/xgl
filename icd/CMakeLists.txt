@@ -317,10 +317,6 @@ target_sources(xgl PRIVATE
     api/icd_main.cpp
 )
 
-if(XGL_BUILD_GFX10)
-    target_sources(xgl PRIVATE api/appopt/wolfenstein2_layer.cpp)
-endif()
-
 # vk_physical_device.cpp uses the __DATE__ and __TIME__ macros to generate a pipelineCacheUUID.
 # The following rule forces vk_physical_device.cpp to be re-compiled on every build, so that
 # an up-to-date time/date is always used regardless of which files were touched since the last build.

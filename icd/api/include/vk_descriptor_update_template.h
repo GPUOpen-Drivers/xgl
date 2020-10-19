@@ -117,7 +117,8 @@ private:
         VkDescriptorType                        descriptorType,
         const DescriptorSetLayout::BindingInfo& dstBinding);
 
-    template <size_t imageDescSize, size_t fmaskDescSize,  bool updateFmask, uint32_t numPalDevices>
+    template <size_t imageDescSize, size_t fmaskDescSize,  bool updateFmask, bool isShaderStorageDesc,
+        uint32_t numPalDevices>
     static void UpdateEntrySampledImage(
             const Device*               pDevice,
             VkDescriptorSet             descriptorSet,

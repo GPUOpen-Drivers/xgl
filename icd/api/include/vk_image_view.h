@@ -45,11 +45,11 @@ class ImageView : public NonDispatchable<VkImageView, ImageView>
 public:
     typedef VkImageView ApiType;
 
-    // Types of supported SRD contained within this view (chosen based on layout)
+    // Types of supported SRD contained within this view (chosen based on descriptor type)
     enum SrdIndexType
     {
-        SrdReadOnly = 0, // SRD compatible for read-only shader ops
-        SrdWritable = 1, // SRD compatible with writable shader ops
+        SrdReadOnly  = 0, // SRD compatible for read-only shader ops
+        SrdReadWrite = 1, // SRD compatible with storage read-write shader ops
         SrdCount
     };
 
@@ -64,7 +64,10 @@ public:
         Device*                      pDevice,
         const VkAllocationCallbacks* pAllocator);
 
-    VK_INLINE const void* Descriptor(VkImageLayout layout, uint32_t deviceIdx, size_t srdSize) const;
+    VK_INLINE const void* Descriptor(
+        uint32_t      deviceIdx,
+        bool          isShaderStorageDesc,
+        size_t        srdSize) const;
 
     VK_INLINE const Pal::IColorTargetView* PalColorTargetView(int32_t idx) const
     {
@@ -116,6 +119,7 @@ protected:
         const Pal::IDevice*       pPalDevice,
         const Pal::IImage*        pPalImage,
         VkImageViewType           viewType,
+        VkImageUsageFlags         imageViewUsage,
         const Pal::SwizzledFormat viewFormat,
         const Pal::SubresRange&   subresRange,
         const Pal::Range&         zRange,
@@ -127,6 +131,7 @@ protected:
         const Pal::IDevice*       pPalDevice,
         const Pal::IImage*        pPalImage,
         VkImageViewType           viewType,
+        VkImageUsageFlags         imageViewUsage,
         const Pal::SwizzledFormat viewFormat,
         const Pal::SubresRange&   subresRange,
         const Pal::Range&         zRange,
@@ -158,23 +163,25 @@ protected:
 };
 
 // =====================================================================================================================
-// Returns an SRD pointer that is compatible with the given VkImageLayout.  This is expected to be the layout of
+// Returns an SRD pointer that is compatible with the descriptor type. The layout is expected to be the layout of
 // the image at the time the shader accesses this SRD data.
 const void* ImageView::Descriptor(
-    VkImageLayout layout,
     uint32_t      deviceIdx,
+    bool          isShaderStorageDesc,
     size_t        srdSize) const
 {
     VK_ASSERT((m_pImage->GetBarrierPolicy().GetSupportedLayoutUsageMask() &
                (Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead | Pal::LayoutShaderWrite)) != 0);
 
     static_assert(
-        SrdReadOnly == 0 &&
-        SrdWritable == 1 &&
-        SrdCount    == 2,
+        SrdReadOnly  == 0 &&
+        SrdReadWrite == 1 &&
+        SrdCount     == 2,
         "SRD data order mismatch");
 
-    size_t srdOffset = (layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL) ? 0 : srdSize;
+    // Set srdOffset to 0 by default for SRDs. This includes those with descType != VK_DESCRIPTOR_TYPE_STORAGE_IMAGE
+    // as well as layout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL i.e. SrdReadOnly
+    size_t srdOffset = (!isShaderStorageDesc) ? 0 : srdSize;
 
     srdOffset += deviceIdx * (SrdCount * srdSize);
 

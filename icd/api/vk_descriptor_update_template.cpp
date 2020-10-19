@@ -162,15 +162,24 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
         }
         break;
     case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE:
-    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
     case VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT:
         if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (dstBinding.sta.dwSize > 0))
         {
-            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, true, numPalDevices>;
+            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, true, false, numPalDevices>;
         }
         else
         {
-            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, false, numPalDevices>;
+            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, false, false, numPalDevices>;
+        }
+        break;
+    case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE:
+        if (pDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead && (dstBinding.sta.dwSize > 0))
+        {
+            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, true, true, numPalDevices>;
+        }
+        else
+        {
+            pFunc = &UpdateEntrySampledImage<imageDescSize, fmaskDescSize, false, true, numPalDevices>;
         }
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER:
@@ -341,7 +350,7 @@ void DescriptorUpdateTemplate::UpdateEntryCombinedImageSampler(
             {
                 // If the sampler part of the combined image sampler is immutable then we should only update the image
                 // descriptors, but have to make sure to still use the appropriate stride.
-                DescriptorUpdate::WriteImageDescriptors<imageDescSize>(
+                DescriptorUpdate::WriteImageDescriptors<imageDescSize, false>(
                     pImageInfo,
                     deviceIdx,
                     pDestAddr,
@@ -499,7 +508,8 @@ void DescriptorUpdateTemplate::UpdateEntrySampler(
 }
 
 // =====================================================================================================================
-template <size_t imageDescSize, size_t fmaskDescSize, bool updateFmask, uint32_t numPalDevices>
+template <size_t imageDescSize, size_t fmaskDescSize, bool updateFmask, bool isShaderStorageDesc,
+    uint32_t numPalDevices>
 void DescriptorUpdateTemplate::UpdateEntrySampledImage(
         const Device*               pDevice,
         VkDescriptorSet             descriptorSet,
@@ -516,7 +526,7 @@ void DescriptorUpdateTemplate::UpdateEntrySampledImage(
     {
         uint32_t* pDestAddr = pDstSet->StaticCpuAddress(deviceIdx) + entry.dstStaOffset;
 
-        DescriptorUpdate::WriteImageDescriptors<imageDescSize>(
+        DescriptorUpdate::WriteImageDescriptors<imageDescSize, isShaderStorageDesc>(
                 pImageInfo,
                 deviceIdx,
                 pDestAddr,

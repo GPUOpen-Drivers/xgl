@@ -735,7 +735,8 @@ void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
         m_supportedLayoutUsageMask |= Pal::LayoutCopySrc;
 
         // Multisampled images can also be used as the source of resolves.
-        if (multisampled)
+        if (multisampled &&
+            ((Formats::IsDepthStencilFormat(format) == false) || pDevice->SupportDepthStencilResolve()))
         {
             m_supportedLayoutUsageMask |= Pal::LayoutResolveSrc;
         }
@@ -746,7 +747,8 @@ void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
         m_supportedLayoutUsageMask |= Pal::LayoutCopyDst;
 
         // Single sampled images can also be used as the destination of resolves.
-        if (multisampled == false)
+        if ((multisampled == false) &&
+            ((Formats::IsDepthStencilFormat(format) == false) || pDevice->SupportDepthStencilResolve()))
         {
             m_supportedLayoutUsageMask |= Pal::LayoutResolveDst;
         }

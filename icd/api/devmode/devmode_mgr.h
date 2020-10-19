@@ -47,7 +47,6 @@
 
 // gpuutil headers
 #include "gpuUtil/palGpaSession.h"
-
 #if ICD_GPUOPEN_DEVMODE_BUILD
 // gpuopen headers
 #include "gpuopen.h"
@@ -187,7 +186,6 @@ public:
 
     void DeregisterPipelineCache(
         PipelineBinaryCache* pPipelineCache);
-
     VK_INLINE Util::ListIterator<PipelineBinaryCache*, PalAllocator> GetPipelineCacheListIterator()
         { return m_pipelineCaches.Begin(); }
 

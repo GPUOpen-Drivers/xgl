@@ -41,6 +41,8 @@
 #include "devDriverServer.h"
 #include "protocols/ddSettingsService.h"
 
+#include "../layers/include/query_dlist.h"
+
 using namespace DevDriver::SettingsURIService;
 
 #include <sstream>
@@ -191,6 +193,26 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.forceEnableDcc = ForceDccForColorAttachments;
         }
 
+        // Put command buffers in local for large/resizable BAR systems
+        Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
+        const gpusize                minLocalSize                      = 256 * 1024 * 1024;
+
+        if ((m_pDevice->GetGpuMemoryHeapProperties(heapProperties) == Pal::Result::Success) &&
+            (heapProperties[Pal::GpuHeapLocal].heapSize > minLocalSize))
+        {
+            m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
+            m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
+
+            if (appProfile == AppProfile::WolfensteinYoungblood)
+            {
+                m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartCacheable;
+            }
+            else if (appProfile == AppProfile::DoomEternal)
+            {
+                m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
+            }
+        }
+
         if (appProfile == AppProfile::Doom)
         {
             m_settings.enableSpvPerfOptimal = true;
@@ -237,15 +259,38 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
         }
 
+        if (appProfile == AppProfile::WolfensteinII)
+        {
+            m_settings.zeroInitIlRegs = true;
+
+            // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
+            if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.forceEnableDcc = ForceDccDefault;
+            }
+        }
+
+        if (appProfile == AppProfile::WolfensteinYoungblood)
+        {
+            m_settings.overrideHeapGartCacheableToUswc = true;
+
+            if (pInfo->gpuType == Pal::GpuType::Discrete)
+            {
+                m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
+                m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
+            }
+
+            // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
+            {
+                m_settings.forceEnableDcc = ForceDccDefault;
+            }
+        }
+
         if ((appProfile == AppProfile::WolfensteinII) ||
             (appProfile == AppProfile::WolfensteinYoungblood))
         {
             m_settings.enableSpvPerfOptimal = true;
-
-            if (appProfile == AppProfile::WolfensteinII)
-            {
-                m_settings.zeroInitIlRegs = true;
-            }
 
             m_settings.optColorTargetUsageDoesNotContainResolveLayout = true;
 
@@ -274,8 +319,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         }
 
         if (((appProfile == AppProfile::WolfensteinII) ||
-            (appProfile == AppProfile::WolfensteinYoungblood) ||
-            (appProfile == AppProfile::Doom)) &&
+             (appProfile == AppProfile::WolfensteinYoungblood) ||
+             (appProfile == AppProfile::Doom)) &&
             (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1))
         {
             m_settings.asyncComputeQueueMaxWavesPerCu = 40;
@@ -290,7 +335,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             m_settings.prefetchShaders = true;
 
-            m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
+            {
+                m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
+            }
 
             m_settings.usePalPipelineCaching = true;
             if (pInfo->revision == Pal::AsicRevision::Vega20)
@@ -338,6 +385,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             // Disable image type checking on Navi10 to avoid 2% loss.
             m_settings.disableImageResourceTypeCheck = true;
+
         }
 
         if (appProfile == AppProfile::Source2Engine)
@@ -378,6 +426,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::StrangeBrigade)
         {
+            if (pInfo->gpuType == Pal::GpuType::Discrete)
+            {
+                m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
+                m_settings.cmdAllocatorDataHeap      = Pal::GpuHeapLocal;
+                m_settings.cmdAllocatorEmbeddedHeap  = Pal::GpuHeapLocal;
+            }
+
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 m_settings.dccBitsPerPixelThreshold = 64;
@@ -511,12 +566,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.barrierFilterOptions = BarrierFilterOptions::ForceImageSharingModeExclusive;
 
             m_settings.delayFullScreenAcquireToFirstPresent = true;
+
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
         {
 
             m_settings.prefetchShaders = true;
+
+            // Override the PAL default for 3D color attachments and storage images to match GFX9's, SW_R/z-slice order.
+            m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
+
         }
 
         if (appProfile == AppProfile::DoomEternal)
@@ -548,6 +608,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
                 }
             }
+
+            if (pInfo->gpuType == Pal::GpuType::Discrete)
+            {
+                m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
+                m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
+            }
+
             // PM4 optimizations give us 1% gain
             m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
 

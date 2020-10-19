@@ -39,6 +39,10 @@
 #include "palIntrusiveListImpl.h"
 #include "palVectorImpl.h"
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
+#include "devmode/devmode_mgr.h"
+#endif
+
 namespace vk
 {
 
@@ -85,13 +89,7 @@ VkResult CmdPool::Create(
 {
     const RuntimeSettings* pSettings = &pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings();
 
-    void* pMemory = pDevice->AllocApiObject(pAllocator, sizeof(CmdPool));
-
-    if (pMemory == nullptr)
-    {
-        return VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
+    void* pMemory   = nullptr;
     VkResult result = VK_SUCCESS;
 
     Pal::ICmdAllocator* pPalCmdAllocator[MaxPalDevices] = {};
@@ -102,6 +100,13 @@ VkResult CmdPool::Create(
         for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
         {
             pPalCmdAllocator[deviceIdx] = pDevice->GetSharedCmdAllocator(deviceIdx);
+        }
+
+        pMemory = pDevice->AllocApiObject(pAllocator, sizeof(CmdPool));
+
+        if (pMemory == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
     }
     else
@@ -133,14 +138,15 @@ VkResult CmdPool::Create(
 
         if (palResult == Pal::Result::Success)
         {
-            void* pAllocatorMem = pAllocator->pfnAllocation(
-                pAllocator->pUserData,
-                allocatorSize * pDevice->NumPalDevices(),
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_DEVICE);
+            size_t apiSize = sizeof(CmdPool);
+            size_t palSize = allocatorSize * pDevice->NumPalDevices();
 
-            if (pAllocatorMem != NULL)
+            pMemory = pDevice->AllocApiObject(pAllocator, apiSize + palSize);
+
+            if (pMemory != NULL)
             {
+                void* pAllocatorMem = Util::VoidPtrInc(pMemory, apiSize);
+
                 for (uint32_t deviceIdx = 0;
                     (deviceIdx < pDevice->NumPalDevices()) && (palResult == Pal::Result::Success);
                     deviceIdx++)
@@ -155,7 +161,8 @@ VkResult CmdPool::Create(
 
                 if (result != VK_SUCCESS)
                 {
-                    pAllocator->pfnFree(pAllocator->pUserData, pAllocatorMem);
+                    pDevice->FreeApiObject(pAllocator, pMemory);
+                    pMemory = nullptr;
                 }
             }
             else
@@ -193,10 +200,6 @@ VkResult CmdPool::Create(
             pApiCmdPool->Destroy(pDevice, pAllocator);
         }
     }
-    else
-    {
-        pDevice->FreeApiObject(pAllocator, pMemory);
-    }
 
     return result;
 }
@@ -224,8 +227,6 @@ VkResult CmdPool::Destroy(
         {
             m_pPalCmdAllocators[deviceIdx]->Destroy();
         }
-
-        pAllocator->pfnFree(pAllocator->pUserData, m_pPalCmdAllocators[DefaultDeviceIndex]);
     }
 
     Util::Destructor(this);

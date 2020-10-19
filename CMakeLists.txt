@@ -521,9 +521,11 @@ else()
     set(XGL_METROHASH_PATH ${PROJECT_SOURCE_DIR}/../third_party/metrohash CACHE PATH "The path of metrohash.")
 endif()
 
-if(EXISTS ${XGL_METROHASH_PATH} AND NOT TARGET metrohash)
+if(EXISTS ${XGL_METROHASH_PATH})
     add_subdirectory(${XGL_METROHASH_PATH} ${PROJECT_BINARY_DIR}/metrohash)
     set(PAL_METROHASH_PATH ${XGL_METROHASH_PATH} CACHE PATH "${PROJECT_NAME} override." FORCE)
+else()
+    message(FATAL_ERROR "${XGL_METROHASH_PATH} cannot be found!")
 endif()
 
 ### cwpack #############################################################
@@ -533,9 +535,11 @@ else()
     set(XGL_CWPACK_PATH ${PROJECT_SOURCE_DIR}/../third_party/cwpack CACHE PATH "The path of cwpack.")
 endif()
 
-if(EXISTS ${XGL_CWPACK_PATH} AND NOT TARGET cwpack)
+if(EXISTS ${XGL_CWPACK_PATH})
     add_subdirectory(${XGL_CWPACK_PATH} ${PROJECT_BINARY_DIR}/cwpack)
     set(PAL_CWPACK_PATH ${XGL_CWPACK_PATH} CACHE PATH "${PROJECT_NAME} override." FORCE)
+else()
+    message(FATAL_ERROR "${XGL_CWPACK_PATH} cannot be found!")
 endif()
 
 ### VKGC ###############################################################
