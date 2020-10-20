@@ -40,18 +40,27 @@
 #include "palFile.h"
 #if ICD_GPUOPEN_DEVMODE_BUILD
 #include "palPipelineAbiReader.h"
-
 #include "devmode/devmode_mgr.h"
 #endif
-#include <limits.h>
 #include <string.h>
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 639
+#include <limits.h>
+#include <stdlib.h>
+
+namespace Util
+{
+#if defined(__unix__)
+static constexpr size_t FilenameBufferLen = NAME_MAX;
+#else
+static constexpr size_t FileNameBufferLen = _MAX_FNAME;
+#endif
+static constexpr size_t PathBufferLen = FilenameBufferLen;
+}
+#endif  // PAL_CLIENT_INTERFACE_MAJOR_VERSION
 
 namespace vk
 {
-#if defined(__unix__)
-#define _MAX_FNAME NAME_MAX
-#endif
-
 constexpr char   PipelineBinaryCache::EnvVarPath[];
 constexpr char   PipelineBinaryCache::EnvVarFileName[];
 constexpr char   PipelineBinaryCache::EnvVarReadOnlyFileName[];
@@ -849,10 +858,14 @@ Util::IArchiveFile* PipelineBinaryCache::OpenReadOnlyArchive(
         allocator::PalFreeFuncDelegator
     };
 
+    info.pMemoryCallbacks        = &allocCbs;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 639
     Util::Strncpy(info.filePath, pFilePath, sizeof(info.filePath));
     Util::Strncpy(info.fileName, pFileName, sizeof(info.fileName));
-
-    info.pMemoryCallbacks        = &allocCbs;
+#else
+    info.pFilePath               = pFilePath;
+    info.pFileName               = pFileName;
+#endif
     info.pPlatformKey            = m_pPlatformKey;
     info.archiveType             = ArchiveType;
     info.useStrictVersionControl = true;
@@ -905,10 +918,14 @@ Util::IArchiveFile* PipelineBinaryCache::OpenWritableArchive(
         allocator::PalFreeFuncDelegator
     };
 
+    info.pMemoryCallbacks        = &allocCbs;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 639
     Util::Strncpy(info.filePath, pFilePath, sizeof(info.filePath));
     Util::Strncpy(info.fileName, pFileName, sizeof(info.fileName));
-
-    info.pMemoryCallbacks        = &allocCbs;
+#else
+    info.pFilePath               = pFilePath;
+    info.pFileName               = pFileName;
+#endif
     info.pPlatformKey            = m_pPlatformKey;
     info.archiveType             = ArchiveType;
     info.useStrictVersionControl = true;
@@ -994,7 +1011,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
     VkResult result = VK_SUCCESS;
 
     // Buffer to hold constructed path
-    char pathBuffer[_MAX_FNAME] = {};
+    char pathBuffer[Util::PathBufferLen] = {};
     // If the environment variable AMD_VK_PIPELINE_CACHE_PATH is set, obey it first
     const char* pCachePath = getenv(EnvVarPath);
 
@@ -1013,7 +1030,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                 (pUserDataPath != nullptr))
             {
                 // Construct the path in the local buffer. Consider it valid if not empty
-                if (Util::Snprintf(pathBuffer, _MAX_FNAME, "%s%s", pUserDataPath, pCacheSubPath) > 0)
+                if (Util::Snprintf(pathBuffer, sizeof(pathBuffer), "%s%s", pUserDataPath, pCacheSubPath) > 0)
                 {
                     pCachePath = pathBuffer;
 #if VK_IS_PAL_VERSION_AT_LEAST(582, 2)
@@ -1073,7 +1090,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
         }
 
         // Buffer to hold constructed filename
-        char nameBuffer[_MAX_FNAME] = {};
+        char nameBuffer[Util::FilenameBufferLen] = {};
 
         const char* const pCacheFileName = getenv(EnvVarFileName);
 
