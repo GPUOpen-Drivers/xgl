@@ -61,8 +61,10 @@ void PAL_STDCALL PalFreeFuncDelegator(
 // =====================================================================================================================
 // This is an allocator class that can be used to alloc/free memory for generic PAL classes like hash tables through
 // the Vulkan callbacks.  The Vulkan Instance object creates and owns one of these.
-struct PalAllocator
+class PalAllocator
 {
+public:
+
     PalAllocator(VkAllocationCallbacks* pCallbacks);
 
     void  Init();
@@ -75,10 +77,19 @@ private:
     // NOTE: Memory leak tracking requires an allocator in order to perform the actual allocations. We can't provide
     //       this platform because that would result in a stack overflow. Instead, we define this simple allocator
     //       structure which contains the necessary methods to allocate and free system memory.
-    struct MemTrackerAllocator
+    class MemTrackerAllocator
     {
+    public:
+
+        MemTrackerAllocator(VkAllocationCallbacks* pCallbacks)
+            :
+            m_pCallbacks(pCallbacks)
+        {}
+
         void Free(const Util::FreeInfo& freeInfo);
         void* Alloc(const Util::AllocInfo& allocInfo);
+
+    private:
 
         VkAllocationCallbacks* m_pCallbacks;
     };

@@ -173,6 +173,24 @@ VkResult PipelineCompiler::Initialize()
         result = m_compilerSolutionLlpc.Initialize(m_gfxIp, info.gfxLevel, pCacheAdapter);
     }
 
+#if  PAL_BUILD_SHADER_DBG
+    if ((result == VK_SUCCESS) && (strlen(settings.shaderDbgCfgDirectory) > 0))
+    {
+        char path[256] = {};
+        Snprintf(&path[0], sizeof(path), "%s/shaderDbg.cfg", settings.shaderDbgCfgDirectory);
+
+        File configFile;
+        if ((m_shaderDbgInfo.Init() == Util::Result::Success) && configFile.Exists(&path[0]))
+        {
+            if (configFile.Open(&path[0], FileAccessRead) == Util::Result::Success)
+            {
+                VK_ASSERT(configFile.IsOpen());
+                ExtractShaderDbgInfo(&configFile);
+            }
+        }
+    }
+#endif
+
     return result;
 }
 
@@ -1571,7 +1589,11 @@ void PipelineCompiler::ApplyPipelineOptions(
     pOptions->shadowDescriptorTableUsage = Vkgc::ShadowDescriptorTableUsage::Enable;
     pOptions->shadowDescriptorTablePtrHigh =
           static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32);
-    pOptions->enableRelocatableShaderElf = m_pPhysicalDevice->GetRuntimeSettings().enableRelocatableShaders;
+
+    // Apply runtime settings from device
+    const auto& settings = m_pPhysicalDevice->GetRuntimeSettings();
+    pOptions->enableRelocatableShaderElf = settings.enableRelocatableShaders;
+    pOptions->disableImageResourceCheck = settings.disableImageResourceTypeCheck;
 
     if (pDevice->GetEnabledFeatures().extendedRobustness.robustBufferAccess)
     {

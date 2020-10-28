@@ -192,24 +192,27 @@ void AttachmentReference::Init(const VkAttachmentReference2& attachRef)
     aspectMask    = attachRef.aspectMask;
     stencilLayout = attachRef.layout;
 
-    union
-    {
-        const VkStructHeader*                     pHeader;
-        const VkAttachmentReference2*             pAttachmentReference;
-        const VkAttachmentReferenceStencilLayout* pStencilLayout;
-    };
+    const void* pNext = attachRef.pNext;
 
-    for (pAttachmentReference = &attachRef; pHeader != nullptr; pHeader = pHeader->pNext)
+    while (pNext != nullptr)
     {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
         switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_STENCIL_LAYOUT:
-            stencilLayout = pStencilLayout->stencilLayout;
+        {
+            const auto* pExtInfo = static_cast<const VkAttachmentReferenceStencilLayout*>(pNext);
+            stencilLayout = pExtInfo->stencilLayout;
+
             break;
+        }
         default:
             // Skip any unknown extension structures.
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 }
 
@@ -261,25 +264,28 @@ void AttachmentDescription::Init(const VkAttachmentDescription2& attachDesc)
     stencilInitialLayout = attachDesc.initialLayout;
     stencilFinalLayout   = attachDesc.finalLayout;
 
-    union
-    {
-        const VkStructHeader*                       pHeader;
-        const VkAttachmentDescription2*             pAttachmentDescription;
-        const VkAttachmentDescriptionStencilLayout* pStencilLayout;
-    };
+    const void* pNext = attachDesc.pNext;
 
-    for (pAttachmentDescription = &attachDesc; pHeader != nullptr; pHeader = pHeader->pNext)
+    while (pNext != nullptr)
     {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
         switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_STENCIL_LAYOUT:
-            stencilInitialLayout = pStencilLayout->stencilInitialLayout;
-            stencilFinalLayout   = pStencilLayout->stencilFinalLayout;
+        {
+            const auto* pExtInfo = static_cast<const VkAttachmentDescriptionStencilLayout*>(pNext);
+            stencilInitialLayout = pExtInfo->stencilInitialLayout;
+            stencilFinalLayout = pExtInfo->stencilFinalLayout;
+
             break;
+        }
         default:
             // Skip any unknown extension structures.
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 }
 
@@ -541,28 +547,30 @@ void SubpassDescription::Init(
 {
     viewMask = subpassDesc.viewMask;
 
-    union
-    {
-        const VkStructHeader*                          pHeader;
-        const VkSubpassDescriptionDepthStencilResolve* pDepthStencilResolveCreateInfo;
-    };
+    const void* pNext = subpassDesc.pNext;
 
-    for (pHeader = static_cast<const VkStructHeader*>(subpassDesc.pNext); pHeader != nullptr; pHeader = pHeader->pNext)
+    while (pNext != nullptr)
     {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
         switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE:
         {
-            depthResolveMode   = pDepthStencilResolveCreateInfo->depthResolveMode;
-            stencilResolveMode = pDepthStencilResolveCreateInfo->stencilResolveMode;
+            const auto* pExtInfo = static_cast<const VkSubpassDescriptionDepthStencilResolve*>(pNext);
+            depthResolveMode = pExtInfo->depthResolveMode;
+            stencilResolveMode = pExtInfo->stencilResolveMode;
 
             depthStencilResolveAttachment.Init(
-                pDepthStencilResolveCreateInfo->pDepthStencilResolveAttachment[subpassIndex]);
+                pExtInfo->pDepthStencilResolveAttachment[subpassIndex]);
+
             break;
         }
         default:
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 
     InitSubpassDescription<VkSubpassDescription2>(
@@ -783,30 +791,31 @@ static VkResult CreateRenderPass(
 
     RenderPassExtCreateInfo renderPassExt;
 
-    union
-    {
-        const VkStructHeader*                                           pHeader;
-        const VkRenderPassMultiviewCreateInfo*                          pMultiviewCreateInfo;
-    };
+    const void* pNext = pCreateInfo->pNext;
 
-    for (pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext); pHeader != nullptr; pHeader = pHeader->pNext)
+    while (pNext != nullptr)
     {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
         switch (static_cast<uint32_t>(pHeader->sType))
         {
         case VK_STRUCTURE_TYPE_RENDER_PASS_MULTIVIEW_CREATE_INFO:
         {
-            VK_ASSERT(pMultiviewCreateInfo->subpassCount == 0 ||
-                     (pMultiviewCreateInfo->subpassCount == pCreateInfo->subpassCount));
-            VK_ASSERT(pMultiviewCreateInfo->dependencyCount == 0 ||
-                     (pMultiviewCreateInfo->dependencyCount == pCreateInfo->dependencyCount));
-            renderPassExt.pMultiviewCreateInfo = pMultiviewCreateInfo;
-        }
-        break;
+            const auto* pExtInfo = static_cast<const VkRenderPassMultiviewCreateInfo*>(pNext);
+            VK_ASSERT((pExtInfo->subpassCount) == 0 ||
+                     (pExtInfo->subpassCount == pCreateInfo->subpassCount));
+            VK_ASSERT((pExtInfo->dependencyCount == 0) ||
+                     (pExtInfo->dependencyCount == pCreateInfo->dependencyCount));
+            renderPassExt.pMultiviewCreateInfo = pExtInfo;
 
+            break;
+        }
         default:
             // Skip any unknown extension structures
             break;
         }
+
+        pNext = pHeader->pNext;
     }
 
     const size_t apiSize        = sizeof(RenderPass);

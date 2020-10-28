@@ -506,6 +506,19 @@
       "Scope": "Driver"
     },
     {
+      "Name": "PrefetchCommands",
+      "Description": "Prefetch command buffers to L2 using CPDMA",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "prefetchCommands",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Controls which category messages are output to log file (/var/tmp/palLog.txt). e.g. enable PipelineCompileTime(enum LogTagId in icd/api/include/log.h), logTagIdMask |= 1<<PipelineCompileTime",
       "Tags": [
         "Pipeline Options"
@@ -2084,6 +2097,25 @@
       "Scope": "Driver",
       "Type": "uint64",
       "VariableName": "filterPipelineDumpByHash"
+    },
+    {
+      "Description": "Directory where ShaderDbg layer read its config file. The file is named \"shaderDbg.cfg\" with several lines. Each line represents a pipeline and has such format \"pipelineHash,stageMask\" (1 - compute shader, 2 - vertex shader, 4 - tessellation control shader, 8 - tessellation evaluation shader, 16 - geometry shader, 32 - fragment shader).",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsPath": true
+      },
+      "Defaults": {
+        "Default": "vkDump/ShaderDbgCfg",
+        "WinDefault": "vkDump\\ShaderDbgCfg",
+        "LnxDefault": "vkDump/ShaderDbgCfg"
+      },
+      "Scope": "Driver",
+      "Name": "ShaderDbgCfgDirectory",
+      "Type": "string",
+      "VariableName": "shaderDbgCfgDirectory",
+      "Size": 260
     },
     {
       "Description": "If true, duplicate pipelines will be dumped to a file with a numeric suffix attached to the filename to distinguish each copy of the pipeline.",
@@ -5437,6 +5469,19 @@
       },
       "Type": "bool",
       "VariableName": "disableAMDVendorExtensions",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "AlwaysAllocDynamicDescriptorData",
+      "Description": "Always allocates dynamic descriptor data instead of based on VkDescriptorPoolCreateInfo.pPoolSizes",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "VariableName": "alwaysAllocDynamicDescriptorData",
       "Scope": "Driver"
     }
   ]

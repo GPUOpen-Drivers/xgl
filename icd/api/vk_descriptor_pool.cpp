@@ -109,7 +109,7 @@ VkResult DescriptorPool::Init(
 
     VkResult result = VK_SUCCESS;
 
-    result = m_setHeap.Init<numPalDevices>(pDevice, pAllocator, poolUsage, maxSets);
+    result = m_setHeap.Init<numPalDevices>(pDevice, pAllocator, pCreateInfo);
 
     if (result == VK_SUCCESS)
     {
@@ -937,29 +937,52 @@ m_pSetMemory(nullptr)
 // =====================================================================================================================
 template <uint32_t numPalDevices>
 VkResult DescriptorSetHeap::Init(
-    Device*                         pDevice,
-    const VkAllocationCallbacks*    pAllocator,
-    VkDescriptorPoolCreateFlags     poolUsage,
-    uint32_t                        maxSets)
+    Device*                           pDevice,
+    const VkAllocationCallbacks*      pAllocator,
+    const VkDescriptorPoolCreateInfo* pCreateInfo)
 {
     // Pre-initialize all set memory.  This needs to be done for future purposes because those sets need to all share
     // the same common base array, and the complexity of allocating them in lazy blocks is probably not worth the
     // effort like it is for GPU memory.
-    m_maxSets = maxSets;
+
+    m_maxSets = pCreateInfo->maxSets;
+
+    bool hasDynamicData = pDevice->GetRuntimeSettings().alwaysAllocDynamicDescriptorData;
+
+    for (uint32 ii = 0; (hasDynamicData == false) && (ii < pCreateInfo->poolSizeCount); ii++)
+    {
+        switch (pCreateInfo->pPoolSizes[ii].type)
+        {
+            case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+            case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+                hasDynamicData = true;
+                break;
+            default:
+                break;
+        }
+    }
+
+    // NOTE: This is hopefully only needed temporarily until SC implements proper support for buffer descriptors
+    // with dynamic offsets. Until then we have to store the static portion of dynamic buffer descriptors in client
+    // memory together with the descriptor set so that we are able to supply the patched version of the descriptors.
+    // This field needs to be qword aligned because it is accessed as qwords in PatchedDynamicDataFromHandle().
+    constexpr size_t DynamicDataSize =
+        numPalDevices * MaxDynamicDescriptors * PipelineLayout::DynDescRegCount * sizeof(uint32);
 
     // Allocate memory for all sets
-    m_setSize = SetSize<numPalDevices>();
+    size_t rawSetSize = sizeof(DescriptorSet<numPalDevices>) + (hasDynamicData ? DynamicDataSize : 0);
+    m_setSize         = Util::Pow2Align(rawSetSize, VK_DEFAULT_MEM_ALIGN);
     m_privateDataSize = pDevice->GetPrivateDataSize();
 
-    size_t setMemorySize = (maxSets * (m_privateDataSize + m_setSize));
+    size_t setMemorySize = (m_maxSets * (m_privateDataSize + m_setSize));
     size_t freeIndexStackSize = 0;
 
-    bool oneShot = (poolUsage & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT) == 0;
+    bool oneShot = (pCreateInfo->flags & VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT) == 0;
 
     if (oneShot == false)
     {
         // Allocate additional memory for the free index stack
-        freeIndexStackSize = (sizeof(uint32_t) * maxSets);
+        freeIndexStackSize = (sizeof(uint32_t) * m_maxSets);
     }
 
     // Use the passed allocator
@@ -978,15 +1001,10 @@ VkResult DescriptorSetHeap::Init(
     if (oneShot == false) //dynamic usage
     {
         m_pFreeIndexStack = reinterpret_cast<uint32_t*>(Util::VoidPtrInc(m_pSetMemory, setMemorySize));
-
-        if (m_pFreeIndexStack == nullptr)
-        {
-            return VK_ERROR_OUT_OF_HOST_MEMORY;
-        }
     }
 
     // Initialize all sets
-    for (uint32_t index = 0; index < maxSets; ++index)
+    for (uint32_t index = 0; index < m_maxSets; ++index)
     {
         void* pSetMem = Util::VoidPtrInc(m_pSetMemory, index * (m_privateDataSize + m_setSize));
 
@@ -1029,8 +1047,7 @@ template <uint32_t numPalDevices>
 VkDescriptorSet DescriptorSetHeap::DescriptorSetHandleFromIndex(
     uint32_t idx) const
 {
-    size_t setSize = SetSize<numPalDevices>();
-    void* pMem = Util::VoidPtrInc(m_pSetMemory, ((m_privateDataSize + setSize) * idx));
+    void* pMem = Util::VoidPtrInc(m_pSetMemory, ((m_privateDataSize + m_setSize) * idx));
 
     pMem = Util::VoidPtrInc(pMem, m_privateDataSize);
 
@@ -1103,8 +1120,6 @@ void DescriptorSetHeap::Reset()
 
 #if DEBUG
     // Clear the descriptor set states for debugging purposes
-    size_t setSize = SetSize<numPalDevices>();
-
     for (uint32_t index = 0; index < m_maxSets; ++index)
     {
         VkDescriptorSet setHandle = DescriptorSetHandleFromIndex<numPalDevices>(index);

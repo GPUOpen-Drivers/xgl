@@ -81,9 +81,9 @@ private:
     void LogAttachment(uint32_t attachment);
     void LogImageLayout(const RPImageLayout& layout);
     void LogFormat(VkFormat format, bool shortDesc = true);
-    void LogPipelineStageMask(VkPipelineStageFlags flags, bool compact);
+    void LogPipelineStageMask(PipelineStageFlags flags, bool compact);
     void LogImageAspectMask(VkImageAspectFlags  flags, bool compact);
-    void LogAccessMask(VkAccessFlags flags, bool compact);
+    void LogAccessMask(AccessFlags flags, bool compact);
     void LogSubpassDependency(const SubpassDependency& dep, bool printSubpasses, bool label);
     void LogStatistics();
     void LogBeginSource();

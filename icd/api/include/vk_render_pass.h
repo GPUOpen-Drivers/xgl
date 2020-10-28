@@ -164,10 +164,10 @@ struct SubpassDependency
 
     uint32_t                srcSubpass;
     uint32_t                dstSubpass;
-    VkPipelineStageFlags    srcStageMask;
-    VkPipelineStageFlags    dstStageMask;
-    VkAccessFlags           srcAccessMask;
-    VkAccessFlags           dstAccessMask;
+    PipelineStageFlags      srcStageMask;
+    PipelineStageFlags      dstStageMask;
+    AccessFlags             srcAccessMask;
+    AccessFlags             dstAccessMask;
     VkDependencyFlags       dependencyFlags;
     int32_t                 viewOffset;
 };

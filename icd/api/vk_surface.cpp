@@ -57,27 +57,14 @@ VkResult Surface::Create(
 #endif
 #endif
 
-    union
-    {
-        const VkStructHeader*                    pHeader;
-#if defined(__unix__)
-#ifdef VK_USE_PLATFORM_XCB_KHR
-        const VkXcbSurfaceCreateInfoKHR*             pVkXcbSurfaceCreateInfoKHR;
-#endif
-#ifdef VK_USE_PLATFORM_XLIB_KHR
-        const VkXlibSurfaceCreateInfoKHR*            pVkXlibSurfaceCreateInfoKHR;
-#endif
-        const VkDisplaySurfaceCreateInfoKHR*         pVkDisplaySurfaceCreateInfoKHR;
-#ifdef VK_USE_PLATFORM_WAYLAND_KHR
-        const VkWaylandSurfaceCreateInfoKHR*     pVkWaylandSurfaceCreateInfoKHR;
-#endif
-#endif
-    };
-
     VkResult result = VK_SUCCESS;
 
-    for (pHeader = pCreateInfo; pHeader != nullptr; pHeader = pHeader->pNext)
+    const void* pNext = pCreateInfo;
+
+    while (pNext != nullptr)
     {
+        const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
         switch (static_cast<uint32_t>(pHeader->sType))
         {
 
@@ -85,9 +72,11 @@ VkResult Surface::Create(
 #ifdef VK_USE_PLATFORM_XCB_KHR
         case VK_STRUCTURE_TYPE_XCB_SURFACE_CREATE_INFO_KHR:
         {
+            const auto* pExtInfo     = static_cast<const VkXcbSurfaceCreateInfoKHR*>(pNext);
             xcbSurface.base.platform = VK_ICD_WSI_PLATFORM_XCB;
-            xcbSurface.connection    = pVkXcbSurfaceCreateInfoKHR->connection;
-            xcbSurface.window        = pVkXcbSurfaceCreateInfoKHR->window;
+            xcbSurface.connection    = pExtInfo->connection;
+            xcbSurface.window        = pExtInfo->window;
+
             break;
         }
 #endif
@@ -95,39 +84,49 @@ VkResult Surface::Create(
 #ifdef VK_USE_PLATFORM_XLIB_KHR
         case VK_STRUCTURE_TYPE_XLIB_SURFACE_CREATE_INFO_KHR:
         {
+            const auto* pExtInfo      = static_cast<const VkXlibSurfaceCreateInfoKHR*>(pNext);
             xlibSurface.base.platform = VK_ICD_WSI_PLATFORM_XLIB;
-            xlibSurface.dpy           = pVkXlibSurfaceCreateInfoKHR->dpy;
-            xlibSurface.window        = pVkXlibSurfaceCreateInfoKHR->window;
+            xlibSurface.dpy           = pExtInfo->dpy;
+            xlibSurface.window        = pExtInfo->window;
+
             break;
         }
 #endif
 
         case VK_STRUCTURE_TYPE_DISPLAY_SURFACE_CREATE_INFO_KHR:
         {
-            displaySurface.base.platform = VK_ICD_WSI_PLATFORM_DISPLAY;
-            displaySurface.displayMode = pVkDisplaySurfaceCreateInfoKHR->displayMode;
-            displaySurface.planeIndex  = pVkDisplaySurfaceCreateInfoKHR->planeIndex;
-            displaySurface.planeStackIndex = pVkDisplaySurfaceCreateInfoKHR->planeStackIndex;
-            displaySurface.transform = pVkDisplaySurfaceCreateInfoKHR->transform;
-            displaySurface.globalAlpha = pVkDisplaySurfaceCreateInfoKHR->globalAlpha;
-            displaySurface.alphaMode   = pVkDisplaySurfaceCreateInfoKHR->alphaMode;
-            displaySurface.imageExtent.width  = pVkDisplaySurfaceCreateInfoKHR->imageExtent.width;
-            displaySurface.imageExtent.height = pVkDisplaySurfaceCreateInfoKHR->imageExtent.height;
+            const auto* pExtInfo              = static_cast<const VkDisplaySurfaceCreateInfoKHR*>(pNext);
+            displaySurface.base.platform      = VK_ICD_WSI_PLATFORM_DISPLAY;
+            displaySurface.displayMode        = pExtInfo->displayMode;
+            displaySurface.planeIndex         = pExtInfo->planeIndex;
+            displaySurface.planeStackIndex    = pExtInfo->planeStackIndex;
+            displaySurface.transform          = pExtInfo->transform;
+            displaySurface.globalAlpha        = pExtInfo->globalAlpha;
+            displaySurface.alphaMode          = pExtInfo->alphaMode;
+            displaySurface.imageExtent.width  = pExtInfo->imageExtent.width;
+            displaySurface.imageExtent.height = pExtInfo->imageExtent.height;
+
             break;
         }
+
 #ifdef VK_USE_PLATFORM_WAYLAND_KHR
         case VK_STRUCTURE_TYPE_WAYLAND_SURFACE_CREATE_INFO_KHR:
         {
+            const auto* pExtInfo         = static_cast<const VkWaylandSurfaceCreateInfoKHR*>(pNext);
             waylandSurface.base.platform = VK_ICD_WSI_PLATFORM_WAYLAND;
-            waylandSurface.display = pVkWaylandSurfaceCreateInfoKHR->display;
-            waylandSurface.surface = pVkWaylandSurfaceCreateInfoKHR->surface;
+            waylandSurface.display       = pExtInfo->display;
+            waylandSurface.surface       = pExtInfo->surface;
+
             break;
         }
 #endif
 #endif
         default:
+            // Skip any unknown extension structures
             break;
-        };
+        }
+
+        pNext = pHeader->pNext;
     }
 
     if (pCreateInfo == nullptr)

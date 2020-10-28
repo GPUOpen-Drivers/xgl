@@ -26,6 +26,7 @@
 #include "include/barrier_policy.h"
 #include "include/vk_device.h"
 #include "include/vk_formats.h"
+#include "include/vk_image.h"
 
 namespace vk
 {
@@ -108,7 +109,7 @@ public:
     }
 
     // Return layout usage index corresponding to the specified layout.
-    VK_FORCEINLINE uint32_t GetLayoutUsageIndex(VkImageLayout layout) const
+    VK_FORCEINLINE uint32_t GetLayoutUsageIndex(VkImageLayout layout, VkFormat format) const
     {
         uint32_t index = 0;
 
@@ -161,7 +162,7 @@ public:
 protected:
     void InitEntry(VkImageLayout layout, uint32_t layoutUsage)
     {
-        const uint32_t usageIndex = GetLayoutUsageIndex(layout);
+        const uint32_t usageIndex = GetLayoutUsageIndex(layout, VK_FORMAT_UNDEFINED);
 
         m_layoutUsageTable[0][usageIndex] = layoutUsage;
         m_layoutUsageTable[1][usageIndex] = layoutUsage;
@@ -170,7 +171,7 @@ protected:
 
     void InitEntry(VkImageLayout layout, uint32_t layoutUsage0, uint32_t layoutUsage1, uint32_t layoutUsage2 = 0)
     {
-        const uint32_t usageIndex = GetLayoutUsageIndex(layout);
+        const uint32_t usageIndex = GetLayoutUsageIndex(layout, VK_FORMAT_UNDEFINED);
 
         m_layoutUsageTable[0][usageIndex] = layoutUsage0;
         m_layoutUsageTable[1][usageIndex] = layoutUsage1;
@@ -229,7 +230,7 @@ static VK_INLINE uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
 
 // =====================================================================================================================
 // Converts source access flags to source cache coherency flags.
-static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask, VkImageLayout imageLayout)
+static VK_INLINE uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
 {
     uint32_t cacheMask = 0;
 
@@ -288,7 +289,7 @@ static VK_INLINE uint32_t SrcAccessToCacheMask(VkAccessFlags accessMask, VkImage
 
 // =====================================================================================================================
 // Converts destination access flags to destination cache coherency flags.
-static VK_INLINE uint32_t DstAccessToCacheMask(VkAccessFlags accessMask, VkImageLayout imageLayout)
+static VK_INLINE uint32_t DstAccessToCacheMask(AccessFlags accessMask, VkImageLayout imageLayout)
 {
     uint32_t cacheMask = 0;
 
@@ -302,10 +303,10 @@ static VK_INLINE uint32_t DstAccessToCacheMask(VkAccessFlags accessMask, VkImage
         cacheMask |= Pal::CoherIndexData;
     }
 
-    constexpr VkAccessFlags shaderReadAccessFlags = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
-                                                    | VK_ACCESS_UNIFORM_READ_BIT
-                                                    | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT
-                                                    | VK_ACCESS_SHADER_READ_BIT;
+    constexpr AccessFlags shaderReadAccessFlags = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
+                                                  | VK_ACCESS_UNIFORM_READ_BIT
+                                                  | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT
+                                                  | VK_ACCESS_SHADER_READ_BIT;
 
     if (accessMask & shaderReadAccessFlags)
     {
@@ -440,8 +441,8 @@ void BarrierPolicy::InitCachePolicy(
 // =====================================================================================================================
 // Applies the barrier policy to a barrier transition while converting the input access flags to cache masks.
 void BarrierPolicy::ApplyBarrierCacheFlags(
-    VkAccessFlags                       srcAccess,
-    VkAccessFlags                       dstAccess,
+    AccessFlags                         srcAccess,
+    AccessFlags                         dstAccess,
     VkImageLayout                       srcLayout,
     VkImageLayout                       dstLayout,
     Pal::BarrierTransition*             pResult) const
@@ -968,7 +969,7 @@ Pal::ImageLayout ImageBarrierPolicy::GetTransferLayout(
               (layout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) ||
               (layout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR));
 
-    uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout);
+    uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout, VK_FORMAT_UNDEFINED);
 
     // The usage flags should match for both aspects in this case.
     VK_ASSERT(g_LayoutUsageHelper.GetLayoutUsage(0, usageIndex) == g_LayoutUsageHelper.GetLayoutUsage(1, usageIndex));
@@ -992,11 +993,12 @@ Pal::ImageLayout ImageBarrierPolicy::GetTransferLayout(
 Pal::ImageLayout ImageBarrierPolicy::GetAspectLayout(
     VkImageLayout                       layout,
     uint32_t                            aspectIndex,
-    uint32_t                            queueFamilyIndex) const
+    uint32_t                            queueFamilyIndex,
+    VkFormat                            format) const
 {
     Pal::ImageLayout result = {};
 
-    uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout);
+    uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout, format);
 
     // Mask determined layout usage flags by the supported layout usage mask on the given queue family index.
     result.usages = g_LayoutUsageHelper.GetLayoutUsage(aspectIndex, usageIndex)
@@ -1017,9 +1019,10 @@ Pal::ImageLayout ImageBarrierPolicy::GetAspectLayout(
 void ImageBarrierPolicy::GetLayouts(
     VkImageLayout                       layout,
     uint32_t                            queueFamilyIndex,
-    Pal::ImageLayout                    results[MaxPalAspectsPerMask]) const
+    Pal::ImageLayout                    results[MaxPalAspectsPerMask],
+    VkFormat                            format) const
 {
-    uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout);
+    uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout, format);
 
     // Mask determined layout usage flags by the supported layout usage mask on the corresponding queue family index.
     const uint32_t supportedLayoutUsageMask = GetSupportedLayoutUsageMask(queueFamilyIndex);
@@ -1040,9 +1043,10 @@ void ImageBarrierPolicy::GetLayouts(
 //   * Converts access masks and writes them to pPalBarrier
 //   * Determines whether the barrier is a layout changing one and returns the information in pLayoutChanging
 //   * If it's a layout changing barrier then returns the old and new PAL layouts in oldPalLayouts and newPalLayouts
+template<typename ImageMemoryBarrierType>
 void ImageBarrierPolicy::ApplyImageMemoryBarrier(
     uint32_t                            currentQueueFamilyIndex,
-    const VkImageMemoryBarrier&         barrier,
+    const ImageMemoryBarrierType&       barrier,
     Pal::BarrierTransition*             pPalBarrier,
     bool*                               pLayoutChanging,
     Pal::ImageLayout                    oldPalLayouts[MaxPalAspectsPerMask],
@@ -1050,9 +1054,9 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
 {
     // Determine effective queue family indices.
     uint32_t srcQueueFamilyIndex = (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-                                 ? currentQueueFamilyIndex : barrier.srcQueueFamilyIndex;
+                                   ? currentQueueFamilyIndex : barrier.srcQueueFamilyIndex;
     uint32_t dstQueueFamilyIndex = (barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-                                 ? currentQueueFamilyIndex : barrier.dstQueueFamilyIndex;
+                                   ? currentQueueFamilyIndex : barrier.dstQueueFamilyIndex;
 
     // Either the source or the destination queue family has to match the current queue family.
     VK_ASSERT((srcQueueFamilyIndex == currentQueueFamilyIndex) || (dstQueueFamilyIndex == currentQueueFamilyIndex));
@@ -1068,9 +1072,11 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
 
     if (applyLayoutChanges)
     {
+        const VkFormat format = Image::ObjectFromHandle(barrier.image)->GetFormat();
+
         // Determine PAL layouts.
-        GetLayouts(barrier.oldLayout, srcQueueFamilyIndex, oldPalLayouts);
-        GetLayouts(barrier.newLayout, dstQueueFamilyIndex, newPalLayouts);
+        GetLayouts(barrier.oldLayout, srcQueueFamilyIndex, oldPalLayouts, format);
+        GetLayouts(barrier.newLayout, dstQueueFamilyIndex, newPalLayouts, format);
 
         // If old and new PAL layouts match then no need to apply layout changes.
         if (memcmp(oldPalLayouts, newPalLayouts, sizeof(Pal::ImageLayout) * MaxPalAspectsPerMask) == 0)
@@ -1110,6 +1116,14 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
 
     *pLayoutChanging = applyLayoutChanges;
 }
+
+template void ImageBarrierPolicy::ApplyImageMemoryBarrier<VkImageMemoryBarrier>(
+    uint32_t                            currentQueueFamilyIndex,
+    const VkImageMemoryBarrier&         barrier,
+    Pal::BarrierTransition*             pPalBarrier,
+    bool*                               pLayoutChanging,
+    Pal::ImageLayout                    oldPalLayouts[MaxPalAspectsPerMask],
+    Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask]) const;
 
 // =====================================================================================================================
 // Returns the layout engine mask corresponding to a queue family index.
@@ -1232,23 +1246,24 @@ void BufferBarrierPolicy::InitBufferCachePolicy(
 // =====================================================================================================================
 // Applies the barrier policy to a buffer memory barrier by converting the access masks and writing them to
 // pPalBarrier.
+template<typename BufferMemoryBarrierType>
 void BufferBarrierPolicy::ApplyBufferMemoryBarrier(
     uint32_t                            currentQueueFamilyIndex,
-    const VkBufferMemoryBarrier&        barrier,
+    const BufferMemoryBarrierType&      barrier,
     Pal::BarrierTransition*             pPalBarrier) const
 {
     // Determine effective queue family indices.
     uint32_t srcQueueFamilyIndex = (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-                                 ? currentQueueFamilyIndex : barrier.srcQueueFamilyIndex;
+        ? currentQueueFamilyIndex : barrier.srcQueueFamilyIndex;
     uint32_t dstQueueFamilyIndex = (barrier.dstQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
-                                 ? currentQueueFamilyIndex : barrier.dstQueueFamilyIndex;
+        ? currentQueueFamilyIndex : barrier.dstQueueFamilyIndex;
 
     // Either the source or the destination queue family has to match the current queue family.
     VK_ASSERT((srcQueueFamilyIndex == currentQueueFamilyIndex) || (dstQueueFamilyIndex == currentQueueFamilyIndex));
 
     // Apply barrier cache flags to the PAL barrier transition.
     ApplyBarrierCacheFlags(barrier.srcAccessMask, barrier.dstAccessMask, VK_IMAGE_LAYOUT_GENERAL,
-                           VK_IMAGE_LAYOUT_GENERAL, pPalBarrier);
+        VK_IMAGE_LAYOUT_GENERAL, pPalBarrier);
 
     // We can further restrict the cache masks to the ones supported by the corresponding queue families or by other
     // queue families that are allowed to concurrently access the image.
@@ -1266,5 +1281,10 @@ void BufferBarrierPolicy::ApplyBufferMemoryBarrier(
         pPalBarrier->dstCacheMask &= immediatelyVisibleCacheMask;
     }
 }
+
+template void BufferBarrierPolicy::ApplyBufferMemoryBarrier<VkBufferMemoryBarrier>(
+    uint32_t                            currentQueueFamilyIndex,
+    const VkBufferMemoryBarrier&        barrier,
+    Pal::BarrierTransition*             pPalBarrier) const;
 
 } //namespace vk

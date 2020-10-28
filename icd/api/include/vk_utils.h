@@ -123,6 +123,9 @@ struct VkStructHeaderNonConst
     VkStructHeader*         pNext;
 };
 
+typedef VkPipelineStageFlags     PipelineStageFlags;
+typedef VkAccessFlags            AccessFlags;
+
 namespace utils
 {
 

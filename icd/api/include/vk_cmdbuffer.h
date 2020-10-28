@@ -537,17 +537,17 @@ public:
 
     void SetEvent(
         VkEvent                                     event,
-        VkPipelineStageFlags                        stageMask);
+        PipelineStageFlags                          stageMask);
 
     void ResetEvent(
         VkEvent                                     event,
-        VkPipelineStageFlags                        stageMask);
+        PipelineStageFlags                          stageMask);
 
     void WaitEvents(
         uint32_t                                    eventCount,
         const VkEvent*                              pEvents,
-        VkPipelineStageFlags                        srcStageMask,
-        VkPipelineStageFlags                        dstStageMask,
+        PipelineStageFlags                          srcStageMask,
+        PipelineStageFlags                          dstStageMask,
         uint32_t                                    memoryBarrierCount,
         const VkMemoryBarrier*                      pMemoryBarriers,
         uint32_t                                    bufferMemoryBarrierCount,
@@ -556,8 +556,8 @@ public:
         const VkImageMemoryBarrier*                 pImageMemoryBarriers);
 
     void PipelineBarrier(
-        VkPipelineStageFlags                        srcStageMask,
-        VkPipelineStageFlags                        dstStageMask,
+        PipelineStageFlags                          srcStageMask,
+        PipelineStageFlags                          dstStageMask,
         uint32_t                                    memoryBarrierCount,
         const VkMemoryBarrier*                      pMemoryBarriers,
         uint32_t                                    bufferMemoryBarrierCount,
@@ -1090,8 +1090,7 @@ private:
             uint32_t isRecording               :  1;
             uint32_t needResetState            :  1;
             uint32_t hasConditionalRendering   :  1;
-            uint32_t prefetchCommands          :  1;
-            uint32_t reserved                  : 27;
+            uint32_t reserved                  : 28;
         };
     };
 

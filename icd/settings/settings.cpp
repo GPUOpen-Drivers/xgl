@@ -830,6 +830,12 @@ void VulkanSettingsLoader::ValidateSettings()
     m_settings.devModeSemaphoreQueueTimingEnable = true;
 #endif
 
+    // Command buffer prefetching was found to be slower for command buffers in local memory.
+    if (m_settings.cmdAllocatorDataHeap == Pal::GpuHeapLocal)
+    {
+        m_settings.prefetchCommands = false;
+    }
+
 }
 
 // =====================================================================================================================

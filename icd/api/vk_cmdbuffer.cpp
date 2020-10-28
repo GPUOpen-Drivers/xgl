@@ -363,9 +363,6 @@ CmdBuffer::CmdBuffer(
 {
     m_flags.needResetState = true;
 
-    // Command buffer prefetching was found to be slower for command buffers in local memory.
-    m_flags.prefetchCommands = (m_pDevice->GetRuntimeSettings().cmdAllocatorDataHeap != Pal::GpuHeapLocal);
-
 #if VK_ENABLE_DEBUG_BARRIERS
     m_dbgBarrierPreCmdMask  = m_pDevice->GetRuntimeSettings().dbgBarrierPreCmdEnable;
     m_dbgBarrierPostCmdMask = m_pDevice->GetRuntimeSettings().dbgBarrierPostCmdEnable;
@@ -970,19 +967,17 @@ VkResult CmdBuffer::Begin(
     RenderPass*  pRenderPass  = nullptr;
     Framebuffer* pFramebuffer = nullptr;
 
+    const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
+
     m_cbBeginDeviceMask = m_pDevice->GetPalDeviceMask();
 
     cmdInfo.flags.u32All = 0;
-    cmdInfo.flags.prefetchCommands = m_flags.prefetchCommands;
+    cmdInfo.flags.prefetchCommands = settings.prefetchCommands;
+    cmdInfo.flags.prefetchShaders  = settings.prefetchShaders;
 
     if (IsProtected())
     {
         cmdInfo.flags.enableTmz = 1;
-    }
-
-    if (m_pDevice->GetRuntimeSettings().prefetchShaders)
-    {
-        cmdInfo.flags.prefetchShaders = 1;
     }
 
     Pal::InheritedStateParams inheritedStateParams = {};
@@ -992,7 +987,7 @@ VkResult CmdBuffer::Begin(
     cmdInfo.flags.optimizeOneTimeSubmit   = (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT) ? 1 : 0;
     cmdInfo.flags.optimizeExclusiveSubmit = (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_SIMULTANEOUS_USE_BIT) ? 0 : 1;
 
-    switch (m_pDevice->GetRuntimeSettings().optimizeCmdbufMode)
+    switch (settings.optimizeCmdbufMode)
     {
     case EnableOptimizeForRenderPassContinue:
         cmdInfo.flags.optimizeGpuSmallBatch = (pBeginInfo->flags & VK_COMMAND_BUFFER_USAGE_RENDER_PASS_CONTINUE_BIT) ? 1 : 0;
@@ -3110,8 +3105,8 @@ void CmdBuffer::ResolveImage(
 // =====================================================================================================================
 // Implementation of vkCmdSetEvent()
 void CmdBuffer::SetEvent(
-    VkEvent                 event,
-    VkPipelineStageFlags    stageMask)
+    VkEvent                       event,
+    PipelineStageFlags            stageMask)
 {
     DbgBarrierPreCmd(DbgBarrierSetResetEvent);
 
@@ -3122,8 +3117,8 @@ void CmdBuffer::SetEvent(
 
 // =====================================================================================================================
 void CmdBuffer::ResetEvent(
-    VkEvent                 event,
-    VkPipelineStageFlags    stageMask)
+    VkEvent                  event,
+    PipelineStageFlags       stageMask)
 {
     DbgBarrierPreCmd(DbgBarrierSetResetEvent);
 
@@ -3228,7 +3223,7 @@ void CmdBuffer::ExecuteBarriers(
     {
         const Buffer* pBuffer = Buffer::ObjectFromHandle(pBufferMemoryBarriers[i].buffer);
 
-        pBuffer->GetBarrierPolicy().ApplyBufferMemoryBarrier(
+        pBuffer->GetBarrierPolicy().ApplyBufferMemoryBarrier<VkBufferMemoryBarrier>(
             GetQueueFamilyIndex(),
             pBufferMemoryBarriers[i],
             pNextMain);
@@ -3264,7 +3259,7 @@ void CmdBuffer::ExecuteBarriers(
         Pal::ImageLayout oldLayouts[MaxPalAspectsPerMask];
         Pal::ImageLayout newLayouts[MaxPalAspectsPerMask];
 
-        pImage->GetBarrierPolicy().ApplyImageMemoryBarrier(
+        pImage->GetBarrierPolicy().ApplyImageMemoryBarrier<VkImageMemoryBarrier>(
             GetQueueFamilyIndex(),
             pImageMemoryBarriers[i],
             &barrierTransition,
@@ -3424,8 +3419,8 @@ void CmdBuffer::ExecuteBarriers(
 void CmdBuffer::WaitEvents(
     uint32_t                     eventCount,
     const VkEvent*               pEvents,
-    VkPipelineStageFlags         srcStageMask,
-    VkPipelineStageFlags         dstStageMask,
+    PipelineStageFlags           srcStageMask,
+    PipelineStageFlags           dstStageMask,
     uint32_t                     memoryBarrierCount,
     const VkMemoryBarrier*       pMemoryBarriers,
     uint32_t                     bufferMemoryBarrierCount,
@@ -3486,8 +3481,8 @@ void CmdBuffer::WaitEvents(
 // =====================================================================================================================
 // Implements vkCmdPipelineBarrier()
 void CmdBuffer::PipelineBarrier(
-    VkPipelineStageFlags         srcStageMask,
-    VkPipelineStageFlags         destStageMask,
+    PipelineStageFlags           srcStageMask,
+    PipelineStageFlags           destStageMask,
     uint32_t                     memBarrierCount,
     const VkMemoryBarrier*       pMemoryBarriers,
     uint32_t                     bufferMemoryBarrierCount,

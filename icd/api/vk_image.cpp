@@ -1051,7 +1051,6 @@ VkResult Image::CreatePresentableImage(
     // Allocate system memory for objects
     const uint32_t numDevices         = pDevice->NumPalDevices();
     const uint32_t allocateDeviceMask = pDevice->GetPalDeviceMask();
-    const bool multiInstanceHeap      = true; // Always use a local heap for presentable images
 
     size_t palImgSize = 0;
     size_t palMemSize = 0;
@@ -1188,8 +1187,6 @@ VkResult Image::CreatePresentableImage(
 
         *pImage = Image::HandleFromVoidPointer(pImgObjMemory);
 
-        // Presentable image shall be positioned on local invisible heap by default.
-        VK_ASSERT(pPalMemory[DefaultDeviceIndex]->Desc().preferredHeap == Pal::GpuHeapInvisible);
         // Presentable image memory shall be multiInstance on multi-device configuration.
         const bool multiInstance = (pDevice->NumPalDevices() > 1);
         pMemory = VK_PLACEMENT_NEW(pMemObjMemory) Memory(pDevice, pPalMemory, multiInstance);
@@ -1838,7 +1835,7 @@ Pal::ImageLayout Image::GetAttachmentLayout(
         }
 
         palLayout = GetBarrierPolicy().GetAspectLayout(
-            layout.layout, aspectIndex, pCmdBuffer->GetQueueFamilyIndex());
+            layout.layout, aspectIndex, pCmdBuffer->GetQueueFamilyIndex(), GetFormat());
 
         // Add any requested extra PAL usage
         palLayout.usages |= layout.extraUsage;
@@ -1847,7 +1844,7 @@ Pal::ImageLayout Image::GetAttachmentLayout(
     {
         // Return a null-usage layout (set the engine still because there are some PAL asserts that hit)
         palLayout = GetBarrierPolicy().GetAspectLayout(
-            layout.layout, 0, pCmdBuffer->GetQueueFamilyIndex());
+            layout.layout, 0, pCmdBuffer->GetQueueFamilyIndex(), GetFormat());
         palLayout.usages = 0;
     }
 

@@ -149,10 +149,9 @@ public:
 
     template <uint32_t numPalDevices>
     VkResult Init(
-        Device*                         pDevice,
-        const VkAllocationCallbacks*    pAllocator,
-        VkDescriptorPoolCreateFlags     poolUsage,
-        uint32_t                        maxSets);
+        Device*                           pDevice,
+        const VkAllocationCallbacks*      pAllocator,
+        const VkDescriptorPoolCreateInfo* pCreateInfo);
 
     void Destroy(
         Device*                         pDevice,
@@ -173,9 +172,6 @@ public:
     }
 
 private:
-
-    template <uint32_t numPalDevices>
-    size_t SetSize() const { return Util::Pow2Align(sizeof(DescriptorSet<numPalDevices>), VK_DEFAULT_MEM_ALIGN); }
 
     template <uint32_t numPalDevices>
     VkDescriptorSet DescriptorSetHandleFromIndex(uint32_t idx) const;

@@ -325,7 +325,7 @@ static const char* PipelineStageFlagString(
 
 // =====================================================================================================================
 void RenderPassLogger::LogPipelineStageMask(
-    VkPipelineStageFlags flags,
+    PipelineStageFlags   flags,
     bool                 compact)
 {
     if (flags == 0)
@@ -517,7 +517,9 @@ static const char* AccessFlagString(VkAccessFlagBits flag, bool compact)
 }
 
 // =====================================================================================================================
-void RenderPassLogger::LogAccessMask(VkAccessFlags flags, bool compact)
+void RenderPassLogger::LogAccessMask(
+    AccessFlags          flags,
+    bool                 compact)
 {
     if (flags == 0)
     {

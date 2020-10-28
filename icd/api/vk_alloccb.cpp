@@ -194,14 +194,11 @@ PalAllocator::PalAllocator(
     VkAllocationCallbacks* pCallbacks)
     :
 #if PAL_MEMTRACK
-    m_memTrackerAlloc(),
+    m_memTrackerAlloc(pCallbacks),
     m_memTracker(&m_memTrackerAlloc),
 #endif
     m_pCallbacks(pCallbacks)
 {
-#if PAL_MEMTRACK
-    m_memTrackerAlloc.m_pCallbacks = pCallbacks;
-#endif
 }
 
 // =====================================================================================================================

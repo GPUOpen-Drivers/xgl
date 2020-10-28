@@ -42,7 +42,7 @@ namespace vk
 
 class Device;
 class AsyncLayer;
-struct PalAllocator;
+class PalAllocator;
 
 namespace async { class ShaderModule; class PartialPipeline; }
 

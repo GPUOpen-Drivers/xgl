@@ -43,7 +43,7 @@ namespace vk
 {
 
 class AsyncLayer;
-struct PalAllocator;
+class PalAllocator;
 
 namespace async
 {

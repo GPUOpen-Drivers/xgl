@@ -93,12 +93,12 @@ public:
 
     uint32_t* DynamicDescriptorData(uint32_t idx)
     {
-        return reinterpret_cast<uint32_t*>(m_dynamicDescriptorData[idx]);
+        return reinterpret_cast<uint32_t*>(&(DynamicDescriptorData()[idx]));
     }
 
     uint64_t* DynamicDescriptorDataQw(uint32_t idx)
     {
-        return m_dynamicDescriptorData[idx];
+        return &(DynamicDescriptorData()[idx]);
     }
 
     VK_INLINE static DescriptorSet* StateFromHandle(VkDescriptorSet set);
@@ -133,18 +133,14 @@ protected:
     uint32_t HeapIndex() const
         { return m_heapIndex; }
 
+    uint64* DynamicDescriptorData()
+        { return static_cast<uint64*>( Util::VoidPtrInc(this, sizeof(*this))); }
+
     const DescriptorSetLayout*  m_pLayout;
     void*                       m_pAllocHandle;
     DescriptorAddr              m_addresses[numPalDevices];
 
     uint32_t                    m_heapIndex;
-
-    // NOTE: This is hopefully only needed temporarily until SC implements proper support for buffer descriptors
-    // with dynamic offsets. Until then we have to store the static portion of dynamic buffer descriptors in client
-    // memory together with the descriptor set so that we are able to supply the patched version of the descriptors.
-    // This field needs to be qword aligned because it is accessed as qwords in PatchedDynamicDataFromHandle().
-    // Since allocating in qwords, need to divide the number of registers by 2 to get the correct size.
-    uint64_t                    m_dynamicDescriptorData[numPalDevices][MaxDynamicDescriptors * PipelineLayout::DynDescRegCount / 2];
 
     friend class DescriptorPool;
     friend class DescriptorSetHeap;

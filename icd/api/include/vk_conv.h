@@ -1891,38 +1891,38 @@ VK_INLINE Pal::ScreenColorSpace VkToPalScreenSpace(VkSurfaceFormatKHR colorForma
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL HW pipe point.
 // Selects a source pipe point that matches all stage flags to use for setting/resetting events.
-VK_INLINE Pal::HwPipePoint VkToPalSrcPipePoint(VkPipelineStageFlags flags)
+VK_INLINE Pal::HwPipePoint VkToPalSrcPipePoint(PipelineStageFlags flags)
 {
     // Flags that only require signaling at top-of-pipe.
-    static const VkPipelineStageFlags srcTopOfPipeFlags =
+    static const PipelineStageFlags srcTopOfPipeFlags =
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
     // Flags that only require signaling post-index-fetch.
-    static const VkPipelineStageFlags srcPostIndexFetchFlags =
-        srcTopOfPipeFlags |
+    static const PipelineStageFlags srcPostIndexFetchFlags =
+        srcTopOfPipeFlags                                    |
         VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT;
 
     // Flags that only require signaling pre-rasterization.
-    static const VkPipelineStageFlags srcPreRasterizationFlags =
-        srcPostIndexFetchFlags                                  |
-        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT                      |
-        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT                     |
-        VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT       |
-        VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT    |
+    static const PipelineStageFlags srcPreRasterizationFlags =
+        srcPostIndexFetchFlags                               |
+        VK_PIPELINE_STAGE_VERTEX_INPUT_BIT                   |
+        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT                  |
+        VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT    |
+        VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
         VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
 
     // Flags that only require signaling post-PS.
-    static const VkPipelineStageFlags srcPostPsFlags =
-        srcPreRasterizationFlags                        |
-        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT      |
+    static const PipelineStageFlags srcPostPsFlags =
+        srcPreRasterizationFlags                             |
+        VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT           |
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
 
     // Flags that only require signaling post-CS.
-    static const VkPipelineStageFlags srcPostCsFlags =
+    static const PipelineStageFlags srcPostCsFlags =
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 
-    // Flags that only require signaling post-Blt
-    static const VkPipelineStageFlags srcPostBltFlags =
+    // fixme correct?
+    static const PipelineStageFlags srcPostBltFlags =
         VK_PIPELINE_STAGE_TRANSFER_BIT;
 
     Pal::HwPipePoint srcPipePoint;
@@ -1968,10 +1968,10 @@ VK_INLINE Pal::HwPipePoint VkToPalSrcPipePoint(VkPipelineStageFlags flags)
 
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL HW top or bottom pipe point.
-VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(VkPipelineStageFlags flags)
+VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(PipelineStageFlags flags)
 {
     // Flags that require signaling at top-of-pipe.
-    static const VkPipelineStageFlags srcTopOfPipeFlags =
+    static const PipelineStageFlags srcTopOfPipeFlags =
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
     Pal::HwPipePoint srcPipePoint;
@@ -1991,7 +1991,7 @@ VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForTimestampWrite(VkPipelineStageF
 // =====================================================================================================================
 // Converts Vulkan source pipeline stage flags to PAL buffer marker writes (top/bottom only)
 VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForMarkers(
-    VkPipelineStageFlags flags,
+    PipelineStageFlags   flags,
     Pal::EngineType      engineType)
 {
     // This function is written against the following three engine types.  If you hit this assert then check if this
@@ -2001,7 +2001,7 @@ VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForMarkers(
               engineType == Pal::EngineTypeCompute);
 
     // Flags that allow signaling at top-of-pipe (anything else maps to bottom)
-    constexpr VkPipelineStageFlags SrcTopOfPipeFlags =
+    constexpr PipelineStageFlags SrcTopOfPipeFlags =
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
 
     Pal::HwPipePoint srcPipePoint;
@@ -2023,7 +2023,7 @@ VK_INLINE Pal::HwPipePoint VkToPalSrcPipePointForMarkers(
 struct HwPipePointMappingEntry
 {
     Pal::HwPipePoint        pipePoint;
-    VkPipelineStageFlags    stateFlags;
+    PipelineStageFlags      stateFlags;
 };
 
 static const HwPipePointMappingEntry hwPipePointMappingTable[] =
@@ -2082,7 +2082,7 @@ static const size_t MaxHwPipePoints = sizeof(hwPipePointMappingTable) / sizeof(h
 // By having the flexibility to specify multiple pipe points for barriers we can avoid going with the least common
 // denominator like in case of event sets/resets.
 // The function returns the number of pipe points set in the return value.
-VK_INLINE uint32_t VkToPalSrcPipePoints(VkPipelineStageFlags flags, Pal::HwPipePoint* pPalPipePoints)
+VK_INLINE uint32_t VkToPalSrcPipePoints(PipelineStageFlags flags, Pal::HwPipePoint* pPalPipePoints)
 {
     uint32_t pipePointCount = 0;
 
@@ -2101,20 +2101,20 @@ VK_INLINE uint32_t VkToPalSrcPipePoints(VkPipelineStageFlags flags, Pal::HwPipeP
 // =====================================================================================================================
 // Converts Vulkan destination pipeline stage flags to PAL HW pipe point.
 // This way a target pipeline stage is selected where the wait for events happens
-VK_INLINE Pal::HwPipePoint VkToPalWaitPipePoint(VkPipelineStageFlags flags)
+VK_INLINE Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
 {
     static_assert((Pal::HwPipePostIndexFetch == Pal::HwPipePreCs) && (Pal::HwPipePostIndexFetch == Pal::HwPipePreBlt),
         "The code here assumes pre-CS and pre-blit match post-index-fetch.");
 
     // Flags that only require waiting pre-rasterization.
-    static const VkPipelineStageFlags dstPreRasterizationFlags =
+    static const PipelineStageFlags dstPreRasterizationFlags =
         VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT              |
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT                   |
         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT               |
         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
 
     // Flags that only require waiting post-index-fetch.
-    static const VkPipelineStageFlags dstPostIndexFetchFlags =
+    static const PipelineStageFlags dstPostIndexFetchFlags =
         dstPreRasterizationFlags                                |
         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT                     |
         VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT       |

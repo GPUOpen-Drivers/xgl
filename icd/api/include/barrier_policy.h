@@ -53,8 +53,8 @@ class BarrierPolicy
 {
 public:
     void ApplyBarrierCacheFlags(
-        VkAccessFlags                       srcAccess,
-        VkAccessFlags                       dstAccess,
+        AccessFlags                         srcAccess,
+        AccessFlags                         dstAccess,
         VkImageLayout                       srcLayout,
         VkImageLayout                       dstLayout,
         Pal::BarrierTransition*             pResult) const;
@@ -274,11 +274,13 @@ public:
     Pal::ImageLayout GetAspectLayout(
         VkImageLayout                       layout,
         uint32_t                            aspectIndex,
-        uint32_t                            queueFamilyIndex) const;
+        uint32_t                            queueFamilyIndex,
+        VkFormat                            format) const;
 
+    template<typename ImageMemoryBarrierType>
     void ApplyImageMemoryBarrier(
         uint32_t                            currentQueueFamilyIndex,
-        const VkImageMemoryBarrier&         barrier,
+        const ImageMemoryBarrierType&       barrier,
         Pal::BarrierTransition*             pPalBarrier,
         bool*                               pLayoutChanging,
         Pal::ImageLayout                    oldPalLayouts[MaxPalAspectsPerMask],
@@ -311,7 +313,8 @@ protected:
     void GetLayouts(
         VkImageLayout                       layout,
         uint32_t                            queueFamilyIndex,
-        Pal::ImageLayout                    results[MaxPalAspectsPerMask]) const;
+        Pal::ImageLayout                    results[MaxPalAspectsPerMask],
+        VkFormat                            format) const;
 
     uint32_t GetQueueFamilyLayoutEngineMask(
         uint32_t                            queueFamilyIndex) const;
@@ -339,9 +342,10 @@ public:
         uint32_t                            queueFamilyIndexCount,
         const uint32_t*                     pQueueFamilyIndices);
 
+    template<typename BufferMemoryBarrierType>
     void ApplyBufferMemoryBarrier(
         uint32_t                            currentQueueFamilyIndex,
-        const VkBufferMemoryBarrier&        barrier,
+        const BufferMemoryBarrierType&      barrier,
         Pal::BarrierTransition*             pPalBarrier) const;
 
 protected:
