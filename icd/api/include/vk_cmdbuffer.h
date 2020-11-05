@@ -96,11 +96,6 @@ struct CmdBufGpuMem
     CmdBufGpuMem*            pNext;        // Intrusive list pointer to the next command buffer GPU memory object.
 };
 
-constexpr uint32_t MaxDescSetRegCount   = MaxDescriptorSets * PipelineLayout::SetPtrRegCount;
-constexpr uint32_t MaxDynDescRegCount   = MaxDynamicDescriptors * PipelineLayout::DynDescRegCount;
-constexpr uint32_t MaxBindingRegCount   = MaxDescSetRegCount + MaxDynDescRegCount;
-constexpr uint32_t MaxPushConstRegCount = MaxPushConstants / 4;
-
 constexpr uint8_t DefaultStencilOpValue = 1;
 
 // This structure contains information about currently written user data entries within the command buffer
@@ -591,7 +586,7 @@ public:
         VkQueryResultFlags                          flags);
 
     void WriteTimestamp(
-        VkPipelineStageFlagBits                     pipelineStage,
+        PipelineStageFlags                          pipelineStage,
         const TimestampQueryPool*                   pQueryPool,
         uint32_t                                    query);
 
@@ -615,7 +610,7 @@ public:
         const void*                                 values);
 
     void WriteBufferMarker(
-        VkPipelineStageFlagBits pipelineStage,
+        PipelineStageFlags      pipelineStage,
         VkBuffer                dstBuffer,
         VkDeviceSize            dstOffset,
         uint32_t                marker);

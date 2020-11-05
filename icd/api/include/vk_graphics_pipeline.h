@@ -335,10 +335,6 @@ protected:
         Util::MetroHash128*                        pApiHasher,
         const VkPipelineColorBlendStateCreateInfo& desc);
 
-    static void GenerateHashFromDynamicStateCreateInfo(
-        Util::MetroHash128*                     pHasher,
-        const VkPipelineDynamicStateCreateInfo& desc);
-
     static uint64_t BuildApiHash(
         const VkGraphicsPipelineCreateInfo* pCreateInfo,
         const CreateInfo*                   pInfo,

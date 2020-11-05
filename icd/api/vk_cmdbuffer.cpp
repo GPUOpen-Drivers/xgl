@@ -1672,7 +1672,7 @@ void CmdBuffer::BindDescriptorSets(
             const PipelineLayout::SetUserDataLayout& setLayoutInfo = pLayout->GetSetUserData(setBindIdx);
 
             // If this descriptor set has any dynamic descriptor data then write them into the shadow.
-            if (setLayoutInfo.dynDescDataRegCount > 0)
+            if (setLayoutInfo.dynDescCount > 0)
             {
                 // NOTE: We currently have to supply patched SRDs directly in used data registers. If we'll have proper
                 // support for dynamic descriptors in SC then we'll only need to write the dynamic offsets directly.
@@ -4075,7 +4075,7 @@ void CmdBuffer::CopyQueryPoolResults(
 // =====================================================================================================================
 // Command to write a timestamp value to a location in a Timestamp query pool
 void CmdBuffer::WriteTimestamp(
-    VkPipelineStageFlagBits   pipelineStage,
+    PipelineStageFlags        pipelineStage,
     const TimestampQueryPool* pQueryPool,
     uint32_t                  query)
 {
@@ -5568,7 +5568,7 @@ void CmdBuffer::DbgCmdBarrier(bool preCmd)
 
 // =====================================================================================================================
 void CmdBuffer::WriteBufferMarker(
-    VkPipelineStageFlagBits pipelineStage,
+    PipelineStageFlags      pipelineStage,
     VkBuffer                dstBuffer,
     VkDeviceSize            dstOffset,
     uint32_t                marker)

@@ -104,7 +104,7 @@ ComputePipeline::ComputePipeline(
     uint32_t                             staticStateMask,
     uint64_t                             apiHash)
     :
-    Pipeline(pDevice),
+    Pipeline(pDevice, VK_PIPELINE_BIND_POINT_COMPUTE),
     m_info(immedInfo)
 {
     Pipeline::Init(pPalPipeline, pPipelineLayout, pPipelineBinary, staticStateMask, apiHash);

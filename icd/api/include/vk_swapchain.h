@@ -94,6 +94,9 @@ public:
         const VkAllocationCallbacks*            pAllocator,
         VkSwapchainKHR*                         pSwapChain);
 
+    void Init(
+        const VkAllocationCallbacks* pAllocator);
+
     VkResult Destroy(const VkAllocationCallbacks* pAllocator);
 
     VkResult AcquireNextImage(

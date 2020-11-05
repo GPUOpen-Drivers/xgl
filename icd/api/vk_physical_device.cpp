@@ -3451,6 +3451,9 @@ static bool IsSingleChannelMinMaxFilteringSupported(
 // =====================================================================================================================
 
 // =====================================================================================================================
+// TODO #raytracing: Query raytracing support from PAL.
+
+// =====================================================================================================================
 // Get available device extensions or populate the specified physical device with the extensions supported by it.
 //
 // If the device pointer is not nullptr, this function returns all extensions supported by that physical device.
@@ -3633,12 +3636,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         }
 
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_BUFFER_DEVICE_ADDRESS));
-
-        if ((pPhysicalDevice == nullptr) ||
-            (pPhysicalDevice->PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9))
-        {
-            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
-        }
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -4817,6 +4815,13 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_TERMINATE_INVOCATION_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR*>(pHeader);
+                pExtInfo->shaderTerminateInvocation = VK_TRUE;
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PIPELINE_CREATION_CACHE_CONTROL_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT*>(pHeader);
@@ -5058,16 +5063,9 @@ void PhysicalDevice::GetFeatures2(
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ROBUSTNESS_2_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceRobustness2FeaturesEXT*>(pHeader);
-                pExtInfo->robustImageAccess2  = VK_FALSE;
-                pExtInfo->robustBufferAccess2 = VK_FALSE;
-                pExtInfo->nullDescriptor      = VK_FALSE;
-
-                if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)
-                {
-                    pExtInfo->robustImageAccess2  = VK_TRUE;
-                    pExtInfo->robustBufferAccess2 = VK_TRUE;
-                    pExtInfo->nullDescriptor      = VK_TRUE;
-                }
+                pExtInfo->robustImageAccess2  = VK_TRUE;
+                pExtInfo->robustBufferAccess2 = VK_TRUE;
+                pExtInfo->nullDescriptor      = VK_TRUE;
 
                 break;
             }

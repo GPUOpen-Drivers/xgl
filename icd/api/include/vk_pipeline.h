@@ -162,6 +162,9 @@ public:
     VK_INLINE const PipelineBinaryInfo* GetBinary() const
         { return m_pBinary; }
 
+    VK_INLINE VkPipelineBindPoint GetType() const
+        { return m_type; }
+
     // This function returns true if any of the bits in the given state mask (corresponding to shifted values of
     // VK_DYNAMIC_STATE_*) should be programmed by the pipeline when it is bound (instead of by the application via
     // vkCmdSet*).
@@ -181,7 +184,8 @@ public:
 
 protected:
     Pipeline(
-        Device* const         pDevice);
+        Device* const         pDevice,
+        VkPipelineBindPoint   type);
 
     virtual ~Pipeline();
 
@@ -200,6 +204,10 @@ protected:
         Util::MetroHash128*                    pHasher,
         const VkPipelineShaderStageCreateInfo& desc);
 
+    static void GenerateHashFromDynamicStateCreateInfo(
+        Util::MetroHash128*                     pHasher,
+        const VkPipelineDynamicStateCreateInfo& desc);
+
     Device* const                      m_pDevice;
     UserDataLayout                     m_userDataLayout;
     Pal::IPipeline*                    m_pPalPipeline[MaxPalDevices];
@@ -207,6 +215,7 @@ protected:
     uint32_t                           m_staticStateMask; // Bitfield to detect which subset of pipeline state is
                                                           // static (written at bind-time as opposed to via vkCmd*).
     uint64_t                           m_apiHash;
+    VkPipelineBindPoint                m_type;
 
 private:
     PipelineBinaryInfo*                m_pBinary;

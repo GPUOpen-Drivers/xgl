@@ -1968,7 +1968,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateGraphicsPipelines(
     {
         for (uint32_t i = 0; i < createInfoCount; ++i)
         {
-            if (GraphicsPipeline::IsNullHandle(pPipelines[i]) == false)
+            if (pPipelines[i] != VK_NULL_HANDLE)
             {
                 GraphicsPipeline* pPipeline = NonDispatchable<VkPipeline, GraphicsPipeline>::ObjectFromHandle(
                     pPipelines[i]);
@@ -2020,7 +2020,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateComputePipelines(
     {
         for (uint32_t i = 0; i < createInfoCount; ++i)
         {
-            if (ComputePipeline::IsNullHandle(pPipelines[i]) == false)
+            if (pPipelines[i] != VK_NULL_HANDLE)
             {
                 ComputePipeline* pPipeline = NonDispatchable<VkPipeline, ComputePipeline>::ObjectFromHandle(
                     pPipelines[i]);

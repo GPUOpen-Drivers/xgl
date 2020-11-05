@@ -415,22 +415,6 @@ void GraphicsPipeline::GenerateHashFromColorBlendStateCreateInfo(
 }
 
 // =====================================================================================================================
-// Generates a hash using the contents of a VkPipelineDynamicStateCreateInfo struct
-// Pipeline compilation affected by: none
-void GraphicsPipeline::GenerateHashFromDynamicStateCreateInfo(
-    Util::MetroHash128*                     pHasher,
-    const VkPipelineDynamicStateCreateInfo& desc)
-{
-    pHasher->Update(desc.flags);
-    pHasher->Update(desc.dynamicStateCount);
-
-    for (uint32_t i = 0; i < desc.dynamicStateCount; i++)
-    {
-        pHasher->Update(desc.pDynamicStates[i]);
-    }
-}
-
-// =====================================================================================================================
 // Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
 // Pipeline compilation affected by:
 //     - pCreateInfo->pStages
@@ -1690,7 +1674,7 @@ GraphicsPipeline::GraphicsPipeline(
     uint64_t                               apiHash,
     Util::MetroHash64*                     pPalPipelineHasher)
     :
-    Pipeline(pDevice),
+    Pipeline(pDevice, VK_PIPELINE_BIND_POINT_GRAPHICS),
     m_info(immedInfo),
     m_vbInfo(vbInfo),
     m_flags()

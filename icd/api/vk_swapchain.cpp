@@ -476,6 +476,8 @@ VkResult SwapChain::Create(
 
         SwapChain* pObject = SwapChain::ObjectFromHandle(*pSwapChain);
 
+        pObject->Init(pAllocator);
+
         for (uint32_t i = 0; i < properties.imageCount; ++i)
         {
             // Register presentable images with the swap chain
@@ -513,6 +515,14 @@ VkResult SwapChain::Create(
     }
 
     return result;
+}
+
+// =====================================================================================================================
+// Initialize swapchain after creation with anything necessary.
+void SwapChain::Init(const VkAllocationCallbacks* pAllocator)
+{
+    VkResult result = VK_SUCCESS;
+
 }
 
 // =====================================================================================================================
@@ -680,7 +690,9 @@ void SwapChain::PostPresent(
 {
     if (m_pFullscreenMgr != nullptr)
     {
+
         m_pFullscreenMgr->PostPresent(this, presentInfo, pPresentResult);
+
     }
 
     m_appOwnedImageCount--;
@@ -751,7 +763,9 @@ Pal::IGpuMemory* SwapChain::UpdatePresentInfo(
     // information in case it has enabled fullscreen.
     if (m_pFullscreenMgr != nullptr)
     {
+
         m_pFullscreenMgr->UpdatePresentInfo(this, pPresentInfo);
+
     }
 
     return pSrcImageGpuMemory;
@@ -1029,7 +1043,7 @@ bool FullscreenMgr::TryExitExclusive(
         Pal::Result palResult = m_pScreen->ReleaseFullscreenOwnership();
 
         s_forceFullscreenReacquire = true;
-        VK_ASSERT(palResult == Pal::Result::Success);
+        VK_ASSERT((m_exclusiveModeFlags.acquired == 0) || (palResult == Pal::Result::Success));
     }
 
     m_exclusiveModeFlags.acquired = 0;

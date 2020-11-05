@@ -68,7 +68,7 @@ public:
     static constexpr uint32_t DynDescRegCount = 4;
 
     // Magic number describing an invalid or unmapped user data entry
-    static constexpr uint32_t InvalidReg = UINT32_MAX;
+    static constexpr uint8 InvalidReg = UINT8_MAX;
 
     static constexpr size_t GetMaxResMappingRootNodeSize();
     static constexpr size_t GetMaxResMappingNodeSize();
@@ -80,12 +80,11 @@ public:
         // The user data register offsets in this structure are relative to the setBindingRegBase field of
         // the below top-level UserDataLayout.
 
-        uint32_t    setPtrRegOffset;        // User data register offset to use for this set's set pointer
-        uint32_t    dynDescDataRegOffset;   // User data register offset for this set's dynamic descriptor data
-        uint32_t    dynDescDataRegCount;    // Number of registers for the dynamic descriptor data
-        uint32_t    dynDescCount;           // Number of dynamic descriptors defined by the descriptor set layout
-        uint32_t    firstRegOffset;         // First user data register offset used by this set layout
-        uint32_t    totalRegCount;          // Total number of user data registers used by this set layout
+        uint8    setPtrRegOffset;        // User data register offset to use for this set's set pointer
+        uint8    dynDescDataRegOffset;   // User data register offset for this set's dynamic descriptor data
+        uint8    dynDescCount;           // Number of dynamic descriptors defined by the descriptor set layout
+        uint8    firstRegOffset;         // First user data register offset used by this set layout
+        uint8    totalRegCount;          // Total number of user data registers used by this set layout
     };
 
     // This structure holds information about the user data register allocation scheme of this pipeline layout
@@ -151,12 +150,13 @@ public:
     VK_INLINE const DescriptorSetLayout* GetSetLayouts(uint32_t setIndex) const
     {
         return static_cast<const DescriptorSetLayout* const*>(
-            Util::VoidPtrInc(this, sizeof(*this) + (m_info.setCount * sizeof(SetUserDataLayout))))[setIndex];
+            Util::VoidPtrInc(this, sizeof(*this) + SetUserDataLayoutSize()))[setIndex];
     }
+
     VK_INLINE DescriptorSetLayout* GetSetLayouts(uint32_t setIndex)
     {
         return static_cast<DescriptorSetLayout**>(
-            Util::VoidPtrInc(this, sizeof(*this) + (m_info.setCount * sizeof(SetUserDataLayout))))[setIndex];
+            Util::VoidPtrInc(this, sizeof(*this) + SetUserDataLayoutSize()))[setIndex];
     }
 
 protected:
@@ -197,6 +197,16 @@ protected:
     static Vkgc::ResourceMappingNodeType MapLlpcResourceNodeType(
         VkDescriptorType descriptorType);
 
+    static size_t ExtraDataAlignment()
+    {
+        return Util::Max(alignof(SetUserDataLayout), alignof(DescriptorSetLayout*));
+    }
+
+    size_t SetUserDataLayoutSize() const
+    {
+        return Util::Pow2Align((m_info.setCount * sizeof(SetUserDataLayout)), ExtraDataAlignment());
+    }
+
     const Info              m_info;
     const PipelineInfo      m_pipelineInfo;
     const Device* const     m_pDevice;
@@ -205,8 +215,16 @@ protected:
 
 static_assert(alignof(PipelineLayout::SetUserDataLayout) <= alignof(PipelineLayout),
     "PipelineLayout::SetUserDataLayout must not have greater alignment than PipelineLayout object!");
-static_assert((sizeof(PipelineLayout::SetUserDataLayout) % alignof(DescriptorSetLayout*)) == 0,
-    "DescriptorSetLayout pointer is not properly aligned after PipelineLayout::SetUserDataLayout!");
+static_assert(alignof(DescriptorSetLayout*) <= alignof(PipelineLayout),
+    "DescriptorSetLayout* must not have greater alignment than PipelineLayout object!");
+
+constexpr uint32 MaxDescSetRegCount   = MaxDescriptorSets * PipelineLayout::SetPtrRegCount;
+constexpr uint32 MaxDynDescRegCount   = MaxDynamicDescriptors * PipelineLayout::DynDescRegCount;
+constexpr uint32 MaxBindingRegCount   = MaxDescSetRegCount + MaxDynDescRegCount;
+constexpr uint32 MaxPushConstRegCount = MaxPushConstants / 4;
+
+static_assert(PipelineLayout::InvalidReg > (MaxPushConstRegCount + MaxBindingRegCount),
+    "PipelineLayout::InvalidReg must be greater than max registers needed.");
 
 namespace entry
 {

@@ -595,9 +595,6 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     // WARNING: Do not conditionally add options based on GFXIP version as these will
     // break support for systems with a mixture of ASICs. GFXIP dependent options
     // should be subtarget features or handled in LLVM backend.
-    llpcOptions[numOptions++] = "-unroll-max-percent-threshold-boost=1000";
-    llpcOptions[numOptions++] = "-pragma-unroll-threshold=1000";
-    llpcOptions[numOptions++] = "-unroll-allow-partial";
     llpcOptions[numOptions++] = "-simplifycfg-sink-common=false";
     llpcOptions[numOptions++] = "-amdgpu-vgpr-index-mode"; // force VGPR indexing on GFX8
 

@@ -141,14 +141,32 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
 }
 
 // =====================================================================================================================
+// Generates a hash using the contents of a VkPipelineDynamicStateCreateInfo struct
+// Pipeline compilation affected by: none
+void Pipeline::GenerateHashFromDynamicStateCreateInfo(
+    Util::MetroHash128* pHasher,
+    const VkPipelineDynamicStateCreateInfo& desc)
+{
+    pHasher->Update(desc.flags);
+    pHasher->Update(desc.dynamicStateCount);
+
+    for (uint32_t i = 0; i < desc.dynamicStateCount; i++)
+    {
+        pHasher->Update(desc.pDynamicStates[i]);
+    }
+}
+
+// =====================================================================================================================
 Pipeline::Pipeline(
-    Device* const pDevice)
+    Device* const       pDevice,
+    VkPipelineBindPoint type)
     :
     m_pDevice(pDevice),
     m_userDataLayout(),
     m_palPipelineHash(0),
     m_staticStateMask(0),
     m_apiHash(0),
+    m_type(type),
     m_pBinary(nullptr)
 {
     memset(m_pPalPipeline, 0, sizeof(m_pPalPipeline));

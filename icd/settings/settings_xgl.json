@@ -856,6 +856,19 @@
       "VariableName": "delayFullScreenAcquireToFirstPresent"
     },
     {
+      "Name": "SyncOsHdrState",
+      "Description": "When true, create a dummy FP16 swapchain to sync the OS HDR state and avoid dim desktop issues during Alt+Tab and app exit from HDR modes",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "syncOsHdrState"
+    },
+    {
       "Name": "EnableRelocatableShaders",
       "Description": "Builds a pipeline by linking reloctable shader elf, which have been built individually.  Only valid when LLPC is the pipeline compiler.",
       "Tags": [

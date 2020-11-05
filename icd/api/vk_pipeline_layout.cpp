@@ -185,7 +185,6 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
         pSetUserData->setPtrRegOffset      = InvalidReg;
         pSetUserData->dynDescDataRegOffset = 0;
-        pSetUserData->dynDescDataRegCount  = 0;
         pSetUserData->dynDescCount         = setLayoutInfo.numDynamicDescriptors;
         pSetUserData->firstRegOffset       = pInfo->userDataRegCount - pInfo->userDataLayout.setBindingRegBase;
         pSetUserData->totalRegCount        = 0;
@@ -210,8 +209,8 @@ VkResult PipelineLayout::ConvertCreateInfo(
 
             // Reserve user data register space for dynamic descriptor data
             pSetUserData->dynDescDataRegOffset = pSetUserData->firstRegOffset + pSetUserData->totalRegCount;
-            pSetUserData->dynDescDataRegCount  = pSetUserData->dynDescCount * DescriptorSetLayout::GetDynamicBufferDescDwSize(pDevice);
-            pSetUserData->totalRegCount += pSetUserData->dynDescDataRegCount;
+
+            pSetUserData->totalRegCount += pSetUserData->dynDescCount * DescriptorSetLayout::GetDynamicBufferDescDwSize(pDevice);
 
             totalDynDescCount += setLayoutInfo.numDynamicDescriptors;
 
@@ -279,9 +278,13 @@ VkResult PipelineLayout::Create(
 
     // Need to add extra storage for DescriptorSetLayout*, SetUserDataLayout, the descriptor set layouts themselves,
     // the resource mapping nodes, and the descriptor range values
-    const size_t apiSize = sizeof(PipelineLayout);
-    const size_t objSize = apiSize + (pCreateInfo->setLayoutCount * sizeof(SetUserDataLayout)) +
-        (pCreateInfo->setLayoutCount * sizeof(DescriptorSetLayout*)) + setLayoutsArraySize;
+    const size_t apiSize                 = sizeof(PipelineLayout);
+    const size_t setUserDataLayoutSize   =
+        Util::Pow2Align((pCreateInfo->setLayoutCount * sizeof(SetUserDataLayout)), ExtraDataAlignment());
+    const size_t descriptorSetLayoutSize =
+        Util::Pow2Align((pCreateInfo->setLayoutCount * sizeof(DescriptorSetLayout*)), ExtraDataAlignment());
+
+    const size_t objSize = apiSize + setUserDataLayoutSize + descriptorSetLayoutSize + setLayoutsArraySize;
 
     void* pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
 
@@ -297,7 +300,7 @@ VkResult PipelineLayout::Create(
     {
         pSetUserData = static_cast<SetUserDataLayout*>(Util::VoidPtrInc(pSysMem, apiSize));
         ppSetLayouts = static_cast<DescriptorSetLayout**>(
-            Util::VoidPtrInc(pSysMem, apiSize + (pCreateInfo->setLayoutCount * sizeof(SetUserDataLayout))));
+            Util::VoidPtrInc(pSysMem, apiSize + setUserDataLayoutSize));
 
         result = ConvertCreateInfo(
             pDevice,
@@ -309,8 +312,7 @@ VkResult PipelineLayout::Create(
 
     if (result == VK_SUCCESS)
     {
-        size_t currentSetLayoutOffset = apiSize + (pCreateInfo->setLayoutCount * sizeof(SetUserDataLayout)) +
-            (pCreateInfo->setLayoutCount * sizeof(DescriptorSetLayout*));
+        size_t currentSetLayoutOffset = apiSize + setUserDataLayoutSize + descriptorSetLayoutSize;
 
         for (uint32_t i = 0; i < pCreateInfo->setLayoutCount; ++i)
         {
