@@ -33,21 +33,21 @@
 #include "include/vk_utils.h"
 
 #include "palMetroHash.h"
+#include "pipeline_binary_cache.h"
 
 namespace vk
 {
 
 // =====================================================================================================================
 CacheAdapter* CacheAdapter::Create(
-    Instance*                   pInstance,
-    PipelineBinaryCache*        pPipelineBinaryCache)
+    PipelineBinaryCache* pPipelineBinaryCache)
 {
     CacheAdapter* pObj = nullptr;
-    void*         pMem = pInstance->AllocMem(sizeof(CacheAdapter), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void*         pMem = pPipelineBinaryCache->AllocMem(sizeof(CacheAdapter));
 
     if (pMem != nullptr)
     {
-        pObj = VK_PLACEMENT_NEW(pMem) CacheAdapter(pInstance, pPipelineBinaryCache);
+        pObj = VK_PLACEMENT_NEW(pMem) CacheAdapter(pPipelineBinaryCache);
     }
 
     return pObj;
@@ -56,17 +56,17 @@ CacheAdapter* CacheAdapter::Create(
 // =====================================================================================================================
 void CacheAdapter::Destroy()
 {
+    PipelineBinaryCache* pCache = m_pPipelineBinaryCache;
+    void*                pMem   = this;
     Util::Destructor(this);
-    m_pInstance->FreeMem(this);
+    pCache->FreeMem(pMem);
 }
 
 // =====================================================================================================================
 CacheAdapter::CacheAdapter(
-    Instance*                   pInstance,
-    PipelineBinaryCache*        pPipelineBinaryCache)
+    PipelineBinaryCache* pPipelineBinaryCache)
     :
-    m_pInstance             { pInstance },
-    m_pPipelineBinaryCache  { pPipelineBinaryCache }
+    m_pPipelineBinaryCache { pPipelineBinaryCache }
 {
 }
 
@@ -83,8 +83,8 @@ Result CacheAdapter::GetEntry(
 {
     Result result = Result::Success;
     bool mustPopulate = false;
-    Util::QueryResult* pQuery  = static_cast<Util::QueryResult*>(m_pInstance->AllocMem(sizeof(Util::QueryResult),
-        VK_SYSTEM_ALLOCATION_SCOPE_OBJECT));
+    Util::QueryResult* pQuery =
+        static_cast<Util::QueryResult*>(m_pPipelineBinaryCache->AllocMem(sizeof(Util::QueryResult)));
 
     if (pQuery != nullptr)
     {
@@ -110,7 +110,7 @@ Result CacheAdapter::GetEntry(
         }
         else if (palResult != Util::Result::Success)
         {
-            m_pInstance->FreeMem(pQuery);
+            m_pPipelineBinaryCache->FreeMem(pQuery);
             pQuery = nullptr;
             result = Result::ErrorUnknown;
             if (palResult == Util::Result::NotFound)
@@ -157,7 +157,7 @@ void CacheAdapter::ReleaseEntry(
     {
         Util::QueryResult* pQuery  = static_cast<Util::QueryResult*>(rawHandle);
         m_pPipelineBinaryCache->ReleaseCacheRef(pQuery);
-        m_pInstance->FreeMem(rawHandle);
+        m_pPipelineBinaryCache->FreeMem(rawHandle);
     }
 }
 

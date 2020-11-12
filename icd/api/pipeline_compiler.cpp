@@ -104,7 +104,6 @@ void PipelineCompiler::DestroyPipelineBinaryCache()
     if (m_pBinaryCache != nullptr)
     {
         m_pBinaryCache->Destroy();
-        m_pPhysicalDevice->VkInstance()->FreeMem(m_pBinaryCache);
         m_pBinaryCache = nullptr;
     }
 }
@@ -173,7 +172,17 @@ VkResult PipelineCompiler::Initialize()
          (m_pPhysicalDevice->VkInstance()->GetDevModeMgr() != nullptr)))
     {
         m_pBinaryCache = PipelineBinaryCache::Create(
-                m_pPhysicalDevice->VkInstance(), 0, nullptr, true, m_gfxIp, m_pPhysicalDevice);
+                m_pPhysicalDevice->VkInstance()->GetAllocCallbacks(),
+                m_pPhysicalDevice->GetPlatformKey(),
+                m_gfxIp,
+                m_pPhysicalDevice->GetRuntimeSettings(),
+                m_pPhysicalDevice->PalDevice()->GetCacheFilePath(),
+#if ICD_GPUOPEN_DEVMODE_BUILD
+                m_pPhysicalDevice->VkInstance()->GetDevModeMgr(),
+#endif
+                0,
+                nullptr,
+                true);
 
         // This isn't a terminal failure, the device can continue without the pipeline cache if need be.
         VK_ALERT(m_pBinaryCache == nullptr);

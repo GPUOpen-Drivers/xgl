@@ -103,8 +103,12 @@ VkResult PipelineCache::Create(
                 {
                     const void* pData   = Util::VoidPtrInc(pCreateInfo->pInitialData, sizeof(PipelineCacheHeaderData));
                     size_t dataSize     = pCreateInfo->initialDataSize - sizeof(PipelineCacheHeaderData);
+                    vk::PhysicalDevice* pPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
 
-                    if (PipelineBinaryCache::IsValidBlob(pDevice->VkPhysicalDevice(DefaultDeviceIndex), dataSize, pData))
+                    if (PipelineBinaryCache::IsValidBlob(pPhysicalDevice->VkInstance()->GetAllocCallbacks(),
+                                                         pPhysicalDevice->GetPlatformKey(),
+                                                         dataSize,
+                                                         pData))
                     {
                         usePipelineCacheInitialData = true;
                     }
@@ -200,9 +204,19 @@ VkResult PipelineCache::Create(
                     initialDataSize = pCreateInfo->initialDataSize - sizeof(PipelineCacheHeaderData);
                 }
 
-                pBinaryCache = PipelineBinaryCache::Create(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance(),
-                    initialDataSize, pInitialData, false,
-                    pDevice->GetCompiler(DefaultDeviceIndex)->GetGfxIp(), pDevice->VkPhysicalDevice(DefaultDeviceIndex));
+                vk::PhysicalDevice* pDefaultPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+                pBinaryCache = PipelineBinaryCache::Create(
+                    pDefaultPhysicalDevice->VkInstance()->GetAllocCallbacks(),
+                    pDefaultPhysicalDevice->GetPlatformKey(),
+                    pDevice->GetCompiler(DefaultDeviceIndex)->GetGfxIp(),
+                    pDefaultPhysicalDevice->GetRuntimeSettings(),
+                    pDefaultPhysicalDevice->PalDevice()->GetCacheFilePath(),
+#if ICD_GPUOPEN_DEVMODE_BUILD
+                    pDefaultPhysicalDevice->VkInstance()->GetDevModeMgr(),
+#endif
+                    initialDataSize,
+                    pInitialData,
+                    false);
 
                 // This isn't a terminal failure, the device can continue without the pipeline cache if need be.
                 VK_ALERT(pBinaryCache == nullptr);
@@ -227,7 +241,6 @@ VkResult PipelineCache::Destroy(
     if (m_pBinaryCache != nullptr)
     {
         m_pBinaryCache->Destroy();
-        pDevice->VkPhysicalDevice(DefaultDeviceIndex)->VkInstance()->FreeMem(m_pBinaryCache);
         m_pBinaryCache = nullptr;
     }
 

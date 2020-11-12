@@ -30,21 +30,19 @@
 */
 #pragma once
 
-#include "include/vk_instance.h"
-#include "pipeline_binary_cache.h"
 #include "vkgcDefs.h"
 
 namespace vk
 {
 using namespace Vkgc;
 
+class PipelineBinaryCache;
+
 // An adapter class that implements ICache in terms of a simple Get/Set interface.
 class CacheAdapter : public ICache
 {
 public:
-    static CacheAdapter* Create(
-        Instance*                   pInstance,
-        PipelineBinaryCache*        pPipelineBinaryCache);
+    static CacheAdapter* Create(PipelineBinaryCache* pPipelineBinaryCache);
 
     ~CacheAdapter();
     void Destroy();
@@ -71,11 +69,8 @@ public:
                             size_t* pDataLen) override;
 
 private:
-    explicit CacheAdapter(
-        Instance*                 pInstance,
-        PipelineBinaryCache*      pPipelineBinaryCache);
+    explicit CacheAdapter(PipelineBinaryCache* pPipelineBinaryCache);
 
-    Instance*   m_pInstance;
     PipelineBinaryCache* m_pPipelineBinaryCache;
 };
 
