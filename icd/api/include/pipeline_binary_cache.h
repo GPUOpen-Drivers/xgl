@@ -40,6 +40,10 @@
 namespace Util
 {
 class IPlatformKey;
+
+#if ICD_GPUOPEN_DEVMODE_BUILD
+class DevModeMgr;
+#endif
 } // namespace Util
 
 namespace vk
@@ -65,22 +69,37 @@ public:
     using CacheId                    = Util::MetroHash::Hash;
 
     static PipelineBinaryCache* Create(
-        Instance*                 pInstance,
-        size_t                    initDataSize,
-        const void*               pInitData,
-        bool                      internal,
-        const Vkgc::GfxIpVersion& gfxIp,
-        const PhysicalDevice*     pPhysicalDevice);
+        VkAllocationCallbacks*     pAllocationCallbacks,
+        Util::IPlatformKey*        pKey,
+        const Vkgc::GfxIpVersion&  gfxIp,
+        const vk::RuntimeSettings& settings,
+        const char*                pDefaultCacheFilePath,
+#if ICD_GPUOPEN_DEVMODE_BUILD
+        vk::DevModeMgr*            pDevModeMgr,
+#endif
+        size_t                     initDataSize,
+        const void*                pInitData,
+        bool                       internal);
 
     static bool IsValidBlob(
-        const PhysicalDevice* pPhysicalDevice,
-        size_t dataSize,
-        const void* pData);
+        VkAllocationCallbacks* pAllocationCallbacks,
+        Util::IPlatformKey*    pKey,
+        size_t                 dataSize,
+        const void*            pData);
+
+    static Util::Result CalculateHashId(
+        VkAllocationCallbacks*    pAllocationCallbacks,
+        const Util::IPlatformKey* pPlatformKey,
+        const void*               pData,
+        size_t                    dataSize,
+        uint8_t*                  pHashId);
 
     ~PipelineBinaryCache();
 
     VkResult Initialize(
-        const PhysicalDevice* pPhysicalDevice);
+        const RuntimeSettings&    settings,
+        const char*               pDefaultCacheFilePath,
+        const Util::IPlatformKey* pKey);
 
     Util::Result QueryPipelineBinary(
         const CacheId*     pCacheId,
@@ -154,6 +173,12 @@ public:
 
     void FreePipelineBinary(const void* pPipelineBinary);
 
+    void* AllocMem(
+        size_t memSize) const;
+
+    void FreeMem(
+        void* pMem) const;
+
     void Destroy();
 
     CacheAdapter* GetCacheAdapter() { return m_pCacheAdapter; }
@@ -164,7 +189,7 @@ private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineBinaryCache);
 
     explicit PipelineBinaryCache(
-        Instance*                 pInstance,
+        VkAllocationCallbacks*    pAllocationCallbacks,
         const Vkgc::GfxIpVersion& gfxIp,
         bool                      internal);
 
@@ -180,7 +205,7 @@ private:
         Util::ICacheLayer** pBottomLayer);
 
     VkResult InitLayers(
-        const PhysicalDevice*  pPhysicalDevice,
+        const char*            pDefaultCacheFilePath,
         bool                   internal,
         const RuntimeSettings& settings);
 
@@ -196,7 +221,7 @@ private:
         const RuntimeSettings& settings);
 
     VkResult InitArchiveLayers(
-        const PhysicalDevice*  pPhysicalDevice,
+        const char*            pDefaultCacheFilePath,
         const RuntimeSettings& settings);
 
     Util::ICacheLayer*  GetMemoryLayer() const { return m_pMemoryLayer; }
@@ -205,33 +230,36 @@ private:
     Util::ICacheLayer*  CreateFileLayer(Util::IArchiveFile* pFile);
 
     // Override the driver's default location
-    static constexpr char   EnvVarPath[] = "AMD_VK_PIPELINE_CACHE_PATH";
+    static constexpr char     EnvVarPath[] = "AMD_VK_PIPELINE_CACHE_PATH";
 
     // Override the driver's default name (Hash of application name)
-    static constexpr char   EnvVarFileName[] = "AMD_VK_PIPELINE_CACHE_FILENAME";
+    static constexpr char     EnvVarFileName[] = "AMD_VK_PIPELINE_CACHE_FILENAME";
 
     // Filename of an additional, read-only archive
-    static constexpr char   EnvVarReadOnlyFileName[] = "AMD_VK_PIPELINE_CACHE_READ_ONLY_FILENAME";
+    static constexpr char     EnvVarReadOnlyFileName[] = "AMD_VK_PIPELINE_CACHE_READ_ONLY_FILENAME";
 
-    static const uint32_t   ArchiveType;                // TypeId created by hashed string VK_SHADER_PIPELINE_CACHE
-    static const uint32_t   ElfType;                    // TypeId created by hashed string VK_PIPELINE_ELF
+    static const uint32_t     ArchiveType;                // TypeId created by hashed string VK_SHADER_PIPELINE_CACHE
+    static const uint32_t     ElfType;                    // TypeId created by hashed string VK_PIPELINE_ELF
 
-    Vkgc::GfxIpVersion      m_gfxIp;                    // Compared against e_flags of reinjected elf files
+    Vkgc::GfxIpVersion        m_gfxIp;                    // Compared against e_flags of reinjected elf files
 
-    Instance* const         m_pInstance;                // Allocator for use when interacting with the cache
+    VkAllocationCallbacks*    m_pAllocationCallbacks;     // Allocator for use when interacting with the cache
 
-    const Util::IPlatformKey*     m_pPlatformKey;       // Platform identifying key
+    vk::PalAllocator          m_palAllocator;             // PalAllocator for helper objects, e.g., FileVector
 
-    Util::ICacheLayer*      m_pTopLayer;                // Top layer of the cache chain where queries are submitted
+    const Util::IPlatformKey* m_pPlatformKey;             // Platform identifying key
+
+    Util::ICacheLayer*        m_pTopLayer;                // Top layer of the cache chain where queries are submitted
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    Util::ICacheLayer*      m_pReinjectionLayer;        // Reinjection interface layer
+    vk::DevModeMgr*           m_pDevModeMgr;
+    Util::ICacheLayer*        m_pReinjectionLayer;        // Reinjection interface layer
 
-    HashMapping             m_hashMapping;              // Maps the internalPipelineHash to the appropriate CacheId
-    Util::RWLock            m_hashMappingLock;          // Prevents collisions during writes to the map
+    HashMapping               m_hashMapping;              // Maps the internalPipelineHash to the appropriate CacheId
+    Util::RWLock              m_hashMappingLock;          // Prevents collisions during writes to the map
 #endif
 
-    Util::ICacheLayer*      m_pMemoryLayer;
+    Util::ICacheLayer*        m_pMemoryLayer;
 
     // Archive based cache layers
     using FileVector  = Util::Vector<Util::IArchiveFile*, 8, PalAllocator>;

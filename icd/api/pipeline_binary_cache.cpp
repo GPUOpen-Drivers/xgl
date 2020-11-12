@@ -29,7 +29,6 @@
 ***********************************************************************************************************************
 */
 #include "include/pipeline_binary_cache.h"
-#include "include/vk_physical_device.h"
 
 #include "palArchiveFile.h"
 #include "palAutoBuffer.h"
@@ -68,20 +67,20 @@ const uint32_t PipelineBinaryCache::ElfType     = Util::HashString(ElfTypeString
 static Util::Hash128 ParseHash128(const char* str);
 #endif
 
-static Util::Result CalculateHashId(
-    Instance*                   pInstance,
-    const Util::IPlatformKey*   pPlatformKey,
-    const void*                 pData,
-    size_t                      dataSize,
-    uint8_t*                    pHashId)
+Util::Result PipelineBinaryCache::CalculateHashId(
+    VkAllocationCallbacks*    pAllocationCallbacks,
+    const Util::IPlatformKey* pPlatformKey,
+    const void*               pData,
+    size_t                    dataSize,
+    uint8_t*                  pHashId)
 {
-    Util::Result        result          = Util::Result::Success;
-    Util::IHashContext* pContext        = nullptr;
-    size_t              contextSize     = pPlatformKey->GetKeyContext()->GetDuplicateObjectSize();
-    void*               pContextMem     = pInstance->AllocMem(
-                                            contextSize,
-                                            VK_DEFAULT_MEM_ALIGN,
-                                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    Util::Result        result       = Util::Result::Success;
+    Util::IHashContext* pContext     = nullptr;
+    size_t              contextSize  = pPlatformKey->GetKeyContext()->GetDuplicateObjectSize();
+    void*               pContextMem  = pAllocationCallbacks->pfnAllocation(pAllocationCallbacks->pUserData,
+                                                                           contextSize,
+                                                                           VK_DEFAULT_MEM_ALIGN,
+                                                                           VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
 
     if (pContextMem != nullptr)
     {
@@ -101,16 +100,17 @@ static Util::Result CalculateHashId(
     }
     if (pContextMem != nullptr)
     {
-        pInstance->FreeMem(pContextMem);
+        pAllocationCallbacks->pfnFree(pAllocationCallbacks->pUserData, pContextMem);
     }
 
     return result;
 }
 
 bool PipelineBinaryCache::IsValidBlob(
-    const PhysicalDevice* pPhysicalDevice,
-    size_t dataSize,
-    const void* pData)
+    VkAllocationCallbacks* pAllocationCallbacks,
+    Util::IPlatformKey*    pKey,
+    size_t                 dataSize,
+    const void*            pData)
 {
     bool     isValid            = false;
     size_t   blobSize           = dataSize;
@@ -120,14 +120,13 @@ bool PipelineBinaryCache::IsValidBlob(
     pData         = Util::VoidPtrInc(pData, sizeof(PipelineBinaryCachePrivateHeader));
     blobSize     -= sizeof(PipelineBinaryCachePrivateHeader);
 
-    if (pPhysicalDevice->GetPlatformKey() != nullptr)
+    if (pKey != nullptr)
     {
-        Util::Result        result          = CalculateHashId(
-                                                pPhysicalDevice->Manager()->VkInstance(),
-                                                pPhysicalDevice->GetPlatformKey(),
-                                                pData,
-                                                blobSize,
-                                                hashId);
+        Util::Result result = CalculateHashId(pAllocationCallbacks,
+                                              pKey,
+                                              pData,
+                                              blobSize,
+                                              hashId);
 
         if (result == Util::Result::Success)
         {
@@ -141,23 +140,37 @@ bool PipelineBinaryCache::IsValidBlob(
 // =====================================================================================================================
 // Allocate and initialize a PipelineBinaryCache object
 PipelineBinaryCache* PipelineBinaryCache::Create(
-    Instance*                 pInstance,
+    VkAllocationCallbacks*    pAllocationCallbacks,
+    Util::IPlatformKey*       pKey,
+    const Vkgc::GfxIpVersion& gfxIp,
+    const RuntimeSettings&    settings,
+    const char*               pDefaultCacheFilePath,
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    vk::DevModeMgr*           pDevModeMgr,
+#endif
     size_t                    initDataSize,
     const void*               pInitData,
-    bool                      internal,
-    const Vkgc::GfxIpVersion& gfxIp,
-    const PhysicalDevice*     pPhysicalDevice)
+    bool                      internal
+    )
 {
+    VK_ASSERT(pAllocationCallbacks != nullptr);
+
     PipelineBinaryCache* pObj = nullptr;
-    void*                pMem = pInstance->AllocMem(sizeof(PipelineBinaryCache), VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void*                pMem = pAllocationCallbacks->pfnAllocation(pAllocationCallbacks->pUserData,
+                                                                    sizeof(PipelineBinaryCache),
+                                                                    VK_DEFAULT_MEM_ALIGN,
+                                                                    VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
     if (pMem != nullptr)
     {
-        pObj = VK_PLACEMENT_NEW(pMem) PipelineBinaryCache(pInstance, gfxIp, internal);
+        pObj = VK_PLACEMENT_NEW(pMem) PipelineBinaryCache(pAllocationCallbacks, gfxIp, internal);
 
-        if (pObj->Initialize(pPhysicalDevice) != VK_SUCCESS)
+#if ICD_GPUOPEN_DEVMODE_BUILD
+        pObj->m_pDevModeMgr = pDevModeMgr;
+#endif
+
+        if (pObj->Initialize(settings, pDefaultCacheFilePath, pKey) != VK_SUCCESS)
         {
             pObj->Destroy();
-            pInstance->FreeMem(pMem);
             pObj = nullptr;
         }
         else if ((pInitData != nullptr) &&
@@ -198,23 +211,25 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
 
 // =====================================================================================================================
 PipelineBinaryCache::PipelineBinaryCache(
-    Instance*                 pInstance,
+    VkAllocationCallbacks*    pAllocationCallbacks,
     const Vkgc::GfxIpVersion& gfxIp,
     bool                      internal)
     :
-    m_pInstance        { pInstance },
-    m_pPlatformKey     { nullptr },
-    m_pTopLayer        { nullptr },
+    m_pAllocationCallbacks { pAllocationCallbacks },
+    m_palAllocator         { pAllocationCallbacks },
+    m_pPlatformKey         { nullptr },
+    m_pTopLayer            { nullptr },
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    m_pReinjectionLayer{ nullptr },
-    m_hashMapping      { 32, pInstance->Allocator() },
+    m_pDevModeMgr          { nullptr },
+    m_pReinjectionLayer    { nullptr },
+    m_hashMapping          { 32, &m_palAllocator },
 #endif
-    m_pMemoryLayer     { nullptr },
-    m_pArchiveLayer    { nullptr },
-    m_openFiles        { pInstance->Allocator() },
-    m_archiveLayers    { pInstance->Allocator() },
-    m_isInternalCache  { internal },
-    m_pCacheAdapter    { nullptr }
+    m_pMemoryLayer         { nullptr },
+    m_pArchiveLayer        { nullptr },
+    m_openFiles            { &m_palAllocator },
+    m_archiveLayers        { &m_palAllocator },
+    m_isInternalCache      { internal },
+    m_pCacheAdapter        { nullptr }
 {
     // Without copy constructor, a class type variable can't be initialized in initialization list with gcc 4.8.5.
     // Initialize m_gfxIp here instead to make gcc 4.8.5 work.
@@ -233,7 +248,7 @@ PipelineBinaryCache::~PipelineBinaryCache()
     for (FileVector::Iter i = m_openFiles.Begin(); i.IsValid(); i.Next())
     {
         i.Get()->Destroy();
-        m_pInstance->FreeMem(i.Get());
+        FreeMem(i.Get());
     }
 
     m_openFiles.Clear();
@@ -241,7 +256,7 @@ PipelineBinaryCache::~PipelineBinaryCache()
     for (LayerVector::Iter i = m_archiveLayers.Begin(); i.IsValid(); i.Next())
     {
         i.Get()->Destroy();
-        m_pInstance->FreeMem(i.Get());
+        FreeMem(i.Get());
     }
 
     m_archiveLayers.Clear();
@@ -249,7 +264,7 @@ PipelineBinaryCache::~PipelineBinaryCache()
     if (m_pMemoryLayer != nullptr)
     {
         m_pMemoryLayer->Destroy();
-        m_pInstance->FreeMem(m_pMemoryLayer);
+        FreeMem(m_pMemoryLayer);
     }
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -258,6 +273,31 @@ PipelineBinaryCache::~PipelineBinaryCache()
         m_pReinjectionLayer->Destroy();
     }
 #endif
+}
+
+// =====================================================================================================================
+// Allocates memory using the internal VkAllocationCallbacks. Uses the default memory alignment and the object system
+// allocation scope.
+// Any memory returned by this function must be freed with PipelineBinaryCache::FreeMem.
+void* PipelineBinaryCache::AllocMem(
+    size_t memSize) const
+{
+        VK_ASSERT(memSize > 0);
+        return m_pAllocationCallbacks->pfnAllocation(m_pAllocationCallbacks->pUserData,
+                                                     memSize,
+                                                     VK_DEFAULT_MEM_ALIGN,
+                                                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+}
+
+// =====================================================================================================================
+// Frees memory allocated by PipelineBinaryCache::AllocMem. No-op when passed a null pointer.
+void PipelineBinaryCache::FreeMem(
+    void* pMem) const
+{
+    if (pMem != nullptr)
+    {
+        m_pAllocationCallbacks->pfnFree(m_pAllocationCallbacks->pUserData, pMem);
+    }
 }
 
 // =====================================================================================================================
@@ -304,11 +344,7 @@ Util::Result PipelineBinaryCache::LoadPipelineBinary(
 
     if (result == Util::Result::Success)
     {
-        void* pOutputMem = m_pInstance->AllocMem(
-            query.dataSize,
-            VK_DEFAULT_MEM_ALIGN,
-            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-
+        void* pOutputMem = AllocMem(query.dataSize);
         if (pOutputMem != nullptr)
         {
             result = m_pTopLayer->Load(&query, pOutputMem);
@@ -320,7 +356,7 @@ Util::Result PipelineBinaryCache::LoadPipelineBinary(
             }
             else
             {
-                m_pInstance->FreeMem(pOutputMem);
+                FreeMem(pOutputMem);
             }
         }
     }
@@ -438,10 +474,7 @@ Util::Result PipelineBinaryCache::LoadReinjectionBinary(
 
         if (result == Util::Result::Success)
         {
-            void* pOutputMem = m_pInstance->AllocMem(
-                query.dataSize,
-                VK_DEFAULT_MEM_ALIGN,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+            void* pOutputMem = AllocMem(query.dataSize);
 
             if (pOutputMem != nullptr)
             {
@@ -454,7 +487,7 @@ Util::Result PipelineBinaryCache::LoadReinjectionBinary(
                 }
                 else
                 {
-                    m_pInstance->FreeMem(pOutputMem);
+                    FreeMem(pOutputMem);
                 }
             }
         }
@@ -478,7 +511,7 @@ Util::Result PipelineBinaryCache::StoreReinjectionBinary(
         uint32_t gfxIpMinor = 0u;
         uint32_t gfxIpStepping = 0u;
 
-        Util::Abi::PipelineAbiReader reader(m_pInstance->Allocator(), pPipelineBinary);
+        Util::Abi::PipelineAbiReader reader(&m_palAllocator, pPipelineBinary);
         reader.GetGfxIpVersion(&gfxIpMajor, &gfxIpMinor, &gfxIpStepping);
 
         if (gfxIpMajor == m_gfxIp.major &&
@@ -502,10 +535,7 @@ Util::Result PipelineBinaryCache::StoreReinjectionBinary(
 void PipelineBinaryCache::FreePipelineBinary(
     const void* pPipelineBinary)
 {
-    if (pPipelineBinary != nullptr)
-    {
-        m_pInstance->FreeMem(const_cast<void*>(pPipelineBinary));
-    }
+    FreeMem(const_cast<void*>(pPipelineBinary));
 }
 
 // =====================================================================================================================
@@ -513,28 +543,32 @@ void PipelineBinaryCache::FreePipelineBinary(
 void PipelineBinaryCache::Destroy()
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    if (m_pInstance->GetDevModeMgr() != nullptr)
+    if (m_pDevModeMgr != nullptr)
     {
-        m_pInstance->GetDevModeMgr()->DeregisterPipelineCache(this);
+        m_pDevModeMgr->DeregisterPipelineCache(this);
     }
 #endif
+
+    VkAllocationCallbacks* pAllocationCallbacks = m_pAllocationCallbacks;
+    void* pMem = this;
     Util::Destructor(this);
+    pAllocationCallbacks->pfnFree(pAllocationCallbacks->pUserData, pMem);
 }
 
 // =====================================================================================================================
 // Build the cache layer chain
 VkResult PipelineBinaryCache::Initialize(
-    const PhysicalDevice* pPhysicalDevice)
+    const RuntimeSettings&    settings,
+    const char*               pDefaultCacheFilePath,
+    const Util::IPlatformKey* pKey)
 {
     VkResult result = VK_SUCCESS;
-
-    const RuntimeSettings& settings = pPhysicalDevice->GetRuntimeSettings();
 
     m_entriesMutex.Init();
 
     if (result == VK_SUCCESS)
     {
-        m_pPlatformKey = pPhysicalDevice->GetPlatformKey();
+        m_pPlatformKey = pKey;
     }
 
     if (m_pPlatformKey == nullptr)
@@ -544,7 +578,7 @@ VkResult PipelineBinaryCache::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        result = InitLayers(pPhysicalDevice, m_isInternalCache, settings);
+        result = InitLayers(pDefaultCacheFilePath, m_isInternalCache, settings);
     }
 
     if (result == VK_SUCCESS)
@@ -556,7 +590,7 @@ VkResult PipelineBinaryCache::Initialize(
     if ((result == VK_SUCCESS) &&
         (m_pReinjectionLayer != nullptr))
     {
-        Util::Result palResult = m_pInstance->GetDevModeMgr()->RegisterPipelineCache(
+        Util::Result palResult = m_pDevModeMgr->RegisterPipelineCache(
             this,
             settings.devModePipelineUriServicePostSizeLimit);
 
@@ -583,7 +617,7 @@ VkResult PipelineBinaryCache::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        m_pCacheAdapter = CacheAdapter::Create(m_pInstance, this);
+        m_pCacheAdapter = CacheAdapter::Create(this);
         VK_ALERT(m_pCacheAdapter == nullptr);
     }
 
@@ -598,11 +632,11 @@ VkResult PipelineBinaryCache::InitReinjectionLayer(
 {
     VkResult result = VK_ERROR_FEATURE_NOT_PRESENT;
 
-    if (m_pInstance->GetDevModeMgr() != nullptr)
+    if (m_pDevModeMgr != nullptr)
     {
         Util::MemoryCacheCreateInfo info = {};
         Util::AllocCallbacks        allocCbs = {
-            m_pInstance->GetAllocCallbacks(),
+            m_pAllocationCallbacks,
             allocator::PalAllocFuncDelegator,
             allocator::PalFreeFuncDelegator
         };
@@ -614,7 +648,7 @@ VkResult PipelineBinaryCache::InitReinjectionLayer(
         info.evictDuplicates = true;
 
         size_t memSize = Util::GetMemoryCacheLayerSize(&info);
-        void*  pMem    = m_pInstance->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+        void*  pMem    = AllocMem(memSize);
 
         if (pMem == nullptr)
         {
@@ -630,7 +664,7 @@ VkResult PipelineBinaryCache::InitReinjectionLayer(
 
             if (result != VK_SUCCESS)
             {
-                m_pInstance->FreeMem(pMem);
+                FreeMem(pMem);
             }
         }
 
@@ -702,12 +736,8 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
         if (result == Util::Result::Success)
         {
             // Allocate space for ppFileNames and pFileNameBuffer
-            ppFileNames = (const char**)m_pInstance->AllocMem(
-                (sizeof(const char*) * fileCount),
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-            pFileNameBuffer = m_pInstance->AllocMem(
-                fileNameBufferSize,
-                VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+            ppFileNames = (const char**)AllocMem(sizeof(const char*) * fileCount);
+            pFileNameBuffer = AllocMem(fileNameBufferSize);
 
             // Populate ppFileNames and pFileNameBuffer
             result = Util::ListDir(
@@ -719,8 +749,8 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
 
             if (result != Util::Result::Success)
             {
-                m_pInstance->FreeMem(pFileNameBuffer);
-                m_pInstance->FreeMem(ppFileNames);
+                FreeMem(pFileNameBuffer);
+                FreeMem(ppFileNames);
             }
         }
 
@@ -745,7 +775,7 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
                     if (Util::File::Exists(filePath))
                     {
                         pipelineBinarySize = Util::File::GetFileSize(filePath);
-                        pPipelineBinary = m_pInstance->AllocMem(pipelineBinarySize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+                        pPipelineBinary = AllocMem(pipelineBinarySize);
 
                         if (pPipelineBinary != nullptr)
                         {
@@ -770,7 +800,7 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
                             }
                         }
 
-                        m_pInstance->FreeMem(pPipelineBinary);
+                        FreeMem(pPipelineBinary);
                     }
                     else
                     {
@@ -779,8 +809,8 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
                 }
             }
 
-            m_pInstance->FreeMem(pFileNameBuffer);
-            m_pInstance->FreeMem(ppFileNames);
+            FreeMem(pFileNameBuffer);
+            FreeMem(ppFileNames);
         }
     }
 
@@ -796,7 +826,7 @@ VkResult PipelineBinaryCache::InitMemoryCacheLayer(
     VK_ASSERT(m_pMemoryLayer == nullptr);
 
     Util::AllocCallbacks allocCallbacks = {};
-    allocCallbacks.pClientData = m_pInstance->GetAllocCallbacks();
+    allocCallbacks.pClientData = m_pAllocationCallbacks;
     allocCallbacks.pfnAlloc    = allocator::PalAllocFuncDelegator;
     allocCallbacks.pfnFree     = allocator::PalFreeFuncDelegator;
 
@@ -808,7 +838,7 @@ VkResult PipelineBinaryCache::InitMemoryCacheLayer(
     createInfo.evictDuplicates     = true;
 
     size_t layerSize = Util::GetMemoryCacheLayerSize(&createInfo);
-    void*  pMem      = m_pInstance->AllocMem(layerSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void* pMem = AllocMem(layerSize);
 
     VkResult result = VK_SUCCESS;
 
@@ -823,7 +853,7 @@ VkResult PipelineBinaryCache::InitMemoryCacheLayer(
 
         if (result != VK_SUCCESS)
         {
-            m_pInstance->FreeMem(pMem);
+            FreeMem(pMem);
         }
     }
 
@@ -844,7 +874,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenReadOnlyArchive(
     Util::IArchiveFile*       pFile = nullptr;
 
     Util::AllocCallbacks allocCbs = {
-        m_pInstance->GetAllocCallbacks(),
+        m_pAllocationCallbacks,
         allocator::PalAllocFuncDelegator,
         allocator::PalFreeFuncDelegator
     };
@@ -863,7 +893,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenReadOnlyArchive(
     info.maxReadBufferMem        = bufferSize;
 
     size_t memSize = Util::GetArchiveFileObjectSize(&info);
-    void*  pMem    = m_pInstance->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void*  pMem    = AllocMem(memSize);
 
     if (pMem != nullptr)
     {
@@ -878,7 +908,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenReadOnlyArchive(
         }
         else
         {
-            m_pInstance->FreeMem(pMem);
+            FreeMem(pMem);
             pFile = nullptr;
         }
     }
@@ -900,7 +930,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenWritableArchive(
     Util::IArchiveFile*       pFile = nullptr;
 
     Util::AllocCallbacks allocCbs = {
-        m_pInstance->GetAllocCallbacks(),
+        m_pAllocationCallbacks,
         allocator::PalAllocFuncDelegator,
         allocator::PalFreeFuncDelegator
     };
@@ -919,7 +949,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenWritableArchive(
     info.maxReadBufferMem        = bufferSize;
 
     size_t memSize = Util::GetArchiveFileObjectSize(&info);
-    void*  pMem    = m_pInstance->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void*  pMem    = AllocMem(memSize);
 
     if (pMem != nullptr)
     {
@@ -942,7 +972,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenWritableArchive(
         }
         else
         {
-            m_pInstance->FreeMem(pMem);
+            FreeMem(pMem);
             pFile = nullptr;
         }
     }
@@ -960,7 +990,7 @@ Util::ICacheLayer* PipelineBinaryCache::CreateFileLayer(
     Util::ICacheLayer*               pLayer = nullptr;
 
     Util::AllocCallbacks allocCbs = {
-        m_pInstance->GetAllocCallbacks(),
+        m_pAllocationCallbacks,
         allocator::PalAllocFuncDelegator,
         allocator::PalFreeFuncDelegator
     };
@@ -971,13 +1001,13 @@ Util::ICacheLayer* PipelineBinaryCache::CreateFileLayer(
     info.dataTypeId          = ElfType;
 
     size_t memSize = Util::GetArchiveFileCacheLayerSize(&info);
-    void*  pMem    = m_pInstance->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    void*  pMem    = AllocMem(memSize);
 
     if (pMem != nullptr)
     {
         if (Util::CreateArchiveFileCacheLayer(&info, pMem, &pLayer) != Util::Result::Success)
         {
-            m_pInstance->FreeMem(pMem);
+            FreeMem(pMem);
             pLayer = nullptr;
         }
     }
@@ -988,7 +1018,7 @@ Util::ICacheLayer* PipelineBinaryCache::CreateFileLayer(
 // =====================================================================================================================
 // Open the archive file and initialize its cache layer
 VkResult PipelineBinaryCache::InitArchiveLayers(
-    const PhysicalDevice*  pPhysicalDevice,
+    const char*            pDefaultCacheFilePath,
     const RuntimeSettings& settings)
 {
     VkResult result = VK_SUCCESS;
@@ -1007,7 +1037,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
         if (settings.usePipelineCachingDefaultLocation)
         {
             const char* pCacheSubPath = settings.pipelineCachingDefaultLocation;
-            const char* pUserDataPath = pPhysicalDevice->PalDevice()->GetCacheFilePath();
+            const char* pUserDataPath = pDefaultCacheFilePath;
 
             if ((pCacheSubPath != nullptr) &&
                 (pUserDataPath != nullptr))
@@ -1067,7 +1097,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                 else
                 {
                     pFile->Destroy();
-                    m_pInstance->FreeMem(pFile);
+                    FreeMem(pFile);
                 }
             }
         }
@@ -1168,7 +1198,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                 else
                 {
                     pFile->Destroy();
-                    m_pInstance->FreeMem(pFile);
+                    FreeMem(pFile);
                 }
             }
         }
@@ -1187,14 +1217,14 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
 // =====================================================================================================================
 // Initialize layers (a single layer that supports storage for binaries needs to succeed)
 VkResult PipelineBinaryCache::InitLayers(
-    const PhysicalDevice*  pPhysicalDevice,
+    const char*            pDefaultCacheFilePath,
     bool                   internal,
     const RuntimeSettings& settings)
 {
     VkResult result = VK_ERROR_INITIALIZATION_FAILED;
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    if ((InitReinjectionLayer(settings) == VK_SUCCESS))
+    if (InitReinjectionLayer(settings) == VK_SUCCESS)
     {
         result = VK_SUCCESS;
     }
@@ -1208,7 +1238,7 @@ VkResult PipelineBinaryCache::InitLayers(
     // If cache handle is vkPipelineCache, we shouldn't store it to disk.
     if (internal)
     {
-        if (InitArchiveLayers(pPhysicalDevice, settings) == VK_SUCCESS)
+        if (InitArchiveLayers(pDefaultCacheFilePath, settings) == VK_SUCCESS)
         {
             result = VK_SUCCESS;
         }
@@ -1308,7 +1338,7 @@ VkResult PipelineBinaryCache::Serialize(
             {
                 if (*pSize > (sizeof(BinaryCacheEntry) + sizeof(PipelineBinaryCachePrivateHeader)))
                 {
-                    Util::AutoBuffer<Util::Hash128, 8, PalAllocator> cacheIds(curCount, m_pInstance->Allocator());
+                    Util::AutoBuffer<Util::Hash128, 8, PalAllocator> cacheIds(curCount, &m_palAllocator);
                     size_t remainingSpace    = *pSize - sizeof(PipelineBinaryCachePrivateHeader);
 
                     result = PalToVkResult(Util::GetMemoryCacheLayerHashIds(m_pMemoryLayer, curCount, &cacheIds[0]));
@@ -1339,7 +1369,7 @@ VkResult PipelineBinaryCache::Serialize(
                                     pDataDst = Util::VoidPtrInc(pDataDst, dataSize);
                                     remainingSpace -= (sizeof(BinaryCacheEntry) + dataSize);
                                 }
-                                m_pInstance->FreeMem(const_cast<void*>(pBinaryCacheData));
+                                FreeMem(const_cast<void*>(pBinaryCacheData));
                             }
                         }
                     }
@@ -1353,7 +1383,7 @@ VkResult PipelineBinaryCache::Serialize(
                     void* pData               = Util::VoidPtrInc(pBlob, sizeof(PipelineBinaryCachePrivateHeader));
 
                     result = PalToVkResult(CalculateHashId(
-                                                m_pInstance,
+                                                m_pAllocationCallbacks,
                                                 m_pPlatformKey,
                                                 pData,
                                                 *pSize - sizeof(PipelineBinaryCachePrivateHeader),
@@ -1390,7 +1420,7 @@ VkResult PipelineBinaryCache::Merge(
             result = PalToVkResult(Util::GetMemoryCacheLayerCurSize(pMemoryLayer, &curCount, &curDataSize));
             if ((result == VK_SUCCESS) && (curCount > 0))
             {
-                Util::AutoBuffer<Util::Hash128, 8, PalAllocator> cacheIds(curCount, m_pInstance->Allocator());
+                Util::AutoBuffer<Util::Hash128, 8, PalAllocator> cacheIds(curCount, &m_palAllocator);
 
                 result = PalToVkResult(Util::GetMemoryCacheLayerHashIds(pMemoryLayer, curCount, &cacheIds[0]));
                 if (result == VK_SUCCESS)
@@ -1404,7 +1434,7 @@ VkResult PipelineBinaryCache::Merge(
                         if (result == VK_SUCCESS)
                         {
                             result = PalToVkResult(StorePipelineBinary(&cacheIds[j], dataSize, pBinaryCacheData));
-                            m_pInstance->FreeMem(const_cast<void*>(pBinaryCacheData));
+                            FreeMem(const_cast<void*>(pBinaryCacheData));
                             if (result != VK_SUCCESS)
                             {
                                 break;
