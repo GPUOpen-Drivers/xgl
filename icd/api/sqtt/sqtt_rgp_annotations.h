@@ -176,38 +176,46 @@ constexpr uint32_t RgpSqttMarkerCbEndWordCount = 3;
 // existing values can't be changed.
 enum class RgpSqttMarkerEventType : uint32_t
 {
-    CmdDraw                             = 0,     // vkCmdDraw
-    CmdDrawIndexed                      = 1,     // vkCmdDrawIndexed
-    CmdDrawIndirect                     = 2,     // vkCmdDrawIndirect
-    CmdDrawIndexedIndirect              = 3,     // vkCmdDrawIndexedIndirect
-    CmdDrawIndirectCountAMD             = 4,     // vkCmdDrawIndirectCountAMD
-    CmdDrawIndexedIndirectCountAMD      = 5,     // vkCmdDrawIndexedIndirectCountAMD
-    CmdDispatch                         = 6,     // vkCmdDispatch
-    CmdDispatchIndirect                 = 7,     // vkCmdDispatchIndirect
-    CmdCopyBuffer                       = 8,     // vkCmdCopyBuffer
-    CmdCopyImage                        = 9,     // vkCmdCopyImage
-    CmdBlitImage                        = 10,    // vkCmdBlitImage
-    CmdCopyBufferToImage                = 11,    // vkCmdCopyBufferToImage
-    CmdCopyImageToBuffer                = 12,    // vkCmdCopyImageToBuffer
-    CmdUpdateBuffer                     = 13,    // vkCmdUpdateBuffer
-    CmdFillBuffer                       = 14,    // vkCmdFillBuffer
-    CmdClearColorImage                  = 15,    // vkCmdClearColorImage
-    CmdClearDepthStencilImage           = 16,    // vkCmdClearDepthStencilImage
-    CmdClearAttachments                 = 17,    // vkCmdClearAttachments
-    CmdResolveImage                     = 18,    // vkCmdResolveImage
-    CmdWaitEvents                       = 19,    // vkCmdWaitEvents
-    CmdPipelineBarrier                  = 20,    // vkCmdPipelineBarrier
-    CmdResetQueryPool                   = 21,    // vkCmdResetQueryPool
-    CmdCopyQueryPoolResults             = 22,    // vkCmdCopyQueryPoolResults
-    RenderPassColorClear                = 23,    // Render pass: Color clear triggered by attachment load op
-    RenderPassDepthStencilClear         = 24,    // Render pass: Depth-stencil clear triggered by attachment load op
-    RenderPassResolve                   = 25,    // Render pass: Color multisample resolve triggered by resolve attachment
-    InternalUnknown                     = 26,    // Draw or dispatch by PAL due to a reason we do not know
-    CmdDrawIndirectCountKHR             = 27,    // vkCmdDrawIndirectCountKHR
-    CmdDrawIndexedIndirectCountKHR      = 28,    // vkCmdDrawIndexedIndirectCountKHR
-
-    Invalid                        = 0xffffffff
+    CmdDraw                                     = 0,        // vkCmdDraw
+    CmdDrawIndexed                              = 1,        // vkCmdDrawIndexed
+    CmdDrawIndirect                             = 2,        // vkCmdDrawIndirect
+    CmdDrawIndexedIndirect                      = 3,        // vkCmdDrawIndexedIndirect
+    CmdDrawIndirectCountAMD                     = 4,        // vkCmdDrawIndirectCountAMD
+    CmdDrawIndexedIndirectCountAMD              = 5,        // vkCmdDrawIndexedIndirectCountAMD
+    CmdDispatch                                 = 6,        // vkCmdDispatch
+    CmdDispatchIndirect                         = 7,        // vkCmdDispatchIndirect
+    CmdCopyBuffer                               = 8,        // vkCmdCopyBuffer
+    CmdCopyImage                                = 9,        // vkCmdCopyImage
+    CmdBlitImage                                = 10,       // vkCmdBlitImage
+    CmdCopyBufferToImage                        = 11,       // vkCmdCopyBufferToImage
+    CmdCopyImageToBuffer                        = 12,       // vkCmdCopyImageToBuffer
+    CmdUpdateBuffer                             = 13,       // vkCmdUpdateBuffer
+    CmdFillBuffer                               = 14,       // vkCmdFillBuffer
+    CmdClearColorImage                          = 15,       // vkCmdClearColorImage
+    CmdClearDepthStencilImage                   = 16,       // vkCmdClearDepthStencilImage
+    CmdClearAttachments                         = 17,       // vkCmdClearAttachments
+    CmdResolveImage                             = 18,       // vkCmdResolveImage
+    CmdWaitEvents                               = 19,       // vkCmdWaitEvents
+    CmdPipelineBarrier                          = 20,       // vkCmdPipelineBarrier
+    CmdResetQueryPool                           = 21,       // vkCmdResetQueryPool
+    CmdCopyQueryPoolResults                     = 22,       // vkCmdCopyQueryPoolResults
+    RenderPassColorClear                        = 23,       // Render pass: Color clear triggered by attachment load op
+    RenderPassDepthStencilClear                 = 24,       // Render pass: Depth-stencil clear triggered by attachment load op
+    RenderPassResolve                           = 25,       // Render pass: Color multisample resolve triggered by resolve attachment
+    InternalUnknown                             = 26,       // Draw or dispatch by PAL due to a reason we do not know
+    CmdDrawIndirectCountKHR                     = 27,       // vkCmdDrawIndirectCountKHR
+    CmdDrawIndexedIndirectCountKHR              = 28,       // vkCmdDrawIndexedIndirectCountKHR
+    CmdUnknown                                  = 0x7fff,
+    Invalid                                     = 0xffffffff
 };
+
+inline RgpSqttMarkerEventType& operator |= (RgpSqttMarkerEventType& lhs, RgpSqttMarkerEventType rhs)
+{
+    return lhs = static_cast<RgpSqttMarkerEventType>(
+        static_cast<std::underlying_type<RgpSqttMarkerEventType>::type>(lhs) |
+        static_cast<std::underlying_type<RgpSqttMarkerEventType>::type>(rhs)
+    );
+}
 
 // RgpSqttMarkerEvent - "Event (Per-draw/dispatch)" RGP SQ thread-tracing marker.  These are generated ahead of
 // draws or dispatches for commands that trigger generation of waves i.e. draws/dispatches (Table 4).

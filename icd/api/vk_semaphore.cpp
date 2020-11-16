@@ -266,8 +266,8 @@ VkResult Semaphore::ImportSemaphore(
     VkResult vkResult       = VK_SUCCESS;
     Pal::Result palResult   = Pal::Result::Success;
 
-    Pal::ExternalQueueSemaphoreOpenInfo palOpenInfo = {};
-    VkExternalSemaphoreHandleTypeFlags handleType   = importInfo.handleType;
+    Pal::ExternalQueueSemaphoreOpenInfo   palOpenInfo = {};
+    VkExternalSemaphoreHandleTypeFlagBits handleType  = importInfo.handleType;
 
     palOpenInfo.externalSemaphore  = importInfo.handle;
     palOpenInfo.flags.crossProcess = true;

@@ -205,6 +205,11 @@ target_include_directories(xgl PRIVATE
 
 target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
+#if VKI_KHR_DEFERRED_HOST_OPERATIONS
+if(VKI_KHR_DEFERRED_HOST_OPERATIONS)
+    target_compile_definitions(xgl PRIVATE VKI_KHR_DEFERRED_HOST_OPERATIONS)
+endif()
+#endif
 #if VKI_EXPOSE_EXT_CONDITIONAL_RENDERING
 if(VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
     target_compile_definitions(xgl PRIVATE VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
@@ -257,7 +262,6 @@ target_sources(xgl PRIVATE
     api/pipeline_binary_cache.cpp
     api/cache_adapter.cpp
     api/shader_cache.cpp
-    api/vert_buf_binding_mgr.cpp
     api/virtual_stack_mgr.cpp
     api/vk_alloccb.cpp
     api/vk_buffer.cpp

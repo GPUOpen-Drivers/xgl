@@ -99,6 +99,17 @@ void PipelineCompiler::GetElfCacheMetricString(
 }
 
 // =====================================================================================================================
+void PipelineCompiler::DestroyPipelineBinaryCache()
+{
+    if (m_pBinaryCache != nullptr)
+    {
+        m_pBinaryCache->Destroy();
+        m_pPhysicalDevice->VkInstance()->FreeMem(m_pBinaryCache);
+        m_pBinaryCache = nullptr;
+    }
+}
+
+// =====================================================================================================================
 PipelineCompiler::~PipelineCompiler()
 {
     VK_ASSERT(m_pBinaryCache == nullptr);
@@ -182,13 +193,7 @@ void PipelineCompiler::Destroy()
 {
     m_compilerSolutionLlpc.Destroy();
 
-    if (m_pBinaryCache)
-    {
-        m_pBinaryCache->Destroy();
-        m_pPhysicalDevice->VkInstance()->FreeMem(m_pBinaryCache);
-        m_pBinaryCache = nullptr;
-    }
-
+    DestroyPipelineBinaryCache();
 }
 
 // =====================================================================================================================

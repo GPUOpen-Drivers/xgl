@@ -672,6 +672,16 @@ VkResult Instance::Destroy(void)
     AmdvlkLog(m_logTagIdMask, GeneralPrint, "%s End ********\n", GetApplicationName());
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
+    // Pipeline binary cache is required to be freed before destroying DevModeMgr
+    // because DevModeMgr manages the state of pipeline binary cache.
+    uint32_t deviceCount = PhysicalDeviceManager::MaxPhysicalDevices;
+    VkPhysicalDevice devices[PhysicalDeviceManager::MaxPhysicalDevices] = {};
+    m_pPhysicalDeviceManager->EnumeratePhysicalDevices(&deviceCount, devices);
+    for (uint32_t deviceIdx = 0; deviceIdx < deviceCount; ++deviceIdx)
+    {
+        ApiPhysicalDevice::ObjectFromHandle(devices[deviceIdx])->GetCompiler()->DestroyPipelineBinaryCache();
+    }
+
     if (m_pDevModeMgr != nullptr)
     {
         m_pDevModeMgr->Destroy();

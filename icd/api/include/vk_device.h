@@ -101,9 +101,9 @@ class AsyncLayer;
 // VkImportSemaphoreWin32HandleInfoKHR. Please refer to the vkspec for the defination of members.
 struct ImportSemaphoreInfo
 {
-    VkExternalSemaphoreHandleTypeFlags  handleType;
-    Pal::OsExternalHandle               handle;
-    VkSemaphoreImportFlags              importFlags;
+    VkExternalSemaphoreHandleTypeFlagBits handleType;
+    Pal::OsExternalHandle                 handle;
+    VkSemaphoreImportFlags                importFlags;
 };
 
 // =====================================================================================================================

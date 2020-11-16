@@ -169,6 +169,9 @@ public:
     VK_INLINE Vkgc::GfxIpVersion& GetGfxIp() { return m_gfxIp; }
 
     void GetElfCacheMetricString(char* pOutStr, size_t outStrSize);
+
+    void DestroyPipelineBinaryCache();
+
 private:
 
     void ApplyProfileOptions(

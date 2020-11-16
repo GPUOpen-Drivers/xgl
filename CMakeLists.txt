@@ -248,6 +248,8 @@ endif()
 
 option(XGL_ENABLE_LTO "Build with LTO enabled?" ON)
 
+option(XGL_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
+
 option(ICD_BUILD_LLPC "Build LLPC?" ON)
 cmake_dependent_option(ICD_COMPILER_DEFAULT "Default value of compiler" ON "ICD_BUILD_LLPC" OFF)
 option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
@@ -465,6 +467,50 @@ string(APPEND CMAKE_EXE_LINKER_FLAGS "${ICD_SANITIZER_LINK_FLAGS}")
 string(APPEND CMAKE_SHARED_LINKER_FLAGS "${ICD_SANITIZER_LINK_FLAGS}")
 string(APPEND CMAKE_C_FLAGS "${ICD_SANITIZER_COMPILE_FLAGS}")
 string(APPEND CMAKE_CXX_FLAGS "${ICD_SANITIZER_COMPILE_FLAGS}")
+
+# GCOV source code coverage
+# Temporary variables
+set(ICD_GCOV_LINK_FLAGS "")
+set(ICD_GCOV_COMPILE_FLAGS "")
+
+macro(xgl_append_gcov_coverage_flags)
+    if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+        # This option is used to compile and link code instrumented for coverage analysis.
+        # The option --coverage is a synonym for -fprofile-arcs -ftest-coverage (when compiling) and -lgcov (when linking)
+        # Ref link: https://gcc.gnu.org/onlinedocs/gcc/Instrumentation-Options.html#Instrumentation-Options
+        string(APPEND ICD_GCOV_COMPILE_FLAGS " --coverage")
+        string(APPEND ICD_GCOV_LINK_FLAGS    " --coverage")
+
+        if (NOT CMAKE_BUILD_TYPE_DEBUG)
+            # Use -O0 even in not debug mode, otherwise code coverage is not accurate.
+            string(APPEND ICD_GCOV_COMPILE_FLAGS " -O0")
+        endif()
+
+        if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+            string(APPEND ICD_GCOV_COMPILE_FLAGS " -Xclang -coverage-cfg-checksum")
+            string(APPEND ICD_GCOV_COMPILE_FLAGS " -Xclang -coverage-no-function-names-in-data")
+            string(APPEND ICD_GCOV_COMPILE_FLAGS " -Xclang -coverage-version='408*'")
+        endif()
+    else()
+        message(FATAL_ERROR "Unknown compiler ID: ${CMAKE_CXX_COMPILER_ID}")
+    endif()
+endmacro()
+
+if(XGL_ENABLE_GCOV)
+    if(UNIX)
+        message(STATUS "This gcov is supported on the UNIX environment: ${XGL_ENABLE_GCOV}")
+        xgl_append_gcov_coverage_flags()
+    elseif(MSVC)
+        message(FATAL_ERROR "This gcov not yet supported in the MSVC environment: ${XGL_ENABLE_GCOV}")
+    else()
+        message(FATAL_ERROR "XGL_ENABLE_GCOV is not supported on this platform.")
+    endif()
+endif()
+
+string(APPEND CMAKE_EXE_LINKER_FLAGS "${ICD_GCOV_LINK_FLAGS}")
+string(APPEND CMAKE_SHARED_LINKER_FLAGS "${ICD_GCOV_LINK_FLAGS}")
+string(APPEND CMAKE_C_FLAGS "${ICD_GCOV_COMPILE_FLAGS}")
+string(APPEND CMAKE_CXX_FLAGS "${ICD_GCOV_COMPILE_FLAGS}")
 
 # Assertions
 if(XGL_ENABLE_ASSERTIONS)

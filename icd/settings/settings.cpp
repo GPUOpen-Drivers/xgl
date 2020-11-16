@@ -323,7 +323,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
              (appProfile == AppProfile::Doom)) &&
             (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1))
         {
-            m_settings.asyncComputeQueueMaxWavesPerCu = 40;
+            m_settings.asyncComputeQueueMaxWavesPerCu = 20;
             m_settings.nggSubgroupSizing = NggSubgroupExplicit;
             m_settings.nggVertsPerSubgroup = 254;
             m_settings.nggPrimsPerSubgroup = 128;
@@ -599,7 +599,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
-                m_settings.asyncComputeQueueMaxWavesPerCu = 40;
+                m_settings.asyncComputeQueueMaxWavesPerCu = 20;
 
                 m_settings.enableWgpMode = 0x20;
 

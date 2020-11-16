@@ -168,8 +168,8 @@ public:
         Device*                         pDevice,
         const VkAllocationCallbacks*    pAllocator) override;
 
-    const VbBindingInfo* GetVbBindingInfo() const
-        { return &m_vbInfo; }
+    const VbBindingInfo& GetVbBindingInfo() const
+        { return m_vbInfo; }
 
     void BindToCmdBuffer(
         CmdBuffer*                             pCmdBuffer,

@@ -35,8 +35,6 @@
 #include "include/vk_utils.h"
 #include "palMetroHash.h"
 
-#include "include/vert_buf_binding_mgr.h"
-
 namespace vk
 {
 

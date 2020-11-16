@@ -45,7 +45,6 @@
 #include "include/vk_utils.h"
 
 #include "include/internal_mem_mgr.h"
-#include "include/vert_buf_binding_mgr.h"
 #include "include/virtual_stack_mgr.h"
 #include "include/barrier_policy.h"
 
@@ -152,6 +151,9 @@ struct PerGpuRenderState
     const Pal::IDepthStencilState*  pDepthStencilState;
     // Currently bound descriptor sets and dynamic offsets (relative to base = 00)
     uint32_t setBindingData[PipelineBindCount][MaxBindingRegCount];
+
+    // VB bindings in source non-SRD form
+    Pal::BufferViewInfo vbBindings[Pal::MaxVertexBuffers];
 };
 
 // Members of CmdBufferRenderState that are the same for each GPU
@@ -750,14 +752,16 @@ public:
         uint32_t firstVertex,
         uint32_t vertexCount,
         uint32_t firstInstance,
-        uint32_t instanceCount);
+        uint32_t instanceCount,
+        uint32_t drawId);
 
     void PalCmdDrawIndexed(
         uint32_t firstIndex,
         uint32_t indexCount,
         int32_t  vertexOffset,
         uint32_t firstInstance,
-        uint32_t instanceCount);
+        uint32_t instanceCount,
+        uint32_t drawId);
 
     void PalCmdDispatch(
         uint32_t x,
@@ -1075,6 +1079,10 @@ private:
         uint32_t               lengthInDwords,
         const uint32_t* const  pInputValues);
 
+    void InitializeVertexBuffer();
+    void ResetVertexBuffer();
+    void UpdateVertexBufferStrides(const GraphicsPipeline* pPipeline);
+
     union CmdBufferFlags
     {
         uint32_t u32All;
@@ -1103,7 +1111,6 @@ private:
 
     CmdBufferRenderState          m_state; // Render state tracked during command buffer building
 
-    VertBufBindingMgr             m_vbMgr;           // Manages current vertex buffer bindings
     CmdBufferFlags                m_flags;
     VkResult                      m_recordingResult; // Tracks the result of recording commands to capture OOM errors
 

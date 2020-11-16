@@ -310,9 +310,13 @@ VkResult Queue::Submit(
         {
             const VkSubmitInfo& submitInfo = pSubmits[submitIdx];
             const VkDeviceGroupSubmitInfo* pDeviceGroupInfo = nullptr;
-            const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = nullptr;
             const VkProtectedSubmitInfo* pProtectedSubmitInfo = nullptr;
             bool  protectedSubmit = false;
+
+            uint32_t        waitSemaphoreValueCount = 0;
+            const uint64_t* pWaitSemaphoreValues = nullptr;
+            uint32_t        signalSemaphoreValueCount = 0;
+            const uint64_t* pSignalSemaphoreValues = nullptr;
 
             const void* pNext = submitInfo.pNext;
 
@@ -326,8 +330,14 @@ VkResult Queue::Submit(
                     pDeviceGroupInfo = static_cast<const VkDeviceGroupSubmitInfo*>(pNext);
                     break;
                 case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
-                    pTimelineSemaphoreInfo = static_cast<const VkTimelineSemaphoreSubmitInfo*>(pNext);
+                {
+                    const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = static_cast<const VkTimelineSemaphoreSubmitInfo*>(pNext);
+                    waitSemaphoreValueCount   = pTimelineSemaphoreInfo->waitSemaphoreValueCount;
+                    pWaitSemaphoreValues      = pTimelineSemaphoreInfo->pWaitSemaphoreValues;
+                    signalSemaphoreValueCount = pTimelineSemaphoreInfo->signalSemaphoreValueCount;
+                    pSignalSemaphoreValues    = pTimelineSemaphoreInfo->pSignalSemaphoreValues;
                     break;
+                }
                 case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO:
                     pProtectedSubmitInfo = static_cast<const VkProtectedSubmitInfo*>(pNext);
                     protectedSubmit = pProtectedSubmitInfo->protectedSubmit;
@@ -342,12 +352,12 @@ VkResult Queue::Submit(
 
             if ((result == VK_SUCCESS) && (submitInfo.waitSemaphoreCount > 0))
             {
-                VK_ASSERT((pTimelineSemaphoreInfo == nullptr) ||
-                          (submitInfo.waitSemaphoreCount == pTimelineSemaphoreInfo->waitSemaphoreValueCount));
+                VK_ASSERT((pWaitSemaphoreValues == nullptr) ||
+                          (submitInfo.waitSemaphoreCount == waitSemaphoreValueCount));
                 result = PalWaitSemaphores(
                     submitInfo.waitSemaphoreCount,
                     submitInfo.pWaitSemaphores,
-                    ((pTimelineSemaphoreInfo != nullptr) ? pTimelineSemaphoreInfo->pWaitSemaphoreValues : nullptr),
+                    pWaitSemaphoreValues,
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->waitSemaphoreCount          : 0),
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pWaitSemaphoreDeviceIndices : nullptr));
             }
@@ -452,12 +462,12 @@ VkResult Queue::Submit(
 
             if ((result == VK_SUCCESS) && (submitInfo.signalSemaphoreCount > 0))
             {
-                VK_ASSERT((pTimelineSemaphoreInfo == nullptr) ||
-                          (submitInfo.signalSemaphoreCount == pTimelineSemaphoreInfo->signalSemaphoreValueCount));
+                VK_ASSERT((pSignalSemaphoreValues == nullptr) ||
+                          (submitInfo.signalSemaphoreCount == signalSemaphoreValueCount));
                 result = PalSignalSemaphores(
                     submitInfo.signalSemaphoreCount,
                     submitInfo.pSignalSemaphores,
-                    ((pTimelineSemaphoreInfo != nullptr) ? pTimelineSemaphoreInfo->pSignalSemaphoreValues : nullptr),
+                    pSignalSemaphoreValues,
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->signalSemaphoreCount          : 0),
                     (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pSignalSemaphoreDeviceIndices : nullptr));
             }

@@ -509,6 +509,19 @@ void PipelineBinaryCache::FreePipelineBinary(
 }
 
 // =====================================================================================================================
+// Destroy PipelineBinaryCache itself
+void PipelineBinaryCache::Destroy()
+{
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    if (m_pInstance->GetDevModeMgr() != nullptr)
+    {
+        m_pInstance->GetDevModeMgr()->DeregisterPipelineCache(this);
+    }
+#endif
+    Util::Destructor(this);
+}
+
+// =====================================================================================================================
 // Build the cache layer chain
 VkResult PipelineBinaryCache::Initialize(
     const PhysicalDevice* pPhysicalDevice)

@@ -44,7 +44,6 @@
 #include "include/vk_conv.h"
 #include "include/vk_surface.h"
 
-#include "include/vert_buf_binding_mgr.h"
 #include "include/khronos/vk_icd.h"
 
 #include "llpc.h"
@@ -3655,7 +3654,10 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_DRAW_INDIRECT_COUNT));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_IMAGE_LOAD_STORE_LOD));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_INFO));
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_FRAGMENT_MASK));
+        if ((pPhysicalDevice == nullptr) || pPhysicalDevice->GetRuntimeSettings().enableFmaskBasedMsaaRead)
+        {
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_FRAGMENT_MASK));
+        }
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_TEXTURE_GATHER_BIAS_LOD));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPA_INTERFACE));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));

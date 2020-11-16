@@ -361,7 +361,7 @@ VkResult Memory::Create(
     if (vkResult == VK_SUCCESS)
     {
         // Account for committed size in logical device. The destructor will decrease the counter accordingly.
-        pDevice->IncreaseAllocatedMemorySize(pMemory->m_info.size, allocationMask, pMemory->m_info.heaps[0]);
+        pDevice->IncreaseAllocatedMemorySize(pMemory->m_size, allocationMask, pMemory->m_heap0);
 
         // Notify the memory object that it is counted so that the destructor can decrease the counter accordingly
         pMemory->SetAllocationCounted(allocationMask);
@@ -393,7 +393,7 @@ VkResult Memory::Create(
             Pal::GpuMemoryResourceBindEventData bindData = {};
             bindData.pObj               = pMemory;
             bindData.pGpuMemory         = pPalGpuMem;
-            bindData.requiredGpuMemSize = pMemory->PalInfo().size;
+            bindData.requiredGpuMemSize = pMemory->m_size;
             bindData.offset             = 0;
 
             pDevice->VkInstance()->PalPlatform()->LogEvent(
@@ -841,15 +841,20 @@ Memory::Memory(
     Pal::IImage*                    pExternalImage)
     :
     m_pDevice(pDevice),
-    m_info(info),
-    m_priority(info.priority, info.priorityOffset),
-    m_multiInstance(multiInstance),
-    m_allocationCounted(false),
-    m_sizeAccountedForDeviceMask(0),
     m_pExternalPalImage(pExternalImage),
-    m_primaryDeviceIndex(primaryIndex),
-    m_sharedGpuMemoryHandle(sharedGpuMemoryHandle)
+    m_sharedGpuMemoryHandle(sharedGpuMemoryHandle),
+    m_priority(info.priority, info.priorityOffset),
+    m_sizeAccountedForDeviceMask(0),
+    m_primaryDeviceIndex(primaryIndex)
 {
+    m_size = info.size;
+    m_heap0 = info.heaps[0];
+
+    m_flags.u32All = 0;
+    m_flags.sharedViaNtHandle = info.flags.sharedViaNtHandle;
+    m_flags.multiInstance = multiInstance ? 1 : 0;
+    m_flags.allocationCounted = 0;
+
     Init(ppPalMemory);
 }
 
@@ -861,15 +866,18 @@ Memory::Memory(
     uint32_t          primaryIndex)
     :
     m_pDevice(pDevice),
-    m_multiInstance(multiInstance),
-    m_allocationCounted(false),
-    m_sizeAccountedForDeviceMask(0),
     m_pExternalPalImage(nullptr),
-    m_primaryDeviceIndex(primaryIndex),
-    m_sharedGpuMemoryHandle(0)
+    m_sharedGpuMemoryHandle(0),
+    m_sizeAccountedForDeviceMask(0),
+    m_primaryDeviceIndex(primaryIndex)
 {
     // PAL info is not available for memory objects allocated for presentable images
-    memset(&m_info, 0, sizeof(m_info));
+    m_size = 0;
+    m_heap0 = Pal::GpuHeap::GpuHeapLocal;
+
+    m_flags.u32All = 0;
+    m_flags.multiInstance = multiInstance ? 1 : 0;
+
     Init(ppPalMemory);
 }
 
@@ -931,7 +939,7 @@ void Memory::Free(
     }
 
     // Decrease the allocation count
-    if (m_allocationCounted)
+    if (m_flags.allocationCounted)
     {
         m_pDevice->DecreaseAllocationCount();
     }
@@ -939,7 +947,7 @@ void Memory::Free(
     // Decrease the allocation size
     if (m_sizeAccountedForDeviceMask != 0)
     {
-        m_pDevice->DecreaseAllocatedMemorySize(m_info.size, m_sizeAccountedForDeviceMask, m_info.heaps[0]);
+        m_pDevice->DecreaseAllocatedMemorySize(m_size, m_sizeAccountedForDeviceMask, m_heap0);
     }
 
     // Call destructor
@@ -1066,7 +1074,7 @@ VkResult Memory::Map(
 
     // According to spec, "memory must not have been allocated with multiple instances"
     // if it is multi-instance allocation, we should just return VK_ERROR_MEMORY_MAP_FAILED
-    if (!m_multiInstance)
+    if (m_flags.multiInstance == 0)
     {
         Pal::Result palResult = Pal::Result::Success;
         if (PalMemory(m_primaryDeviceIndex) != nullptr)
@@ -1101,7 +1109,7 @@ void Memory::Unmap(void)
 {
     Pal::Result palResult = Pal::Result::Success;
 
-    VK_ASSERT(m_multiInstance == false);
+    VK_ASSERT(m_flags.multiInstance == 0);
 
     palResult = PalMemory(m_primaryDeviceIndex)->Unmap();
     VK_ASSERT(palResult == Pal::Result::Success);
@@ -1115,7 +1123,7 @@ VkResult Memory::GetCommitment(
     VK_ASSERT(pCommittedMemoryInBytes != nullptr);
 
     // We never allocate memory lazily, so just return the size of the memory object
-    *pCommittedMemoryInBytes = m_info.size;
+    *pCommittedMemoryInBytes = m_size;
 
     return VK_SUCCESS;
 }
@@ -1211,15 +1219,15 @@ Pal::IGpuMemory* Memory::PalMemory(
     uint32_t resourceIndex,
     uint32_t memoryIndex)
 {
-    // if it is not m_multiInstance, each PalMemory in peer device is imported from m_primaryDeviceIndex.
+    // if it is not m_flags.multiInstance, each PalMemory in peer device is imported from m_primaryDeviceIndex.
     // We could always return the PalMemory with memory index m_primaryDeviceIndex.
-    uint32_t index = m_multiInstance ? memoryIndex : m_primaryDeviceIndex;
+    uint32_t index = m_flags.multiInstance ? memoryIndex : m_primaryDeviceIndex;
 
     if (m_pPalMemory[resourceIndex][index] == nullptr)
     {
         // Instantiate the required PalMemory.
         Pal::IGpuMemory* pBaseMemory = nullptr;
-        if (m_multiInstance)
+        if (m_flags.multiInstance)
         {
             // we need to import the memory from [memoryIndex][memoryIndex]
             VK_ASSERT(m_pPalMemory[index][index] != nullptr);

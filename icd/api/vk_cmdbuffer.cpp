@@ -352,7 +352,6 @@ CmdBuffer::CmdBuffer(
     m_cbBeginDeviceMask(0),
     m_validShaderStageFlags(pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetValidShaderStages(queueFamilyIndex)),
     m_pStackAllocator(nullptr),
-    m_vbMgr(pDevice),
     m_flags(),
     m_recordingResult(VK_SUCCESS),
     m_barrierPolicy(barrierPolicy),
@@ -367,6 +366,7 @@ CmdBuffer::CmdBuffer(
     m_dbgBarrierPreCmdMask  = m_pDevice->GetRuntimeSettings().dbgBarrierPreCmdEnable;
     m_dbgBarrierPostCmdMask = m_pDevice->GetRuntimeSettings().dbgBarrierPostCmdEnable;
 #endif
+
 }
 
 // =====================================================================================================================
@@ -492,7 +492,7 @@ VkResult CmdBuffer::Initialize(
 
     if (result == Pal::Result::Success)
     {
-        result = m_vbMgr.Initialize();
+        InitializeVertexBuffer();
     }
 
     if (result == Pal::Result::Success)
@@ -634,7 +634,8 @@ void CmdBuffer::PalCmdDraw(
     uint32_t firstVertex,
     uint32_t vertexCount,
     uint32_t firstInstance,
-    uint32_t instanceCount)
+    uint32_t instanceCount,
+    uint32_t drawId)
 {
     // Currently only Vulkan graphics pipelines use PAL graphics pipeline bindings so there's no need to
     // add a delayed validation check for graphics.
@@ -648,7 +649,8 @@ void CmdBuffer::PalCmdDraw(
         PalCmdBuffer(deviceIdx)->CmdDraw(firstVertex,
             vertexCount,
             firstInstance,
-            instanceCount);
+            instanceCount,
+            drawId);
     }
     while (deviceGroup.IterateNext());
 }
@@ -659,7 +661,8 @@ void CmdBuffer::PalCmdDrawIndexed(
     uint32_t indexCount,
     int32_t  vertexOffset,
     uint32_t firstInstance,
-    uint32_t instanceCount)
+    uint32_t instanceCount,
+    uint32_t drawId)
 {
     // Currently only Vulkan graphics pipelines use PAL graphics pipeline bindings so there's no need to
     // add a delayed validation check for graphics.
@@ -674,7 +677,8 @@ void CmdBuffer::PalCmdDrawIndexed(
             indexCount,
             vertexOffset,
             firstInstance,
-            instanceCount);
+            instanceCount,
+            drawId);
     }
     while (deviceGroup.IterateNext());
 }
@@ -1197,7 +1201,7 @@ VkResult CmdBuffer::End(void)
 // and during vkResetCommandBuffer  (inside CmdBuffer::ResetState()) and during vkExecuteCommands
 void CmdBuffer::ResetPipelineState()
 {
-    m_vbMgr.Reset();
+    ResetVertexBuffer();
 
     memset(&m_state.allGpuState.staticTokens, 0u, sizeof(m_state.allGpuState.staticTokens));
     memset(&(m_state.allGpuState.depthStencilCreateInfo),
@@ -1393,7 +1397,7 @@ void CmdBuffer::BindPipeline(
 
                     if (pPipeline->ContainsStaticState(DynamicStatesInternal::VertexInputBindingStrideExt))
                     {
-                        m_vbMgr.GraphicsPipelineChanged(this, pPipeline);
+                        UpdateVertexBufferStrides(pPipeline);
                     }
 
                     m_state.allGpuState.pGraphicsPipeline = pPipeline;
@@ -1864,6 +1868,43 @@ void CmdBuffer::BindIndexBuffer(
 }
 
 // =====================================================================================================================
+// Initializes VB binding manager state.  Should be called when the command buffer is being initialized.
+void CmdBuffer::InitializeVertexBuffer()
+{
+    for (uint32 deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    {
+        Pal::BufferViewInfo* pBindings = &m_state.perGpuState[deviceIdx].vbBindings[0];
+
+        for (uint32 i = 0; i < Pal::MaxVertexBuffers; ++i)
+        {
+            // Format needs to be set to invalid for struct srv SRDs
+            pBindings[i].swizzledFormat = Pal::UndefinedSwizzledFormat;
+
+            pBindings[i].flags.u32All = 0;
+        }
+    }
+
+    ResetVertexBuffer();
+}
+
+// =====================================================================================================================
+// Called to reset the state of the VB manager because the parent command buffer is being reset.
+void CmdBuffer::ResetVertexBuffer()
+{
+    for (uint32 deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
+    {
+        Pal::BufferViewInfo* pBindings = &m_state.perGpuState[deviceIdx].vbBindings[0];
+
+        for (uint32 i = 0; i < Pal::MaxVertexBuffers; ++i)
+        {
+            pBindings[i].gpuAddr = 0;
+            pBindings[i].range   = 0;
+            pBindings[i].stride  = 0;
+        }
+    }
+}
+
+// =====================================================================================================================
 // Implementation of vkCmdBindVertexBuffers
 void CmdBuffer::BindVertexBuffers(
     uint32_t            firstBinding,
@@ -1872,13 +1913,98 @@ void CmdBuffer::BindVertexBuffers(
     const VkDeviceSize* pOffsets,
     const VkDeviceSize* pSizes,
     const VkDeviceSize* pStrides)
-
 {
     DbgBarrierPreCmd(DbgBarrierBindIndexVertexBuffer);
 
-    m_vbMgr.BindVertexBuffers(this, firstBinding, bindingCount, pBuffers, pOffsets, pSizes, pStrides);
+    utils::IterateMask deviceGroup(GetDeviceMask());
+    do
+    {
+        const uint32_t deviceIdx = deviceGroup.Index();
+
+        Pal::BufferViewInfo* pBinding    = &m_state.perGpuState[deviceIdx].vbBindings[firstBinding];
+        Pal::BufferViewInfo* pEndBinding = pBinding + bindingCount;
+        uint32_t             inputIdx    = 0;
+
+        while (pBinding != pEndBinding)
+        {
+            const VkBuffer     buffer = pBuffers[inputIdx];
+            const VkDeviceSize offset = pOffsets[inputIdx];
+
+            if (buffer != VK_NULL_HANDLE)
+            {
+                const Buffer* pBuffer = Buffer::ObjectFromHandle(buffer);
+
+                pBinding->gpuAddr = pBuffer->GpuVirtAddr(deviceIdx) + offset;
+                pBinding->range   = (pSizes != nullptr) ? pSizes[inputIdx] : pBuffer->GetSize() - offset;
+            }
+            else
+            {
+                pBinding->gpuAddr = 0;
+                pBinding->range   = 0;
+            }
+
+            if (pStrides != nullptr)
+            {
+                pBinding->stride = pStrides[inputIdx];
+            }
+
+            inputIdx++;
+            pBinding++;
+        }
+
+        PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(
+            firstBinding, bindingCount, &m_state.perGpuState[deviceIdx].vbBindings[firstBinding]);
+    }
+    while (deviceGroup.IterateNext());
 
     DbgBarrierPostCmd(DbgBarrierBindIndexVertexBuffer);
+}
+
+// =====================================================================================================================
+void CmdBuffer::UpdateVertexBufferStrides(
+    const GraphicsPipeline* pPipeline)
+{
+    if (pPipeline != nullptr)
+    {
+        // Update strides for each binding used by the graphics pipeline.  Rebuild SRD data for those bindings
+        // whose strides changed.
+        utils::IterateMask deviceGroup(GetDeviceMask());
+        do
+        {
+            const VbBindingInfo& bindingInfo = pPipeline->GetVbBindingInfo();
+
+            uint32 deviceIdx = deviceGroup.Index();
+
+            uint32 firstChanged = UINT_MAX;
+            uint32 lastChanged  = 0;
+
+            for (uint32 bindex = 0; bindex < bindingInfo.bindingCount; ++bindex)
+            {
+                uint32 slot                   = bindingInfo.bindings[bindex].slot;
+                uint32 byteStride             = bindingInfo.bindings[bindex].byteStride;
+                Pal::BufferViewInfo* pBinding = &m_state.perGpuState[deviceIdx].vbBindings[slot];
+
+                if (pBinding->stride != byteStride)
+                {
+                    pBinding->stride = byteStride;
+
+                    if (pBinding->gpuAddr != 0)
+                    {
+                        firstChanged = Util::Min(firstChanged, slot);
+                        lastChanged  = Util::Max(lastChanged, slot);
+                    }
+                }
+            }
+
+            if (firstChanged <= lastChanged)
+            {
+                PalCmdBuffer(deviceIdx)->CmdSetVertexBuffers(
+                    firstChanged, (lastChanged - firstChanged) + 1,
+                    &m_state.perGpuState[deviceIdx].vbBindings[firstChanged]);
+            }
+        }
+        while (deviceGroup.IterateNext());
+    }
 }
 
 // =====================================================================================================================
@@ -1895,7 +2021,8 @@ void CmdBuffer::Draw(
     PalCmdDraw(firstVertex,
         vertexCount,
         firstInstance,
-        instanceCount);
+        instanceCount,
+        0u);
 
     DbgBarrierPostCmd(DbgBarrierDrawNonIndexed);
 }
@@ -1916,7 +2043,8 @@ void CmdBuffer::DrawIndexed(
                       indexCount,
                       vertexOffset,
                       firstInstance,
-                      instanceCount);
+                      instanceCount,
+                      0u);
 
     DbgBarrierPostCmd(DbgBarrierDrawIndexed);
 }
@@ -3479,7 +3607,7 @@ void CmdBuffer::WaitEvents(
 }
 
 // =====================================================================================================================
-// Implements vkCmdPipelineBarrier()
+// Implements of vkCmdPipelineBarrier()
 void CmdBuffer::PipelineBarrier(
     PipelineStageFlags           srcStageMask,
     PipelineStageFlags           destStageMask,

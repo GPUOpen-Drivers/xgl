@@ -40,11 +40,6 @@
 #include "include/vk_utils.h"
 #include "palGpuMemory.h"
 
-namespace Pal
-{
-class IGpuMemory;
-}
-
 namespace vk
 {
 class Device;
@@ -132,12 +127,10 @@ public:
 
     VK_INLINE bool IsMultiInstance() const
     {
-        return m_multiInstance;
+        return m_flags.multiInstance;
     }
 
     VkResult GetCommitment(VkDeviceSize* pCommittedMemoryInBytes);
-
-    VK_INLINE const Pal::GpuMemoryCreateInfo& PalInfo() const { return m_info; }
 
     void ElevatePriority(MemoryPriority priority);
 
@@ -153,13 +146,6 @@ public:
         return m_pExternalPalImage;
     }
 
-protected:
-    Device*                      m_pDevice;
-    Pal::IGpuMemory*             m_pPalMemory[MaxPalDevices][MaxPalDevices];
-    Pal::GpuMemoryCreateInfo     m_info;
-    MemoryPriority               m_priority;
-    bool                         m_multiInstance;
-
 private:
     Memory(vk::Device*                      pDevice,
            Pal::IGpuMemory**                pPalMemory,
@@ -172,23 +158,11 @@ private:
     // Image needs to be a friend class to be able to create wrapper API memory objects
     friend class Image;
 
-    bool                  m_allocationCounted;
-    uint32_t              m_sizeAccountedForDeviceMask;
-    Pal::IImage*          m_pExternalPalImage;
-    uint32_t              m_primaryDeviceIndex;
-
-    // Cache the handle of GPU memory which is on the first device, if the Gpumemory can be inter-process sharing.
-    Pal::OsExternalHandle m_sharedGpuMemoryHandle;
-    // m_handleCloseNeeded indicates if m_sharedGpuMemoryHandle should be closed.
-    // m_handleCloseNeeded is true in two cases :
-    // 1. When m_sharedGpuMemoryHandle is shared via NtHandle and is not externally opended;
-    // Or 2. When m_sharedGpuMemoryHandle is imported based on a name rather than a handle;
-
     // Marks that the logical device's allocation count is incremented and needs to be decremented during the
     // destruction of this memory object.
     VK_INLINE void SetAllocationCounted(uint32_t sizeAccountedForDeviceMask)
     {
-        m_allocationCounted = true;
+        m_flags.allocationCounted = 1;
         m_sizeAccountedForDeviceMask = sizeAccountedForDeviceMask;
     }
 
@@ -228,6 +202,33 @@ private:
         Image*                  pBoundImage,
         const ImportMemoryInfo& importInfo,
         Memory**                ppVkMemory);
+
+    Device*               m_pDevice;
+    Pal::IGpuMemory*      m_pPalMemory[MaxPalDevices][MaxPalDevices];
+    Pal::IImage*          m_pExternalPalImage;
+
+    // Cache the handle of GPU memory which is on the first device, if the Gpumemory can be inter-process sharing.
+    Pal::OsExternalHandle m_sharedGpuMemoryHandle;
+
+    Pal::gpusize          m_size;
+    Pal::GpuHeap          m_heap0;
+    MemoryPriority        m_priority;
+    uint32_t              m_sizeAccountedForDeviceMask;
+    uint32_t              m_primaryDeviceIndex;
+
+    union
+    {
+        struct
+        {
+            uint32_t sharedViaNtHandle :  1;
+            uint32_t multiInstance     :  1;
+            uint32_t allocationCounted :  1;
+            uint32_t reserved1         :  1;
+            uint32_t reserved          : 28;
+        };
+
+        uint32_t u32All;
+    } m_flags;
 };
 
 namespace entry

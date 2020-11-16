@@ -77,6 +77,8 @@ public:
         size_t dataSize,
         const void* pData);
 
+    ~PipelineBinaryCache();
+
     VkResult Initialize(
         const PhysicalDevice* pPhysicalDevice);
 
@@ -152,7 +154,7 @@ public:
 
     void FreePipelineBinary(const void* pPipelineBinary);
 
-    void Destroy() { this->~PipelineBinaryCache(); }
+    void Destroy();
 
     CacheAdapter* GetCacheAdapter() { return m_pCacheAdapter; }
 
@@ -165,7 +167,6 @@ private:
         Instance*                 pInstance,
         const Vkgc::GfxIpVersion& gfxIp,
         bool                      internal);
-    ~PipelineBinaryCache();
 
     VkResult InitializePlatformKey(
         const PhysicalDevice*  pPhysicalDevice,
