@@ -3339,6 +3339,231 @@
       "Name": "MemoryPaddingFactorForImageMemoryRequirements"
     },
     {
+      "Description": "[GFX10+ only] MALL NOALLOC resource policy.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": "MallNoAllocDefault"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "MallNoAllocResourcePolicy",
+        "Values": [
+          {
+            "Name": "MallNoAllocDefault",
+            "Value": 0,
+            "Description": "Default policy for resources"
+          },
+          {
+            "Name": "MallNoAllocCt",
+            "Value": 1,
+            "Description": "NOALLOC policy for color target resource"
+          },
+          {
+            "Name": "MallNoAllocDs",
+            "Value": 2,
+            "Description": "NOALLOC policy for depth stencil resource"
+          },
+          {
+            "Name": "MallNoAllocImageViewSrds",
+            "Value": 4,
+            "Description": "NOALLOC policy for image view shader resource descriptors"
+          },
+          {
+            "Name": "MallNoAllocBufferViewSrds",
+            "Value": 8,
+            "Description": "NOALLOC policy for buffer view shader resource descriptors"
+          },
+          {
+            "Name": "MallNoAllocBvh",
+            "Value": 16,
+            "Description": "NOALLOC policy for BVH (bounding volume hierarchy, used by ray-trace)"
+          }
+        ]
+      },
+      "Type": "uint32",
+      "VariableName": "mallNoAllocResourcePolicy",
+      "Name": "MallNoAllocResourcePolicy",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[GFX10+ only] MALL NOALLOC color target (RT) resource policy.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": "MallNoAllocCtDefault"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "MallNoAllocCtPolicy",
+        "Values": [
+          {
+            "Name": "MallNoAllocCtDefault",
+            "Value": 0,
+            "Description": "Default policy for color target resources"
+          },
+          {
+            "Name": "MallNoAllocCtAsSnsr",
+            "Value": 1,
+            "Description": "NOALLOC policy when color target resource is used as shader non-storage resource (SNSR <-> SRV)"
+          },
+          {
+            "Name": "MallNoAllocCtAsCt",
+            "Value": 2,
+            "Description": "NOALLOC policy when color target resource is used as color target"
+          },
+          {
+            "Name": "MallNoAllocCtAlways",
+            "Value": 4,
+            "Description": "NOALLOC always independent of use"
+          }
+        ]
+      },
+      "Type": "uint32",
+      "VariableName": "mallNoAllocCtPolicy",
+      "Name": "MallNoAllocCtPolicy",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[GFX10+ only] MALL NOALLOC shader storage resource (SSR <-> UAV) policy.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": "MallNoAllocSsrDefault"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "MallNoAllocSsrPolicy",
+        "Values": [
+          {
+            "Name": "MallNoAllocSsrDefault",
+            "Value": 0,
+            "Description": "Default policy for shader storage resources"
+          },
+          {
+            "Name": "MallNoAllocSsrAsSnsr",
+            "Value": 1,
+            "Description": "NOALLOC policy when shader storage resource is used as shader non-storage resource (SNSR <-> SRV)"
+          },
+          {
+            "Name": "MallNoAllocSsrAsSsr",
+            "Value": 2,
+            "Description": "NOALLOC policy when shader storage resource is used as shader storage resource"
+          },
+          {
+            "Name": "MallNoAllocSsrAlways",
+            "Value": 4,
+            "Description": "NOALLOC always independent of use"
+          }
+        ]
+      },
+      "Type": "uint32",
+      "VariableName": "mallNoAllocSsrPolicy",
+      "Name": "MallNoAllocSsrPolicy",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[GFX10+ only] MALL NOALLOC depth stencil resource policy.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": "MallNoAllocDsDefault"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "MallNoAllocDsPolicy",
+        "Values": [
+          {
+            "Name": "MallNoAllocDsDefault",
+            "Value": 0,
+            "Description": "Default policy for depth stencil resources"
+          },
+          {
+            "Name": "MallNoAllocDsAsSnsr",
+            "Value": 1,
+            "Description": "NOALLOC policy when depth stencil resource is used as shader non-storage resource (SNSR <-> SRV)"
+          },
+          {
+            "Name": "MallNoAllocDsAsDs",
+            "Value": 2,
+            "Description": "NOALLOC policy whendepth stencil resource is used as depth stencil resource"
+          },
+          {
+            "Name": "MallNoAllocDsAlways",
+            "Value": 4,
+            "Description": "NOALLOC always independent of use"
+          }
+        ]
+      },
+      "Type": "uint32",
+      "VariableName": "mallNoAllocDsPolicy",
+      "Name": "MallNoAllocDsPolicy",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "[GFX10+ only] MALL NOALLOC color target and shader storage resource (SSR <-> UAV) policy.",
+      "Tags": [
+        "Memory"
+      ],
+      "Defaults": {
+        "Default": "MallNoAllocCtSsrDefault"
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "MallNoAllocCtSsrPolicy",
+        "Values": [
+          {
+            "Name": "MallNoAllocCtSsrDefault",
+            "Value": 0,
+            "Description": "Default policy for color target and shader storage resources"
+          },
+          {
+            "Name": "MallNoAllocCtSsrAsSnsr",
+            "Value": 1,
+            "Description": "NOALLOC policy when color target and shader storage resource is used as shader non-storage resource (SNSR <-> SRV)"
+          },
+          {
+            "Name": "MallNoAllocCtSsrAsDs",
+            "Value": 2,
+            "Description": "NOALLOC policy when color target and shader storage resource is used as depth stencil resource"
+          },
+          {
+            "Name": "MallNoAllocCtSsrAlways",
+            "Value": 4,
+            "Description": "NOALLOC always independent of use"
+          }
+        ]
+      },
+      "Type": "uint32",
+      "VariableName": "mallNoAllocCtSsrPolicy",
+      "Name": "MallNoAllocCtSsrPolicy",
+      "Scope": "Driver"
+    },
+    {
       "ValidValues": {
         "IsEnum": true,
         "Values": [
@@ -4154,6 +4379,19 @@
       "Type": "enum",
       "VariableName": "waveSizeDecision",
       "Name": "WaveSizeDecision"
+    },
+    {
+      "Name": "DisableDisplayDccForMgpu",
+      "Description": " Disables Display Dcc for MGPU on presentable surface.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "VariableName": "disableDisplayDccForMgpu"
     },
     {
       "Description": "Enable fragment shader threshold to control wave size selection model by a confidence score.",

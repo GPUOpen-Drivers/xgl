@@ -138,6 +138,13 @@ endif()
 if(XGL_BUILD_NAVI14)
     target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI14=1)
 endif()
+if(XGL_BUILD_NAVI21)
+    target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI21=1)
+endif()
+
+if(XGL_BUILD_GFX103)
+    target_compile_definitions(xgl PRIVATE VKI_BUILD_GFX103=1)
+endif()
 
 if(TARGET_ARCHITECTURE_BITS EQUAL 32)
     target_compile_definitions(xgl PRIVATE ICD_X86_BUILD)

@@ -163,6 +163,9 @@ VkResult SwapChain::Create(
     // The swapchain image can be used as a blit source for driver post processing on present.
     properties.imageCreateInfo.usage.shaderRead = 1;
 
+    properties.imageCreateInfo.usage.disableOptimizedDisplay =
+        (pDevice->GetRuntimeSettings().disableDisplayDccForMgpu && pDevice->IsMultiGpu()) ? 1 : 0;
+
     bool mutableFormat = ((pCreateInfo->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR) != 0);
 
     const void* pNext = pCreateInfo->pNext;

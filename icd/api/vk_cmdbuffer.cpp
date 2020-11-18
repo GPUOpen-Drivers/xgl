@@ -1161,6 +1161,40 @@ VkResult CmdBuffer::Begin(
         }
         while (deviceGroup.IterateNext());
 
+        const PhysicalDevice* pPhysicalDevice   = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+        const uint32_t        supportedVrsRates = pPhysicalDevice->PalProperties().gfxipProperties.supportedVrsRates;
+
+        // Turn variable rate shading off if it is supported.
+        if (supportedVrsRates & (1 << static_cast<uint32_t>(Pal::VrsShadingRate::_1x1)))
+        {
+            Pal::VrsCenterState centerState = {};
+            m_state.allGpuState.vrsRate     = {};
+
+            m_state.allGpuState.vrsRate.flags.exposeVrsPixelsMask = 1;
+
+            // Don't use coarse shading.
+            m_state.allGpuState.vrsRate.shadingRate = Pal::VrsShadingRate::_1x1;
+
+            // Set combiner state for for PsIterator and ProvokingVertex
+            m_state.allGpuState.vrsRate.combinerState[static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] =
+                Pal::VrsCombiner::Override;
+
+            m_state.allGpuState.vrsRate.combinerState[static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
+                Pal::VrsCombiner::Override;
+
+            utils::IterateMask deviceGroupVrs(GetDeviceMask());
+
+            do
+            {
+                const uint32_t deviceIdx = deviceGroupVrs.Index();
+
+                PalCmdBuffer(deviceIdx)->CmdSetVrsCenterState(centerState);
+
+                // A null source image implies 1x1 shading rate for the image combiner stage.
+                PalCmdBuffer(deviceIdx)->CmdBindSampleRateImage(nullptr);
+            }
+            while (deviceGroupVrs.IterateNext());
+        }
     }
 
     // Dirty all the dynamic states, the bit should be cleared with 0 when the corresponding state is
@@ -6068,6 +6102,28 @@ void CmdBuffer::ValidateStates()
                 DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
 
                 PalCmdBuffer(deviceIdx)->CmdSetInputAssemblyState(m_state.allGpuState.inputAssemblyState);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
+
+            if (m_state.allGpuState.dirty.vrs)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                const GraphicsPipeline* pGraphicsPipeline = m_state.allGpuState.pGraphicsPipeline;
+
+                const bool force1x1 = (pGraphicsPipeline != nullptr) &&
+                                      (pGraphicsPipeline->Force1x1ShaderRateEnabled());
+
+                // CmdSetPerDrawVrsRate has been called for the dynamic state
+                // Look at the currently bound pipeline and see if we need to force the values to 1x1
+                Pal::VrsRateParams vrsRate = m_state.allGpuState.vrsRate;
+                if (force1x1)
+                {
+                    Force1x1ShaderRate(&vrsRate);
+                }
+
+                PalCmdBuffer(deviceIdx)->CmdSetPerDrawVrsRate(vrsRate);
 
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }

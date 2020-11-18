@@ -80,6 +80,13 @@ VkResult BufferView::Create(
         info.range = pCreateInfo->range;
     }
 
+    // Bypass Mall read/write if no alloc policy is set for SRDs
+    if (Util::TestAnyFlagSet(pDevice->GetRuntimeSettings().mallNoAllocResourcePolicy, MallNoAllocBufferViewSrds))
+    {
+        info.flags.bypassMallRead = 1;
+        info.flags.bypassMallWrite = 1;
+    }
+
     void* pSrdMemory = Util::VoidPtrInc(pMemory, apiSize);
     for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
     {

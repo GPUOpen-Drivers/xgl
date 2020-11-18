@@ -127,7 +127,7 @@ union DirtyState
         uint32 rasterState   :  1;
         uint32 inputAssembly :  1;
         uint32 stencilRef    :  1;
-        uint32 reserved1     :  1;
+        uint32 vrs           :  1;
         uint32 reserved      : 25;
     };
 
@@ -213,6 +213,7 @@ struct AllGpuRenderState
     Pal::StencilRefMaskParams        stencilRefMasks;
     Pal::InputAssemblyStateParams    inputAssemblyState;
     Pal::DepthStencilStateCreateInfo depthStencilCreateInfo;
+    Pal::VrsRateParams               vrsRate;
 
 };
 

@@ -150,6 +150,10 @@ protected:
         const bool               needsFmaskViewSrds,
         uint32_t                 numDevices);
 
+    static bool IsMallNoAllocSnsrPolicySet(
+        VkImageUsageFlags      imageViewUsage,
+        const RuntimeSettings& settings);
+
     const Image*        m_pImage;
     const VkFormat      m_viewFormat;
     Pal::SubresRange    m_subresRange;

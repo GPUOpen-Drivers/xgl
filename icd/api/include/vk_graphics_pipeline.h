@@ -150,6 +150,19 @@ static void ConvertToPalMsaaQuadSamplePattern(
 }
 
 // =====================================================================================================================
+// Force 1x1 shader rate
+static void Force1x1ShaderRate(
+    Pal::VrsRateParams* pVrsRateParams)
+{
+    pVrsRateParams->shadingRate = Pal::VrsShadingRate::_1x1;
+
+    for (uint32 idx = 0; idx <= static_cast<uint32>(Pal::VrsCombinerStage::Image); idx++)
+    {
+        pVrsRateParams->combinerState[idx] = Pal::VrsCombiner::Passthrough;
+    }
+}
+
+// =====================================================================================================================
 bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pColorBlendAttachmentState);
 
 // =====================================================================================================================
@@ -187,6 +200,9 @@ public:
 
      const bool CustomSampleLocationsEnabled() const
          { return m_flags.customSampleLocations; }
+
+    const bool Force1x1ShaderRateEnabled() const
+        { return m_flags.force1x1ShaderRate; }
 
     static void BindNullPipeline(CmdBuffer* pCmdBuffer);
 
@@ -250,6 +266,7 @@ protected:
         bool                                   bindTriangleRasterState,
         bool                                   bindStencilRefMasks,
         bool                                   bindInputAssemblyState,
+        bool                                   force1x1ShaderRate,
         bool                                   customSampleLocations,
         const VbBindingInfo&                   vbInfo,
         Pal::IMsaaState**                      pPalMsaa,
@@ -284,6 +301,7 @@ protected:
         bool                                        bindStencilRefMasks;
         bool                                        bindInputAssemblyState;
         bool                                        customSampleLocations;
+        bool                                        force1x1ShaderRate;
     };
 
     static void ConvertGraphicsPipelineInfo(
@@ -358,7 +376,7 @@ private:
             uint8 bindStencilRefMasks      : 1;
             uint8 bindInputAssemblyState   : 1;
             uint8 customSampleLocations    : 1;
-            uint8 reserved1                : 1;
+            uint8 force1x1ShaderRate       : 1;
             uint8 reserved                 : 1;
         };
     } m_flags;

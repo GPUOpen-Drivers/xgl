@@ -2145,6 +2145,7 @@ ValidKeysForEntity = {
 
 BuildTypesTemplate = {
     "llpc": "ICD_BUILD_LLPC",
+    "gfxIp10_3": "VKI_BUILD_GFX103",
     "icdRuntimeAppProfile": "ICD_RUNTIME_APP_PROFILE"
 }
 

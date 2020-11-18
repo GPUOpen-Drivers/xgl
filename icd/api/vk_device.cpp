@@ -1332,6 +1332,7 @@ VkResult Device::Initialize(
     m_properties.descriptorSizes.imageView  = deviceProps.gfxipProperties.srdSizes.imageView;
     m_properties.descriptorSizes.fmaskView  = deviceProps.gfxipProperties.srdSizes.fmaskView;
     m_properties.descriptorSizes.sampler    = deviceProps.gfxipProperties.srdSizes.sampler;
+    m_properties.descriptorSizes.bvh        = deviceProps.gfxipProperties.srdSizes.bvh;
     // Size of combined image samplers is the sum of the image and sampler SRD sizes (8DW + 4DW)
     m_properties.descriptorSizes.combinedImageSampler =
         m_properties.descriptorSizes.imageView +

@@ -154,6 +154,7 @@ public:
             uint32_t imageView;
             uint32_t fmaskView;
             uint32_t sampler;
+            uint32_t bvh;
             uint32_t combinedImageSampler;
             uint32_t alignment;
         } descriptorSizes;

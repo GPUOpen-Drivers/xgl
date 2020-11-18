@@ -152,6 +152,10 @@ VkResult PipelineCompiler::Initialize()
         m_gfxIp.major = 10;
         m_gfxIp.minor = 1;
         break;
+    case Pal::GfxIpLevel::GfxIp10_3:
+        m_gfxIp.major = 10;
+        m_gfxIp.minor = 3;
+        break;
 
     default:
         VK_NEVER_CALLED();

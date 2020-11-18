@@ -69,6 +69,46 @@ ImageView::ImageView(
 }
 
 // =====================================================================================================================
+bool ImageView::IsMallNoAllocSnsrPolicySet(
+    VkImageUsageFlags imageViewUsage,
+    const RuntimeSettings& settings)
+{
+    bool isSet = false;
+
+    // Bypass the Mall cache for color target resource if it is used as shader non-storage resource and the corresponding
+    // panel setting is set
+    if ((imageViewUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+        (TestAnyFlagSet(settings.mallNoAllocCtPolicy, MallNoAllocCtAsSnsr)))
+    {
+        isSet = true;
+    }
+    // Bypass the Mall cache for shader storage resource if it is used as shader non-storage resource and the corresponding
+    // panel setting is set
+    else if ((imageViewUsage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+             (TestAnyFlagSet(settings.mallNoAllocSsrPolicy, MallNoAllocSsrAsSnsr)))
+    {
+        isSet = true;
+    }
+    // Bypass the Mall cache for depth stencil resource if it is used as shader non-storage resource and the corresponding
+    // panel setting is set
+    else if ((imageViewUsage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) &&
+             (TestAnyFlagSet(settings.mallNoAllocDsPolicy, MallNoAllocDsAsSnsr)))
+    {
+        isSet = true;
+    }
+    // Bypass the Mall cache for color target/shader storage resource if it is used as shader non-storage resource and the
+    // corresponding panel setting is set
+    else if (((imageViewUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+              (imageViewUsage & VK_IMAGE_USAGE_STORAGE_BIT)) &&
+             (TestAnyFlagSet(settings.mallNoAllocCtSsrPolicy, MallNoAllocCtSsrAsSnsr)))
+    {
+        isSet = true;
+    }
+
+    return isSet;
+}
+
+// =====================================================================================================================
 void ImageView::BuildImageSrds(
     const Device*                pDevice,
     size_t                       srdSize,
@@ -107,6 +147,14 @@ void ImageView::BuildImageSrds(
                                     (Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead));
     info.possibleLayouts.engines = Pal::LayoutUniversalEngine | Pal::LayoutComputeEngine;
 
+    // Bypass Mall cache read/write if no alloc policy is set for SRDs. This global setting applies to every image view SRD
+    // and takes precedence over other shader non-storage resource/shader storage resource settings
+    if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocImageViewSrds))
+    {
+        info.flags.bypassMallRead = 1;
+        info.flags.bypassMallWrite = 1;
+    }
+
     // Create all possible SRD variants
     static_assert(SrdCount == 2, "More SRD types were added; need to create them below");
 
@@ -116,6 +164,13 @@ void ImageView::BuildImageSrds(
 
         info.pImage = pImage->PalImage(deviceIdx);
 
+        // Bypass Mall cache read/write if no alloc policy is set for shader non-storage resources
+        if (!Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocImageViewSrds) &&
+            IsMallNoAllocSnsrPolicySet(imageViewUsage, settings))
+        {
+            info.flags.bypassMallRead = 1;
+            info.flags.bypassMallWrite = 1;
+        }
         // Create a read-only SRD
         VK_ASSERT(Pal::Result::Success == pDevice->PalDevice(deviceIdx)->ValidateImageViewInfo(info));
 
@@ -125,6 +180,32 @@ void ImageView::BuildImageSrds(
 
         if (imageViewUsage & VK_IMAGE_USAGE_STORAGE_BIT)
         {
+            if (!Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocImageViewSrds))
+            {
+                // If Mall No alloc flags were set for shader non-storage resources, clear the flags first so that they
+                // are not set incorrectly by default for the 3rd SRD to be created in this pass
+                if (IsMallNoAllocSnsrPolicySet(imageViewUsage, settings))
+                {
+                    info.flags.bypassMallRead = 0;
+                    info.flags.bypassMallWrite = 0;
+                }
+
+                // Bypass the Mall cache for shader storage resources if the corresponding panel settings are set
+                if (Util::TestAnyFlagSet(settings.mallNoAllocSsrPolicy, MallNoAllocSsrAlways) ||
+                    Util::TestAnyFlagSet(settings.mallNoAllocSsrPolicy, MallNoAllocSsrAsSsr))
+                {
+                    info.flags.bypassMallRead  = 1;
+                    info.flags.bypassMallWrite = 1;
+                }
+                // Bypass the Mall cache for render target/shader storage resources if it is used as shader storage resource
+                // and the corresponding panel setting is set
+                else if ((imageViewUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+                         Util::TestAnyFlagSet(settings.mallNoAllocCtSsrPolicy, MallNoAllocCtSsrAlways))
+                {
+                    info.flags.bypassMallRead  = 1;
+                    info.flags.bypassMallWrite = 1;
+                }
+            }
             // Create a read-write storage SRD
             info.possibleLayouts.usages = info.possibleLayouts.usages | Pal::ImageLayoutUsageFlags::LayoutShaderWrite;
 
@@ -197,6 +278,28 @@ Pal::Result ImageView::BuildColorTargetView(
     colorInfo.swizzledFormat       = viewFormat;
     colorInfo.imageInfo.baseSubRes = subresId;
     colorInfo.imageInfo.arraySize  = subresRange.numSlices;
+    // Bypass Mall cache if no alloc policy is set for color target resource
+    // Global resource settings always takes precedence over everything else
+    if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocCt))
+    {
+        colorInfo.flags.bypassMall = 1;
+    }
+    else
+    {
+        // Bypass the Mall cache if resource view is color target and the corresponding panel settings are set
+        if (Util::TestAnyFlagSet(settings.mallNoAllocCtPolicy, MallNoAllocCtAsCt) ||
+            Util::TestAnyFlagSet(settings.mallNoAllocCtPolicy, MallNoAllocCtAlways))
+        {
+            colorInfo.flags.bypassMall = 1;
+        }
+        // Bypass the Mall cache for color target/shader storage resource if it is used as CT and the corresponding panel
+        // setting is set
+        else if ((imageViewUsage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+                 TestAnyFlagSet(settings.mallNoAllocCtSsrPolicy, MallNoAllocCtSsrAlways))
+        {
+            colorInfo.flags.bypassMall = 1;
+        }
+    }
 
     if (pPalImage->GetImageCreateInfo().imageType == Pal::ImageType::Tex3d)
     {
@@ -230,6 +333,29 @@ Pal::Result ImageView::BuildDepthStencilView(
     depthInfo.mipLevel            = subresRange.startSubres.mipLevel;
     depthInfo.baseArraySlice      = subresRange.startSubres.arraySlice;
     depthInfo.arraySize           = subresRange.numSlices;
+    // Bypass Mall cache if no alloc policy is set for depth stencil resource
+    // Global resource settings always takes precedence over everything else
+    if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocDs))
+    {
+        depthInfo.flags.bypassMall = 1;
+    }
+    else
+    {
+        // Bypass the Mall cache if resource view is depth stencil and the corresponding panel settings are set
+        if (Util::TestAnyFlagSet(settings.mallNoAllocDsPolicy, MallNoAllocDsAsDs) ||
+            Util::TestAnyFlagSet(settings.mallNoAllocDsPolicy, MallNoAllocDsAlways))
+        {
+            depthInfo.flags.bypassMall = 1;
+        }
+        // Bypass the Mall cache for color target/shader storage resource if it is used as DS and the corresponding panel
+        // setting is set
+        else if ((imageViewUsage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+                 (imageViewUsage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+                 TestAnyFlagSet(settings.mallNoAllocCtSsrPolicy, MallNoAllocCtSsrAsDs))
+        {
+            depthInfo.flags.bypassMall = 1;
+        }
+    }
 
     if (pPalImage->GetImageCreateInfo().imageType  == Pal::ImageType::Tex3d)
     {

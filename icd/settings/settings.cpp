@@ -193,6 +193,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.forceEnableDcc = ForceDccForColorAttachments;
         }
 
+        if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            // Enable NGG culling by default for Navi2x.
+            m_settings.nggEnableBackfaceCulling = true;
+            m_settings.nggEnableSmallPrimFilter = true;
+
+        }
+
         // Put command buffers in local for large/resizable BAR systems
         Pal::GpuMemoryHeapProperties heapProperties[Pal::GpuHeapCount] = {};
         const gpusize                minLocalSize                      = 256 * 1024 * 1024;
@@ -262,6 +270,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::WolfensteinII)
         {
             m_settings.zeroInitIlRegs = true;
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                // Mall no alloc settings give a 2.91% gain
+                m_settings.mallNoAllocCtPolicy = 0x01;
+                m_settings.mallNoAllocCtSsrPolicy = 0x01;
+            }
 
             // Don't enable DCC for color attachments aside from those listed in the app_resource_optimizer
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
@@ -335,6 +350,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             m_settings.prefetchShaders = true;
 
+            if (pInfo->revision != Pal::AsicRevision::Navi21)
             {
                 m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
             }
@@ -349,6 +365,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
                 m_settings.forceEnableDcc = ForceDccDefault;
+            }
+
+            // Mall no alloc setting gives a ~0.82% gain
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.mallNoAllocSsrPolicy = 0x01;
             }
 
         }
@@ -440,6 +462,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             }
 
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.disableDisplayDccForMgpu = true;
+
+                m_settings.overrideWgpMode = WgpMode::WgpModeWgp;
+
+                m_settings.forceEnableDcc = ForceEnableDcc::ForceDccForColorAttachments |
+                                            ForceEnableDcc::ForceDccFor32BppShaderStorage |
+                                            ForceEnableDcc::ForceDccFor64BppShaderStorage;
+            }
         }
 
         if (appProfile == AppProfile::ZombieArmy4)
@@ -452,6 +484,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.dccBitsPerPixelThreshold = 64;
                 m_settings.enableNgg = 0x0;
+                m_settings.enableWgpMode = 0x20;
+            }
+            else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.enableNgg = 0x3;
+                m_settings.nggEnableFrustumCulling = true;
+                m_settings.nggEnableBackfaceCulling = true;
                 m_settings.enableWgpMode = 0x20;
             }
         }
@@ -567,6 +606,17 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             m_settings.delayFullScreenAcquireToFirstPresent = true;
 
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.mallNoAllocCtPolicy = 0x01;
+                m_settings.mallNoAllocDsPolicy = 0x01;
+                m_settings.mallNoAllocCtSsrPolicy = 0x01;
+                m_settings.mallNoAllocSsrPolicy = 0x1;
+
+                m_settings.forceEnableDcc = ForceEnableDcc::ForceDccForColorAttachments |
+                                            ForceEnableDcc::ForceDccFor32BppShaderStorage |
+                                            ForceEnableDcc::ForceDccFor64BppShaderStorage;
+            }
         }
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
@@ -577,6 +627,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Override the PAL default for 3D color attachments and storage images to match GFX9's, SW_R/z-slice order.
             m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
 
+            m_settings.forceEnableDcc = ForceDccFor64BppShaderStorage;
         }
 
         if (appProfile == AppProfile::DoomEternal)
@@ -607,6 +658,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 {
                     m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
                 }
+            }
+            // Mall no alloc settings give a ~3.07% gain
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.mallNoAllocCtPolicy = 0x01;
+                m_settings.mallNoAllocDsPolicy = 0x01;
+                m_settings.mallNoAllocCtSsrPolicy = 0x01;
+                m_settings.mallNoAllocSsrPolicy = 0x01;
             }
 
             if (pInfo->gpuType == Pal::GpuType::Discrete)

@@ -1585,6 +1585,7 @@ VkResult GraphicsPipeline::Create(
             localPipelineInfo.bindTriangleRasterState,
             localPipelineInfo.bindStencilRefMasks,
             localPipelineInfo.bindInputAssemblyState,
+            localPipelineInfo.force1x1ShaderRate,
             localPipelineInfo.customSampleLocations,
             vbInfo,
             pPalMsaa,
@@ -1663,6 +1664,7 @@ GraphicsPipeline::GraphicsPipeline(
     bool                                   bindTriangleRasterState,
     bool                                   bindStencilRefMasks,
     bool                                   bindInputAssemblyState,
+    bool                                   force1x1ShaderRate,
     bool                                   customSampleLocations,
     const VbBindingInfo&                   vbInfo,
     Pal::IMsaaState**                      pPalMsaa,
@@ -1691,6 +1693,7 @@ GraphicsPipeline::GraphicsPipeline(
     m_flags.bindStencilRefMasks      = bindStencilRefMasks;
     m_flags.bindInputAssemblyState   = bindInputAssemblyState;
 	m_flags.customSampleLocations    = customSampleLocations;
+    m_flags.force1x1ShaderRate       = force1x1ShaderRate;
     CreateStaticState();
 
     pPalPipelineHasher->Update(m_palPipelineHash);

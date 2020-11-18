@@ -279,6 +279,114 @@ void ResourceOptimizer::BuildAppProfile()
             m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
             m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
         }
+        else if (gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            // 000003c00000021c84f475a87fdb8b6a,False,RESDCC,1,0.72%,0.72%,0.97%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x84f475a87fdb8b6a;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // 00000f0000000870cd48459e32729751,False,RESDCC,1,0.3%,0.3%,6.55%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xcd48459e32729751;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+        }
+    }
+    else if (appProfile == AppProfile::StrangeBrigade)
+    {
+        if (gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            // 00000f00000008708a03574f7d0e4d17,False,RESDCC,2,1.84%,1.84%,1.23%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x8a03574f7d0e4d17;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
+
+            // 00000f00000008708bcf1c20f5a6c4a7,False,RESDCC,1,0.64%,0.64%,2.02%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x8bcf1c20f5a6c4a7;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // 0000078000000438f1d2e696ab27d939,False,RESDCC,1,0.06%,0.06%,2.13%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xf1d2e696ab27d939;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+        }
+    }
+    else if (appProfile == AppProfile::RainbowSixSiege)
+    {
+        if (gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            // 00a9c000005f8dd07784b18629d6e,False,RESDCC,1,3.26%,3.26%,3.49%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xdd07784b18629d6e;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // 00000a9c000005f8fcea8016ffda572a,False,RESDCC,1,2.73%,2.73%,7.75%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xfcea8016ffda572a;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // 00000a9c000005f88bcf1c20f5a6c4a7,False,RESDCC,2,1%,1%,8.08%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x8bcf1c20f5a6c4a7;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
+        }
+    }
+    else if (appProfile == AppProfile::GhostReconBreakpoint)
+    {
+        if (gfxIpLevel == Pal::GfxIpLevel::GfxIp10_3)
+        {
+            // 00000f000000087094dcd846befd983e,False,RESDCC,1,0.33%,0.33%,0.49%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x94dcd846befd983e;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // 00000f0000000870fe51515a12ef5aa0,False,RESDCC,1,0.31%,0.31%,0.6%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xfe51515a12ef5aa0;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // 00000f0000000870d7eb29d36795fc2a,False,RESDCC,1,0.14%,0.14%,0.72%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0xd7eb29d36795fc2a;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // 00000780000004387e872e67edab5a42,False,RESDCC,1,0.1%,0.1%,0.98%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x7e872e67edab5a42;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccDisableMode;
+
+            // 00000200000002005ca0007c064cc05a,False,RESDCC,2,0.03%,0.03%,1.09%
+            i = m_appProfile.entryCount++;
+            m_appProfile.entries[i].pattern.match.apiHash = true;
+            m_appProfile.entries[i].pattern.targetKey.apiHash = 0x5ca0007c064cc05a;
+            m_appProfile.entries[i].action.resourceCreate.apply.dccMode = true;
+            m_appProfile.entries[i].action.resourceCreate.dccMode = DccMode::DccEnableMode;
+        }
     }
 }
 
