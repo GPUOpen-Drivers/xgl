@@ -43,7 +43,7 @@
 #endif
 #include <string.h>
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 639
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 641
 #include <limits.h>
 #include <stdlib.h>
 
@@ -889,7 +889,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenReadOnlyArchive(
     };
 
     info.pMemoryCallbacks        = &allocCbs;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 639
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 641
     Util::Strncpy(info.filePath, pFilePath, sizeof(info.filePath));
     Util::Strncpy(info.fileName, pFileName, sizeof(info.fileName));
 #else
@@ -949,7 +949,7 @@ Util::IArchiveFile* PipelineBinaryCache::OpenWritableArchive(
     };
 
     info.pMemoryCallbacks        = &allocCbs;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 639
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 641
     Util::Strncpy(info.filePath, pFilePath, sizeof(info.filePath));
     Util::Strncpy(info.fileName, pFileName, sizeof(info.fileName));
 #else
