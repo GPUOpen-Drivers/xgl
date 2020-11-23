@@ -50,11 +50,11 @@
 namespace Util
 {
 #if defined(__unix__)
-static constexpr size_t FilenameBufferLen = NAME_MAX;
+static constexpr size_t FileNameBufferLen = NAME_MAX;
 #else
 static constexpr size_t FileNameBufferLen = _MAX_FNAME;
 #endif
-static constexpr size_t PathBufferLen = FilenameBufferLen;
+static constexpr size_t PathBufferLen = FileNameBufferLen;
 }
 #endif  // PAL_CLIENT_INTERFACE_MAJOR_VERSION
 
@@ -1120,7 +1120,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
         }
 
         // Buffer to hold constructed filename
-        char nameBuffer[Util::FilenameBufferLen] = {};
+        char nameBuffer[Util::FileNameBufferLen] = {};
 
         const char* const pCacheFileName = getenv(EnvVarFileName);
 
