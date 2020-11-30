@@ -1045,26 +1045,73 @@ void PipelineCompiler::GetPipelineCreationInfoNext(
 }
 
 // =====================================================================================================================
+void PipelineCompiler::UpdatePipelineCreationFeedback(
+    VkPipelineCreationFeedbackEXT*  pPipelineCreationFeedback,
+    const PipelineCreationFeedback* pFeedbackFromCompiler)
+{
+    pPipelineCreationFeedback->flags = 0;
+    if (pFeedbackFromCompiler->feedbackValid)
+    {
+        pPipelineCreationFeedback->flags |= VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT_EXT;
+    }
+    if (pFeedbackFromCompiler->hitApplicationCache)
+    {
+        pPipelineCreationFeedback->flags |=
+            VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT_EXT;
+    }
+    pPipelineCreationFeedback->duration = pFeedbackFromCompiler->duration;
+}
+
+// =====================================================================================================================
 VkResult PipelineCompiler::SetPipelineCreationFeedbackInfo(
     const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo,
-    const PipelineCreationFeedback*                pPipelineFeedback)
+    uint32_t                                       stageCount,
+    const VkPipelineShaderStageCreateInfo*         pStages,
+    const PipelineCreationFeedback*                pPipelineFeedback,
+    const PipelineCreationFeedback*                pStageFeedback)
 {
     if (pPipelineCreationFeadbackCreateInfo != nullptr)
     {
-        if (pPipelineFeedback->feedbackValid)
-        {
-            pPipelineCreationFeadbackCreateInfo->pPipelineCreationFeedback->flags |=
-                VK_PIPELINE_CREATION_FEEDBACK_VALID_BIT_EXT;
-        }
-        if (pPipelineFeedback->hitApplicationCache)
-        {
-            pPipelineCreationFeadbackCreateInfo->pPipelineCreationFeedback->flags |=
-                VK_PIPELINE_CREATION_FEEDBACK_APPLICATION_PIPELINE_CACHE_HIT_BIT_EXT;
-        }
-        pPipelineCreationFeadbackCreateInfo->pPipelineCreationFeedback->duration =
-            pPipelineFeedback->duration;
-    }
+        UpdatePipelineCreationFeedback(pPipelineCreationFeadbackCreateInfo->pPipelineCreationFeedback,
+                                       pPipelineFeedback);
 
+        auto *stageCreationFeedbacks = pPipelineCreationFeadbackCreateInfo->pPipelineStageCreationFeedbacks;
+        if (stageCount == 0)
+        {
+            UpdatePipelineCreationFeedback(&stageCreationFeedbacks[0], pStageFeedback);
+        }
+        else
+        {
+            VK_ASSERT(stageCount <= ShaderStage::ShaderStageGfxCount);
+            for (uint32_t i = 0; i < stageCount; ++i)
+            {
+                uint32_t feedbackStage = 0;
+                VK_ASSERT(pStages[i].sType == VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO);
+                switch (pStages[i].stage)
+                {
+                    case VK_SHADER_STAGE_VERTEX_BIT:
+                        feedbackStage = ShaderStage::ShaderStageVertex;
+                        break;
+                    case VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT:
+                        feedbackStage = ShaderStage::ShaderStageTessControl;
+                        break;
+                    case VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT:
+                        feedbackStage = ShaderStage::ShaderStageTessEval;
+                        break;
+                    case VK_SHADER_STAGE_GEOMETRY_BIT:
+                        feedbackStage = ShaderStage::ShaderStageGeometry;
+                        break;
+                    case VK_SHADER_STAGE_FRAGMENT_BIT:
+                        feedbackStage = ShaderStage::ShaderStageFragment;
+                        break;
+                    default:
+                        VK_NEVER_CALLED();
+                        break;
+                }
+                UpdatePipelineCreationFeedback(&stageCreationFeedbacks[i], &pStageFeedback[feedbackStage]);
+            }
+        }
+    }
     return VK_SUCCESS;
 }
 

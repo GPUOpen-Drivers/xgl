@@ -1445,7 +1445,10 @@ VkResult GraphicsPipeline::Create(
             {
                 pDefaultCompiler->SetPipelineCreationFeedbackInfo(
                     pPipelineCreationFeadbackCreateInfo,
-                    &binaryCreateInfoMGPU.pipelineFeedback);
+                    pCreateInfo->stageCount,
+                    pCreateInfo->pStages,
+                    &binaryCreateInfoMGPU.pipelineFeedback,
+                    binaryCreateInfoMGPU.stageFeedback);
             }
 
             pDefaultCompiler->FreeGraphicsPipelineCreateInfo(&binaryCreateInfoMGPU);
@@ -1698,7 +1701,10 @@ VkResult GraphicsPipeline::Create(
         binaryCreateInfo.pipelineFeedback.duration = duration;
         pDefaultCompiler->SetPipelineCreationFeedbackInfo(
             pPipelineCreationFeadbackCreateInfo,
-            &binaryCreateInfo.pipelineFeedback);
+            pCreateInfo->stageCount,
+            pCreateInfo->pStages,
+            &binaryCreateInfo.pipelineFeedback,
+            binaryCreateInfo.stageFeedback);
 
         // The hash is same as pipline dump file name, we can easily analyze further.
         AmdvlkLog(settings.logTagIdMask, PipelineCompileTime, "0x%016llX-%llu", pipelineHash, duration);
