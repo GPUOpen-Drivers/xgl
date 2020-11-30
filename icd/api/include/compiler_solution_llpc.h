@@ -110,6 +110,11 @@ public:
         size_t                      binarySize) override;
 private:
     VkResult CreateLlpcCompiler(Vkgc::ICache* pCache);
+    void UpdateStageCreationFeedback(
+        PipelineCreationFeedback*       pStageFeedback,
+        const Vkgc::PipelineShaderInfo& shader,
+        const Llpc::CacheAccessInfo*    pStageCacheAccesses,
+        ShaderStage                     stage);
 
 private:
     Llpc::ICompiler*    m_pLlpc;               // LLPC compiler object

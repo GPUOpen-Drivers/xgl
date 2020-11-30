@@ -329,7 +329,10 @@ VkResult ComputePipeline::Create(
         binaryCreateInfo.pipelineFeedback.duration = duration;
         pDefaultCompiler->SetPipelineCreationFeedbackInfo(
                 pPipelineCreationFeadbackCreateInfo,
-                &binaryCreateInfo.pipelineFeedback);
+                0,
+                nullptr,
+                &binaryCreateInfo.pipelineFeedback,
+                &binaryCreateInfo.stageFeedback);
 
         const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
         // The hash is same as pipline dump file name, we can easily analyze further.

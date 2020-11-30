@@ -114,9 +114,16 @@ public:
         const void**                        ppPipelineBinary,
         Util::MetroHash::Hash*              pCacheId);
 
+    void UpdatePipelineCreationFeedback(
+        VkPipelineCreationFeedbackEXT*  pPipelineCreationFeedback,
+        const PipelineCreationFeedback* pFeedbackFromCompiler);
+
     VkResult SetPipelineCreationFeedbackInfo(
         const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo,
-        const PipelineCreationFeedback*                pPipelineFeedback);
+        uint32_t                                       stageCount,
+        const VkPipelineShaderStageCreateInfo*         pStages,
+        const PipelineCreationFeedback*                pPipelineFeedback,
+        const PipelineCreationFeedback*                pStageFeedback);
 
     VkResult ConvertGraphicsPipelineInfo(
         Device*                                         pDevice,

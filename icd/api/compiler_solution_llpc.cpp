@@ -344,6 +344,8 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     }
 
     auto llpcResult = m_pLlpc->BuildGraphicsPipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
+    pCreateInfo->pipelineFeedback = {};
+    memset(pCreateInfo->stageFeedback, 0, sizeof(pCreateInfo->stageFeedback));
     if (llpcResult != Vkgc::Result::Success)
     {
         // There shouldn't be anything to free for the failure case
@@ -354,6 +356,32 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
     {
         *ppPipelineBinary   = pipelineOut.pipelineBin.pCode;
         *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
+        if (pipelineOut.pipelineCacheAccess != Llpc::CacheAccessInfo::CacheNotChecked)
+        {
+            pCreateInfo->pipelineFeedback.feedbackValid = true;
+            pCreateInfo->pipelineFeedback.hitApplicationCache =
+                (pipelineOut.pipelineCacheAccess == Llpc::CacheAccessInfo::CacheHit);
+        }
+        UpdateStageCreationFeedback(pCreateInfo->stageFeedback,
+                                    pPipelineBuildInfo->vs,
+                                    pipelineOut.stageCacheAccesses,
+                                    ShaderStage::ShaderStageVertex);
+        UpdateStageCreationFeedback(pCreateInfo->stageFeedback,
+                                    pPipelineBuildInfo->tcs,
+                                    pipelineOut.stageCacheAccesses,
+                                    ShaderStage::ShaderStageTessControl);
+        UpdateStageCreationFeedback(pCreateInfo->stageFeedback,
+                                    pPipelineBuildInfo->tes,
+                                    pipelineOut.stageCacheAccesses,
+                                    ShaderStage::ShaderStageTessEval);
+        UpdateStageCreationFeedback(pCreateInfo->stageFeedback,
+                                    pPipelineBuildInfo->gs,
+                                    pipelineOut.stageCacheAccesses,
+                                    ShaderStage::ShaderStageGeometry);
+        UpdateStageCreationFeedback(pCreateInfo->stageFeedback,
+                                    pPipelineBuildInfo->fs,
+                                    pipelineOut.stageCacheAccesses,
+                                    ShaderStage::ShaderStageFragment);
     }
 
     if (settings.enablePipelineDump && (pPipelineDumpHandle != nullptr))
@@ -448,6 +476,8 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
 
     // Build pipline binary
     auto llpcResult = m_pLlpc->BuildComputePipeline(pPipelineBuildInfo, &pipelineOut, pPipelineDumpHandle);
+    pCreateInfo->pipelineFeedback = {};
+    pCreateInfo->stageFeedback = {};
     if (llpcResult != Vkgc::Result::Success)
     {
         // There shouldn't be anything to free for the failure case
@@ -465,6 +495,18 @@ VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
     {
         *ppPipelineBinary = pipelineOut.pipelineBin.pCode;
         *pPipelineBinarySize = pipelineOut.pipelineBin.codeSize;
+        if (pipelineOut.pipelineCacheAccess != Llpc::CacheAccessInfo::CacheNotChecked)
+        {
+            pCreateInfo->pipelineFeedback.feedbackValid = true;
+            pCreateInfo->pipelineFeedback.hitApplicationCache =
+                (pipelineOut.pipelineCacheAccess == Llpc::CacheAccessInfo::CacheHit);
+        }
+        if (pipelineOut.stageCacheAccess != Llpc::CacheAccessInfo::CacheNotChecked)
+        {
+            pCreateInfo->stageFeedback.feedbackValid = true;
+            pCreateInfo->stageFeedback.hitApplicationCache =
+                (pipelineOut.stageCacheAccess == Llpc::CacheAccessInfo::CacheHit);
+        }
     }
     VK_ASSERT(*ppPipelineBinary == pLlpcPipelineBuffer);
 
@@ -705,4 +747,18 @@ VkResult CompilerSolutionLlpc::CreateLlpcCompiler(
     return (llpcResult == Vkgc::Result::Success) ? VK_SUCCESS : VK_ERROR_INITIALIZATION_FAILED;
 }
 
+// =====================================================================================================================
+// Update the cache feedback for a stage.
+void CompilerSolutionLlpc::UpdateStageCreationFeedback(
+    PipelineCreationFeedback*       pStageFeedback,
+    const Vkgc::PipelineShaderInfo& shader,
+    const Llpc::CacheAccessInfo*    pStageCacheAccesses,
+    ShaderStage                     stage)
+{
+    if ((shader.pModuleData != nullptr) && (pStageCacheAccesses[stage] != Llpc::CacheAccessInfo::CacheNotChecked))
+    {
+        pStageFeedback[stage].feedbackValid = true;
+        pStageFeedback[stage].hitApplicationCache = (pStageCacheAccesses[stage] == Llpc::CacheAccessInfo::CacheHit);
+    }
+}
 }
