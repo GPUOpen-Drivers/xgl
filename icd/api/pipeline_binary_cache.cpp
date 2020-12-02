@@ -121,16 +121,18 @@ bool PipelineBinaryCache::IsValidBlob(
     size_t                 dataSize,
     const void*            pData)
 {
+    VK_ASSERT(pData != nullptr);
+
     bool     isValid            = false;
     size_t   blobSize           = dataSize;
     auto pBinaryPrivateHeader   = static_cast<const PipelineBinaryCachePrivateHeader*>(pData);
     uint8_t  hashId[SHA_DIGEST_LENGTH];
 
-    pData         = Util::VoidPtrInc(pData, sizeof(PipelineBinaryCachePrivateHeader));
-    blobSize     -= sizeof(PipelineBinaryCachePrivateHeader);
-
-    if (pKey != nullptr)
+    if ((pKey != nullptr) && (dataSize > sizeof(PipelineBinaryCachePrivateHeader)))
     {
+        pData         = Util::VoidPtrInc(pData, sizeof(PipelineBinaryCachePrivateHeader));
+        blobSize     -= sizeof(PipelineBinaryCachePrivateHeader);
+
         Util::Result result = CalculateHashId(pAllocationCallbacks,
                                               pKey,
                                               pData,
