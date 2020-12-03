@@ -495,6 +495,19 @@ endif()
 
 target_link_libraries(xgl PRIVATE pal)
 
+### XGL cache_support ####
+add_library(xgl_cache_support INTERFACE)
+
+target_sources(xgl_cache_support INTERFACE
+    api/binary_cache_serialization.cpp
+)
+target_include_directories(xgl_cache_support INTERFACE
+    api
+)
+target_link_libraries(xgl_cache_support INTERFACE pal)
+
+target_link_libraries(xgl PRIVATE xgl_cache_support)
+
 ### Visual Studio Filters ##############################################################################################
 target_find_headers(xgl)
 if(MSVC)
