@@ -28,28 +28,18 @@
 #include "include/vk_utils.h"
 #include "include/vk_defines.h"
 #include "include/vk_dispatch.h"
+#include "include/pipeline_binary_cache.h"
 #include "include/pipeline_compiler.h"
-#include "pipeline_binary_cache.h"
 
 namespace vk
 {
 
 class Device;
 
-// Layout for pipeline cache header version VK_PIPELINE_CACHE_HEADER_VERSION_ONE, all fields are written with LSB first.
-struct PipelineCacheHeaderData
-{
-    uint32_t headerLength;       // Length in bytes of the entire pipeline cache header.
-    uint32_t headerVersion;      // A VkPipelineCacheHeaderVersion value.
-    uint32_t vendorID;           // A vendor ID equal to VkPhysicalDeviceProperties::vendorID.
-    uint32_t deviceID;           // A device ID equal to VkPhysicalDeviceProperties::deviceID.
-    uint8_t  UUID[VK_UUID_SIZE]; // A pipeline cache ID equal to VkPhysicalDeviceProperties::pipelineCacheUUID.
-};
-
 // Layout for pipeline cache private header, all fields are written with LSB first.
 struct PipelineCachePrivateHeaderData
 {
-    PipelineCompilerType cacheType;        // Cache data type
+    PipelineCompilerType cacheType;     // Cache data type
     uint64_t blobSize[MaxPalDevices];   // Blob data size for each device
 };
 

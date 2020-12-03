@@ -193,6 +193,12 @@ namespace vk
     // The default, full stencil write mask
     static const uint8_t StencilWriteMaskFull = 0xFF;
 
+    // Enumerates the compiler types
+    enum PipelineCompilerType : uint32_t
+    {
+        PipelineCompilerTypeLlpc,  // Use shader compiler provided by LLPC
+    };
+
 }// namespace vk
 
 #endif

@@ -50,17 +50,6 @@ namespace vk
 {
 
 class CacheAdapter;
-struct BinaryCacheEntry
-{
-    Util::MetroHash::Hash hashId;
-    size_t                dataSize;
-};
-
-constexpr size_t SHA_DIGEST_LENGTH = 20;
-struct PipelineBinaryCachePrivateHeader
-{
-    uint8_t  hashId[SHA_DIGEST_LENGTH];
-};
 
 // Unified pipeline cache interface
 class PipelineBinaryCache
@@ -86,13 +75,6 @@ public:
         Util::IPlatformKey*    pKey,
         size_t                 dataSize,
         const void*            pData);
-
-    static Util::Result CalculateHashId(
-        VkAllocationCallbacks*    pAllocationCallbacks,
-        const Util::IPlatformKey* pPlatformKey,
-        const void*               pData,
-        size_t                    dataSize,
-        uint8_t*                  pHashId);
 
     ~PipelineBinaryCache();
 
