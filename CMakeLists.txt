@@ -265,6 +265,8 @@ option(XGL_BUILD_GFX103 "Build open source vulkan for GFX103" ON)
 
 cmake_dependent_option(XGL_BUILD_NAVI21 "Build open source vulkan for Navi21" ON "XGL_BUILD_GFX10;XGL_BUILD_GFX103" OFF)
 
+option(XGL_BUILD_CACHE_CREATOR "Build cache-creator tools?" OFF)
+
 #if VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES
 option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
 #endif
@@ -367,6 +369,9 @@ if(ICD_GPUOPEN_DEVMODE_BUILD)
     endif()
     set(GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION ${GPUOPEN_MAJOR_VERSION})
 endif()
+
+# XGL cache creator tool
+set(XGL_CACHE_CREATOR_PATH ${PROJECT_SOURCE_DIR}/tools/cache_creator CACHE PATH "Path to the cache creator tool")
 
 # PAL
 if(EXISTS ${PROJECT_SOURCE_DIR}/../pal)
