@@ -1,0 +1,13 @@
+BasedOnStyle: LLVM
+ColumnLimit: 120
+AllowShortFunctionsOnASingleLine: InlineOnly
+IncludeBlocks: Merge
+IncludeCategories:
+  - Regex:           '^"include/'
+    Priority:        2
+  - Regex:           '^"(llvm|llvm-c|clang|clang-c)/'
+    Priority:        3
+  - Regex:           '^(<|"(gtest|gmock|isl|json)/)'
+    Priority:        4
+  - Regex:           '.*'
+    Priority:        1
