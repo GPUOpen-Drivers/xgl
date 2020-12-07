@@ -70,7 +70,10 @@ static void* VKAPI_PTR
 
 // ===============================================================================================
 // Default memory allocation callback used when application does not supply a callback function
-// of its own. Currently just punts to stock new []. Alignment and alloc types are ignored.
+// of its own. Since POSIX doesn't provide an aligned reallocation primitive, we don't support it
+// either.
+// If there's a future need to support it, reallocation could be implemented by prepending a
+// metadata header to each allocation that contains the allocation size.
 static void* VKAPI_PTR
     DefaultReallocFunc(
     void*                                   pUserData,
@@ -79,21 +82,8 @@ static void* VKAPI_PTR
     size_t                                  alignment,
     VkSystemAllocationScope                 allocType)
 {
-    void* pMemory;
-#if __STDC_VERSION__ >= 201112L
-    alignment = Util::Pow2Align(alignment, sizeof(void*));
-    size = Util::Pow2Align(size, alignment);
-    pMemory = aligned_alloc(alignment, size);
-    memcpy(pMemory, pOriginal, size);
-#elif _POSIX_VERSION >= 200112L
-    if (posix_memalign(&pMemory, Util::Pow2Align(alignment, sizeof(void*)), size))
-        pMemory = NULL;
-    else
-        memcpy(pMemory, pOriginal, size);
-#else
-#error "Unsupported platform"
-#endif
-    return pMemory;
+    VK_NEVER_CALLED();
+    return nullptr;
 }
 
 // =====================================================================================================================
