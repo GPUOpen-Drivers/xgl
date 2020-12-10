@@ -48,6 +48,12 @@ class PhysicalDevice;
 class PipelineCache;
 class ShaderCache;
 
+// Enumerates the compiler types
+enum PipelineCompilerType : uint32_t
+{
+    PipelineCompilerTypeLlpc,  // Use shader compiler provided by LLPC
+};
+
 // Represents the result of PipelineCompiler::BuildShaderModule
 struct ShaderModuleHandle
 {

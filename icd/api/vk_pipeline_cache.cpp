@@ -32,7 +32,7 @@
 #include "include/vk_pipeline_cache.h"
 #include "palAutoBuffer.h"
 
-#include "include/binary_cache_serialization.h"
+#include "include/pipeline_binary_cache.h"
 
 namespace vk
 {
@@ -402,7 +402,10 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(
     result = pCache->GetData(nullptr, &privateDataSize);
     VK_ASSERT(result == VK_SUCCESS);
 
-    const size_t       fullDataSize = VkPipelineCacheHeaderDataSize + privateDataSize;
+    PipelineCacheHeaderData pipelineCacheHeaderData;
+
+    constexpr uint32_t HeaderSize = sizeof(pipelineCacheHeaderData);
+    const size_t       fullDataSize = HeaderSize + privateDataSize;
 
     if (pData == nullptr)
     {
@@ -429,30 +432,23 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(
     {
         ApiDevice::ObjectFromHandle(device)->VkPhysicalDevice(DefaultDeviceIndex)->GetDeviceProperties(&physicalDeviceProps);
 
-        size_t       headerBytesWritten = 0;
-        Util::Result headerWriteRes     =  WriteVkPipelineCacheHeaderData(
-                                            pData,
-                                            fullDataSize,
-                                            palProps.vendorId,
-                                            palProps.deviceId,
-                                            physicalDeviceProps.pipelineCacheUUID,
-                                            sizeof(physicalDeviceProps.pipelineCacheUUID),
-                                            &headerBytesWritten);
+        pipelineCacheHeaderData.headerLength = HeaderSize;
+        pipelineCacheHeaderData.headerVersion = VK_PIPELINE_CACHE_HEADER_VERSION_ONE;
+        pipelineCacheHeaderData.vendorID = palProps.vendorId;
+        pipelineCacheHeaderData.deviceID = palProps.deviceId;
 
-        if (headerWriteRes != Util::Result::Success)
+        memcpy(pipelineCacheHeaderData.UUID,
+            physicalDeviceProps.pipelineCacheUUID,
+            sizeof(physicalDeviceProps.pipelineCacheUUID));
+
+        // Store the header first.
+        memcpy(pData, &pipelineCacheHeaderData, HeaderSize);
+
+        if (privateDataSize > 0)
         {
-            *pDataSize = 0;
-            result = VK_INCOMPLETE;
-        }
-        else
-        {
-            VK_ASSERT(headerBytesWritten == VkPipelineCacheHeaderDataSize);
-            if (privateDataSize > 0)
-            {
-                void* pPrivateData = Util::VoidPtrInc(pData, headerBytesWritten);
-                result = pCache->GetData(pPrivateData, &privateDataSize);
-                *pDataSize = privateDataSize + headerBytesWritten;
-            }
+            void* pPrivateData = Util::VoidPtrInc(pData, HeaderSize);
+            result = pCache->GetData(pPrivateData, &privateDataSize);
+            *pDataSize = privateDataSize + HeaderSize;
         }
     }
 
