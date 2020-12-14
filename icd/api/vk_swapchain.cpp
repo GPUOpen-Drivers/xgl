@@ -152,7 +152,6 @@ VkResult SwapChain::Create(
     imageUsage &= VkFormatFeatureFlagsToImageUsageFlags(formatProperties.optimalTilingFeatures);
 
     properties.imageCreateInfo.usage    = VkToPalImageUsageFlags(imageUsage,
-                                                                 pCreateInfo->imageFormat,
                                                                  1,
                                                                  (VkImageUsageFlags)(0),
                                                                  (VkImageUsageFlags)(0));
@@ -163,8 +162,12 @@ VkResult SwapChain::Create(
     // The swapchain image can be used as a blit source for driver post processing on present.
     properties.imageCreateInfo.usage.shaderRead = 1;
 
-    properties.imageCreateInfo.usage.disableOptimizedDisplay =
-        (pDevice->GetRuntimeSettings().disableDisplayDccForMgpu && pDevice->IsMultiGpu()) ? 1 : 0;
+    if ((pDevice->GetRuntimeSettings().disableDisplayDcc == DisplayableDcc::DisplayableDccDisabled) ||
+        ((pDevice->GetRuntimeSettings().disableDisplayDcc == DisplayableDcc::DisplayableDccDisabledForMgpu) &&
+            (pDevice->IsMultiGpu())))
+    {
+        properties.imageCreateInfo.usage.disableOptimizedDisplay = 1;
+    }
 
     bool mutableFormat = ((pCreateInfo->flags & VK_SWAPCHAIN_CREATE_MUTABLE_FORMAT_BIT_KHR) != 0);
 
@@ -255,7 +258,6 @@ VkResult SwapChain::Create(
     swapChainCreateInfo.imageSwizzledFormat = properties.imageCreateInfo.swizzledFormat;
     swapChainCreateInfo.imageExtent         = VkToPalExtent2d(pCreateInfo->imageExtent);
     swapChainCreateInfo.imageUsageFlags     = VkToPalImageUsageFlags(pCreateInfo->imageUsage,
-                                                                     pCreateInfo->imageFormat,
                                                                      1,
                                                                      (VkImageUsageFlags)(0),
                                                                      (VkImageUsageFlags)(0));

@@ -472,6 +472,8 @@ VkResult ImageView::Create(
         imageViewUsage = pImage->GetImageStencilUsage();
     }
 
+    VkFormat createInfoFormat = pCreateInfo->format;
+
     VK_ASSERT(pCreateInfo->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO);
 
     for (const auto* pHeader = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
@@ -560,7 +562,7 @@ VkResult ImageView::Create(
     Pal::Result result = Pal::Result::Success;
 
     // Get the view format (without component mapping)
-    Pal::SwizzledFormat viewFormat = VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings());
+    Pal::SwizzledFormat viewFormat = VkToPalFormat(createInfoFormat, pDevice->GetRuntimeSettings());
 
     VK_ASSERT(viewFormat.format != Pal::ChNumFormat::Undefined);
 
@@ -571,7 +573,7 @@ VkResult ImageView::Create(
 
         pSrdMemorys[0] = Util::VoidPtrInc(pMemory, srdSegmentOffset);
 
-        Pal::SwizzledFormat aspectFormat = VkToPalFormat(Formats::GetAspectFormat(pCreateInfo->format,
+        Pal::SwizzledFormat aspectFormat = VkToPalFormat(Formats::GetAspectFormat(createInfoFormat,
                                                          subresRange.aspectMask), pDevice->GetRuntimeSettings());
 
         VK_ASSERT(aspectFormat.format != Pal::ChNumFormat::Undefined);
@@ -654,7 +656,7 @@ VkResult ImageView::Create(
             (colorViewSegmentSize > 0) ? pColorView : nullptr,
             (depthViewSegmentSize > 0) ? pDsView    : nullptr,
             pImage,
-            pCreateInfo->format,
+            createInfoFormat,
             palRanges[0],
             zRange,
             needsFmaskViewSrds,

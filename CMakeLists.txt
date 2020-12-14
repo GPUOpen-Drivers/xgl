@@ -268,6 +268,7 @@ cmake_dependent_option(XGL_BUILD_NAVI21 "Build open source vulkan for Navi21" ON
 #if VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES
 option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
 #endif
+option(VKI_KHR_FRAGMENT_SHADING_RATE "Build vulkan with VKI_KHR_FRAGMENT_SHADING_RATE" OFF)
 #if VKI_EXT_EXTENDED_DYNAMIC_STATE
 option(VKI_EXT_EXTENDED_DYNAMIC_STATE "Build vulkan with EXTENDED_DYNAMIC_STATE extention" OFF)
 #endif
@@ -566,6 +567,11 @@ endif()
 set(PERL_CMD ${PERL_EXECUTABLE})
 
 ### Add Subdirectories #################################################################################################
+
+### external Vulkan headers ############################################
+if(EXISTS ${PROJECT_SOURCE_DIR}/../Vulkan-Headers)
+    set(VULKAN_HEADERS_PATH ${PROJECT_SOURCE_DIR}/../Vulkan-Headers CACHE PATH "The path of Vulkan headers.")
+endif()
 
 ### Metrohash ##########################################################
 if(EXISTS ${PROJECT_SOURCE_DIR}/../MetroHash)

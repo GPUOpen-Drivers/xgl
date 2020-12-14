@@ -238,6 +238,7 @@ private:
 VK_INLINE const PalQueryPool* QueryPool::AsPalQueryPool() const
 {
     VK_ASSERT(m_queryType != VK_QUERY_TYPE_TIMESTAMP);
+
     return static_cast<const PalQueryPool*>(this);
 }
 

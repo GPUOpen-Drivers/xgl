@@ -97,6 +97,21 @@ struct CmdBufGpuMem
 
 constexpr uint8_t DefaultStencilOpValue = 1;
 
+// Internal API pipeline binding points
+enum PipelineBindPoint
+{
+    PipelineBindCompute = 0,
+    PipelineBindGraphics,
+    PipelineBindCount
+};
+
+// Dynamic bind-time info (wave limits, etc.) for either graphics or compute-based pipelines
+union PipelineDynamicBindInfo
+{
+    Pal::DynamicComputeShaderInfo   cs;
+    Pal::DynamicGraphicsShaderInfos gfx;
+};
+
 // This structure contains information about currently written user data entries within the command buffer
 struct PipelineBindState
 {
@@ -108,13 +123,8 @@ struct PipelineBindState
     uint32_t pushedConstCount;
     // Currently pushed constant values (relative to an base = 0)
     uint32_t pushConstData[MaxPushConstRegCount];
-};
-
-enum PipelineBind
-{
-    PipelineBindCompute = 0,
-    PipelineBindGraphics,
-    PipelineBindCount
+    // Dynamic info (wave limits, etc.)
+    PipelineDynamicBindInfo dynamicBindInfo;
 };
 
 union DirtyState
@@ -160,6 +170,7 @@ struct PerGpuRenderState
 struct AllGpuRenderState
 {
     const GraphicsPipeline*        pGraphicsPipeline;
+    uint64_t                       boundGraphicsPipelineHash;
     const ComputePipeline*         pComputePipeline;
     const RenderPass*              pRenderPass;
     const Pal::IMsaaState* const * pBltMsaaStates;
@@ -182,6 +193,7 @@ struct AllGpuRenderState
         uint32_t viewports;
         uint32_t scissorRect;
         uint32_t samplePattern;
+        uint32_t fragmentShadingRate;
     } staticTokens;
 
     // The Imageless Frambuffer extension allows setting this at RenderPassBind
@@ -203,10 +215,10 @@ struct AllGpuRenderState
     // the first part is for the memset in CmdBuffer::ResetState().
     PipelineBindState       pipelineState[PipelineBindCount];
 
-    // Which Vulkan PipelineBind enum currently owns the state of each PAL pipeline bind point.  This is
+    // Which Vulkan PipelineBindPoint currently owns the state of each PAL pipeline bind point.  This is
     // relevant because e.g. multiple Vulkan pipeline bind points are implemented as compute pipelines and used through
     // the same PAL pipeline bind point.
-    PipelineBind            palToApiPipeline[static_cast<size_t>(Pal::PipelineBindPoint::Count)];
+    PipelineBindPoint       palToApiPipeline[static_cast<size_t>(Pal::PipelineBindPoint::Count)];
 
     Pal::LineStippleStateParams      lineStipple;
     Pal::TriangleRasterStateParams   triangleRasterState;
@@ -214,15 +226,6 @@ struct AllGpuRenderState
     Pal::InputAssemblyStateParams    inputAssemblyState;
     Pal::DepthStencilStateCreateInfo depthStencilCreateInfo;
     Pal::VrsRateParams               vrsRate;
-
-};
-
-// This structure describes current render state within a command buffer during its building.
-struct CmdBufferRenderState
-{
-    AllGpuRenderState allGpuState;
-
-    PerGpuRenderState perGpuState[MaxPalDevices];
 };
 
 // State tracked during a render pass instance when building a command buffer.
@@ -649,6 +652,10 @@ public:
         uint32_t        lineStippleFactor,
         uint16_t        lineStipplePattern);
 
+    void CmdSetPerDrawVrsRate(
+        const VkExtent2D*                        pFragmentSize,
+        const VkFragmentShadingRateCombinerOpKHR combinerOps[2]);
+
     void CmdBeginConditionalRendering(const VkConditionalRenderingBeginInfoEXT* pConditionalRenderingBegin);
     void CmdEndConditionalRendering();
 
@@ -661,7 +668,7 @@ public:
         VK_ASSERT(((m_cbBeginDeviceMask ^ deviceMask) & deviceMask) == 0);
 
         // If called inside a render pass, ensure devices outside of render pass device mask are not enabled
-        VK_ASSERT((m_state.allGpuState.pRenderPass == nullptr) ||
+        VK_ASSERT((m_allGpuState.pRenderPass == nullptr) ||
                   (((m_rpDeviceMask ^ deviceMask) & deviceMask) == 0));
 
         m_curDeviceMask = deviceMask;
@@ -708,12 +715,6 @@ public:
     VK_INLINE Pal::ICmdBuffer* PalCmdBuffer(
             int32_t idx) const
     {
-        if (idx == 0)
-        {
-            VK_ASSERT((uintptr_t)m_pPalCmdBuffers[idx] == (uintptr_t)this + sizeof(*this));
-            return (Pal::ICmdBuffer*)((uintptr_t)this + sizeof(*this));
-        }
-
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pPalCmdBuffers[idx];
     }
@@ -947,6 +948,16 @@ public:
 
     CmdPool* GetCmdPool() const { return m_pCmdPool; }
 
+    PerGpuRenderState* PerGpuState(uint32 deviceIdx)
+    {
+        PerGpuRenderState* pPerGpuState = static_cast<PerGpuRenderState*>(Util::VoidPtrInc(this, sizeof(*this)));
+
+        return &pPerGpuState[deviceIdx];
+    }
+
+    AllGpuRenderState* RenderState()
+        { return &m_allGpuState; }
+
 private:
     void ValidateStates();
 
@@ -998,17 +1009,15 @@ private:
     typedef uint32_t RebindUserDataFlags;
 
     RebindUserDataFlags SwitchUserDataLayouts(
-        PipelineBind           apiBindPoint,
+        PipelineBindPoint      apiBindPoint,
         const UserDataLayout*  pUserDataLayout);
 
-    void RebindCompatibleUserData(
-        PipelineBind           apiBindPoint,
+    void RebindPipeline(PipelineBindPoint bindPoint, bool fromBindPipeline);
+
+    void RebindUserData(
+        PipelineBindPoint      apiBindPoint,
         Pal::PipelineBindPoint palBindPoint,
         RebindUserDataFlags    flags);
-
-    void PalBindPipeline(
-        VkPipelineBindPoint     pipelineBindPoint,
-        VkPipeline              pipeline);
 
     VK_INLINE void RPBeginSubpass();
     VK_INLINE void RPEndSubpass();
@@ -1064,16 +1073,16 @@ private:
 
     VK_INLINE bool PalPipelineBindingOwnedBy(
         Pal::PipelineBindPoint palBind,
-        PipelineBind apiBind
+        PipelineBindPoint apiBind
         ) const;
 
     VK_INLINE static void ConvertPipelineBindPoint(
-        VkPipelineBindPoint pipelineBindPoint,
+        VkPipelineBindPoint     pipelineBindPoint,
         Pal::PipelineBindPoint* pPalBindPoint,
-        PipelineBind*           pApiBind);
+        PipelineBindPoint*      pApiBind);
 
     VK_INLINE void WritePushConstants(
-        PipelineBind           apiBindPoint,
+        PipelineBindPoint      apiBindPoint,
         Pal::PipelineBindPoint palBindPoint,
         const PipelineLayout*  pLayout,
         uint32_t               startInDwords,
@@ -1110,7 +1119,7 @@ private:
     Pal::ICmdBuffer*              m_pPalCmdBuffers[MaxPalDevices];
     VirtualStackAllocator*        m_pStackAllocator;
 
-    CmdBufferRenderState          m_state; // Render state tracked during command buffer building
+    AllGpuRenderState             m_allGpuState; // Render state tracked during command buffer building
 
     CmdBufferFlags                m_flags;
     VkResult                      m_recordingResult; // Tracks the result of recording commands to capture OOM errors
@@ -1128,6 +1137,8 @@ private:
 #endif
 
     Util::Vector<DynamicDepthStencil, 16, PalAllocator> m_palDepthStencilState;
+
+    uint32                        m_vbWatermark;  // tracks how many vb entries need to be reset
 
 };
 
@@ -1148,11 +1159,11 @@ void CmdBuffer::PalCmdBindMsaaState(
 {
     VK_ASSERT(((1UL << deviceIdx) & m_curDeviceMask) != 0);
 
-    if (pState != m_state.perGpuState[deviceIdx].pMsaaState)
+    if (pState != PerGpuState(deviceIdx)->pMsaaState)
     {
         pPalCmdBuf->CmdBindMsaaState(pState);
 
-        m_state.perGpuState[deviceIdx].pMsaaState = pState;
+        PerGpuState(deviceIdx)->pMsaaState = pState;
     }
 }
 
@@ -1164,11 +1175,11 @@ void CmdBuffer::PalCmdBindColorBlendState(
 {
     VK_ASSERT(((1UL << deviceIdx) & m_curDeviceMask) != 0);
 
-    if (pState != m_state.perGpuState[deviceIdx].pColorBlendState)
+    if (pState != PerGpuState(deviceIdx)->pColorBlendState)
     {
         pPalCmdBuf->CmdBindColorBlendState(pState);
 
-        m_state.perGpuState[deviceIdx].pColorBlendState = pState;
+        PerGpuState(deviceIdx)->pColorBlendState = pState;
     }
 }
 
@@ -1180,11 +1191,11 @@ void CmdBuffer::PalCmdBindDepthStencilState(
 {
     VK_ASSERT(((1UL << deviceIdx) & m_curDeviceMask) != 0);
 
-    if (pState != m_state.perGpuState[deviceIdx].pDepthStencilState)
+    if (pState != PerGpuState(deviceIdx)->pDepthStencilState)
     {
         pPalCmdBuf->CmdBindDepthStencilState(pState);
 
-        m_state.perGpuState[deviceIdx].pDepthStencilState = pState;
+        PerGpuState(deviceIdx)->pDepthStencilState = pState;
     }
 }
 
@@ -1234,7 +1245,7 @@ Pal::ImageLayout CmdBuffer::RPGetAttachmentLayout(
               aspect == Pal::ImageAspect::Cr      ||
               aspect == Pal::ImageAspect::YCbCr);
     VK_ASSERT(static_cast<Pal::uint32>(aspect) < static_cast<Pal::uint32>(Pal::ImageAspect::Count));
-    VK_ASSERT(attachment < m_state.allGpuState.pRenderPass->GetAttachmentCount());
+    VK_ASSERT(attachment < m_allGpuState.pRenderPass->GetAttachmentCount());
     VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
 
     return m_renderPassInstance.pAttachments[attachment].aspectLayout[static_cast<size_t>(aspect)];
@@ -1255,7 +1266,7 @@ void CmdBuffer::RPSetAttachmentLayout(
               aspect == Pal::ImageAspect::Cr      ||
               aspect == Pal::ImageAspect::YCbCr);
     VK_ASSERT(static_cast<Pal::uint32>(aspect) < static_cast<Pal::uint32>(Pal::ImageAspect::Count));
-    VK_ASSERT(attachment < m_state.allGpuState.pRenderPass->GetAttachmentCount());
+    VK_ASSERT(attachment < m_allGpuState.pRenderPass->GetAttachmentCount());
     VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
 
     m_renderPassInstance.pAttachments[attachment].aspectLayout[static_cast<size_t>(aspect)] = layout;
@@ -1698,6 +1709,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdEndDebugUtilsLabelEXT(
 VKAPI_ATTR void VKAPI_CALL vkCmdInsertDebugUtilsLabelEXT(
     VkCommandBuffer                             commandBuffer,
     const VkDebugUtilsLabelEXT*                 pLabelInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetFragmentShadingRateKHR(
+    VkCommandBuffer                          commandBuffer,
+    const VkExtent2D*                        pFragmentSize,
+    const VkFragmentShadingRateCombinerOpKHR combinerOps[2]);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdBeginConditionalRenderingEXT(
     VkCommandBuffer                           commandBuffer,

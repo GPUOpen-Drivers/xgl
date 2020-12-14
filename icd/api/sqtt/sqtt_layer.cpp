@@ -831,7 +831,7 @@ void SqttCmdBufferState::PipelineBound(
 {
     if (pipeline != VK_NULL_HANDLE)
     {
-        const Pipeline* pPipeline = Pipeline::ObjectFromHandle(pipeline);
+        const Pipeline* pPipeline = Pipeline::BaseObjectFromHandle(pipeline);
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevModeMgr != nullptr)
@@ -2061,8 +2061,10 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
     {
         if (VK_NULL_HANDLE != pipeline)
         {
-            Pipeline* pPipeline = Pipeline::ObjectFromHandle(pipeline);
+            Pipeline* pPipeline = Pipeline::BaseObjectFromHandle(pipeline);
+
             pDevMgr->PipelineDestroyed(pDevice, pPipeline);
+
         }
     }
 #endif

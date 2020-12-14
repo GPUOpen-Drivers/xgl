@@ -259,10 +259,11 @@ VkResult Queue::NotifyFlipMetadataAfterPresent(
 
 // =====================================================================================================================
 // Submit an array of command buffers to a queue
+template<typename SubmitInfoType>
 VkResult Queue::Submit(
-    uint32_t            submitCount,
-    const VkSubmitInfo* pSubmits,
-    VkFence             fence)
+    uint32_t              submitCount,
+    const SubmitInfoType* pSubmits,
+    VkFence               fence)
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
     DevModeMgr* pDevModeMgr = m_pDevice->VkInstance()->GetDevModeMgr();
@@ -308,7 +309,7 @@ VkResult Queue::Submit(
     {
         for (uint32_t submitIdx = 0; (submitIdx < submitCount) && (result == VK_SUCCESS); ++submitIdx)
         {
-            const VkSubmitInfo& submitInfo = pSubmits[submitIdx];
+            const SubmitInfoType& submitInfo = pSubmits[submitIdx];
             const VkDeviceGroupSubmitInfo* pDeviceGroupInfo = nullptr;
             const VkProtectedSubmitInfo* pProtectedSubmitInfo = nullptr;
             bool  protectedSubmit = false;
@@ -350,24 +351,25 @@ VkResult Queue::Submit(
                 pNext = pHeader->pNext;
             }
 
-            if ((result == VK_SUCCESS) && (submitInfo.waitSemaphoreCount > 0))
-            {
-                VK_ASSERT((pWaitSemaphoreValues == nullptr) ||
-                          (submitInfo.waitSemaphoreCount == waitSemaphoreValueCount));
-                result = PalWaitSemaphores(
-                    submitInfo.waitSemaphoreCount,
-                    submitInfo.pWaitSemaphores,
-                    pWaitSemaphoreValues,
-                    (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->waitSemaphoreCount          : 0),
-                    (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pWaitSemaphoreDeviceIndices : nullptr));
-            }
+                if ((result == VK_SUCCESS) && (submitInfo.waitSemaphoreCount > 0))
+                {
+                    VK_ASSERT((pWaitSemaphoreValues == nullptr) ||
+                            (submitInfo.waitSemaphoreCount == waitSemaphoreValueCount));
+                    result = PalWaitSemaphores(
+                        submitInfo.waitSemaphoreCount,
+                        submitInfo.pWaitSemaphores,
+                        pWaitSemaphoreValues,
+                        (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->waitSemaphoreCount          : 0),
+                        (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pWaitSemaphoreDeviceIndices : nullptr));
+                }
 
             // Allocate space to store the PAL command buffer handles
             const VkCommandBuffer* pCmdBuffers = submitInfo.pCommandBuffers;
             const uint32_t cmdBufferCount      = submitInfo.commandBufferCount;
+            const uint32_t waitSemaphoreCount  = submitInfo.waitSemaphoreCount;
 
             Pal::ICmdBuffer** pPalCmdBuffers = (cmdBufferCount > 0) ?
-                            virtStackFrame.AllocArray<Pal::ICmdBuffer*>(submitInfo.commandBufferCount) : nullptr;
+                            virtStackFrame.AllocArray<Pal::ICmdBuffer*>(cmdBufferCount) : nullptr;
 
             result = ((pPalCmdBuffers != nullptr) || (cmdBufferCount == 0)) ? result : VK_ERROR_OUT_OF_HOST_MEMORY;
 
@@ -393,7 +395,7 @@ VkResult Queue::Submit(
                 // Get the PAL command buffer object from each Vulkan object and put it
                 // in the local array before submitting to PAL.
                 DispatchableCmdBuffer* const * pCommandBuffers =
-                    reinterpret_cast<DispatchableCmdBuffer*const*>(submitInfo.pCommandBuffers);
+                    reinterpret_cast<DispatchableCmdBuffer*const*>(pCmdBuffers);
 
                 perSubQueueInfo.cmdBufferCount = 0;
 
@@ -432,7 +434,7 @@ VkResult Queue::Submit(
 
                 if ((perSubQueueInfo.cmdBufferCount > 0) ||
                     (palSubmitInfo.fenceCount > 0)     ||
-                    (submitInfo.waitSemaphoreCount > 0))
+                    (waitSemaphoreCount > 0))
                 {
                     Pal::Result palResult = Pal::Result::Success;
 
@@ -443,10 +445,11 @@ VkResult Queue::Submit(
                     else
                     {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-                        palResult = m_pDevModeMgr->TimedQueueSubmit(deviceIdx,
+                        palResult = m_pDevModeMgr->TimedQueueSubmit(
+                            deviceIdx,
                             this,
                             cmdBufferCount,
-                            submitInfo.pCommandBuffers,
+                            pCmdBuffers,
                             palSubmitInfo,
                             &virtStackFrame);
 #else
@@ -460,17 +463,17 @@ VkResult Queue::Submit(
 
             virtStackFrame.FreeArray(pPalCmdBuffers);
 
-            if ((result == VK_SUCCESS) && (submitInfo.signalSemaphoreCount > 0))
-            {
-                VK_ASSERT((pSignalSemaphoreValues == nullptr) ||
-                          (submitInfo.signalSemaphoreCount == signalSemaphoreValueCount));
-                result = PalSignalSemaphores(
-                    submitInfo.signalSemaphoreCount,
-                    submitInfo.pSignalSemaphores,
-                    pSignalSemaphoreValues,
-                    (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->signalSemaphoreCount          : 0),
-                    (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pSignalSemaphoreDeviceIndices : nullptr));
-            }
+                if ((result == VK_SUCCESS) && (submitInfo.signalSemaphoreCount > 0))
+                {
+                    VK_ASSERT((pSignalSemaphoreValues == nullptr) ||
+                            (submitInfo.signalSemaphoreCount == signalSemaphoreValueCount));
+                    result = PalSignalSemaphores(
+                        submitInfo.signalSemaphoreCount,
+                        submitInfo.pSignalSemaphores,
+                        pSignalSemaphoreValues,
+                        (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->signalSemaphoreCount          : 0),
+                        (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pSignalSemaphoreDeviceIndices : nullptr));
+                }
 
         }
     }
@@ -1740,7 +1743,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
     const VkSubmitInfo*                         pSubmits,
     VkFence                                     fence)
 {
-     return ApiQueue::ObjectFromHandle(queue)->Submit(
+     return ApiQueue::ObjectFromHandle(queue)->Submit<VkSubmitInfo>(
         submitCount,
         pSubmits,
         fence);

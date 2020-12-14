@@ -323,6 +323,11 @@ VkResult Memory::Create(
             importInfo.isAhbHandle      = isAndroidHardwareBuffer || sharedViaAndroidHwBuf;
             importInfo.isNtHandle       = sharedViaNtHandle;
 
+            if (pBoundImage != nullptr)
+            {
+                vkResult = OpenExternalSharedImage(pDevice, pBoundImage, importInfo, &pMemory);
+            }
+            else
             {
                 vkResult = OpenExternalMemory(pDevice, importInfo, &pMemory);
             }
@@ -404,6 +409,15 @@ VkResult Memory::Create(
         else
         {
              VK_NEVER_CALLED();
+        }
+
+        // When share a dedicated image, metadata(width/height/mips/...) info is necessary in handle,
+        // so driver calls bindMemory here to update metadata at allocation time.
+        // For dedicated buffer, only base address and total size needed to be filled in handle for sharing,
+        // so we don't need to update buffer handle's metadata.
+        if (dedicatedImage != VK_NULL_HANDLE)
+        {
+            pBoundImage->BindMemory(pDevice, *pMemoryHandle, 0, 0, nullptr, 0, nullptr);
         }
     }
     else if (vkResult != VK_ERROR_TOO_MANY_OBJECTS)
@@ -731,7 +745,6 @@ VkResult Memory::OpenExternalSharedImage(
 
     palOpenInfo.swizzledFormat  = VkToPalFormat(pBoundImage->GetFormat(), pDevice->GetRuntimeSettings());
     palOpenInfo.usage           = VkToPalImageUsageFlags(pBoundImage->GetImageUsage(),
-                                                         pBoundImage->GetFormat(),
                                                          1,
                                                          (VkImageUsageFlags)(0),
                                                          (VkImageUsageFlags)(0));

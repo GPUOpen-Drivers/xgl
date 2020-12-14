@@ -31,5 +31,9 @@
 
 #pragma once
 
+#if EXTERNAL_SPIRV_HEADERS
+#include "unified1/spirv.hpp"
+#else
 #include "sdk-1.2/spirv.hpp"
+#endif
 

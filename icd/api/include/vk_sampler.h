@@ -74,11 +74,13 @@ protected:
     Sampler(
         uint64_t apiHash,
         bool     isYCbCrSampler,
-        uint32_t multiPlaneCount)
+        uint32_t multiPlaneCount,
+        uint32_t borderColorPaletteIndex)
         :
         m_apiHash(apiHash),
         m_isYCbCrSampler(isYCbCrSampler),
-        m_multiPlaneCount(multiPlaneCount)
+        m_multiPlaneCount(multiPlaneCount),
+        m_borderColorPaletteIndex(borderColorPaletteIndex)
     {
     }
 
@@ -88,6 +90,7 @@ protected:
     const uint64_t          m_apiHash;
     const bool              m_isYCbCrSampler;
     const uint32_t          m_multiPlaneCount;
+    const uint32_t          m_borderColorPaletteIndex;
 };
 
 namespace entry

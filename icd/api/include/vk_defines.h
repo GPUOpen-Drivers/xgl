@@ -193,6 +193,9 @@ namespace vk
     // The default, full stencil write mask
     static const uint8_t StencilWriteMaskFull = 0xFF;
 
+    // The max palette size for CustomBorderColor.
+    static const uint32_t MaxBorderColorPaletteSize = 4096;
+
 }// namespace vk
 
 #endif

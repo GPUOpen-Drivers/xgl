@@ -472,7 +472,7 @@ VkResult Instance::Init(
 
     // Install PAL developer callback if the SQTT layer is enabled.  This is required to trap internal barriers
     // and dispatches performed by PAL so that they can be correctly annotated to RGP.
-    if ((status == VK_SUCCESS) && IsTracingSupportEnabled())
+    if (status == VK_SUCCESS)
     {
         Pal::IPlatform::InstallDeveloperCb(m_pPalPlatform, &Instance::PalDeveloperCallback, this);
     }
@@ -1132,6 +1132,7 @@ void PAL_STDCALL Instance::PalDeveloperCallback(
     {
         SqttMgr::PalDeveloperCallback(pInstance, deviceIndex, type, pCbData);
     }
+
 }
 
 // =====================================================================================================================

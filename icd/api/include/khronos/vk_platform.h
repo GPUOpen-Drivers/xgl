@@ -32,7 +32,11 @@
 #ifndef __VK_PLATFORM_H_PROXY__
 #define __VK_PLATFORM_H_PROXY__
 
+#if EXTERNAL_VULKAN_HEADERS
+#include "vulkan/vk_platform.h"
+#else
 #include "sdk-1.2/vk_platform.h"
+#endif
 
 #ifdef VK_USE_PLATFORM_XLIB_KHR
 #ifdef None

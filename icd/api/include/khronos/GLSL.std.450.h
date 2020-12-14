@@ -31,4 +31,8 @@
 
 #pragma once
 
+#if EXTERNAL_SPIRV_HEADERS
+#include "unified1/GLSL.std.450.h"
+#else
 #include "sdk-1.2/GLSL.std.450.h"
+#endif

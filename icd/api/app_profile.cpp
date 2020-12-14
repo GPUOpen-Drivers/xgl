@@ -277,6 +277,12 @@ constexpr AppProfilePatternEntry AppNameDiRT4 =
     "dirt4"
 };
 
+constexpr AppProfilePatternEntry AppNameShadowOfTheTombRaider =
+{
+    PatternAppNameLower,
+    "shadowofthetomb"
+};
+
 constexpr AppProfilePatternEntry AppNameSaschaWillemsExamples =
 {
     PatternAppNameLower,
@@ -583,6 +589,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::DiRT4,
         {
             AppNameDiRT4,
+            AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::ShadowOfTheTombRaider,
+        {
+            AppNameShadowOfTheTombRaider,
             AppEngineFeral3D,
             PatternEnd
         }

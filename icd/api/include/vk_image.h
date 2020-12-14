@@ -313,6 +313,7 @@ private:
     static VkResult CreateFromAndroidHwBufferHandle(
         Device*                  pDevice,
         const VkImageCreateInfo* pImageCreateInfo,
+        uint64_t                 externalFormat,
         ImageFlags               internalFlags,
         VkImage*                 pImage);
 

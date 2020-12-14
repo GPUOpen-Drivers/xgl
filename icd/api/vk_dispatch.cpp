@@ -609,6 +609,8 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdSetDepthBoundsTestEnableEXT                );
     INIT_DISPATCH_ENTRY(vkCmdSetStencilTestEnableEXT                    );
     INIT_DISPATCH_ENTRY(vkCmdSetStencilOpEXT                            );
+    INIT_DISPATCH_ENTRY(vkCmdSetFragmentShadingRateKHR                  );
+    INIT_DISPATCH_ENTRY(vkGetPhysicalDeviceFragmentShadingRatesKHR      );
 
     INIT_DISPATCH_ENTRY(vkCreatePrivateDataSlotEXT                      );
     INIT_DISPATCH_ENTRY(vkDestroyPrivateDataSlotEXT                     );

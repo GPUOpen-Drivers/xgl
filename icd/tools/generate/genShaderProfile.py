@@ -872,12 +872,16 @@ def wrapWithComment(content, comment, secured):
 def main():
     shaderProfileDir = ''
     outputDir = ''
+    genDir = ''
 
     if len(sys.argv) >= 2:
         shaderProfileDir = sys.argv[1]
+        # if genDir was specified by the user
+        if len(sys.argv) == 3:
+            genDir = sys.argv[2]
     else:
         print("Error: include directory path in the argument \n"
-                "usage: python3 genshaderprofile.py <vulkancodebase>\\xgl\\icd\\api\\appopt\\shader_profiles\\")
+                "usage: python3 genshaderprofile.py <vulkancodebase>\\xgl\\icd\\api\\appopt\\shader_profiles\\ genDir [optional]")
         return -1
 
     if not os.path.isabs(shaderProfileDir):
@@ -888,6 +892,8 @@ def main():
         outputDir = os.path.split(splitShaderProfileDir[0])[0]
     else:
         outputDir = splitShaderProfileDir[0]
+    if genDir != "":
+        outputDir = genDir
 
     headerDoxComment = HeaderFileDoxComment.replace("%FileName%", outputFile)
 

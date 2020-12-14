@@ -24,9 +24,19 @@
  #######################################################################################################################
 
 import os
+import sys
 
-CopyrightFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../xgl-copyright-template.txt"
-AppProfileHeaderFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../../api/include/app_profile.h"
+genDir = ''
+# if genDir was specified by the user
+if len(sys.argv) == 3:
+    genDir = sys.argv[2]
+
+if genDir != "":
+    CopyrightFilePath = genDir + "/xgl-copyright-template.txt"
+    AppProfileHeaderFilePath = genDir + "/api/include/app_profile.h"
+else:
+    CopyrightFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../xgl-copyright-template.txt"
+    AppProfileHeaderFilePath = os.path.dirname(os.path.realpath(__file__)) + "/../../api/include/app_profile.h"
 
 FileHeaderCopyright = open(CopyrightFilePath).read()
 

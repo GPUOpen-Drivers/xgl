@@ -98,6 +98,7 @@ static void GenerateHashFromSubpassDescription(
     pHasher->Update(desc.preserveAttachmentCount);
     GenerateHashFromAttachmentReference(pHasher, desc.depthStencilAttachment);
     GenerateHashFromAttachmentReference(pHasher, desc.depthStencilResolveAttachment);
+    GenerateHashFromAttachmentReference(pHasher, desc.fragmentShadingRateAttachment);
     pHasher->Update(desc.subpassSampleCount);
 
     for (uint32_t i = 0; i < desc.inputAttachmentCount; ++i)
@@ -563,6 +564,14 @@ void SubpassDescription::Init(
 
             depthStencilResolveAttachment.Init(
                 pExtInfo->pDepthStencilResolveAttachment[subpassIndex]);
+
+            break;
+        }
+        case VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR:
+        {
+            const auto* pExtInfo = static_cast<const VkFragmentShadingRateAttachmentInfoKHR*>(pNext);
+            fragmentShadingRateAttachment.Init(
+                *pExtInfo->pFragmentShadingRateAttachment);
 
             break;
         }

@@ -171,22 +171,22 @@ SamplerYcbcrConversion::SamplerYcbcrConversion(
     :
 	m_settings(settings)
 {
-    VK_ASSERT(pCreateInfo->pNext == nullptr);
+    VkFormat createInfoFormat = pCreateInfo->format;
 
-    const Pal::SwizzledFormat palFormat = VkToPalFormat(pCreateInfo->format, m_settings);
+    Pal::SwizzledFormat palFormat = VkToPalFormat(createInfoFormat, m_settings);
 
-    if ((pCreateInfo->format == VK_FORMAT_B5G5R5A1_UNORM_PACK16) ||
-        (pCreateInfo->format == VK_FORMAT_R5G5B5A1_UNORM_PACK16))
+    if ((createInfoFormat == VK_FORMAT_B5G5R5A1_UNORM_PACK16) ||
+        (createInfoFormat == VK_FORMAT_R5G5B5A1_UNORM_PACK16))
     {
-        m_metaData.word0.bitDepth.channelBitsR = GetYuvBitDepth(pCreateInfo->format).wBitCount;
-        m_metaData.word0.bitDepth.channelBitsG = GetYuvBitDepth(pCreateInfo->format).zBitCount;
-        m_metaData.word0.bitDepth.channelBitsB = GetYuvBitDepth(pCreateInfo->format).yBitCount;
+        m_metaData.word0.bitDepth.channelBitsR = GetYuvBitDepth(createInfoFormat).wBitCount;
+        m_metaData.word0.bitDepth.channelBitsG = GetYuvBitDepth(createInfoFormat).zBitCount;
+        m_metaData.word0.bitDepth.channelBitsB = GetYuvBitDepth(createInfoFormat).yBitCount;
     }
     else
     {
-        m_metaData.word0.bitDepth.channelBitsR = GetYuvBitDepth(pCreateInfo->format).xBitCount;
-        m_metaData.word0.bitDepth.channelBitsG = GetYuvBitDepth(pCreateInfo->format).yBitCount;
-        m_metaData.word0.bitDepth.channelBitsB = GetYuvBitDepth(pCreateInfo->format).zBitCount;
+        m_metaData.word0.bitDepth.channelBitsR = GetYuvBitDepth(createInfoFormat).xBitCount;
+        m_metaData.word0.bitDepth.channelBitsG = GetYuvBitDepth(createInfoFormat).yBitCount;
+        m_metaData.word0.bitDepth.channelBitsB = GetYuvBitDepth(createInfoFormat).zBitCount;
     }
 
     m_metaData.word0.componentMapping.swizzleR = MapSwizzle(pCreateInfo->components.r, VK_COMPONENT_SWIZZLE_R);
@@ -201,9 +201,9 @@ SamplerYcbcrConversion::SamplerYcbcrConversion(
     m_metaData.word1.xChromaOffset = pCreateInfo->xChromaOffset;
     m_metaData.word1.yChromaOffset = pCreateInfo->yChromaOffset;
 
-    m_metaData.word1.planes        = Formats::GetYuvPlaneCounts(pCreateInfo->format);
-    m_metaData.word1.xSubSampled   = Formats::IsYuvXChromaSubsampled(pCreateInfo->format);
-    m_metaData.word1.ySubSampled   = Formats::IsYuvYChromaSubsampled(pCreateInfo->format);
+    m_metaData.word1.planes        = Formats::GetYuvPlaneCounts(createInfoFormat);
+    m_metaData.word1.xSubSampled   = Formats::IsYuvXChromaSubsampled(createInfoFormat);
+    m_metaData.word1.ySubSampled   = Formats::IsYuvYChromaSubsampled(createInfoFormat);
 
     Pal::Formats::FormatInfo yuvFormatInfo = Pal::Formats::FormatInfoTable[static_cast<uint32_t>(palFormat.format)];
     m_metaData.word2.bitCounts.xBitCount = yuvFormatInfo.bitCount[0];

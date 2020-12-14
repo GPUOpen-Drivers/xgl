@@ -64,9 +64,10 @@ uint64_t Sampler::BuildApiHash(
     {
         union
         {
-            const VkStructHeader*                   pInfo;
-            const VkSamplerYcbcrConversionInfo*     pYCbCrConversionInfo;
-            const VkSamplerReductionModeCreateInfo* pReductionModeCreateInfo;
+            const VkStructHeader*                          pInfo;
+            const VkSamplerYcbcrConversionInfo*            pYCbCrConversionInfo;
+            const VkSamplerReductionModeCreateInfo*        pReductionModeCreateInfo;
+            const VkSamplerCustomBorderColorCreateInfoEXT* pVkSamplerCustomBorderColorCreateInfoEXT;
         };
 
         pInfo = static_cast<const VkStructHeader*>(pCreateInfo->pNext);
@@ -89,6 +90,11 @@ uint64_t Sampler::BuildApiHash(
                 hasher.Update(pReductionModeCreateInfo->sType);
                 hasher.Update(pReductionModeCreateInfo->reductionMode);
 
+                break;
+            case VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT:
+                hasher.Update(pVkSamplerCustomBorderColorCreateInfoEXT->sType);
+                hasher.Update(pVkSamplerCustomBorderColorCreateInfoEXT->customBorderColor);
+                hasher.Update(pVkSamplerCustomBorderColorCreateInfoEXT->format);
                 break;
             default:
                 break;
@@ -134,7 +140,7 @@ VkResult Sampler::Create(
     samplerInfo.minLod                  = pCreateInfo->minLod;
     samplerInfo.maxLod                  = pCreateInfo->maxLod;
     samplerInfo.borderColorType         = VkToPalBorderColorType(pCreateInfo->borderColor);
-    samplerInfo.borderColorPaletteIndex = 0;
+    samplerInfo.borderColorPaletteIndex = MaxBorderColorPaletteSize;
 
     switch (settings.preciseAnisoMode)
     {
@@ -187,7 +193,27 @@ VkResult Sampler::Create(
             }
             break;
         }
+        case VK_STRUCTURE_TYPE_SAMPLER_CUSTOM_BORDER_COLOR_CREATE_INFO_EXT:
+        {
+            if (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CUSTOM_BORDER_COLOR))
+            {
+                const auto* pExtInfo = static_cast<const VkSamplerCustomBorderColorCreateInfoEXT*>(pNext);
+                VK_ASSERT(samplerInfo.borderColorType == Pal::BorderColorType::PaletteIndex);
+                samplerInfo.borderColorPaletteIndex = pDevice->GetBorderColorIndex(pExtInfo->customBorderColor.float32);
 
+                if (samplerInfo.borderColorPaletteIndex == MaxBorderColorPaletteSize)
+                {
+                    samplerInfo.borderColorType = Pal::BorderColorType::TransparentBlack;
+                    VK_ASSERT(!"Limit has been reached");
+                }
+            }
+            else
+            {
+                samplerInfo.borderColorType = Pal::BorderColorType::TransparentBlack;
+                VK_ASSERT(!"Extension is not enabled");
+            }
+            break;
+        }
         default:
             // Skip any unknown extension structures
             break;
@@ -233,7 +259,8 @@ VkResult Sampler::Create(
 
     VK_PLACEMENT_NEW (pMemory) Sampler(apiHash,
                                       (pSamplerYCbCrConversionMetaData != nullptr),
-                                      multiPlaneCount);
+                                      multiPlaneCount,
+                                      samplerInfo.borderColorPaletteIndex);
 
     *pSampler = Sampler::HandleFromVoidPointer(pMemory);
 
@@ -246,6 +273,11 @@ VkResult Sampler::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
+    if (m_borderColorPaletteIndex != MaxBorderColorPaletteSize)
+    {
+        pDevice->ReleaseBorderColorIndex(m_borderColorPaletteIndex);
+    }
+
     // Call destructor
     Util::Destructor(this);
 

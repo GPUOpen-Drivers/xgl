@@ -98,6 +98,9 @@ public:
                   Pal::LayoutDepthStencilTarget,                            // Read-write depth
                   Pal::LayoutDepthStencilTarget | Pal::LayoutShaderRead);   // Read-only stencil
 
+        InitEntry(VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
+                  Pal::LayoutSampleRate);
+
         InitEntry(VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL,
             Pal::LayoutDepthStencilTarget);
         InitEntry(VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL,
@@ -141,6 +144,9 @@ public:
                 break;
             case VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 9;
+                break;
+            case VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 10;
                 break;
             default:
                 VK_NEVER_CALLED();
@@ -346,6 +352,11 @@ static VK_INLINE uint32_t DstAccessToCacheMask(AccessFlags accessMask, VkImageLa
     if (accessMask & VK_ACCESS_CONDITIONAL_RENDERING_READ_BIT_EXT)
     {
         cacheMask |= Pal::CoherMemory | Pal::CoherIndirectArgs;
+    }
+
+    if (accessMask & VK_ACCESS_FRAGMENT_SHADING_RATE_ATTACHMENT_READ_BIT_KHR)
+    {
+        cacheMask |= Pal::CoherSampleRate;
     }
 
     return cacheMask;
@@ -569,6 +580,12 @@ void DeviceBarrierPolicy::InitDeviceCachePolicy(
         supportedInputCacheMask  |= Pal::CoherTimestamp;
     }
 
+    if (enabledExtensions.IsExtensionEnabled(DeviceExtensions::KHR_FRAGMENT_SHADING_RATE))
+    {
+        supportedOutputCacheMask |= Pal::CoherSampleRate;
+        supportedInputCacheMask  |= Pal::CoherSampleRate;
+    }
+
     // Initialize cache policy.
     InitCachePolicy(pPhysicalDevice,
                     supportedOutputCacheMask,
@@ -619,6 +636,7 @@ void DeviceBarrierPolicy::InitQueueFamilyPolicies(
                                              | Pal::LayoutCopyDst
                                              | Pal::LayoutResolveSrc
                                              | Pal::LayoutResolveDst
+                                             | Pal::LayoutSampleRate
                                              ;
 
             // Always prefer executing ownership transfer barriers on the universal queue.
@@ -815,6 +833,11 @@ void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
     {
         // See the above note for CoherClear.
         m_supportedLayoutUsageMask |= Pal::LayoutDepthStencilTarget;
+    }
+
+    if (usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR)
+    {
+        m_supportedLayoutUsageMask |= Pal::LayoutSampleRate;
     }
 
     // We don't do anything special in case of transient attachment images
@@ -1050,7 +1073,8 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
     Pal::BarrierTransition*             pPalBarrier,
     bool*                               pLayoutChanging,
     Pal::ImageLayout                    oldPalLayouts[MaxPalAspectsPerMask],
-    Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask]) const
+    Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask],
+    bool                                skipMatchingLayouts) const
 {
     // Determine effective queue family indices.
     uint32_t srcQueueFamilyIndex = (barrier.srcQueueFamilyIndex == VK_QUEUE_FAMILY_IGNORED)
@@ -1079,7 +1103,8 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
         GetLayouts(barrier.newLayout, dstQueueFamilyIndex, newPalLayouts, format);
 
         // If old and new PAL layouts match then no need to apply layout changes.
-        if (memcmp(oldPalLayouts, newPalLayouts, sizeof(Pal::ImageLayout) * MaxPalAspectsPerMask) == 0)
+        if (skipMatchingLayouts &&
+            (memcmp(oldPalLayouts, newPalLayouts, sizeof(Pal::ImageLayout) * MaxPalAspectsPerMask) == 0))
         {
             applyLayoutChanges = false;
         }
@@ -1123,7 +1148,8 @@ template void ImageBarrierPolicy::ApplyImageMemoryBarrier<VkImageMemoryBarrier>(
     Pal::BarrierTransition*             pPalBarrier,
     bool*                               pLayoutChanging,
     Pal::ImageLayout                    oldPalLayouts[MaxPalAspectsPerMask],
-    Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask]) const;
+    Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask],
+    bool                                skipMatchingLayouts) const;
 
 // =====================================================================================================================
 // Returns the layout engine mask corresponding to a queue family index.

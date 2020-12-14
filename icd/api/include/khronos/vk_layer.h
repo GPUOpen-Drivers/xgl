@@ -32,6 +32,10 @@
 #ifndef __VK_LAYER_H_PROXY__
 #define __VK_LAYER_H_PROXY__
 
+#if EXTERNAL_VULKAN_HEADERS
+#include "vulkan/vk_layer.h"
+#else
 #include "sdk-1.2/vk_layer.h"
+#endif
 
 #endif /* __VK_LAYER_H_PROXY__ */

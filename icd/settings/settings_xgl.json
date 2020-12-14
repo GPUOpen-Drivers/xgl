@@ -123,6 +123,11 @@
           "Name": "OptRenderStateCacheStaticLineStipple",
           "Value": 32768,
           "Description": "Line stipple state (only when marked static)"
+        },
+        {
+          "Name": "OptRenderStateFragmentShadingRate",
+          "Value": 65536,
+          "Description": "Variable Rate Shading"
         }
       ]
     },
@@ -235,8 +240,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "renderPassLogEnable"
+      "Type": "bool"
     },
     {
       "Name": "RenderPassLogDirectory",
@@ -254,7 +258,6 @@
       },
       "Scope": "Driver",
       "Type": "string",
-      "VariableName": "renderPassLogDirectory",
       "Size": 512
     },
     {
@@ -295,8 +298,7 @@
         ]
       },
       "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "renderPassLogFlags"
+      "Type": "uint32"
     },
     {
       "Description": "Use shared CmdAllocator for all command buffers.",
@@ -308,7 +310,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "useSharedCmdAllocator",
       "Name": "UseSharedCmdAllocator"
     },
     {
@@ -343,7 +344,6 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "cmdAllocatorDataHeap",
       "Name": "CmdAllocatorDataHeap"
     },
     {
@@ -356,7 +356,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "cmdAllocatorDataAllocSize",
       "Name": "CmdAllocatorDataAllocSize"
     },
     {
@@ -369,7 +368,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "cmdAllocatorDataSubAllocSize",
       "Name": "CmdAllocatorDataSubAllocSize"
     },
     {
@@ -404,7 +402,6 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "cmdAllocatorEmbeddedHeap",
       "Name": "CmdAllocatorEmbeddedHeap"
     },
     {
@@ -420,7 +417,6 @@
       "Flags": {
         "IsHex": true
       },
-      "VariableName": "cmdAllocatorEmbeddedAllocSize",
       "Scope": "Driver"
     },
     {
@@ -436,7 +432,6 @@
       "Flags": {
         "IsHex": true
       },
-      "VariableName": "cmdAllocatorEmbeddedSubAllocSize",
       "Scope": "Driver"
     },
     {
@@ -470,8 +465,7 @@
         "Name": "Pal::GpuHeap"
       },
       "Scope": "Driver",
-      "Type": "enum",
-      "VariableName": "cmdAllocatorScratchHeap"
+      "Type": "enum"
     },
     {
       "Name": "CmdAllocatorScratchAllocSize",
@@ -486,7 +480,6 @@
       "Flags": {
         "IsHex": true
       },
-      "VariableName": "cmdAllocatorScratchAllocSize",
       "Scope": "Driver"
     },
     {
@@ -502,7 +495,6 @@
       "Flags": {
         "IsHex": true
       },
-      "VariableName": "cmdAllocatorScratchSubAllocSize",
       "Scope": "Driver"
     },
     {
@@ -515,7 +507,6 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "prefetchCommands",
       "Scope": "Driver"
     },
     {
@@ -528,7 +519,6 @@
       },
       "Scope": "Driver",
       "Type": "uint64",
-      "VariableName": "logTagIdMask",
       "Name": "LogTagIdMask"
     },
     {
@@ -562,8 +552,7 @@
         "Name": "PipelineFastCompileMode"
       },
       "Scope": "Driver",
-      "Type": "enum",
-      "VariableName": "pipelineFastCompileMode"
+      "Type": "enum"
     },
     {
       "Name": "PipelineBinningMode",
@@ -595,8 +584,7 @@
         "Name": "PipelineBinningMode"
       },
       "Scope": "Driver",
-      "Type": "enum",
-      "VariableName": "pipelineBinningMode"
+      "Type": "enum"
     },
     {
       "Name": "PipelineUseProfileHashAsClientHash",
@@ -608,8 +596,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "pipelineUseProfileHashAsClientHash"
+      "Type": "bool"
     },
     {
       "Name": "PipelineUseShaderHashAsProfileHash",
@@ -621,8 +608,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "pipelineUseShaderHashAsProfileHash"
+      "Type": "bool"
     },
     {
       "Name": "EnablePipelineProfileDumping",
@@ -634,7 +620,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "enablePipelineProfileDumping",
       "Scope": "Driver"
     },
     {
@@ -652,7 +637,6 @@
       },
       "Name": "PipelineProfileDumpFile",
       "Type": "string",
-      "VariableName": "pipelineProfileDumpFile",
       "Size": 260,
       "Scope": "Driver"
     },
@@ -670,7 +654,6 @@
       },
       "Scope": "Driver",
       "Type": "string",
-      "VariableName": "pipelineProfileRuntimeFile",
       "Size": 512
     },
     {
@@ -683,8 +666,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "pipelineProfileDbgPrintProfileMatch"
+      "Type": "bool"
     },
     {
       "Name": "PipelineProfileIgnoresAppProfile",
@@ -696,8 +678,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "pipelineProfileIgnoresAppProfile"
+      "Type": "bool"
     },
     {
       "Name": "PipelineProfileHaltOnParseFailure",
@@ -709,8 +690,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "pipelineProfileHaltOnParseFailure"
+      "Type": "bool"
     },
     {
       "Name": "DisableEmbedConstArrays",
@@ -722,7 +702,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "disableEmbedConstArrays",
       "Scope": "Driver"
     },
     {
@@ -735,7 +714,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "forceDepthClampBasedOnZExport",
       "Scope": "Driver"
     },
     {
@@ -774,8 +752,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "enableTurboSync"
+      "Type": "bool"
     },
     {
       "Name": "FullscreenFrameMetadataSupport",
@@ -800,8 +777,7 @@
         "Default": true
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "useSdmaCompositingBlt"
+      "Type": "bool"
     },
     {
       "Name": "EnableMailboxPresentMode",
@@ -813,8 +789,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "enableMailboxPresentMode"
+      "Type": "bool"
     },
     {
       "Name": "EnableAcquireBeforeSignal",
@@ -826,8 +801,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "enableAcquireBeforeSignal"
+      "Type": "bool"
     },
     {
       "Name": "IgnoreSuboptimalSwapchainSize",
@@ -839,8 +813,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "ignoreSuboptimalSwapchainSize"
+      "Type": "bool"
     },
     {
       "Name": "DelayFullScreenAcquireToFirstPresent",
@@ -852,8 +825,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "delayFullScreenAcquireToFirstPresent"
+      "Type": "bool"
     },
     {
       "Name": "SyncOsHdrState",
@@ -865,8 +837,7 @@
         "Default": true
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "syncOsHdrState"
+      "Type": "bool"
     },
     {
       "Name": "EnableRelocatableShaders",
@@ -878,8 +849,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "enableRelocatableShaders"
+      "Type": "bool"
     },
     {
       "Description": "Enable pipeline dump, pipeline is stored with .pipe format. You must set AMD_DEBUG_DIR and make sure $AMD_DEBUG_DIR + pipelineDumpDir is  an available directory.",
@@ -891,7 +861,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "enablePipelineDump",
       "Name": "EnablePipelineDump"
     },
     {
@@ -910,7 +879,6 @@
       "Scope": "Driver",
       "Name": "PipelineDumpDir",
       "Type": "string",
-      "VariableName": "pipelineDumpDir",
       "Size": 256
     },
     {
@@ -943,7 +911,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "enableLog",
       "Name": "EnableLog"
     },
     {
@@ -960,7 +927,6 @@
       "Scope": "Driver",
       "Name": "LogFileName",
       "Type": "string",
-      "VariableName": "logFileName",
       "Size": 256
     },
     {
@@ -973,7 +939,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "enableDebug",
       "Name": "EnableDebug"
     },
     {
@@ -990,7 +955,6 @@
       "Scope": "Driver",
       "Name": "DebugLogFileName",
       "Type": "string",
-      "VariableName": "debugLogFileName",
       "Size": 256
     },
     {
@@ -1034,7 +998,6 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "shaderReplaceMode",
       "Name": "ShaderReplaceMode"
     },
     {
@@ -1053,7 +1016,6 @@
       "Scope": "Driver",
       "Name": "ShaderReplaceDir",
       "Type": "string",
-      "VariableName": "shaderReplaceDir",
       "Size": 256
     },
     {
@@ -1067,7 +1029,6 @@
       "Scope": "Driver",
       "Name": "ShaderReplacePipelineHashes",
       "Type": "string",
-      "VariableName": "shaderReplacePipelineHashes",
       "Size": 512
     },
     {
@@ -1080,7 +1041,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "enableDropPipelineBinaryInst",
       "Name": "EnableDropPipelineBinaryInst"
     },
     {
@@ -1092,7 +1052,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "subgroupSize",
       "Name": "SubgroupSize",
       "Scope": "Driver"
     },
@@ -1105,7 +1064,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "vsWaveSize",
       "Name": "VsWaveSize",
       "Scope": "Driver"
     },
@@ -1118,7 +1076,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "tcsWaveSize",
       "Name": "TcsWaveSize",
       "Scope": "Driver"
     },
@@ -1131,7 +1088,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "tesWaveSize",
       "Name": "TesWaveSize",
       "Scope": "Driver"
     },
@@ -1144,7 +1100,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "gsWaveSize",
       "Name": "GsWaveSize",
       "Scope": "Driver"
     },
@@ -1157,7 +1112,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "fsWaveSize",
       "Name": "FsWaveSize",
       "Scope": "Driver"
     },
@@ -1170,7 +1124,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "csWaveSize",
       "Name": "CsWaveSize",
       "Scope": "Driver"
     },
@@ -1190,12 +1143,11 @@
         "Name": "GraphicsPipelineType"
       },
       "Type": "uint32",
-      "VariableName": "enableNgg",
       "Name": "EnableNgg",
       "Scope": "Driver"
     },
     {
-      "Description": "[LLPC ONLY] Force NGG to run in non pass-through mode.",
+      "Description": "[LLPC ONLY] Force NGG to run in culling mode.",
       "Tags": [
         "SPIRV Options"
       ],
@@ -1203,8 +1155,7 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "nggForceNonPassthrough",
-      "Name": "NggForceNonPassthrough",
+      "Name": "NggForceCullingMode",
       "Scope": "Driver"
     },
     {
@@ -1230,7 +1181,6 @@
         "Default": "NggCompactVertices"
       },
       "Type": "enum",
-      "VariableName": "nggCompactionMode",
       "Name": "NggCompactionMode",
       "Scope": "Driver"
     },
@@ -1243,7 +1193,6 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "nggAlwaysUsePrimShaderTable",
       "Name": "NggAlwaysUsePrimShaderTable",
       "Scope": "Driver"
     },
@@ -1256,7 +1205,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "nggBackfaceExponent",
       "Name": "NggBackfaceExponent",
       "Scope": "Driver"
     },
@@ -1305,7 +1253,6 @@
         "Default": "NggSubgroupAuto"
       },
       "Type": "enum",
-      "VariableName": "nggSubgroupSizing",
       "Name": "NggSubgroupSizing",
       "Scope": "Driver"
     },
@@ -1318,7 +1265,6 @@
         "Default": 256
       },
       "Type": "uint32",
-      "VariableName": "nggPrimsPerSubgroup",
       "Name": "NggPrimsPerSubgroup",
       "Scope": "Driver"
     },
@@ -1331,7 +1277,6 @@
         "Default": 256
       },
       "Type": "uint32",
-      "VariableName": "nggVertsPerSubgroup",
       "Name": "NggVertsPerSubgroup",
       "Scope": "Driver"
     },
@@ -1344,7 +1289,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "nggEnableBackfaceCulling",
       "Name": "NggEnableBackfaceCulling",
       "Scope": "Driver"
     },
@@ -1357,7 +1301,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "nggEnableFrustumCulling",
       "Name": "NggEnableFrustumCulling",
       "Scope": "Driver"
     },
@@ -1370,7 +1313,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "nggEnableBoxFilterCulling",
       "Name": "NggEnableBoxFilterCulling",
       "Scope": "Driver"
     },
@@ -1383,7 +1325,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "nggEnableSphereCulling",
       "Name": "NggEnableSphereCulling",
       "Scope": "Driver"
     },
@@ -1396,7 +1337,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "nggEnableSmallPrimFilter",
       "Name": "NggEnableSmallPrimFilter",
       "Scope": "Driver"
     },
@@ -1409,7 +1349,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "nggEnableCullDistanceCulling",
       "Name": "NggEnableCullDistanceCulling",
       "Scope": "Driver"
     },
@@ -1422,7 +1361,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "requireMrtForNggCulling",
       "Name": "RequireMrtForNggCulling",
       "Scope": "Driver"
     },
@@ -1436,8 +1374,7 @@
         "Default": 0.0
       },
       "Scope": "Driver",
-      "Type": "float",
-      "VariableName": "nggDisableCullingVmemInstrThreshold"
+      "Type": "float"
     },
     {
       "Name": "NggDisableCullingValuInstrThreshold",
@@ -1449,8 +1386,7 @@
         "Default": 0.0
       },
       "Scope": "Driver",
-      "Type": "float",
-      "VariableName": "nggDisableCullingValuInstrThreshold"
+      "Type": "float"
     },
     {
       "Description": "Force HW to guarantee forward progress per wave on GFX10 0x00000000 - Disable (default) 0x00000001 - Enable for vertex shaders 0x00000002 - Enable for tessellation control shaders 0x00000004 - Enable for tessellation evaluation shaders 0x00000008 - Enable for geometry shaders 0x00000010 - Enable for fragment shaders 0x00000020 - Enable for compute shaders ",
@@ -1464,7 +1400,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "enableForwardProgress",
       "Name": "EnableForwardProgress",
       "Scope": "Driver"
     },
@@ -1512,7 +1447,6 @@
       "Flags": {
         "IsHex": true
       },
-      "VariableName": "enableWgpMode",
       "Name": "EnableWgpMode",
       "Scope": "Driver"
     },
@@ -1528,7 +1462,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "waveBreakSize",
       "Name": "WaveBreakSize",
       "Scope": "Driver"
     },
@@ -1552,7 +1485,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dropPipelineBinaryInstToken",
       "Name": "DropPipelineBinaryInstToken"
     },
     {
@@ -1575,7 +1507,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dropPipelineBinaryInstSize",
       "Name": "DropPipelineBinaryInstSize"
     },
     {
@@ -1588,7 +1519,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "enableSpvPerfOptimal",
       "Name": "EnableSpvPerfOptimal"
     },
     {
@@ -1601,7 +1531,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "enableSpvValidation",
       "Name": "EnableSpvValidation"
     },
     {
@@ -1627,7 +1556,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "skipUnsupportedOpCode",
       "Name": "SkipUnsupportedOpCode"
     },
     {
@@ -1659,7 +1587,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "vsIrMode",
       "Name": "VsIrMode",
       "Scope": "Driver"
     },
@@ -1692,7 +1619,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "tcsIrMode",
       "Name": "TcsIrMode",
       "Scope": "Driver"
     },
@@ -1725,7 +1651,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "tesIrMode",
       "Name": "TesIrMode",
       "Scope": "Driver"
     },
@@ -1758,7 +1683,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "gsIrMode",
       "Name": "GsIrMode",
       "Scope": "Driver"
     },
@@ -1791,7 +1715,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "fsIrMode",
       "Name": "FsIrMode",
       "Scope": "Driver"
     },
@@ -1824,7 +1747,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "csIrMode",
       "Name": "CsIrMode",
       "Scope": "Driver"
     },
@@ -1839,7 +1761,6 @@
       "Scope": "Driver",
       "Name": "LlpcOptions",
       "Type": "string",
-      "VariableName": "llpcOptions",
       "Size": 256
     },
     {
@@ -1878,7 +1799,6 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "shaderCacheMode",
       "Name": "ShaderCacheMode"
     },
     {
@@ -1895,7 +1815,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dropPipelineBinaryInstMask",
       "Name": "DropPipelineBinaryInstMask"
     },
     {
@@ -1923,7 +1842,6 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "allowExternalPipelineCacheObject",
       "Scope": "Driver"
     },
     {
@@ -1936,7 +1854,6 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "usePipelineCacheInitialData",
       "Scope": "Driver"
     },
     {
@@ -1950,7 +1867,6 @@
       },
       "Scope": "Driver",
       "Type": "string",
-      "VariableName": "pipelineCachingEnvironmentVariable",
       "Size": 256
     },
     {
@@ -1963,8 +1879,7 @@
         "Default": true
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "usePipelineCachingDefaultLocation"
+      "Type": "bool"
     },
     {
       "Name": "PipelineCachingDefaultLocation",
@@ -1979,7 +1894,6 @@
       },
       "Scope": "Driver",
       "Type": "string",
-      "VariableName": "pipelineCachingDefaultLocation",
       "Size": 256
     },
     {
@@ -1995,8 +1909,7 @@
         "IsHex": true
       },
       "Scope": "Driver",
-      "Type": "uint64",
-      "VariableName": "pipelineCacheDefaultLocationLimitation"
+      "Type": "uint64"
     },
     {
       "Name": "AllowCleanUpCacheDirectory",
@@ -2010,7 +1923,6 @@
         "LnxDefault": true
       },
       "Type": "bool",
-      "VariableName": "allowCleanUpCacheDirectory",
       "Scope": "Driver"
     },
     {
@@ -2026,8 +1938,7 @@
         "IsHex": true
       },
       "Scope": "Driver",
-      "Type": "uint64",
-      "VariableName": "thresholdOfCleanUpCache"
+      "Type": "uint64"
     },
     {
       "Name": "MarkPipelineCacheWithBuildTimestamp",
@@ -2039,8 +1950,7 @@
         "Default": true
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "markPipelineCacheWithBuildTimestamp"
+      "Type": "bool"
     },
     {
       "Name": "FilterPipelineDumpByType",
@@ -2092,8 +2002,7 @@
         "Name": "PipelineDumpFilters"
       },
       "Scope": "Driver",
-      "Type": "enum",
-      "VariableName": "filterPipelineDumpByType"
+      "Type": "enum"
     },
     {
       "Name": "FilterPipelineDumpByHash",
@@ -2108,8 +2017,7 @@
         "IsHex": true
       },
       "Scope": "Driver",
-      "Type": "uint64",
-      "VariableName": "filterPipelineDumpByHash"
+      "Type": "uint64"
     },
     {
       "Description": "Directory where ShaderDbg layer read its config file. The file is named \"shaderDbg.cfg\" with several lines. Each line represents a pipeline and has such format \"pipelineHash,stageMask\" (1 - compute shader, 2 - vertex shader, 4 - tessellation control shader, 8 - tessellation evaluation shader, 16 - geometry shader, 32 - fragment shader).",
@@ -2127,7 +2035,6 @@
       "Scope": "Driver",
       "Name": "ShaderDbgCfgDirectory",
       "Type": "string",
-      "VariableName": "shaderDbgCfgDirectory",
       "Size": 260
     },
     {
@@ -2140,8 +2047,23 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "dumpDuplicatePipelines",
       "Name": "DumpDuplicatePipelines"
+    },
+    {
+      "Description": "Mask for enabling SPIR-V pass for internal ray tracing pipelines. The bit is corresponding to the enum defined in gpurt header.",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Scope": "Driver",
+      "Type": "uint64",
+      "Name": "RtInternalPipelineSpvPassMask"
     },
     {
       "Name": "DbgBarrierPostCmdEnable",
@@ -2308,8 +2230,7 @@
         "Name": "DbgBarrierCmd"
       },
       "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "dbgBarrierPostCmdEnable"
+      "Type": "uint32"
     },
     {
       "Description": "For post-cmd barriers, this flag describes the PAL HwPipePoint pipeline stage where the barrier will wait.",
@@ -2356,7 +2277,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dbgBarrierPostWaitPipePoint",
       "Name": "DbgBarrierPostWaitPipePoint"
     },
     {
@@ -2404,7 +2324,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dbgBarrierPostSignalPipePoint",
       "Name": "DbgBarrierPostSignalPipePoint"
     },
     {
@@ -2489,7 +2408,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dbgBarrierPostCacheSrcMask",
       "Name": "DbgBarrierPostCacheSrcMask"
     },
     {
@@ -2574,7 +2492,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dbgBarrierPostCacheDstMask",
       "Name": "DbgBarrierPostCacheDstMask"
     },
     {
@@ -2591,7 +2508,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dbgBarrierPreCmdEnable",
       "Name": "DbgBarrierPreCmdEnable"
     },
     {
@@ -2608,7 +2524,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dbgBarrierPreWaitPipePoint",
       "Name": "DbgBarrierPreWaitPipePoint"
     },
     {
@@ -2625,7 +2540,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dbgBarrierPreSignalPipePoint",
       "Name": "DbgBarrierPreSignalPipePoint"
     },
     {
@@ -2642,7 +2556,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dbgBarrierPreCacheSrcMask",
       "Name": "DbgBarrierPreCacheSrcMask"
     },
     {
@@ -2659,7 +2572,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dbgBarrierPreCacheDstMask",
       "Name": "DbgBarrierPreCacheDstMask"
     },
     {
@@ -2730,7 +2642,6 @@
         "Default": 35328
       },
       "Type": "uint32",
-      "VariableName": "resourceBarrierOptions",
       "Name": "ResourceBarrierOptions",
       "Scope": "Driver"
     },
@@ -2794,8 +2705,7 @@
         "IsBitmask": true
       },
       "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "barrierFilterOptions"
+      "Type": "uint32"
     },
     {
       "Description": "Path to a file that contains application-specific barrier filter profiles. The contents are read on startup and used if BarrierFilterOptions SkipWithAppProfile, SkipWithAppProfileRegen, or SkipWithIntDevOverlay are set. On exit, an updated profile is written to this same file. This setting only triggers on debug builds.",
@@ -2811,7 +2721,6 @@
       "Scope": "Driver",
       "Name": "BarrierFilterProfileFile",
       "Type": "string",
-      "VariableName": "barrierFilterProfileFile",
       "Size": 512
     },
     {
@@ -2824,7 +2733,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "excessivePipelineCacheCountThreshold",
       "Name": "ExcessivePipelineCacheCountThreshold"
     },
     {
@@ -2836,7 +2744,6 @@
         "Default": 4294967295
       },
       "Type": "uint32",
-      "VariableName": "enumPreferredDeviceIndex",
       "Name": "EnumPreferredDeviceIndex",
       "Scope": "Driver"
     },
@@ -2869,7 +2776,6 @@
         "Default": "FeatureDefault"
       },
       "Type": "enum",
-      "VariableName": "robustBufferAccess",
       "Name": "RobustBufferAccess",
       "Scope": "Driver"
     },
@@ -2882,7 +2788,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "lenientInstanceFuncQuery",
       "Name": "LenientInstanceFuncQuery",
       "Scope": "Driver"
     },
@@ -2899,7 +2804,6 @@
       },
       "Name": "AppProfileDumpDir",
       "Type": "string",
-      "VariableName": "appProfileDumpDir",
       "Size": 512,
       "Scope": "Driver"
     },
@@ -2913,7 +2817,6 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "optEnablePrt",
       "Scope": "Driver"
     },
     {
@@ -2926,8 +2829,7 @@
         "Default": 0
       },
       "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "asyncComputeQueueMaxWavesPerCu"
+      "Type": "uint32"
     },
     {
       "Name": "AsyncComputeQueueLimit",
@@ -2942,8 +2844,7 @@
         "IsHex": true
       },
       "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "asyncComputeQueueLimit"
+      "Type": "uint32"
     },
     {
       "Name": "LimitSampleCounts",
@@ -2958,8 +2859,7 @@
         "IsHex": true
       },
       "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "limitSampleCounts"
+      "Type": "uint32"
     },
     {
       "Name": "AlwaysReportHdrFormats",
@@ -2971,8 +2871,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "alwaysReportHdrFormats"
+      "Type": "bool"
     },
     {
       "Name": "EnableEmitSqttFunctionCrc",
@@ -2984,8 +2883,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "enableEmitSqttFunctionCrc"
+      "Type": "bool"
     },
     {
       "Name": "DisableImageResourceTypeCheck",
@@ -2997,8 +2895,19 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "disableImageResourceTypeCheck"
+      "Type": "bool"
+    },
+    {
+      "Name": "UseOldDeviceUUIDCalculation",
+      "Description": "Old calculation only use pci bdf (busNumber, deviceNumber, functionNumber) to compose the UUID.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
     },
     {
       "Description": "Custom device allocation count limitation, when larger than 0.",
@@ -3010,7 +2919,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "memoryCustomDeviceAllocationCountLimit",
       "Name": "MemoryCustomDeviceAllocationCountLimit"
     },
     {
@@ -3023,7 +2931,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "memoryBaseAddrAlignment",
       "Name": "MemoryBaseAddrAlignment"
     },
     {
@@ -3036,7 +2943,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "memoryBaseAddrAlignmentCpuVisibleWin32",
       "Name": "MemoryBaseAddrAlignmentCpuVisibleWin32"
     },
     {
@@ -3052,8 +2958,7 @@
       "Type": "gpusize",
       "Flags": {
         "IsHex": true
-      },
-      "VariableName": "memoryRemoteBackupHeapMinHeapSize"
+      }
     },
     {
       "Name": "MemoryAttachmentImageMemoryTypeMinHeapSize",
@@ -3068,8 +2973,7 @@
         "Default": 18446744073709551615
       },
       "Scope": "Driver",
-      "Type": "gpusize",
-      "VariableName": "memoryAttachmentImageMemoryTypeMinHeapSize"
+      "Type": "gpusize"
     },
     {
       "Description": "Default priority of all VkMemory objects as two hex digits.  The first (most-significant) digit defines the priority level, and the second digit defines the priority offset.  Valid priority level values (Pal::GpuMemPriority) are:  0: Unused 1: VeryLow 2: Low 3: Normal 4: High 5: VeryHigh. Valid priority offset values (Pal::GpuMemPriorityOffset) are: 0: Offset0 (same as base level) 1: Offset1 2: Offset2 3: Offset3 4: Offset4 5: Offset5 6: Offset6 7: Offset7 ",
@@ -3085,7 +2989,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "memoryPriorityDefault",
       "Name": "MemoryPriorityDefault"
     },
     {
@@ -3102,7 +3005,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "memoryPriorityImageAny",
       "Name": "MemoryPriorityImageAny"
     },
     {
@@ -3119,7 +3021,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "memoryPriorityImageShaderRead",
       "Name": "MemoryPriorityImageShaderRead"
     },
     {
@@ -3136,7 +3037,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "memoryPriorityImageShaderWrite",
       "Name": "MemoryPriorityImageShaderWrite"
     },
     {
@@ -3153,7 +3053,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "memoryPriorityImageColorTarget",
       "Name": "MemoryPriorityImageColorTarget"
     },
     {
@@ -3170,7 +3069,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "memoryPriorityImageDepthStencil",
       "Name": "MemoryPriorityImageDepthStencil"
     },
     {
@@ -3183,7 +3081,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "heapBudgetRatioOfHeapSizeLocal",
       "Name": "HeapBudgetRatioOfHeapSizeLocal"
     },
     {
@@ -3196,7 +3093,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "heapBudgetRatioOfHeapSizeInvisible",
       "Name": "HeapBudgetRatioOfHeapSizeInvisible"
     },
     {
@@ -3209,7 +3105,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "heapBudgetRatioOfHeapSizeNonlocal",
       "Name": "HeapBudgetRatioOfHeapSizeNonlocal"
     },
     {
@@ -3222,7 +3117,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "isSparseUnmapBeforeDestroyEnabled",
       "Name": "IsSparseUnmapBeforeDestroyEnabled"
     },
     {
@@ -3238,7 +3132,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "transferGranularityUniversalOverride",
       "Name": "TransferGranularityUniversalOverride"
     },
     {
@@ -3254,7 +3147,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "transferGranularityComputeOverride",
       "Name": "TransferGranularityComputeOverride"
     },
     {
@@ -3267,7 +3159,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "memoryDeviceOverallocationAllowed",
       "Name": "MemoryDeviceOverallocationAllowed"
     },
     {
@@ -3280,7 +3171,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "memoryDeviceOverallocationNonOverridable",
       "Name": "MemoryDeviceOverallocationNonOverridable"
     },
     {
@@ -3296,7 +3186,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "transferGranularityDmaOverride",
       "Name": "TransferGranularityDmaOverride"
     },
     {
@@ -3309,7 +3198,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "addHostInvisibleMemoryTypesForOptimalImages",
       "Name": "AddHostInvisibleMemoryTypesForOptimalImages"
     },
     {
@@ -3322,7 +3210,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "addMemoryPaddingToImageMemoryRequirements",
       "Name": "AddMemoryPaddingToImageMemoryRequirements"
     },
     {
@@ -3335,7 +3222,6 @@
       },
       "Scope": "Driver",
       "Type": "float",
-      "VariableName": "memoryPaddingFactorForImageMemoryRequirements",
       "Name": "MemoryPaddingFactorForImageMemoryRequirements"
     },
     {
@@ -3387,7 +3273,6 @@
         ]
       },
       "Type": "uint32",
-      "VariableName": "mallNoAllocResourcePolicy",
       "Name": "MallNoAllocResourcePolicy",
       "Scope": "Driver"
     },
@@ -3430,7 +3315,6 @@
         ]
       },
       "Type": "uint32",
-      "VariableName": "mallNoAllocCtPolicy",
       "Name": "MallNoAllocCtPolicy",
       "Scope": "Driver"
     },
@@ -3473,7 +3357,6 @@
         ]
       },
       "Type": "uint32",
-      "VariableName": "mallNoAllocSsrPolicy",
       "Name": "MallNoAllocSsrPolicy",
       "Scope": "Driver"
     },
@@ -3516,7 +3399,6 @@
         ]
       },
       "Type": "uint32",
-      "VariableName": "mallNoAllocDsPolicy",
       "Name": "MallNoAllocDsPolicy",
       "Scope": "Driver"
     },
@@ -3559,7 +3441,6 @@
         ]
       },
       "Type": "uint32",
-      "VariableName": "mallNoAllocCtSsrPolicy",
       "Name": "MallNoAllocCtSsrPolicy",
       "Scope": "Driver"
     },
@@ -3593,7 +3474,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "overrideHeapChoiceToLocal",
       "Name": "OverrideHeapChoiceToLocal"
     },
     {
@@ -3606,7 +3486,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "overrideHeapChoiceToLocalBudget",
       "Name": "OverrideHeapChoiceToLocalBudget"
     },
     {
@@ -3619,7 +3498,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "overrideHeapGartCacheableToUswc",
       "Name": "OverrideHeapGartCacheableToUswc"
     },
     {
@@ -3632,7 +3510,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "forceAppProfileEnable",
       "Name": "ForceAppProfileEnable"
     },
     {
@@ -3655,7 +3532,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "forceAppProfileValue",
       "Name": "ForceAppProfileValue"
     },
     {
@@ -3689,7 +3565,6 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "preciseAnisoMode",
       "Name": "PreciseAnisoMode"
     },
     {
@@ -3702,7 +3577,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "useAnisoThreshold",
       "Name": "UseAnisoThreshold"
     },
     {
@@ -3715,7 +3589,6 @@
       },
       "Scope": "Driver",
       "Type": "float",
-      "VariableName": "anisoThreshold",
       "Name": "AnisoThreshold"
     },
     {
@@ -3733,7 +3606,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "useFlipHint",
       "Name": "UseFlipHint"
     },
     {
@@ -3806,7 +3678,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "backgroundFullscreenPresent",
       "Name": "BackgroundFullscreenPresent"
     },
     {
@@ -3819,7 +3690,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "backgroundFullscreenFailureDisableCount",
       "Name": "BackgroundFullscreenFailureDisableCount"
     },
     {
@@ -3832,7 +3702,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "backgroundFullscreenSuccessResetCount",
       "Name": "BackgroundFullscreenSuccessResetCount"
     },
     {
@@ -3845,7 +3714,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "backgroundFullscreenIgnorePresentErrors",
       "Name": "BackgroundFullscreenIgnorePresentErrors"
     },
     {
@@ -3878,7 +3746,6 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "imageTilingOptMode",
       "Name": "ImageTilingOptMode"
     },
     {
@@ -3921,7 +3788,6 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "imageTilingPreference",
       "Name": "ImageTilingPreference"
     },
     {
@@ -3964,7 +3830,6 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "imageTilingPreference3dGpuWritable",
       "Name": "ImageTilingPreference3dGpuWritable"
     },
     {
@@ -3976,7 +3841,6 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "enableFmaskBasedMsaaRead",
       "Name": "EnableFmaskBasedMsaaRead",
       "Scope": "Driver"
     },
@@ -3989,7 +3853,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "enableFmaskLookUpOptSampleIndexZero",
       "Name": "EnableFmaskLookUpOptSampleIndexZero",
       "Scope": "Driver"
     },
@@ -4002,7 +3865,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "enableHighPriorityDescriptorMemory",
       "Name": "EnableHighPriorityDescriptorMemory",
       "Scope": "Driver"
     },
@@ -4015,7 +3877,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "disableHtileBasedMsaaRead",
       "Name": "DisableHtileBasedMsaaRead",
       "Scope": "Driver"
     },
@@ -4028,7 +3889,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "disableMsaaStencilShaderRead",
       "Name": "DisableMsaaStencilShaderRead",
       "Scope": "Driver"
     },
@@ -4041,7 +3901,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "enableFullCopyDstOnly",
       "Name": "EnableFullCopyDstOnly",
       "Scope": "Driver"
     },
@@ -4182,7 +4041,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "ignoreMutableFlag",
       "Name": "IgnoreMutableFlag",
       "Scope": "Driver"
     },
@@ -4217,7 +4075,6 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "optimizeCmdbufMode",
       "Name": "OptimizeCmdbufMode"
     },
     {
@@ -4229,7 +4086,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "prefetchShaders",
       "Name": "PrefetchShaders",
       "Scope": "Driver"
     },
@@ -4243,7 +4099,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "dccBitsPerPixelThreshold",
       "Name": "DccBitsPerPixelThreshold"
     },
     {
@@ -4291,8 +4146,7 @@
         "IsBitmask": true
       },
       "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "forceEnableDcc"
+      "Type": "uint32"
     },
     {
       "Name": "DisableSmallSurfColorCompressionSize",
@@ -4304,8 +4158,7 @@
         "Default": 128
       },
       "Scope": "Driver",
-      "Type": "uint32",
-      "VariableName": "disableSmallSurfColorCompressionSize"
+      "Type": "uint32"
     },
     {
       "Name": "EnableGpuEventMultiSlot",
@@ -4317,8 +4170,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "enableGpuEventMultiSlot"
+      "Type": "bool"
     },
     {
       "Name": "UseAcqRelInterface",
@@ -4330,8 +4182,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "useAcqRelInterface"
+      "Type": "bool"
     },
     {
       "Name": "EnableSPP",
@@ -4343,7 +4194,6 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "enableSPP",
       "Scope": "Driver"
     },
     {
@@ -4377,21 +4227,40 @@
       },
       "Scope": "Driver",
       "Type": "enum",
-      "VariableName": "waveSizeDecision",
       "Name": "WaveSizeDecision"
     },
     {
-      "Name": "DisableDisplayDccForMgpu",
-      "Description": " Disables Display Dcc for MGPU on presentable surface.",
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DisplayableDccEnabled",
+            "Value": 0,
+            "Description": "Enable DisplayableDcc"
+          },
+          {
+            "Name": "DisplayableDccDisabledForMgpu",
+            "Value": 1,
+            "Description": " Disable DisplayableDcc for MGPU configurations"
+          },
+          {
+            "Name": "DisplayableDccDisabled",
+            "Value": 2,
+            "Description": "Disable DisplayableDcc for all configurations"
+          }
+        ],
+        "Name": "DisplayableDcc"
+      },
+      "Name": "DisableDisplayDcc",
+      "Description": " Disables Display Dcc on presentable surface.",
       "Tags": [
         "Optimization"
       ],
       "Defaults": {
-        "Default": false
+        "Default": "DisplayableDccEnabled"
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "disableDisplayDccForMgpu"
+      "Type": "enum"
     },
     {
       "Description": "Enable fragment shader threshold to control wave size selection model by a confidence score.",
@@ -4403,7 +4272,6 @@
       },
       "Scope": "Driver",
       "Type": "float",
-      "VariableName": "fsWaveSizeThreshold",
       "Name": "FsWaveSizeThreshold"
     },
     {
@@ -4416,7 +4284,6 @@
       },
       "Scope": "Driver",
       "Type": "float",
-      "VariableName": "csWaveSizeThreshold",
       "Name": "CsWaveSizeThreshold"
     },
     {
@@ -4429,7 +4296,6 @@
       },
       "Scope": "Driver",
       "Type": "float",
-      "VariableName": "mlSchedConfidenceThreshold",
       "Name": "MlSchedConfidenceThreshold"
     },
     {
@@ -4442,7 +4308,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "enableAsyncCompile",
       "Name": "EnableAsyncCompile"
     },
     {
@@ -4455,7 +4320,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "enablePartialPipelineCompile",
       "Name": "EnablePartialPipelineCompile"
     },
     {
@@ -4467,7 +4331,6 @@
         "Default": true
       },
       "Type": "bool",
-      "VariableName": "enableWholePipelineOptimization",
       "Name": "EnableWholePipelineOptimization"
     },
     {
@@ -4489,7 +4352,6 @@
         ]
       },
       "Type": "bool",
-      "VariableName": "enablePackVsPsAttrs",
       "Name": "EnablePackVsPsAttrs"
     },
     {
@@ -4502,11 +4364,10 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "cpDmaCmdCopyMemoryMaxBytes",
       "Name": "CpDmaCmdCopyMemoryMaxBytes"
     },
     {
-      "Description": "Enable the use of SC heuristic machine learning culling for NGG culling, culling is enabled for Gfx10.3 by default.",
+      "Description": "Enable the use of SC heuristic machine learning culling for NGG culling.",
       "Tags": [
         "Optimization"
       ],
@@ -4515,7 +4376,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "enableMlHeuristicCulling",
       "Name": "EnableMlHeuristicCulling"
     },
     {
@@ -4528,7 +4388,6 @@
       },
       "Scope": "Driver",
       "Type": "string",
-      "VariableName": "devModeStartFrameDebugUtilsLabel",
       "Name": "DevModeStartFrameDebugUtilsLabel",
       "Size": 512
     },
@@ -4542,7 +4401,6 @@
       },
       "Scope": "Driver",
       "Type": "string",
-      "VariableName": "devModeEndFrameDebugUtilsLabel",
       "Name": "DevModeEndFrameDebugUtilsLabel",
       "Size": 512
     },
@@ -4556,7 +4414,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "devModePipelineUriServicePostSizeLimit",
       "Name": "DevModePipelineUriServicePostSizeLimit"
     },
     {
@@ -4569,7 +4426,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeElfReplacementDirectoryEnable",
       "Name": "DevModeElfReplacementDirectoryEnable"
     },
     {
@@ -4588,7 +4444,6 @@
       "Scope": "Driver",
       "Name": "DevModeElfReplacementDirectory",
       "Type": "string",
-      "VariableName": "devModeElfReplacementDirectory",
       "Size": 512
     },
     {
@@ -4601,7 +4456,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeShaderIsaDbEnable",
       "Name": "DevModeShaderIsaDbEnable"
     },
     {
@@ -4614,7 +4468,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeQueueTimingEnable",
       "Name": "DevModeQueueTimingEnable"
     },
     {
@@ -4632,7 +4485,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeSemaphoreQueueTimingEnable",
       "Name": "DevModeSemaphoreQueueTimingEnable"
     },
     {
@@ -4689,7 +4541,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "devModeSqttMarkerEnable",
       "Name": "DevModeSqttMarkerEnable"
     },
     {
@@ -4702,7 +4553,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeSqttForceDisable",
       "Name": "DevModeSqttForceDisable"
     },
     {
@@ -4715,7 +4565,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeSqttWaitIdle",
       "Name": "DevModeSqttWaitIdle"
     },
     {
@@ -4728,7 +4577,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeSqttFlushAllQueues",
       "Name": "DevModeSqttFlushAllQueues"
     },
     {
@@ -4754,7 +4602,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "devModeSqttGpuMemoryLimit",
       "Name": "DevModeSqttGpuMemoryLimit"
     },
     {
@@ -4767,7 +4614,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "devModeSqttFrameCount",
       "Name": "DevModeSqttFrameCount"
     },
     {
@@ -4781,7 +4627,6 @@
       "Scope": "Driver",
       "Name": "DevModeSqttInternalUserEventPrefix",
       "Type": "string",
-      "VariableName": "devModeSqttInternalUserEventPrefix",
       "Size": 512
     },
     {
@@ -4794,7 +4639,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeSqttTraceBeginEndTagEnable",
       "Name": "DevModeSqttTraceBeginEndTagEnable"
     },
     {
@@ -4817,7 +4661,6 @@
       },
       "Scope": "Driver",
       "Type": "uint64",
-      "VariableName": "devModeSqttTraceBeginTagValue",
       "Name": "DevModeSqttTraceBeginTagValue"
     },
     {
@@ -4843,7 +4686,6 @@
       },
       "Scope": "Driver",
       "Type": "uint64",
-      "VariableName": "devModeSqttTraceEndTagValue",
       "Name": "DevModeSqttTraceEndTagValue"
     },
     {
@@ -4856,7 +4698,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeSqttInstructionTraceEnable",
       "Name": "DevModeSqttInstructionTraceEnable"
     },
     {
@@ -4869,7 +4710,6 @@
       },
       "Scope": "Driver",
       "Type": "uint64",
-      "VariableName": "devModeSqttTargetApiPsoHash",
       "Name": "DevModeSqttTargetApiPsoHash"
     },
     {
@@ -4882,7 +4722,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeSqttForceBlockOnTraceEnd",
       "Name": "DevModeSqttForceBlockOnTraceEnd"
     },
     {
@@ -4895,7 +4734,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32",
-      "VariableName": "devModeSqttPrepareFrameCount",
       "Name": "DevModeSqttPrepareFrameCount"
     },
     {
@@ -4908,7 +4746,6 @@
       },
       "Scope": "Driver",
       "Type": "bool",
-      "VariableName": "devModeEnableRgpTraceDump",
       "Name": "DevModeEnableRgpTraceDump"
     },
     {
@@ -4927,12 +4764,10 @@
       "Scope": "Driver",
       "Name": "DevModeRgpTraceDumpFile",
       "Type": "string",
-      "VariableName": "devModeRgpTraceDumpFile",
       "Size": 256
     },
     {
       "Name": "RgpInstTraceBarrierEnabled",
-      "VariableName": "rgpInstTraceBarrierEnabled",
       "Type": "bool",
       "Description": "Controls the barrier inserted during RGP tracing when instruction trace is active which stalls at the end of the command buffer to ensure that instruction trace is not disabled while the pipeline being traced is still in flight.  This barrier has a significant effect on frame timing.",
       "Scope": "Driver",
@@ -4953,7 +4788,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideShaderParams",
       "Scope": "Driver"
     },
     {
@@ -4970,7 +4804,6 @@
         "Default": 0
       },
       "Type": "uint64",
-      "VariableName": "overrideShaderHashUpper",
       "Scope": "Driver"
     },
     {
@@ -4987,7 +4820,6 @@
         "Default": 0
       },
       "Type": "uint64",
-      "VariableName": "overrideShaderHashLower",
       "Scope": "Driver"
     },
     {
@@ -5028,7 +4860,6 @@
         ]
       },
       "Type": "uint32",
-      "VariableName": "overrideShaderStage",
       "Scope": "Driver"
     },
     {
@@ -5040,7 +4871,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "overrideNumVGPRsAvailable",
       "Name": "OverrideNumVGPRsAvailable",
       "Scope": "Driver"
     },
@@ -5053,7 +4883,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "overrideWavesPerCu",
       "Name": "OverrideWavesPerCu",
       "Scope": "Driver"
     },
@@ -5066,7 +4895,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUserDataSpillThreshold",
       "Name": "OverrideUserDataSpillThreshold",
       "Scope": "Driver"
     },
@@ -5079,7 +4907,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "overrideMaxLdsSpillDwords",
       "Name": "OverrideMaxLdsSpillDwords",
       "Scope": "Driver"
     },
@@ -5092,7 +4919,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "overrideMinVgprsStrategy",
       "Name": "OverrideMinVgprsStrategy",
       "Scope": "Driver"
     },
@@ -5105,7 +4931,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "overrideThreadLatencyStrategy",
       "Name": "OverrideThreadLatencyStrategy",
       "Scope": "Driver"
     },
@@ -5118,7 +4943,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideLiveness",
       "Name": "OverrideLiveness",
       "Scope": "Driver"
     },
@@ -5131,7 +4955,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideGroups",
       "Name": "OverrideGroups",
       "Scope": "Driver"
     },
@@ -5144,7 +4967,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideRemat",
       "Name": "OverrideRemat",
       "Scope": "Driver"
     },
@@ -5157,7 +4979,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideDisableLoopUnrolls",
       "Name": "OverrideDisableLoopUnrolls",
       "Scope": "Driver"
     },
@@ -5170,7 +4991,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUseSiScheduler",
       "Name": "OverrideUseSiScheduler",
       "Scope": "Driver"
     },
@@ -5183,7 +5003,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideReconfigWorkgroupLayout",
       "Name": "OverrideReconfigWorkgroupLayout",
       "Scope": "Driver"
     },
@@ -5196,7 +5015,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideDisableLicm",
       "Name": "OverrideDisableLicm",
       "Scope": "Driver"
     },
@@ -5209,7 +5027,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideEnableLoadScalarizer",
       "Name": "OverrideEnableLoadScalarizer",
       "Scope": "Driver"
     },
@@ -5222,7 +5039,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUseMoreD16",
       "Name": "OverrideUseMoreD16",
       "Scope": "Driver"
     },
@@ -5235,7 +5051,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUseUnsafeMadMix",
       "Name": "OverrideUseUnsafeMadMix",
       "Scope": "Driver"
     },
@@ -5248,7 +5063,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUseAggressiveHoist",
       "Name": "OverrideUseAggressiveHoist",
       "Scope": "Driver"
     },
@@ -5261,7 +5075,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUseXnackEnable",
       "Name": "OverrideUseXnackEnable",
       "Scope": "Driver"
     },
@@ -5274,7 +5087,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUsePbqp",
       "Name": "OverrideUsePbqp",
       "Scope": "Driver"
     },
@@ -5287,7 +5099,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUseLatency2",
       "Name": "OverrideUseLatency2",
       "Scope": "Driver"
     },
@@ -5300,7 +5111,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideDisableBulkCodeMotion",
       "Name": "OverrideDisableBulkCodeMotion",
       "Scope": "Driver"
     },
@@ -5313,7 +5123,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideEnableSelectiveInline",
       "Name": "OverrideEnableSelectiveInline",
       "Scope": "Driver"
     },
@@ -5326,7 +5135,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideEnableSubvector",
       "Name": "OverrideEnableSubvector",
       "Scope": "Driver"
     },
@@ -5352,7 +5160,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "overrideShaderIntents",
       "Name": "OverrideShaderIntents",
       "Scope": "Driver"
     },
@@ -5366,7 +5173,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUseBlocking",
       "Scope": "Driver"
     },
     {
@@ -5379,7 +5185,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideWavePrioOnStartup",
       "Scope": "Driver"
     },
     {
@@ -5391,7 +5196,6 @@
         "Default": 0
       },
       "Type": "uint32",
-      "VariableName": "overrideCsTgPerCu",
       "Name": "OverrideCsTgPerCu",
       "Scope": "Driver"
     },
@@ -5425,7 +5229,6 @@
         "Name": "PipelineBinningMode"
       },
       "Type": "enum",
-      "VariableName": "overrideUsePbbPerCrc",
       "Scope": "Driver"
     },
     {
@@ -5437,7 +5240,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideAllowReZ",
       "Name": "OverrideAllowReZ",
       "Scope": "Driver"
     },
@@ -5475,7 +5277,6 @@
         "IsHex": true
       },
       "Type": "enum",
-      "VariableName": "overrideWaveSize",
       "Scope": "Driver"
     },
     {
@@ -5509,7 +5310,6 @@
         "Name": "WgpMode"
       },
       "Type": "enum",
-      "VariableName": "overrideWgpMode",
       "Scope": "Driver"
     },
     {
@@ -5522,7 +5322,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideUseNgg",
       "Scope": "Driver"
     },
     {
@@ -5578,8 +5377,7 @@
         "Default": false
       },
       "Scope": "Driver",
-      "Type": "bool",
-      "VariableName": "resourceProfileIgnoresAppProfile"
+      "Type": "bool"
     },
     {
       "Name": "OverrideResourceParams",
@@ -5591,7 +5389,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "overrideResourceParams",
       "Scope": "Driver"
     },
     {
@@ -5607,7 +5404,6 @@
         "IsHex": true
       },
       "Type": "uint64",
-      "VariableName": "overrideResourceHashDimensions",
       "Scope": "Driver"
     },
     {
@@ -5623,7 +5419,6 @@
         "IsHex": true
       },
       "Type": "uint64",
-      "VariableName": "overrideResourceHashCrc",
       "Scope": "Driver"
     },
     {
@@ -5662,8 +5457,7 @@
         "Name": "DccMode"
       },
       "Type": "enum",
-      "Scope": "Driver",
-      "VariableName": "overrideResourceDccOnOff"
+      "Scope": "Driver"
     },
     {
       "Name": "VulkanTexFilterQuality",
@@ -5693,8 +5487,7 @@
         "Name": "TextureFilterOptimizationSettings"
       },
       "Scope": "Global",
-      "Type": "enum",
-      "VariableName": "vulkanTexFilterQuality"
+      "Type": "enum"
     },
     {
       "Name": "AppGpuID",
@@ -5706,8 +5499,7 @@
         "Default": 0
       },
       "Scope": "Global",
-      "Type": "uint32",
-      "VariableName": "appGpuID"
+      "Type": "uint32"
     },
     {
       "Name": "DisableAMDVendorExtensions",
@@ -5719,7 +5511,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "disableAMDVendorExtensions",
       "Scope": "Driver"
     },
     {
@@ -5732,7 +5523,6 @@
         "Default": false
       },
       "Type": "bool",
-      "VariableName": "alwaysAllocDynamicDescriptorData",
       "Scope": "Driver"
     }
   ]

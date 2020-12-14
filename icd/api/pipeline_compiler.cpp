@@ -1308,7 +1308,11 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.nggState.enableGsUse = Util::TestAnyFlagSet(
             settings.enableNgg,
             GraphicsPipelineTypeGs | GraphicsPipelineTypeTessGs);
-        pCreateInfo->pipelineInfo.nggState.forceNonPassthrough        = settings.nggForceNonPassthrough;
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 44
+        pCreateInfo->pipelineInfo.nggState.forceNonPassthrough        = settings.nggForceCullingMode;
+#else
+        pCreateInfo->pipelineInfo.nggState.forceCullingMode           = settings.nggForceCullingMode;
+#endif
         pCreateInfo->pipelineInfo.nggState.alwaysUsePrimShaderTable   = settings.nggAlwaysUsePrimShaderTable;
         pCreateInfo->pipelineInfo.nggState.compactMode                =
             static_cast<Vkgc::NggCompactMode>(settings.nggCompactionMode);

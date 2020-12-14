@@ -296,22 +296,29 @@ VK_INLINE Pal::TexAddressMode VkToPalTexAddressMode(
 }
 
 // =====================================================================================================================
-VK_TO_PAL_TABLE_X(  BORDER_COLOR, BorderColor,              BorderColorType,
-// =====================================================================================================================
-VK_TO_PAL_ENTRY_X(  BORDER_COLOR_FLOAT_TRANSPARENT_BLACK,   BorderColorType::TransparentBlack                          )
-VK_TO_PAL_ENTRY_X(  BORDER_COLOR_INT_TRANSPARENT_BLACK,     BorderColorType::TransparentBlack                          )
-VK_TO_PAL_ENTRY_X(  BORDER_COLOR_FLOAT_OPAQUE_BLACK,        BorderColorType::OpaqueBlack                               )
-VK_TO_PAL_ENTRY_X(  BORDER_COLOR_INT_OPAQUE_BLACK,          BorderColorType::OpaqueBlack                               )
-VK_TO_PAL_ENTRY_X(  BORDER_COLOR_FLOAT_OPAQUE_WHITE,        BorderColorType::White                                     )
-VK_TO_PAL_ENTRY_X(  BORDER_COLOR_INT_OPAQUE_WHITE,          BorderColorType::White                                     )
-// =====================================================================================================================
-)
-
-// =====================================================================================================================
 // Converts Vulkan border color type to PAL equivalent
 VK_INLINE Pal::BorderColorType VkToPalBorderColorType(VkBorderColor borderColor)
 {
-    return convert::BorderColorType(borderColor);
+    switch (borderColor)
+    {
+        case VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK:
+        case VK_BORDER_COLOR_INT_TRANSPARENT_BLACK:
+            return Pal::BorderColorType::TransparentBlack;
+        case VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK:
+        case VK_BORDER_COLOR_INT_OPAQUE_BLACK:
+            return Pal::BorderColorType::OpaqueBlack;
+        case VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE:
+        case VK_BORDER_COLOR_INT_OPAQUE_WHITE:
+            return Pal::BorderColorType::White;
+        case VK_BORDER_COLOR_FLOAT_CUSTOM_EXT:
+        case VK_BORDER_COLOR_INT_CUSTOM_EXT:
+            return Pal::BorderColorType::PaletteIndex;
+        default:
+        {
+            VK_ASSERT(!"Unknown VkBorderColor!");
+            return Pal::BorderColorType::TransparentBlack;
+        }
+    }
 }
 
 VK_TO_PAL_TABLE_X(  POLYGON_MODE, PolygonMode,                FillMode,
@@ -2360,7 +2367,6 @@ VK_INLINE VkImageCreateFlags PalToVkImageCreateFlags(Pal::ImageCreateFlags image
 // =====================================================================================================================
 // Converts Vulkan image usage flags to PAL image usage flags
 VK_INLINE Pal::ImageUsageFlags VkToPalImageUsageFlags(VkImageUsageFlags imageUsageFlags,
-                                                      VkFormat          format,
                                                       uint32_t          samples,
                                                       VkImageUsageFlags maskSetShaderReadForTransferSrc,
                                                       VkImageUsageFlags maskSetShaderWriteForTransferDst)
@@ -3032,6 +3038,116 @@ VK_INLINE Pal::ResolveMode VkToPalResolveMode(
         VK_NEVER_CALLED();
         return Pal::ResolveMode::Average;
     }
+}
+
+// =====================================================================================================================
+// VFS extension states implementations have to accept anything in the range{ 1,2,4 } ^ 2.
+// Clamp fragment to maxFragmentSize after each combiner operation.
+VK_INLINE VkExtent2D VkClampShadingRate(
+    const VkExtent2D& fragmentSize,
+    const VkExtent2D& maxSupportedFragmentSize)
+{
+    VkExtent2D extent2D = {
+        Util::Min(fragmentSize.width,  maxSupportedFragmentSize.width),
+        Util::Min(fragmentSize.height, maxSupportedFragmentSize.height)
+    };
+
+    return extent2D;
+}
+
+// =====================================================================================================================
+VK_INLINE Pal::VrsShadingRate VkToPalShadingSize(
+    const VkExtent2D& fragmentSize)
+{
+    Pal::VrsShadingRate vrsShadingRate = Pal::VrsShadingRate::_1x1;
+
+    if ((fragmentSize.width == 1) && (fragmentSize.height == 1))
+    {
+        vrsShadingRate = Pal::VrsShadingRate::_1x1;
+    }
+    else if ((fragmentSize.width == 2) && (fragmentSize.height == 1))
+    {
+        vrsShadingRate = Pal::VrsShadingRate::_2x1;
+    }
+    else if ((fragmentSize.width == 1) && (fragmentSize.height == 2))
+    {
+        vrsShadingRate = Pal::VrsShadingRate::_1x2;
+    }
+    else if ((fragmentSize.width == 2) && (fragmentSize.height == 2))
+    {
+        vrsShadingRate = Pal::VrsShadingRate::_2x2;
+    }
+    else
+    {
+        VK_NEVER_CALLED();
+    }
+
+    return vrsShadingRate;
+}
+
+// =====================================================================================================================
+VK_INLINE VkExtent2D PalToVkShadingSize(
+    const Pal::VrsShadingRate& vrsShadingRate)
+{
+    VkExtent2D fragmentSize = {0,0};
+
+    switch (vrsShadingRate)
+    {
+    case Pal::VrsShadingRate::_1x1:
+        fragmentSize = {1, 1};
+        break;
+    case Pal::VrsShadingRate::_1x2:
+        fragmentSize = {1, 2};
+        break;
+    case Pal::VrsShadingRate::_2x1:
+        fragmentSize = {2, 1};
+        break;
+    case Pal::VrsShadingRate::_2x2:
+        fragmentSize = {2, 2};
+        break;
+    case Pal::VrsShadingRate::_16xSsaa:
+    case Pal::VrsShadingRate::_8xSsaa:
+    case Pal::VrsShadingRate::_4xSsaa:
+    case Pal::VrsShadingRate::_2xSsaa:
+        // Unsupported by VK_KHR_fragment_shading_rate extension
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    return fragmentSize;
+}
+
+// =====================================================================================================================
+VK_INLINE Pal::VrsCombiner VkToPalShadingRateCombinerOp(
+    VkFragmentShadingRateCombinerOpKHR fragmentShadingRateCombinerOp)
+{
+    Pal::VrsCombiner vrsCombiner = Pal::VrsCombiner::Passthrough;
+
+    switch (fragmentShadingRateCombinerOp)
+    {
+    case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR:
+        vrsCombiner = Pal::VrsCombiner::Passthrough;
+        break;
+    case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR:
+        vrsCombiner = Pal::VrsCombiner::Override;
+        break;
+    case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MIN_KHR:
+        vrsCombiner = Pal::VrsCombiner::Min;
+        break;
+    case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MAX_KHR:
+        vrsCombiner = Pal::VrsCombiner::Max;
+        break;
+    case VK_FRAGMENT_SHADING_RATE_COMBINER_OP_MUL_KHR:
+        vrsCombiner = Pal::VrsCombiner::Sum;
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    return vrsCombiner;
 }
 
 // =====================================================================================================================

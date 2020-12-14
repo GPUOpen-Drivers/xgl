@@ -46,18 +46,18 @@ public:
     virtual ~CompilerSolutionLlpc();
 
 public:
-    // Overidded functions
-    virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel, Vkgc::ICache* pCache);
+    // Overridden functions
+    virtual VkResult Initialize(Vkgc::GfxIpVersion gfxIp, Pal::GfxIpLevel gfxIpLevel, Vkgc::ICache* pCache) override;
 
-    virtual void Destroy();
+    virtual void Destroy() override;
 
-    virtual size_t GetShaderCacheSize(PipelineCompilerType cacheType);
+    virtual size_t GetShaderCacheSize(PipelineCompilerType cacheType) override;
 
     virtual VkResult CreateShaderCache(
         const void*  pInitialData,
         size_t       initialDataSize,
         void*        pShaderCacheMem,
-        ShaderCache* pShaderCache);
+        ShaderCache* pShaderCache) override;
 
     virtual VkResult BuildShaderModule(
         const Device*                pDevice,
@@ -65,9 +65,9 @@ public:
         size_t                       codeSize,
         const void*                  pCode,
         ShaderModuleHandle*          pShaderModule,
-        const Util::MetroHash::Hash& hash);
+        const Util::MetroHash::Hash& hash) override;
 
-    virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule);
+    virtual void FreeShaderModule(ShaderModuleHandle* pShaderModule) override;
 
     virtual VkResult CreatePartialPipelineBinary(
         uint32_t                             deviceIdx,
@@ -75,7 +75,7 @@ public:
         Vkgc::ShaderModuleEntryData*         pShaderModuleEntryData,
         const Vkgc::ResourceMappingRootNode* pResourceMappingNode,
         uint32_t                             mappingNodeCount,
-        Vkgc::ColorTarget*                   pColorTarget);
+        Vkgc::ColorTarget*                   pColorTarget) override;
 
     virtual VkResult CreateGraphicsPipelineBinary(
         Device*                     pDevice,
@@ -88,7 +88,7 @@ public:
         Vkgc::PipelineShaderInfo**  ppShadersInfo,
         void*                       pPipelineDumpHandle,
         uint64_t                    pipelineHash,
-        int64_t*                    pCompileTime);
+        int64_t*                    pCompileTime) override;
 
     virtual VkResult CreateComputePipelineBinary(
         Device*                     pDevice,
@@ -99,15 +99,15 @@ public:
         const void**                ppPipelineBinary,
         void*                       pPipelineDumpHandle,
         uint64_t                    pipelineHash,
-        int64_t*                    pCompileTime);
+        int64_t*                    pCompileTime) override;
 
     virtual void FreeGraphicsPipelineBinary(
         const void*                 pPipelineBinary,
-        size_t                      binarySize);
+        size_t                      binarySize) override;
 
     virtual void FreeComputePipelineBinary(
         const void*                 pPipelineBinary,
-        size_t                      binarySize);
+        size_t                      binarySize) override;
 private:
     VkResult CreateLlpcCompiler(Vkgc::ICache* pCache);
 

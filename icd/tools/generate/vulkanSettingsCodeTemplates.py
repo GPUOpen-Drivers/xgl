@@ -68,7 +68,7 @@ typedef Pal::gpusize gpusize;\n"
 CppIncludes = "#include \"settings.h\"\n\
 #include \"palDevice.h\"\n"
 
-IncludeDir = ""
+IncludeDir = "settings/"
 
 PrefixName = ""
 

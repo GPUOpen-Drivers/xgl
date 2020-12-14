@@ -88,6 +88,7 @@ constexpr VkFormatFeatureFlags AllImgFeatures =
     VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
     VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BLEND_BIT |
     VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT |
+    VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR |
     VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_MINMAX_BIT_EXT |
     VK_FORMAT_FEATURE_MIDPOINT_CHROMA_SAMPLES_BIT|
     VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT|
@@ -493,7 +494,7 @@ static void GetLinearSampleBits(
     const size_t formatIdx = static_cast<size_t>(palFormat);
 
     VkFormatFeatureFlags formatRetFlags = PalToVkFormatFeatureFlags(formatProperties.features[formatIdx][tilingIdx]);
-    if ((formatRetFlags & Pal::FormatFeatureImageFilterLinear) == 0)
+    if ((formatRetFlags & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT) == 0)
     {
         *formatFeatureFlags &= ~ VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_LINEAR_FILTER_BIT;
         *formatFeatureFlags &= ~ VK_FORMAT_FEATURE_SAMPLED_IMAGE_YCBCR_CONVERSION_SEPARATE_RECONSTRUCTION_FILTER_BIT;
@@ -1118,6 +1119,15 @@ void PhysicalDevice::PopulateFormatProperties()
 
              bufferFlags = linearFlags;
           }
+
+        if (format == VK_FORMAT_R8_UINT)
+        {
+            if (IsExtensionSupported(DeviceExtensions::KHR_FRAGMENT_SHADING_RATE))
+            {
+                linearFlags  |= VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+                optimalFlags |= VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+            }
+        }
 
         if (Formats::IsYuvFormat(format) && (palFormat.format != Pal::UndefinedSwizzledFormat.format))
         {
@@ -3634,8 +3644,15 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CONDITIONAL_RENDERING));
         }
 
+        if ((pPhysicalDevice == nullptr) ||
+            (pPhysicalDevice->PalProperties().gfxipProperties.supportedVrsRates != 0))
+        {
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FRAGMENT_SHADING_RATE));
+        }
+
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_BUFFER_DEVICE_ADDRESS));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_TERMINATE_INVOCATION));
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -4084,13 +4101,33 @@ void  PhysicalDevice::GetPhysicalDeviceIDProperties(
 {
     const Pal::DeviceProperties& props = PalProperties();
 
-    uint32_t* pBusNumber        = reinterpret_cast<uint32_t *>(pDeviceUUID);
-    uint32_t* pDeviceNumber     = reinterpret_cast<uint32_t *>(pDeviceUUID+4);
-    uint32_t* pFunctionNumber   = reinterpret_cast<uint32_t *>(pDeviceUUID+8);
+    uint32_t* pDomainNumber = nullptr;
+    uint32_t* pBusNumber = nullptr;
+    uint32_t* pDeviceNumber = nullptr;
+    uint32_t* pFunctionNumber = nullptr;
+
+    if (GetRuntimeSettings().useOldDeviceUUIDCalculation == false)
+    {
+        pDomainNumber     = reinterpret_cast<uint32_t *>(pDeviceUUID);
+        pBusNumber        = reinterpret_cast<uint32_t *>(pDeviceUUID + 4);
+        pDeviceNumber     = reinterpret_cast<uint32_t *>(pDeviceUUID + 8);
+        pFunctionNumber   = reinterpret_cast<uint32_t *>(pDeviceUUID + 12);
+    }
+    else
+    {
+        pBusNumber        = reinterpret_cast<uint32_t *>(pDeviceUUID);
+        pDeviceNumber     = reinterpret_cast<uint32_t *>(pDeviceUUID + 4);
+        pFunctionNumber   = reinterpret_cast<uint32_t *>(pDeviceUUID + 8);
+    }
 
     memset(pDeviceLUID, 0, VK_LUID_SIZE);
     memset(pDeviceUUID, 0, VK_UUID_SIZE);
     memset(pDriverUUID, 0, VK_UUID_SIZE);
+
+    if (GetRuntimeSettings().useOldDeviceUUIDCalculation == false)
+    {
+        *pDomainNumber   = props.pciProperties.domainNumber;
+    }
 
     *pBusNumber      = props.pciProperties.busNumber;
     *pDeviceNumber   = props.pciProperties.deviceNumber;
@@ -5037,6 +5074,20 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceFragmentShadingRateFeaturesKHR *>(pHeader);
+
+                bool vrsSupported      = (PalProperties().gfxipProperties.supportedVrsRates > 0);
+                bool vrsImageSupported = (PalProperties().imageProperties.vrsTileSize.width > 0);
+
+                pExtInfo->attachmentFragmentShadingRate = vrsImageSupported;
+                pExtInfo->pipelineFragmentShadingRate   = vrsSupported;
+                pExtInfo->primitiveFragmentShadingRate  = vrsSupported;
+
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CONDITIONAL_RENDERING_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceConditionalRenderingFeaturesEXT*>(pHeader);
@@ -5101,6 +5152,14 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceCustomBorderColorFeaturesEXT*>(pHeader);
+                pExtInfo->customBorderColors = VK_TRUE;
+                pExtInfo->customBorderColorWithoutFormat = VK_TRUE;
+                break;
+            }
+
             default:
             {
                 // skip any unsupported extension structures
@@ -5119,6 +5178,8 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
 {
     VkResult result = VK_SUCCESS;
     VK_ASSERT(pImageFormatInfo->sType == VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_FORMAT_INFO_2);
+
+    VkFormat createInfoFormat = pImageFormatInfo->format;
 
     const VkStructHeader*                                   pHeader;
     const VkPhysicalDeviceExternalImageFormatInfo*          pExternalImageFormatInfo                     = nullptr;
@@ -5172,7 +5233,7 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
             pSamplerYcbcrConversionImageFormatProperties =
                 reinterpret_cast<VkSamplerYcbcrConversionImageFormatProperties*>(pHeader2);
             pSamplerYcbcrConversionImageFormatProperties->combinedImageSamplerDescriptorCount =
-                Formats::GetYuvPlaneCounts(pImageFormatInfo->format);
+                Formats::GetYuvPlaneCounts(createInfoFormat);
             break;
         }
         default:
@@ -5184,7 +5245,7 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     VK_ASSERT((pImageStencilUsageCreateInfo == nullptr) || (pImageStencilUsageCreateInfo->stencilUsage != 0));
 
     result = GetImageFormatProperties(
-                pImageFormatInfo->format,
+                createInfoFormat,
                 pImageFormatInfo->type,
                 pImageFormatInfo->tiling,
                 pImageStencilUsageCreateInfo ? pImageFormatInfo->usage | pImageStencilUsageCreateInfo->stencilUsage
@@ -5211,15 +5272,13 @@ VkResult PhysicalDevice::GetImageFormatProperties2(
     // handle VK_STRUCTURE_TYPE_TEXTURE_LOD_GATHER_FORMAT_PROPERTIES_AMD
     if ((pTextureLODGatherFormatProperties != nullptr) && (result == VK_SUCCESS))
     {
-        const VkFormat& format = pImageFormatInfo->format;
-
         if (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)
         {
             pTextureLODGatherFormatProperties->supportsTextureGatherLODBiasAMD = true;
         }
         else
         {
-            const auto formatType = vk::Formats::GetNumberFormat(format, GetRuntimeSettings());
+            const auto formatType = vk::Formats::GetNumberFormat(createInfoFormat, GetRuntimeSettings());
             const bool isInteger  = (formatType == Pal::Formats::NumericSupportFlags::Sint) ||
                                     (formatType == Pal::Formats::NumericSupportFlags::Uint);
 
@@ -5598,6 +5657,43 @@ void PhysicalDevice::GetDeviceProperties2(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceFragmentShadingRatePropertiesKHR*>(pNext);
+
+            VkExtent2D vrsTileSize = PalToVkExtent2d(PalProperties().imageProperties.vrsTileSize);
+
+            // We just have one tile size for attachments
+            pProps->minFragmentShadingRateAttachmentTexelSize = vrsTileSize;
+            pProps->maxFragmentShadingRateAttachmentTexelSize = vrsTileSize;
+
+            uint32_t maxVrsShadingRate = 0;
+            Util::BitMaskScanReverse(&maxVrsShadingRate, PalProperties().gfxipProperties.supportedVrsRates);
+
+            pProps->maxFragmentSize =
+                PalToVkShadingSize(static_cast<Pal::VrsShadingRate>(maxVrsShadingRate));
+
+            pProps->maxFragmentShadingRateAttachmentTexelSizeAspectRatio = 1;
+            pProps->primitiveFragmentShadingRateWithMultipleViewports    = VK_TRUE;
+            pProps->layeredShadingRateAttachments                        = VK_FALSE;
+            pProps->fragmentShadingRateNonTrivialCombinerOps             = VK_TRUE;
+            pProps->maxFragmentSizeAspectRatio                           = 1;
+            pProps->fragmentShadingRateWithShaderDepthStencilWrites      = PalProperties().gfxipProperties.flags.supportVrsWithDsExports;
+            pProps->fragmentShadingRateWithSampleMask                    = VK_TRUE;
+            pProps->fragmentShadingRateWithShaderSampleMask              = VK_TRUE;
+            pProps->fragmentShadingRateWithConservativeRasterization     = VK_TRUE;
+            pProps->fragmentShadingRateWithFragmentShaderInterlock       = VK_FALSE;
+            pProps->fragmentShadingRateWithCustomSampleLocations         = VK_TRUE;
+            pProps->fragmentShadingRateStrictMultiplyCombiner            = VK_TRUE;
+
+            pProps->maxFragmentShadingRateCoverageSamples =
+                (pProps->maxFragmentSize.width *  pProps->maxFragmentSize.height);
+
+            pProps->maxFragmentShadingRateRasterizationSamples =
+                static_cast<VkSampleCountFlagBits>(Pal::MaxMsaaColorSamples);
+            break;
+        }
+
         case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_TEXEL_BUFFER_ALIGNMENT_PROPERTIES_EXT:
         {
             auto* pProps = static_cast<VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT*>(pNext);
@@ -5616,6 +5712,13 @@ void PhysicalDevice::GetDeviceProperties2(
 
             pProps->robustStorageBufferAccessSizeAlignment = 4;
             pProps->robustUniformBufferAccessSizeAlignment = 4;
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_PROPERTIES_EXT:
+        {
+            auto* pProps = static_cast<VkPhysicalDeviceCustomBorderColorPropertiesEXT *>(pNext);
+            pProps->maxCustomBorderColorSamplers = MaxBorderColorPaletteSize;
             break;
         }
 
@@ -6666,6 +6769,79 @@ void PhysicalDevice::GetMemoryBudgetProperties(
     }
 }
 
+// =====================================================================================================================
+// Get Supported VRS Rates from PAL (Ssaa are not supported by VK_KHR_fragment_shading_rate)
+uint32 PhysicalDevice::GetNumberOfSupportedShadingRates(
+    uint32 supportedVrsRates) const
+{
+    uint32 outputCount = 0;
+
+    uint32 i = 0;
+    while (Util::BitMaskScanForward(&i, supportedVrsRates))
+    {
+        if (PalToVkShadingSize(static_cast<Pal::VrsShadingRate>(i)).width > 0)
+        {
+            outputCount++;
+        }
+
+        supportedVrsRates &= ~(1 << i);
+    }
+
+    return outputCount;
+}
+
+// =====================================================================================================================
+// Get Fragment Shading Rates
+VkResult PhysicalDevice::GetFragmentShadingRates(
+    uint32*                               pFragmentShadingRateCount,
+    VkPhysicalDeviceFragmentShadingRateKHR* pFragmentShadingRates)
+{
+    uint32 supportedVrsRates            = PalProperties().gfxipProperties.supportedVrsRates;
+    uint32 numberOfSupportedShaderRates = GetNumberOfSupportedShadingRates(supportedVrsRates);
+
+    if (pFragmentShadingRates == nullptr)
+    {
+        *pFragmentShadingRateCount = numberOfSupportedShaderRates;
+    }
+    else
+    {
+        uint32 outputCount = 0;
+
+        uint32 i = 0;
+        while ((Util::BitMaskScanForward(&i, supportedVrsRates)) &&
+            (outputCount < *pFragmentShadingRateCount))
+        {
+            VkExtent2D fragmentSize = PalToVkShadingSize(static_cast<Pal::VrsShadingRate>(i));
+
+            // Only return Non Ssaa rates
+            if (fragmentSize.width > 0)
+            {
+                VK_ASSERT(m_limits.framebufferColorSampleCounts & VK_SAMPLE_COUNT_2_BIT);
+
+                VkSampleCountFlags sampleCounts = VK_SAMPLE_COUNT_1_BIT |
+                                                  VK_SAMPLE_COUNT_2_BIT |
+                                                  VK_SAMPLE_COUNT_4_BIT;
+
+                 // Set 8 samples on 1x1
+                 if ((fragmentSize.width == 1) && (fragmentSize.height == 1))
+                 {
+                     sampleCounts |= VK_SAMPLE_COUNT_8_BIT;
+                 }
+
+                pFragmentShadingRates[outputCount].sampleCounts = sampleCounts;
+                pFragmentShadingRates[outputCount].fragmentSize = fragmentSize;
+                outputCount++;
+            }
+
+            supportedVrsRates &= ~(1 << i);
+        }
+
+        *pFragmentShadingRateCount = outputCount;
+    }
+
+    return (*pFragmentShadingRateCount < numberOfSupportedShaderRates) ? VK_INCOMPLETE : VK_SUCCESS;
+}
+
 // C-style entry points
 namespace entry
 {
@@ -7289,6 +7465,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(
 {
     return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetPhysicalDeviceCalibrateableTimeDomainsEXT(pTimeDomainCount,
                                                                                                              pTimeDomains);
+}
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceFragmentShadingRatesKHR(
+    VkPhysicalDevice                        physicalDevice,
+    uint32*                                 pFragmentShadingRateCount,
+    VkPhysicalDeviceFragmentShadingRateKHR* pFragmentShadingRates)
+{
+    return ApiPhysicalDevice::ObjectFromHandle(physicalDevice)->GetFragmentShadingRates(
+        pFragmentShadingRateCount,
+        pFragmentShadingRates);
 }
 
 }

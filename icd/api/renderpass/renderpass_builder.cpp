@@ -273,6 +273,12 @@ uint32_t RenderPassBuilder::GetSubpassReferenceMask(
         refMask |= AttachRefResolveDst;
     }
 
+    // If VRS is used set the Fragment Ref
+    if (m_pInfo->pSubpasses[subpass].fragmentShadingRateAttachment.attachment == attachment)
+    {
+        refMask |= AttachRefFragShading;
+    }
+
     return refMask;
 }
 
@@ -358,6 +364,11 @@ Pal::Result RenderPassBuilder::BuildSubpass(
     if (result == Pal::Result::Success)
     {
         result = BuildColorAttachmentReferences(subpass, subpassDesc);
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        result = BuildFragmentShadingRateAttachmentReferences(subpass);
     }
 
     if (result == Pal::Result::Success)
@@ -533,6 +544,39 @@ Pal::Result RenderPassBuilder::BuildColorAttachmentReferences(
                     &pSubpass->syncTop);
             }
         }
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// This function handles Variable Rate Shading references.  Called from BuildSubpass().
+Pal::Result RenderPassBuilder::BuildFragmentShadingRateAttachmentReferences(
+    uint32_t subpass)
+{
+    Pal::Result result = Pal::Result::Success;
+    SubpassState* pSubpass = &m_pSubpasses[subpass];
+
+    pSubpass->bindTargets.fragmentShadingRateTarget.attachment        = VK_ATTACHMENT_UNUSED;
+    pSubpass->bindTargets.fragmentShadingRateTarget.layout.layout     = VK_IMAGE_LAYOUT_UNDEFINED;
+    pSubpass->bindTargets.fragmentShadingRateTarget.layout.extraUsage = 0;
+
+    const AttachmentReference& reference = m_pInfo->pSubpasses[subpass].fragmentShadingRateAttachment;
+
+    RPImageLayout layout = { reference.layout, 0 };
+
+    if ((result == Pal::Result::Success) && (reference.attachment != VK_ATTACHMENT_UNUSED))
+    {
+        result = TrackAttachmentUsage(
+            subpass,
+            AttachRefFragShading,
+            reference.attachment,
+            layout,
+            nullptr,
+            &pSubpass->syncTop);
+
+        pSubpass->bindTargets.fragmentShadingRateTarget.attachment = reference.attachment;
+        pSubpass->bindTargets.fragmentShadingRateTarget.layout     = layout;
     }
 
     return result;
