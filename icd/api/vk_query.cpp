@@ -149,6 +149,7 @@ VkResult PalQueryPool::Create(
            reinterpret_cast<Pal::IGpuMemoryBindable**>(pPalQueryPools),
            false,
            &internalMem,
+           pDevice->GetPalDeviceMask(),
            removeInvisibleHeap,
            persistentMapped);
     }

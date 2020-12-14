@@ -208,8 +208,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if ((m_pDevice->GetGpuMemoryHeapProperties(heapProperties) == Pal::Result::Success) &&
             (heapProperties[Pal::GpuHeapLocal].heapSize > minLocalSize))
         {
-            m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
-            m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
+            {
+                m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
+                m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
+            }
 
             if (appProfile == AppProfile::WolfensteinYoungblood)
             {
@@ -464,7 +466,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                m_settings.disableDisplayDccForMgpu = true;
+
+                m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabledForMgpu;
 
                 m_settings.overrideWgpMode = WgpMode::WgpModeWgp;
 
@@ -608,10 +611,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
-                m_settings.mallNoAllocCtPolicy = 0x01;
-                m_settings.mallNoAllocDsPolicy = 0x01;
+                m_settings.mallNoAllocCtPolicy    = 0x01;
                 m_settings.mallNoAllocCtSsrPolicy = 0x01;
-                m_settings.mallNoAllocSsrPolicy = 0x1;
 
                 m_settings.forceEnableDcc = ForceEnableDcc::ForceDccForColorAttachments |
                                             ForceEnableDcc::ForceDccFor32BppShaderStorage |
@@ -659,12 +660,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
                 }
             }
-            // Mall no alloc settings give a ~3.07% gain
+            // Mall no alloc settings give a ~1% gain
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.mallNoAllocCtPolicy = 0x01;
-                m_settings.mallNoAllocDsPolicy = 0x01;
-                m_settings.mallNoAllocCtSsrPolicy = 0x01;
                 m_settings.mallNoAllocSsrPolicy = 0x01;
             }
 

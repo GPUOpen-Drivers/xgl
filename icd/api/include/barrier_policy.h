@@ -284,7 +284,8 @@ public:
         Pal::BarrierTransition*             pPalBarrier,
         bool*                               pLayoutChanging,
         Pal::ImageLayout                    oldPalLayouts[MaxPalAspectsPerMask],
-        Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask]) const;
+        Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask],
+        bool                                skipMatchingLayouts) const;
 
 protected:
     void InitImageLayoutUsagePolicy(

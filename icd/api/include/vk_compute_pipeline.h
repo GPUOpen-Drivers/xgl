@@ -69,13 +69,13 @@ public:
         const VkAllocationCallbacks*    pAllocator) override;
 
     void BindToCmdBuffer(
-        CmdBuffer*                           pCmdBuffer) const;
-
-    void BindToCmdBuffer(
         CmdBuffer*                           pCmdBuffer,
         const Pal::DynamicComputeShaderInfo& computeShaderInfo) const;
 
     static void BindNullPipeline(CmdBuffer* pCmdBuffer);
+
+    VK_INLINE const Pal::DynamicComputeShaderInfo& GetBindInfo() const
+        { return m_info.computeShaderInfo; }
 
 protected:
     // Immediate state info that will be written during Bind() but is not

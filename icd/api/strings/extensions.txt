@@ -42,6 +42,7 @@ VK_KHR_shader_float_controls
 VK_KHR_swapchain
 VK_KHR_image_format_list
 VK_KHR_swapchain_mutable_format
+VK_KHR_fragment_shading_rate
 VK_AMD_rasterization_order
 VK_AMD_shader_ballot
 VK_AMD_shader_trinary_minmax
@@ -85,6 +86,7 @@ VK_EXT_descriptor_indexing
 VK_KHR_create_renderpass2
 VK_KHR_8bit_storage
 VK_EXT_conservative_rasterization
+VK_EXT_custom_border_color
 VK_EXT_hdr_metadata
 VK_KHR_shader_atomic_int64
 VK_KHR_driver_properties

@@ -140,6 +140,9 @@ public:
     uint32_t CreateSamplePattern(const SamplePattern& samplePattern);
     void DestroySamplePattern(const SamplePattern& samplePattern, uint32_t token);
 
+    uint32_t CreateFragmentShadingRate(const Pal::VrsRateParams& params);
+    void DestroyFragmentShadingRate(const Pal::VrsRateParams& params, uint32_t token);
+
     uint32_t CreateLineStipple(const Pal::LineStippleStateParams& params);
     void DestroyLineStipple(const Pal::LineStippleStateParams& params, uint32_t token);
 
@@ -367,6 +370,10 @@ private:
         StaticDepthStencilState*,
         PalAllocator>                                 m_depthStencilRefs;
 
+    Util::HashMap<Pal::VrsRateParams,
+        StaticParamState,
+        PalAllocator>                                 m_fragmentShadingRate;
+    uint32_t                                          m_fragmentShadingRateNextId;
 };
 
 };

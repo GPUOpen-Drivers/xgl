@@ -101,6 +101,7 @@ struct RPBindTargetsInfo
     uint32_t              colorTargetCount;
     RPAttachmentReference colorTargets[Pal::MaxColorTargets];
     RPAttachmentReference depthStencil;
+    RPAttachmentReference fragmentShadingRateTarget;
 };
 
 // Information about any necessary barrier operations done during an RPSyncPoint.  Includes composite

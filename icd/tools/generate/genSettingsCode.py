@@ -45,6 +45,11 @@ ClassNameOverride = "%ClassName%"
 
 SettingsFileBasePath = GenerateDirPath + "/../../settings/"
 
+# if <genDir> was specified
+if len(sys.argv) == 4:
+    GenerateDirPath = sys.argv[3]
+    SettingsFileBasePath = GenerateDirPath + "/settings/"
+
 GenerateRegistryCodeEnabled = " --genRegistryCode"
 GenerateRegistryCodeDisabled = ""
 
@@ -76,12 +81,14 @@ usage = "\
 *****************************************************************************************************\n\
   Helper script to generate settings files. User can provide components to be generated as arguments.\n\
   The current list of supported arguments/components is:\n\
+      [mandatory] <palDir> - path to PAL sources\n\
       Vulkan\n\
-  User can instead pass '-all' to generate all components' settings files.\n\
-    Example Usage: python genSettingsCode.py vulkan\n\
+      [optional <genDir>]\n\
+  User can instead pass \'-all\' to generate all components\' settings files.\n\
+    Example Usage: python genSettingsCode.py <palDir> vulkan [optional: <genDir> - path to output]\n\
 *****************************************************************************************************"
 
-if len(sys.argv) < 1:
+if len(sys.argv) not in (3,4):
     print(usage)
     sys.exit(1)
 
@@ -93,13 +100,13 @@ if sys.argv[1] == "-all":
         if result != 0:
             print("Error generating settings for " + key)
 else:
-    for component in sys.argv[2:]:
-        if component in settingsArgData:
-            print("Generating settings code for " + component)
-            result = GenSettings(settingsArgData[component])
-            if result != 0:
-                print("Error generating settings for " + component + ". Did you forget to check out the g_ files?")
-        else:
-            print("Unknown component argument: " + component)
+    component = sys.argv[2]
+    if component in settingsArgData:
+        print("Generating settings code for " + component)
+        result = GenSettings(settingsArgData[component])
+        if result != 0:
+            print("Error generating settings for " + component + ". Did you forget to check out the g_ files?")
+    else:
+        print("Unknown component argument: " + component)
 
 sys.exit(0)

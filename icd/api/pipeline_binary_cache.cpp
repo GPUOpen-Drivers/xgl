@@ -58,7 +58,7 @@ static constexpr size_t FileNameBufferLen = _MAX_FNAME;
 #endif
 static constexpr size_t PathBufferLen = FileNameBufferLen;
 }
-#endif  // PAL_CLIENT_INTERFACE_MAJOR_VERSION
+#endif
 
 namespace vk
 {
@@ -1192,7 +1192,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
             result = VK_ERROR_INITIALIZATION_FAILED;
         }
 
-        VK_ASSERT(pWriteLayer != nullptr);
+        PAL_ALERT_MSG(pWriteLayer == nullptr, "No valid write layer for cache. No data will be written out.");
     }
 
     return result;
@@ -1205,30 +1205,19 @@ VkResult PipelineBinaryCache::InitLayers(
     bool                   internal,
     const RuntimeSettings& settings)
 {
-    VkResult result = VK_ERROR_INITIALIZATION_FAILED;
-
 #if ICD_GPUOPEN_DEVMODE_BUILD
-    if (InitReinjectionLayer(settings) == VK_SUCCESS)
-    {
-        result = VK_SUCCESS;
-    }
+    bool injectionLayerOnline = (InitReinjectionLayer(settings) >= VK_SUCCESS);
+#else
+    bool injectionLayerOnline = false;
 #endif
 
-    if (InitMemoryCacheLayer(settings) == VK_SUCCESS)
-    {
-        result = VK_SUCCESS;
-    }
+    bool memoryLayerOnline = (InitMemoryCacheLayer(settings) >= VK_SUCCESS);
 
-    // If cache handle is vkPipelineCache, we shouldn't store it to disk.
-    if (internal)
-    {
-        if (InitArchiveLayers(pDefaultCacheFilePath, settings) == VK_SUCCESS)
-        {
-            result = VK_SUCCESS;
-        }
-    }
+    bool archiveLayerOnline = internal && (InitArchiveLayers(pDefaultCacheFilePath, settings) >= VK_SUCCESS);
 
-    return result;
+    return (injectionLayerOnline || memoryLayerOnline || archiveLayerOnline)
+        ? VK_SUCCESS
+        : VK_ERROR_INITIALIZATION_FAILED;
 }
 
 VkResult PipelineBinaryCache::AddLayerToChain(

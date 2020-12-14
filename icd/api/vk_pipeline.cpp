@@ -495,7 +495,7 @@ VKAPI_ATTR void VKAPI_CALL vkDestroyPipeline(
         Device*                      pDevice  = ApiDevice::ObjectFromHandle(device);
         const VkAllocationCallbacks* pAllocCB = pAllocator ? pAllocator : pDevice->VkInstance()->GetAllocCallbacks();
 
-        Pipeline::ObjectFromHandle(pipeline)->Destroy(pDevice, pAllocCB);
+        Pipeline::BaseObjectFromHandle(pipeline)->Destroy(pDevice, pAllocCB);
     }
 }
 
@@ -512,7 +512,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetShaderInfoAMD(
     VkResult result = VK_ERROR_FEATURE_NOT_PRESENT;
 
     const Device*         pDevice      = ApiDevice::ObjectFromHandle(device);
-    const Pipeline*       pPipeline    = Pipeline::ObjectFromHandle(pipeline);
+    const Pipeline*       pPipeline    = Pipeline::BaseObjectFromHandle(pipeline);
     const Pal::IPipeline* pPalPipeline = pPipeline->PalPipeline(DefaultDeviceIndex);
 
     if (pPipeline != nullptr)
@@ -740,7 +740,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutablePropertiesKHR(
     uint32_t*                                   pExecutableCount,
     VkPipelineExecutablePropertiesKHR*          pProperties)
 {
-    const Pipeline*                     pPipeline     = Pipeline::ObjectFromHandle(pPipelineInfo->pipeline);
+    const Pipeline*                     pPipeline     = Pipeline::BaseObjectFromHandle(pPipelineInfo->pipeline);
     const Pal::IPipeline*               pPalPipeline  = pPipeline->PalPipeline(DefaultDeviceIndex);
     const Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
 
@@ -816,7 +816,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableStatisticsKHR(
     uint32_t*                                   pStatisticCount,
     VkPipelineExecutableStatisticKHR*           pStatistics)
 {
-    const Pipeline*                     pPipeline     = Pipeline::ObjectFromHandle(pExecutableInfo->pipeline);
+    const Pipeline*                     pPipeline     = Pipeline::BaseObjectFromHandle(pExecutableInfo->pipeline);
     const Pal::IPipeline*               pPalPipeline  = pPipeline->PalPipeline(DefaultDeviceIndex);
     const Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
 
@@ -904,7 +904,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineExecutableInternalRepresentationsKHR
     VkPipelineExecutableInternalRepresentationKHR* pInternalRepresentations)
 {
     const Device*                       pDevice       = ApiDevice::ObjectFromHandle(device);
-    const Pipeline*                     pPipeline     = Pipeline::ObjectFromHandle(pExecutableInfo->pipeline);
+    const Pipeline*                     pPipeline     = Pipeline::BaseObjectFromHandle(pExecutableInfo->pipeline);
     const Pal::IPipeline*               pPalPipeline  = pPipeline->PalPipeline(DefaultDeviceIndex);
     const Util::Abi::ApiHwShaderMapping apiToHwShader = pPalPipeline->ApiHwShaderMapping();
 

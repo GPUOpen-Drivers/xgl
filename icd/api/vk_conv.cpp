@@ -384,7 +384,6 @@ VK_TO_PAL_DECL_LOOKUP_TABLE(FORMAT,                         SwizzledFormat      
 VK_TO_PAL_DECL_LOOKUP_TABLE(PRIMITIVE_TOPOLOGY,             PrimitiveType                                              )
 VK_TO_PAL_DECL_LOOKUP_TABLE_COMPLEX(QUERY_TYPE,             PalQueryTypePool,     QueryTypePool                        )
 VK_TO_PAL_DECL_LOOKUP_TABLE(INDEX_TYPE,                     IndexType                                                  )
-VK_TO_PAL_DECL_LOOKUP_TABLE(BORDER_COLOR,                   BorderColorType                                            )
 VK_TO_PAL_DECL_LOOKUP_TABLE(IMAGE_VIEW_TYPE,                ImageViewType                                              )
 VK_TO_PAL_DECL_LOOKUP_TABLE(LOGIC_OP,                       LogicOp                                                    )
 VK_TO_PAL_DECL_LOOKUP_TABLE(SAMPLER_ADDRESS_MODE,           TexAddressMode                                             )
@@ -718,6 +717,14 @@ const char* PalResultName(
         resultName = "ErrorGpuPageFaultDetected";
         break;
 
+    case Pal::Result::ErrorMismatchedImageDepthPitch:
+        resultName = "ErrorMismatchedImageDepthPitch";
+        break;
+
+    case Pal::Result::ErrorMismatchedImageRowPitch:
+        resultName = "ErrorMismatchedImageRowPitch";
+        break;
+
     default:
         VK_NOT_IMPLEMENTED;
         resultName = "??";
@@ -974,6 +981,8 @@ VkResult PalToVkError(
     case Pal::Result::ErrorMultiDevicePresentFailed:
     case Pal::Result::ErrorWindowedPresentUnavailable:
     case Pal::Result::ErrorInvalidResolution:
+    case Pal::Result::ErrorMismatchedImageDepthPitch:
+    case Pal::Result::ErrorMismatchedImageRowPitch:
         // VK_ERROR_UNKNOWN is an error that can be returned by any error returning API function
         vkResult = VK_ERROR_UNKNOWN;
         break;

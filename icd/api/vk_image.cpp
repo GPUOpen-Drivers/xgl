@@ -212,10 +212,13 @@ Image::Image(
 static void ConvertImageCreateInfo(
     const Device*            pDevice,
     const VkImageCreateInfo* pCreateInfo,
-    Pal::ImageCreateInfo*    pPalCreateInfo)
+    Pal::ImageCreateInfo*    pPalCreateInfo,
+    uint64_t                 ahbExternalFormat)
 {
-    VkImageUsageFlags      imageUsage = pCreateInfo->usage;
-    const RuntimeSettings& settings   = pDevice->GetRuntimeSettings();
+    VkImageUsageFlags      imageUsage       = pCreateInfo->usage;
+    const RuntimeSettings& settings         = pDevice->GetRuntimeSettings();
+    VkFormat               createInfoFormat = (ahbExternalFormat == 0) ?
+        pCreateInfo->format : static_cast<VkFormat>(ahbExternalFormat);
 
     // VK_IMAGE_CREATE_EXTENDED_USAGE_BIT indicates that the image can be created with usage flags that are not
     // supported for the format the image is created with but are supported for at least one format a VkImageView
@@ -227,7 +230,7 @@ static void ConvertImageCreateInfo(
         Pal::MergedFormatPropertiesTable fmtProperties = {};
         pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalDevice()->GetFormatProperties(&fmtProperties);
 
-        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings());
+        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(createInfoFormat, pDevice->GetRuntimeSettings());
 
         const size_t formatIdx = static_cast<size_t>(swizzledFormat.format);
         const size_t tilingIdx = ((pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR) ? Pal::IsLinear : Pal::IsNonLinear);
@@ -242,7 +245,7 @@ static void ConvertImageCreateInfo(
     pPalCreateInfo->extent.height    = pCreateInfo->extent.height;
     pPalCreateInfo->extent.depth     = pCreateInfo->extent.depth;
     pPalCreateInfo->imageType        = VkToPalImageType(pCreateInfo->imageType);
-    pPalCreateInfo->swizzledFormat   = VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings());
+    pPalCreateInfo->swizzledFormat   = VkToPalFormat(createInfoFormat, pDevice->GetRuntimeSettings());
     pPalCreateInfo->mipLevels        = pCreateInfo->mipLevels;
     pPalCreateInfo->arraySize        = pCreateInfo->arrayLayers;
     pPalCreateInfo->samples          = pCreateInfo->samples;
@@ -260,10 +263,9 @@ static void ConvertImageCreateInfo(
         pPalCreateInfo->tilingPreference = settings.imageTilingPreference;
     }
 
-    pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(pCreateInfo->flags, pCreateInfo->format);
+    pPalCreateInfo->flags.u32All     = VkToPalImageCreateFlags(pCreateInfo->flags, createInfoFormat);
     pPalCreateInfo->usageFlags       = VkToPalImageUsageFlags(
                                          imageUsage,
-                                         pCreateInfo->format,
                                          pCreateInfo->samples,
                                          (VkImageUsageFlags)(settings.optImgMaskToApplyShaderReadUsageForTransferSrc),
                                          (VkImageUsageFlags)(settings.optImgMaskToApplyShaderWriteUsageForTransferDst));
@@ -452,16 +454,17 @@ VkResult Image::Create(
     Pal::ImageCreateInfo palCreateInfo  = {};
     Pal::PresentableImageCreateInfo presentImageCreateInfo = {};
 
-    const RuntimeSettings& settings        = pDevice->GetRuntimeSettings();
-    uint32_t               viewFormatCount = 0;
-    const VkFormat*        pViewFormats    = nullptr;
+    const RuntimeSettings& settings          = pDevice->GetRuntimeSettings();
+    uint32_t               viewFormatCount   = 0;
+    const VkFormat*        pViewFormats      = nullptr;
+    uint64_t               ahbExternalFormat = 0;
 
     const uint32_t numDevices = pDevice->NumPalDevices();
     const bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
     const bool     hasDepthStencilAspect = Formats::IsDepthStencilFormat(pCreateInfo->format);
     VkResult       result     = VK_SUCCESS;
 
-    ConvertImageCreateInfo(pDevice, pCreateInfo, &palCreateInfo);
+    ConvertImageCreateInfo(pDevice, pCreateInfo, &palCreateInfo, 0);
 
     // It indicates the stencil aspect will be read by shader, so it is only meaningful if the image contains the
     // stencil aspect. The setting of stencilShaderRead will be overrode, if
@@ -556,7 +559,6 @@ VkResult Image::Create(
 
             Pal::ImageUsageFlags usageFlags = VkToPalImageUsageFlags(
                                         pExtInfo->stencilUsage,
-                                        pCreateInfo->format,
                                         pCreateInfo->samples,
                                         (VkImageUsageFlags)(settings.optImgMaskToApplyShaderReadUsageForTransferSrc),
                                         (VkImageUsageFlags)(settings.optImgMaskToApplyShaderWriteUsageForTransferDst));
@@ -635,6 +637,13 @@ VkResult Image::Create(
         settings.enableFullCopyDstOnly)
     {
         palCreateInfo.flags.fullCopyDstOnly = 1;
+    }
+
+    // Any depth buffer could potentially be used while VRS is active.
+    if (pDevice->GetEnabledFeatures().attachmentFragmentShadingRate &&
+        ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0))
+    {
+        palCreateInfo.usageFlags.vrsDepth = 1;
     }
 
     palCreateInfo.metadataMode         = Pal::MetadataMode::Default;
@@ -771,6 +780,7 @@ VkResult Image::Create(
         result = Image::CreateFromAndroidHwBufferHandle(
             pDevice,
             pCreateInfo,
+            ahbExternalFormat,
             imageFlags,
             pImage);
 
@@ -922,6 +932,7 @@ VkResult Image::Create(
 VkResult Image::CreateFromAndroidHwBufferHandle(
     Device*                                pDevice,
     const VkImageCreateInfo*               pImageCreateInfo,
+    uint64_t                               externalFormat,
     ImageFlags                             internalFlags,
     VkImage*                               pImage)
 {
@@ -934,14 +945,8 @@ VkResult Image::CreateFromAndroidHwBufferHandle(
     Pal::Result          palResult          = Pal::Result::Success;
     const VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
 
-    //TODO: handle external format (mainly the YUV formats) with YCbCrSamplers later
-    if (internalFlags.isExternalFormat)
-    {
-        VK_NOT_IMPLEMENTED;
-        return VK_ERROR_UNKNOWN;
-    }
+    ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo, externalFormat);
 
-    ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo);
     palImgSize = pDevice->PalDevice(DefaultDeviceIndex)->GetImageSize(palCreateInfo, &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
 
@@ -998,7 +1003,7 @@ VkResult Image::CreateFromAndroidHwBufferHandle(
             dummyTileSize,
             palCreateInfo.mipLevels,
             palCreateInfo.arraySize,
-            pImageCreateInfo->format,
+            (externalFormat == 0) ? pImageCreateInfo->format : static_cast<VkFormat>(externalFormat),
             pImageCreateInfo->samples,
             pImageCreateInfo->usage,
             pImageCreateInfo->usage,
@@ -1327,6 +1332,12 @@ VkResult Image::BindMemory(
     const VkRect2D*    pRects)
 {
     Memory* pMemory = (mem != VK_NULL_HANDLE) ? Memory::ObjectFromHandle(mem) : nullptr;
+
+    // If this memory has been bound on the image, do nothing.
+    if (m_perGpu[DefaultDeviceIndex].pPalImage == pMemory->GetExternalPalImage())
+    {
+        return VK_SUCCESS;
+    }
 
     if (m_internalFlags.externallyShareable && (pMemory->GetExternalPalImage() != nullptr))
     {

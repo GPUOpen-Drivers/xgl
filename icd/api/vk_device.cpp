@@ -93,6 +93,7 @@
 #include "palQueue.h"
 #include "palQueueSemaphore.h"
 #include "palAutoBuffer.h"
+#include "palBorderColorPalette.h"
 
 namespace vk
 {
@@ -226,8 +227,11 @@ Device::Device(
     m_pBarrierFilterLayer(nullptr),
     m_allocationSizeTracking(m_settings.memoryDeviceOverallocationAllowed ? false : true),
     m_useComputeAsTransferQueue(useComputeAsTransferQueue)
+    , m_pBorderColorUsedIndexes(nullptr)
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
+
+    m_maxVrsShadingRate = {0, 0};
 
     for (uint32_t deviceIdx = 0; deviceIdx < palDeviceCount; ++deviceIdx)
     {
@@ -240,6 +244,7 @@ Device::Device(
         m_perGpu[deviceIdx].pSwCompositingQueue     = nullptr;
         m_perGpu[deviceIdx].pSwCompositingSemaphore = nullptr;
         m_perGpu[deviceIdx].pSwCompositingCmdBuffer = nullptr;
+        m_perGpu[deviceIdx].pPalBorderColorPalette  = nullptr;
 
     }
 
@@ -270,6 +275,7 @@ Device::Device(
     }
 
     m_enabledFeatures.scalarBlockLayout = false;
+    m_enabledFeatures.attachmentFragmentShadingRate = false;
 
     m_allocatedCount = 0;
     m_maxAllocations = pPhysicalDevices[DefaultDeviceIndex]->GetLimits().maxMemoryAllocationCount;
@@ -419,6 +425,8 @@ VkResult Device::Create(
     bool                              deviceCoherentMemoryEnabled     = false;
     bool                              scalarBlockLayoutEnabled        = false;
     ExtendedRobustness                extendedRobustnessEnabled     = { false, false, false };
+
+    bool                              attachmentFragmentShadingRate   = false;
 
     uint32                            privateDataSlotRequestCount     = 0;
     bool                              privateDataEnabled              = false;
@@ -791,6 +799,20 @@ VkResult Device::Create(
                 scalarBlockLayoutEnabled = true;
             }
 
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR:
+        {
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFragmentShadingRateFeaturesKHR>(
+                pPhysicalDevice,
+                reinterpret_cast<const VkPhysicalDeviceFragmentShadingRateFeaturesKHR*>(pHeader));
+
+            if ((vkResult == VK_SUCCESS) &&
+                reinterpret_cast<const VkPhysicalDeviceFragmentShadingRateFeaturesKHR*>(pHeader)->attachmentFragmentShadingRate)
+            {
+                attachmentFragmentShadingRate = true;
+            }
             break;
         }
 
@@ -1213,6 +1235,7 @@ VkResult Device::Create(
                 enabledDeviceExtensions,
                 overallocationBehavior,
                 deviceCoherentMemoryEnabled,
+                attachmentFragmentShadingRate,
                 scalarBlockLayoutEnabled,
                 extendedRobustnessEnabled);
 
@@ -1245,6 +1268,7 @@ VkResult Device::Initialize(
     const DeviceExtensions::Enabled&        enabled,
     const VkMemoryOverallocationBehaviorAMD overallocationBehavior,
     const bool                              deviceCoherentMemoryEnabled,
+    const bool                              attachmentFragmentShadingRate,
     bool                                    scalarBlockLayoutEnabled,
 	const ExtendedRobustness&               extendedRobustnessEnabled)
 {
@@ -1355,6 +1379,16 @@ VkResult Device::Initialize(
     m_enabledFeatures.deviceCoherentMemory = deviceCoherentMemoryEnabled;
     m_enabledFeatures.scalarBlockLayout    = scalarBlockLayoutEnabled;
     m_enabledFeatures.extendedRobustness   = extendedRobustnessEnabled;
+
+    m_enabledFeatures.attachmentFragmentShadingRate = attachmentFragmentShadingRate;
+
+    Pal::VrsShadingRate maxPalVrsShadingRate;
+    bool vrsMaskIsValid = Util::BitMaskScanReverse(reinterpret_cast<uint32*>(&maxPalVrsShadingRate),
+                                                   deviceProps.gfxipProperties.supportedVrsRates);
+    if (vrsMaskIsValid)
+    {
+        m_maxVrsShadingRate = PalToVkShadingSize(maxPalVrsShadingRate);
+    }
 
     if (result == VK_SUCCESS)
     {
@@ -1558,6 +1592,12 @@ VkResult Device::Initialize(
     if (result == VK_SUCCESS)
     {
         InitDispatchTable();
+    }
+
+    if ((result == VK_SUCCESS) &&
+        IsExtensionEnabled(DeviceExtensions::EXT_CUSTOM_BORDER_COLOR))
+    {
+        result = AllocBorderColorPalette();
     }
 
     return result;
@@ -1892,6 +1932,8 @@ VkResult Device::Destroy(const VkAllocationCallbacks* pAllocator)
 
     }
 
+    DestroyBorderColorPalette();
+
     m_renderStateCache.Destroy();
 
     Util::Destructor(this);
@@ -1935,6 +1977,7 @@ VkResult Device::CreateInternalComputePipeline(
     const uint8_t*                 pCode,
     uint32_t                       numUserDataNodes,
     Vkgc::ResourceMappingRootNode* pUserDataNodes,
+    VkShaderModuleCreateFlags      flags,
     InternalPipeline*              pInternalPipeline)
 {
     VK_ASSERT(numUserDataNodes <= VK_ARRAY_SIZE(pInternalPipeline->userDataNodeOffsets));
@@ -1952,10 +1995,12 @@ VkResult Device::CreateInternalComputePipeline(
     // Build shader module
     result = pCompiler->BuildShaderModule(
         this,
-        0,
+        flags,
         codeByteSize,
         pCode,
         &shaderModule);
+
+    Vkgc::BinaryData spvBin = { codeByteSize, pCode };
 
     if (result == VK_SUCCESS)
     {
@@ -1964,7 +2009,7 @@ VkResult Device::CreateInternalComputePipeline(
         pipelineBuildInfo.compilerType = PipelineCompilerTypeLlpc;
         pShaderInfo->pModuleData         = shaderModule.pLlpcShaderModule;
         pShaderInfo->pSpecializationInfo = nullptr;
-        pShaderInfo->pEntryTarget        = "main";
+        pShaderInfo->pEntryTarget        = Vkgc::IUtil::GetEntryPointNameFromSpirvBinary(&spvBin);
         pShaderInfo->entryStage          = Vkgc::ShaderStageCompute;
 
 #if   (LLPC_CLIENT_INTERFACE_MAJOR_VERSION< 41)
@@ -2129,6 +2174,7 @@ VkResult Device::CreateInternalPipelines()
         pSpvCode,
         VK_ARRAY_SIZE(userDataNodes),
         userDataNodes,
+        0,
         &m_timestampQueryCopyPipeline);
 
     return result;
@@ -3238,6 +3284,98 @@ VkResult Device::InitSwCompositing(
 }
 
 // =====================================================================================================================
+VkResult Device::AllocBorderColorPalette()
+{
+    VkResult result = VK_SUCCESS;
+
+    Pal::BorderColorPaletteCreateInfo createInfo = { };
+    createInfo.paletteSize = MaxBorderColorPaletteSize;
+
+    Pal::Result palResult = Pal::Result::Success;
+    const size_t palSize = PalDevice(DefaultDeviceIndex)->GetBorderColorPaletteSize(createInfo, &palResult);
+
+    result = PalToVkResult(palResult);
+
+    void* pSystemMem = nullptr;
+
+    if (result == VK_SUCCESS)
+    {
+        const size_t memSize = (palSize * NumPalDevices()) +
+                               (sizeof(bool)* MaxBorderColorPaletteSize);
+
+        pSystemMem = VkInstance()->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+        if (pSystemMem == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            memset(pSystemMem, 0, memSize);
+        }
+    }
+
+    for (uint32_t deviceIdx = 0; (deviceIdx < NumPalDevices()) && (result == VK_SUCCESS); ++deviceIdx)
+    {
+        result = PalToVkResult(PalDevice(deviceIdx)->CreateBorderColorPalette(
+                                createInfo, pSystemMem, &m_perGpu[deviceIdx].pPalBorderColorPalette));
+
+        pSystemMem = Util::VoidPtrInc(pSystemMem, palSize);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        Pal::IBorderColorPalette* pPalBorderColorPalette[MaxPalDevices] = {};
+
+        for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); ++deviceIdx)
+        {
+            pPalBorderColorPalette[deviceIdx] = m_perGpu[deviceIdx].pPalBorderColorPalette;
+        }
+
+      result = MemMgr()->AllocAndBindGpuMem(
+          NumPalDevices(),
+          reinterpret_cast<Pal::IGpuMemoryBindable**>(pPalBorderColorPalette),
+          false,
+          &m_memoryPalBorderColorPalette,
+          GetPalDeviceMask(),
+          true,
+          false);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        m_pBorderColorUsedIndexes = static_cast<bool*>(pSystemMem);
+
+        result = PalToVkResult(m_borderColorMutex.Init());
+    }
+
+    if ((result != VK_SUCCESS) &&
+        (m_perGpu[0].pPalBorderColorPalette != nullptr))
+    {
+        VkInstance()->FreeMem(m_perGpu[0].pPalBorderColorPalette);
+        m_perGpu[0].pPalBorderColorPalette = nullptr;
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+void Device::DestroyBorderColorPalette()
+{
+    if (m_perGpu[0].pPalBorderColorPalette != nullptr)
+    {
+        for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); ++deviceIdx)
+        {
+            m_perGpu[deviceIdx].pPalBorderColorPalette->Destroy();
+        }
+
+        VkInstance()->FreeMem(m_perGpu[0].pPalBorderColorPalette);
+        m_perGpu[0].pPalBorderColorPalette = nullptr;
+        MemMgr()->FreeGpuMem(&m_memoryPalBorderColorPalette);
+    }
+}
+
+// =====================================================================================================================
 // Issue the software compositing and/or synchronization with the updated presenting queue
 Pal::IQueue* Device::PerformSwCompositing(
     uint32_t         deviceIdx,
@@ -3381,6 +3519,44 @@ VkResult Device::SetDebugUtilsObjectName(
     }
 
     return VkResult::VK_SUCCESS;
+}
+
+// =====================================================================================================================
+uint32_t Device::GetBorderColorIndex(
+        const float*                 pBorderColor)
+{
+    uint32_t borderColorIndex = MaxBorderColorPaletteSize;
+    bool     indexWasFound    = false;
+
+    MutexAuto lock(&m_borderColorMutex);
+
+    for (uint32_t index = 0; (index < MaxBorderColorPaletteSize) && (indexWasFound == false); ++index)
+    {
+        if (m_pBorderColorUsedIndexes[index] == false)
+        {
+            borderColorIndex = index;
+            m_pBorderColorUsedIndexes[index] = true;
+
+            for (uint32_t deviceIdx = 0; deviceIdx < NumPalDevices(); deviceIdx++)
+            {
+                // Update border color entry
+                m_perGpu[deviceIdx].pPalBorderColorPalette->Update(borderColorIndex, 1, pBorderColor);
+            }
+
+            indexWasFound = true;
+        }
+    }
+
+    VK_ASSERT(indexWasFound);
+    return borderColorIndex;
+}
+
+// =====================================================================================================================
+void Device::ReleaseBorderColorIndex(
+        uint32_t                     borderColorIndex)
+{
+    MutexAuto lock(&m_borderColorMutex);
+    m_pBorderColorUsedIndexes[borderColorIndex] = false;
 }
 
 // =====================================================================================================================

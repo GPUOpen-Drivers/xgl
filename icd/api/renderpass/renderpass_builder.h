@@ -72,6 +72,7 @@ public:
         AttachRefResolveDst           = 0x00000020, // Resolve attachment
         AttachRefPreserve             = 0x00000040, // Preserve attachment (not really used)
         AttachRefExternalPostInstance = 0x00000080  // Dummy flag denoting post-instance reference
+        , AttachRefFragShading        = 0x00000100  // Fragment shading rate attachment
     };
 
     // State tracked per attachment during building
@@ -180,6 +181,7 @@ private:
     Pal::Result BuildDepthStencilAttachmentReferences(uint32_t subpass, const SubpassDescription& desc);
     Pal::Result BuildInputAttachmentReferences(uint32_t subpass, const SubpassDescription& desc);
     Pal::Result BuildResolveAttachmentReferences(uint32_t subpass);
+    Pal::Result BuildFragmentShadingRateAttachmentReferences(uint32_t subpass);
     Pal::Result BuildSamplePatternMemoryStore(uint32_t attachment);
     Pal::Result BuildEndState();
     Pal::Result TrackAttachmentUsage(

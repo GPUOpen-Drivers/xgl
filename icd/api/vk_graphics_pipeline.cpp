@@ -495,7 +495,7 @@ uint64_t GraphicsPipeline::BuildApiHash(
 
     if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
     {
-        apiHasher.Update(Pipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
+        apiHasher.Update(GraphicsPipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
     }
 
     apiHasher.Update(pCreateInfo->basePipelineIndex);
@@ -613,21 +613,6 @@ void GraphicsPipeline::BuildRasterizationState(
 
     // Enable perpendicular end caps if we report strictLines semantics
     pInfo->pipeline.rsState.perpLineEndCapsEnable = (limits.strictLines == VK_TRUE);
-
-    // For optimal performance, depth clamping should be enabled by default. Only disable it if dealing
-    // with depth values outside of [0.0, 1.0] range.
-    // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
-    if ((pIn->depthClampEnable == VK_FALSE) &&
-        (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_DEPTH_RANGE_UNRESTRICTED)))
-    {
-        pInfo->pipeline.rsState.depthClampDisable = true;
-    }
-    else
-    {
-        // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
-        // Clipping is updated in pipeline compiler.
-        pInfo->pipeline.rsState.depthClampDisable = false;
-    }
 
     pInfo->pipeline.viewportInfo.depthClipEnable                = (pIn->depthClampEnable == VK_FALSE);
     pInfo->pipeline.viewportInfo.depthRange                     = Pal::DepthRange::ZeroToOne;
@@ -771,6 +756,22 @@ void GraphicsPipeline::BuildRasterizationState(
 
         pNext = pHeader->pNext;
     }
+
+    // For optimal performance, depth clamping should be enabled by default. Only disable it if dealing
+    // with depth values outside of [0.0, 1.0] range.
+    // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
+    if ((pIn->depthClampEnable == VK_FALSE) &&
+        (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_DEPTH_RANGE_UNRESTRICTED) ||
+         (pInfo->pipeline.viewportInfo.depthClipEnable == false)))
+    {
+        pInfo->pipeline.rsState.depthClampDisable = true;
+    }
+    else
+    {
+        // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
+        // Clipping is updated in pipeline compiler.
+        pInfo->pipeline.rsState.depthClampDisable = false;
+    }
 }
 
 // =====================================================================================================================
@@ -876,6 +877,9 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                         dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt)] = true;
                         break;
 
+                    case  VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr)] = true;
+                        break;
                     case  VK_DYNAMIC_STATE_CULL_MODE_EXT:
                         dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::CullModeExt)] = true;
                         break;
@@ -1003,6 +1007,54 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
         if ((pIn->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pVp != nullptr))
         {
+            const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;
+
+            // Override the shader rate to 1x1 if sample shading is used or the sample count is 8
+            pInfo->force1x1ShaderRate = ((pMs != nullptr) &&
+                (pMs->sampleShadingEnable ||
+                (pMs->rasterizationSamples == VK_SAMPLE_COUNT_8_BIT)));
+
+            if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr)]
+                    == false)
+            {
+                EXTRACT_VK_STRUCTURES_0(
+                    variableRateShading,
+                    PipelineFragmentShadingRateStateCreateInfoKHR,
+                    static_cast<const VkPipelineFragmentShadingRateStateCreateInfoKHR*>(pIn->pNext),
+                    PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR)
+
+                if (pPipelineFragmentShadingRateStateCreateInfoKHR != nullptr)
+                {
+                    pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask = 1;
+
+                    pInfo->immedInfo.vrsRateParams.shadingRate =
+                        VkToPalShadingSize(VkClampShadingRate(
+                                pPipelineFragmentShadingRateStateCreateInfoKHR->fragmentSize,
+                                pDevice->GetMaxVrsShadingRate()));
+
+                    pInfo->immedInfo.vrsRateParams.combinerState[
+                        static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
+                        VkToPalShadingRateCombinerOp(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[0]);
+
+                    pInfo->immedInfo.vrsRateParams.combinerState[
+                        static_cast<uint32_t>(Pal::VrsCombinerStage::Primitive)]= Pal::VrsCombiner::Passthrough;
+
+                    pInfo->immedInfo.vrsRateParams.combinerState[
+                        static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] =
+                        VkToPalShadingRateCombinerOp(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[1]);
+
+                    pInfo->immedInfo.vrsRateParams.combinerState[
+                        static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Passthrough;
+
+                    if (pInfo->force1x1ShaderRate)
+                    {
+                        Force1x1ShaderRate(&pInfo->immedInfo.vrsRateParams);
+                    }
+
+                    pInfo->staticStateMask |=
+                        1 << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr);
+                }
+            }
             // From the spec, "scissorCount is the number of scissors and must match the number of viewports."
             VK_ASSERT(pVp->viewportCount <= Pal::MaxViewports);
             VK_ASSERT(pVp->scissorCount <= Pal::MaxViewports);
@@ -1517,6 +1569,9 @@ VkResult GraphicsPipeline::Create(
 
                     if (info.ps.flags.perSampleShading == 1)
                     {
+                        // Override the shader rate to 1x1 if SampleId used in shader
+                        Force1x1ShaderRate(&localPipelineInfo.immedInfo.vrsRateParams);
+                        localPipelineInfo.force1x1ShaderRate     |= true;
                         localPipelineInfo.msaa.pixelShaderSamples = localPipelineInfo.msaa.coverageSamples;
                     }
                 }
@@ -1719,6 +1774,8 @@ void GraphicsPipeline::CreateStaticState()
     pStaticTokens->samplePattern              = DynamicRenderStateToken;
     pStaticTokens->lineStippleState           = DynamicRenderStateToken;
 
+    pStaticTokens->fragmentShadingRate        = DynamicRenderStateToken;
+
     if (m_flags.bindInputAssemblyState)
     {
         pStaticTokens->inputAssemblyState = pCache->CreateInputAssemblyState(m_info.inputAssemblyState);
@@ -1770,6 +1827,11 @@ void GraphicsPipeline::CreateStaticState()
         pStaticTokens->lineStippleState = pCache->CreateLineStipple(m_info.lineStippleParams);
     }
 
+    if (ContainsStaticState(DynamicStatesInternal::FragmentShadingRateStateKhr))
+    {
+        pStaticTokens->fragmentShadingRate =
+            pCache->CreateFragmentShadingRate(m_info.vrsRateParams);
+    }
 }
 
 // =====================================================================================================================
@@ -1838,26 +1900,19 @@ GraphicsPipeline::~GraphicsPipeline()
 }
 
 // =====================================================================================================================
-// Binds this graphics pipeline's state to the given command buffer (using waveLimits created from the pipeline)
-void GraphicsPipeline::BindToCmdBuffer(
-    CmdBuffer*                             pCmdBuffer,
-    CmdBufferRenderState*                  pRenderState) const
-{
-    BindToCmdBuffer(pCmdBuffer, pRenderState, m_info.graphicsShaderInfos);
-}
-
-// =====================================================================================================================
 // Binds this graphics pipeline's state to the given command buffer (with passed in wavelimits)
 void GraphicsPipeline::BindToCmdBuffer(
     CmdBuffer*                             pCmdBuffer,
-    CmdBufferRenderState*                  pRenderState,
-    const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos) const
+    const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos
+    ) const
 {
+    AllGpuRenderState* pRenderState = pCmdBuffer->RenderState();
+
     // Get this pipeline's static tokens
     const auto& newTokens = m_info.staticTokens;
 
     // Get the old static tokens.  Copy these by value because in MGPU cases we update the new token state in a loop.
-    const auto oldTokens = pRenderState->allGpuState.staticTokens;
+    const auto oldTokens = pRenderState->staticTokens;
 
     // Program static pipeline state.
 
@@ -1877,11 +1932,11 @@ void GraphicsPipeline::BindToCmdBuffer(
         utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
         do
         {
-            pRenderState->perGpuState[deviceGroup.Index()].viewport.count = m_info.viewportParams.count;
+            pCmdBuffer->PerGpuState(deviceGroup.Index())->viewport.count = m_info.viewportParams.count;
         }
         while (deviceGroup.IterateNext());
 
-        pRenderState->allGpuState.dirty.viewport = 1;
+        pRenderState->dirty.viewport = 1;
     }
 
     if (ContainsStaticState(DynamicStatesInternal::Scissor))
@@ -1896,51 +1951,51 @@ void GraphicsPipeline::BindToCmdBuffer(
         utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
         do
         {
-            pRenderState->perGpuState[deviceGroup.Index()].scissor.count = m_info.scissorRectParams.count;
+            pCmdBuffer->PerGpuState(deviceGroup.Index())->scissor.count = m_info.scissorRectParams.count;
         }
         while (deviceGroup.IterateNext());
 
-        pRenderState->allGpuState.dirty.scissor = 1;
+        pRenderState->dirty.scissor = 1;
     }
 
     if (m_flags.bindDepthStencilObject == false)
     {
-        Pal::DepthStencilStateCreateInfo* pDepthStencilCreateInfo = &(pRenderState->allGpuState.depthStencilCreateInfo);
+        Pal::DepthStencilStateCreateInfo* pDepthStencilCreateInfo = &(pRenderState->depthStencilCreateInfo);
 
         if (ContainsStaticState(DynamicStatesInternal::DepthTestEnableExt) &&
             (pDepthStencilCreateInfo->depthEnable != m_info.depthStencilCreateInfo.depthEnable))
         {
             pDepthStencilCreateInfo->depthEnable = m_info.depthStencilCreateInfo.depthEnable;
 
-            pRenderState->allGpuState.dirty.depthStencil = 1;
+            pRenderState->dirty.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::DepthWriteEnableExt) &&
             (pDepthStencilCreateInfo->depthWriteEnable != m_info.depthStencilCreateInfo.depthWriteEnable))
         {
             pDepthStencilCreateInfo->depthWriteEnable = m_info.depthStencilCreateInfo.depthWriteEnable;
 
-            pRenderState->allGpuState.dirty.depthStencil = 1;
+            pRenderState->dirty.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::DepthCompareOpExt) &&
             (pDepthStencilCreateInfo->depthFunc != m_info.depthStencilCreateInfo.depthFunc))
         {
             pDepthStencilCreateInfo->depthFunc = m_info.depthStencilCreateInfo.depthFunc;
 
-            pRenderState->allGpuState.dirty.depthStencil = 1;
+            pRenderState->dirty.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::DepthBoundsTestEnableExt) &&
             (pDepthStencilCreateInfo->depthBoundsEnable != m_info.depthStencilCreateInfo.depthBoundsEnable))
         {
             pDepthStencilCreateInfo->depthBoundsEnable = m_info.depthStencilCreateInfo.depthBoundsEnable;
 
-            pRenderState->allGpuState.dirty.depthStencil = 1;
+            pRenderState->dirty.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::StencilTestEnableExt) &&
             (pDepthStencilCreateInfo->stencilEnable != m_info.depthStencilCreateInfo.stencilEnable))
         {
             pDepthStencilCreateInfo->stencilEnable = m_info.depthStencilCreateInfo.stencilEnable;
 
-            pRenderState->allGpuState.dirty.depthStencil = 1;
+            pRenderState->dirty.depthStencil = 1;
         }
         if (ContainsStaticState(DynamicStatesInternal::StencilOpExt) &&
             ((pDepthStencilCreateInfo->front.stencilFailOp != m_info.depthStencilCreateInfo.front.stencilFailOp) ||
@@ -1957,94 +2012,97 @@ void GraphicsPipeline::BindToCmdBuffer(
             pDepthStencilCreateInfo->front = m_info.depthStencilCreateInfo.front;
             pDepthStencilCreateInfo->back  = m_info.depthStencilCreateInfo.back;
 
-            pRenderState->allGpuState.dirty.depthStencil = 1;
+            pRenderState->dirty.depthStencil = 1;
         }
     }
     else
     {
         // Update static state to cmdBuffer when it's static DS. It's necessary because
         // it will be used to tell if the value is changed next time.
-        pRenderState->allGpuState.depthStencilCreateInfo = m_info.depthStencilCreateInfo;
+        pRenderState->depthStencilCreateInfo = m_info.depthStencilCreateInfo;
     }
 
     if (m_flags.bindTriangleRasterState == false)
     {
         // Update the static states to renderState
-        pRenderState->allGpuState.triangleRasterState.frontFillMode   = m_info.triangleRasterState.frontFillMode;
-        pRenderState->allGpuState.triangleRasterState.backFillMode    = m_info.triangleRasterState.backFillMode;
-        pRenderState->allGpuState.triangleRasterState.provokingVertex = m_info.triangleRasterState.provokingVertex;
-        pRenderState->allGpuState.triangleRasterState.flags.u32All    = m_info.triangleRasterState.flags.u32All;
+        pRenderState->triangleRasterState.frontFillMode   = m_info.triangleRasterState.frontFillMode;
+        pRenderState->triangleRasterState.backFillMode    = m_info.triangleRasterState.backFillMode;
+        pRenderState->triangleRasterState.provokingVertex = m_info.triangleRasterState.provokingVertex;
+        pRenderState->triangleRasterState.flags.u32All    = m_info.triangleRasterState.flags.u32All;
 
         if (ContainsStaticState(DynamicStatesInternal::FrontFaceExt))
         {
-            pRenderState->allGpuState.triangleRasterState.frontFace = m_info.triangleRasterState.frontFace;
+            pRenderState->triangleRasterState.frontFace = m_info.triangleRasterState.frontFace;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::CullModeExt))
         {
-            pRenderState->allGpuState.triangleRasterState.cullMode = m_info.triangleRasterState.cullMode;
+            pRenderState->triangleRasterState.cullMode = m_info.triangleRasterState.cullMode;
         }
 
-        pRenderState->allGpuState.dirty.rasterState = 1;
+        pRenderState->dirty.rasterState = 1;
     }
     else
     {
-        pRenderState->allGpuState.triangleRasterState = m_info.triangleRasterState;
+        pRenderState->triangleRasterState = m_info.triangleRasterState;
     }
 
-    Pal::StencilRefMaskParams prevStencilRefMasks = pRenderState->allGpuState.stencilRefMasks;
+    Pal::StencilRefMaskParams prevStencilRefMasks = pRenderState->stencilRefMasks;
 
     if (m_flags.bindStencilRefMasks == false)
     {
         // Until we expose Stencil Op Value, we always inherit the PSO value, which is currently Default == 1
-        pRenderState->allGpuState.stencilRefMasks.frontOpValue   = m_info.stencilRefMasks.frontOpValue;
-        pRenderState->allGpuState.stencilRefMasks.backOpValue    = m_info.stencilRefMasks.backOpValue;
+        pRenderState->stencilRefMasks.frontOpValue   = m_info.stencilRefMasks.frontOpValue;
+        pRenderState->stencilRefMasks.backOpValue    = m_info.stencilRefMasks.backOpValue;
 
         // We don't have to use tokens for these since the combiner does a redundancy check on the full value
         if (ContainsStaticState(DynamicStatesInternal::StencilCompareMask))
         {
-            pRenderState->allGpuState.stencilRefMasks.frontReadMask  = m_info.stencilRefMasks.frontReadMask;
-            pRenderState->allGpuState.stencilRefMasks.backReadMask   = m_info.stencilRefMasks.backReadMask;
+            pRenderState->stencilRefMasks.frontReadMask  = m_info.stencilRefMasks.frontReadMask;
+            pRenderState->stencilRefMasks.backReadMask   = m_info.stencilRefMasks.backReadMask;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::StencilWriteMask))
         {
-            pRenderState->allGpuState.stencilRefMasks.frontWriteMask = m_info.stencilRefMasks.frontWriteMask;
-            pRenderState->allGpuState.stencilRefMasks.backWriteMask  = m_info.stencilRefMasks.backWriteMask;
+            pRenderState->stencilRefMasks.frontWriteMask = m_info.stencilRefMasks.frontWriteMask;
+            pRenderState->stencilRefMasks.backWriteMask  = m_info.stencilRefMasks.backWriteMask;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::StencilReference))
         {
-            pRenderState->allGpuState.stencilRefMasks.frontRef       = m_info.stencilRefMasks.frontRef;
-            pRenderState->allGpuState.stencilRefMasks.backRef        = m_info.stencilRefMasks.backRef;
+            pRenderState->stencilRefMasks.frontRef       = m_info.stencilRefMasks.frontRef;
+            pRenderState->stencilRefMasks.backRef        = m_info.stencilRefMasks.backRef;
         }
     }
     else
     {
-        pRenderState->allGpuState.stencilRefMasks = m_info.stencilRefMasks;
+        pRenderState->stencilRefMasks = m_info.stencilRefMasks;
     }
 
     // Check whether the dirty bit should be set
-    if (memcmp(&pRenderState->allGpuState.stencilRefMasks, &prevStencilRefMasks, sizeof(Pal::StencilRefMaskParams)) != 0)
+    if (memcmp(&pRenderState->stencilRefMasks, &prevStencilRefMasks, sizeof(Pal::StencilRefMaskParams)) != 0)
     {
-        pRenderState->allGpuState.dirty.stencilRef = 1;
+        pRenderState->dirty.stencilRef = 1;
     }
 
     if (m_flags.bindInputAssemblyState == false)
     {
         // Update the static states to renderState
-        pRenderState->allGpuState.inputAssemblyState.primitiveRestartIndex =
+        pRenderState->inputAssemblyState.primitiveRestartIndex =
             m_info.inputAssemblyState.primitiveRestartIndex;
 
-        pRenderState->allGpuState.inputAssemblyState.primitiveRestartEnable =
+        pRenderState->inputAssemblyState.primitiveRestartEnable =
             m_info.inputAssemblyState.primitiveRestartEnable;
 
-        pRenderState->allGpuState.dirty.inputAssembly = 1;
+        pRenderState->dirty.inputAssembly = 1;
     }
     else
     {
-        pRenderState->allGpuState.inputAssemblyState = m_info.inputAssemblyState;
+        pRenderState->inputAssemblyState = m_info.inputAssemblyState;
     }
+
+    const uint64_t oldHash = pRenderState->boundGraphicsPipelineHash;
+    const uint64_t newHash = PalPipelineHash();
 
     utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
     do
@@ -2053,15 +2111,13 @@ void GraphicsPipeline::BindToCmdBuffer(
 
         Pal::ICmdBuffer* pPalCmdBuf = pCmdBuffer->PalCmdBuffer(deviceIdx);
 
-        if (pRenderState->allGpuState.pGraphicsPipeline != nullptr)
+        if (pRenderState->pGraphicsPipeline != nullptr)
         {
-            const uint64_t oldHash = pRenderState->allGpuState.pGraphicsPipeline->PalPipelineHash();
-            const uint64_t newHash = PalPipelineHash();
-
             if ((oldHash != newHash)
                 )
             {
                 Pal::PipelineBindParams params = {};
+
                 params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
                 params.pPipeline         = m_pPalPipeline[deviceIdx];
                 params.graphics          = graphicsShaderInfos;
@@ -2075,6 +2131,7 @@ void GraphicsPipeline::BindToCmdBuffer(
         else
         {
             Pal::PipelineBindParams params = {};
+
             params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
             params.pPipeline         = m_pPalPipeline[deviceIdx];
             params.graphics          = graphicsShaderInfos;
@@ -2090,7 +2147,7 @@ void GraphicsPipeline::BindToCmdBuffer(
         {
             pCmdBuffer->PalCmdBindDepthStencilState(pPalCmdBuf, deviceIdx, m_pPalDepthStencil[deviceIdx]);
 
-            pRenderState->allGpuState.dirty.depthStencil = 0;
+            pRenderState->dirty.depthStencil = 0;
         }
 
         pCmdBuffer->PalCmdBindColorBlendState(pPalCmdBuf, deviceIdx, m_pPalColorBlend[deviceIdx]);
@@ -2104,8 +2161,8 @@ void GraphicsPipeline::BindToCmdBuffer(
         {
             pPalCmdBuf->CmdSetInputAssemblyState(m_info.inputAssemblyState);
 
-            pRenderState->allGpuState.staticTokens.inputAssemblyState = newTokens.inputAssemblyState;
-            pRenderState->allGpuState.dirty.inputAssembly             = 0;
+            pRenderState->staticTokens.inputAssemblyState = newTokens.inputAssemblyState;
+            pRenderState->dirty.inputAssembly             = 0;
         }
 
         if (CmdBuffer::IsStaticStateDifferent(oldTokens.triangleRasterState, newTokens.triangleRasterState) &&
@@ -2113,43 +2170,43 @@ void GraphicsPipeline::BindToCmdBuffer(
         {
             pPalCmdBuf->CmdSetTriangleRasterState(m_info.triangleRasterState);
 
-            pRenderState->allGpuState.staticTokens.triangleRasterState = newTokens.triangleRasterState;
-            pRenderState->allGpuState.dirty.rasterState                = 0;
+            pRenderState->staticTokens.triangleRasterState = newTokens.triangleRasterState;
+            pRenderState->dirty.rasterState                = 0;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::LineWidth) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.pointLineRasterState, newTokens.pointLineRasterState))
         {
             pPalCmdBuf->CmdSetPointLineRasterState(m_info.pointLineRasterParams);
-            pRenderState->allGpuState.staticTokens.pointLineRasterState = newTokens.pointLineRasterState;
+            pRenderState->staticTokens.pointLineRasterState = newTokens.pointLineRasterState;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::LineStippleExt) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.lineStippleState, newTokens.lineStippleState))
         {
             pPalCmdBuf->CmdSetLineStippleState(m_info.lineStippleParams);
-            pRenderState->allGpuState.staticTokens.lineStippleState = newTokens.lineStippleState;
+            pRenderState->staticTokens.lineStippleState = newTokens.lineStippleState;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::DepthBias) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.depthBiasState, newTokens.depthBias))
         {
             pPalCmdBuf->CmdSetDepthBiasState(m_info.depthBiasParams);
-            pRenderState->allGpuState.staticTokens.depthBiasState = newTokens.depthBias;
+            pRenderState->staticTokens.depthBiasState = newTokens.depthBias;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::BlendConstants) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.blendConst, newTokens.blendConst))
         {
             pPalCmdBuf->CmdSetBlendConst(m_info.blendConstParams);
-            pRenderState->allGpuState.staticTokens.blendConst = newTokens.blendConst;
+            pRenderState->staticTokens.blendConst = newTokens.blendConst;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::DepthBounds) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.depthBounds, newTokens.depthBounds))
         {
             pPalCmdBuf->CmdSetDepthBounds(m_info.depthBoundParams);
-            pRenderState->allGpuState.staticTokens.depthBounds = newTokens.depthBounds;
+            pRenderState->staticTokens.depthBounds = newTokens.depthBounds;
         }
 
         if (ContainsStaticState(DynamicStatesInternal::SampleLocationsExt) &&
@@ -2157,22 +2214,33 @@ void GraphicsPipeline::BindToCmdBuffer(
         {
             pCmdBuffer->PalCmdSetMsaaQuadSamplePattern(
                 m_info.samplePattern.sampleCount, m_info.samplePattern.locations);
-            pRenderState->allGpuState.staticTokens.samplePattern = newTokens.samplePattern;
+            pRenderState->staticTokens.samplePattern = newTokens.samplePattern;
+        }
+        // Only set the Fragment Shading Rate if the dynamic state is not set.
+        if (ContainsStaticState(DynamicStatesInternal::FragmentShadingRateStateKhr) &&
+            CmdBuffer::IsStaticStateDifferent(oldTokens.fragmentShadingRate, newTokens.fragmentShadingRate))
+        {
+            pPalCmdBuf->CmdSetPerDrawVrsRate(m_info.vrsRateParams);
+
+            pRenderState->staticTokens.fragmentShadingRate = newTokens.fragmentShadingRate;
+            pRenderState->dirty.vrs = 0;
         }
     }
     while (deviceGroup.IterateNext());
+
+    pRenderState->boundGraphicsPipelineHash = newHash;
 
     // Binding GraphicsPipeline affects ViewMask,
     // because when VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT is specified
     // ViewMask for each VkPhysicalDevice is defined by DeviceIndex
     // not by current subpass during a render pass instance.
-    const bool oldViewIndexFromDeviceIndex = pRenderState->allGpuState.viewIndexFromDeviceIndex;
+    const bool oldViewIndexFromDeviceIndex = pRenderState->viewIndexFromDeviceIndex;
     const bool newViewIndexFromDeviceIndex = ViewIndexFromDeviceIndex();
 
     if (oldViewIndexFromDeviceIndex != newViewIndexFromDeviceIndex)
     {
         // Update value of ViewIndexFromDeviceIndex for currently bound pipeline.
-        pRenderState->allGpuState.viewIndexFromDeviceIndex = newViewIndexFromDeviceIndex;
+        pRenderState->viewIndexFromDeviceIndex = newViewIndexFromDeviceIndex;
 
         // Sync ViewMask state in CommandBuffer.
         pCmdBuffer->SetViewInstanceMask(pCmdBuffer->GetDeviceMask());

@@ -107,6 +107,7 @@ enum class DynamicStatesInternal : uint32_t
     StencilWriteMask,
     StencilReference,
     SampleLocationsExt,
+    FragmentShadingRateStateKhr,
     LineStippleExt,
     ViewportCount,
     ScissorCount,
@@ -134,7 +135,7 @@ public:
 
     const UserDataLayout* GetUserDataLayout(void) const { return &m_userDataLayout; }
 
-    static VK_FORCEINLINE Pipeline* ObjectFromHandle(VkPipeline pipeline)
+    static VK_FORCEINLINE Pipeline* BaseObjectFromHandle(VkPipeline pipeline)
     {
         return reinterpret_cast<Pipeline*>(pipeline);
     }

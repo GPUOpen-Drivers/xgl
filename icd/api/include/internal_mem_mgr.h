@@ -162,7 +162,7 @@ public:
     void* CpuAddr(int32_t idx) const
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
-        return m_memoryPool.groupMemory.CpuAddr(idx);
+        return Util::VoidPtrInc(m_memoryPool.groupMemory.CpuAddr(idx), static_cast<size_t>(m_offset));
     }
 
     Pal::gpusize Offset() const
@@ -238,8 +238,8 @@ public:
         bool                       readOnly,
         InternalMemory*            pInternalMemory,
         uint32_t                   allocMask,
-        bool                       removeInvisibleHeap = false,
-        bool                       persistentMapped    = false);
+        bool                       removeInvisibleHeap,
+        bool                       persistentMapped);
 
     void FreeGpuMem(
         const InternalMemory*           pInternalMemory);

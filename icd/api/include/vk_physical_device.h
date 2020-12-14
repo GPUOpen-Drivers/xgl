@@ -615,6 +615,13 @@ public:
     void GetMemoryBudgetProperties(
         VkPhysicalDeviceMemoryBudgetPropertiesEXT* pMemBudgetProps);
 
+    uint32_t GetNumberOfSupportedShadingRates(
+        uint32 supportedVrsRates) const;
+
+    VkResult GetFragmentShadingRates(
+        uint32*                                 pFragmentShadingRateCount,
+        VkPhysicalDeviceFragmentShadingRateKHR* pFragmentShadingRates);
+
 #if defined(__unix__)
 #ifdef VK_USE_PLATFORM_XLIB_XRANDR_EXT
     VkResult AcquireXlibDisplay(
@@ -1051,6 +1058,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceCalibrateableTimeDomainsEXT(
     VkPhysicalDevice                            physicalDevice,
     uint32_t*                                   pTimeDomainCount,
     VkTimeDomainEXT*                            pTimeDomains);
+
+VKAPI_ATTR VkResult VKAPI_CALL vkGetPhysicalDeviceFragmentShadingRatesKHR(
+    VkPhysicalDevice                        physicalDevice,
+    uint32*                                 pFragmentShadingRateCount,
+    VkPhysicalDeviceFragmentShadingRateKHR* pFragmentShadingRates);
 
 } // namespace entry
 

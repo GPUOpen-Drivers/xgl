@@ -186,12 +186,9 @@ public:
 
     void BindToCmdBuffer(
         CmdBuffer*                             pCmdBuffer,
-        CmdBufferRenderState*                  pRenderState) const;
-
-    void BindToCmdBuffer(
-        CmdBuffer*                             pCmdBuffer,
-        CmdBufferRenderState*                  pRenderState,
         const Pal::DynamicGraphicsShaderInfos& graphicsShaderInfos) const;
+
+    VK_INLINE const Pal::DynamicGraphicsShaderInfos& GetBindInfo() const { return m_info.graphicsShaderInfos; }
 
     const Pal::IMsaaState* const* GetMsaaStates() const { return m_pPalMsaa; }
 
@@ -216,17 +213,10 @@ public:
 protected:
     // Immediate state info that will be written during Bind() but is not
     // encapsulated within a state object.
-    //
-    // NOTE: This structure needs to be revisited when the new PAL state headers
-    // are in place.
     struct ImmedInfo
     {
-        // Input to >CmdSetInputAssemblyState:
-        Pal::InputAssemblyStateParams  inputAssemblyState;
-
-        // Input to CmdSetTriangleRasterState:
-        Pal::TriangleRasterStateParams triangleRasterState;
-
+        Pal::InputAssemblyStateParams         inputAssemblyState;
+        Pal::TriangleRasterStateParams        triangleRasterState;
         Pal::BlendConstParams                 blendConstParams;
         Pal::DepthBiasParams                  depthBiasParams;
         Pal::DepthBoundsParams                depthBoundParams;
@@ -237,6 +227,7 @@ protected:
         Pal::StencilRefMaskParams             stencilRefMasks;
         SamplePattern                         samplePattern;
         Pal::DynamicGraphicsShaderInfos       graphicsShaderInfos;
+        Pal::VrsRateParams                    vrsRateParams;
         Pal::DepthStencilStateCreateInfo      depthStencilCreateInfo;
 
         // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
@@ -253,6 +244,7 @@ protected:
             uint32_t viewport;
             uint32_t scissorRect;
             uint32_t samplePattern;
+            uint32_t fragmentShadingRate;
         } staticTokens;
     };
 

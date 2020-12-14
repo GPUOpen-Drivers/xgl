@@ -80,6 +80,7 @@ enum class AppProfile : uint32_t
     ZombieArmy4,           // Zombie Army 4: Dead War by Rebellion Developments
     GhostReconBreakpoint,  // Ghost Recon Breakpoint
     DetroitBecomeHuman,    // Detroit Become Human by Quantic Dream
+    ShadowOfTheTombRaider, // ShadowOfTheTombRaider by Feral3D
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)

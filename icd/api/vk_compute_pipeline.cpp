@@ -60,7 +60,7 @@ uint64_t ComputePipeline::BuildApiHash(
 
     if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
     {
-        apiHasher.Update(Pipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
+        apiHasher.Update(ComputePipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
     }
 
     apiHasher.Update(pCreateInfo->basePipelineIndex);
@@ -340,12 +340,6 @@ VkResult ComputePipeline::Create(
 }
 
 // =====================================================================================================================
-void ComputePipeline::BindToCmdBuffer(CmdBuffer* pCmdBuffer) const
-{
-    BindToCmdBuffer(pCmdBuffer, m_info.computeShaderInfo);
-}
-
-// =====================================================================================================================
 void ComputePipeline::BindToCmdBuffer(
     CmdBuffer*                           pCmdBuffer,
     const Pal::DynamicComputeShaderInfo& computeShaderInfo) const
@@ -353,10 +347,11 @@ void ComputePipeline::BindToCmdBuffer(
     const uint32_t numGroupedCmdBuffers = pCmdBuffer->VkDevice()->NumPalDevices();
 
     Pal::PipelineBindParams params = {};
+
     params.pipelineBindPoint = Pal::PipelineBindPoint::Compute;
-    params.cs = computeShaderInfo;
+    params.cs                = computeShaderInfo;
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
-    params.apiPsoHash = m_apiHash;
+    params.apiPsoHash        = m_apiHash;
 #endif
 
     for (uint32_t deviceIdx = 0; deviceIdx < numGroupedCmdBuffers; deviceIdx++)

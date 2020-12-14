@@ -210,8 +210,16 @@ target_include_directories(xgl PRIVATE
     ${XGL_VKGC_PATH}/include
 )
 
+if(EXISTS ${VULKAN_HEADERS_PATH})
+    target_include_directories(xgl PRIVATE ${VULKAN_HEADERS_PATH}/include)
+    target_compile_definitions(xgl PRIVATE EXTERNAL_VULKAN_HEADERS=1)
+endif()
+
 target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
+if(VKI_KHR_FRAGMENT_SHADING_RATE)
+    target_compile_definitions(xgl PRIVATE VKI_KHR_FRAGMENT_SHADING_RATE)
+endif()
 #if VKI_KHR_DEFERRED_HOST_OPERATIONS
 if(VKI_KHR_DEFERRED_HOST_OPERATIONS)
     target_compile_definitions(xgl PRIVATE VKI_KHR_DEFERRED_HOST_OPERATIONS)

@@ -145,6 +145,8 @@ struct SubpassDescription
     VkResolveModeFlagBits       stencilResolveMode;
     AttachmentReference         depthStencilResolveAttachment;
 
+    AttachmentReference         fragmentShadingRateAttachment;
+
     SubpassSampleCount          subpassSampleCount;
 };
 

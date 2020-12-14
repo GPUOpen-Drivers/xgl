@@ -124,6 +124,8 @@ public:
         VkBool32                sparseBinding;
         // The state of enabled feature VK_EXT_scalar_block_layout.
         VkBool32                scalarBlockLayout;
+        // Attachment Fragment Shading Rate feature in VK_KHR_variable_rate_shading
+        VkBool32                attachmentFragmentShadingRate;
         // The states of enabled feature DEVICE_COHERENT_MEMORY_FEATURES_AMD which is defined by
         // extensions VK_AMD_device_coherent_memory
         VkBool32                deviceCoherentMemory;
@@ -344,6 +346,7 @@ public:
         const DeviceExtensions::Enabled&            enabled,
         const VkMemoryOverallocationBehaviorAMD     overallocationBehavior,
         const bool                                  deviceCoherentMemoryEnabled,
+        const bool                                  attachmentFragmentShadingRate,
         bool                                        scalarBlockLayoutEnabled,
         const ExtendedRobustness&                   extendedRobustnessEnabled);
 
@@ -531,6 +534,11 @@ public:
     VK_INLINE const InternalPipeline& GetTimestampQueryCopyPipeline() const
         { return m_timestampQueryCopyPipeline; }
 
+    VK_INLINE InternalPipeline& GetInternalRayTracingPipeline()
+    {
+        return m_internalRayTracingPipeline;
+    }
+
     VK_INLINE const Pal::IMsaaState* const * GetBltMsaaState(uint32_t imgSampleCount) const;
 
     VK_INLINE bool IsExtensionEnabled(DeviceExtensions::ExtensionId id) const
@@ -618,6 +626,11 @@ public:
 
     void UpdateFeatureSettings();
 
+    VK_FORCEINLINE VkExtent2D GetMaxVrsShadingRate() const
+    {
+        return m_maxVrsShadingRate;
+    }
+
     VK_INLINE size_t GetPrivateDataSize() const
     {
         return m_privateDataSize;
@@ -644,6 +657,25 @@ public:
 
     VkResult SetDebugUtilsObjectName(const VkDebugUtilsObjectNameInfoEXT* pNameInfo);
 
+    uint32_t GetBorderColorIndex(
+        const float*             pBorderColor);
+
+    void ReleaseBorderColorIndex(
+        uint32_t                 pBorderColor);
+
+    VK_INLINE Pal::IBorderColorPalette* GetPalBorderColorPalette(uint32_t deviceIdx) const
+    {
+        return m_perGpu[deviceIdx].pPalBorderColorPalette;
+    }
+
+    VkResult CreateInternalComputePipeline(
+        size_t                         codeByteSize,
+        const uint8_t*                 pCode,
+        uint32_t                       numUserDataNodes,
+        Vkgc::ResourceMappingRootNode* pUserDataNodes,
+        VkShaderModuleCreateFlags      flags,
+        InternalPipeline*              pInternalPipeline);
+
 protected:
     Device(
         uint32_t                         deviceCount,
@@ -656,13 +688,6 @@ protected:
         uint32                           privateDataSlotRequestCount,
         size_t                           privateDataSize);
 
-    VkResult CreateInternalComputePipeline(
-        size_t                         codeByteSize,
-        const uint8_t*                 pCode,
-        uint32_t                       numUserDataNodes,
-        Vkgc::ResourceMappingRootNode* pUserDataNodes,
-        InternalPipeline*              pInternalPipeline);
-
     VkResult CreateInternalPipelines();
 
     void DestroyInternalPipeline(InternalPipeline* pPipeline);
@@ -672,6 +697,10 @@ protected:
     void InitSamplePatternPalette(Pal::SamplePatternPalette* pPalette) const;
 
     VkResult InitSwCompositing(uint32_t deviceIdx);
+
+    VkResult AllocBorderColorPalette();
+
+    void DestroyBorderColorPalette();
 
     Instance* const                     m_pInstance;
     const RuntimeSettings&              m_settings;
@@ -691,6 +720,8 @@ protected:
     DispatchableQueue*                  m_pQueues[Queue::MaxQueueFamilies][Queue::MaxQueuesPerFamily];
 
     InternalPipeline                    m_timestampQueryCopyPipeline;
+
+    InternalPipeline                    m_internalRayTracingPipeline;
 
     static const uint32_t BltMsaaStateCount = 4;
 
@@ -727,16 +758,19 @@ protected:
     // If set to true, will use a compute queue internally for transfers.
     bool                                m_useComputeAsTransferQueue;
 
+    VkExtent2D                          m_maxVrsShadingRate;
+
     struct PerGpuInfo
     {
-        PhysicalDevice*        pPhysicalDevice;
-        Pal::IDevice*          pPalDevice;
-        Pal::ICmdAllocator*    pSharedPalCmdAllocator;
+        PhysicalDevice*           pPhysicalDevice;
+        Pal::IDevice*             pPalDevice;
+        Pal::ICmdAllocator*       pSharedPalCmdAllocator;
 
-        void*                  pSwCompositingMemory;    // Internal memory for the below PAL objects (master and slave)
-        Pal::IQueue*           pSwCompositingQueue;     // Internal present queue (master) or transfer queue (slave)
-        Pal::IQueueSemaphore*  pSwCompositingSemaphore; // Internal semaphore (master and slave)
-        Pal::ICmdBuffer*       pSwCompositingCmdBuffer; // Internal dummy command buffer for flip metadata (master)
+        void*                     pSwCompositingMemory;    // Internal memory for the below PAL objects (master and slave)
+        Pal::IQueue*              pSwCompositingQueue;     // Internal present queue (master) or transfer queue (slave)
+        Pal::IQueueSemaphore*     pSwCompositingSemaphore; // Internal semaphore (master and slave)
+        Pal::ICmdBuffer*          pSwCompositingCmdBuffer; // Internal dummy command buffer for flip metadata (master)
+        Pal::IBorderColorPalette* pPalBorderColorPalette;  // Pal border color palette for custom border color.
 
     };
 
@@ -752,6 +786,10 @@ protected:
     volatile uint64                     m_nextPrivateDataSlot;
     size_t                              m_privateDataSize;
     Util::RWLock                        m_privateDataRWLock;
+
+    InternalMemory                      m_memoryPalBorderColorPalette;
+    bool*                               m_pBorderColorUsedIndexes;
+    Util::Mutex                         m_borderColorMutex;
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

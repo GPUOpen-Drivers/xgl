@@ -246,6 +246,9 @@ vkDestroySwapchainKHR                               @device     @dext(KHR_swapch
 vkGetSwapchainImagesKHR                             @device     @dext(KHR_swapchain)
 vkQueuePresentKHR                                   @device     @dext(KHR_swapchain)
 
+vkCmdSetFragmentShadingRateKHR                      @device     @dext(KHR_fragment_shading_rate)
+vkGetPhysicalDeviceFragmentShadingRatesKHR          @device     @dext(KHR_fragment_shading_rate)
+
 vkCmdDrawIndexedIndirectCountAMD                    @device     @dext(AMD_draw_indirect_count)
 vkCmdDrawIndirectCountAMD                           @device     @dext(AMD_draw_indirect_count)
 vkCmdDrawIndirectCountKHR                           @device     @dext(KHR_draw_indirect_count)

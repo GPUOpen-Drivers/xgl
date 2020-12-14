@@ -88,10 +88,11 @@ public:
 
     ~Queue();
 
+    template<typename SubmitInfoType>
     VkResult Submit(
-        uint32_t            submitCount,
-        const VkSubmitInfo* pSubmits,
-        VkFence             fence);
+        uint32_t              submitCount,
+        const SubmitInfoType* pSubmits,
+        VkFence               fence);
 
     VkResult WaitIdle(void);
     VkResult PalSignalSemaphores(

@@ -32,6 +32,10 @@
 #ifndef __VK_ICD_H_PROXY__
 #define __VK_ICD_H_PROXY__
 
+#if EXTERNAL_VULKAN_HEADERS
+#include "vulkan/vk_icd.h"
+#else
 #include "sdk-1.2/vk_icd.h"
+#endif
 
 #endif /* __VK_ICD_H_PROXY__ */

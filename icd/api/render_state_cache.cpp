@@ -72,6 +72,8 @@ RenderStateCache::RenderStateCache(
     m_colorBlendRefs(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_depthStencilStates(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_depthStencilRefs(NumStateBuckets, pDevice->VkInstance()->Allocator())
+    , m_fragmentShadingRate(NumStateBuckets, pDevice->VkInstance()->Allocator()),
+    m_fragmentShadingRateNextId(FirstStaticRenderStateToken)
 {
 
 }
@@ -160,6 +162,11 @@ VkResult RenderStateCache::Init()
     if (result == Pal::Result::Success)
     {
         result = m_depthStencilRefs.Init();
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        result = m_fragmentShadingRate.Init();
     }
 
     return PalToVkResult(result);
@@ -1076,6 +1083,29 @@ void RenderStateCache::DestroyLineStipple(
         params,
         token,
         &m_lineStippleState);
+}
+
+// =====================================================================================================================
+uint32_t RenderStateCache::CreateFragmentShadingRate(
+    const Pal::VrsRateParams& params)
+{
+    return CreateStaticParamsState(
+        OptRenderStateFragmentShadingRate,
+        params,
+        &m_fragmentShadingRate,
+        &m_fragmentShadingRateNextId);
+}
+
+// =====================================================================================================================
+void RenderStateCache::DestroyFragmentShadingRate(
+    const Pal::VrsRateParams&                    params,
+    uint32_t                                     token)
+{
+    return DestroyStaticParamsState(
+        OptRenderStateFragmentShadingRate,
+        params,
+        token,
+        &m_fragmentShadingRate);
 }
 
 };
