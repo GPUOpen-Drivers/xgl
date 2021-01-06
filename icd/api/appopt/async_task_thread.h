@@ -60,7 +60,6 @@ public:
         m_taskList(pAllocator),
         m_stop(false)
     {
-        m_lock.Init();
         Util::EventCreateFlags flags = {};
         flags.manualReset = false;
         flags.initiallySignaled = false;

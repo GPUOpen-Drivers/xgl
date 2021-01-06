@@ -92,12 +92,7 @@ SqttQueueState::SqttQueueState(
 // Initialize per-queue SQTT layer info
 VkResult SqttQueueState::Init()
 {
-    Util::Result palResult = m_lock.Init();
-
-    if (palResult == Util::Result::Success)
-    {
-        palResult = m_cmdBufferMap.Init();
-    }
+    Util::Result palResult = m_cmdBufferMap.Init();
 
     VkResult result = PalToVkResult(palResult);
 

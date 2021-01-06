@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0x872392726f4754b0 265f213698c57054"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    }
+  ]
+}

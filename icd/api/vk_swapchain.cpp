@@ -909,14 +909,9 @@ void SwapChain::SetHdrMetadata(
     m_colorParams.userDefinedColorGamut.chromaticityWhitePointY   = ConvertUnits(pMetadata->whitePoint.y);
     m_colorParams.userDefinedColorGamut.minLuminance              = ConvertMinLuminance(pMetadata->minLuminance);
     m_colorParams.userDefinedColorGamut.maxLuminance              = static_cast<uint32_t>(pMetadata->maxLuminance);
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 512
     m_colorParams.userDefinedColorGamut.maxFrameAverageLightLevel = static_cast<uint32_t>(
                                                                     pMetadata->maxFrameAverageLightLevel);
-#endif
-
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 506
     m_colorParams.userDefinedColorGamut.maxContentLightLevel    = static_cast<uint32_t>(pMetadata->maxContentLightLevel);
-#endif
 
     // TODO: I don't know if average luminance is important, but VK_EXT_hdr_metadata does not currently expose it.
     // ie. palGamut.avgLuminance = ConvertUnits(pMetadata->avgLuminance);

@@ -129,11 +129,7 @@ public:
 
     VK_FORCEINLINE bool IsTimelineSemaphore() const
     {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         return m_palCreateInfo.flags.timeline;
-#else
-        return false;
-#endif
     }
 
 private:

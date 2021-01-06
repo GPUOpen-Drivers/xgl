@@ -2317,10 +2317,6 @@ VK_INLINE uint32_t VkToPalImageCreateFlags(VkImageCreateFlags imageCreateFlags,
     palImageCreateInfo.flags.cubemap            = (imageCreateFlags & VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT)   ? 1 : 0;
     palImageCreateInfo.flags.prt                = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_RESIDENCY_BIT)  ? 1 : 0;
     palImageCreateInfo.flags.invariant          = (imageCreateFlags & VK_IMAGE_CREATE_ALIAS_BIT)             ? 1 : 0;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 481
-    // We must not use any metadata if sparse aliasing is enabled
-    palImageCreateInfo.flags.noMetadata         = (imageCreateFlags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT)    ? 1 : 0;
-#endif
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 616
     palImageCreateInfo.flags.tmzProtected       = (imageCreateFlags & VK_IMAGE_CREATE_PROTECTED_BIT)         ? 1 : 0;
 #endif

@@ -226,17 +226,24 @@ DescriptorUpdateTemplate::PfnUpdateEntry DescriptorUpdateTemplate::GetUpdateEntr
     DescriptorUpdateTemplate::PfnUpdateEntry pFunc = nullptr;
 
     if ((imageDescSize == 32) &&
-        (fmaskDescSize == 32) &&
         (samplerDescSize == 16) &&
         (bufferDescSize == 16))
 
     {
-        pFunc = GetUpdateEntryFunc<
-            32,
-            32,
-            16,
-            16,
-            numPalDevices>(pDevice, descriptorType, dstBinding);
+        if (fmaskDescSize == 32)
+        {
+            pFunc = GetUpdateEntryFunc<
+                32,
+                32,
+                16,
+                16,
+                numPalDevices>(pDevice, descriptorType, dstBinding);
+        }
+        else
+        {
+            VK_NEVER_CALLED();
+            pFunc = nullptr;
+        }
     }
     else
     {

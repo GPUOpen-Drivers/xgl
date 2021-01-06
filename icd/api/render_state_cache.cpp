@@ -82,12 +82,7 @@ RenderStateCache::RenderStateCache(
 // Initializes the render state cache.  Should be called during device create.
 VkResult RenderStateCache::Init()
 {
-    Pal::Result result = m_mutex.Init();
-
-    if (result == Pal::Result::Success)
-    {
-        result = m_inputAssemblyState.Init();
-    }
+    Pal::Result result = m_inputAssemblyState.Init();
 
     if (result == Pal::Result::Success)
     {

@@ -54,9 +54,6 @@ ShaderOptimizer::ShaderOptimizer(
     m_pDevice(pDevice),
     m_settings(pPhysicalDevice->GetRuntimeSettings())
 {
-#if PAL_ENABLE_PRINTS_ASSERTS
-    m_printMutex.Init();
-#endif
 }
 
 // =====================================================================================================================
@@ -177,10 +174,12 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
                     options.pNggState->enableNgg = false;
                 }
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 45
                 if (shaderCreate.apply.nggFasterLaunchRate)
                 {
                     options.pNggState->enableFastLaunch = true;
                 }
+#endif
 
                 if (shaderCreate.apply.nggVertexReuse)
                 {

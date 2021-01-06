@@ -197,7 +197,7 @@ static VK_INLINE uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
 {
     uint32_t cacheMask = 0;
 
-    switch (imageLayout)
+    switch (static_cast<uint32_t>(imageLayout))
     {
     // It is likely more correct to use Pal::CoherAllUsages but it seems better to avoid CPU sync and just use
     // a general set of cache maks with the unsupported masks eventually being masked out by the barrier policy.

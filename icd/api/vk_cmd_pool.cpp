@@ -35,6 +35,7 @@
 #include "include/vk_device.h"
 #include "include/vk_conv.h"
 
+#include "palFile.h"
 #include "palHashSetImpl.h"
 #include "palIntrusiveListImpl.h"
 #include "palVectorImpl.h"

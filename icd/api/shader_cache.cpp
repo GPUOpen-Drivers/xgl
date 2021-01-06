@@ -91,8 +91,6 @@ VkResult ShaderCache::Merge(
 void ShaderCache::Destroy(
     PipelineCompiler* pCompiler)
 {
-    VkResult result = VK_SUCCESS;
-
     {
         if (m_cache.pLlpcShaderCache)
         {

@@ -188,7 +188,8 @@ private:
     bool ReplacePipelineBinary(
         const PipelineBuildInfo* pPipelineBuildInfo,
         size_t*                  pPipelineBinarySize,
-        const void**             ppPipelineBinary);
+        const void**             ppPipelineBinary,
+        uint64_t                 hashCode64);
 
     void DropPipelineBinaryInst(
         Device*                pDevice,

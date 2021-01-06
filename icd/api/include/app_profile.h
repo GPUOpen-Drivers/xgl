@@ -81,6 +81,7 @@ enum class AppProfile : uint32_t
     GhostReconBreakpoint,  // Ghost Recon Breakpoint
     DetroitBecomeHuman,    // Detroit Become Human by Quantic Dream
     ShadowOfTheTombRaider, // ShadowOfTheTombRaider by Feral3D
+    XPlane,                // XPlane by Laminar Research
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)
@@ -92,6 +93,7 @@ enum class AppProfile : uint32_t
     ScimitarEngine,        // Scimitar Engine by Ubisoft (Default)
     AnvilNextEngine,       // AnvilNext Engine by Ubisoft (Default)
     QuanticDreamEngine,    // Quantic Dream Engine by Quantic Dream
+    XSystemEngine,         // XSystem Engine by Laminar Research
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
 };
 

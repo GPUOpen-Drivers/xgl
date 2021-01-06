@@ -724,7 +724,11 @@ const char* PalResultName(
     case Pal::Result::ErrorMismatchedImageRowPitch:
         resultName = "ErrorMismatchedImageRowPitch";
         break;
-
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 645
+    case Pal::Result::ErrorInvalidExternalHandle:
+        resultName = "ErrorInvalidExternalHandle";
+        break;
+#endif
     default:
         VK_NOT_IMPLEMENTED;
         resultName = "??";
@@ -926,7 +930,11 @@ VkResult PalToVkError(
     case Pal::Result::ErrorNotMappable:
         vkResult = VK_ERROR_MEMORY_MAP_FAILED;
         break;
-
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 645
+    case Pal::Result::ErrorInvalidExternalHandle:
+        vkResult = VK_ERROR_INVALID_EXTERNAL_HANDLE;
+        break;
+#endif
     case Pal::Result::ErrorUnknown:
     case Pal::Result::ErrorUnavailable:
     case Pal::Result::ErrorInvalidPointer:

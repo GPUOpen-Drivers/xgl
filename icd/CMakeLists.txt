@@ -49,8 +49,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         -fno-math-errno
         -fno-rtti
         -std=c++14
-        -Wno-comment
-        -Wno-ignored-qualifiers
         -Wno-missing-field-initializers
         -Wno-pointer-arith
         -Wno-switch
@@ -244,15 +242,17 @@ add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
 set(ICD_GENDIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate)
 
 # ICD shader profile code generation main script
-set(ICD_GEN_SHADER_PROFILE_SCRIPTS ${ICD_GENDIR}/genShaderProfile.py ${ICD_GENDIR}/shaderProfileTemplate.py )
+set(ICD_GEN_SHADER_PROFILE_SCRIPTS ${ICD_GENDIR}/genShaderProfile.py ${ICD_GENDIR}/shaderProfileTemplate.py)
 
 set(ICD_SHADER_PROFILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/appopt)
 
-set(ICD_SHADER_PROFILE_SOURCE_FILES_DIR ${ICD_SHADER_PROFILE_DIR}/shader_profiles)
+set(ICD_SHADER_PROFILE_SOURCE_FILES_DIR
+    ${ICD_SHADER_PROFILE_DIR}/shader_profiles
+    )
 
 add_custom_command(
     OUTPUT ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.cpp ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.h
-    COMMAND ${PYTHON_CMD} ${ICD_GENDIR}/genShaderProfile.py ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
+    COMMAND ${PYTHON_CMD} ${ICD_GENDIR}/genShaderProfile.py ${ICD_SHADER_PROFILE_DIR}/shader_profiles
     DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
     COMMENT "Generating shader profiles code from all profile.json files"
 )

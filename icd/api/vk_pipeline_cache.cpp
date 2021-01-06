@@ -260,13 +260,11 @@ VkResult PipelineCache::GetData(
 
     VkResult        result = VK_SUCCESS;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 534
     if (m_pBinaryCache != nullptr)
     {
         result = m_pBinaryCache->Serialize(pData, pSize);
     }
     else
-#endif
     {
         uint32_t numPalDevices = m_pDevice->NumPalDevices();
 
@@ -317,7 +315,6 @@ VkResult PipelineCache::Merge(
 {
     VkResult result = VK_SUCCESS;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 534
     if (m_pBinaryCache != nullptr)
     {
         Util::AutoBuffer<const PipelineBinaryCache *, 16, PalAllocator> binaryCaches(
@@ -332,7 +329,6 @@ VkResult PipelineCache::Merge(
         result = m_pBinaryCache->Merge(srcCacheCount, &binaryCaches[0]);
     }
     else
-#endif
     {
         Util::AutoBuffer<ShaderCache::ShaderCachePtr, 16, PalAllocator> shaderCaches(
             srcCacheCount * m_pDevice->NumPalDevices(),

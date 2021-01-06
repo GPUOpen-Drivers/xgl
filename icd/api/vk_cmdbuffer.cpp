@@ -403,7 +403,6 @@ VkResult CmdBuffer::Create(
     VK_ASSERT(palResult == Pal::Result::Success);
 
     VkResult result = VK_SUCCESS;
-    Instance* pInstance = pDevice->VkInstance();
 
     uint32 allocCount = 0;
 
@@ -2560,8 +2559,6 @@ void CmdBuffer::CopyImageToBuffer(
     {
         const Image* const pSrcImage      = Image::ObjectFromHandle(srcImage);
         Buffer* pDstBuffer                = Buffer::ObjectFromHandle(destBuffer);
-        const Pal::IImage& palImage       = *pSrcImage->PalImage(DefaultDeviceIndex);
-        Pal::IGpuMemory* const pDstMemory = pDstBuffer->PalMemory(DefaultDeviceIndex);
         const Pal::gpusize dstMemOffset   = pDstBuffer->MemOffset();
 
         const Pal::ImageLayout layout = pSrcImage->GetBarrierPolicy().GetTransferLayout(
@@ -4036,8 +4033,6 @@ void CmdBuffer::PalCmdBarrier(
     for (uint32_t i = 0; i < info.transitionCount; ++i)
     {
         // Detect if PAL may execute a barrier blt using this image
-        const auto& transInfo = info.pTransitions[i].imageInfo;
-
         VK_ASSERT(info.pTransitions[i].imageInfo.pImage == nullptr);
         // You need to use the other PalCmdBarrier method (below) which uses vk::Image ptrs to obtain the
         // corresponding Pal::IImage ptr for each image transition
@@ -4283,9 +4278,7 @@ void CmdBuffer::CopyQueryPoolResults(
             Pal::PipelineBindParams bindParams = {};
             bindParams.pipelineBindPoint = Pal::PipelineBindPoint::Compute;
             bindParams.pPipeline         = pipeline.pPipeline[deviceIdx];
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
             bindParams.apiPsoHash        = Pal::InternalApiPsoHash;
-#endif
 
             // Bind the copy compute pipeline
             PalCmdBuffer(deviceIdx)->CmdBindPipeline(bindParams);

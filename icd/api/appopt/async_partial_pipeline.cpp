@@ -140,7 +140,6 @@ void PartialPipeline::CreatePipelineLayoutFromModuleData(
     // 1 reperents push constant
     uint32_t totalNodes = pushConstSize != 0 ? resNodeDataCount + setCount + 1 : resNodeDataCount + setCount;
 
-    Device* pDevice = pAsyncLayer->GetDevice();
     auto pSets = static_cast<Vkgc::ResourceMappingRootNode*>(m_pAllocator->pfnAllocation(
         m_pAllocator->pUserData,
         totalNodes * sizeof(Vkgc::ResourceMappingRootNode),

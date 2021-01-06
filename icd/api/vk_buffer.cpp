@@ -88,7 +88,6 @@ VkResult Buffer::Create(
     VkBuffer*                       pBuffer)
 {
     VkDeviceSize     size;
-    Instance* const  pInstance = pDevice->VkInstance();
     void*            pMemory   = nullptr;
     Pal::IGpuMemory* pGpuMemory[MaxPalDevices] = {};
 

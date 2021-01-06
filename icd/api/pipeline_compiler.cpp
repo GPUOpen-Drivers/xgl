@@ -218,7 +218,6 @@ VkResult PipelineCompiler::CreateShaderCache(
     ShaderCache*  pShaderCache)
 {
     VkResult                     result         = VK_SUCCESS;
-    PipelineCompilerType         cacheType      = GetShaderCacheType();
 
     return result;
 }
@@ -323,7 +322,6 @@ VkResult PipelineCompiler::BuildShaderModule(
 void PipelineCompiler::FreeShaderModule(
     ShaderModuleHandle* pShaderModule)
 {
-    auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
     m_compilerSolutionLlpc.FreeShaderModule(pShaderModule);
 }
 
@@ -333,13 +331,14 @@ template<class PipelineBuildInfo>
 bool PipelineCompiler::ReplacePipelineBinary(
         const PipelineBuildInfo* pPipelineBuildInfo,
         size_t*                  pPipelineBinarySize,
-        const void**             ppPipelineBinary)
+        const void**             ppPipelineBinary,
+        uint64_t                 hashCode64)
 {
     const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
     char fileName[Pal::MaxFileNameStrLen] = {};
-    Vkgc::IPipelineDumper::GetPipelineName(pPipelineBuildInfo, fileName, sizeof(fileName));
+    Vkgc::IPipelineDumper::GetPipelineName(pPipelineBuildInfo, fileName, sizeof(fileName), hashCode64);
 
     char replaceFileName[Pal::MaxPathStrLen] = {};
     int32_t length = Util::Snprintf(replaceFileName, sizeof(replaceFileName), "%s/%s_replace.elf", settings.shaderReplaceDir, fileName);
@@ -484,7 +483,6 @@ void PipelineCompiler::ReplacePipelineIsaCode(
 
     const Util::Elf::SectionHeader& codeSection = abiReader.GetElfReader().GetSection(codeSectionId);
 
-    size_t pipelineCodeSize = static_cast<size_t>(codeSection.sh_size);
     void* pPipelineCode = const_cast<void*>(Util::VoidPtrInc(pPipelineBinary,
         static_cast<size_t>(codeSection.sh_offset)));
     uint8_t* pFirstInstruction = static_cast<uint8_t*>(pPipelineCode);
@@ -630,7 +628,6 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
     VkResult               result        = VK_SUCCESS;
     bool                   shouldCompile = true;
     const RuntimeSettings& settings      = m_pPhysicalDevice->GetRuntimeSettings();
-    auto                   pInstance     = m_pPhysicalDevice->Manager()->VkInstance();
 
     int64_t compileTime = 0;
     uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
@@ -651,7 +648,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
     if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
     {
-        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
+        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary, pipelineHash))
         {
             shouldCompile = false;
         }
@@ -688,7 +685,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 
         Vkgc::PipelineBuildInfo pipelineInfo = {};
         pipelineInfo.pGraphicsInfo = &pCreateInfo->pipelineInfo;
-        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo);
+        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo, pipelineHash);
     }
 
     // PAL Pipeline caching
@@ -842,7 +839,6 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
 {
     VkResult               result        = VK_SUCCESS;
     const RuntimeSettings& settings      = m_pPhysicalDevice->GetRuntimeSettings();
-    auto                   pInstance     = m_pPhysicalDevice->Manager()->VkInstance();
     bool                   shouldCompile = true;
 
     pCreateInfo->pipelineInfo.deviceIndex = deviceIdx;
@@ -855,22 +851,9 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
     ShaderModuleHandle shaderModuleReplaceHandle = {};
     bool shaderModuleReplaced = false;
 
-    if (settings.enablePipelineDump)
-    {
-        Vkgc::PipelineDumpOptions dumpOptions = {};
-        dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
-        dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
-        dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
-        dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
-
-        Vkgc::PipelineBuildInfo pipelineInfo = {};
-        pipelineInfo.pComputeInfo = &pCreateInfo->pipelineInfo;
-        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo);
-    }
-
     if (settings.shaderReplaceMode == ShaderReplacePipelineBinaryHash)
     {
-        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary))
+        if (ReplacePipelineBinary(&pCreateInfo->pipelineInfo, pPipelineBinarySize, ppPipelineBinary, pipelineHash))
         {
             shouldCompile = false;
         }
@@ -891,6 +874,19 @@ VkResult PipelineCompiler::CreateComputePipelineBinary(
                 pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&pCreateInfo->pipelineInfo);
             }
         }
+    }
+
+    if (settings.enablePipelineDump)
+    {
+        Vkgc::PipelineDumpOptions dumpOptions = {};
+        dumpOptions.pDumpDir                 = settings.pipelineDumpDir;
+        dumpOptions.filterPipelineDumpByType = settings.filterPipelineDumpByType;
+        dumpOptions.filterPipelineDumpByHash = settings.filterPipelineDumpByHash;
+        dumpOptions.dumpDuplicatePipelines    = settings.dumpDuplicatePipelines;
+
+        Vkgc::PipelineBuildInfo pipelineInfo = {};
+        pipelineInfo.pComputeInfo = &pCreateInfo->pipelineInfo;
+        pPipelineDumpHandle = Vkgc::IPipelineDumper::BeginPipelineDump(&dumpOptions, pipelineInfo, pipelineHash);
     }
 
     // PAL Pipeline caching
@@ -1317,7 +1313,9 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.nggState.compactMode                =
             static_cast<Vkgc::NggCompactMode>(settings.nggCompactionMode);
 
+#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 45
         pCreateInfo->pipelineInfo.nggState.enableFastLaunch           = false;
+#endif
         pCreateInfo->pipelineInfo.nggState.enableVertexReuse          = false;
         pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling      = settings.nggEnableBackfaceCulling;
         pCreateInfo->pipelineInfo.nggState.enableFrustumCulling       = settings.nggEnableFrustumCulling;
@@ -1530,7 +1528,6 @@ template<class PipelineBuildInfo>
 PipelineCompilerType PipelineCompiler::CheckCompilerType(
     const PipelineBuildInfo* pPipelineBuildInfo)
 {
-    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     uint32_t availCompilerMask = 0;
     uint32_t compilerMask = 0;
     availCompilerMask |= (1 << PipelineCompilerTypeLlpc);
@@ -1556,7 +1553,6 @@ PipelineCompilerType PipelineCompiler::CheckCompilerType(
 // Checks which compiler is available in pipeline build
 uint32_t PipelineCompiler::GetCompilerCollectionMask()
 {
-    const RuntimeSettings& settings = m_pPhysicalDevice->GetRuntimeSettings();
     uint32_t availCompilerMask = 0;
     availCompilerMask |= (1 << PipelineCompilerTypeLlpc);
 
@@ -1624,7 +1620,6 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
     VkResult result    = VK_SUCCESS;
 
     auto     pInstance = m_pPhysicalDevice->Manager()->VkInstance();
-    auto&    settings  = m_pPhysicalDevice->GetRuntimeSettings();
 
     PipelineLayout* pLayout = nullptr;
 

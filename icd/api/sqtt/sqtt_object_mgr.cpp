@@ -117,7 +117,7 @@ SqttObjectMgr::ObjectTypeState::ObjectTypeState(
 void SqttObjectMgr::ObjectTypeState::Init(
     Device* pDevice)
 {
-    if ((dataMap.Init() == Pal::Result::Success) && (dataMutex.Init() == Pal::Result::Success))
+    if (dataMap.Init() == Pal::Result::Success)
     {
         enabled = true;
     }

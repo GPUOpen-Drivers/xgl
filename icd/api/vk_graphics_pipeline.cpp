@@ -657,9 +657,8 @@ void GraphicsPipeline::BuildRasterizationState(
         case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD:
             {
                 const auto* pRsOrder = static_cast<const VkPipelineRasterizationStateRasterizationOrderAMD*>(pNext);
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 493
+
                 if (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportOutOfOrderPrimitives)
-#endif
                 {
                     pInfo->pipeline.rsState.outOfOrderPrimsEnable = VkToPalRasterizationOrder(pRsOrder->rasterizationOrder);
                 }
@@ -2121,9 +2120,7 @@ void GraphicsPipeline::BindToCmdBuffer(
                 params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
                 params.pPipeline         = m_pPalPipeline[deviceIdx];
                 params.graphics          = graphicsShaderInfos;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
                 params.apiPsoHash = m_apiHash;
-#endif
 
                 pPalCmdBuf->CmdBindPipeline(params);
             }
@@ -2135,9 +2132,7 @@ void GraphicsPipeline::BindToCmdBuffer(
             params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
             params.pPipeline         = m_pPalPipeline[deviceIdx];
             params.graphics          = graphicsShaderInfos;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
             params.apiPsoHash = m_apiHash;
-#endif
 
             pPalCmdBuf->CmdBindPipeline(params);
         }
@@ -2255,9 +2250,7 @@ void GraphicsPipeline::BindNullPipeline(CmdBuffer* pCmdBuffer)
 
     Pal::PipelineBindParams params = {};
     params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
     params.apiPsoHash = Pal::InternalApiPsoHash;
-#endif
 
     for (uint32_t deviceIdx = 0; deviceIdx < numDevices; deviceIdx++)
     {

@@ -443,6 +443,11 @@ public:
         return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().osProperties.umdFpsCapFrameRate;
     }
 
+    VK_INLINE uint64_t TimestampFrequency() const
+    {
+        return VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().timestampFrequency;
+    }
+
     void GetDeviceGroupPeerMemoryFeatures(
         uint32_t                  heapIndex,
         uint32_t                  localDeviceIndex,
@@ -596,16 +601,16 @@ public:
     VK_FORCEINLINE const DeviceBarrierPolicy& GetBarrierPolicy() const
         { return m_barrierPolicy; }
 
-    VK_INLINE const bool IsAllocationSizeTrackingEnabled() const
+    VK_INLINE bool IsAllocationSizeTrackingEnabled() const
         { return m_allocationSizeTracking; }
 
     VK_INLINE bool UseStridedCopyQueryResults() const
         { return (m_properties.timestampQueryPoolSlotSize == 32); }
 
-    VK_INLINE const bool UseCompactDynamicDescriptors() const
+    VK_INLINE bool UseCompactDynamicDescriptors() const
         { return !GetRuntimeSettings().enableRelocatableShaders && !GetEnabledFeatures().robustBufferAccess;}
 
-    VK_INLINE const bool SupportDepthStencilResolve() const
+    VK_INLINE bool SupportDepthStencilResolve() const
     {
         return (IsExtensionEnabled(DeviceExtensions::KHR_DEPTH_STENCIL_RESOLVE) ||
                 (VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion() >= VK_MAKE_VERSION(1, 2, 0)));

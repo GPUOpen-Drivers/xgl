@@ -231,13 +231,11 @@ VkResult Memory::Create(
                     allocationMask = pExtInfo->deviceMask;
                 }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
                 // Test if capture replay has been specified for the memory allocation
                 if (pExtInfo->flags & VK_MEMORY_ALLOCATE_DEVICE_ADDRESS_CAPTURE_REPLAY_BIT)
                 {
                     createInfo.vaRange = Pal::VaRange::CaptureReplay;
                 }
-#endif
             }
             break;
 
@@ -248,6 +246,13 @@ VkResult Memory::Create(
                 {
                     pBoundImage       = Image::ObjectFromHandle(pExtInfo->image);
                     createInfo.pImage = pBoundImage->PalImage(DefaultDeviceIndex);
+
+                    VkMemoryRequirements reqs = {};
+                    if (pBoundImage->GetMemoryRequirements(pDevice, &reqs) == VK_SUCCESS)
+                    {
+                        VK_ASSERT(pAllocInfo->allocationSize >= reqs.size);
+                        createInfo.alignment = reqs.alignment;
+                    }
                 }
                 dedicatedImage  = pExtInfo->image;
                 dedicatedBuffer = pExtInfo->buffer;
@@ -262,7 +267,6 @@ VkResult Memory::Create(
             }
             break;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 560
             case VK_STRUCTURE_TYPE_MEMORY_OPAQUE_CAPTURE_ADDRESS_ALLOCATE_INFO:
             {
                 const auto* pExtInfo = reinterpret_cast<const VkMemoryOpaqueCaptureAddressAllocateInfo *>(pHeader);
@@ -276,7 +280,6 @@ VkResult Memory::Create(
                 }
             }
             break;
-#endif
 
             case VK_STRUCTURE_TYPE_IMPORT_MEMORY_HOST_POINTER_INFO_EXT:
             {
@@ -743,6 +746,9 @@ VkResult Memory::OpenExternalSharedImage(
 
     Pal::ExternalImageOpenInfo palOpenInfo = {};
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 645
+    palOpenInfo.extent          = pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().extent;
+#endif
     palOpenInfo.swizzledFormat  = VkToPalFormat(pBoundImage->GetFormat(), pDevice->GetRuntimeSettings());
     palOpenInfo.usage           = VkToPalImageUsageFlags(pBoundImage->GetImageUsage(),
                                                          1,

@@ -195,10 +195,10 @@ public:
     const Pal::MsaaQuadSamplePattern* GetSampleLocations() const
         { return &m_info.samplePattern.locations; }
 
-     const bool CustomSampleLocationsEnabled() const
+     bool CustomSampleLocationsEnabled() const
          { return m_flags.customSampleLocations; }
 
-    const bool Force1x1ShaderRateEnabled() const
+    bool Force1x1ShaderRateEnabled() const
         { return m_flags.force1x1ShaderRate; }
 
     static void BindNullPipeline(CmdBuffer* pCmdBuffer);

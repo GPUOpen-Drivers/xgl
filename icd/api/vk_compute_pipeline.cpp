@@ -350,9 +350,7 @@ void ComputePipeline::BindToCmdBuffer(
 
     params.pipelineBindPoint = Pal::PipelineBindPoint::Compute;
     params.cs                = computeShaderInfo;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
     params.apiPsoHash        = m_apiHash;
-#endif
 
     for (uint32_t deviceIdx = 0; deviceIdx < numGroupedCmdBuffers; deviceIdx++)
     {
@@ -369,9 +367,7 @@ void ComputePipeline::BindNullPipeline(CmdBuffer* pCmdBuffer)
 
     Pal::PipelineBindParams params = {};
     params.pipelineBindPoint       = Pal::PipelineBindPoint::Compute;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
     params.apiPsoHash = Pal::InternalApiPsoHash;
-#endif
 
     for (uint32_t deviceIdx = 0; deviceIdx < numGroupedCmdBuffers; deviceIdx++)
     {

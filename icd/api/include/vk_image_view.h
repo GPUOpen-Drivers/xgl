@@ -84,7 +84,7 @@ public:
     VK_INLINE const Image* GetImage() const
         { return m_pImage; }
 
-    VK_INLINE const VkFormat GetViewFormat() const
+    VK_INLINE VkFormat GetViewFormat() const
         { return m_viewFormat; }
 
     VK_INLINE const Pal::Range GetZRange() const

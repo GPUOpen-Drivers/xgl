@@ -286,7 +286,6 @@ Device::Device(
     memset(m_overallocationRequestedForPalHeap, 0, sizeof(m_overallocationRequestedForPalHeap));
 
     m_nextPrivateDataSlot = 0;
-    m_privateDataRWLock.Init();
     m_privateDataSize = privateDataSize;
     m_privateDataSlotRequestCount = privateDataSlotRequestCount;
 }
@@ -359,7 +358,7 @@ static void ConstructQueueCreateInfo(
     pQueueCreateInfo->queueType = palQueueType;
     pQueueCreateInfo->priority  = palQueuePriority;
 
-#if defined(__unix__) && (PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 479)
+#if defined(__unix__)
     pQueueCreateInfo->enableGpuMemoryPriorities = 1;
 #endif
 }
@@ -950,8 +949,6 @@ VkResult Device::Create(
              pSubHeader = pSubHeader->pNext)
         {
 
-            uint32 totalDedicatedComputeUnits = 0;
-
             switch (static_cast<uint32>(pSubHeader->sType))
             {
             case VK_STRUCTURE_TYPE_DEVICE_QUEUE_GLOBAL_PRIORITY_CREATE_INFO_EXT:
@@ -1500,10 +1497,6 @@ VkResult Device::Initialize(
         {
             result = VK_ERROR_OUT_OF_HOST_MEMORY;
         }
-    }
-    if (result == VK_SUCCESS)
-    {
-        result = PalToVkResult(m_memoryMutex.Init());
     }
 
     const Pal::DeviceProperties& palProps = pPhysicalDevice->PalProperties();
@@ -2952,14 +2945,13 @@ VkResult Device::WaitSemaphores(
         currentSemaphore->RestoreSemaphore();
     }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 508
     if (pWaitInfo->flags == VK_SEMAPHORE_WAIT_ANY_BIT)
     {
         flags |= Pal::HostWaitFlags::HostWaitAny;
     }
     palResult = PalDevice(DefaultDeviceIndex)->WaitForSemaphores(pWaitInfo->semaphoreCount, ppPalSemaphores,
             pWaitInfo->pValues, flags, timeout);
-#endif
+
     return PalToVkResult(palResult);
 }
 
@@ -3345,12 +3337,8 @@ VkResult Device::AllocBorderColorPalette()
     if (result == VK_SUCCESS)
     {
         m_pBorderColorUsedIndexes = static_cast<bool*>(pSystemMem);
-
-        result = PalToVkResult(m_borderColorMutex.Init());
     }
-
-    if ((result != VK_SUCCESS) &&
-        (m_perGpu[0].pPalBorderColorPalette != nullptr))
+    else if (m_perGpu[0].pPalBorderColorPalette != nullptr)
     {
         VkInstance()->FreeMem(m_perGpu[0].pPalBorderColorPalette);
         m_perGpu[0].pPalBorderColorPalette = nullptr;

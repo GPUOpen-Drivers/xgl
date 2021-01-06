@@ -88,14 +88,6 @@ Pal::Result VirtualStackMgr::Create(
 }
 
 // =====================================================================================================================
-// Initializes the virtual stack manager.
-Pal::Result VirtualStackMgr::Init()
-{
-    // Initialize the lock
-    return m_lock.Init();
-}
-
-// =====================================================================================================================
 // Tears down the virtual stack manager.
 void VirtualStackMgr::Destroy()
 {

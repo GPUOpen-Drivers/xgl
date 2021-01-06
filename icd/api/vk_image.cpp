@@ -457,14 +457,17 @@ VkResult Image::Create(
     const RuntimeSettings& settings          = pDevice->GetRuntimeSettings();
     uint32_t               viewFormatCount   = 0;
     const VkFormat*        pViewFormats      = nullptr;
-    uint64_t               ahbExternalFormat = 0;
+    VkFormat               createInfoFormat  = pCreateInfo->format;
+    ImageFlags             imageFlags;
 
-    const uint32_t numDevices = pDevice->NumPalDevices();
-    const bool     isSparse   = (pCreateInfo->flags & SparseEnablingFlags) != 0;
-    const bool     hasDepthStencilAspect = Formats::IsDepthStencilFormat(pCreateInfo->format);
-    VkResult       result     = VK_SUCCESS;
+    imageFlags.u32All = 0;
 
-    ConvertImageCreateInfo(pDevice, pCreateInfo, &palCreateInfo, 0);
+    const uint32_t numDevices            = pDevice->NumPalDevices();
+    const bool     isSparse              = (pCreateInfo->flags & SparseEnablingFlags) != 0;
+    const bool     hasDepthStencilAspect = Formats::IsDepthStencilFormat(createInfoFormat);
+    VkResult       result                = VK_SUCCESS;
+
+    ConvertImageCreateInfo(pDevice, pCreateInfo, &palCreateInfo, createInfoFormat);
 
     // It indicates the stencil aspect will be read by shader, so it is only meaningful if the image contains the
     // stencil aspect. The setting of stencilShaderRead will be overrode, if
@@ -472,10 +475,6 @@ VkResult Image::Create(
     bool stencilShaderRead = palCreateInfo.usageFlags.shaderRead | palCreateInfo.usageFlags.resolveSrc;
 
     VkImageUsageFlags stencilUsage = pCreateInfo->usage;
-
-    ImageFlags imageFlags;
-
-    imageFlags.u32All = 0;
 
     if ((pCreateInfo->flags & VK_IMAGE_CREATE_PROTECTED_BIT) != 0)
     {
@@ -602,7 +601,7 @@ VkResult Image::Create(
             // Skip any entries that specify the same format as the base format of the image as the PAL interface
             // expects that to be excluded from the list.
             if (VkToPalFormat(pViewFormats[i], pDevice->GetRuntimeSettings()).format
-                != VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings()).format)
+                != VkToPalFormat(createInfoFormat, pDevice->GetRuntimeSettings()).format)
             {
                 palFormatList[palCreateInfo.viewFormatCount++] = VkToPalFormat(pViewFormats[i],
                                                                                pDevice->GetRuntimeSettings());
@@ -664,7 +663,7 @@ VkResult Image::Create(
             palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
         }
 
-        if (Formats::IsColorFormat(pCreateInfo->format))
+        if (Formats::IsColorFormat(createInfoFormat))
         {
             uint32_t bpp = Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format);
 
@@ -753,7 +752,7 @@ VkResult Image::Create(
             pCreateInfo->usage,
             Pal::PresentMode::Windowed,
             pImage,
-            pCreateInfo->format,
+            createInfoFormat,
             pCreateInfo->sharingMode,
             pCreateInfo->queueFamilyIndexCount,
             pCreateInfo->pQueueFamilyIndices,
@@ -780,7 +779,8 @@ VkResult Image::Create(
         result = Image::CreateFromAndroidHwBufferHandle(
             pDevice,
             pCreateInfo,
-            ahbExternalFormat,
+            palCreateInfo,
+            createInfoFormat,
             imageFlags,
             pImage);
 
@@ -872,7 +872,7 @@ VkResult Image::Create(
                                          pCreateInfo->queueFamilyIndexCount,
                                          pCreateInfo->pQueueFamilyIndices,
                                          pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT,
-                                         pCreateInfo->format);
+                                         createInfoFormat);
 
         // Construct API image object.
         VK_PLACEMENT_NEW (pMemory) Image(
@@ -885,7 +885,7 @@ VkResult Image::Create(
             sparseTileSize,
             palCreateInfo.mipLevels,
             palCreateInfo.arraySize,
-            pCreateInfo->format,
+            createInfoFormat,
             pCreateInfo->samples,
             pCreateInfo->usage,
             stencilUsage,
@@ -932,6 +932,7 @@ VkResult Image::Create(
 VkResult Image::CreateFromAndroidHwBufferHandle(
     Device*                                pDevice,
     const VkImageCreateInfo*               pImageCreateInfo,
+    const Pal::ImageCreateInfo&            palCreateInfo,
     uint64_t                               externalFormat,
     ImageFlags                             internalFlags,
     VkImage*                               pImage)
@@ -941,11 +942,8 @@ VkResult Image::CreateFromAndroidHwBufferHandle(
     size_t               palImgSize         = 0;
     size_t               totalSize          = 0;
     void*                pMemory            = nullptr;
-    Pal::ImageCreateInfo palCreateInfo      = {};
     Pal::Result          palResult          = Pal::Result::Success;
     const VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
-
-    ConvertImageCreateInfo(pDevice, pImageCreateInfo, &palCreateInfo, externalFormat);
 
     palImgSize = pDevice->PalDevice(DefaultDeviceIndex)->GetImageSize(palCreateInfo, &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);

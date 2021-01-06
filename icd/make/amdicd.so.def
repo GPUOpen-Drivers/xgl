@@ -26,6 +26,7 @@
 {
 global:
     vk_icdGetInstanceProcAddr;
+    vk_icdGetInstanceProcAddrSG;
     vk_icdGetPhysicalDeviceProcAddr;
     vk_icdNegotiateLoaderICDInterfaceVersion;
     vkGetInstanceProcAddr;

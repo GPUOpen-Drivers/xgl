@@ -333,6 +333,7 @@ PhysicalDevice::PhysicalDevice(
     m_supportedExtensions(),
     m_allowedExtensions(),
     m_compiler(this),
+    m_memoryUsageTracker {},
     m_pPlatformKey(nullptr)
 {
     memset(&m_limits, 0, sizeof(m_limits));
@@ -351,7 +352,7 @@ PhysicalDevice::PhysicalDevice(
     {
         m_memoryVkIndexToPalHeap[i] = Pal::GpuHeapCount; // invalid index
     }
-    memset(&m_memoryUsageTracker, 0, sizeof(m_memoryUsageTracker));
+
     memset(&m_pipelineCacheUUID, 0, VK_UUID_SIZE);
 
     for (uint32_t i = 0; i < VkMemoryHeapNum; ++i)
@@ -657,11 +658,6 @@ VkResult PhysicalDevice::Initialize()
             m_memoryUsageTracker.totalMemorySize[Pal::GpuHeapInvisible] = UINT64_MAX;
         }
 
-        result = m_memoryUsageTracker.trackerMutex.Init();
-    }
-
-    if (result == Pal::Result::Success)
-    {
         // Pal in some case can give Vulkan a heap with heapSize = 0 or multiple heaps for the same physical memory.
         // Make sure we expose only the valid heap that has a heapSize > 0 and only expose each heap once.
         // Vulkan uses memory types to communicate memory properties, so the number exposed is based on our
@@ -1063,7 +1059,6 @@ void PhysicalDevice::PopulateGpaProperties()
         m_gpaProps.properties.maxSqttSeBufferSize = m_gpaProps.palProps.features.threadTrace ?
                                                     static_cast<VkDeviceSize>(m_gpaProps.palProps.maxSqttSeBufferSize) :
                                                     0;
-
         for (uint32_t perfBlock = VK_GPA_PERF_BLOCK_BEGIN_RANGE_AMD;
                       perfBlock <= VK_GPA_PERF_BLOCK_END_RANGE_AMD;
                       ++perfBlock)
@@ -2902,12 +2897,8 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
                     vkMetadata.whitePoint.y              = static_cast<float>(colorGamut.chromaticityWhitePointY * scale);
                     vkMetadata.minLuminance              = static_cast<float>(colorGamut.minLuminance            * scale);
                     vkMetadata.maxLuminance              = static_cast<float>(colorGamut.maxLuminance);
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 512
                     vkMetadata.maxFrameAverageLightLevel = static_cast<float>(colorGamut.maxFrameAverageLightLevel);
-#endif
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 506
                     vkMetadata.maxContentLightLevel      = static_cast<float>(colorGamut.maxContentLightLevel);
-#endif
                 }
                 else
                 {
@@ -3449,12 +3440,8 @@ static bool IsConditionalRenderingSupported(
 static bool IsSingleChannelMinMaxFilteringSupported(
     const PhysicalDevice* pPhysicalDevice)
 {
-#if VK_IS_PAL_VERSION_AT_LEAST(560, 1)
     return ((pPhysicalDevice == nullptr) ||
             pPhysicalDevice->PalProperties().gfxipProperties.flags.supportSingleChannelMinMaxFilter);
-#else
-    return true;
-#endif
 }
 
 // =====================================================================================================================
@@ -3687,10 +3674,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MIXED_ATTACHMENT_SAMPLES));
         }
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 493
         if ((pPhysicalDevice == nullptr) ||
             (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportOutOfOrderPrimitives))
-#endif
         {
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_RASTERIZATION_ORDER));
         }
@@ -3902,11 +3887,7 @@ void PhysicalDevice::PopulateQueueFamilies()
                 pTransferQueueFamilyProperties = &m_queueFamilies[m_queueFamilyCount].properties;
                 palImageLayoutFlag             = Pal::LayoutDmaEngine;
                 transferGranularityOverride    = settings.transferGranularityDmaOverride;
-#if VK_IS_PAL_VERSION_AT_LEAST(465, 2)
                 m_prtOnDmaSupported            = engineProps.flags.supportsUnmappedPrtPageAccess;
-#else
-                m_prtOnDmaSupported            = true;
-#endif
                 break;
             default:
                 break; // no-op
@@ -5913,6 +5894,7 @@ void PhysicalDevice::GetDeviceGpaProperties(
         for (uint32_t perfBlock = VK_GPA_PERF_BLOCK_BEGIN_RANGE_AMD;
                       (perfBlock <= VK_GPA_PERF_BLOCK_END_RANGE_AMD) && (written < count);
                       ++perfBlock)
+
         {
             const Pal::GpuBlock gpuBlock = VkToPalGpuBlock(static_cast<VkGpaPerfBlockAMD>(perfBlock));
 

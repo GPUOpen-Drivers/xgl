@@ -202,7 +202,6 @@ void SqttMgr::PalDeveloperCallback(
         }
         break;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 471
     case Pal::Developer::CallbackType::BindPipeline:
         {
             const auto& bindPipeline = *static_cast<const Pal::Developer::BindPipelineData*>(pCbData);
@@ -220,7 +219,6 @@ void SqttMgr::PalDeveloperCallback(
             }
         }
         break;
-#endif
 
     default:
         break;

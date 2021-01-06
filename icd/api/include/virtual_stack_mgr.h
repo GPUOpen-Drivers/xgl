@@ -83,7 +83,7 @@ public:
         Instance*           pInstance,
         VirtualStackMgr**   ppVirtualStackMgr);
 
-    Pal::Result Init();
+    Pal::Result Init() { return Pal::Result::Success; }
     void Destroy();
 
     Pal::Result AcquireAllocator(VirtualStackAllocator** ppAllocator);

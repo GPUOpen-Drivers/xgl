@@ -87,27 +87,6 @@ void DebugReportCallback::Destroy(
 }
 
 // =====================================================================================================================
-// Inject a message into the debug stream from the Debug Report Callback.
-void DebugReportCallback::Message(
-    Instance*                                 pInstance,
-    VkDebugReportFlagsEXT                     flags,
-    VkDebugReportObjectTypeEXT                objectType,
-    uint64_t                                  object,
-    size_t                                    location,
-    int32_t                                   messageCode,
-    const char*                               pLayerPrefix,
-    const char*                               pMessage)
-{
-    pInstance->CallExternalCallbacks(flags,
-                                     objectType,
-                                     object,
-                                     location,
-                                     messageCode,
-                                     pLayerPrefix,
-                                     pMessage);
-}
-
-// =====================================================================================================================
 // Get the flags for this callback
 VkDebugReportFlagsEXT DebugReportCallback::GetFlags()
 {

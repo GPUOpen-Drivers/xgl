@@ -177,158 +177,123 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     {
         result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, pLayerPhysicalDevices);
     }
+#if defined(__unix__)
+
+    if (pPhysicalDevices == nullptr)
+    {
+        void* pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                  physicalDeviceCount * sizeof(VkPhysicalDevice),
+                                  sizeof(void*),
+                                  VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+
+        if (pMemory == nullptr)
+        {
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            pLayerPhysicalDevices = static_cast<VkPhysicalDevice*>(pMemory);
+        }
+
+        result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, pLayerPhysicalDevices);
+    }
 
     if (result == VK_SUCCESS)
     {
-        bool isHybridGraphics = false;
-        bool loaderCallNvLayerFirst = false;
+        bool radvExists = false;
 
-        if (physicalDeviceCount > 1)
+        // Allocate memory space to place the PhysicalDeviceProperties
+        void* pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                  physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
+                                  sizeof(void*),
+                                  VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+        VkPhysicalDeviceProperties* pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
+
+        if (pProperties == nullptr)
         {
-            isHybridGraphics = IsHybridGraphicsSupported();
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            for (uint32_t i = 0; i < physicalDeviceCount; i++)
+            {
+                // Determine whether RADV Vulkan driver exists and get all physical device properites
+                g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[i], &pProperties[i]);
+                if (((pProperties[i].vendorID == VENDOR_ID_AMD) || (pProperties[i].vendorID == VENDOR_ID_ATI)) &&
+                   (strstr(pProperties[i].deviceName, "RADV") != nullptr))
+                {
+                    radvExists = true;
+                }
+            }
         }
 
-        // For the case of HG A+N, HG I+A+eN and HG I+N+eA, loader will load both NV layer and AMD layer, the order of
-        // the two layers is important to return correct physical device to loader and apps. If loader call NV layer
-        // first, the call sequence should be like:
-        // loader -> NV layer -> AMD layer -> loader terminator function -> ICD function;
-        // If loader call AMD layer first, the call sequence should be like: loader -> AMD layer -> NV layer -> loader
-        // terminator function -> ICD function. The first layer called by loader needs to return the specified physical
-        // device for HG platforms, AMD layer should add the following logic to support the case of loader call NV
-        // first, in this case, AMD layer needs to report all physical devices to NV layer, then NV layer can have them
-        // and then filter out the correct physical device and report it to loader and apps.
-        if (isHybridGraphics)
+        if (result == VK_SUCCESS)
         {
-            void* pTmpLayerPhysicalDeviceMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                                        physicalDeviceCount * sizeof(VkPhysicalDevice),
-                                                        sizeof(void*),
-                                                        VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-            void* pPropertiesMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                                    physicalDeviceCount * sizeof(VkPhysicalDeviceProperties),
-                                                    sizeof(void*),
-                                                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-            VkPhysicalDevice* pTmpLayerPhysicalDevice = static_cast<VkPhysicalDevice*>(pTmpLayerPhysicalDeviceMemory);
-            VkPhysicalDeviceProperties* pProperties = static_cast<VkPhysicalDeviceProperties*>(pPropertiesMemory);
+            if ((physicalDeviceCount > 1) && radvExists)
+            {
+                // Return specified physical devices according to environment variable AMD_VULKAN_ICD
+                const char* pEnv = getenv("AMD_VULKAN_ICD");
+                size_t reportPhysicalDeviceCount = 0;
 
-            if ((pTmpLayerPhysicalDevice == nullptr) || (pProperties == nullptr))
-            {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-            }
-            else
-            {
-                result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance,
-                                                                     &physicalDeviceCount,
-                                                                     pTmpLayerPhysicalDevice);
-                if (result == VK_SUCCESS)
+                if ((pEnv != nullptr) && (strcmp(pEnv, "RADV") == 0))
                 {
+                    // Environment variable AMD_VULKAN_ICD = RADV indicates apps want to use RADV driver
+                    // So only reports RADV returned physical devices
                     for (uint32_t i = 0; i < physicalDeviceCount; i++)
                     {
-                       g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pTmpLayerPhysicalDevice[i], &pProperties[i]);
-                    }
-                }
-            }
-
-            if ((result == VK_SUCCESS) && (physicalDeviceCount == 2))
-            {
-                // For HG A+N platform, if NVIDIA device is the second device, then loader will call NV layer first
-                if (pProperties[physicalDeviceCount - 1].vendorID == VENDOR_ID_NVIDIA)
-                {
-                    loaderCallNvLayerFirst = true;
-                }
-            }
-
-            if ((result == VK_SUCCESS) && (physicalDeviceCount >= 3))
-            {
-                // For HG I+N+A and HG I+A+N, the last physical device is always Intel device, if NVIDIA device
-                // is next to Intel device, then loader will call NV layer first
-                if ((pProperties[physicalDeviceCount - 1].vendorID == VENDOR_ID_INTEL) &&
-                    (pProperties[physicalDeviceCount - 2].vendorID == VENDOR_ID_NVIDIA))
-                {
-                    loaderCallNvLayerFirst = true;
-                }
-            }
-
-            if ((result == VK_SUCCESS) && (physicalDeviceCount >= 2) && (!loaderCallNvLayerFirst))
-            {
-                if (pPhysicalDevices != nullptr)
-                {
-                    pPhysicalDevices[0] = pLayerPhysicalDevices[0];
-
-                    VkPhysicalDeviceProperties properties = {};
-                    uint32_t vendorId = 0;
-                    uint32_t deviceId = 0;
-                    QueryOsSettingsForApplication(&vendorId, &deviceId);
-
-                    for (uint32_t i = 0; i < physicalDeviceCount; i++)
-                    {
-                        g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[i], &properties);
-                        if ((properties.vendorID == vendorId) && (properties.deviceID == deviceId))
+                        // Don't report AMD Vulkan driver returned physical devices
+                        if (((pProperties[i].vendorID != VENDOR_ID_AMD) && (pProperties[i].vendorID != VENDOR_ID_ATI)) ||
+                            (strstr(pProperties[i].deviceName, "RADV") != nullptr))
                         {
-                            pPhysicalDevices[0] = pLayerPhysicalDevices[i];
-                            break;
+                            if (pPhysicalDevices != nullptr)
+                            {
+                                pPhysicalDevices[reportPhysicalDeviceCount] = pLayerPhysicalDevices[i];
+                            }
+                            reportPhysicalDeviceCount++;
                         }
                     }
                 }
-
-                // Always report physical device count as 1 for hybrid graphics when loader call AMD layer first
-                *pPhysicalDeviceCount = 1;
-            }
-
-            if (pTmpLayerPhysicalDevice != nullptr)
-            {
-                pAllocCb->pfnFree(pAllocCb->pUserData, pTmpLayerPhysicalDevice);
-            }
-
-            if (pProperties != nullptr)
-            {
-                pAllocCb->pfnFree(pAllocCb->pUserData, pProperties);
-            }
-        }
-        else if ((pPhysicalDevices != nullptr) && (physicalDeviceCount == 2))
-        {
-            // On some intel+amd platform(non-hybrid) Amd Gpu will be first physical device, while Intel Gpu
-            // will be first on some others. We need to set the one that is referred as default one by Os
-            // to fisrt physical device.
-            VkPhysicalDeviceProperties properties = {};
-            g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[0], &properties);
-
-            if (properties.vendorID == VENDOR_ID_INTEL)
-            {
-                uint32_t d3dZerothVendorId = 0;
-                uint32_t d3dZerothDeviceId = 0;
-                QueryOsSettingsForApplication(&d3dZerothVendorId, &d3dZerothDeviceId);
-
-                for (uint32_t i = 1; i < physicalDeviceCount; i++)
+                else
                 {
-                    g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[i], &properties);
-
-                    if (((properties.vendorID == d3dZerothVendorId) && (properties.deviceID == d3dZerothDeviceId)) &&
-                        ((properties.vendorID == VENDOR_ID_AMD) || (properties.vendorID == VENDOR_ID_ATI)))
+                    // In this case, apps want to use AMD Vulkan driver instead of RADV
+                    for (uint32_t i = 0; i < physicalDeviceCount; i++)
                     {
-                        VkPhysicalDevice tmpPhysDevice = pLayerPhysicalDevices[i];
-                        pLayerPhysicalDevices[i] = pLayerPhysicalDevices[0];
-                        pLayerPhysicalDevices[0] = tmpPhysDevice;
-                        break;
+                        // Don't report RADV driver returned physical devices
+                        if (((pProperties[i].vendorID != VENDOR_ID_AMD) && (pProperties[i].vendorID != VENDOR_ID_ATI)) ||
+                            (strstr(pProperties[i].deviceName, "RADV") == nullptr))
+                        {
+                            if (pPhysicalDevices != nullptr)
+                            {
+                                pPhysicalDevices[reportPhysicalDeviceCount] = pLayerPhysicalDevices[i];
+                            }
+                            reportPhysicalDeviceCount++;
+                        }
                     }
                 }
+                // Modify the PhysicalDeviceCount
+                *pPhysicalDeviceCount = reportPhysicalDeviceCount;
+            }
+            else
+            {
+                // Return all the physical devices to apps
+                if (pPhysicalDevices != nullptr)
+                {
+                    for (uint32_t i = 0; i < physicalDeviceCount; i++)
+                    {
+                        pPhysicalDevices[i] = pLayerPhysicalDevices[i];
+                    }
+                }
+                *pPhysicalDeviceCount = physicalDeviceCount;
             }
         }
 
-        if (!isHybridGraphics || loaderCallNvLayerFirst)
+        if (pProperties != nullptr)
         {
-            // If it is not HG platform or loader call NV layer at first, report all the physical devices to
-            // upper layer or loader
-            *pPhysicalDeviceCount = physicalDeviceCount;
-            if (pPhysicalDevices != nullptr)
-            {
-                for (uint32_t i = 0; i < physicalDeviceCount; i++)
-                {
-                    pPhysicalDevices[i] = pLayerPhysicalDevices[i];
-                }
-            }
+            // Free previous allocated PhysicalDeviceProperties memory
+            pAllocCb->pfnFree(pAllocCb->pUserData, pProperties);
         }
     }
-
+#endif
     if (pLayerPhysicalDevices != nullptr)
     {
         pAllocCb->pfnFree(pAllocCb->pUserData, pLayerPhysicalDevices);

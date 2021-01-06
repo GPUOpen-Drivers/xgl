@@ -186,7 +186,6 @@ void ResourceOptimizer::BuildAppProfile()
 {
     const AppProfile        appProfile = m_pDevice->GetAppProfile();
     const Pal::GfxIpLevel   gfxIpLevel = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
-    const Pal::AsicRevision asicRevision = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().revision;
 
     uint32_t i = 0;
 
@@ -242,6 +241,7 @@ void ResourceOptimizer::BuildAppProfile()
     }
     else if (appProfile == AppProfile::WolfensteinII)
     {
+        // The resource profile created by disabling DCC for usage containing:
         //     VK_IMAGE_USAGE_STORAGE_BIT & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
         // except for format:
         //     VK_FORMAT_R8G8B8A8_UNORM

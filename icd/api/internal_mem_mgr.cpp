@@ -87,14 +87,8 @@ VkResult InternalMemMgr::Init()
 {
     VkResult result = VK_SUCCESS;
 
-    // Initialize memory manager lock
-    Pal::Result palResult = m_allocatorLock.Init();
-
-    if (palResult == Pal::Result::Success)
-    {
-        // Initialize pool list map
-        palResult = m_poolListMap.Init();
-    }
+    // Initialize pool list map
+    Pal::Result palResult = m_poolListMap.Init();
 
     if (palResult == Pal::Result::Success)
     {

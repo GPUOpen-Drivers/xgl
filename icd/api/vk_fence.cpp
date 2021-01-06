@@ -251,9 +251,7 @@ VkResult Fence::GetFenceFd(
 
     Pal::FenceExportInfo exportInfo = {};
     exportInfo.flags.isReference   = (pGetFdInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_OPAQUE_FD_BIT_KHR);
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 566
     exportInfo.flags.implicitReset = (pGetFdInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR);
-#endif
     *pFd  = PalFence(DefaultDeviceIndex)->ExportExternalHandle(exportInfo);
 
     return VkResult::VK_SUCCESS;

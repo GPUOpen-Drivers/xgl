@@ -48,12 +48,6 @@ public:
         Instance*                                   pInstance,
         const VkAllocationCallbacks*                pAllocator);
 
-    void Message(
-        Instance*                                   pInstance,
-        VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
-        VkDebugUtilsMessageTypeFlagsEXT             messageTypes,
-        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData);
-
     VkDebugUtilsMessageSeverityFlagsEXT  GetMessageSeverityFlags();
     VkDebugUtilsMessageTypeFlagsEXT      GetMessageTypeFlags();
 

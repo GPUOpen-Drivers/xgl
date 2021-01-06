@@ -291,6 +291,57 @@ private:
     void*                m_pCommonPools[InternalPoolCount];    // Commonly used memory pools
 };
 
+// =====================================================================================================================
+// Helper class for mapping vram in an RAII fashion
+class MappedInternalMemoryAddr
+{
+public:
+    // Default Constructor: Valid (safely destructable) but unusable state.
+    MappedInternalMemoryAddr() noexcept {}
+
+    // Destructor: Only destroy the pointer we mapped. Assume m_pVidMem is externally managed.
+    ~MappedInternalMemoryAddr() noexcept
+    {
+        if (IsMapped() &&
+            Util::IsErrorResult(m_pVidMem->Unmap(m_deviceIdx)))
+        {
+            VK_ALERT_ALWAYS_MSG("Unable to unmap CPU address");
+        }
+    }
+
+    // Copy and Move semantics are Disabled.
+    MappedInternalMemoryAddr(const MappedInternalMemoryAddr&) = delete;
+    MappedInternalMemoryAddr(MappedInternalMemoryAddr&&) = delete;
+    MappedInternalMemoryAddr& operator=(const MappedInternalMemoryAddr&) = delete;
+    MappedInternalMemoryAddr& operator=(MappedInternalMemoryAddr&&) = delete;
+
+    // Attempts to map video memory. On failure the object remains safely descrutable
+    void Init(InternalMemory* pMappableMem, uint32_t deviceIdx) noexcept
+    {
+        VK_ASSERT(pMappableMem != nullptr);
+
+        if (Util::IsErrorResult(pMappableMem->Map(deviceIdx, &m_pCpuAddr)) == false)
+        {
+            m_pVidMem   = pMappableMem;
+            m_deviceIdx = deviceIdx;
+        }
+        else
+        {
+            VK_ALERT_ALWAYS_MSG("Unable to map InternalMemory to CPU address");
+        }
+    }
+
+    // Accessors to the mapped memory
+    bool     IsMapped() const noexcept { return m_pCpuAddr != nullptr; }
+    void*    Get()      const noexcept { return m_pCpuAddr; }
+    uint64_t Size()     const noexcept { return this->IsMapped() ? m_pVidMem->Size() : 0; }
+
+private:
+    void*           m_pCpuAddr  = nullptr;
+    InternalMemory* m_pVidMem   = nullptr;
+    uint32_t        m_deviceIdx = 0;
+};
+
 } // namespace vk
 
 #endif /* __INTERNAL_MEM_MGR_H__ */

@@ -1,0 +1,43 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "ps": {
+          "stageActive": true,
+          "codeHash": "0xd401b57b99f03e25 290d42ad8f52f8a6"
+        }
+      },
+      "action": {
+        "ps": {
+          "waveSize": 32
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x4885c362e168f99b ffaf92b47e9ef9fa"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x6af73682cd6c345e 93909280c3645d3b"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    }
+  ]
+}

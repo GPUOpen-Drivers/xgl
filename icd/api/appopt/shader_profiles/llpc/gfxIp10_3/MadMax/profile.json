@@ -1,0 +1,30 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x2bd30ad00a5af320 df10f846e20fdced"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0xa483cbf9bbd456da a8ec09bf2e5f3a7f"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    }
+  ]
+}

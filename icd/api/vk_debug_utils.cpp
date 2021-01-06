@@ -87,19 +87,6 @@ void DebugUtilsMessenger::Destroy(
 }
 
 // =====================================================================================================================
-// Inject a message into the debug stream from the Debug Report Callback.
-void DebugUtilsMessenger::Message(
-    Instance*                                   pInstance,
-    VkDebugUtilsMessageSeverityFlagBitsEXT      messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT             messageTypes,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData)
-{
-    pInstance->CallExternalMessengers(messageSeverity,
-                                      messageTypes,
-                                      pCallbackData);
-}
-
-// =====================================================================================================================
 // Get the message severity flags for this callback
 VkDebugUtilsMessageSeverityFlagsEXT DebugUtilsMessenger::GetMessageSeverityFlags()
 {

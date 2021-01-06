@@ -1559,6 +1559,53 @@
       "Name": "SkipUnsupportedOpCode"
     },
     {
+      "Description": "A bitmask of flags that control relaxed precision features.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": "RelaxedPrecisionNone"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "RelaxedPrecisionNone",
+            "Value": 0,
+            "Description": "Disable relaxed precision handling."
+          },
+          {
+            "Name": "RelaxedPrecisionEnabled",
+            "Value": 1,
+            "Description": "Enable generic relaxed precision handling (required for other settings)."
+          },
+          {
+            "Name": "RelaxedPrecisionRelaxDefaultUniform",
+            "Value": 2,
+            "Description": "Force default uniform to 16-bit type if decorated with relaxed precision."
+          },
+          {
+            "Name": "RelaxedPrecisionKeepAllOutput",
+            "Value": 4,
+            "Description": "Align all fragment shader input to pre-stage output precision when in-out precision does not match."
+          },
+          {
+            "Name": "RelaxedPrecisionIgnoreSrcOperand",
+            "Value": 8,
+            "Description": "Ignore the relaxed precision limitation of source operands, this will relax the rule of determining whether the conversion can be performed."
+          }
+        ],
+        "Name": "RelaxedPrecisionFlags"
+      },
+      "Type": "uint32",
+      "Name": "RelaxedPrecisionFlags",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Force vertex shaders' optimization IR mode selection.",
       "Tags": [
         "SPIRV Options"
@@ -4330,6 +4377,7 @@
       "Defaults": {
         "Default": true
       },
+      "Scope": "Driver",
       "Type": "bool",
       "Name": "EnableWholePipelineOptimization"
     },
@@ -4351,6 +4399,7 @@
           }
         ]
       },
+      "Scope": "Driver",
       "Type": "bool",
       "Name": "EnablePackVsPsAttrs"
     },

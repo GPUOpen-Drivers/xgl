@@ -283,6 +283,18 @@ constexpr AppProfilePatternEntry AppNameShadowOfTheTombRaider =
     "shadowofthetomb"
 };
 
+constexpr AppProfilePatternEntry AppNameXPlane =
+{
+    PatternAppNameLower,
+    "x-plane"
+};
+
+constexpr AppProfilePatternEntry AppEngineXSystem =
+{
+    PatternEngineNameLower,
+    "x-system"
+};
+
 constexpr AppProfilePatternEntry AppNameSaschaWillemsExamples =
 {
     PatternAppNameLower,
@@ -607,6 +619,23 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::Feral3DEngine,
         {
             AppEngineFeral3D,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::XPlane,
+        {
+            AppNameXPlane,
+            AppEngineXSystem,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::XSystemEngine,
+        {
+            AppEngineXSystem,
             PatternEnd
         }
     },
@@ -1023,7 +1052,6 @@ void ProcessProfileEntry(
         bool*          pBoolSetting   = nullptr;
         uint32_t*      pUint32Setting = nullptr;
         float*         pFloatSetting  = nullptr;
-        bool           assertOnZero   = false;
         bool           doNotSetOnZero = false;
 
         if (strcmp(entryName, "TFQ") == 0)
@@ -1043,12 +1071,6 @@ void ProcessProfileEntry(
         else if (pUint32Setting != nullptr)
         {
             uint32_t dataValue = ParseProfileDataToUint32(wcharData, isUser3DAreaFormat, appGpuID);
-#if DEBUG
-            if (assertOnZero)
-            {
-                VK_ASSERT(dataValue != 0);
-            }
-#endif
             if ((doNotSetOnZero == false) ||
                 (dataValue != 0))
             {

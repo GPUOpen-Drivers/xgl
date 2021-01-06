@@ -198,6 +198,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Enable NGG culling by default for Navi2x.
             m_settings.nggEnableBackfaceCulling = true;
             m_settings.nggEnableSmallPrimFilter = true;
+            m_settings.nggCompactionMode = NggCompactDisable;
 
         }
 
@@ -208,6 +209,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if ((m_pDevice->GetGpuMemoryHeapProperties(heapProperties) == Pal::Result::Success) &&
             (heapProperties[Pal::GpuHeapLocal].heapSize > minLocalSize))
         {
+            if ((appProfile != AppProfile::WorldWarZ)
+               )
             {
                 m_settings.cmdAllocatorDataHeap     = Pal::GpuHeapLocal;
                 m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
@@ -917,12 +920,9 @@ void VulkanSettingsLoader::UpdatePalSettings()
     // if one of the built in clear colors are used (white/black) and the image is TCC compatible.
     pPalSettings->disableSkipFceOptimization = false;
 
-#if VK_IS_PAL_VERSION_AT_LEAST(548, 1)
     // For vulkan driver, forceDepthClampBasedOnZExport should be false by default, this is required to pass depth_range_unrestricted CTS tests
     // Set it to true for applications that have perf drops
     pPalSettings->depthClampBasedOnZExport = m_settings.forceDepthClampBasedOnZExport;
-#endif
-
     pPalSettings->cpDmaCmdCopyMemoryMaxBytes = m_settings.cpDmaCmdCopyMemoryMaxBytes;
 
 }

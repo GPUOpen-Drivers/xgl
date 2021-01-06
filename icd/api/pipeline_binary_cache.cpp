@@ -78,7 +78,6 @@ const uint32_t PipelineBinaryCache::ElfType     = Util::HashString(ElfTypeString
 static Util::Hash128 ParseHash128(const char* str);
 #endif
 
-
 bool PipelineBinaryCache::IsValidBlob(
     VkAllocationCallbacks* pAllocationCallbacks,
     Util::IPlatformKey*    pKey,
@@ -540,14 +539,11 @@ VkResult PipelineBinaryCache::Initialize(
 {
     VkResult result = VK_SUCCESS;
 
-    m_entriesMutex.Init();
-
-    if (result == VK_SUCCESS)
+    if (pKey != nullptr)
     {
         m_pPlatformKey = pKey;
     }
-
-    if (m_pPlatformKey == nullptr)
+    else
     {
         result = VK_ERROR_INITIALIZATION_FAILED;
     }
@@ -573,11 +569,6 @@ VkResult PipelineBinaryCache::Initialize(
         if (palResult == Util::Result::Success)
         {
             palResult = m_hashMapping.Init();
-        }
-
-        if (palResult == Util::Result::Success)
-        {
-            palResult = m_hashMappingLock.Init();
         }
 
         if (palResult != Util::Result::Success)
@@ -1030,7 +1021,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                 if (Util::Snprintf(pathBuffer, sizeof(pathBuffer), "%s%s", pUserDataPath, pCacheSubPath) > 0)
                 {
                     pCachePath = pathBuffer;
-#if VK_IS_PAL_VERSION_AT_LEAST(582, 2)
+
                     if (settings.allowCleanUpCacheDirectory)
                     {
                         uint64 totalSize = 0, oldestTime = 0;
@@ -1042,7 +1033,6 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                             }
                         }
                     }
-#endif
                     result = VK_SUCCESS;
                 }
             }
@@ -1289,7 +1279,6 @@ VkResult PipelineBinaryCache::Serialize(
 {
     VkResult result = VK_ERROR_INITIALIZATION_FAILED;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 534
     if (m_pMemoryLayer != nullptr)
     {
         if (*pSize == 0)
@@ -1338,7 +1327,6 @@ VkResult PipelineBinaryCache::Serialize(
             }
         }
     }
-#endif
     return result;
 }
 
@@ -1351,7 +1339,6 @@ VkResult PipelineBinaryCache::Merge(
 {
     VkResult result = VK_ERROR_INITIALIZATION_FAILED;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 534
     if (m_pMemoryLayer != nullptr)
     {
         for (uint32_t i = 0; i < srcCacheCount; i++)
@@ -1387,7 +1374,6 @@ VkResult PipelineBinaryCache::Merge(
             }
         }
     }
-#endif
 
     return result;
 }

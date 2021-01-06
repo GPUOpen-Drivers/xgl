@@ -311,11 +311,12 @@ private:
         ResourceOptimizerKey*    pResourceKey);
 
     static VkResult CreateFromAndroidHwBufferHandle(
-        Device*                  pDevice,
-        const VkImageCreateInfo* pImageCreateInfo,
-        uint64_t                 externalFormat,
-        ImageFlags               internalFlags,
-        VkImage*                 pImage);
+        Device*                     pDevice,
+        const VkImageCreateInfo*    pImageCreateInfo,
+        const Pal::ImageCreateInfo& palCreateInfo,
+        uint64_t                    externalFormat,
+        ImageFlags                  internalFlags,
+        VkImage*                    pImage);
 
     uint32_t                m_mipLevels;          // This is the amount of mip levels contained in the image.
                                                   // We need this to support VK_WHOLE_SIZE during

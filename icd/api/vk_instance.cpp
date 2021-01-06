@@ -332,13 +332,6 @@ VkResult Instance::Init(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    // Initialize mutexes used for debug report extension before registering the callback with the Platform.
-    if ((m_logCallbackInternalOnlyMutex.Init() != Pal::Result::Success) ||
-        (m_logCallbackInternalExternalMutex.Init() != Pal::Result::Success))
-    {
-        return VK_ERROR_INITIALIZATION_FAILED;
-    }
-
     // Thunk PAL's memory allocator callbacks to our own
     const Util::AllocCallbacks allocCb =
     {

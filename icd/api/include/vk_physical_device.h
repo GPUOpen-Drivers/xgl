@@ -228,7 +228,7 @@ public:
         return m_queueFamilies[queueFamilyIndex].palImageLayoutFlag;
     }
 
-    VK_INLINE const VkShaderStageFlags GetValidShaderStages(
+    VK_INLINE VkShaderStageFlags GetValidShaderStages(
         uint32_t queueFamilyIndex) const
     {
         return m_queueFamilies[queueFamilyIndex].validShaderStages;

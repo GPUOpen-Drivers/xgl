@@ -43,6 +43,7 @@
 #include "sqtt/sqtt_mgr.h"
 
 // PAL headers
+#include "pal.h"
 #include "palCmdAllocator.h"
 #include "palFence.h"
 #include "palQueueSemaphore.h"
@@ -382,16 +383,11 @@ VkResult DevModeMgr::Create(
 // Initializes the devmode manager based on the current client flags.
 Pal::Result DevModeMgr::Init()
 {
-    Pal::Result result = m_traceMutex.Init();
+    Pal::Result result = Pal::Result::Success;
 
     if (m_pDevDriverServer != nullptr)
     {
         m_pRGPServer = m_pDevDriverServer->GetRGPServer();
-    }
-
-    if (result == Pal::Result::Success)
-    {
-        m_pipelineReinjectionLock.Init();
     }
 
     return result;
@@ -2282,9 +2278,7 @@ Pal::Result DevModeMgr::InitRGPTracing(
                 pPalDevice,
                 VK_VERSION_MAJOR(apiVersion),
                 VK_VERSION_MINOR(apiVersion),
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 575
                 GpuUtil::ApiType::Vulkan,
-#endif
                 RgpSqttInstrumentationSpecVersion,
                 RgpSqttInstrumentationApiVersion);
         }
@@ -2420,22 +2414,14 @@ Pal::Result DevModeMgr::TimedSignalQueueSemaphore(
         GpuUtil::TimedQueueSemaphoreInfo timedSemaphoreInfo = {};
 
         timedSemaphoreInfo.semaphoreID = (uint64_t)semaphore;
-
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         result = m_trace.pGpaSession->TimedSignalQueueSemaphore(pPalQueue, pQueueSemaphore, timedSemaphoreInfo, value);
-#else
-        result = m_trace.pGpaSession->TimedSignalQueueSemaphore(pPalQueue, pQueueSemaphore, timedSemaphoreInfo);
-#endif
+
         VK_ASSERT(result == Pal::Result::Success);
     }
 
     if (result != Pal::Result::Success)
     {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         result = pPalQueue->SignalQueueSemaphore(pQueueSemaphore, value);
-#else
-        result = pPalQueue->SignalQueueSemaphore(pQueueSemaphore);
-#endif
     }
 
     return result;
@@ -2458,21 +2444,14 @@ Pal::Result DevModeMgr::TimedWaitQueueSemaphore(
         GpuUtil::TimedQueueSemaphoreInfo timedSemaphoreInfo = {};
 
         timedSemaphoreInfo.semaphoreID = (uint64_t)semaphore;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         result = m_trace.pGpaSession->TimedWaitQueueSemaphore(pPalQueue, pQueueSemaphore, timedSemaphoreInfo, value);
-#else
-        result = m_trace.pGpaSession->TimedWaitQueueSemaphore(pPalQueue, pQueueSemaphore, timedSemaphoreInfo);
-#endif
+
         VK_ASSERT(result == Pal::Result::Success);
     }
 
     if (result != Pal::Result::Success)
     {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 458
         result = pPalQueue->WaitQueueSemaphore(pQueueSemaphore, value);
-#else
-        result = pPalQueue->WaitQueueSemaphore(pQueueSemaphore);
-#endif
     }
 
     return result;
@@ -2583,14 +2562,10 @@ void DevModeMgr::PipelineCreated(
         m_trace.pDevice->GetRuntimeSettings().devModeShaderIsaDbEnable &&
         (m_trace.pGpaSession != nullptr))
     {
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 460
-        m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex));
-#else
         GpuUtil::RegisterPipelineInfo pipelineInfo = { 0 };
         pipelineInfo.apiPsoHash = pPipeline->GetApiHash();
 
         m_trace.pGpaSession->RegisterPipeline(pPipeline->PalPipeline(DefaultDeviceIndex), pipelineInfo);
-#endif
     }
 }
 

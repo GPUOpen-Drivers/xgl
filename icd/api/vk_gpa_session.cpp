@@ -95,9 +95,7 @@ GpaSession::GpaSession(
         pDevice->PalDevice(DefaultDeviceIndex),
         0,
         0,
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 575
         GpuUtil::ApiType::Vulkan,
-#endif
         0)
 {
 

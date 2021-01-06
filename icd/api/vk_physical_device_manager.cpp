@@ -108,14 +108,7 @@ VkResult PhysicalDeviceManager::Create(
 // =====================================================================================================================
 VkResult PhysicalDeviceManager::Initialize()
 {
-    VkResult result = PalToVkResult(m_devicesLock.Init());
-
-    if (result == VK_SUCCESS)
-    {
-        result = UpdateLockedPhysicalDeviceList();
-    }
-
-    return result;
+    return UpdateLockedPhysicalDeviceList();
 }
 
 // =====================================================================================================================

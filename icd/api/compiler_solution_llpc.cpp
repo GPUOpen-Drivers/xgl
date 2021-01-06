@@ -210,7 +210,6 @@ VkResult CompilerSolutionLlpc::CreatePartialPipelineBinary(
 
     if (result == VK_SUCCESS)
     {
-        auto pShaderModuleDataEx = reinterpret_cast<Vkgc::ShaderModuleDataEx*>(pShaderModuleData);
         if (pShaderModuleEntryData->stage == Vkgc::ShaderStageCompute)
         {
             Vkgc::ComputePipelineBuildInfo pipelineBuildInfo = {};

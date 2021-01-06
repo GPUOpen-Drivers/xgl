@@ -870,17 +870,24 @@ PFN_vkUpdateDescriptorSets DescriptorUpdate::GetUpdateDescriptorSetsFunc(
     PFN_vkUpdateDescriptorSets pFunc = nullptr;
 
     if ((imageDescSize == 32) &&
-        (fmaskDescSize == 32) &&
         (samplerDescSize == 16) &&
         (bufferDescSize == 16))
     {
-        pFunc = &UpdateDescriptorSets<
-            32,
-            32,
-            16,
-            16,
-            numPalDevices,
-            fmaskBasedMsaaReadEnabled>;
+        if (fmaskDescSize == 32)
+        {
+            pFunc = &UpdateDescriptorSets<
+                32,
+                32,
+                16,
+                16,
+                numPalDevices,
+                fmaskBasedMsaaReadEnabled>;
+        }
+        else
+        {
+            VK_NEVER_CALLED();
+            pFunc = nullptr;
+        }
     }
     else
     {
