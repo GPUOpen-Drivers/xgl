@@ -35,8 +35,8 @@ include(LLVMConfig)
 
 # Find all the LLVM libraries necessary to use the LLVM components that we use.
 # See https://llvm.org/docs/CMake.html#embedding-llvm-in-your-project.
-llvm_map_components_to_libnames(llvm_libs Support)
-target_link_libraries(cache_creator_lib INTERFACE pal ${llvm_libs})
+llvm_map_components_to_libnames(llvm_libs Object Support)
+target_link_libraries(cache_creator_lib INTERFACE pal xgl_cache_support ${llvm_libs})
 
 target_include_directories(cache_creator_lib INTERFACE
     ${XGL_LLVM_SRC_PATH}/include
@@ -47,8 +47,11 @@ get_target_property(XGL_COMPILE_OPTIONS xgl COMPILE_OPTIONS)
 get_target_property(XGL_COMPILE_DEFINITIONS xgl COMPILE_DEFINITIONS)
 
 # Compile with the same flags and definitions as the ICD and LLVM.
-target_compile_definitions(cache_creator_lib INTERFACE ${LLVM_DEFINITIONS})
-target_compile_definitions(cache_creator_lib INTERFACE ${XGL_COMPILE_DEFINITIONS})
+target_compile_definitions(cache_creator_lib INTERFACE
+    ${LLVM_DEFINITIONS}
+    ${XGL_COMPILE_DEFINITIONS}
+    CC_LLPC_MAJOR_VERSION=${LLPC_MAJOR_VERSION}
+)
 target_compile_options(cache_creator_lib INTERFACE ${XGL_COMPILE_OPTIONS})
 
 target_sources(cache_creator_lib INTERFACE cache_creator.cpp)
