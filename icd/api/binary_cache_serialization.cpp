@@ -54,7 +54,7 @@
 * @brief Implementation of pipeline binary cache serialization in the xgl_cache_support library.
 ***********************************************************************************************************************
 */
-#include "binary_cache_serialization.h"
+#include "include/binary_cache_serialization.h"
 
 #include "palAssert.h"
 #include "palInlineFuncs.h"
