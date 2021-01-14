@@ -67,10 +67,17 @@ target_link_libraries(cache-creator PRIVATE cache_creator_lib)
 # Build cache-creator whenever we build XGL.
 add_dependencies(xgl cache-creator)
 
-# TODO: Add unit tests.
-
 if(XGL_BUILD_LIT)
     message(STATUS "Building cache creator LIT tests")
     set(CACHE_CREATOR_TOOLS_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
     add_subdirectory(test "${CMAKE_CURRENT_BINARY_DIR}/test/cache-creator")
 endif()
+
+# This executable runs cache-creator unit tests.
+add_executable(cache-creator-unit-tests)
+target_sources(cache-creator-unit-tests PRIVATE
+    units/cache_creator_units_main.cpp
+    units/cache_creator_tests.cpp
+)
+target_include_directories(cache-creator-unit-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(cache-creator-unit-tests PRIVATE cache_creator_lib)
