@@ -1,0 +1,43 @@
+name: Check XGL
+
+on:
+  push:
+    branches:
+      - '*'
+      - '!master'
+  pull_request:
+
+jobs:
+  build-and-test:
+    name: "Features: ${{ matrix.feature-set }}, assertions: ${{ matrix.assertions }}"
+    runs-on: ${{ matrix.host-os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        host-os:             ["ubuntu-20.04"]
+        base-image-template: ["gcr.io/stadia-open-source/amdvlk_%s%s_%s:nightly"]
+        config:              [Release]
+        assertions:          ["OFF", "ON"]
+        feature-set:         ["+gcc", "+clang"]
+    steps:
+      - name: Checkout XGL
+        run: |
+          git clone https://github.com/${GITHUB_REPOSITORY}.git .
+          git fetch origin +${GITHUB_SHA}:${GITHUB_REF} --update-head-ok
+          git checkout ${GITHUB_SHA}
+      - name: Generate Docker base image tag string
+        run: |
+          CONFIG_LOWER=$(echo "${{ matrix.config }}" | tr "[:upper:]" "[:lower:]")
+          FEATURES_LOWER=$(echo "${{ matrix.feature-set }}" | tr "+" "_")
+          ASSERTS_LOWER=$(echo "${{ matrix.assertions }}" | tr "[:upper:]" "[:lower:]")
+          TAG=$(printf "${{ matrix.base-image-template }}" "$CONFIG_LOWER" "$FEATURES_LOWER" "$ASSERTS_LOWER")
+          echo "IMAGE_TAG=$TAG" | tee -a $GITHUB_ENV
+      - name: Fetch the latest prebuilt AMDVLK
+        run: docker pull "$IMAGE_TAG"
+      - name: Build and Test with Docker
+        run: docker build . --file tools/cache_creator/docker/check_xgl.Dockerfile
+                            --build-arg AMDVLK_IMAGE="$IMAGE_TAG"
+                            --build-arg XGL_REPO_NAME="${GITHUB_REPOSITORY}"
+                            --build-arg XGL_REPO_REF="${GITHUB_REF}"
+                            --build-arg XGL_REPO_SHA="${GITHUB_SHA}"
+                            --tag xgl/xgl-ci
