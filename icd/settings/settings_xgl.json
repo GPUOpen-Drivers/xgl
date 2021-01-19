@@ -1866,7 +1866,7 @@
     },
     {
       "Name": "AllowVkPipelineCachingToDisk",
-      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for saving shader ELFs. (Default: TRUE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
+      "Description": "Controls whether the pipeline compiler enables internal pipeline caching. This also allows the Vulkan application to get a Vulkan Pipeline Cache object based on internal caches, without creating an application-managed Vulkan Pipeline Cache. (Default: TRUE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
       "Tags": [
         "SPIRV Options"
       ],
@@ -1877,6 +1877,19 @@
       },
       "Type": "bool",
       "VariableName": "usePalPipelineCaching",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "EnableInternalPipelineCachingToDisk",
+      "Description": "Controls whether the pipeline compiler enables Pal's archive-file based caching for internal pipelines. (Default: TRUE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Type": "bool",
+      "VariableName": "enableOnDiskInternalPipelineCaches",
       "Scope": "Driver"
     },
     {
