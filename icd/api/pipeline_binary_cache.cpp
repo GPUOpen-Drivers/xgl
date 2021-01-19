@@ -125,7 +125,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
 #endif
     size_t                    initDataSize,
     const void*               pInitData,
-    bool                      internal
+    bool                      createArchiveLayers
     )
 {
     VK_ASSERT(pAllocationCallbacks != nullptr);
@@ -137,13 +137,13 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
                                                                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
     if (pMem != nullptr)
     {
-        pObj = VK_PLACEMENT_NEW(pMem) PipelineBinaryCache(pAllocationCallbacks, gfxIp, internal);
+        pObj = VK_PLACEMENT_NEW(pMem) PipelineBinaryCache(pAllocationCallbacks, gfxIp);
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
         pObj->m_pDevModeMgr = pDevModeMgr;
 #endif
 
-        if (pObj->Initialize(settings, pDefaultCacheFilePath, pKey) != VK_SUCCESS)
+        if (pObj->Initialize(settings, createArchiveLayers, pDefaultCacheFilePath, pKey) != VK_SUCCESS)
         {
             pObj->Destroy();
             pObj = nullptr;
@@ -187,8 +187,7 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
 // =====================================================================================================================
 PipelineBinaryCache::PipelineBinaryCache(
     VkAllocationCallbacks*    pAllocationCallbacks,
-    const Vkgc::GfxIpVersion& gfxIp,
-    bool                      internal)
+    const Vkgc::GfxIpVersion& gfxIp)
     :
     m_pAllocationCallbacks { pAllocationCallbacks },
     m_palAllocator         { pAllocationCallbacks },
@@ -203,7 +202,6 @@ PipelineBinaryCache::PipelineBinaryCache(
     m_pArchiveLayer        { nullptr },
     m_openFiles            { &m_palAllocator },
     m_archiveLayers        { &m_palAllocator },
-    m_isInternalCache      { internal },
     m_pCacheAdapter        { nullptr }
 {
     // Without copy constructor, a class type variable can't be initialized in initialization list with gcc 4.8.5.
@@ -534,6 +532,7 @@ void PipelineBinaryCache::Destroy()
 // Build the cache layer chain
 VkResult PipelineBinaryCache::Initialize(
     const RuntimeSettings&    settings,
+    bool                      createArchiveLayers,
     const char*               pDefaultCacheFilePath,
     const Util::IPlatformKey* pKey)
 {
@@ -550,7 +549,7 @@ VkResult PipelineBinaryCache::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        result = InitLayers(pDefaultCacheFilePath, m_isInternalCache, settings);
+        result = InitLayers(pDefaultCacheFilePath, createArchiveLayers, settings);
     }
 
     if (result == VK_SUCCESS)
@@ -1192,7 +1191,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
 // Initialize layers (a single layer that supports storage for binaries needs to succeed)
 VkResult PipelineBinaryCache::InitLayers(
     const char*            pDefaultCacheFilePath,
-    bool                   internal,
+    bool                   createArchiveLayers,
     const RuntimeSettings& settings)
 {
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -1203,7 +1202,7 @@ VkResult PipelineBinaryCache::InitLayers(
 
     bool memoryLayerOnline = (InitMemoryCacheLayer(settings) >= VK_SUCCESS);
 
-    bool archiveLayerOnline = internal && (InitArchiveLayers(pDefaultCacheFilePath, settings) >= VK_SUCCESS);
+    bool archiveLayerOnline = createArchiveLayers && (InitArchiveLayers(pDefaultCacheFilePath, settings) > VK_SUCCESS);
 
     return (injectionLayerOnline || memoryLayerOnline || archiveLayerOnline)
         ? VK_SUCCESS

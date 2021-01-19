@@ -68,7 +68,7 @@ public:
 #endif
         size_t                     initDataSize,
         const void*                pInitData,
-        bool                       internal);
+        bool                       createArchiveLayers);
 
     static bool IsValidBlob(
         VkAllocationCallbacks* pAllocationCallbacks,
@@ -80,6 +80,7 @@ public:
 
     VkResult Initialize(
         const RuntimeSettings&    settings,
+        bool                      createArchiveLayers,
         const char*               pDefaultCacheFilePath,
         const Util::IPlatformKey* pKey);
 
@@ -172,8 +173,7 @@ private:
 
     explicit PipelineBinaryCache(
         VkAllocationCallbacks*    pAllocationCallbacks,
-        const Vkgc::GfxIpVersion& gfxIp,
-        bool                      internal);
+        const Vkgc::GfxIpVersion& gfxIp);
 
     VkResult InitializePlatformKey(
         const PhysicalDevice*  pPhysicalDevice,
@@ -188,7 +188,7 @@ private:
 
     VkResult InitLayers(
         const char*            pDefaultCacheFilePath,
-        bool                   internal,
+        bool                   createArchiveLayers,
         const RuntimeSettings& settings);
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
@@ -249,8 +249,6 @@ private:
     Util::ICacheLayer*  m_pArchiveLayer;  // Top of a chain of loaded archives.
     FileVector          m_openFiles;
     LayerVector         m_archiveLayers;
-
-    bool                m_isInternalCache;
 
     CacheAdapter*       m_pCacheAdapter;
 

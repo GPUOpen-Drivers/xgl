@@ -175,14 +175,14 @@ VkResult PipelineCompiler::Initialize()
                 m_pPhysicalDevice->VkInstance()->GetAllocCallbacks(),
                 m_pPhysicalDevice->GetPlatformKey(),
                 m_gfxIp,
-                m_pPhysicalDevice->GetRuntimeSettings(),
+                settings,
                 m_pPhysicalDevice->PalDevice()->GetCacheFilePath(),
 #if ICD_GPUOPEN_DEVMODE_BUILD
                 m_pPhysicalDevice->VkInstance()->GetDevModeMgr(),
 #endif
                 0,
                 nullptr,
-                true);
+                settings.enableOnDiskInternalPipelineCaches);
 
         // This isn't a terminal failure, the device can continue without the pipeline cache if need be.
         VK_ALERT(m_pBinaryCache == nullptr);
