@@ -28,6 +28,7 @@ set_target_properties(xgl PROPERTIES OUTPUT_NAME ${ICD_TARGET})
 set_target_properties(xgl PROPERTIES PREFIX "")
 install(TARGETS xgl DESTINATION ${CMAKE_SOURCE_DIR}/lib/${CMAKE_BUILD_TYPE})
 
+
 ### Compiler Options ###################################################################################################
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     if(ICD_ANALYSIS_WARNINGS_AS_ERRORS)
