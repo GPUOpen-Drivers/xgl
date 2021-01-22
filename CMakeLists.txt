@@ -24,7 +24,6 @@
  #######################################################################################################################
 cmake_minimum_required(VERSION 3.13.4)
 
-
 # This part set before "project(XGL VERSION 1 LANGUAGES C CXX)".
 # In a system has both gcc and clang compiler. The cmake output log will be more reasonable.
 ### Clang build ########################################################################################################
