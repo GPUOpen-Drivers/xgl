@@ -1202,7 +1202,7 @@ VkResult PipelineBinaryCache::InitLayers(
 
     bool memoryLayerOnline = (InitMemoryCacheLayer(settings) >= VK_SUCCESS);
 
-    bool archiveLayerOnline = createArchiveLayers && (InitArchiveLayers(pDefaultCacheFilePath, settings) > VK_SUCCESS);
+    bool archiveLayerOnline = createArchiveLayers && (InitArchiveLayers(pDefaultCacheFilePath, settings) >= VK_SUCCESS);
 
     return (injectionLayerOnline || memoryLayerOnline || archiveLayerOnline)
         ? VK_SUCCESS
