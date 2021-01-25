@@ -31,8 +31,11 @@ set(CACHE_CREATOR_TEST_BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR})
 set(CACHE_CREATOR_AMDLLPC_DIR ${LLPC_BINARY_DIR})
 set(CACHE_CREATOR_DEFAULT_GFXIP "9")
 
-# TODO: SPVGEN binary dir should be propagated from LLPC to its parent scope (XGL) and used here.
-set(CACHE_CREATOR_SPVGEN_DIR ${CMAKE_CURRENT_BINARY_DIR}/../../../spvgen)
+# Check if the SPVGEN binary dir is defined and not empty.
+if(XGL_SPVGEN_BUILD_PATH STREQUAL "")
+    message(FATAL_ERROR "SPVGEN is required for XGL Cache Creator LIT test but cannot be found.")
+endif()
+set(CACHE_CREATOR_SPVGEN_DIR ${XGL_SPVGEN_BUILD_PATH})
 
 # Required by configure_lit_site_cfg; this allows it to find the llvm-lit executable.
 set(LLVM_LIT_OUTPUT_DIR ${LLVM_TOOLS_BINARY_DIR})
