@@ -17,12 +17,10 @@ jobs:
           git fetch origin +${GITHUB_SHA}:${GITHUB_REF} --update-head-ok
           git checkout ${GITHUB_SHA}
       - name: Run clang-format
-        working-directory: ./tools/cache_creator
         run: |
-          git diff ${{ github.base_ref }} -U0 --no-color -- '**/*.cpp' '**/*.cc' '**/*.h' '**/*.hh' \
+          git diff ${{ github.base_ref }} -U0 --no-color -- 'tools/cache_creator/**/*.cpp' 'tools/cache_creator/**/*.h' \
             | clang-format-diff-10 -p1 >not-formatted.diff 2>&1
       - name: Check formatting
-        working-directory: ./tools/cache_creator
         run: |
           if ! grep -q '[^[:space:]]' not-formatted.diff ; then
             echo "Code formatted. Success."
