@@ -39,4 +39,6 @@ RUN source /vulkandriver/env.sh \
     && cmake --build . \
     && cmake --build . --target amdvlk64.so cache-creator
 
-# TODO: Run the cache-creator test suites when they get merged
+# Run cache-creator tests.
+RUN source /vulkandriver/env.sh \
+    && cmake --build . --target check-cache-creator
