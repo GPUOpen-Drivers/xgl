@@ -564,11 +564,11 @@ void PhysicalDevice::InitializePlatformKey(
     {
         VkPhysicalDeviceProperties properties;
         char*                      timestamp[sizeof(__TIMESTAMP__)];
-    } initialData;
+    } fingerprintData;
 
-    memset(&initialData, 0, sizeof(initialData));
+    memset(&fingerprintData, 0, sizeof(fingerprintData));
 
-    VkResult result = GetDeviceProperties(&initialData.properties);
+    VkResult result = GetDeviceProperties(&fingerprintData.properties);
 
     if (result == VK_SUCCESS)
     {
@@ -577,18 +577,106 @@ void PhysicalDevice::InitializePlatformKey(
 
         if (pMem != nullptr)
         {
-            if (settings.markPipelineCacheWithBuildTimestamp)
+            void*  initialData     = nullptr;
+            size_t initialDataSize = 0;
+
+            if (settings.enablePortablePipelineCacheFormat)
             {
-                memcpy(initialData.timestamp, __TIMESTAMP__, sizeof(__TIMESTAMP__));
+                // TODO(kuhar): We should probably also incldue a fingerprint of the shader compiler, to make sure that
+                // any loaded portable cache blobs were created with the matching tooling (either ICD or cache-creator).
+                initialData = &fingerprintData.properties.pipelineCacheUUID;
+                initialDataSize = sizeof(fingerprintData.properties.pipelineCacheUUID);
+            }
+            else
+            {
+                if (settings.markPipelineCacheWithBuildTimestamp)
+                {
+                    memcpy(fingerprintData.timestamp, __TIMESTAMP__, sizeof(__TIMESTAMP__));
+                }
+                initialData = &fingerprintData;
+                initialDataSize = sizeof(fingerprintData);
             }
 
-            if (Util::CreatePlatformKey(KeyAlgorithm, &initialData, sizeof(initialData), pMem, &m_pPlatformKey) !=
+            VK_ASSERT(initialData != nullptr);
+            VK_ASSERT(initialDataSize != 0);
+
+            if (Util::CreatePlatformKey(KeyAlgorithm, initialData, initialDataSize, pMem, &m_pPlatformKey) !=
                 Util::Result::Success)
             {
                 VkInstance()->FreeMem(pMem);
             }
         }
     }
+}
+
+// =====================================================================================================================
+// Writes out pipeline cache UUID based on the build information, current device properties, and runtime settings.
+// In the default configuration, the generated UUID will depend on the exact system configuration and build timestamp.
+// With the experimental portable pipeline cache format enabled, the generated UUID won't depend on the exact system
+// configuration and driver build.
+static Pal::Result GeneratePipelineCacheUUID(
+    const Pal::DeviceProperties& palProperties,
+    const RuntimeSettings& settings,
+    uint8_t *pUUID,
+    size_t UUIDLength)
+{
+    VK_ASSERT(pUUID != nullptr);
+    VK_ASSERT(UUIDLength == VK_UUID_SIZE);
+
+    // This UUID identifies whether a previously created pipeline cache is compatible with the currently installed
+    // device/driver.
+    constexpr uint16_t PalMajorVersion  = PAL_INTERFACE_MAJOR_VERSION;
+    constexpr uint8_t  PalMinorVersion  = PAL_INTERFACE_MINOR_VERSION;
+
+#if ICD_BUILD_LLPC
+    constexpr uint16_t LlpcMajorVersion = LLPC_INTERFACE_MAJOR_VERSION;
+    constexpr uint8_t  LlpcMinorVersion = LLPC_INTERFACE_MINOR_VERSION;
+#endif
+    Pal::Result result = Pal::Result::Success;
+
+    memset(pUUID, 0, VK_UUID_SIZE);
+
+    Util::MetroHash128 hash = {};
+    hash.Update(palProperties.vendorId);
+    hash.Update(palProperties.deviceId);
+    hash.Update(PalMajorVersion);
+    hash.Update(PalMinorVersion);
+
+#if ICD_BUILD_LLPC
+    hash.Update(LlpcMajorVersion);
+    hash.Update(LlpcMinorVersion);
+#endif
+
+    if (settings.markPipelineCacheWithBuildTimestamp)
+    {
+        constexpr char timestamp[]   = __DATE__ __TIME__;
+        const uint32_t timestampHash = Util::HashLiteralString<sizeof(timestamp)>(timestamp);
+        hash.Update(timestampHash);
+    }
+
+    // Don't include system-specific bits when portable cache format is requested.
+    if (settings.enablePortablePipelineCacheFormat == false)
+    {
+        Util::SystemInfo systemInfo = {};
+        result = Util::QuerySystemInfo(&systemInfo);
+
+        if (result == Pal::Result::Success)
+        {
+            hash.Update(systemInfo.cpuType);
+            hash.Update(systemInfo.cpuVendorString[0]);
+            hash.Update(systemInfo.cpuBrandString[0]);
+            hash.Update(systemInfo.cpuLogicalCoreCount);
+            hash.Update(systemInfo.cpuPhysicalCoreCount);
+            hash.Update(systemInfo.totalSysMemSize);
+        }
+    }
+
+    if (result == Pal::Result::Success)
+    {
+        hash.Finalize(pUUID);
+    }
+
+    return result;
 }
 
 // =====================================================================================================================
@@ -957,38 +1045,8 @@ VkResult PhysicalDevice::Initialize()
 
     if (result == Pal::Result::Success)
     {
-        // Get properties from PAL
-        const Pal::DeviceProperties& palProps = PalProperties();
-
-        // This UUID identifies whether a previously created pipeline cache is compatible with the currently installed
-        // device/driver.
-        constexpr uint16_t PalMajorVersion  = PAL_INTERFACE_MAJOR_VERSION;
-        constexpr uint8_t  PalMinorVersion  = PAL_INTERFACE_MINOR_VERSION;
-
-        constexpr char timestamp[]    = __DATE__ __TIME__;
-        const uint32_t timestampHash  = Util::HashLiteralString<sizeof(timestamp)>(timestamp);
-
-        memset(m_pipelineCacheUUID, 0, VK_UUID_SIZE);
-
-        Util::SystemInfo systemInfo = {};
-
-        result = Util::QuerySystemInfo(&systemInfo);
-        if (result == Pal::Result::Success)
-        {
-            Util::MetroHash128 hash = {};
-            hash.Update(timestampHash);
-            hash.Update(palProps.vendorId);
-            hash.Update(palProps.deviceId);
-            hash.Update(PalMajorVersion);
-            hash.Update(PalMinorVersion);
-            hash.Update(systemInfo.cpuType);
-            hash.Update(systemInfo.cpuVendorString[0]);
-            hash.Update(systemInfo.cpuBrandString[0]);
-            hash.Update(systemInfo.cpuLogicalCoreCount);
-            hash.Update(systemInfo.cpuPhysicalCoreCount);
-            hash.Update(systemInfo.totalSysMemSize);
-            hash.Finalize(m_pipelineCacheUUID);
-        }
+        // Generate PCUUID based on build information, current system properties, and runtime settings.
+        result = GeneratePipelineCacheUUID(PalProperties(), settings, m_pipelineCacheUUID, sizeof(m_pipelineCacheUUID));
     }
 
     // Collect properties for perf experiments (this call can fail; we just don't report support for

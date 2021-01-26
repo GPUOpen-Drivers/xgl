@@ -35,6 +35,7 @@
 #include "palMetroHash.h"
 #include "palVector.h"
 #include "palCacheLayer.h"
+#include "binary_cache_serialization.h"
 #include "cache_adapter.h"
 
 namespace Util
@@ -48,8 +49,6 @@ class DevModeMgr;
 
 namespace vk
 {
-
-class CacheAdapter;
 
 // Unified pipeline cache interface
 class PipelineBinaryCache
@@ -71,10 +70,11 @@ public:
         bool                       createArchiveLayers);
 
     static bool IsValidBlob(
-        VkAllocationCallbacks* pAllocationCallbacks,
-        Util::IPlatformKey*    pKey,
-        size_t                 dataSize,
-        const void*            pData);
+        VkAllocationCallbacks*  pAllocationCallbacks,
+        Util::IPlatformKey*     pKey,
+        PipelineCacheBlobFormat expectedCacheBlobFormat,
+        size_t                  dataSize,
+        const void*             pData);
 
     ~PipelineBinaryCache();
 
@@ -120,8 +120,9 @@ public:
         const Util::QueryResult* pQuery) const;
 
     VkResult Serialize(
-        void*   pBlob,
-        size_t* pSize);
+        void*                   pBlob,
+        size_t*                 pSize,
+        PipelineCacheBlobFormat cacheBlobFormat);
 
     VkResult Merge(
         uint32_t                    srcCacheCount,

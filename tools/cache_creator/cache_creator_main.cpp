@@ -102,11 +102,8 @@ int main(int argc, char **argv) {
     return 4;
   }
 
-  // TODO(kuhar): Initialize the platform key properly by providing the `fingerprint` parameter instead of an empty
-  // array. This is so that the cache can pass validation and be consumed by the ICD. Note that this also requires
-  // ICD-side changes.
   auto cacheCreatorOrErr = cc::RelocatableCacheCreator::Create(
-      DeviceId, uuid, {},
+      DeviceId, uuid, uuid,
       llvm::makeMutableArrayRef((*outFileBufferOrErr)->getBufferStart(), (*outFileBufferOrErr)->getBufferSize()));
   if (auto err = cacheCreatorOrErr.takeError()) {
     llvm::errs() << "Error:\t" << err << "\n";

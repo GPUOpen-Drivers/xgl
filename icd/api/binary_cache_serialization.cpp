@@ -156,13 +156,14 @@ Util::Result CalculatePipelineBinaryCacheHashId(
 // Returns Util::Result::Success on success or Util::Result::ErrorInvalidMemorySize if the provided buffer is too small
 // to create a valid pipeline binary cache blob.
 Util::Result PipelineBinaryCacheSerializer::Initialize(
+    PipelineCacheBlobFormat blobFormat,
     size_t bufferCapacity,
     void*  pOutputBuffer)
 {
     PAL_ASSERT(pOutputBuffer != nullptr);
 
     Util::Result result = Util::Result::ErrorInvalidMemorySize;
-
+    m_blobFormat = blobFormat;
     m_pOutputBuffer = pOutputBuffer;
     if (bufferCapacity >= HeaderSize)
     {
@@ -223,6 +224,7 @@ Util::Result PipelineBinaryCacheSerializer::Finalize(
         *pBytesWritten = m_bytesUsed;
     }
 
+    pPrivateHeader->blobFormat = m_blobFormat;
     return CalculatePipelineBinaryCacheHashId(pAllocationCallbacks,
                                               pKey,
                                               pCacheDataBegin,

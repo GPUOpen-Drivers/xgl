@@ -273,7 +273,8 @@ llvm::Expected<RelocatableCacheCreator> RelocatableCacheCreator::Create(uint32_t
   auto serializer = std::make_unique<vk::PipelineBinaryCacheSerializer>();
   assert(serializer);
 
-  if (serializer->Initialize(privateCacheData.size(), privateCacheData.data()) != Util::Result::Success)
+  if (serializer->Initialize(vk::PipelineCacheBlobFormat::Portable, privateCacheData.size(), privateCacheData.data()) !=
+      Util::Result::Success)
     return llvm::createStringError(std::errc::state_not_recoverable,
                                    "Failed to initialize PipelineBinaryCacheSerializer");
 

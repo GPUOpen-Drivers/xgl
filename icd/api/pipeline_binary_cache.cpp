@@ -29,7 +29,6 @@
 ***********************************************************************************************************************
 */
 #include "include/pipeline_binary_cache.h"
-#include "include/binary_cache_serialization.h"
 
 #include "palArchiveFile.h"
 #include "palAutoBuffer.h"
@@ -79,10 +78,11 @@ static Util::Hash128 ParseHash128(const char* str);
 #endif
 
 bool PipelineBinaryCache::IsValidBlob(
-    VkAllocationCallbacks* pAllocationCallbacks,
-    Util::IPlatformKey*    pKey,
-    size_t                 dataSize,
-    const void*            pData)
+    VkAllocationCallbacks*  pAllocationCallbacks,
+    Util::IPlatformKey*     pKey,
+    PipelineCacheBlobFormat expectedBlobFormat,
+    size_t                  dataSize,
+    const void*             pData)
 {
     VK_ASSERT(pData != nullptr);
 
@@ -91,7 +91,8 @@ bool PipelineBinaryCache::IsValidBlob(
     auto pBinaryPrivateHeader   = static_cast<const PipelineBinaryCachePrivateHeader*>(pData);
     uint8_t  hashId[SHA_DIGEST_LENGTH];
 
-    if ((pKey != nullptr) && (dataSize > sizeof(PipelineBinaryCachePrivateHeader)))
+    if ((pKey != nullptr) && (dataSize > sizeof(PipelineBinaryCachePrivateHeader)) &&
+        (pBinaryPrivateHeader->blobFormat == expectedBlobFormat))
     {
         pData         = Util::VoidPtrInc(pData, sizeof(PipelineBinaryCachePrivateHeader));
         blobSize     -= sizeof(PipelineBinaryCachePrivateHeader);
@@ -165,7 +166,9 @@ PipelineBinaryCache* PipelineBinaryCache::Create(
 
                 if (blobSize >= entryAndDataSize)
                 {
-                    //add to cache
+                    // Add to cache.
+                    // TODO: In the portable cache format case, we should checked that all entries (ELFs) were created
+                    // using the same shader compiler.
                     Util::Result result = pObj->StorePipelineBinary(&pEntry->hashId, pEntry->dataSize, pData);
                     if (result != Util::Result::Success)
                     {
@@ -1273,8 +1276,9 @@ VkResult PipelineBinaryCache::OrderLayers(
 // NOTE: It is expected that the calling function has not used this pipeline cache since querying the size
 VkResult PipelineBinaryCache::Serialize(
     void*   pBlob,    // [out] System memory pointer where the serialized data should be placed
-    size_t* pSize)    // [in,out] Size of the memory pointed to by pBlob. If the value stored in pSize is zero then no
+    size_t* pSize,    // [in,out] Size of the memory pointed to by pBlob. If the value stored in pSize is zero then no
                       // data will be copied and instead the size required for serialization will be returned in pSize
+    PipelineCacheBlobFormat blobFormat)
 {
     VkResult result = VK_ERROR_INITIALIZATION_FAILED;
 
@@ -1298,7 +1302,7 @@ VkResult PipelineBinaryCache::Serialize(
             if (result == VK_SUCCESS)
             {
                 PipelineBinaryCacheSerializer serializer;
-                if (serializer.Initialize(*pSize, pBlob) == Util::Result::Success)
+                if (serializer.Initialize(blobFormat, *pSize, pBlob) == Util::Result::Success)
                 {
                     Util::AutoBuffer<Util::Hash128, 8, PalAllocator> cacheIds(curCount, &m_palAllocator);
                     result = PalToVkResult(Util::GetMemoryCacheLayerHashIds(m_pMemoryLayer, curCount, &cacheIds[0]));

@@ -2000,7 +2000,7 @@
       "Scope": "Driver",
       "Type": "uint64"
     },
-    {
+     {
       "Name": "MarkPipelineCacheWithBuildTimestamp",
       "Description": "Controles whether the pipline cache is tagged with the build timestamp. This provides extra stability by forcing a cache rebuild for every new driver released.  May be useful to disable during rapid iteration. (Default: TRUE)",
       "Tags": [
@@ -2008,6 +2008,18 @@
       ],
       "Defaults": {
         "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "EnablePortablePipelineCacheFormat",
+      "Description": "Controles whether the pipline binary cache use the portable format. This makes pipeline caches portable across machines. This is an experimental option not meant for general use. (Default: FALSE)",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": false
       },
       "Scope": "Driver",
       "Type": "bool"

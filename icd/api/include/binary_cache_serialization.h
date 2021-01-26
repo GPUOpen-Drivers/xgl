@@ -103,10 +103,16 @@ struct BinaryCacheEntry
     size_t                dataSize;
 };
 
+enum class PipelineCacheBlobFormat : uint32_t {
+    Strict = 0,
+    Portable = 1
+};
+
 // Layout for pipeline binary cache header, all fields are written with LSB first.
 constexpr size_t SHA_DIGEST_LENGTH = 20;
 struct PipelineBinaryCachePrivateHeader
 {
+    PipelineCacheBlobFormat blobFormat;
     uint8_t  hashId[SHA_DIGEST_LENGTH];
 };
 
@@ -135,8 +141,9 @@ public:
     PipelineBinaryCacheSerializer() = default;
 
     Util::Result Initialize(
-        size_t bufferCapacity,
-        void*  pOutputBuffer);
+        PipelineCacheBlobFormat blobFormat,
+        size_t                  bufferCapacity,
+        void*                   pOutputBuffer);
 
     Util::Result AddPipelineBinary(
         const BinaryCacheEntry* pEntry,
@@ -151,13 +158,14 @@ public:
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineBinaryCacheSerializer);
 
-    static constexpr size_t HeaderSize      = sizeof(PipelineBinaryCachePrivateHeader);
-    static constexpr size_t EntryHeaderSize = sizeof(BinaryCacheEntry);
+    static constexpr size_t HeaderSize       = sizeof(PipelineBinaryCachePrivateHeader);
+    static constexpr size_t EntryHeaderSize  = sizeof(BinaryCacheEntry);
 
-    size_t m_numEntries     = 0;
-    void*  m_pOutputBuffer  = nullptr;
-    size_t m_bufferCapacity = 0;
-    size_t m_bytesUsed      = 0;
+    PipelineCacheBlobFormat m_blobFormat     = {};
+    size_t                  m_numEntries     = 0;
+    void*                   m_pOutputBuffer  = nullptr;
+    size_t                  m_bufferCapacity = 0;
+    size_t                  m_bytesUsed      = 0;
 };
 
 }
