@@ -37,8 +37,9 @@ RUN cat /vulkandriver/build_info.txt \
 WORKDIR /vulkandriver/builds/ci-build
 RUN source /vulkandriver/env.sh \
     && cmake --build . \
-    && cmake --build . --target amdvlk64.so cache-creator
+    && cmake --build . --target amdvlk64.so cache-creator cache-creator-unit-tests
 
 # Run cache-creator tests.
 RUN source /vulkandriver/env.sh \
-    && cmake --build . --target check-cache-creator
+    && cmake --build . --target check-cache-creator \
+    && tools/cache-creator-unit-tests
