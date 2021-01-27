@@ -1,0 +1,28 @@
+; Check that cache-creator requires all the necessary arguments to create a valid cache file.
+; These tests doesn't require SPIR-V input, but we use .spvasm as the file extension so that LIT can pick it up.
+
+; Test 1: Empty input ELF list.
+; RUN: not cache-creator -o %t.bin --uuid=00000000-0000-0000-0000-000000000000 --device-id=0x6080 2>&1 | FileCheck --check-prefix=CHECK-ELFS %s
+; CHECK-ELFS:      Not enough positional command line arguments specified!
+; CHECK-ELFS-NEXT: Must specify at least 1 positional argument
+
+; Test 2: No UUID provided.
+; RUN: not cache-creator -o %t.bin --device-id=0x6080 %s 2>&1 | FileCheck --check-prefix=CHECK-NO-UUID %s
+; CHECK-NO-UUID: for the --uuid option: must be specified at least once!
+
+; Test 3: Invalid UUID provided.
+; RUN: not cache-creator -o %t.bin --uuid=42 --device-id=0x6080 %s 2>&1 | FileCheck --check-prefix=CHECK-INVALID-UUID %s
+; CHECK-INVALID-UUID: Failed to parse pipeline cache UUID
+
+; Test 4: No device ID provided.
+; RUN: not cache-creator -o %t.bin --uuid=00000000-0000-0000-0000-000000000000 2>&1 | FileCheck --check-prefix=CHECK-NO-DID %s
+; CHECK-NO-DID: for the --device-id option: must be specified at least once!
+
+; Test 5: No output file specified.
+; RUN: not cache-creator --uuid=00000000-0000-0000-0000-000000000000 --device-id=0x6080 %s 2>&1 | FileCheck --check-prefix=CHECK-NO-OUT %s
+; CHECK-NO-OUT: for the -o option: must be specified at least once!
+
+; Test 6: Specified input file does not exist.
+; RUN: not cache-creator -o %t.bin --uuid=00000000-0000-0000-0000-000000000000 --device-id=0x6080 %t.does.not.exist.elf 2>&1 \
+; RUN:   | FileCheck --check-prefix=CHECK-BAD-IN %s
+; CHECK-BAD-IN: Failed to read file size

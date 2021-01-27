@@ -219,7 +219,8 @@ llvm::Expected<ElfLlpcCacheInfo> getElfLlpcCacheInfo(llvm::MemoryBufferRef elfBu
     }
   }
 
-  return llvm::createStringError(llvm::object::object_error::invalid_file_type, "Could not find shader/elf elf hash");
+  return llvm::createStringError(llvm::object::object_error::invalid_file_type,
+                                 "Could not find shader/pipeline elf hash");
 }
 
 // =====================================================================================================================
