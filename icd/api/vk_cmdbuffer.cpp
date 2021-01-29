@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -39,7 +39,6 @@
 #include "include/vk_pipeline_layout.h"
 #include "include/vk_image.h"
 #include "include/vk_instance.h"
-#include "include/vk_object.h"
 #include "include/vk_utils.h"
 #include "include/vk_query.h"
 #include "include/vk_queue.h"
@@ -381,13 +380,17 @@ VkResult CmdBuffer::Create(
     // Get information about the Vulkan command buffer
     Pal::CmdBufferCreateInfo palCreateInfo = {};
 
-    CmdPool* pCmdPool           = CmdPool::ObjectFromHandle(pAllocateInfo->commandPool);
-    uint32 queueFamilyIndex     = pCmdPool->GetQueueFamilyIndex();
-    uint32 commandBufferCount   = pAllocateInfo->commandBufferCount;
-    palCreateInfo.pCmdAllocator = pCmdPool->PalCmdAllocator(DefaultDeviceIndex);
-    palCreateInfo.queueType     = pDevice->GetQueueFamilyPalQueueType(queueFamilyIndex);
-    palCreateInfo.engineType    = pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex);
-    palCreateInfo.flags.nested  = (pAllocateInfo->level > VK_COMMAND_BUFFER_LEVEL_PRIMARY) ? 1 : 0;
+    CmdPool* pCmdPool                     = CmdPool::ObjectFromHandle(pAllocateInfo->commandPool);
+    uint32 queueFamilyIndex               = pCmdPool->GetQueueFamilyIndex();
+    uint32 commandBufferCount             = pAllocateInfo->commandBufferCount;
+    palCreateInfo.pCmdAllocator           = pCmdPool->PalCmdAllocator(DefaultDeviceIndex);
+    palCreateInfo.queueType               = pDevice->GetQueueFamilyPalQueueType(queueFamilyIndex);
+    palCreateInfo.engineType              = pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex);
+    palCreateInfo.flags.nested            = (pAllocateInfo->level > VK_COMMAND_BUFFER_LEVEL_PRIMARY) ? 1 : 0;
+    if (pDevice->GetRuntimeSettings().enableDispatchTunneling)
+    {
+        palCreateInfo.flags.dispatchTunneling = 1;
+    }
 
     // Allocate system memory for the command buffer objects
     Pal::Result palResult;
@@ -2066,6 +2069,12 @@ void CmdBuffer::BindVertexBuffers(
                 pBinding->stride = pStrides[inputIdx];
             }
 
+            if (m_pDevice->GetRuntimeSettings().padVertexBuffers &&
+                (pBinding->stride != 0))
+            {
+                pBinding->range = Util::RoundUpToMultiple(pBinding->range, pBinding->stride);
+            }
+
             inputIdx++;
             pBinding++;
         }
@@ -2112,6 +2121,12 @@ void CmdBuffer::UpdateVertexBufferStrides(
                     {
                         firstChanged = Util::Min(firstChanged, slot);
                         lastChanged  = Util::Max(lastChanged, slot);
+                    }
+
+                    if (m_pDevice->GetRuntimeSettings().padVertexBuffers &&
+                        (pBinding->stride != 0))
+                    {
+                        pBinding->range = Util::RoundUpToMultiple(pBinding->range, pBinding->stride);
                     }
                 }
             }
@@ -2513,10 +2528,10 @@ void CmdBuffer::CopyBufferToImage(
                     pRegions[regionIdx + i].imageSubresource.aspectMask),
                     m_pDevice->GetRuntimeSettings());
 
-                Pal::ImageAspect aspectMask =  VkToPalImageAspectSingle(pDstImage->GetFormat(),
+                uint32 plane =  VkToPalImagePlaneSingle(pDstImage->GetFormat(),
                     pRegions[regionIdx + i].imageSubresource.aspectMask, m_pDevice->GetRuntimeSettings());
 
-                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, aspectMask, srcMemOffset);
+                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], dstFormat.format, plane, srcMemOffset);
             }
 
             PalCmdCopyMemoryToImage(pSrcBuffer, pDstImage, layout, regionBatch, pPalRegions);
@@ -2574,10 +2589,10 @@ void CmdBuffer::CopyImageToBuffer(
                 Pal::SwizzledFormat srcFormat = VkToPalFormat(Formats::GetAspectFormat(pSrcImage->GetFormat(),
                     pRegions[regionIdx + i].imageSubresource.aspectMask), m_pDevice->GetRuntimeSettings());
 
-                Pal::ImageAspect aspectMask = VkToPalImageAspectSingle(pSrcImage->GetFormat(),
+                uint32 plane = VkToPalImagePlaneSingle(pSrcImage->GetFormat(),
                     pRegions[regionIdx + i].imageSubresource.aspectMask, m_pDevice->GetRuntimeSettings());
 
-                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], srcFormat.format, aspectMask, dstMemOffset);
+                pPalRegions[i] = VkToPalMemoryImageCopyRegion(pRegions[regionIdx + i], srcFormat.format, plane, dstMemOffset);
             }
 
             PalCmdCopyImageToMemory(pSrcImage, pDstBuffer, layout, regionBatch, pPalRegions);
@@ -3167,7 +3182,7 @@ void CmdBuffer::ClearImageAttachments(
                 const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(attachmentIdx);
 
                 // Get the layout that this color attachment is currently in within the render pass
-                const Pal::ImageLayout targetLayout = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Color);
+                const Pal::ImageLayout targetLayout = RPGetAttachmentLayout(attachmentIdx, 0);
 
                 Util::Vector<Pal::Box,         8, VirtualStackFrame> clearBoxes        { &virtStackFrame };
                 Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
@@ -3229,8 +3244,8 @@ void CmdBuffer::ClearImageAttachments(
                 const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(attachmentIdx);
 
                 // Get the layout(s) that this attachment is currently in within the render pass
-                const Pal::ImageLayout depthLayout   = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Depth);
-                const Pal::ImageLayout stencilLayout = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Stencil);
+                const Pal::ImageLayout depthLayout   = RPGetAttachmentLayout(attachmentIdx, 0);
+                const Pal::ImageLayout stencilLayout = RPGetAttachmentLayout(attachmentIdx, 1);
 
                 Util::Vector<Pal::Rect,        8, VirtualStackFrame> clearRects        { &virtStackFrame };
                 Util::Vector<Pal::SubresRange, 8, VirtualStackFrame> clearSubresRanges { &virtStackFrame };
@@ -3780,7 +3795,7 @@ void CmdBuffer::BeginQueryIndexed(
     const QueryPool* pBasePool = QueryPool::ObjectFromHandle(queryPool);
     const auto palQueryControlFlags = VkToPalQueryControlFlags(pBasePool->GetQueryType(), flags);
 
-    // NOTE: This function is illegal to call for TimestampQueryPools
+    // NOTE: This function is illegal to call for TimestampQueryPools and AccelerationStructureQueryPools
     const PalQueryPool* pQueryPool = pBasePool->AsPalQueryPool();
     Pal::QueryType queryType = pQueryPool->PalQueryType();
     if (queryType == Pal::QueryType::StreamoutStats)
@@ -3849,7 +3864,7 @@ void CmdBuffer::EndQueryIndexed(
 {
     DbgBarrierPreCmd(DbgBarrierQueryBeginEnd);
 
-    // NOTE: This function is illegal to call for TimestampQueryPools
+    // NOTE: This function is illegal to call for TimestampQueryPools and  AccelerationStructureQueryPools
     const PalQueryPool* pQueryPool = QueryPool::ObjectFromHandle(queryPool)->AsPalQueryPool();
     Pal::QueryType queryType = pQueryPool->PalQueryType();
     if (queryType == Pal::QueryType::StreamoutStats)
@@ -4587,21 +4602,17 @@ void CmdBuffer::BeginRenderPass(
             // Start current layouts to PAL version of initial layout for each attachment.
             constexpr Pal::ImageLayout NullLayout     = {};
             const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(a);
-            const Pal::ImageAspect firstAspect        = attachment.subresRange[0].startSubres.aspect;
+            const uint32 firstPlane = attachment.subresRange[0].startSubres.plane;
 
             const RPImageLayout initialLayout =
             { m_allGpuState.pRenderPass->GetAttachmentDesc(a).initialLayout, 0 };
 
-            if ((firstAspect != Pal::ImageAspect::Depth) &&
-                (firstAspect != Pal::ImageAspect::Stencil))
+            if (!attachment.pImage->IsDepthStencilFormat())
             {
                 RPSetAttachmentLayout(
                     a,
-                    firstAspect,
-                    attachment.pImage->GetAttachmentLayout(initialLayout, firstAspect, this));
-
-                RPSetAttachmentLayout(a, Pal::ImageAspect::Depth, NullLayout);
-                RPSetAttachmentLayout(a, Pal::ImageAspect::Stencil, NullLayout);
+                    firstPlane,
+                    attachment.pImage->GetAttachmentLayout(initialLayout, firstPlane, this));
             }
             else
             {
@@ -4609,23 +4620,20 @@ void CmdBuffer::BeginRenderPass(
                 // initial values for them.  This avoids some (incorrect) PAL asserts when clearing depth- or
                 // stencil-only surfaces.  Here, the missing aspect will have a null usage but a non-null engine
                 // component.
-                VK_ASSERT((firstAspect == Pal::ImageAspect::Depth) ||
-                            (firstAspect == Pal::ImageAspect::Stencil));
+                VK_ASSERT((firstPlane == 0) || (firstPlane == 1));
 
                 const RPImageLayout initialStencilLayout =
                 { m_allGpuState.pRenderPass->GetAttachmentDesc(a).stencilInitialLayout, 0 };
 
-                RPSetAttachmentLayout(a, Pal::ImageAspect::Color, NullLayout);
+                RPSetAttachmentLayout(
+                    a,
+                    0,
+                    attachment.pImage->GetAttachmentLayout(initialLayout, 0, this));
 
                 RPSetAttachmentLayout(
                     a,
-                    Pal::ImageAspect::Depth,
-                    attachment.pImage->GetAttachmentLayout(initialLayout, Pal::ImageAspect::Depth, this));
-
-                RPSetAttachmentLayout(
-                    a,
-                    Pal::ImageAspect::Stencil,
-                    attachment.pImage->GetAttachmentLayout(initialStencilLayout, Pal::ImageAspect::Stencil, this));
+                    1,
+                    attachment.pImage->GetAttachmentLayout(initialStencilLayout, 1, this));
             }
         }
 
@@ -4905,20 +4913,18 @@ void CmdBuffer::RPSyncPoint(
 
             for (uint32_t sr = 0; sr < attachment.subresRangeCount; ++sr)
             {
-                const Pal::ImageAspect aspect = attachment.subresRange[sr].startSubres.aspect;
+                const uint32_t plane = attachment.subresRange[sr].startSubres.plane;
 
-                const RPImageLayout nextLayout =
-                    (aspect == Pal::ImageAspect::Stencil) ? tr.nextStencilLayout :
-                                                            tr.nextLayout;
+                const RPImageLayout nextLayout = (plane == 1) ? tr.nextStencilLayout : tr.nextLayout;
 
                 const Pal::ImageLayout newLayout = attachment.pImage->GetAttachmentLayout(
                     nextLayout,
-                    aspect,
+                    plane,
                     this);
 
                 const Pal::ImageLayout oldLayout = RPGetAttachmentLayout(
                     tr.attachment,
-                    aspect);
+                    plane);
 
                 if (oldLayout.usages  != newLayout.usages ||
                     oldLayout.engines != newLayout.engines)
@@ -4962,7 +4968,7 @@ void CmdBuffer::RPSyncPoint(
 
                     pLayoutTransition->imageInfo.pQuadSamplePattern = pQuadSamplePattern;
 
-                    RPSetAttachmentLayout(tr.attachment, aspect, newLayout);
+                    RPSetAttachmentLayout(tr.attachment, plane, newLayout);
                 }
             }
         }
@@ -5014,7 +5020,7 @@ void CmdBuffer::RPLoadOpClearColor(
         Pal::SubresRange subresRange;
         attachment.pView->GetFrameBufferAttachmentSubresRange(&subresRange);
 
-        const Pal::ImageLayout clearLayout = RPGetAttachmentLayout(clear.attachment, subresRange.startSubres.aspect);
+        const Pal::ImageLayout clearLayout = RPGetAttachmentLayout(clear.attachment, subresRange.startSubres.plane);
 
         VK_ASSERT(clearLayout.usages & Pal::LayoutColorTarget);
 
@@ -5071,8 +5077,8 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
 
         const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(clear.attachment);
 
-        const Pal::ImageLayout depthLayout   = RPGetAttachmentLayout(clear.attachment, Pal::ImageAspect::Depth);
-        const Pal::ImageLayout stencilLayout = RPGetAttachmentLayout(clear.attachment, Pal::ImageAspect::Stencil);
+        const Pal::ImageLayout depthLayout   = RPGetAttachmentLayout(clear.attachment, 0);
+        const Pal::ImageLayout stencilLayout = RPGetAttachmentLayout(clear.attachment, 1);
 
         // Convert the clear color to the format of the attachment view
         const VkClearValue& clearValue = m_renderPassInstance.pAttachments[clear.attachment].clearValue;
@@ -5147,17 +5153,17 @@ void CmdBuffer::RPResolveAttachments(
         // We expect MSAA images to never have mipmaps
         VK_ASSERT(srcAttachment.subresRange[0].startSubres.mipLevel == 0);
 
-        uint32_t         aspectRegionCount                     = 0;
-        Pal::ImageAspect resolveAspects[MaxRangePerAttachment] = {};
-        const VkFormat   resolveFormat                         = srcAttachment.pView->GetViewFormat();
-        Pal::ResolveMode resolveModes[MaxRangePerAttachment]   = {};
+        uint32_t aspectRegionCount                    = 0;
+        uint32_t resolvePlanes[MaxRangePerAttachment] = {};
+        const VkFormat   resolveFormat                       = srcAttachment.pView->GetViewFormat();
+        Pal::ResolveMode resolveModes[MaxRangePerAttachment] = {};
 
         const Pal::MsaaQuadSamplePattern* pSampleLocations = nullptr;
 
         if (Formats::IsDepthStencilFormat(resolveFormat) == false)
         {
             resolveModes[0]   = Pal::ResolveMode::Average;
-            resolveAspects[0] = Pal::ImageAspect::Color;
+            resolvePlanes[0]  = 0;
             aspectRegionCount = 1;
         }
         else
@@ -5173,8 +5179,8 @@ void CmdBuffer::RPResolveAttachments(
             {
                 if (depthResolveMode != VK_RESOLVE_MODE_NONE)
                 {
-                    resolveModes[aspectRegionCount]     = VkToPalResolveMode(depthResolveMode);
-                    resolveAspects[aspectRegionCount++] = Pal::ImageAspect::Depth;
+                    resolveModes[aspectRegionCount]    = VkToPalResolveMode(depthResolveMode);
+                    resolvePlanes[aspectRegionCount++] = 0;
                 }
 
                 // Must be specified because the source image was created with sampleLocsAlwaysKnown set
@@ -5183,8 +5189,8 @@ void CmdBuffer::RPResolveAttachments(
 
             if (Formats::HasStencil(resolveFormat) && (stencilResolveMode != VK_RESOLVE_MODE_NONE))
             {
-                resolveModes[aspectRegionCount]     = VkToPalResolveMode(stencilResolveMode);
-                resolveAspects[aspectRegionCount++] = Pal::ImageAspect::Stencil;
+                resolveModes[aspectRegionCount]    = VkToPalResolveMode(stencilResolveMode);
+                resolvePlanes[aspectRegionCount++] = Formats::HasDepth(resolveFormat) ? 1 : 0;
             }
         }
 
@@ -5194,19 +5200,19 @@ void CmdBuffer::RPResolveAttachments(
             // During split-frame-rendering, the image to resolve could be split across multiple devices.
             Pal::ImageResolveRegion regions[MaxPalDevices];
 
-            const Pal::ImageLayout srcLayout = RPGetAttachmentLayout(params.src.attachment, resolveAspects[aspectRegionIndex]);
-            const Pal::ImageLayout dstLayout = RPGetAttachmentLayout(params.dst.attachment, resolveAspects[aspectRegionIndex]);
+            const Pal::ImageLayout srcLayout = RPGetAttachmentLayout(params.src.attachment, resolvePlanes[aspectRegionIndex]);
+            const Pal::ImageLayout dstLayout = RPGetAttachmentLayout(params.dst.attachment, resolvePlanes[aspectRegionIndex]);
 
             for (uint32_t idx = 0; idx < m_renderPassInstance.renderAreaCount; idx++)
             {
                 const Pal::Rect& renderArea = m_renderPassInstance.renderArea[idx];
 
-                regions[idx].srcAspect      = resolveAspects[aspectRegionIndex];
+                regions[idx].srcPlane       = resolvePlanes[aspectRegionIndex];
                 regions[idx].srcSlice       = srcAttachment.subresRange[0].startSubres.arraySlice;
                 regions[idx].srcOffset.x    = renderArea.offset.x;
                 regions[idx].srcOffset.y    = renderArea.offset.y;
                 regions[idx].srcOffset.z    = 0;
-                regions[idx].dstAspect      = resolveAspects[aspectRegionIndex];
+                regions[idx].dstPlane       = resolvePlanes[aspectRegionIndex];
                 regions[idx].dstMipLevel    = dstAttachment.subresRange[0].startSubres.mipLevel;
                 regions[idx].dstSlice       = dstAttachment.subresRange[0].startSubres.arraySlice;
                 regions[idx].dstOffset.x    = renderArea.offset.x;
@@ -5264,8 +5270,7 @@ void CmdBuffer::RPBindTargets(
                 const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(reference.attachment);
 
                 params.colorTargets[i].pColorTargetView = attachment.pView->PalColorTargetView(deviceIdx);
-                params.colorTargets[i].imageLayout = RPGetAttachmentLayout(reference.attachment,
-                    Pal::ImageAspect::Color);
+                params.colorTargets[i].imageLayout = RPGetAttachmentLayout(reference.attachment, 0);
 
             }
             else
@@ -5283,8 +5288,8 @@ void CmdBuffer::RPBindTargets(
             const Framebuffer::Attachment& attachment = m_allGpuState.pFramebuffer->GetAttachment(attachmentIdx);
 
             params.depthTarget.pDepthStencilView = attachment.pView->PalDepthStencilView(deviceIdx);
-            params.depthTarget.depthLayout       = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Depth);
-            params.depthTarget.stencilLayout     = RPGetAttachmentLayout(attachmentIdx, Pal::ImageAspect::Stencil);
+            params.depthTarget.depthLayout       = RPGetAttachmentLayout(attachmentIdx, 0);
+            params.depthTarget.stencilLayout     = RPGetAttachmentLayout(attachmentIdx, 1);
 
         }
         else

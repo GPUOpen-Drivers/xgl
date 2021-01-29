@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2018-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2018-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -44,21 +44,6 @@
 #include "devmode/devmode_mgr.h"
 #endif
 #include <string.h>
-
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 641
-#include <limits.h>
-#include <stdlib.h>
-
-namespace Util
-{
-#if defined(__unix__)
-static constexpr size_t FileNameBufferLen = NAME_MAX;
-#else
-static constexpr size_t FileNameBufferLen = _MAX_FNAME;
-#endif
-static constexpr size_t PathBufferLen = FileNameBufferLen;
-}
-#endif
 
 namespace vk
 {
@@ -847,13 +832,8 @@ Util::IArchiveFile* PipelineBinaryCache::OpenReadOnlyArchive(
     };
 
     info.pMemoryCallbacks        = &allocCbs;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 641
-    Util::Strncpy(info.filePath, pFilePath, sizeof(info.filePath));
-    Util::Strncpy(info.fileName, pFileName, sizeof(info.fileName));
-#else
     info.pFilePath               = pFilePath;
     info.pFileName               = pFileName;
-#endif
     info.pPlatformKey            = m_pPlatformKey;
     info.archiveType             = ArchiveType;
     info.useStrictVersionControl = true;
@@ -907,13 +887,8 @@ Util::IArchiveFile* PipelineBinaryCache::OpenWritableArchive(
     };
 
     info.pMemoryCallbacks        = &allocCbs;
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION < 641
-    Util::Strncpy(info.filePath, pFilePath, sizeof(info.filePath));
-    Util::Strncpy(info.fileName, pFileName, sizeof(info.fileName));
-#else
     info.pFilePath               = pFilePath;
     info.pFileName               = pFileName;
-#endif
     info.pPlatformKey            = m_pPlatformKey;
     info.archiveType             = ArchiveType;
     info.useStrictVersionControl = true;
@@ -1077,7 +1052,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
         }
 
         // Buffer to hold constructed filename
-        char nameBuffer[Util::FileNameBufferLen] = {};
+        char nameBuffer[Util::FilenameBufferLen] = {};
 
         const char* const pCacheFileName = getenv(EnvVarFileName);
 

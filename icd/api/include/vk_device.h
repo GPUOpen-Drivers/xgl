@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -423,11 +423,6 @@ public:
         return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeMaskForExternalSharing();
     }
 
-    VK_INLINE uint32_t GetMemoryTypeForAttachmentImage() const
-    {
-        return VkPhysicalDevice(DefaultDeviceIndex)->GetMemoryTypeForAttachmentImage();
-    }
-
     VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
     {
         return VkPhysicalDevice(DefaultDeviceIndex)->GetVkTypeIndexBitsFromPalHeap(heapIndex, pVkIndexBits);
@@ -679,6 +674,7 @@ public:
         uint32_t                       numUserDataNodes,
         Vkgc::ResourceMappingRootNode* pUserDataNodes,
         VkShaderModuleCreateFlags      flags,
+        bool                           forceWave64,
         InternalPipeline*              pInternalPipeline);
 
 protected:

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -33,7 +33,6 @@
 #include "include/vk_fence.h"
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
-#include "include/vk_object.h"
 
 #include "palFence.h"
 
@@ -225,10 +224,30 @@ VkResult Fence::ImportFenceFd(
 
         if (pMemory != nullptr)
         {
-            result = PalToVkResult(pDevice->PalDevice(DefaultDeviceIndex)->OpenFence(
-                openInfo,
-                pMemory,
-                &m_pPalTemporaryFences));
+            // According to the spec,If handleType is VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT,
+            // the special value -1 for fd is treated like a valid sync file descriptor referring
+            // to an object that has already signaled.
+
+            // Since -1 is an invalid fd, it can't be opened.
+            // Therefore, create a signaled fence here to return to the application.
+            if ((pImportFenceFdInfo->handleType == VK_EXTERNAL_FENCE_HANDLE_TYPE_SYNC_FD_BIT_KHR) &&
+                (static_cast<int32_t>(pImportFenceFdInfo->fd) == InvalidFd))
+            {
+                Pal::FenceCreateInfo palFenceCreateInfo = {};
+                palFenceCreateInfo.flags.signaled = 1;
+
+                result = PalToVkResult(pDevice->PalDevice(DefaultDeviceIndex)->CreateFence(
+                    palFenceCreateInfo,
+                    pMemory,
+                    &m_pPalTemporaryFences));
+            }
+            else
+            {
+                result = PalToVkResult(pDevice->PalDevice(DefaultDeviceIndex)->OpenFence(
+                    openInfo,
+                    pMemory,
+                    &m_pPalTemporaryFences));
+            }
         }
         else
         {

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +31,6 @@
 #include "include/vk_memory.h"
 #include "include/vk_pipeline_cache.h"
 #include "include/vk_pipeline_layout.h"
-#include "include/vk_object.h"
 #include "include/vk_render_pass.h"
 #include "include/vk_shader.h"
 #include "include/vk_cmdbuffer.h"
@@ -614,7 +613,8 @@ void GraphicsPipeline::BuildRasterizationState(
     // Enable perpendicular end caps if we report strictLines semantics
     pInfo->pipeline.rsState.perpLineEndCapsEnable = (limits.strictLines == VK_TRUE);
 
-    pInfo->pipeline.viewportInfo.depthClipEnable                = (pIn->depthClampEnable == VK_FALSE);
+    pInfo->pipeline.viewportInfo.depthClipNearEnable            = (pIn->depthClampEnable == VK_FALSE);
+    pInfo->pipeline.viewportInfo.depthClipFarEnable             = (pIn->depthClampEnable == VK_FALSE);
     pInfo->pipeline.viewportInfo.depthRange                     = Pal::DepthRange::ZeroToOne;
 
     pInfo->immedInfo.triangleRasterState.frontFillMode          = VkToPalFillMode(pIn->polygonMode);
@@ -744,7 +744,8 @@ void GraphicsPipeline::BuildRasterizationState(
                 const auto* pRsRasterizationDepthClipState =
                     static_cast<const VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(pNext);
 
-                pInfo->pipeline.viewportInfo.depthClipEnable = (pRsRasterizationDepthClipState->depthClipEnable == VK_TRUE);
+                pInfo->pipeline.viewportInfo.depthClipNearEnable = (pRsRasterizationDepthClipState->depthClipEnable == VK_TRUE);
+                pInfo->pipeline.viewportInfo.depthClipFarEnable = (pRsRasterizationDepthClipState->depthClipEnable == VK_TRUE);
             }
             break;
 
@@ -761,7 +762,8 @@ void GraphicsPipeline::BuildRasterizationState(
     // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
     if ((pIn->depthClampEnable == VK_FALSE) &&
         (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_DEPTH_RANGE_UNRESTRICTED) ||
-         (pInfo->pipeline.viewportInfo.depthClipEnable == false)))
+         ((pInfo->pipeline.viewportInfo.depthClipNearEnable == false) &&
+          (pInfo->pipeline.viewportInfo.depthClipFarEnable == false))))
     {
         pInfo->pipeline.rsState.depthClampDisable = true;
     }
@@ -1376,7 +1378,6 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             }
         }
     }
-
 }
 
 // =====================================================================================================================

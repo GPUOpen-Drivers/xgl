@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1023,6 +1023,7 @@ VkResult Device::Create(
 
     if (privateDataEnabled)
     {
+
         privateDataSlotRequestCount = (privateDataSlotRequestCount > 0) ? privateDataSlotRequestCount : 1;
 
         privateDataSize = Util::Pow2Align(
@@ -1971,6 +1972,7 @@ VkResult Device::CreateInternalComputePipeline(
     uint32_t                       numUserDataNodes,
     Vkgc::ResourceMappingRootNode* pUserDataNodes,
     VkShaderModuleCreateFlags      flags,
+    bool                           forceWave64,
     InternalPipeline*              pInternalPipeline)
 {
     VK_ASSERT(numUserDataNodes <= VK_ARRAY_SIZE(pInternalPipeline->userDataNodeOffsets));
@@ -2168,6 +2170,7 @@ VkResult Device::CreateInternalPipelines()
         VK_ARRAY_SIZE(userDataNodes),
         userDataNodes,
         0,
+        false,
         &m_timestampQueryCopyPipeline);
 
     return result;

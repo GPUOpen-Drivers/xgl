@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -25,7 +25,6 @@
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
-#include "include/vk_object.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_sampler.h"
 #include "include/vk_sampler_ycbcr_conversion.h"
@@ -157,8 +156,9 @@ VkResult Sampler::Create(
         break;
     }
 
-    samplerInfo.flags.useAnisoThreshold        = (pDevice->GetRuntimeSettings().useAnisoThreshold == true);
-    samplerInfo.anisoThreshold                 = pDevice->GetRuntimeSettings().anisoThreshold;
+    samplerInfo.flags.useAnisoThreshold        = (settings.useAnisoThreshold == true) ? 1 : 0;
+    samplerInfo.anisoThreshold                 = settings.anisoThreshold;
+    samplerInfo.perfMip                        = settings.samplerPerfMip;
     samplerInfo.flags.unnormalizedCoords       = (pCreateInfo->unnormalizedCoordinates == VK_TRUE) ? 1 : 0;
     samplerInfo.flags.prtBlendZeroMode         = 0;
     samplerInfo.flags.seamlessCubeMapFiltering = 1;

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -1891,23 +1891,32 @@ Pal::Result DevModeMgr::InitTraceQueueResources(
 
         if (pState->queueTimingEnabled)
         {
-            if (palResult == Pal::Result::Success)
+            if (kernelContextInfo.contextIdentifier != 0)
             {
-                pQueueState->queueContext = kernelContextInfo.contextIdentifier;
+                // A zero for contextIdentifier indicates that we don't have access to get the kernel handle. Without
+                // that access we can't use the queue timing functions.
+                pState->queueTimingEnabled = false;
             }
-
-            // I think we need a GPA session per PAL device in the group, and we need to register each
-            // per-device queue with the corresponding PAL device's GPA session.  This needs to be
-            // fixed for MGPU tracing to work (among probably many other things).
-            VK_ASSERT(pState->pDevice->NumPalDevices() == 1);
-
-            // Register the queue with the GPA session class for timed queue operation support.
-            if (pState->pGpaSession->RegisterTimedQueue(
-                pQueue->PalQueue(DefaultDeviceIndex),
-                pQueueState->queueId,
-                pQueueState->queueContext) == Pal::Result::Success)
+            else
             {
-                pQueueState->timingSupported = true;
+                if (palResult == Pal::Result::Success)
+                {
+                    pQueueState->queueContext = kernelContextInfo.contextIdentifier;
+                }
+
+                // I think we need a GPA session per PAL device in the group, and we need to register each
+                // per-device queue with the corresponding PAL device's GPA session.  This needs to be
+                // fixed for MGPU tracing to work (among probably many other things).
+                VK_ASSERT(pState->pDevice->NumPalDevices() == 1);
+
+                // Register the queue with the GPA session class for timed queue operation support.
+                if (pState->pGpaSession->RegisterTimedQueue(
+                    pQueue->PalQueue(DefaultDeviceIndex),
+                    pQueueState->queueId,
+                    pQueueState->queueContext) == Pal::Result::Success)
+                {
+                    pQueueState->timingSupported = true;
+                }
             }
         }
     }
@@ -2587,12 +2596,19 @@ void DevModeMgr::PipelineDestroyed(
 // Retrieves the target API PSO hash from the RGP Server
 uint64_t DevModeMgr::GetInstructionTraceTargetHash()
 {
-    const auto& settings        = m_trace.pDevice->GetRuntimeSettings();
-    const auto  traceParameters = m_pRGPServer->QueryTraceParameters();
+    uint64_t targetHash = InvalidTargetPipelineHash;
 
-    return settings.devModeSqttInstructionTraceEnable ?
-        settings.devModeSqttTargetApiPsoHash :
-        traceParameters.pipelineHash;
+    if (IsTracingEnabled())
+    {
+        const auto& settings = m_trace.pDevice->GetRuntimeSettings();
+        const auto  traceParameters = m_pRGPServer->QueryTraceParameters();
+
+        targetHash = settings.devModeSqttInstructionTraceEnable ?
+            settings.devModeSqttTargetApiPsoHash :
+            traceParameters.pipelineHash;
+    }
+
+    return targetHash;
 }
 
 // =====================================================================================================================
@@ -2600,10 +2616,13 @@ uint64_t DevModeMgr::GetInstructionTraceTargetHash()
 void DevModeMgr::StartInstructionTrace(
     CmdBuffer* pCmdBuffer)
 {
-    m_trace.pGpaSession->UpdateSampleTraceParams(
-        pCmdBuffer->PalCmdBuffer(DefaultDeviceIndex),
-        0,
-        GpuUtil::UpdateSampleTraceMode::StartInstructionTrace);
+    if (IsTracingEnabled())
+    {
+        m_trace.pGpaSession->UpdateSampleTraceParams(
+            pCmdBuffer->PalCmdBuffer(DefaultDeviceIndex),
+            0,
+            GpuUtil::UpdateSampleTraceMode::StartInstructionTrace);
+    }
 }
 
 // =====================================================================================================================
@@ -2611,10 +2630,13 @@ void DevModeMgr::StartInstructionTrace(
 void DevModeMgr::StopInstructionTrace(
     CmdBuffer* pCmdBuffer)
 {
-    m_trace.pGpaSession->UpdateSampleTraceParams(
-        pCmdBuffer->PalCmdBuffer(DefaultDeviceIndex),
-        0,
-        GpuUtil::UpdateSampleTraceMode::StopInstructionTrace);
+    if (IsTracingEnabled())
+    {
+        m_trace.pGpaSession->UpdateSampleTraceParams(
+            pCmdBuffer->PalCmdBuffer(DefaultDeviceIndex),
+            0,
+            GpuUtil::UpdateSampleTraceMode::StopInstructionTrace);
+    }
 }
 
 #if VKI_GPUOPEN_PROTOCOL_ETW_CLIENT

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,6 @@
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
-#include "include/vk_object.h"
 #include "include/vk_sampler_ycbcr_conversion.h"
 
 #include "palColorTargetView.h"
@@ -132,7 +131,7 @@ void ImageView::BuildImageSrds(
                                                   pDevice->PalDevice(DefaultDeviceIndex),
                                                   imageTiling);
     info.samplePatternIdx = Device::GetDefaultSamplePatternIndex(pImage->GetImageSamples());
-    info.texOptLevel      = VkToPalTexFilterQuality(pDevice->GetRuntimeSettings().vulkanTexFilterQuality);
+    info.texOptLevel      = VkToPalTexFilterQuality(settings.vulkanTexFilterQuality);
 
     // NOTE: Unlike for color views, we don't have to mess with the subresource range for 3D views.
     // When zRangeValid is 0, PAL still enables all depth slices on that subresource visible to the view
@@ -267,7 +266,7 @@ Pal::Result ImageView::BuildColorTargetView(
 {
     struct Pal::SubresId subresId;
 
-    subresId.aspect     = subresRange.startSubres.aspect;
+    subresId.plane      = subresRange.startSubres.plane;
     subresId.mipLevel   = subresRange.startSubres.mipLevel;
     subresId.arraySlice = subresRange.startSubres.arraySlice;
 
@@ -278,6 +277,7 @@ Pal::Result ImageView::BuildColorTargetView(
     colorInfo.swizzledFormat       = viewFormat;
     colorInfo.imageInfo.baseSubRes = subresId;
     colorInfo.imageInfo.arraySize  = subresRange.numSlices;
+
     // Bypass Mall cache if no alloc policy is set for color target resource
     // Global resource settings always takes precedence over everything else
     if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocCt))
@@ -333,6 +333,7 @@ Pal::Result ImageView::BuildDepthStencilView(
     depthInfo.mipLevel            = subresRange.startSubres.mipLevel;
     depthInfo.baseArraySlice      = subresRange.startSubres.arraySlice;
     depthInfo.arraySize           = subresRange.numSlices;
+
     // Bypass Mall cache if no alloc policy is set for depth stencil resource
     // Global resource settings always takes precedence over everything else
     if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocDs))
@@ -569,27 +570,24 @@ VkResult ImageView::Create(
     // Build the PAL image view SRDs if needed
     if (srdSegmentSize > 0)
     {
-        void* pSrdMemorys[MaxPalAspectsPerMask] = {};
-
-        pSrdMemorys[0] = Util::VoidPtrInc(pMemory, srdSegmentOffset);
-
         Pal::SwizzledFormat aspectFormat = VkToPalFormat(Formats::GetAspectFormat(createInfoFormat,
                                                          subresRange.aspectMask), pDevice->GetRuntimeSettings());
 
         VK_ASSERT(aspectFormat.format != Pal::ChNumFormat::Undefined);
 
-        for (uint32 i = 0; i < palRangeCount; ++i)
+        for (uint32 plane = 0; plane < palRangeCount; ++plane)
         {
+            void* pSrdMemory = Util::VoidPtrInc(pMemory, srdSegmentOffset + (imageDescSize  * SrdCount * plane));
+
             BuildImageSrds(pDevice,
                            imageDescSize,
                            pImage,
                            aspectFormat,
-                           palRanges[i],
+                           palRanges[plane],
                            imageViewUsage,
                            minLod,
                            pCreateInfo,
-                           pSrdMemorys[i]);
-            pSrdMemorys[i+1] = Util::VoidPtrInc(pSrdMemorys[i], imageDescSize  * SrdCount);
+                           pSrdMemory);
         }
     }
 

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2015-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2015-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -31,7 +31,7 @@
 
 #include <string.h>
 #include "include/vk_alloccb.h"
-#include "include/vk_object.h"
+#include "include/vk_utils.h"
 #include "include/vk_layer_switchable_graphics.h"
 #include "include/query_dlist.h"
 
@@ -128,6 +128,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance_SG(
                     g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups =
                         reinterpret_cast<PFN_vkEnumeratePhysicalDeviceGroups>(
                             pfnGetInstanceProcAddr(*pInstance, "vkEnumeratePhysicalDeviceGroups"));
+                    g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroupsKHR =
+                        reinterpret_cast<PFN_vkEnumeratePhysicalDeviceGroupsKHR>(
+                            pfnGetInstanceProcAddr(*pInstance, "vkEnumeratePhysicalDeviceGroupsKHR"));
                 }
             }
             break;
@@ -303,12 +306,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
 }
 
 // =====================================================================================================================
-// Layer's implementation for vkEnumeratePhysicalDeviceGroups, call next link's vkEnumeratePhysicalDeviceGroups,
-// implementation, then adjust the returned physical device groups result by checking hybrid graphics platform
-VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
+// General part for both vkEnumeratePhysicalDeviceGroups_SG and vkEnumeratePhysicalDeviceGroupsKHR_SG
+static VkResult vkEnumeratePhysicalDeviceGroupsComm(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceGroupCount,
-    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties)
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties,
+    PFN_EnumPhysDeviceGroupsFunc                pEnumPhysDeviceGroupsFunc)
 {
     VkResult result = VK_SUCCESS;
     const VkAllocationCallbacks* pAllocCb = &allocator::g_DefaultAllocCallback;
@@ -318,47 +321,47 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
     uint32_t physicalDeviceGroupCount = *pPhysicalDeviceGroupCount;
     VkPhysicalDeviceGroupProperties* pLayerPhysicalDeviceGroups = nullptr;
 
-    if (pPhysicalDeviceGroupProperties != nullptr)
+    // Get real device groups count at first
+    result = pEnumPhysDeviceGroupsFunc(instance, &physicalDeviceGroupCount, nullptr);
+
+    if (result == VK_SUCCESS)
     {
-        // Get real device groups count at first
-        result = g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups(instance, &physicalDeviceGroupCount, nullptr);
-        if (result == VK_SUCCESS)
+        void* pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
+                                                physicalDeviceGroupCount * sizeof(VkPhysicalDeviceGroupProperties),
+                                                sizeof(void*),
+                                                VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
+        if (pMemory == nullptr)
         {
-            void* pMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
-                                                    physicalDeviceGroupCount * sizeof(VkPhysicalDeviceGroupProperties),
-                                                    sizeof(void*),
-                                                    VK_SYSTEM_ALLOCATION_SCOPE_INSTANCE);
-            if (pMemory == nullptr)
-            {
-                result = VK_ERROR_OUT_OF_HOST_MEMORY;
-            }
-            else
-            {
-                pLayerPhysicalDeviceGroups = static_cast<VkPhysicalDeviceGroupProperties*>(pMemory);
-            }
+            result = VK_ERROR_OUT_OF_HOST_MEMORY;
+        }
+        else
+        {
+            pLayerPhysicalDeviceGroups = static_cast<VkPhysicalDeviceGroupProperties*>(pMemory);
         }
     }
 
     // Call loader's terminator function into ICDs to get all the physical device groups
     if (result == VK_SUCCESS)
     {
-        result = g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups(instance,
-                                                                  &physicalDeviceGroupCount,
-                                                                  pLayerPhysicalDeviceGroups);
+        result = pEnumPhysDeviceGroupsFunc(instance, &physicalDeviceGroupCount, pLayerPhysicalDeviceGroups);
     }
 
     if (result == VK_SUCCESS)
     {
-        bool isHybridGraphics = false;
+        bool processDevices = false;
 
         if (physicalDeviceGroupCount > 1)
         {
-            isHybridGraphics = IsHybridGraphicsSupported();
+
+#if defined(__unix__)
+            processDevices = true;
+#endif
         }
 
-        if (isHybridGraphics)
+        if (processDevices)
         {
-            uint32_t physicalDeviceCount = physicalDeviceGroupCount;
+            uint32_t physicalDeviceCount = 0;
+            g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
             void* pTmpLayerPhysicalDeviceMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
                                                         physicalDeviceCount * sizeof(VkPhysicalDevice),
                                                         sizeof(void*),
@@ -379,7 +382,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
                 // Call vkEnumeratePhysicalDevices_SG to get all valid physical devices, store all valid
                 // physical device properies in pProperties
                 result = vkEnumeratePhysicalDevices_SG(instance, &physicalDeviceCount, pTmpLayerPhysicalDevice);
-                if ((result == VK_SUCCESS) && (pPhysicalDeviceGroupProperties != nullptr))
+                if (result == VK_SUCCESS)
                 {
                     for (uint32_t i = 0; i < physicalDeviceCount; i++)
                     {
@@ -390,29 +393,33 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
 
             if (result == VK_SUCCESS)
             {
+                uint32_t deviceGroupCount = 0;
+
                 // Check the physical devices in device group, only report the device groups which contains valid
                 // physical devices
-                if (pPhysicalDeviceGroupProperties != nullptr)
+                for (uint32_t i = 0; i < physicalDeviceGroupCount; i++)
                 {
-                    uint32_t deviceGroupCount = 0;
-                    for (uint32_t i = 0; i < physicalDeviceGroupCount; i++)
+                    VkPhysicalDeviceProperties properties = {};
+                    g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(
+                            pLayerPhysicalDeviceGroups[i].physicalDevices[0], &properties);
+                    for (uint32_t j = 0; j < physicalDeviceCount; j++)
                     {
-                        VkPhysicalDeviceProperties properties = {};
-                        g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(
-                                pLayerPhysicalDeviceGroups[i].physicalDevices[0], &properties);
-                        for (uint32_t j = 0; j < physicalDeviceCount; j++)
+                        if ((properties.vendorID == pProperties[j].vendorID) &&
+                            (properties.deviceID == pProperties[j].deviceID) &&
+                            (strcmp(properties.deviceName, pProperties[j].deviceName) == 0))
                         {
-                            if ((properties.vendorID == pProperties[j].vendorID) &&
-                                (properties.deviceID == pProperties[j].deviceID))
+                            if (pPhysicalDeviceGroupProperties != nullptr)
                             {
                                 pPhysicalDeviceGroupProperties[deviceGroupCount] = pLayerPhysicalDeviceGroups[i];
-                                deviceGroupCount++;
                             }
+
+                            deviceGroupCount++;
+                            break;
                         }
                     }
                 }
 
-                *pPhysicalDeviceGroupCount = physicalDeviceCount;
+                *pPhysicalDeviceGroupCount = deviceGroupCount;
             }
 
             if (pTmpLayerPhysicalDevice != nullptr)
@@ -427,7 +434,6 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
         }
         else
         {
-            // If it is not HG platform, report all the physical device groups to upper layer or loader
             *pPhysicalDeviceGroupCount = physicalDeviceGroupCount;
             if (pPhysicalDeviceGroupProperties != nullptr)
             {
@@ -447,6 +453,34 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
     return result;
 }
 
+// =====================================================================================================================
+// Layer's implementation for vkEnumeratePhysicalDeviceGroupsKHR, call next link's vkEnumeratePhysicalDeviceGroupsKHR,
+// implementation, then adjust the returned physical device groups result by checking hybrid graphics platform
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR_SG(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties)
+{
+    return vkEnumeratePhysicalDeviceGroupsComm(instance,
+                                               pPhysicalDeviceGroupCount,
+                                               pPhysicalDeviceGroupProperties,
+                                               g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroupsKHR);
+}
+
+// =====================================================================================================================
+// Layer's implementation for vkEnumeratePhysicalDeviceGroups, call next link's vkEnumeratePhysicalDeviceGroups,
+// implementation, then adjust the returned physical device groups result by checking hybrid graphics platform
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties)
+{
+    return vkEnumeratePhysicalDeviceGroupsComm(instance,
+                                               pPhysicalDeviceGroupCount,
+                                               pPhysicalDeviceGroupProperties,
+                                               g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups);
+}
+
 // Helper macro used to create an entry for the "primary" entry point implementation (i.e. the one that goes straight
 // to the driver, unmodified.
 #define LAYER_DISPATCH_ENTRY(entry_name) VK_LAYER_DISPATCH_ENTRY(entry_name, vk::entry::entry_name)
@@ -457,6 +491,7 @@ const LayerDispatchTableEntry g_LayerDispatchTable_SG[] =
     LAYER_DISPATCH_ENTRY(vkCreateInstance_SG),
     LAYER_DISPATCH_ENTRY(vkEnumeratePhysicalDevices_SG),
     LAYER_DISPATCH_ENTRY(vkEnumeratePhysicalDeviceGroups_SG),
+    LAYER_DISPATCH_ENTRY(vkEnumeratePhysicalDeviceGroupsKHR_SG),
     VK_LAYER_DISPATCH_TABLE_END()
 };
 

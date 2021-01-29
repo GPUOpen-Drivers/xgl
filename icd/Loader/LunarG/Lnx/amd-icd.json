@@ -1,12 +1,12 @@
 {
   "file_format_version": "1.0.0",
   "ICD": {
-    "api_version": "1.2.164"
+    "api_version": "1.2.167"
   },
   "layer": {
     "name": "VK_LAYER_AMD_switchable_graphics",
     "type": "GLOBAL",
-    "api_version": "1.2.162",
+    "api_version": "1.2.167",
     "implementation_version": "1",
     "description": "AMD switchable graphics layer",
     "functions": {

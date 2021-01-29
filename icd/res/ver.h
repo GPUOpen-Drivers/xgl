@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -36,7 +36,7 @@
 #define VERSION_MAJOR_STR           MAKE_VERSION_STRING(VULKAN_ICD_MAJOR_VERSION) "\0"
 
 // Bump up after each promotion to mainline
-#define VULKAN_ICD_BUILD_VERSION   172
+#define VULKAN_ICD_BUILD_VERSION   174
 
 // String version is needed with leading zeros and extra termination (unicode)
 #define VERSION_NUMBER_MINOR        VULKAN_ICD_BUILD_VERSION

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -134,19 +134,19 @@ public:
                 index = VK_IMAGE_LAYOUT_RANGE_SIZE + 2;
                 break;
             case VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL:
-                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 6;
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 5;
                 break;
             case VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL:
-                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 7;
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 6;
                 break;
             case VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL:
-                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 8;
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 7;
                 break;
             case VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL:
-                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 9;
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 8;
                 break;
             case VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR:
-                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 10;
+                index = VK_IMAGE_LAYOUT_RANGE_SIZE + 9;
                 break;
             default:
                 VK_NEVER_CALLED();
@@ -175,18 +175,18 @@ protected:
         m_layoutUsageTable[2][usageIndex] = layoutUsage;
     }
 
-    void InitEntry(VkImageLayout layout, uint32_t layoutUsage0, uint32_t layoutUsage1, uint32_t layoutUsage2 = 0)
+    void InitEntry(VkImageLayout layout, uint32_t layoutUsage0, uint32_t layoutUsage1)
     {
         const uint32_t usageIndex = GetLayoutUsageIndex(layout, VK_FORMAT_UNDEFINED);
 
         m_layoutUsageTable[0][usageIndex] = layoutUsage0;
         m_layoutUsageTable[1][usageIndex] = layoutUsage1;
-        m_layoutUsageTable[2][usageIndex] = layoutUsage2;
+        m_layoutUsageTable[2][usageIndex] = layoutUsage1;
     }
 
     enum { LayoutUsageTableSize = VK_IMAGE_LAYOUT_RANGE_SIZE + 11 };
 
-    uint32_t    m_layoutUsageTable[MaxPalAspectsPerMask][LayoutUsageTableSize];
+    uint32_t m_layoutUsageTable[MaxPalAspectsPerMask][LayoutUsageTableSize];
 };
 
 static const LayoutUsageHelper g_LayoutUsageHelper;
@@ -1015,7 +1015,7 @@ Pal::ImageLayout ImageBarrierPolicy::GetTransferLayout(
 // Constructs the PAL layout corresponding to a Vulkan layout for the specified aspect.
 Pal::ImageLayout ImageBarrierPolicy::GetAspectLayout(
     VkImageLayout                       layout,
-    uint32_t                            aspectIndex,
+    uint32_t                            plane,
     uint32_t                            queueFamilyIndex,
     VkFormat                            format) const
 {
@@ -1024,7 +1024,7 @@ Pal::ImageLayout ImageBarrierPolicy::GetAspectLayout(
     uint32_t usageIndex = g_LayoutUsageHelper.GetLayoutUsageIndex(layout, format);
 
     // Mask determined layout usage flags by the supported layout usage mask on the given queue family index.
-    result.usages = g_LayoutUsageHelper.GetLayoutUsage(aspectIndex, usageIndex)
+    result.usages = g_LayoutUsageHelper.GetLayoutUsage(plane, usageIndex)
                   & GetSupportedLayoutUsageMask(queueFamilyIndex);
 
     // If the layout usage is 0, it likely means that an application is trying to transition to an image layout that

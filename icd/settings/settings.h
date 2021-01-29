@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -35,8 +35,11 @@
 #define __SETTINGS_SETTINGS_H__
 
 #include "palSettingsLoader.h"
-#include "g_settings.h"
 
+// g_settings.h is generated in the same dir on Linux and Windows.
+// However, if g_settings.h is generated out of source tree,
+// then we need to include this file from "settings" dir.
+#include "settings/g_settings.h"
 #include "include/app_profile.h"
 
 namespace Pal

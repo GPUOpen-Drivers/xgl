@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -239,7 +239,9 @@ SqttCmdBufferState::SqttCmdBufferState(
     m_currentEntryPoint(RgpSqttMarkerGeneralApiType::Invalid),
     m_currentEventId(0),
     m_currentEventType(RgpSqttMarkerEventType::InternalUnknown),
-    m_instructionTrace({ false, 0, VK_PIPELINE_BIND_POINT_MAX_ENUM }),
+#if ICD_GPUOPEN_DEVMODE_BUILD
+    m_instructionTrace({ false, DevModeMgr::InvalidTargetPipelineHash, VK_PIPELINE_BIND_POINT_MAX_ENUM }),
+#endif
     m_debugTags(pCmdBuf->VkInstance()->Allocator())
 {
     m_cbId.u32All       = 0;

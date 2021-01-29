@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -371,6 +371,18 @@ constexpr AppProfilePatternEntry AppNameGhostReconBreakpoint =
 {
     PatternAppNameLower,
     "ghost recon breakpoint"
+};
+
+constexpr AppProfilePatternEntry AppNameQuake2RTX =
+{
+    PatternAppNameLower,
+    "quake 2 pathtracing"
+};
+
+constexpr AppProfilePatternEntry AppEngineVKPT =
+{
+    PatternEngineNameLower,
+    "vkpt"
 };
 
 constexpr AppProfilePatternEntry AppEngineAnvilNext =
@@ -749,6 +761,15 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameGhostReconBreakpoint,
             AppEngineAnvilNext,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Quake2RTX,
+        {
+            AppNameQuake2RTX,
+            AppEngineVKPT,
             PatternEnd
         }
     },

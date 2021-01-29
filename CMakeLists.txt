@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -254,16 +254,11 @@ option(ICD_BUILD_LLPC "Build LLPC?" ON)
 cmake_dependent_option(ICD_COMPILER_DEFAULT "Default value of compiler" ON "ICD_BUILD_LLPC" OFF)
 option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
 option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)
-option(XGL_BUILD_RENOIR "Build open source vulkan for Renoir?" ON)
 
 option(XGL_BUILD_LIT "Build with Lit test?" OFF)
 option(XGL_BUILD_GFX10 "Build open source vulkan for GFX10" ON)
 
-cmake_dependent_option(XGL_BUILD_NAVI14 "Build open source vulkan for Navi14" ON "XGL_BUILD_GFX10" OFF)
-
 option(XGL_BUILD_GFX103 "Build open source vulkan for GFX103" ON)
-
-cmake_dependent_option(XGL_BUILD_NAVI21 "Build open source vulkan for Navi21" ON "XGL_BUILD_GFX10;XGL_BUILD_GFX103" OFF)
 
 option(XGL_BUILD_CACHE_CREATOR "Build cache-creator tools?" OFF)
 
@@ -271,6 +266,9 @@ option(XGL_BUILD_CACHE_CREATOR "Build cache-creator tools?" OFF)
 option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
 #endif
 option(VKI_KHR_FRAGMENT_SHADING_RATE "Build vulkan with VKI_KHR_FRAGMENT_SHADING_RATE" OFF)
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+option(VKI_3RD_PARTY_IP_PROPERTY_ID "Build vulkan with 3RD_PARTY_IP_PROPERTY_ID" OFF)
+#endif
 #if VKI_EXT_EXTENDED_DYNAMIC_STATE
 option(VKI_EXT_EXTENDED_DYNAMIC_STATE "Build vulkan with EXTENDED_DYNAMIC_STATE extention" OFF)
 #endif
@@ -369,7 +367,6 @@ if(ICD_GPUOPEN_DEVMODE_BUILD)
     endif()
     set(GPUOPEN_CLIENT_INTERFACE_MAJOR_VERSION ${GPUOPEN_MAJOR_VERSION})
 endif()
-
 # XGL cache creator tool
 set(XGL_CACHE_CREATOR_PATH ${PROJECT_SOURCE_DIR}/tools/cache_creator CACHE PATH "Path to the cache creator tool")
 
@@ -387,12 +384,14 @@ set(PAL_ENABLE_LTO ${XGL_ENABLE_LTO} CACHE BOOL "XGL override to build PAL with 
 set(PAL_MEMTRACK ${ICD_MEMTRACK} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GPUOPEN ${ICD_GPUOPEN_DEVMODE_BUILD} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-set(PAL_BUILD_RENOIR ${XGL_BUILD_RENOIR} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(PAL_BUILD_RENOIR ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-set(PAL_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(PAL_BUILD_NAVI14 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
 set(PAL_BUILD_GFX103 ${XGL_BUILD_GFX103} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-set(PAL_BUILD_NAVI21 ${XGL_BUILD_NAVI21} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+set(PAL_BUILD_NAVI21 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 # Wayland
 set(PAL_BUILD_WAYLAND ${BUILD_WAYLAND_SUPPORT} CACHE BOOL "Build PAL with Wayland support" FORCE)
@@ -548,6 +547,10 @@ if(XGL_ENABLE_ASSERTIONS)
     endif()
 endif()
 
+#if VKI_3RD_PARTY_IP_PROPERTY_ID
+set(PAL_3RD_PARTY_IP_PROPERTY_ID ${VKI_3RD_PARTY_IP_PROPERTY_ID})
+#endif
+
 ### Generator Dependencies #############################################################################################
 find_package(PythonInterp 3)
 if(NOT PYTHONINTERP_FOUND)
@@ -619,13 +622,9 @@ endif()
 set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE STRING "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(LLPC_BUILD_GFX10 ${XGL_BUILD_GFX10} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-set(LLPC_BUILD_GFX103 ${XGL_BUILD_GFX103} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-set(LLPC_BUILD_NAVI14 ${XGL_BUILD_NAVI14} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-set(LLPC_BUILD_NAVI21 ${XGL_BUILD_NAVI21} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 if(ICD_BUILD_LLPC)
     set(LLPC_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-    set(LLPC_BUILD_RENOIR ${XGL_BUILD_RENOIR} CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(LLPC_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(LLPC_ENABLE_WERROR ${ICD_ANALYSIS_WARNINGS_AS_ERRORS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 endif()

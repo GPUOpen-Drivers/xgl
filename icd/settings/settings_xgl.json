@@ -510,6 +510,18 @@
       "Scope": "Driver"
     },
     {
+      "Name": "PadVertexBuffers",
+      "Description": "Pad vertex buffers if the range isn't the multiple of stride. ",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Controls which category messages are output to log file (/var/tmp/palLog.txt). e.g. enable PipelineCompileTime(enum LogTagId in icd/api/include/log.h), logTagIdMask |= 1<<PipelineCompileTime",
       "Tags": [
         "Pipeline Options"
@@ -1128,6 +1140,18 @@
       "Scope": "Driver"
     },
     {
+      "Description": "Force ray tracing shaders to run with a particular wave size. This is ignored if subgroup operations are used by the shader, see SubgroupSize. 0  - Let compiler choose Wave32 vs Wave64 mode (default) 32 - Run in Wave32 mode 64 - Run in Wave64 mode ",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": 32
+      },
+      "Type": "uint32",
+      "Name": "RtWaveSize",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Enable NGG mode, use an implicit primitive shader on a per-pipeline type basis. Use this instead of PAL setting, NggEnableMode.",
       "Tags": [
         "SPIRV Options"
@@ -1365,30 +1389,6 @@
       "Scope": "Driver"
     },
     {
-      "Name": "NggDisableCullingVmemInstrThreshold",
-      "Description": "Control the NGG culling hueristic's allowed ratio of VMEM instructions that can be duplicated because of culling. 0 is the compiler's default, not none",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": 0.0
-      },
-      "Scope": "Driver",
-      "Type": "float"
-    },
-    {
-      "Name": "NggDisableCullingValuInstrThreshold",
-      "Description": "Control the NGG culling hueristic's allowed ratio of VALU instructions that can be duplicated because of culling. 0 is the compiler's default, not none",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": 0.0
-      },
-      "Scope": "Driver",
-      "Type": "float"
-    },
-    {
       "Description": "Force HW to guarantee forward progress per wave on GFX10 0x00000000 - Disable (default) 0x00000001 - Enable for vertex shaders 0x00000002 - Enable for tessellation control shaders 0x00000004 - Enable for tessellation evaluation shaders 0x00000008 - Enable for geometry shaders 0x00000010 - Enable for fragment shaders 0x00000020 - Enable for compute shaders ",
       "Tags": [
         "SPIRV Options"
@@ -1603,198 +1603,6 @@
       },
       "Type": "uint32",
       "Name": "RelaxedPrecisionFlags",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Force vertex shaders' optimization IR mode selection.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "ValidValues": {
-        "Values": [
-          {
-            "Description": "Let the compiler choose the IR mode.",
-            "Value": 0
-          },
-          {
-            "Description": "Force the compiler to use Old IR.",
-            "Value": 1
-          },
-          {
-            "Description": "Force the compiler to use New IR with retry mechanism.",
-            "Value": 2
-          },
-          {
-            "Description": "Force the compiler to use New IR with error mechanism.",
-            "Value": 3
-          }
-        ]
-      },
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "VsIrMode",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Force tessellation control shaders' optimization IR mode selection.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "ValidValues": {
-        "Values": [
-          {
-            "Description": "Let the compiler choose the IR mode.",
-            "Value": 0
-          },
-          {
-            "Description": "Force the compiler to use Old IR.",
-            "Value": 1
-          },
-          {
-            "Description": "Force the compiler to use New IR with retry mechanism.",
-            "Value": 2
-          },
-          {
-            "Description": "Force the compiler to use New IR with error mechanism.",
-            "Value": 3
-          }
-        ]
-      },
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "TcsIrMode",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Force tessellation evaluation shaders' optimization IR mode selection.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "ValidValues": {
-        "Values": [
-          {
-            "Description": "Let the compiler choose the IR mode.",
-            "Value": 0
-          },
-          {
-            "Description": "Force the compiler to use Old IR.",
-            "Value": 1
-          },
-          {
-            "Description": "Force the compiler to use New IR with retry mechanism.",
-            "Value": 2
-          },
-          {
-            "Description": "Force the compiler to use New IR with error mechanism.",
-            "Value": 3
-          }
-        ]
-      },
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "TesIrMode",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Force geometry shaders' optimization IR mode selection.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "ValidValues": {
-        "Values": [
-          {
-            "Description": "Let the compiler choose the IR mode.",
-            "Value": 0
-          },
-          {
-            "Description": "Force the compiler to use Old IR.",
-            "Value": 1
-          },
-          {
-            "Description": "Force the compiler to use New IR with retry mechanism.",
-            "Value": 2
-          },
-          {
-            "Description": "Force the compiler to use New IR with error mechanism.",
-            "Value": 3
-          }
-        ]
-      },
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "GsIrMode",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Force fragment shaders' optimization IR mode selection.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "ValidValues": {
-        "Values": [
-          {
-            "Description": "Let the compiler choose the IR mode.",
-            "Value": 0
-          },
-          {
-            "Description": "Force the compiler to use Old IR.",
-            "Value": 1
-          },
-          {
-            "Description": "Force the compiler to use New IR with retry mechanism.",
-            "Value": 2
-          },
-          {
-            "Description": "Force the compiler to use New IR with error mechanism.",
-            "Value": 3
-          }
-        ]
-      },
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "FsIrMode",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Force compute shaders' optimization IR mode selection.",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "ValidValues": {
-        "Values": [
-          {
-            "Description": "Let the compiler choose the IR mode.",
-            "Value": 0
-          },
-          {
-            "Description": "Force the compiler to use Old IR.",
-            "Value": 1
-          },
-          {
-            "Description": "Force the compiler to use New IR with retry mechanism.",
-            "Value": 2
-          },
-          {
-            "Description": "Force the compiler to use New IR with error mechanism.",
-            "Value": 3
-          }
-        ]
-      },
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "CsIrMode",
       "Scope": "Driver"
     },
     {
@@ -2102,7 +1910,7 @@
         "Ray Tracing"
       ],
       "Defaults": {
-        "Default": 0
+        "Default": "0xffffffffffffffff"
       },
       "Flags": {
         "IsHex": true,
@@ -3008,21 +2816,6 @@
       }
     },
     {
-      "Name": "MemoryAttachmentImageMemoryTypeMinHeapSize",
-      "Description": "If the sum of the device-local heap sizes exceeds this value, the attachment image memory type (local invisible) is enabled. A back-up heap is not added for this memory type unless overallocation is allowed via the VK_AMD_memory_overallocation extension. ",
-      "Tags": [
-        "Memory"
-      ],
-      "Flags": {
-        "IsHex": true
-      },
-      "Defaults": {
-        "Default": 18446744073709551615
-      },
-      "Scope": "Driver",
-      "Type": "gpusize"
-    },
-    {
       "Description": "Default priority of all VkMemory objects as two hex digits.  The first (most-significant) digit defines the priority level, and the second digit defines the priority offset.  Valid priority level values (Pal::GpuMemPriority) are:  0: Unused 1: VeryLow 2: Low 3: Normal 4: High 5: VeryHigh. Valid priority offset values (Pal::GpuMemPriorityOffset) are: 0: Offset0 (same as base level) 1: Offset1 2: Offset2 3: Offset3 4: Offset4 5: Offset5 6: Offset6 7: Offset7 ",
       "Tags": [
         "Memory"
@@ -3639,6 +3432,18 @@
       "Name": "AnisoThreshold"
     },
     {
+      "Description": "Controls the value of the PERF_MIP field in Sampler SRDs (DisablePreciseAniso needs to be true also)",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32",
+      "Name": "SamplerPerfMip"
+    },
+    {
       "Description": "Use flip hint for swapchain. Linux Only. The X Server make the final decision whether to go async flip.",
       "Tags": [
         "Optimization"
@@ -4163,7 +3968,7 @@
           {
             "Name": "ForceDccDefault",
             "Value": 0,
-            "Description": "Don't force enable DCC for Shader storage (UAVs) and/or color attachments (RTs)"
+            "Description": "Let PAL heuristics decide what's best. Don't force anything in xgl."
           },
           {
             "Name": "ForceDccForColorAttachments",
@@ -4173,17 +3978,17 @@
           {
             "Name": "ForceDccFor32BppShaderStorage",
             "Value": 2,
-            "Description": "bpp range from 32 to 64 resource shader storage"
+            "Description": "Force enable DCC for shader storage resources with BPP range from 32 to 64"
           },
           {
             "Name": "ForceDccFor64BppShaderStorage",
             "Value": 4,
-            "Description": "64 bpp or deeper resource shader storage"
+            "Description": "Force enable DCC for shader storage resources with 64 BPP or deeper"
           },
           {
             "Name": "ForceDisableDcc",
-            "Value": 5,
-            "Description": "Force disable DCC."
+            "Value": 8,
+            "Description": "Force disable DCC for every resource irrespective of PAL heuristics."
           }
         ],
         "Name": "ForceEnableDcc"
@@ -4248,39 +4053,6 @@
         "IsEnum": true,
         "Values": [
           {
-            "Name": "MlModelForWaveSizeOff",
-            "Value": 0,
-            "Description": "Wave size selection is determined by WaveSize enum."
-          },
-          {
-            "Name": "MlModelForWaveSizePhase1",
-            "Value": 1,
-            "Description": "Enabled wave size selection is post-compile using Machine Learning."
-          },
-          {
-            "Name": "MlModelForWaveSizePhase2",
-            "Value": 2,
-            "Description": "Enabled wave size selection is pre-compile using Deep Learning."
-          }
-        ],
-        "Name": "WaveSizeDecision"
-      },
-      "Description": "Enable a machine learning model to optimally choose Wave64 or Wave32 instead of relying on per shader stage defaults.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": "MlModelForWaveSizeOff"
-      },
-      "Scope": "Driver",
-      "Type": "enum",
-      "Name": "WaveSizeDecision"
-    },
-    {
-      "ValidValues": {
-        "IsEnum": true,
-        "Values": [
-          {
             "Name": "DisplayableDccEnabled",
             "Value": 0,
             "Description": "Enable DisplayableDcc"
@@ -4310,42 +4082,6 @@
       "Type": "enum"
     },
     {
-      "Description": "Enable fragment shader threshold to control wave size selection model by a confidence score.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": 0.0
-      },
-      "Scope": "Driver",
-      "Type": "float",
-      "Name": "FsWaveSizeThreshold"
-    },
-    {
-      "Description": "Enable compute shader threshold to control wave size selection model by a confidence score.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": 0.0
-      },
-      "Scope": "Driver",
-      "Type": "float",
-      "Name": "CsWaveSizeThreshold"
-    },
-    {
-      "Description": "Enable threshold to control scheduling strategy selection model by a confidence score",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": 0.0
-      },
-      "Scope": "Driver",
-      "Type": "float",
-      "Name": "MlSchedConfidenceThreshold"
-    },
-    {
       "Description": "Enable async compile for shader module and pipelines.",
       "Tags": [
         "Optimization"
@@ -4370,40 +4106,6 @@
       "Name": "EnablePartialPipelineCompile"
     },
     {
-      "Description": "If set, enables whole-program optimizations for this pipeline, which includes using dead-code removal across its shaders to remove unnecessary data being passed between shaders (can reduce HW resoure usage such as LDS, shader rings, parameter cache, etc.) ans removing potentially complex logic in the shader(s) used to compute those unused outputs. A side effect of this is that any shader which was compiled early will be re-compiled in order to make use of these optimizations since they could not have been done up front without the entire pipeline state being known",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "EnableWholePipelineOptimization"
-    },
-    {
-      "Description": "Attributes between PS and the stage before it will be tightly packed (which can potentially save parameter cache space) when enabled. This opt requires that EnableWholePipelineOptimization be set to TRUE.",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "DependsOn": {
-        "Settings": [
-          {
-            "Values": [
-              true
-            ],
-            "Name": "EnableWholePipelineOptimization"
-          }
-        ]
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "EnablePackVsPsAttrs"
-    },
-    {
       "Description": "Specifies the maximum threshold in bytes for linear transfer commands to use CP DMA, which have less overhead than CS/Gfx copies, but also less throughput for large copies.",
       "Tags": [
         "Optimization"
@@ -4416,16 +4118,16 @@
       "Name": "CpDmaCmdCopyMemoryMaxBytes"
     },
     {
-      "Description": "Enable the use of SC heuristic machine learning culling for NGG culling.",
+      "Description": "Enable dispatch tunneling.",
       "Tags": [
-        "Optimization"
+        "Developer Mode"
       ],
       "Defaults": {
         "Default": false
       },
       "Scope": "Driver",
       "Type": "bool",
-      "Name": "EnableMlHeuristicCulling"
+      "Name": "EnableDispatchTunneling"
     },
     {
       "Description": "Determines the string that's used to trigger a start-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameBegin\" by default.",
@@ -4960,66 +4662,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Determines the MaxOccupancyOptions SC bitfield for the shader specified by overrideShaderCrcUpper/Lower. Setting this value will enable the MaxOccupancy shader intent by default, which can be overwritten by OverrideShaderIntents.",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "OverrideMinVgprsStrategy",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Determines the LowLatencyOptions SC bitfield for the shader specified by  overrideShaderCrcUpper/Lower. Setting this value will enable the ThreadLatency shader  intent by default, which can be overwritten by OverrideShaderIntents.",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "OverrideThreadLatencyStrategy",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Enable SC's liveness-based instruction scheduling for the shader specified by overrideShaderCrcUpper/Lower",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideLiveness",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Enable SC's groups-based instruction scheduling for the shader specified by overrideShaderCrcUpper/Lower",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideGroups",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Enable SC's rematerialization VGPR limit configuration for the shader specified by overrideShaderCrcUpper/Lower",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideRemat",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Override default setting to disable loop unrolls",
       "Tags": [
         "Shader Tuning"
@@ -5080,90 +4722,6 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Set the SC option (experimental and for GFX9 only) to use more D16",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideUseMoreD16",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Set the SC option for the unsafe MAD mix",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideUseUnsafeMadMix",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Set the SC option for aggressive hoist",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideUseAggressiveHoist",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Set the SC option to enable XNack support",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideUseXnackEnable",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Set the SC option to enable PBQP register allocator",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideUsePbqp",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Set the SC option to enable Latency2 scheduler",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideUseLatency2",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Override DisableBulkCodeMotion for the shader specified by OverrideShaderHashUpper/Lower.",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Name": "OverrideDisableBulkCodeMotion",
-      "Scope": "Driver"
-    },
-    {
       "Description": "Enable selective inlining behavior in the compiler.",
       "Tags": [
         "Shader Tuning"
@@ -5185,55 +4743,6 @@
       },
       "Type": "bool",
       "Name": "OverrideEnableSubvector",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Set the SC option to enable use of legacy non-ieee FP instructions",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "VariableName": "overrideUseNonIeeeFpInstr",
-      "Name": "OverrideUseNonIeeeFpInstructions",
-      "Scope": "Driver"
-    },
-    {
-      "Description": "Sets the ShaderIntent for the shader specified by OverrideShaderHashUpper/Lower: 0x00000000: Unset 0x00000001: Balanced 0x00000002: MaxOccupancy 0x00000003: ThreadLatency ",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": 0
-      },
-      "Type": "uint32",
-      "Name": "OverrideShaderIntents",
-      "Scope": "Driver"
-    },
-    {
-      "Name": "OverrideUseBlocking",
-      "Description": "Override EnableBlocking for the shader specified by OverrideShaderHashUpper/Lower.",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
-      "Scope": "Driver"
-    },
-    {
-      "Name": "OverrideWavePrioOnStartup",
-      "Description": "Override WavePrioOnStartup for the shader specified by OverrideShaderHashUpper/Lower.",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Type": "bool",
       "Scope": "Driver"
     },
     {
@@ -5371,49 +4880,6 @@
         "Default": false
       },
       "Type": "bool",
-      "Scope": "Driver"
-    },
-    {
-      "Name": "FloatingPointPrecision",
-      "Description": "Force SC flags related to floating point refactoring and FMA.",
-      "Tags": [
-        "Shader Tuning"
-      ],
-      "Defaults": {
-        "Default": "ScFpPrecisionDefault"
-      },
-      "ValidValues": {
-        "IsEnum": true,
-        "Name": "ScFpPrecision",
-        "Values": [
-          {
-            "Name": "ScFpPrecisionDefault",
-            "Value": 0
-          },
-          {
-            "Name": "ScFpPrecisionEnableFma",
-            "Value": 1
-          },
-          {
-            "Name": "ScFpPrecisionDisableFma",
-            "Value": 2
-          },
-          {
-            "Name": "ScFpPrecisionEnableRefactoring",
-            "Value": 3
-          },
-          {
-            "Name": "ScFpPrecisionDisableRefactoring",
-            "Value": 4
-          },
-          {
-            "Name": "ScFpPrecisionEnableRefactoringAndDisableFma",
-            "Value": 5
-          }
-        ]
-      },
-      "Type": "enum",
-      "VariableName": "floatingPointRefactoring",
       "Scope": "Driver"
     },
     {

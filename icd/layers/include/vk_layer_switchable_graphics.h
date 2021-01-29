@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -47,6 +47,7 @@ struct NextLinkFuncPointers
     PFN_vkEnumeratePhysicalDevices              pfnEnumeratePhysicalDevices;
     PFN_vkGetPhysicalDeviceProperties           pfnGetPhysicalDeviceProperties;
     PFN_vkEnumeratePhysicalDeviceGroups         pfnEnumeratePhysicalDeviceGroups;
+    PFN_vkEnumeratePhysicalDeviceGroupsKHR      pfnEnumeratePhysicalDeviceGroupsKHR;
 };
 
 extern NextLinkFuncPointers g_nextLinkFuncs;
@@ -62,6 +63,16 @@ typedef VkResult (VKAPI_PTR *PFN_vkEnumeratePhysicalDevices_SG)(
     VkPhysicalDevice*                           pPhysicalDevices);
 
 typedef VkResult (VKAPI_PTR *PFN_vkEnumeratePhysicalDeviceGroups_SG)(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties);
+
+typedef VkResult (VKAPI_PTR *PFN_vkEnumeratePhysicalDeviceGroupsKHR_SG)(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties);
+
+typedef VkResult (VKAPI_PTR *PFN_EnumPhysDeviceGroupsFunc)(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties);
@@ -104,6 +115,12 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
+    VkInstance                                  instance,
+    uint32_t*                                   pPhysicalDeviceGroupCount,
+    VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties);
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR_SG(
     VkInstance                                  instance,
     uint32_t*                                   pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties);

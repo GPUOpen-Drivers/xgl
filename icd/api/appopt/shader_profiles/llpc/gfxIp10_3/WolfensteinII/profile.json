@@ -1,0 +1,104 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "always": true
+      },
+      "action": {
+        "binningOverride": 1
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0xaf0f2d97bef3af3d 9393b9383f5e494b"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64,
+          "wgpMode": 1
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0xeb9a42dc7ff51768 eb2f68f486b52893"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x4AB27AA97EFB9988 D3D8A4F61D7CBF0C"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x0226B384A0A386391 DC495CA6C48428D"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x4ff9952eb812b9d1 5c6fc3a4fb143a2e"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x594fede1c0cc46db b385e225148adb49"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    },
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x50643f72906fdcff 6d8014bc34136edc"
+        }
+      },
+      "action": {
+        "cs": {
+          "waveSize": 64
+        }
+      }
+    }
+  ]
+}

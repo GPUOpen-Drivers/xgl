@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -588,50 +588,48 @@ VK_INLINE Pal::ImageTexOptLevel VkToPalTexFilterQuality(TextureFilterOptimizatio
 
 // =====================================================================================================================
 // Selects the first PAL aspect from the Vulkan aspect mask and removes the corresponding bits from it.
-VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
+VK_INLINE uint32 VkToPalImagePlaneExtract(
     Pal::ChNumFormat    format,
     VkImageAspectFlags* pAspectMask)
 {
-    VkImageAspectFlags& aspectMask = *pAspectMask;
-    if ((aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
+    if (((*pAspectMask) & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
     {
         // No other aspect can be specified in this case.
-        VK_ASSERT(aspectMask == VK_IMAGE_ASPECT_COLOR_BIT);
+        VK_ASSERT((*pAspectMask) == VK_IMAGE_ASPECT_COLOR_BIT);
 
-        aspectMask = 0;
+        (*pAspectMask) = 0;
 
-        // Formats e.g. VK_FORMAT_G8B8G8R8_422_UNORM or other single plane formats could be
-        // used with Color/YCbCr Aspect, but if it is wrapped with YUY2 expilicitly from pal,
-        // we should redirect COLOR_BIT to YCbCr for compatilble with PAL handling.
-        if (Pal::Formats::IsYuv(format))
-        {
-            return Pal::ImageAspect::YCbCr;
-        }
-
-        return Pal::ImageAspect::Color;
+        return 0;
     }
-    else if ((aspectMask & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) != 0)
+    else if (((*pAspectMask) & (VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) != 0)
     {
         // Only the depth and/or stencil aspects can be specified in this case.
-        VK_ASSERT((aspectMask & ~(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) == 0);
+        VK_ASSERT(((*pAspectMask) & ~(VK_IMAGE_ASPECT_DEPTH_BIT | VK_IMAGE_ASPECT_STENCIL_BIT)) == 0);
 
-        if ((aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0)
+        if (((*pAspectMask) & VK_IMAGE_ASPECT_DEPTH_BIT) != 0)
         {
-            aspectMask ^= VK_IMAGE_ASPECT_DEPTH_BIT;
+            (*pAspectMask) ^= VK_IMAGE_ASPECT_DEPTH_BIT;
 
-            return Pal::ImageAspect::Depth;
+            return 0;
         }
         else
         {
-            aspectMask ^= VK_IMAGE_ASPECT_STENCIL_BIT;
+            (*pAspectMask) ^= VK_IMAGE_ASPECT_STENCIL_BIT;
 
-            return Pal::ImageAspect::Stencil;
+            if (Pal::Formats::IsDepthStencilOnly(format))
+            {
+                return 1;
+            }
+            else
+            {
+                return 0;
+            }
         }
     }
-    else if ((aspectMask & (VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT | VK_IMAGE_ASPECT_PLANE_2_BIT)) != 0)
+    else if (((*pAspectMask) & (VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT | VK_IMAGE_ASPECT_PLANE_2_BIT)) != 0)
     {
         // Only the YUV specific aspects can be specified in this case.
-        VK_ASSERT((aspectMask & ~(VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT | VK_IMAGE_ASPECT_PLANE_2_BIT)) == 0);
+        VK_ASSERT(((*pAspectMask) & ~(VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT | VK_IMAGE_ASPECT_PLANE_2_BIT)) == 0);
 
         // Must be a YUV image.
         VK_ASSERT(Pal::Formats::IsYuv(format));
@@ -645,10 +643,10 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
         case Pal::ChNumFormat::YUY2:
         case Pal::ChNumFormat::YVY2:
             // Application must specify all 3 YUV aspects, and only that.
-            VK_ASSERT(aspectMask == VK_IMAGE_ASPECT_PLANE_0_BIT);
+            VK_ASSERT((*pAspectMask) == VK_IMAGE_ASPECT_PLANE_0_BIT);
 
-            aspectMask = 0;
-            return Pal::ImageAspect::YCbCr;
+            (*pAspectMask) = 0;
+            return 0;
 
             // YUV planar formats with separate Y and UV planes.
         case Pal::ChNumFormat::NV11:
@@ -656,40 +654,41 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
         case Pal::ChNumFormat::NV21:
         case Pal::ChNumFormat::P016:
         case Pal::ChNumFormat::P010:
+        case Pal::ChNumFormat::P208:
         case Pal::ChNumFormat::P210:
-            if (aspectMask & VK_IMAGE_ASPECT_PLANE_0_BIT)
+            if ((*pAspectMask) & VK_IMAGE_ASPECT_PLANE_0_BIT)
             {
-                aspectMask ^= VK_IMAGE_ASPECT_PLANE_0_BIT;
-                return Pal::ImageAspect::Y;
+                (*pAspectMask) ^= VK_IMAGE_ASPECT_PLANE_0_BIT;
+                return 0;
             }
             else
             {
                 // Only the CbCr aspect can be selected besides the Y one.
-                VK_ASSERT(aspectMask == VK_IMAGE_ASPECT_PLANE_1_BIT);
+                VK_ASSERT((*pAspectMask) == VK_IMAGE_ASPECT_PLANE_1_BIT);
 
-                aspectMask = 0;
-                return Pal::ImageAspect::CbCr;
+                (*pAspectMask) = 0;
+                return 1;
             }
 
             // YUV planar formats with spearate Y, U, and V planes.
         case Pal::ChNumFormat::YV12:
-            if (aspectMask & VK_IMAGE_ASPECT_PLANE_0_BIT)
+            if ((*pAspectMask) & VK_IMAGE_ASPECT_PLANE_0_BIT)
             {
-                aspectMask ^= VK_IMAGE_ASPECT_PLANE_0_BIT;
-                return Pal::ImageAspect::Y;
+                (*pAspectMask) ^= VK_IMAGE_ASPECT_PLANE_0_BIT;
+                return 0;
             }
-            else if (aspectMask & VK_IMAGE_ASPECT_PLANE_1_BIT)
+            else if ((*pAspectMask) & VK_IMAGE_ASPECT_PLANE_1_BIT)
             {
-                aspectMask ^= VK_IMAGE_ASPECT_PLANE_1_BIT;
-                return Pal::ImageAspect::Cb;
+                (*pAspectMask) ^= VK_IMAGE_ASPECT_PLANE_1_BIT;
+                return 1;
             }
             else
             {
                 // Only the Cr aspect can be selected besides the Y and Cb one.
-                VK_ASSERT(aspectMask == VK_IMAGE_ASPECT_PLANE_2_BIT);
+                VK_ASSERT((*pAspectMask) == VK_IMAGE_ASPECT_PLANE_2_BIT);
 
-                aspectMask = 0;
-                return Pal::ImageAspect::Cr;
+                (*pAspectMask) = 0;
+                return 2;
             }
             break;
         default:
@@ -698,12 +697,12 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectExtract(
     }
 
     VK_ASSERT(!"Unexpected aspect mask");
-    return Pal::ImageAspect::Color;
+    return 0;
 }
 
 // =====================================================================================================================
 // Selects a single PAL aspect that directly corresponds to the specified mask.
-VK_INLINE Pal::ImageAspect VkToPalImageAspectSingle(
+VK_INLINE uint32 VkToPalImagePlaneSingle(
     VkFormat               format,
     VkImageAspectFlags     aspectMask,
     const RuntimeSettings& settings)
@@ -714,15 +713,15 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectSingle(
         {
         // VK_FORMAT_G8B8G8R8_422_UNORM|VK_FORMAT_B8G8R8G8_422_UNORM
         case VK_IMAGE_ASPECT_COLOR_BIT:
-            return Pal::ImageAspect::YCbCr;
+            return 0;
         // Multi Plane Images
         case VK_IMAGE_ASPECT_PLANE_0_BIT:
         case VK_IMAGE_ASPECT_PLANE_1_BIT:
         case VK_IMAGE_ASPECT_PLANE_2_BIT:
-            return VkToPalImageAspectExtract(VkToPalFormat(format, settings).format, &aspectMask);
+            return VkToPalImagePlaneExtract(VkToPalFormat(format, settings).format, &aspectMask);
         default:
             VK_ASSERT(!"Unsupported flag combination");
-            return Pal::ImageAspect::Y;
+            return 0;
         }
     }
     else
@@ -730,16 +729,16 @@ VK_INLINE Pal::ImageAspect VkToPalImageAspectSingle(
         switch (aspectMask)
         {
         case VK_IMAGE_ASPECT_COLOR_BIT:
-            return Pal::ImageAspect::Color;
+            return 0;
         case VK_IMAGE_ASPECT_DEPTH_BIT:
-            return Pal::ImageAspect::Depth;
+            return 0;
         case VK_IMAGE_ASPECT_STENCIL_BIT:
-            return Pal::ImageAspect::Stencil;
+            return VkToPalImagePlaneExtract(VkToPalFormat(format, settings).format, &aspectMask);
         case VK_IMAGE_ASPECT_METADATA_BIT:
-            return Pal::ImageAspect::Fmask;
+            return 0;
         default:
             VK_ASSERT(!"Unsupported flag combination");
-            return Pal::ImageAspect::Color;
+            return 0;
         }
     }
 }
@@ -1011,7 +1010,7 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
     // the conversion finishes.
     // Note: AYUV && NV11 are not available in VK_KHR_sampler_ycbcr_conversion extension.
     if ((format.format >= Pal::ChNumFormat::AYUV) &&
-        (format.format <= Pal::ChNumFormat::P210))
+        (format.format <= Pal::ChNumFormat::P208))
     {
         switch (format.format)
         {
@@ -1046,19 +1045,19 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
         case Pal::ChNumFormat::YV12:
             newFormat.format = (formatProperties.features[x8MmformatIdx][tilingIdx] != 0) ?
                                Pal::ChNumFormat::X8_MM_Unorm : Pal::ChNumFormat::X8_Unorm;
-            if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
+            if (subresRange.startSubres.plane == 0)
             {
                 newFormat.swizzle.r = ChannelSwizzle::Zero;
                 newFormat.swizzle.g = ChannelSwizzle::X;
                 newFormat.swizzle.b = ChannelSwizzle::Zero;
             }
-            else if (subresRange.startSubres.aspect == Pal::ImageAspect::Cb)
+            else if (subresRange.startSubres.plane == 1)
             {
                 newFormat.swizzle.r = ChannelSwizzle::Zero;
                 newFormat.swizzle.g = ChannelSwizzle::Zero;
                 newFormat.swizzle.b = ChannelSwizzle::X;
             }
-            else if (subresRange.startSubres.aspect == Pal::ImageAspect::Cr)
+            else if (subresRange.startSubres.plane == 2)
             {
                 newFormat.swizzle.r = ChannelSwizzle::X;
                 newFormat.swizzle.g = ChannelSwizzle::Zero;
@@ -1068,7 +1067,8 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
             break;
         case Pal::ChNumFormat::NV12:
         case Pal::ChNumFormat::NV21:
-            if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
+        case Pal::ChNumFormat::P208:
+            if (subresRange.startSubres.plane == 0)
             {
                 newFormat.format = (formatProperties.features[x8MmformatIdx][tilingIdx] != 0) ?
                                    Pal::ChNumFormat::X8_MM_Unorm : Pal::ChNumFormat::X8_Unorm;
@@ -1077,11 +1077,12 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
                 newFormat.swizzle.b = ChannelSwizzle::Zero;
                 newFormat.swizzle.a = ChannelSwizzle::One;
             }
-            else if (subresRange.startSubres.aspect == Pal::ImageAspect::CbCr)
+            else if (subresRange.startSubres.plane == 1)
             {
                 newFormat.format = (formatProperties.features[x8Y8MmformatIdx][tilingIdx] != 0) ?
                                    Pal::ChNumFormat::X8Y8_MM_Unorm : Pal::ChNumFormat::X8Y8_Unorm;
-                if (format.format == Pal::ChNumFormat::NV12)
+                if ((format.format == Pal::ChNumFormat::NV12) ||
+                    (format.format == Pal::ChNumFormat::P208))
                 {
                     newFormat.swizzle.r = ChannelSwizzle::Y;
                     newFormat.swizzle.b = ChannelSwizzle::X;
@@ -1096,7 +1097,7 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
             }
             break;
         case Pal::ChNumFormat::P016:
-            if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
+            if (subresRange.startSubres.plane == 0)
             {
                 newFormat.format = Pal::ChNumFormat::X16_Unorm;
                 newFormat.swizzle.r = ChannelSwizzle::Zero;
@@ -1104,7 +1105,7 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
                 newFormat.swizzle.b = ChannelSwizzle::Zero;
                 newFormat.swizzle.a = ChannelSwizzle::One;
             }
-            else if (subresRange.startSubres.aspect == Pal::ImageAspect::CbCr)
+            else if (subresRange.startSubres.plane == 1)
             {
                 newFormat.format = Pal::ChNumFormat::X16Y16_Unorm;
                 newFormat.swizzle.r = ChannelSwizzle::Y;
@@ -1115,7 +1116,7 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
             break;
         case Pal::ChNumFormat::P010:
         case Pal::ChNumFormat::P210:
-            if (subresRange.startSubres.aspect == Pal::ImageAspect::Y)
+            if (subresRange.startSubres.plane == 0)
             {
                 newFormat.format = (formatProperties.features[x16MmformatIdx][tilingIdx] != 0) ?
                                    Pal::ChNumFormat::X16_MM_Unorm : Pal::ChNumFormat::X16_Unorm;
@@ -1124,7 +1125,7 @@ VK_INLINE Pal::SwizzledFormat RemapFormatComponents(
                 newFormat.swizzle.b = ChannelSwizzle::Zero;
                 newFormat.swizzle.a = ChannelSwizzle::One;
             }
-            else if (subresRange.startSubres.aspect == Pal::ImageAspect::CbCr)
+            else if (subresRange.startSubres.plane == 1)
             {
                 newFormat.format = (formatProperties.features[x16Y16MmformatIdx][tilingIdx] != 0) ?
                                    Pal::ChNumFormat::X16Y16_MM_Unorm : Pal::ChNumFormat::X16Y16_Unorm;
@@ -1190,6 +1191,7 @@ VK_INLINE VkImageAspectFlags PalYuvFormatToVkImageAspectPlane(
     case Pal::ChNumFormat::NV21:
     case Pal::ChNumFormat::P016:
     case Pal::ChNumFormat::P010:
+    case Pal::ChNumFormat::P208:
     case Pal::ChNumFormat::P210:
         return VK_IMAGE_ASPECT_PLANE_0_BIT | VK_IMAGE_ASPECT_PLANE_1_BIT;
         // YUV planar formats with spearate Y, U, and V planes.
@@ -1220,8 +1222,11 @@ VK_INLINE void VkToPalSubresRange(
 
     palSubresRange.startSubres.arraySlice   = range.baseArrayLayer;
     palSubresRange.startSubres.mipLevel     = range.baseMipLevel;
-    palSubresRange.numMips                  = (range.levelCount == WHOLE_SIZE_UINT32) ? (mipLevels - range.baseMipLevel)   : range.levelCount;
-    palSubresRange.numSlices                = (range.layerCount == WHOLE_SIZE_UINT32) ? (arraySize - range.baseArrayLayer) : range.layerCount;
+    palSubresRange.numPlanes                = 1;
+    palSubresRange.numMips                  = (range.levelCount == WHOLE_SIZE_UINT32) ?
+        (mipLevels - range.baseMipLevel)   : range.levelCount;
+    palSubresRange.numSlices                = (range.layerCount == WHOLE_SIZE_UINT32) ?
+        (arraySize - range.baseArrayLayer) : range.layerCount;
 
     VkImageAspectFlags aspectMask = range.aspectMask;
     Pal::ChNumFormat palFormat = VkToPalFormat(format, settings).format;
@@ -1234,7 +1239,7 @@ VK_INLINE void VkToPalSubresRange(
 
     do
     {
-        palSubresRange.startSubres.aspect = VkToPalImageAspectExtract(palFormat, &aspectMask);
+        palSubresRange.startSubres.plane = VkToPalImagePlaneExtract(palFormat, &aspectMask);
         pPalSubresRanges[(*pPalSubresRangeIndex)++] = palSubresRange;
     } while (aspectMask != 0);
 }
@@ -1414,7 +1419,7 @@ VK_INLINE Pal::Offset3d TexelsToBlocks(Pal::Offset3d texels, Pal::Extent3d block
 
 // =====================================================================================================================
 // Queries the number of bytes in a pixel or element for the given format.
-VK_INLINE Pal::uint32 BytesPerPixel(Pal::ChNumFormat format, Pal::ImageAspect aspect)
+VK_INLINE Pal::uint32 BytesPerPixel(Pal::ChNumFormat format, uint32 plane)
 {
     if (Pal::Formats::IsYuvPlanar(format))
     {
@@ -1423,20 +1428,21 @@ VK_INLINE Pal::uint32 BytesPerPixel(Pal::ChNumFormat format, Pal::ImageAspect as
         switch (format)
         {
         case Pal::ChNumFormat::YV12:
-            VK_ASSERT((Pal::ImageAspect::Y == aspect) || (Pal::ImageAspect::Cb == aspect) || (Pal::ImageAspect::Cr == aspect));
+            VK_ASSERT((0 == plane) || (1 == plane) || (2 == plane));
             bytesPerPixel = 1;
             break;
         case Pal::ChNumFormat::NV11:
         case Pal::ChNumFormat::NV12:
         case Pal::ChNumFormat::NV21:
-            VK_ASSERT((Pal::ImageAspect::Y == aspect) || (Pal::ImageAspect::CbCr == aspect));
-            bytesPerPixel = (Pal::ImageAspect::Y == aspect) ? 1 : 2;
+        case Pal::ChNumFormat::P208:
+            VK_ASSERT((0 == plane) || (1 == plane));
+            bytesPerPixel = (0 == plane) ? 1 : 2;
             break;
         case Pal::ChNumFormat::P016:
         case Pal::ChNumFormat::P010:
         case Pal::ChNumFormat::P210:
-            VK_ASSERT((Pal::ImageAspect::Y == aspect) || (Pal::ImageAspect::CbCr == aspect));
-            bytesPerPixel = (Pal::ImageAspect::Y == aspect) ? 2 : 4;
+            VK_ASSERT((0 == plane) || (1 == plane));
+            bytesPerPixel = (0 == plane) ? 2 : 4;
             break;
         default:
             VK_NEVER_CALLED();
@@ -1502,8 +1508,8 @@ VK_INLINE void VkToPalImageCopyRegion(
     {
         VK_ASSERT(pPalRegionIndex != nullptr);
 
-        region.srcSubres.aspect = VkToPalImageAspectExtract(srcFormat, &srcAspectMask);
-        region.dstSubres.aspect = VkToPalImageAspectExtract(dstFormat, &dstAspectMask);
+        region.srcSubres.plane = VkToPalImagePlaneExtract(srcFormat, &srcAspectMask);
+        region.dstSubres.plane = VkToPalImagePlaneExtract(dstFormat, &dstAspectMask);
         pPalRegions[(*pPalRegionIndex)++] = region;
     }
     while (srcAspectMask != 0 || dstAspectMask != 0);
@@ -1565,7 +1571,7 @@ VK_INLINE void VkToPalImageScaledCopyRegion(
     {
         VK_ASSERT(pPalRegionIndex != nullptr);
 
-        region.srcSubres.aspect = region.dstSubres.aspect = VkToPalImageAspectExtract(srcFormat, &aspectMask);
+        region.srcSubres.plane = region.dstSubres.plane = VkToPalImagePlaneExtract(srcFormat, &aspectMask);
         pPalRegions[(*pPalRegionIndex)++] = region;
     }
     while (aspectMask != 0);
@@ -1597,7 +1603,7 @@ VK_INLINE Pal::ColorSpaceConversionRegion VkToPalImageColorSpaceConversionRegion
     Pal::Offset3d       dstOffset = VkToPalOffset3d(imageBlit.dstOffsets[0]);
     Pal::SignedExtent3d dstExtent = VkToPalSignedExtent3d(imageBlit.dstOffsets);
 
-    region.rgbSubres.aspect     = Pal::ImageAspect::Color;
+    region.rgbSubres.plane      = 0;
     region.rgbSubres.mipLevel   = rgbSubresource.mipLevel;
     region.rgbSubres.arraySlice = rgbSubresource.baseArrayLayer;
 
@@ -1689,7 +1695,7 @@ VK_INLINE void VkToPalImageResolveRegion(
     {
         VK_ASSERT(pPalRegionIndex != nullptr);
 
-        region.srcAspect = region.dstAspect = VkToPalImageAspectExtract(srcFormat, &aspectMask);
+        region.srcPlane = region.dstPlane = VkToPalImagePlaneExtract(srcFormat, &aspectMask);
         pPalRegions[(*pPalRegionIndex)++] = region;
     }
     while (aspectMask != 0);
@@ -1700,12 +1706,12 @@ VK_INLINE void VkToPalImageResolveRegion(
 VK_INLINE Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
     const VkBufferImageCopy&    bufferImageCopy,
     Pal::ChNumFormat            format,
-    Pal::ImageAspect            aspectMask,
+    uint32                      plane,
     Pal::gpusize                baseMemOffset)
 {
     Pal::MemoryImageCopyRegion region = {};
 
-    region.imageSubres.aspect       = aspectMask;
+    region.imageSubres.plane        = plane;
     region.imageSubres.arraySlice   = bufferImageCopy.imageSubresource.baseArrayLayer;
     region.imageSubres.mipLevel     = bufferImageCopy.imageSubresource.mipLevel;
 
@@ -1737,7 +1743,7 @@ VK_INLINE Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
     }
 
     // Convert pitch to bytes per pixel and multiply depth pitch by row pitch after the texel-to-block conversion
-    region.gpuMemoryRowPitch   *= BytesPerPixel(format, aspectMask);
+    region.gpuMemoryRowPitch   *= BytesPerPixel(format, plane);
     region.gpuMemoryDepthPitch *= region.gpuMemoryRowPitch;
 
     return region;
@@ -1772,19 +1778,21 @@ VK_INLINE Pal::SwizzledFormat VkToPalFormat(VkFormat format, const RuntimeSettin
         switch (static_cast<int32_t>(format))
         {
         case VK_FORMAT_G8B8G8R8_422_UNORM:             return PalFmt(Pal::ChNumFormat::YUY2,
-            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_B8G8R8G8_422_UNORM:             return PalFmt(Pal::ChNumFormat::UYVY,
-            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_G8_B8_R8_3PLANE_420_UNORM:      return PalFmt(Pal::ChNumFormat::YV12,
-            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_G8_B8R8_2PLANE_420_UNORM:       return PalFmt(Pal::ChNumFormat::NV12,
-            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
+        case VK_FORMAT_G8_B8R8_2PLANE_422_UNORM:       return PalFmt(Pal::ChNumFormat::P208,
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_420_UNORM_3PACK16:    return PalFmt(Pal::ChNumFormat::P010,
-            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_G16_B16R16_2PLANE_420_UNORM:    return PalFmt(Pal::ChNumFormat::P016,
-            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_G10X6_B10X6R10X6_2PLANE_422_UNORM_3PACK16:    return PalFmt(Pal::ChNumFormat::P210,
-            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::W);
+            Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::One);
         case VK_FORMAT_A4R4G4B4_UNORM_PACK16_EXT:   return PalFmt(Pal::ChNumFormat::X4Y4Z4W4_Unorm,
             Pal::ChannelSwizzle::Z, Pal::ChannelSwizzle::Y, Pal::ChannelSwizzle::X, Pal::ChannelSwizzle::W);
         case VK_FORMAT_A4B4G4R4_UNORM_PACK16_EXT:   return PalFmt(Pal::ChNumFormat::X4Y4Z4W4_Unorm,
@@ -3188,7 +3196,7 @@ VK_INLINE Pal::ResourceDescriptionDescriptorType VkToPalDescriptorType(
         case VkDescriptorType::VK_DESCRIPTOR_TYPE_INLINE_UNIFORM_BLOCK_EXT:
             retType = Pal::ResourceDescriptionDescriptorType::InlineUniformBlock;
             break;
-        case VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_NV:
+        case VkDescriptorType::VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR:
             retType = Pal::ResourceDescriptionDescriptorType::AccelerationStructure;
             break;
         default:
