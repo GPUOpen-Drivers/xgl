@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -143,11 +143,6 @@ public:
     VK_INLINE uint32_t GetMemoryTypeMaskForExternalSharing() const
     {
         return m_memoryTypeMaskForExternalSharing;
-    }
-
-    VK_INLINE uint32_t GetMemoryTypeForAttachmentImage() const
-    {
-        return m_memoryVkIndexAttachmentImage;
     }
 
     VK_INLINE bool GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeap heapIndex, uint32_t* pVkIndexBits) const
@@ -717,7 +712,6 @@ protected:
 
     uint32_t                         m_memoryTypeMask;
     uint32_t                         m_memoryTypeMaskForExternalSharing;
-    uint32_t                         m_memoryVkIndexAttachmentImage;
     bool                             m_memoryVkIndexAddRemoteBackupHeap[VK_MAX_MEMORY_TYPES];
     uint32_t                         m_memoryPalHeapToVkIndexBits[Pal::GpuHeapCount];
     uint32_t                         m_memoryPalHeapToVkHeap[Pal::GpuHeapCount];

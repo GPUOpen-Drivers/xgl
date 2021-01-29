@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -34,13 +34,10 @@
 #include <xcb/xcb.h>
 #endif
 #include "include/vk_conv.h"
-#include "include/vk_display.h"
-#include "include/vk_display_manager.h"
 #include "include/vk_fence.h"
 #include "include/vk_image.h"
 #include "include/vk_instance.h"
 #include "include/vk_memory.h"
-#include "include/vk_object.h"
 #include "include/vk_queue.h"
 #include "include/vk_semaphore.h"
 #include "include/vk_surface.h"
@@ -58,6 +55,7 @@ namespace vk
 {
     // Default to true
     bool FullscreenMgr::s_forceFullscreenReacquire = true;
+    bool SwapChain::s_forceTurboSyncEnable         = true;
 
 static bool EnableFullScreen(
     const Device*                   pDevice,
@@ -285,11 +283,7 @@ VkResult SwapChain::Create(
 
     // Figure out the mode the FullscreenMgr should be working in
     const FullscreenMgr::Mode mode =
-            ((properties.pFullscreenSurface != nullptr) && (properties.pSurface != nullptr)) ?
-                                                          FullscreenMgr::Explicit_Mixed :
-            ((properties.pFullscreenSurface != nullptr) ? FullscreenMgr::Explicit :
-                                                          FullscreenMgr::Implicit);
-
+                       FullscreenMgr::Implicit;
     // Find the monitor is associated with the given window handle
     Pal::IDevice* pPalDevice = pDevice->PalDevice(properties.presentationDeviceIdx);
     Pal::IScreen* pScreen    = pDevice->VkInstance()->FindScreen(pPalDevice,
@@ -703,6 +697,16 @@ void SwapChain::PostPresent(
     m_appOwnedImageCount--;
     m_presentCount++;
 }
+
+// =====================================================================================================================
+// Call to check to see if the swapchain (turbosync) needs to pace present
+bool SwapChain::NeedPacePresent(
+    const Pal::PresentSwapChainInfo& presentInfo)
+{
+    bool needPacePresent = false;
+
+    return needPacePresent;
+}
 // =====================================================================================================================
 // Called after full screen has been acquired so the color params can bet set correctly
 void SwapChain::AcquireFullScreenProperties()
@@ -962,23 +966,19 @@ bool FullscreenMgr::TryEnterExclusive(
     {
         Pal::Result result = Pal::Result::Success;
 
-        // In explicit mode, we allow the fullscreen manager to acquire fullscreen ownership, regardless of
-        // size changes or lost window focus.
-        if (m_mode != Explicit)
-        {
-            VK_ASSERT(m_pImage != nullptr);
+        VK_ASSERT(m_pImage != nullptr);
 
-            const auto& imageInfo = m_pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
+        const auto& imageInfo = m_pImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo();
 
-            Pal::Extent2d imageExtent;
+        Pal::Extent2d imageExtent;
 
-            imageExtent.width  = imageInfo.extent.width;
-            imageExtent.height = imageInfo.extent.height;
+        imageExtent.width  = imageInfo.extent.width;
+        imageExtent.height = imageInfo.extent.height;
 
-            // Update current exclusive access compatibility
-            result = m_pScreen->IsImplicitFullscreenOwnershipSafe(m_hDisplay, m_hWindow, imageExtent);
-
-        }
+        // Update current exclusive access compatibility
+        // This is called in both Implicit and Explicit mode to make sure we don't accidentally acquire FSE when it's
+        // not safe, especially when the window is in the background and not the active window.
+        result = m_pScreen->IsImplicitFullscreenOwnershipSafe(m_hDisplay, m_hWindow, imageExtent);
 
         // Exit exclusive access mode if no longer compatible or try to enter (or simply remain in) if we are currently
         // compatible
@@ -999,15 +999,12 @@ bool FullscreenMgr::TryEnterExclusive(
                     result = m_pScreen->TakeFullscreenOwnership(*m_pImage->PalImage(DefaultDeviceIndex));
 
                     // NOTE: ErrorFullscreenUnavailable means according to PAL, we already have exclusive access.
-                    if (result == Pal::Result::Success || result == Pal::Result::ErrorFullscreenUnavailable)
+                    if ((result == Pal::Result::Success) || (result == Pal::Result::ErrorFullscreenUnavailable))
                     {
                         m_exclusiveModeFlags.acquired = 1;
 
-                        if (m_mode != Implicit)
-                        {
-                            pSwapChain->AcquireFullScreenProperties();
-                            m_pScreen->SetColorConfiguration(&pSwapChain->GetColorParams());
-                        }
+                        pSwapChain->AcquireFullScreenProperties();
+                        m_pScreen->SetColorConfiguration(&pSwapChain->GetColorParams());
                     }
                 }
 
@@ -1245,10 +1242,9 @@ void FullscreenMgr::PostPresent(
             // Exit fullscreen exclusive mode immediately.  This should also put PAL's internal state back in sync
             // with the monitor's actual state, in case it's out of sync as well.
             TryExitExclusive(pSwapChain);
+            *pPresentResult = Pal::Result::Success;
 
             VK_ASSERT(m_exclusiveModeFlags.acquired == 0);
-
-            *pPresentResult = Pal::Result::Success;
         }
     }
     else
@@ -1266,6 +1262,13 @@ void FullscreenMgr::PostPresent(
         (*pPresentResult == Pal::Result::ErrorUnknown))
     {
         *pPresentResult = Pal::Result::Success;
+    }
+
+    // Report Fullscreen error if we had lost FSE while in Explicit mode.
+    // This error will be reported until FSE is reacquired as per spec.
+    if ((m_exclusiveModeFlags.acquired == 0) && (m_mode == Mode::Explicit))
+    {
+        *pPresentResult = Pal::Result::ErrorFullscreenUnavailable;
     }
 
     // Hide any present error if we have disabled them via panel
@@ -1288,43 +1291,9 @@ void FullscreenMgr::UpdatePresentInfo(
     // Try to enter (or remain in) exclusive access mode on this swap chain's screen for this present
     TryEnterExclusive(pSwapChain);
 
-    switch(m_mode)
-    {
-    case Implicit:
-        if (m_exclusiveModeFlags.disabled == 0)
-        {
-            // If we've successfully entered exclusive mode, switch to fullscreen presents
-            if (m_exclusiveModeFlags.acquired)
-            {
-                pPresentInfo->presentMode = Pal::PresentMode::Fullscreen;
-            }
-            else
-            {
-                pPresentInfo->presentMode = Pal::PresentMode::Windowed;
-            }
-        }
-        else
-        {
-            // set the presentMode to windoed if fullscreen is disabled
-            pPresentInfo->presentMode = Pal::PresentMode::Windowed;
-        }
-        break;
-
-    case Explicit:
-        pPresentInfo->presentMode = Pal::PresentMode::Fullscreen;
-        break;
-
-    case Explicit_Mixed:
-        {
-            pPresentInfo->presentMode =
-                m_exclusiveModeFlags.acquired ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
-        }
-        break;
-
-      default:
-        VK_NOT_IMPLEMENTED;
-        break;
-    };
+    // Always fallback to windowed if FSE is not acquired to avoid missing presents.
+    pPresentInfo->presentMode =
+            m_exclusiveModeFlags.acquired ? Pal::PresentMode::Fullscreen : Pal::PresentMode::Windowed;
 }
 
 // =====================================================================================================================
@@ -1490,11 +1459,11 @@ SwCompositor* SwCompositor::Create(
         region.extent    = peerInfo.pOriginalImage->GetImageCreateInfo().extent;
         region.numSlices = 1;
 
-        region.srcSubres.aspect     = Pal::ImageAspect::Color;
+        region.srcSubres.plane     = 0;
         region.srcSubres.arraySlice = 0;
         region.srcSubres.mipLevel   = 0;
 
-        region.dstSubres.aspect     = Pal::ImageAspect::Color;
+        region.dstSubres.plane     = 0;
         region.dstSubres.arraySlice = 0;
         region.dstSubres.mipLevel   = 0;
 

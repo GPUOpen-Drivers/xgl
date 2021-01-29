@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -157,6 +157,8 @@ public:
         const Pal::PresentSwapChainInfo& presentInfo,
         Pal::Result*                     pPresentResult);
 
+    bool NeedPacePresent(const Pal::PresentSwapChainInfo& presentInfo);
+
     void AcquireFullScreenProperties();
 
     void SetHdrMetadata(
@@ -191,6 +193,8 @@ protected:
                                                // oldSwapChain when creating a new SwapChain.
 
     uint32_t                m_queueFamilyIndex;                    // Queue family index of the last present
+
+    static bool             s_forceTurboSyncEnable; // Force turbosync enable when synchronizing across swapchains
 };
 
 // =====================================================================================================================
@@ -217,7 +221,6 @@ public:
     {
         Implicit = 0,
         Explicit,
-        Explicit_Mixed,
     };
 
     FullscreenMgr(

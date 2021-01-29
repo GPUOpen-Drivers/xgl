@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2016-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2016-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -120,6 +120,9 @@ public:
     // Number of frames to wait before collecting a hardware trace.
     // Note: This will be replaced in the future by a remotely configurable value provided by the RGP server.
     static constexpr uint32_t NumTracePreparationFrames = 4;
+
+    // Pipeline hash used for instruction tracing whenever no pipeline is being targetted.
+    static constexpr uint64_t InvalidTargetPipelineHash = 0;
 
     ~DevModeMgr();
 

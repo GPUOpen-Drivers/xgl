@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -686,6 +686,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.lenientInstanceFuncQuery = true;
 
             m_settings.alwaysReportHdrFormats = true;
+
+            m_settings.backgroundFullscreenIgnorePresentErrors = true;
         }
 
         if (appProfile == AppProfile::SaschaWillemsExamples)
@@ -710,7 +712,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
             }
         }
-
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
     }
 

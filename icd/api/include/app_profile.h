@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -82,6 +82,7 @@ enum class AppProfile : uint32_t
     DetroitBecomeHuman,    // Detroit Become Human by Quantic Dream
     ShadowOfTheTombRaider, // ShadowOfTheTombRaider by Feral3D
     XPlane,                // XPlane by Laminar Research
+    Quake2RTX,             // Quake2 RTX
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -260,25 +260,23 @@ public:
         m_index(0),
         m_mask(mask)
     {
-        if (MaxPalDevices > 1)
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
+        if (Util::BitMaskScanForward(&m_index, m_mask) == true)
         {
-            if (Util::BitMaskScanForward(&m_index, m_mask) == true)
-            {
-                m_mask ^= (1 << m_index);
-            }
+            m_mask ^= (1 << m_index);
         }
+#endif
     }
 
     VK_INLINE bool IterateNext()
     {
-        if (MaxPalDevices > 1)
+#if (VKI_BUILD_MAX_NUM_GPUS > 1)
+        if (Util::BitMaskScanForward(&m_index, m_mask) == true)
         {
-            if (Util::BitMaskScanForward(&m_index, m_mask) == true)
-            {
-                m_mask ^= (1 << m_index);
-                return true;
-            }
+            m_mask ^= (1 << m_index);
+            return true;
         }
+#endif
         return false;
     }
 

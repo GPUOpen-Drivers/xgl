@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -207,12 +207,14 @@ private:
     RgpSqttMarkerEventType      m_currentEventType;  // Current API type for pre-draw/dispatch event markers
     uint32_t                    m_enabledMarkers;
 
+#if ICD_GPUOPEN_DEVMODE_BUILD
     struct
     {
         bool                started;    // True if a pipeline is currently being traced
         uint64_t            targetHash; // Determines target pipeline used to trigger instruction tracing
         VkPipelineBindPoint bindPoint;  // Bind point of the target pipeline
     } m_instructionTrace;
+#endif
 
     RgpSqttMarkerUserEventWithString* m_pUserEvent;
 

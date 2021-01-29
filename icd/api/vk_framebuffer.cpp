@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -53,23 +53,19 @@ Framebuffer::Attachment::FindSubresRanges(
 
     for (uint32_t i = 0; i < subresRangeCount; ++i)
     {
-        const Pal::ImageAspect attachmentAspect = subresRange[i].startSubres.aspect;
+        const uint32_t attachmentPlane = subresRange[i].startSubres.plane;
 
         const bool   colorAvailable = (aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) &&
-                                      (attachmentAspect == Pal::ImageAspect::Color);
+                                      (attachmentPlane == 0);
 
         const bool   depthAvailable = (aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) &&
-                                      (attachmentAspect == Pal::ImageAspect::Depth);
+                                      (attachmentPlane == 0);
 
         const bool stencilAvailable = (aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) &&
-                                      (attachmentAspect == Pal::ImageAspect::Stencil);
+                                      (((attachmentPlane == 0) && (!pImage->HasDepth())) ||
+                                       (attachmentPlane == 1));
 
-        const bool     yuvAvailable = (aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) &&
-                                      ((attachmentAspect == Pal::ImageAspect::Y)    ||
-                                       (attachmentAspect == Pal::ImageAspect::CbCr) ||
-                                       (attachmentAspect == Pal::ImageAspect::Cb)   ||
-                                       (attachmentAspect == Pal::ImageAspect::Cr)   ||
-                                       (attachmentAspect == Pal::ImageAspect::YCbCr));
+        const bool     yuvAvailable = (aspectMask & VK_IMAGE_ASPECT_COLOR_BIT);
 
         if (colorAvailable || depthAvailable || stencilAvailable || yuvAvailable)
         {
@@ -228,14 +224,14 @@ void Framebuffer::SetSubresRanges(
         if (pImage->HasDepth())
         {
             pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[count]);
-            pAttachment->subresRange[count].startSubres.aspect = Pal::ImageAspect::Depth;
+            pAttachment->subresRange[count].startSubres.plane = 0;
             count++;
         }
 
         if (pImage->HasStencil())
         {
             pAttachment->pView->GetFrameBufferAttachmentSubresRange(&pAttachment->subresRange[count]);
-            pAttachment->subresRange[count].startSubres.aspect = Pal::ImageAspect::Stencil;
+            pAttachment->subresRange[count].startSubres.plane = count;
             count++;
         }
 

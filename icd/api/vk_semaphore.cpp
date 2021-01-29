@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -27,7 +27,6 @@
 #include "include/vk_device.h"
 #include "include/vk_instance.h"
 #include "include/vk_semaphore.h"
-#include "include/vk_object.h"
 
 #include "palQueueSemaphore.h"
 
@@ -296,11 +295,36 @@ VkResult Semaphore::ImportSemaphore(
         if (pMemory)
         {
             Pal::IQueueSemaphore* pPalSemaphores[MaxPalDevices] = { nullptr };
+#if defined(__unix__)
+            // According to the spec, If handleType is VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT, the special value -1
+            // for fd is treated like a valid sync file descriptor referring to an object that has already signaled.
 
-            palResult = pDevice->PalDevice(DefaultDeviceIndex)->OpenExternalSharedQueueSemaphore(
-                    palOpenInfo,
-                    pMemory,
-                    &pPalSemaphores[0]);
+            // Since -1 is an invalid fd, it can't be opened.
+            // Therefore, create a signaled semaphore here to return to the application.
+            if ((handleType == VK_EXTERNAL_SEMAPHORE_HANDLE_TYPE_SYNC_FD_BIT) &&
+                (static_cast<int32_t>(importInfo.handle) == InvalidFd))
+
+            {
+                 Pal::QueueSemaphoreCreateInfo palCreateInfo = {};
+                 palCreateInfo.flags.timeline = m_palCreateInfo.flags.timeline;
+
+                 // Pal will check if this flag is 0 to determine if this semaphore create as signaled.
+                 palCreateInfo.initialCount = 1;
+                 palCreateInfo.flags.shareable = 1;
+
+                 palResult = pDevice->PalDevice(DefaultDeviceIndex)->CreateQueueSemaphore(
+                         palCreateInfo,
+                         pMemory,
+                         &pPalSemaphores[0]);
+            }
+            else
+#endif
+            {
+                palResult = pDevice->PalDevice(DefaultDeviceIndex)->OpenExternalSharedQueueSemaphore(
+                        palOpenInfo,
+                        pMemory,
+                        &pPalSemaphores[0]);
+            }
 
             if (palResult == Pal::Result::Success)
             {

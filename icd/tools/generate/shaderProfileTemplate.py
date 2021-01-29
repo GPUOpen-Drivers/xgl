@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2020-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -2155,7 +2155,6 @@ ValidKeysForEntity = {
 
 BuildTypesTemplate = {
     "llpc": "ICD_BUILD_LLPC",
-    "gfxIp10_3": "VKI_BUILD_GFX103",
     "icdRuntimeAppProfile": "ICD_RUNTIME_APP_PROFILE"
 }
 

@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -33,7 +33,6 @@
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
 #include "include/vk_dispatch.h"
-#include "include/vk_object.h"
 #include "include/vk_instance.h"
 #include "include/vk_utils.h"
 #include "include/vk_queue.h"
@@ -91,7 +90,8 @@ VkResult DescriptorPool::Create(
 DescriptorPool::DescriptorPool(
     Device* pDevice)
     :
-    m_pDevice(pDevice)
+    m_pDevice(pDevice),
+    m_DynamicDataSupport(false)
 {
     memset(m_addresses, 0, sizeof(m_addresses));
 }
@@ -186,6 +186,16 @@ VkResult DescriptorPool::Init(
 
             for (uint32 i = 0; i < pCreateInfo->poolSizeCount; i++)
             {
+                switch (pCreateInfo->pPoolSizes[i].type)
+                {
+                case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+                case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
+                    m_DynamicDataSupport = true;
+                    break;
+                default:
+                    break;
+                }
+
                 pPoolSizes[i].type = VkToPalDescriptorType(pCreateInfo->pPoolSizes[i].type);
                 pPoolSizes[i].numDescriptors = pCreateInfo->pPoolSizes[i].descriptorCount;
             }
@@ -282,67 +292,74 @@ VkResult DescriptorPool::AllocDescriptorSets(
 
     while ((result == VK_SUCCESS) && (allocCount < count))
     {
-        if (m_setHeap.AllocSetState<numPalDevices>(&pDescriptorSets[allocCount]))
+        // Try to allocate GPU memory for the descriptor set
+        DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pSetLayouts[allocCount]);
+
+        if ((m_DynamicDataSupport == false) && (pLayout->Info().numDynamicDescriptors > 0))
         {
-            // Try to allocate GPU memory for the descriptor set
-            DescriptorSetLayout* pLayout = DescriptorSetLayout::ObjectFromHandle(pSetLayouts[allocCount]);
-
-            uint32_t variableDescriptorCounts = 0;
-
-            // Get variable descriptor counts for the last layout binding
-            if (pVariableDescriptorCount != nullptr)
-            {
-                VK_ASSERT(pVariableDescriptorCount->sType ==
-                    VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO);
-
-                VK_ASSERT(pVariableDescriptorCount->descriptorSetCount == pAllocateInfo->descriptorSetCount);
-
-                uint32_t lastBindingIdx = pLayout->Info().count - 1;
-
-                if (pLayout->Binding(lastBindingIdx).bindingFlags.variableDescriptorCount)
-                {
-                    variableDescriptorCounts = pVariableDescriptorCount->pDescriptorCounts[allocCount];
-                    VK_ASSERT(variableDescriptorCounts <= pLayout->Binding(lastBindingIdx).info.descriptorCount);
-                }
-            }
-
-            Pal::gpusize setGpuMemOffset;
-            void* pSetAllocHandle;
-
-            if (m_gpuMemHeap.AllocSetGpuMem(pLayout, variableDescriptorCounts, &setGpuMemOffset, &pSetAllocHandle))
-            {
-                // Allocation succeeded: Mark this
-                // Reallocate this descriptor set to use the allocated GPU range and layout
-                DescriptorSet<numPalDevices>* pSet = DescriptorSet<numPalDevices>::StateFromHandle(pDescriptorSets[allocCount]);
-
-                size_t privateDataSize = m_setHeap.GetPrivateDataSize();
-
-                if (privateDataSize > 0)
-                {
-                    void* pMem = reinterpret_cast<void*>(pDescriptorSets[allocCount]);
-
-                    //just memset the reserved slots here
-                    privateDataSize -= sizeof(HashedPrivateDataMap*);
-                    pMem = Util::VoidPtrDec(pMem, privateDataSize);
-                    memset(pMem, 0, privateDataSize);
-                }
-
-                pSet->Reassign(pLayout,
-                               setGpuMemOffset,
-                               m_addresses,
-                               pSetAllocHandle);
-            }
-            else
-            {
-                // State set will be released in error case handling below, since non-null handle is present
-                result = VK_ERROR_OUT_OF_POOL_MEMORY;
-            }
-
-            allocCount++;
+            result = VK_ERROR_OUT_OF_POOL_MEMORY;
         }
         else
         {
-            result = VK_ERROR_OUT_OF_POOL_MEMORY;
+            if ((m_setHeap.AllocSetState<numPalDevices>(&pDescriptorSets[allocCount])))
+            {
+                uint32_t variableDescriptorCounts = 0;
+
+                // Get variable descriptor counts for the last layout binding
+                if (pVariableDescriptorCount != nullptr)
+                {
+                    VK_ASSERT(pVariableDescriptorCount->sType ==
+                        VK_STRUCTURE_TYPE_DESCRIPTOR_SET_VARIABLE_DESCRIPTOR_COUNT_ALLOCATE_INFO);
+
+                    VK_ASSERT(pVariableDescriptorCount->descriptorSetCount == pAllocateInfo->descriptorSetCount);
+
+                    uint32_t lastBindingIdx = pLayout->Info().count - 1;
+
+                    if (pLayout->Binding(lastBindingIdx).bindingFlags.variableDescriptorCount)
+                    {
+                        variableDescriptorCounts = pVariableDescriptorCount->pDescriptorCounts[allocCount];
+                        VK_ASSERT(variableDescriptorCounts <= pLayout->Binding(lastBindingIdx).info.descriptorCount);
+                    }
+                }
+
+                Pal::gpusize setGpuMemOffset;
+                void* pSetAllocHandle;
+
+                if (m_gpuMemHeap.AllocSetGpuMem(pLayout, variableDescriptorCounts, &setGpuMemOffset, &pSetAllocHandle))
+                {
+                    // Allocation succeeded: Mark this
+                    // Reallocate this descriptor set to use the allocated GPU range and layout
+                    DescriptorSet<numPalDevices>* pSet = DescriptorSet<numPalDevices>::StateFromHandle(pDescriptorSets[allocCount]);
+
+                    size_t privateDataSize = m_setHeap.GetPrivateDataSize();
+
+                    if (privateDataSize > 0)
+                    {
+                        void* pMem = reinterpret_cast<void*>(pDescriptorSets[allocCount]);
+
+                        //just memset the reserved slots here
+                        privateDataSize -= sizeof(HashedPrivateDataMap*);
+                        pMem = Util::VoidPtrDec(pMem, privateDataSize);
+                        memset(pMem, 0, privateDataSize);
+                    }
+
+                    pSet->Reassign(pLayout,
+                        setGpuMemOffset,
+                        m_addresses,
+                        pSetAllocHandle);
+                }
+                else
+                {
+                    // State set will be released in error case handling below, since non-null handle is present
+                    result = VK_ERROR_OUT_OF_POOL_MEMORY;
+                }
+
+                allocCount++;
+            }
+            else
+            {
+                result = VK_ERROR_OUT_OF_POOL_MEMORY;
+            }
         }
     }
 
@@ -1028,7 +1045,7 @@ void DescriptorSetHeap::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-    if (m_privateDataSize > 0)
+    if ((m_privateDataSize > 0) && (m_pSetMemory!= nullptr))
     {
         for (uint32 index = 0; index < m_maxSets; ++index)
         {

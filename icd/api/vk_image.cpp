@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -37,7 +37,6 @@
 #include "include/vk_image.h"
 #include "include/vk_instance.h"
 #include "include/vk_memory.h"
-#include "include/vk_object.h"
 #include "include/vk_swapchain.h"
 #include "include/vk_queue.h"
 
@@ -831,6 +830,7 @@ VkResult Image::Create(
                 palCreateInfo,
                 Util::VoidPtrInc(pPalImgAddr, palImgOffset),
                 &pPalImages[deviceIdx]);
+            VK_ASSERT(palResult == Pal::Result::Success);
 
             palImgOffset += palImgSize;
 
@@ -1507,7 +1507,7 @@ VkResult Image::GetSubresourceLayout(
     Pal::SubresLayout palLayout = {};
     Pal::SubresId palSubResId = {};
 
-    palSubResId.aspect     = VkToPalImageAspectSingle(m_format,
+    palSubResId.plane = VkToPalImagePlaneSingle(m_format,
         pSubresource->aspectMask, pDevice->GetRuntimeSettings());
 
     palSubResId.mipLevel   = pSubresource->mipLevel;
@@ -1554,14 +1554,14 @@ void Image::GetSparseMemoryRequirements(
     // Count the number of aspects
     struct
     {
-        Pal::ImageAspect      aspectPal;
+        uint32_t              planePal;
         VkImageAspectFlagBits aspectVk;
         bool                  available;
     } aspects[] =
     {
-        {Pal::ImageAspect::Color,   VK_IMAGE_ASPECT_COLOR_BIT,   IsColorFormat()},
-        {Pal::ImageAspect::Depth,   VK_IMAGE_ASPECT_DEPTH_BIT,   HasDepth()},
-        {Pal::ImageAspect::Stencil, VK_IMAGE_ASPECT_STENCIL_BIT, HasStencil()}
+        {0, VK_IMAGE_ASPECT_COLOR_BIT,   IsColorFormat()},
+        {0, VK_IMAGE_ASPECT_DEPTH_BIT,   HasDepth()},
+        {1, VK_IMAGE_ASPECT_STENCIL_BIT, HasStencil()}
     };
     uint32_t supportedAspectsCount = sizeof(aspects) / sizeof(aspects[0]);
 
@@ -1626,7 +1626,7 @@ void Image::GetSparseMemoryRequirements(
                 {
                     const Pal::SubresId subresourceId =
                     {
-                        currentAspect.aspectPal,
+                        currentAspect.planePal,
                         memoryLayout.prtMinPackedLod,
                         i  /* arraySlice */
                     };
@@ -1736,16 +1736,7 @@ VkResult Image::GetMemoryRequirements(
     {
         uint32_t typeIndexBits;
 
-        if ((palReqs.heaps[i] == Pal::GpuHeap::GpuHeapInvisible) &&
-            (m_imageUsage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)))
-        {
-            // Unlike the default local/invisible memory type, allocations made under the attachment image
-            // memory type do not include a back-up heap (unless overallocation is allowed via
-            // VK_AMD_memory_overallocation_behavior). If the attachment image memory type isn't enabled,
-            // GetMemoryTypeForAttachmentImage still returns the GPU invisible memory type.
-            pReqs->memoryTypeBits |= 1 << pDevice->GetMemoryTypeForAttachmentImage();
-        }
-        else if (pDevice->GetVkTypeIndexBitsFromPalHeap(palReqs.heaps[i], &typeIndexBits))
+        if (pDevice->GetVkTypeIndexBitsFromPalHeap(palReqs.heaps[i], &typeIndexBits))
         {
             pReqs->memoryTypeBits |= typeIndexBits;
         }
@@ -1806,56 +1797,18 @@ VkResult Image::GetMemoryRequirements(
 // This is a function used to convert RPImageLayouts to PAL equivalents.  These are basically Vulkan layouts but they
 // are renderpass-specific instance specific and contain some extra internal requirements.
 Pal::ImageLayout Image::GetAttachmentLayout(
-    const RPImageLayout&  layout,
-    Pal::ImageAspect      aspect,
-    const CmdBuffer*      pCmdBuffer
+    const RPImageLayout& layout,
+    uint32_t             plane,
+    const CmdBuffer*     pCmdBuffer
     ) const
 {
     Pal::ImageLayout palLayout;
 
-    if (((aspect == Pal::ImageAspect::Color)   && IsColorFormat()) ||
-        ((aspect == Pal::ImageAspect::Depth)   && HasDepth())      ||
-        ((aspect == Pal::ImageAspect::Stencil) && HasStencil())    ||
-        ((aspect == Pal::ImageAspect::Y)       && IsYuvFormat())   ||
-        ((aspect == Pal::ImageAspect::CbCr)    && IsYuvFormat())   ||
-        ((aspect == Pal::ImageAspect::Cb)      && IsYuvFormat())   ||
-        ((aspect == Pal::ImageAspect::Cr)      && IsYuvFormat())   ||
-        ((aspect == Pal::ImageAspect::YCbCr)   && IsYuvFormat()))
-    {
-        uint32_t aspectIndex = 0;
+    palLayout = GetBarrierPolicy().GetAspectLayout(
+    layout.layout, plane, pCmdBuffer->GetQueueFamilyIndex(), GetFormat());
 
-        if ((aspect == Pal::ImageAspect::Color) ||
-            (aspect == Pal::ImageAspect::Depth) ||
-            (aspect == Pal::ImageAspect::Y)     ||
-            (aspect == Pal::ImageAspect::CbCr)  ||
-            (aspect == Pal::ImageAspect::Cb)    ||
-            (aspect == Pal::ImageAspect::Cr)    ||
-            (aspect == Pal::ImageAspect::YCbCr) ||
-            (HasDepth() == false)) // Stencil aspect for stencil-only format
-        {
-            aspectIndex = 0;
-        }
-        else
-        {
-            // Stencil-aspect usages for combined depth-stencil formats usages are returned in usages[1]
-            VK_ASSERT(aspect == Pal::ImageAspect::Stencil && HasDepth());
-
-            aspectIndex = 1;
-        }
-
-        palLayout = GetBarrierPolicy().GetAspectLayout(
-            layout.layout, aspectIndex, pCmdBuffer->GetQueueFamilyIndex(), GetFormat());
-
-        // Add any requested extra PAL usage
-        palLayout.usages |= layout.extraUsage;
-    }
-    else
-    {
-        // Return a null-usage layout (set the engine still because there are some PAL asserts that hit)
-        palLayout = GetBarrierPolicy().GetAspectLayout(
-            layout.layout, 0, pCmdBuffer->GetQueueFamilyIndex(), GetFormat());
-        palLayout.usages = 0;
-    }
+    // Add any requested extra PAL usage
+    palLayout.usages |= layout.extraUsage;
 
     return palLayout;
 }

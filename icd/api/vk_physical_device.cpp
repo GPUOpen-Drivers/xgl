@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -36,8 +36,6 @@
 #include "include/vk_device.h"
 #include "include/vk_physical_device.h"
 #include "include/vk_physical_device_manager.h"
-#include "include/vk_display.h"
-#include "include/vk_display_manager.h"
 #include "include/vk_image.h"
 #include "include/vk_instance.h"
 #include "include/vk_utils.h"
@@ -75,6 +73,13 @@
 
 namespace vk
 {
+// DisplayModeObject should be returned as a VkDisplayModeKHR, since in some cases we need to retrieve Pal::IScreen from
+// VkDisplayModeKHR.
+struct DisplayModeObject
+{
+    Pal::IScreen* pScreen;
+    Pal::ScreenMode palScreenMode;
+};
 
 // Vulkan Spec Table 30.11: All features in optimalTilingFeatures
 constexpr VkFormatFeatureFlags AllImgFeatures =
@@ -321,7 +326,6 @@ PhysicalDevice::PhysicalDevice(
     m_pPalDevice(pPalDevice),
     m_memoryTypeMask(0),
     m_memoryTypeMaskForExternalSharing(0),
-    m_memoryVkIndexAttachmentImage(0),
     m_pSettingsLoader(pSettingsLoader),
     m_sampleLocationSampleCounts(0),
     m_vrHighPrioritySubEngineIndex(UINT32_MAX),
@@ -802,27 +806,6 @@ VkResult PhysicalDevice::Initialize()
                     }
                 }
 
-                if (palGpuHeap == Pal::GpuHeapInvisible)
-                {
-                    if ((invisHeapSize + localHeapSize) >= settings.memoryAttachmentImageMemoryTypeMinHeapSize)
-                    {
-                        // The attachment image memory type (unavailable for parts with VRAM smaller than 4GB)
-                        // reports identical properties as the default invisible. However, it does
-                        // not add a remote back-up heap unless overallocation is allowed via
-                        // VK_AMD_memory_overallocation_behavior.
-                        m_memoryVkIndexAttachmentImage = m_memoryProperties.memoryTypeCount++;
-
-                        m_memoryProperties.memoryTypes[m_memoryVkIndexAttachmentImage] =
-                            m_memoryProperties.memoryTypes[memoryTypeIndex];
-                        m_memoryVkIndexToPalHeap[m_memoryVkIndexAttachmentImage] =
-                            m_memoryVkIndexToPalHeap[memoryTypeIndex];
-                    }
-                    else
-                    {
-                        m_memoryVkIndexAttachmentImage = memoryTypeIndex;
-                    }
-                }
-
                 // Optional: if we have exposed a memory type that is host visible, add a backup
                 // memory type that is not host visible. We will use it for optimally tiled images.
                 if (settings.addHostInvisibleMemoryTypesForOptimalImages &&
@@ -1059,6 +1042,7 @@ void PhysicalDevice::PopulateGpaProperties()
         m_gpaProps.properties.maxSqttSeBufferSize = m_gpaProps.palProps.features.threadTrace ?
                                                     static_cast<VkDeviceSize>(m_gpaProps.palProps.maxSqttSeBufferSize) :
                                                     0;
+
         for (uint32_t perfBlock = VK_GPA_PERF_BLOCK_BEGIN_RANGE_AMD;
                       perfBlock <= VK_GPA_PERF_BLOCK_END_RANGE_AMD;
                       ++perfBlock)
@@ -1146,7 +1130,7 @@ void PhysicalDevice::PopulateFormatProperties()
                 do
                 {
                     // Get aspect for each plane.
-                    subresRange.startSubres.aspect = VkToPalImageAspectExtract(palFormat.format, &aspectMask);
+                    subresRange.startSubres.plane = VkToPalImagePlaneExtract(palFormat.format, &aspectMask);
 
                     Pal::SwizzledFormat palLinearFormat =
                         RemapFormatComponents(palFormat, subresRange, mapping, m_pPalDevice, Pal::ImageTiling::Linear);
@@ -1698,14 +1682,14 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 {
     const struct AspectLookup
     {
-        Pal::ImageAspect      aspectPal;
+        uint32_t              planePal;
         VkImageAspectFlagBits aspectVk;
         bool                  available;
     } aspects[] =
     {
-        {Pal::ImageAspect::Color,   VK_IMAGE_ASPECT_COLOR_BIT,   vk::Formats::IsColorFormat(format)},
-        {Pal::ImageAspect::Depth,   VK_IMAGE_ASPECT_DEPTH_BIT,   vk::Formats::HasDepth     (format)},
-        {Pal::ImageAspect::Stencil, VK_IMAGE_ASPECT_STENCIL_BIT, vk::Formats::HasStencil   (format)}
+        {0, VK_IMAGE_ASPECT_COLOR_BIT,   vk::Formats::IsColorFormat(format)},
+        {0, VK_IMAGE_ASPECT_DEPTH_BIT,   vk::Formats::HasDepth     (format)},
+        {1, VK_IMAGE_ASPECT_STENCIL_BIT, vk::Formats::HasStencil   (format)}
     };
     const uint32_t nAspects = sizeof(aspects) / sizeof(aspects[0]);
 
@@ -3443,11 +3427,6 @@ static bool IsSingleChannelMinMaxFilteringSupported(
     return ((pPhysicalDevice == nullptr) ||
             pPhysicalDevice->PalProperties().gfxipProperties.flags.supportSingleChannelMinMaxFilter);
 }
-
-// =====================================================================================================================
-
-// =====================================================================================================================
-// TODO #raytracing: Query raytracing support from PAL.
 
 // =====================================================================================================================
 // Get available device extensions or populate the specified physical device with the extensions supported by it.
@@ -5649,17 +5628,26 @@ void PhysicalDevice::GetDeviceProperties2(
             pProps->maxFragmentShadingRateAttachmentTexelSize = vrsTileSize;
 
             uint32_t maxVrsShadingRate = 0;
-            Util::BitMaskScanReverse(&maxVrsShadingRate, PalProperties().gfxipProperties.supportedVrsRates);
 
-            pProps->maxFragmentSize =
-                PalToVkShadingSize(static_cast<Pal::VrsShadingRate>(maxVrsShadingRate));
+            // BSR op normally returns success unless PalProperties().gfxipProperties.supportedVrsRates equals 0,
+            // Unfortunately, if HW doesn't support VRS, we do get supportedVrsRates to be 0 which fails.
+            bool foundSupportedVrsRates = Util::BitMaskScanReverse(&maxVrsShadingRate,
+                PalProperties().gfxipProperties.supportedVrsRates);
+
+            // Per Spec says maxVrsShadingRate's width and height must both be power-of-two values.
+            // This limit is purely informational, and is not validated. Thus, for VRS unsupported conditions,
+            // we could just return {1, 1}.
+            pProps->maxFragmentSize = foundSupportedVrsRates ?
+                PalToVkShadingSize(static_cast<Pal::VrsShadingRate>(maxVrsShadingRate)) :
+                PalToVkShadingSize(Pal::VrsShadingRate::_1x1);
 
             pProps->maxFragmentShadingRateAttachmentTexelSizeAspectRatio = 1;
             pProps->primitiveFragmentShadingRateWithMultipleViewports    = VK_TRUE;
             pProps->layeredShadingRateAttachments                        = VK_FALSE;
             pProps->fragmentShadingRateNonTrivialCombinerOps             = VK_TRUE;
             pProps->maxFragmentSizeAspectRatio                           = 1;
-            pProps->fragmentShadingRateWithShaderDepthStencilWrites      = PalProperties().gfxipProperties.flags.supportVrsWithDsExports;
+            pProps->fragmentShadingRateWithShaderDepthStencilWrites      =
+                PalProperties().gfxipProperties.flags.supportVrsWithDsExports;
             pProps->fragmentShadingRateWithSampleMask                    = VK_TRUE;
             pProps->fragmentShadingRateWithShaderSampleMask              = VK_TRUE;
             pProps->fragmentShadingRateWithConservativeRasterization     = VK_TRUE;
@@ -5894,7 +5882,6 @@ void PhysicalDevice::GetDeviceGpaProperties(
         for (uint32_t perfBlock = VK_GPA_PERF_BLOCK_BEGIN_RANGE_AMD;
                       (perfBlock <= VK_GPA_PERF_BLOCK_END_RANGE_AMD) && (written < count);
                       ++perfBlock)
-
         {
             const Pal::GpuBlock gpuBlock = VkToPalGpuBlock(static_cast<VkGpaPerfBlockAMD>(perfBlock));
 

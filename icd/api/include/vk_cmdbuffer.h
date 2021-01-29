@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -234,10 +234,10 @@ struct RenderPassInstanceState
     // Per-attachment instance state
     struct AttachmentState
     {
-        Pal::ImageLayout aspectLayout[static_cast<uint32_t>(Pal::ImageAspect::Count)];    // Per-aspect PAL layout
-        VkClearValue     clearValue;              // Specified load-op clear value for this attachment
-        SamplePattern    initialSamplePattern;    // Initial sample pattern at first layout transition of
-                                                  // depth/stencil attachment.
+        Pal::ImageLayout planeLayout[Pal::MaxNumPlanes];  // Per-plane PAL layout
+        VkClearValue     clearValue;                      // Specified load-op clear value for this attachment
+        SamplePattern    initialSamplePattern;            // Initial sample pattern at first layout transition of
+                                                          // depth/stencil attachment.
     };
 
     union
@@ -1030,8 +1030,8 @@ private:
 
     void RPInitSamplePattern();
 
-    VK_INLINE Pal::ImageLayout RPGetAttachmentLayout(uint32_t attachment, Pal::ImageAspect aspect);
-    VK_INLINE void RPSetAttachmentLayout(uint32_t attachment, Pal::ImageAspect aspect, Pal::ImageLayout layout);
+    VK_INLINE Pal::ImageLayout RPGetAttachmentLayout(uint32_t attachment, uint32_t plane);
+    VK_INLINE void RPSetAttachmentLayout(uint32_t attachment, uint32_t plane, Pal::ImageLayout layout);
 
     void FillTimestampQueryPool(
         const TimestampQueryPool& timestampQueryPool,
@@ -1233,43 +1233,25 @@ void CmdBuffer::InsertDeviceEvents(
 
 // =====================================================================================================================
 Pal::ImageLayout CmdBuffer::RPGetAttachmentLayout(
-    uint32_t         attachment,
-    Pal::ImageAspect aspect)
+    uint32_t attachment,
+    uint32_t plane)
 {
-    VK_ASSERT(aspect == Pal::ImageAspect::Color   ||
-              aspect == Pal::ImageAspect::Depth   ||
-              aspect == Pal::ImageAspect::Stencil ||
-              aspect == Pal::ImageAspect::Y       ||
-              aspect == Pal::ImageAspect::CbCr    ||
-              aspect == Pal::ImageAspect::Cb      ||
-              aspect == Pal::ImageAspect::Cr      ||
-              aspect == Pal::ImageAspect::YCbCr);
-    VK_ASSERT(static_cast<Pal::uint32>(aspect) < static_cast<Pal::uint32>(Pal::ImageAspect::Count));
     VK_ASSERT(attachment < m_allGpuState.pRenderPass->GetAttachmentCount());
     VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
 
-    return m_renderPassInstance.pAttachments[attachment].aspectLayout[static_cast<size_t>(aspect)];
+    return m_renderPassInstance.pAttachments[attachment].planeLayout[plane];
 }
 
 // =====================================================================================================================
 void CmdBuffer::RPSetAttachmentLayout(
     uint32_t         attachment,
-    Pal::ImageAspect aspect,
+    uint32_t         plane,
     Pal::ImageLayout layout)
 {
-    VK_ASSERT(aspect == Pal::ImageAspect::Color   ||
-              aspect == Pal::ImageAspect::Depth   ||
-              aspect == Pal::ImageAspect::Stencil ||
-              aspect == Pal::ImageAspect::Y       ||
-              aspect == Pal::ImageAspect::CbCr    ||
-              aspect == Pal::ImageAspect::Cb      ||
-              aspect == Pal::ImageAspect::Cr      ||
-              aspect == Pal::ImageAspect::YCbCr);
-    VK_ASSERT(static_cast<Pal::uint32>(aspect) < static_cast<Pal::uint32>(Pal::ImageAspect::Count));
     VK_ASSERT(attachment < m_allGpuState.pRenderPass->GetAttachmentCount());
     VK_ASSERT(attachment < m_renderPassInstance.maxAttachmentCount);
 
-    m_renderPassInstance.pAttachments[attachment].aspectLayout[static_cast<size_t>(aspect)] = layout;
+    m_renderPassInstance.pAttachments[attachment].planeLayout[plane] = layout;
 }
 
 VK_DEFINE_DISPATCHABLE(CmdBuffer);

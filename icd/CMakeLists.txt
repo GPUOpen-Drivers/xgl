@@ -1,7 +1,7 @@
 ##
  #######################################################################################################################
  #
- #  Copyright (c) 2017-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ #  Copyright (c) 2017-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  #
  #  Permission is hereby granted, free of charge, to any person obtaining a copy
  #  of this software and associated documentation files (the "Software"), to deal
@@ -120,10 +120,9 @@ if(XGL_BUILD_RAVEN2)
     target_compile_definitions(xgl PRIVATE VKI_BUILD_RAVEN2=1)
     target_compile_definitions(xgl PRIVATE PAL_BUILD_RAVEN2)
 endif()
-if(XGL_BUILD_RENOIR)
-    target_compile_definitions(xgl PRIVATE VKI_BUILD_RENOIR=1)
-    target_compile_definitions(xgl PRIVATE PAL_BUILD_RENOIR)
-endif()
+
+target_compile_definitions(xgl PRIVATE PAL_BUILD_RENOIR)
+
 if(XGL_BUILD_VEGA20)
     target_compile_definitions(xgl PRIVATE VKI_BUILD_VEGA20=1)
     target_compile_definitions(xgl PRIVATE PAL_BUILD_VEGA20)
@@ -132,16 +131,6 @@ if(XGL_BUILD_GFX10)
     target_compile_definitions(xgl PRIVATE VKI_BUILD_GFX10=1)
     target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX10)
     target_compile_definitions(xgl PRIVATE LLPC_BUILD_GFX10)
-endif()
-if(XGL_BUILD_NAVI14)
-    target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI14=1)
-endif()
-if(XGL_BUILD_NAVI21)
-    target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI21=1)
-endif()
-
-if(XGL_BUILD_GFX103)
-    target_compile_definitions(xgl PRIVATE VKI_BUILD_GFX103=1)
 endif()
 
 if(TARGET_ARCHITECTURE_BITS EQUAL 32)
@@ -223,6 +212,7 @@ if(VKI_KHR_DEFERRED_HOST_OPERATIONS)
     target_compile_definitions(xgl PRIVATE VKI_KHR_DEFERRED_HOST_OPERATIONS)
 endif()
 #endif
+
 #if VKI_EXPOSE_EXT_CONDITIONAL_RENDERING
 if(VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
     target_compile_definitions(xgl PRIVATE VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
@@ -300,8 +290,6 @@ target_sources(xgl PRIVATE
     api/vk_descriptor_pool.cpp
     api/vk_device.cpp
     api/vk_dispatch.cpp
-    api/vk_display.cpp
-    api/vk_display_manager.cpp
     api/vk_event.cpp
     api/vk_fence.cpp
     api/vk_formats.cpp
@@ -313,7 +301,6 @@ target_sources(xgl PRIVATE
     api/vk_image_view.cpp
     api/vk_instance.cpp
     api/vk_memory.cpp
-    api/vk_object.cpp
     api/vk_pipeline.cpp
     api/vk_pipeline_layout.cpp
     api/vk_pipeline_cache.cpp

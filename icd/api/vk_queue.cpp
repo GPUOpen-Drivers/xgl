@@ -1,7 +1,7 @@
 /*
  ***********************************************************************************************************************
  *
- *  Copyright (c) 2014-2020 Advanced Micro Devices, Inc. All Rights Reserved.
+ *  Copyright (c) 2014-2021 Advanced Micro Devices, Inc. All Rights Reserved.
  *
  *  Permission is hereby granted, free of charge, to any person obtaining a copy
  *  of this software and associated documentation files (the "Software"), to deal
@@ -33,12 +33,10 @@
 #include "include/vk_cmdbuffer.h"
 #include "include/vk_conv.h"
 #include "include/vk_device.h"
-#include "include/vk_display.h"
 #include "include/vk_fence.h"
 #include "include/vk_image.h"
 #include "include/vk_instance.h"
 #include "include/vk_memory.h"
-#include "include/vk_object.h"
 #include "include/vk_queue.h"
 #include "include/vk_semaphore.h"
 #include "include/vk_swapchain.h"
@@ -679,7 +677,7 @@ VkResult Queue::UpdateFlipStatus(
 // Return true if pace present is needed, should sync flip (timer queue hold present queue) if pSyncFlip is true
 bool Queue::NeedPacePresent(
     Pal::PresentSwapChainInfo* pPresentInfo,
-    const SwapChain*           pSwapChain,
+    SwapChain*                 pSwapChain,
     bool*                      pSyncFlip,
     bool*                      pPostFrameTimerSubmission)
 {
@@ -1131,7 +1129,7 @@ VkResult Queue::BindSparseEntry(
             Pal::SubresLayout subResLayout = {};
             Pal::SubresId     subResId     = {};
 
-            subResId.aspect     = VkToPalImageAspectSingle(image.GetFormat(),
+            subResId.plane      = VkToPalImagePlaneSingle(image.GetFormat(),
                 bind.subresource.aspectMask, m_pDevice->GetRuntimeSettings());
 
             subResId.mipLevel   = bind.subresource.mipLevel;
