@@ -204,12 +204,12 @@ llvm::Expected<ElfLlpcCacheInfo> getElfLlpcCacheInfo(llvm::MemoryBufferRef elfBu
       llvm::StringRef noteName = note.getName();
       llvm::ArrayRef<uint8_t> noteBlob = note.getDesc();
 
-      if (noteName.startswith("llpc_cache_hash")) {
-        assert(noteBlob.size() == sizeof(Util::MetroHash::Hash) && "Invalid llpc_cache_hash note");
+      if (noteName == "AMD_llpc_cache_hash") {
+        assert(noteBlob.size() == sizeof(Util::MetroHash::Hash) && "Invalid AMD_llpc_cache_hash note");
         memcpy(hash.bytes, noteBlob.data(), sizeof(hash));
         foundHash = true;
-      } else if (noteName.startswith("llpc_version")) {
-        assert(noteBlob.size() == sizeof(llpcVersion) && "Invalid llpc_version note");
+      } else if (noteName == "AMD_llpc_version") {
+        assert(noteBlob.size() == sizeof(llpcVersion) && "Invalid AMD_llpc_version note");
         memcpy(llpcVersion, noteBlob.data(), sizeof(llpcVersion));
         foundLlpcVersion = true;
       }

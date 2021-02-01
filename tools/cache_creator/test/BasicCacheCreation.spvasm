@@ -1,0 +1,102 @@
+; Check that cache-creator can create cache files from one or two elf entries.
+
+; Split the test into two .spvasm temporary inputs.
+; RUN: split-file %s %t
+
+; Compile the vertex shader into a relocatable ELF.
+; RUN: amdllpc %t/vert.spvasm %gfxip %spvgen %reloc -add-hash-to-elf -v -o %t.vert.elf | FileCheck --check-prefix=LLPC-VERT %s
+; LLPC-VERT-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; LLPC-VERT-LABEL: {{^=====}}  AMDLLPC SUCCESS  =====
+
+; Compile the fragment shader into a relocatable ELF.
+; RUN: amdllpc %t/frag.spvasm %gfxip %spvgen %reloc -add-hash-to-elf -v -o %t.frag.elf | FileCheck --check-prefix=LLPC-FRAG %s
+; LLPC-FRAG-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
+; LLPC-FRAG-LABEL: {{^=====}}  AMDLLPC SUCCESS  =====
+
+; Test 1: Create a cache file with one input.
+; RUN: cache-creator %t.vert.elf --uuid=00000000-0000-0000-0000-000000000000 --device-id=0x6080 -o %t.vert.bin --verbose \
+; RUN:   | FileCheck --check-prefix=CC-VERT %s
+; CC-VERT:       {{^Num}} inputs: 1, anticipated cache size: [[ver_cache_size:[0-9]+]]{{$}}
+; CC-VERT-NEXT:  {{^Read:}} {{.*}}.vert.elf{{$}}
+; CC-VERT:       {{^Num}} entries written: 1, actual cache size: [[ver_cache_size]] B{{$}}
+; CC-VERT-LABEL: {{^Cache}} successfully written to: {{.*}}.vert.bin{{$}}
+
+; Test 2: Create a cache file with two inputs.
+; RUN: cache-creator %t.vert.elf %t.frag.elf --uuid=00000000-0000-0000-0000-000000000000 --device-id=0x6080 -o %t.vert-frag.bin --verbose \
+; RUN:   | FileCheck --check-prefix=CC-TWO %s
+; CC-TWO:       {{^Num}} inputs: 2, anticipated cache size: [[two_cache_size:[0-9]+]]{{$}}
+; CC-TWO-NEXT:  {{^Read:}} {{.*}}.vert.elf{{$}}
+; CC-TWO:       {{^Read:}} {{.*}}.frag.elf{{$}}
+; CC-TWO:       {{^Num}} entries written: 2, actual cache size: [[two_cache_size]] B{{$}}
+; CC-TWO-LABEL: {{^Cache}} successfully written to: {{.*}}.vert-frag.bin{{$}}
+
+; Test 3: Create a cache file with one input repeated twice.
+;         In this case, we simply add it twice and do not attempt to de-duplicate inputs.
+; RUN: cache-creator %t.vert.elf %t.vert.elf --uuid=00000000-0000-0000-0000-000000000000 --device-id=0x6080 -o %t.vert-vert.bin --verbose \
+; RUN:   | FileCheck --check-prefix=CC-DUP %s
+; CC-DUP:       {{^Num}} inputs: 2, anticipated cache size: [[dup_cache_size:[0-9]+]]{{$}}
+; CC-DUP-NEXT:  {{^Read:}} {{.*}}.vert.elf{{$}}
+; CC-DUP:       {{^Read:}} {{.*}}.vert.elf{{$}}
+; CC-DUP:       {{^Num}} entries written: 2, actual cache size: [[dup_cache_size]] B{{$}}
+; CC-DUP-LABEL: {{^Cache}} successfully written to: {{.*}}.vert-vert.bin{{$}}
+
+;--- vert.spvasm
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 10
+; Bound: 28
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Vertex %main "main" %input_color %_entryPointOutput
+               OpSource HLSL 500
+               OpName %main "main"
+               OpName %input_color "input.color"
+               OpName %_entryPointOutput "@entryPointOutput"
+               OpDecorate %input_color Location 0
+               OpDecorate %_entryPointOutput Location 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Input_v4float = OpTypePointer Input %v4float
+%input_color = OpVariable %_ptr_Input_v4float Input
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+%_entryPointOutput = OpVariable %_ptr_Output_v4float Output
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+         %24 = OpLoad %v4float %input_color
+               OpStore %_entryPointOutput %24
+               OpReturn
+               OpFunctionEnd
+
+
+;--- frag.spvasm
+; SPIR-V
+; Version: 1.0
+; Generator: Khronos Glslang Reference Front End; 10
+; Bound: 12
+; Schema: 0
+               OpCapability Shader
+          %1 = OpExtInstImport "GLSL.std.450"
+               OpMemoryModel Logical GLSL450
+               OpEntryPoint Fragment %main "main" %fragColor
+               OpExecutionMode %main OriginUpperLeft
+               OpSource GLSL 460
+               OpName %main "main"
+               OpName %fragColor "fragColor"
+               OpDecorate %fragColor Location 0
+       %void = OpTypeVoid
+          %3 = OpTypeFunction %void
+      %float = OpTypeFloat 32
+    %v4float = OpTypeVector %float 4
+%_ptr_Output_v4float = OpTypePointer Output %v4float
+  %fragColor = OpVariable %_ptr_Output_v4float Output
+    %float_1 = OpConstant %float 1
+         %11 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
+       %main = OpFunction %void None %3
+          %5 = OpLabel
+               OpStore %fragColor %11
+               OpReturn
+               OpFunctionEnd
