@@ -27,7 +27,7 @@
 # These input elf files can be compiled offline and packaged as cache file on a host machine without a GPU.
 # The "XGL_BUILD_CACHE_CREATOR" CMake option enables the cache creator targets.
 
-# This interface library is intended be used by the cache creator tool and by the related unit tests.
+# This interface library is intended be used by cache-creator, cache-info, and by the related unit tests.
 add_library(cache_creator_lib INTERFACE)
 
 list(APPEND CMAKE_MODULE_PATH "${XGL_LLVM_BUILD_PATH}/lib/cmake/llvm")
@@ -54,18 +54,26 @@ target_compile_definitions(cache_creator_lib INTERFACE
 )
 target_compile_options(cache_creator_lib INTERFACE ${XGL_COMPILE_OPTIONS})
 
-target_sources(cache_creator_lib INTERFACE cache_creator.cpp)
+target_sources(cache_creator_lib INTERFACE cache_creator.cpp cache_info.cpp)
 
 # This executable takes AMDGPU elf files as input and outputs a Vulkan cache file blob
 # that can be later loaded by the ICD.
 # The `cache-creator` binary follows the standard llvm-based tool naming convention.
-# Note that running the cache creator tool doesn't require a Vulkan device to be installed.
+# Note that running the cache-creator tool doesn't require a Vulkan device to be installed.
 add_executable(cache-creator)
 target_sources(cache-creator PRIVATE cache_creator_main.cpp)
 target_link_libraries(cache-creator PRIVATE cache_creator_lib)
 
-# Build cache-creator whenever we build XGL.
-add_dependencies(xgl cache-creator)
+# This executable analyzes pipeline binary cache files produced either by the ICD or by the cache-creator tool.
+# We use the output in automated regression tests but it may also be useful in manual analysis/debugging.
+# The `cache-info` binary follows the standard llvm-based tool naming convention.
+# Note that running the cache-info tool doesn't require a Vulkan device to be installed.
+add_executable(cache-info)
+target_sources(cache-info PRIVATE cache_info_main.cpp)
+target_link_libraries(cache-info PRIVATE cache_creator_lib)
+
+# Build cache creator tools whenever we build XGL.
+add_dependencies(xgl cache-creator cache-info)
 
 if(XGL_BUILD_LIT)
     message(STATUS "Building cache creator LIT tests")
@@ -78,6 +86,7 @@ add_executable(cache-creator-unit-tests)
 target_sources(cache-creator-unit-tests PRIVATE
     units/cache_creator_units_main.cpp
     units/cache_creator_tests.cpp
+    units/cache_info_tests.cpp
 )
 target_include_directories(cache-creator-unit-tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(cache-creator-unit-tests PRIVATE cache_creator_lib)

@@ -57,5 +57,5 @@ config.substitutions.append(('%spvgen', '-spvgen-dir=' + config.spvgen_dir))
 config.substitutions.append(('%reloc', '-unlinked -enable-relocatable-shader-elf'))
 
 tool_dirs = [config.cache_creator_tools_dir, config.amdllpc_dir, config.llvm_tools_dir]
-tools = ['amdllpc', 'cache-creator', 'llvm-objdump', 'llvm-readelf', 'count', 'not', 'split-file']
+tools = ['amdllpc', 'cache-creator', 'cache-info', 'llvm-objdump', 'llvm-readelf', 'count', 'not', 'split-file']
 llvm_config.add_tool_substitutions(tools, tool_dirs)
