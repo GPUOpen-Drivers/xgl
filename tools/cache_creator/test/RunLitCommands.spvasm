@@ -6,6 +6,9 @@
 ; RUN: cache-creator --help | FileCheck -check-prefix=CHECK-CC %s
 ; CHECK-CC: Cache Creator Options
 
+; RUN: cache-info --help | FileCheck -check-prefix=CHECK-CI %s
+; CHECK-CI: Cache Info Options
+
 ; RUN: llvm-objdump --version | FileCheck -check-prefix=CHECK-OBJDUMP %s
 ; CHECK-OBJDUMP: Registered Targets
 
