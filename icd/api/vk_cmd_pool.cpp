@@ -211,7 +211,6 @@ VkResult CmdPool::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-
     // When a command pool is destroyed, all command buffers allocated from the pool are implicitly freed and
     // become invalid.
     while (m_cmdBufferRegistry.GetNumEntries() > 0)

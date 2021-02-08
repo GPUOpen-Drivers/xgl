@@ -46,9 +46,7 @@ void *VKAPI_PTR defaultAllocFunc(void *userData, size_t size, size_t alignment, 
   // See https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/aligned-malloc,
   // and https://linux.die.net/man/3/aligned_alloc.
   const size_t requiredAlignment = llvm::PowerOf2Ceil(std::max(alignment, sizeof(void *)));
-#if defined(_WIN32)
-  return _aligned_malloc(size, requiredAlignment);
-#elif _POSIX_C_SOURCE >= 200112L
+#if   _POSIX_C_SOURCE >= 200112L
   void *mem = nullptr;
   if (posix_memalign(&mem, requiredAlignment, size) != 0)
     return nullptr;
@@ -64,9 +62,7 @@ void *VKAPI_PTR defaultReallocFunc(void *userData, void *original, size_t size, 
 }
 
 void VKAPI_PTR defaultFreeFunc(void *userData, void *mem) {
-#if defined(_WIN32)
-  return _aligned_free(mem);
-#elif _POSIX_C_SOURCE >= 200112L
+#if   _POSIX_C_SOURCE >= 200112L
   free(mem);
 #else
 #error Platform not handled

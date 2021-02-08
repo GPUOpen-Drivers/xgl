@@ -2763,7 +2763,9 @@ VkResult PhysicalDevice::GetSurfaceCapabilities(
                 pSurfaceCapabilities->maxImageArrayLayers   = swapChainProperties.maxImageArraySize;
             }
 
-            pSurfaceCapabilities->minImageCount = swapChainProperties.minImageCount;
+            pSurfaceCapabilities->minImageCount =
+                Util::Max<uint32_t>(GetRuntimeSettings().forceMinImageCount, swapChainProperties.minImageCount);
+
             pSurfaceCapabilities->maxImageCount = swapChainProperties.maxImageCount;
 
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 610

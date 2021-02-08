@@ -82,6 +82,7 @@ enum class AppProfile : uint32_t
     DetroitBecomeHuman,    // Detroit Become Human by Quantic Dream
     ShadowOfTheTombRaider, // ShadowOfTheTombRaider by Feral3D
     XPlane,                // XPlane by Laminar Research
+    WarThunder,            // WarThunder by Gaijin Distribution Kft
     Quake2RTX,             // Quake2 RTX
 
     IdTechEngine,          // id Tech Engine (Default)
