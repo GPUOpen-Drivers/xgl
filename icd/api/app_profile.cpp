@@ -289,6 +289,18 @@ constexpr AppProfilePatternEntry AppNameXPlane =
     "x-plane"
 };
 
+constexpr AppProfilePatternEntry AppNameWarThunder =
+{
+    PatternAppNameLower,
+    "dagor"
+};
+
+constexpr AppProfilePatternEntry AppEngineDagorEngine =
+{
+    PatternEngineNameLower,
+    "dagor"
+};
+
 constexpr AppProfilePatternEntry AppEngineXSystem =
 {
     PatternEngineNameLower,
@@ -648,6 +660,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::XSystemEngine,
         {
             AppEngineXSystem,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::WarThunder,
+        {
+            AppNameWarThunder,
+            AppEngineDagorEngine,
             PatternEnd
         }
     },

@@ -111,7 +111,6 @@ private:
     } m_flags;
 
     Util::HashSet<CmdBuffer*, PalAllocator> m_cmdBufferRegistry;
-
 };
 
 namespace entry

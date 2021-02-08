@@ -712,6 +712,13 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.resourceBarrierOptions = ResourceBarrierOptions::SkipDstCacheInv;
             }
         }
+
+        if (appProfile == AppProfile::WarThunder)
+        {
+            // A larger minImageCount can get a huge performance gain for game WarThunder.
+            m_settings.forceMinImageCount = 3;
+        }
+
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);
     }
 
@@ -914,7 +921,6 @@ void VulkanSettingsLoader::UpdatePalSettings()
         Pal::DeviceProperties info;
         m_pDevice->GetProperties(&info);
         pPalSettings->useAcqRelInterface      = info.gfxipProperties.flags.supportReleaseAcquireInterface && m_settings.useAcqRelInterface;
-        pPalSettings->enableGpuEventMultiSlot = m_settings.enableGpuEventMultiSlot;
     }
 
     // Setting disableSkipFceOptimization to false enables an optimization in PAL that disregards the FCE in a transition

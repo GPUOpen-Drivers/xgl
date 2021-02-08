@@ -1891,32 +1891,23 @@ Pal::Result DevModeMgr::InitTraceQueueResources(
 
         if (pState->queueTimingEnabled)
         {
-            if (kernelContextInfo.contextIdentifier != 0)
+            if (palResult == Pal::Result::Success)
             {
-                // A zero for contextIdentifier indicates that we don't have access to get the kernel handle. Without
-                // that access we can't use the queue timing functions.
-                pState->queueTimingEnabled = false;
+                pQueueState->queueContext = kernelContextInfo.contextIdentifier;
             }
-            else
+
+            // I think we need a GPA session per PAL device in the group, and we need to register each
+            // per-device queue with the corresponding PAL device's GPA session.  This needs to be
+            // fixed for MGPU tracing to work (among probably many other things).
+            VK_ASSERT(pState->pDevice->NumPalDevices() == 1);
+
+            // Register the queue with the GPA session class for timed queue operation support.
+            if (pState->pGpaSession->RegisterTimedQueue(
+                pQueue->PalQueue(DefaultDeviceIndex),
+                pQueueState->queueId,
+                pQueueState->queueContext) == Pal::Result::Success)
             {
-                if (palResult == Pal::Result::Success)
-                {
-                    pQueueState->queueContext = kernelContextInfo.contextIdentifier;
-                }
-
-                // I think we need a GPA session per PAL device in the group, and we need to register each
-                // per-device queue with the corresponding PAL device's GPA session.  This needs to be
-                // fixed for MGPU tracing to work (among probably many other things).
-                VK_ASSERT(pState->pDevice->NumPalDevices() == 1);
-
-                // Register the queue with the GPA session class for timed queue operation support.
-                if (pState->pGpaSession->RegisterTimedQueue(
-                    pQueue->PalQueue(DefaultDeviceIndex),
-                    pQueueState->queueId,
-                    pQueueState->queueContext) == Pal::Result::Success)
-                {
-                    pQueueState->timingSupported = true;
-                }
+                pQueueState->timingSupported = true;
             }
         }
     }

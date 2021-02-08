@@ -675,6 +675,7 @@ public:
         Vkgc::ResourceMappingRootNode* pUserDataNodes,
         VkShaderModuleCreateFlags      flags,
         bool                           forceWave64,
+        const VkSpecializationInfo*    pSpecializationInfo,
         InternalPipeline*              pInternalPipeline);
 
 protected:

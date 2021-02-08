@@ -852,6 +852,18 @@
       "Type": "bool"
     },
     {
+      "Name": "ForceMinImageCount",
+      "Description": "A non-zero value will force to set the minimum count of swap chain images",
+      "Tags": [
+        "Present"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "Scope": "Driver",
+      "Type": "uint32"
+    },
+    {
       "Name": "EnableRelocatableShaders",
       "Description": "Builds a pipeline by linking reloctable shader elf, which have been built individually.  Only valid when LLPC is the pipeline compiler.",
       "Tags": [
@@ -4024,18 +4036,6 @@
       },
       "Scope": "Driver",
       "Type": "uint32"
-    },
-    {
-      "Name": "EnableGpuEventMultiSlot",
-      "Description": "Enable multiple slots instead of single DWORD slot for GPU event. This will enable anywhere that can utilize multiple event slots for optimization or feature purpose, such as AcqRelBarrier interface. ",
-      "Tags": [
-        "Optimization"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool"
     },
     {
       "Name": "UseAcqRelInterface",

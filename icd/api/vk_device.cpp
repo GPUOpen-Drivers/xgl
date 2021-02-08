@@ -1973,6 +1973,7 @@ VkResult Device::CreateInternalComputePipeline(
     Vkgc::ResourceMappingRootNode* pUserDataNodes,
     VkShaderModuleCreateFlags      flags,
     bool                           forceWave64,
+    const VkSpecializationInfo*    pSpecializationInfo,
     InternalPipeline*              pInternalPipeline)
 {
     VK_ASSERT(numUserDataNodes <= VK_ARRAY_SIZE(pInternalPipeline->userDataNodeOffsets));
@@ -2003,7 +2004,7 @@ VkResult Device::CreateInternalComputePipeline(
         auto pShaderInfo = &pipelineBuildInfo.pipelineInfo.cs;
         pipelineBuildInfo.compilerType = PipelineCompilerTypeLlpc;
         pShaderInfo->pModuleData         = shaderModule.pLlpcShaderModule;
-        pShaderInfo->pSpecializationInfo = nullptr;
+        pShaderInfo->pSpecializationInfo = pSpecializationInfo;
         pShaderInfo->pEntryTarget        = Vkgc::IUtil::GetEntryPointNameFromSpirvBinary(&spvBin);
         pShaderInfo->entryStage          = Vkgc::ShaderStageCompute;
 
@@ -2171,6 +2172,7 @@ VkResult Device::CreateInternalPipelines()
         userDataNodes,
         0,
         false,
+        nullptr,
         &m_timestampQueryCopyPipeline);
 
     return result;

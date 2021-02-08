@@ -109,6 +109,7 @@ endif()
 ### Build Definitions ##################################################################################################
 target_compile_definitions(xgl PRIVATE ${TARGET_ARCHITECTURE_ENDIANESS}ENDIAN_CPU)
 target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
+target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX10)
 
 # Internal developer build
 
@@ -126,11 +127,6 @@ target_compile_definitions(xgl PRIVATE PAL_BUILD_RENOIR)
 if(XGL_BUILD_VEGA20)
     target_compile_definitions(xgl PRIVATE VKI_BUILD_VEGA20=1)
     target_compile_definitions(xgl PRIVATE PAL_BUILD_VEGA20)
-endif()
-if(XGL_BUILD_GFX10)
-    target_compile_definitions(xgl PRIVATE VKI_BUILD_GFX10=1)
-    target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX10)
-    target_compile_definitions(xgl PRIVATE LLPC_BUILD_GFX10)
 endif()
 
 if(TARGET_ARCHITECTURE_BITS EQUAL 32)
