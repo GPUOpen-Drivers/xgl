@@ -660,16 +660,16 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
     if (settings.devModeElfReplacementDirectoryEnable)
     {
         Util::File      file;
-        char            filePath[260]; // Windows MAX_PATH = 260
-        uint32_t        fileCount           = 0u;
-        const char**    ppFileNames         = nullptr;
-        size_t          fileNameBufferSize  = 0u;
-        void*           pFileNameBuffer     = nullptr;
-        size_t          dirLength           = strlen(settings.devModeElfReplacementDirectory) + 1u;
+        char            filePath[Util::PathBufferLen] = {};
+        uint32_t        fileCount                     = 0u;
+        const char**    ppFileNames                   = nullptr;
+        size_t          fileNameBufferSize            = 0u;
+        void*           pFileNameBuffer               = nullptr;
+        size_t          dirLength                     = strlen(settings.devModeElfReplacementDirectory) + 1u;
 
-        Util::Hash128   pipelineHash        = {};
-        size_t          pipelineBinarySize  = 0u;
-        void*           pPipelineBinary     = nullptr;
+        Util::Hash128   pipelineHash                  = {};
+        size_t          pipelineBinarySize            = 0u;
+        void*           pPipelineBinary               = nullptr;
 
         // Get the number of files in dir and the size of the buffer to hold their names
         result = Util::ListDir(
@@ -708,12 +708,12 @@ Util::Result PipelineBinaryCache::InjectBinariesFromDirectory(
         if (result == Util::Result::Success)
         {
             // Store each file into cache
-            strcpy(filePath, settings.devModeElfReplacementDirectory);
-            strcat(filePath, "\\");
+            Util::Strncpy(filePath, settings.devModeElfReplacementDirectory, sizeof(filePath));
+            Util::Strncat(filePath, sizeof(filePath), "\\");
             for (uint32_t fileIndex = 0; fileIndex < fileCount; fileIndex++)
             {
                 filePath[dirLength] = '\0';
-                strcat(filePath, ppFileNames[fileIndex]);
+                Util::Strncat(filePath, sizeof(filePath), ppFileNames[fileIndex]);
 
                 ppFileNames[fileIndex] = strstr(ppFileNames[fileIndex], "_0x");
 
