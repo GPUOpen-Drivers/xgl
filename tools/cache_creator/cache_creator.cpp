@@ -295,14 +295,16 @@ llvm::Error RelocatableCacheCreator::addElf(llvm::MemoryBufferRef elfBuffer) {
   entry.dataSize = elfBuffer.getBufferSize();
   entry.hashId = elfLlpcInfoOrErr->cacheHash;
 
-  // TODO(kuhar): Also check if the LLPC minor version from the elf matches the current LLPC version from the build.
-  // LLPC minor version is not currently available to this targer, so we need to update CMake to access it here.
-  if (elfLlpcInfoOrErr->llpcMajorVersion != BuildLlpcMajorVersion)
-    return llvm::createFileError(elfBuffer.getBufferIdentifier(),
-                                 llvm::createStringError(std::errc::state_not_recoverable,
-                                                         "Elf LLPC version (% " PRIu32
-                                                         ")  not compatible with the tool LLPC version (%" PRIu32 ")",
-                                                         elfLlpcInfoOrErr->llpcMajorVersion, BuildLlpcMajorVersion));
+  if (elfLlpcInfoOrErr->llpcMajorVersion != BuildLlpcMajorVersion ||
+      elfLlpcInfoOrErr->llpcMinorVersion != BuildLlpcMinorVersion) {
+    return llvm::createFileError(
+        elfBuffer.getBufferIdentifier(),
+        llvm::createStringError(std::errc::state_not_recoverable,
+                                "Elf LLPC version (%" PRIu32 ".%" PRIu32
+                                ") not compatible with the tool LLPC version (%" PRIu32 ".%" PRIu32 ")",
+                                elfLlpcInfoOrErr->llpcMajorVersion, elfLlpcInfoOrErr->llpcMinorVersion,
+                                BuildLlpcMajorVersion, BuildLlpcMinorVersion));
+  }
 
   if (m_serializer->AddPipelineBinary(&entry, elfBuffer.getBufferStart()) != Util::Result::Success)
     return llvm::createFileError(

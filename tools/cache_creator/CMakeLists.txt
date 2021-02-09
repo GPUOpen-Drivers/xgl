@@ -41,6 +41,7 @@ target_link_libraries(cache_creator_lib INTERFACE pal xgl_cache_support ${llvm_l
 target_include_directories(cache_creator_lib INTERFACE
     ${XGL_LLVM_SRC_PATH}/include
     ${LLVM_INCLUDE_DIRS}  # This is necessary to discover the auto-generated llvm-config.h header.
+    ${XGL_VKGC_PATH}/include
 )
 
 get_target_property(XGL_COMPILE_OPTIONS xgl COMPILE_OPTIONS)
@@ -50,7 +51,6 @@ get_target_property(XGL_COMPILE_DEFINITIONS xgl COMPILE_DEFINITIONS)
 target_compile_definitions(cache_creator_lib INTERFACE
     ${LLVM_DEFINITIONS}
     ${XGL_COMPILE_DEFINITIONS}
-    CC_LLPC_MAJOR_VERSION=${LLPC_MAJOR_VERSION}
 )
 target_compile_options(cache_creator_lib INTERFACE ${XGL_COMPILE_OPTIONS})
 
