@@ -25,6 +25,7 @@
 #pragma once
 
 #include "util/palMetroHash.h"
+#include "vkgcDefs.h"
 #include "include/binary_cache_serialization.h"
 
 // These Xlib defines conflict with LLVM.
@@ -42,7 +43,8 @@ namespace cc {
 constexpr uint32_t AMDVendorId = 0x1002; // See https://pci-ids.ucw.cz/read/PC/1002.
 
 // The LLPC version number in the current source tree.
-constexpr uint32_t BuildLlpcMajorVersion = CC_LLPC_MAJOR_VERSION;
+constexpr uint32_t BuildLlpcMajorVersion = LLPC_INTERFACE_MAJOR_VERSION;
+constexpr uint32_t BuildLlpcMinorVersion = LLPC_INTERFACE_MINOR_VERSION;
 
 VkAllocationCallbacks &getDefaultAllocCallbacks();
 

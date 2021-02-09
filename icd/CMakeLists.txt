@@ -502,6 +502,7 @@ target_sources(xgl_cache_support INTERFACE
 )
 target_include_directories(xgl_cache_support INTERFACE
     api
+    api/include/khronos
 )
 target_link_libraries(xgl_cache_support INTERFACE pal)
 
