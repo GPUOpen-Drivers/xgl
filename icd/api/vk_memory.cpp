@@ -212,6 +212,9 @@ VkResult Memory::Create(
                     }
 #endif
                     createInfo.flags.interprocess = 1;
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 657
+                    createInfo.flags.explicitSync = 1;
+#endif
                     // Todo: we'd better to pass in the handleTypes to the Pal as well.
                     // The supported handleType should also be provided by Pal as Device Capabilities.
             }
