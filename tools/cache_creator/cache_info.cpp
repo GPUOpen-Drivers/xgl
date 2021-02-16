@@ -204,7 +204,8 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const PublicVkHeaderInfo &i
      << "header version:\t\t" << header.headerVersion << "\n"
      << "vendor ID:\t\t" << llvm::format("0x%" PRIx32, header.vendorID) << "\n"
      << "device ID:\t\t" << llvm::format("0x%" PRIx32, header.deviceID) << "\n"
-     << "pipeline cache UUID:\t" << cc::uuidToHexString(header.UUID) << "\n";
+     << "pipeline cache UUID:\t" << cc::uuidToHexString(header.UUID) << "\n"
+     << "trailing space:\t" << info.trailingSpaceBeforePrivateBlob << "\n";
   return os;
 }
 
