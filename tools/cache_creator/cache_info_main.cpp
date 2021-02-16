@@ -91,7 +91,8 @@ int main(int argc, char **argv) {
     return reportAndConsumeError(std::move(cacheEntriesReadErr), 4);
 
   llvm::outs() << "=== Cache Content Info ===\n"
-               << "total num entries: " << entries.size() << "\n\n";
+               << "total num entries: " << entries.size() << "\n"
+               << "entry header length: " << sizeof(vk::BinaryCacheEntry) << "\n\n";
 
   for (const cc::BinaryCacheEntryInfo &entryInfo : entries) {
     llvm::StringRef sourceFilePath = "<none>";
