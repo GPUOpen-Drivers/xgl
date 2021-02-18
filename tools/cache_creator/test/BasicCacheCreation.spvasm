@@ -59,7 +59,7 @@
 ; Part 1c: Check amdllpc output to see that the entry hash ID from 1b matches the compiler vertex cache hash.
 ; CC-VERT:       SPIR-V disassembly for {{.*}}vert.spvasm{{$}}
 ; CC-VERT-LABEL: {{^// LLPC}} calculated hash results (graphics pipeline)
-; CC-VERT:       {{^Hash for vertex stage cache lookup:}} [[vert_cache_hash]]{{$}}
+; CC-VERT:       {{^Finalized}} Hash for vertex stage cache lookup: [[vert_cache_hash]]{{$}}
 
 
 ; Test 2: Create a cache file with two inputs. Check that both ELFs are present in the cache file.
@@ -105,11 +105,11 @@
 ; Part 2c: Check amdllpc output to see that the entry hash IDs from 2b match the compiler vertex and fragment cache hashes.
 ; CC-TWO:       SPIR-V disassembly for {{.*}}vert.spvasm{{$}}
 ; CC-TWO-LABEL: {{// LLPC}} calculated hash results (graphics pipeline)
-; CC-TWO:       {{^Hash for vertex stage cache lookup:}} [[vert_cache_hash]]{{$}}
+; CC-TWO:       {{^Finalized}} Hash for vertex stage cache lookup: [[vert_cache_hash]]{{$}}
 ;
 ; CC-TWO:       SPIR-V disassembly for {{.*}}frag.spvasm{{$}}
 ; CC-TWO-LABEL: {{^// LLPC}} calculated hash results (graphics pipeline)
-; CC-TWO:       {{^Hash for fragment stage cache lookup:}} [[frag_cache_hash]]{{$}}
+; CC-TWO:       {{^Finalized}} Hash for fragment stage cache lookup: [[frag_cache_hash]]{{$}}
 
 
 ; Test 3: Create a cache file with one input repeated twice.
@@ -146,7 +146,7 @@
 ; Part 3c: Check amdllpc output to see that the entry hash ID from 2b matches the compiler vertex cache hash.
 ; CC-DUP:       SPIR-V disassembly for {{.*}}vert.spvasm{{$}}
 ; CC-DUP-LABEL: {{^// LLPC}} calculated hash results (graphics pipeline)
-; CC-DUP:       {{^Hash for vertex stage cache lookup:}} [[vert_cache_hash]]{{$}}
+; CC-DUP:       {{^Finalized}} Hash for vertex stage cache lookup: [[vert_cache_hash]]{{$}}
 
 
 ;--- vert.spvasm
