@@ -216,11 +216,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.cmdAllocatorEmbeddedHeap = Pal::GpuHeapLocal;
             }
 
-            if (appProfile == AppProfile::WolfensteinYoungblood)
-            {
-                m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartCacheable;
-            }
-            else if (appProfile == AppProfile::DoomEternal)
+            if (appProfile == AppProfile::DoomEternal)
             {
                 m_settings.overrideHeapChoiceToLocal = OverrideChoiceForGartUswc;
             }
@@ -506,6 +502,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
             m_settings.useAnisoThreshold = true;
             m_settings.anisoThreshold = 1.0f;
+            m_settings.disableResetReleaseResources = true;
         }
 
         if (appProfile == AppProfile::F1_2017)
@@ -560,6 +557,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.dccBitsPerPixelThreshold = 64;
             }
+
         }
 
         if (appProfile == AppProfile::Rage2 || appProfile == AppProfile::ApexEngine)

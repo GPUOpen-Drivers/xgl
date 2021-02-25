@@ -189,20 +189,11 @@ target_include_directories(xgl PRIVATE imported)
 target_include_directories(xgl PRIVATE
     api
     api/include
-    api/include/khronos
     ${XGL_VKGC_PATH}/include
 )
 
-if(EXISTS ${VULKAN_HEADERS_PATH})
-    target_include_directories(xgl PRIVATE ${VULKAN_HEADERS_PATH}/include)
-    target_compile_definitions(xgl PRIVATE EXTERNAL_VULKAN_HEADERS=1)
-endif()
-
 target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
-if(VKI_KHR_FRAGMENT_SHADING_RATE)
-    target_compile_definitions(xgl PRIVATE VKI_KHR_FRAGMENT_SHADING_RATE)
-endif()
 #if VKI_KHR_DEFERRED_HOST_OPERATIONS
 if(VKI_KHR_DEFERRED_HOST_OPERATIONS)
     target_compile_definitions(xgl PRIVATE VKI_KHR_DEFERRED_HOST_OPERATIONS)
@@ -493,6 +484,7 @@ if (UNIX)
 endif()
 
 target_link_libraries(xgl PRIVATE pal)
+target_link_libraries(xgl PRIVATE khronos_vulkan_interface)
 
 ### XGL cache_support ####
 add_library(xgl_cache_support INTERFACE)

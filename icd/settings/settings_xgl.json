@@ -227,6 +227,32 @@
     {
       "Name": "BvhBuildMode",
       "Values": []
+    },
+    {
+      "Name": "ThreadGroupSwizzleMode",
+      "IsEnum": true,
+      "Values": [
+        {
+          "Name": "ThreadGroupSwizzleModeDefault",
+          "Value": 0,
+          "Description": "Use default shader settings"
+        },
+        {
+          "Name": "ThreadGroupSwizzleMode4x4",
+          "Value": 1,
+          "Description": "Swizzle thread groups with 4x4 tiles"
+        },
+        {
+          "Name": "ThreadGroupSwizzleMode8x8",
+          "Value": 2,
+          "Description": "Swizzle thread groups with 8x8 tiles"
+        },
+        {
+          "Name": "ThreadGroupSwizzleMode16x16",
+          "Value": 3,
+          "Description": "Swizzle thread groups with 16x16 tiles"
+        }
+      ]
     }
   ],
   "Settings": [
@@ -512,6 +538,18 @@
     {
       "Name": "PadVertexBuffers",
       "Description": "Pad vertex buffers if the range isn't the multiple of stride. ",
+      "Tags": [
+        "Command Buffer Options"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "DisableResetReleaseResources",
+      "Description": "Disable resources releasing when resetting command buffer.",
       "Tags": [
         "Command Buffer Options"
       ],
@@ -4050,6 +4088,18 @@
       "Type": "bool"
     },
     {
+      "Name": "SyncTokenEnabled",
+      "Description": "Using sync token is enabled. ",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Name": "EnableSPP",
       "Description": "Enable Shader Profiling for Power (SPP).  The gist of the initial version of this feature is that we will profile important  applications to determine which shaders are heavily memory bound, then use these profiles  to program the RLC to dynamically reduce engine clocks when running such shaders.This  should result in power savings with a limited perf impact. ",
       "Tags": [
@@ -4129,6 +4179,48 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "CpDmaCmdCopyMemoryMaxBytes"
+    },
+    {
+      "Description": "This value denotes whether using CmdClearBoundAttachments/CmdClearBoundDepthStencilTargets for subpass load op clears or not.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": "false"
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "SubpassLoadOpClearsBoundAttachments"
+    },
+    {
+      "Description": "Force all compute shaders to have swizzled thread groups.",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "ThreadGroupSwizzleMode"
+      },
+      "Defaults": {
+        "Default": "ThreadGroupSwizzleModeDefault"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "Name": "ForceCsThreadGroupSwizzleMode"
+    },
+    {
+      "Description": "Force all ray tracing shaders compiled in unified mode to have swizzled thread groups.",
+      "Tags": [
+        "Optimization"
+      ],
+      "ValidValues": {
+        "Name": "ThreadGroupSwizzleMode"
+      },
+      "Defaults": {
+        "Default": "ThreadGroupSwizzleModeDefault"
+      },
+      "Scope": "Driver",
+      "Type": "enum",
+      "Name": "ForceRtThreadGroupSwizzleMode"
     },
     {
       "Description": "Enable dispatch tunneling.",

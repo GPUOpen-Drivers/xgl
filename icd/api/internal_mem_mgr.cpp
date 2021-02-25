@@ -791,6 +791,8 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
     Pal::GpuMemoryCreateInfo     localCreateInfo = createInfo;
     const Pal::DeviceProperties& palProperties   = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
 
+    localCreateInfo.heapAccess = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
+
     if (palProperties.gfxipProperties.flags.supportGl2Uncached && memCreateFlags.needGl2Uncached)
     {
         localCreateInfo.flags.gl2Uncached = 1;
@@ -870,6 +872,7 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                             shadowCreateInfo.vaRange                  = Pal::VaRange::ShadowDescriptorTable;
                             shadowCreateInfo.heapCount                = 1;
                             shadowCreateInfo.heaps[0]                 = Pal::GpuHeapGartCacheable;
+                            shadowCreateInfo.heapAccess               = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
 
                             palResult = m_pDevice->PalDevice(deviceIdx)->CreateGpuMemory(
                                 shadowCreateInfo,

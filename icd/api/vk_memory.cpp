@@ -87,6 +87,7 @@ VkResult Memory::Create(
 
     // Copy Vulkan API allocation info to local PAL version
     Pal::GpuMemoryCreateInfo createInfo = {};
+    createInfo.heapAccess = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
 
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
@@ -507,6 +508,8 @@ VkResult Memory::CreateGpuMemory(
                 {
                     Pal::IDevice* pPalDevice = pDevice->PalDevice(deviceIdx);
 
+                    VK_ASSERT(createInfo.heapAccess == Pal::GpuHeapAccess::GpuHeapAccessExplicit);
+
                     // Allocate the PAL memory object
                     palResult = pPalDevice->CreateGpuMemory(
                         createInfo, Util::VoidPtrInc(pSystemMem, palMemOffset), &pGpuMemory[deviceIdx]);
@@ -743,6 +746,8 @@ VkResult Memory::OpenExternalSharedImage(
     Pal::ImageCreateInfo palImgCreateInfo = {};
     Pal::GpuMemoryCreateInfo palMemCreateInfo = {};
 
+    palMemCreateInfo.heapAccess = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
+
     Pal::ExternalImageOpenInfo palOpenInfo = {};
 
 #if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 645
@@ -757,6 +762,9 @@ VkResult Memory::OpenExternalSharedImage(
     palOpenInfo.resourceInfo.hExternalResource        = importInfo.handle;
     palOpenInfo.resourceInfo.flags.ntHandle           = importInfo.isNtHandle;
     palOpenInfo.resourceInfo.flags.androidHwBufHandle = importInfo.isAhbHandle;
+#if defined(__unix__)
+    palOpenInfo.resourceInfo.handleType               = Pal::HandleType::DmaBufFd;
+#endif
 
     Pal::Result palResult = Pal::Result::Success;
     const bool openedViaName = (importInfo.handle == 0);
@@ -989,6 +997,8 @@ VkResult Memory::OpenExternalMemory(
     Pal::Result palResult;
     size_t gpuMemorySize;
     uint8_t *pSystemMem;
+
+    createInfo.heapAccess = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
 
     VK_ASSERT(pDevice  != nullptr);
     VK_ASSERT(ppMemory != nullptr);

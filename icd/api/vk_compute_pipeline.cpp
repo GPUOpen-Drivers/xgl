@@ -141,7 +141,9 @@ VkResult ComputePipeline::Create(
         pDevice, pCreateInfo, &binaryCreateInfo, &pPipelineCreationFeadbackCreateInfo);
 
     uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
-    for (uint32_t deviceIdx = 0; (result == VK_SUCCESS) && (deviceIdx < pDevice->NumPalDevices()); deviceIdx++)
+    for (uint32_t deviceIdx = 0;
+        (result == VK_SUCCESS) && (deviceIdx < pDevice->NumPalDevices())
+        ; deviceIdx++)
     {
         result = pDevice->GetCompiler(deviceIdx)->CreateComputePipelineBinary(
             pDevice,

@@ -309,6 +309,7 @@ static VkResult InitSparseVirtualMemory(
     pSparseMemCreateInfo->alignment          = Util::RoundUpToMultiple(sparseAllocGranularity, palReqs.alignment);
     pSparseMemCreateInfo->size               = Util::RoundUpToMultiple(palReqs.size, pSparseMemCreateInfo->alignment);
     pSparseMemCreateInfo->heapCount          = 0;
+    pSparseMemCreateInfo->heapAccess         = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
 
     // Virtual resource should return 0 on unmapped read if residencyNonResidentStrict is set.
     if (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureStrictNull)
