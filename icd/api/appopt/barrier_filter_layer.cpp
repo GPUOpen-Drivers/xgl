@@ -136,7 +136,8 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(
                 for (uint32_t i = 0; i < imageMemoryBarrierCount; ++i)
                 {
                     if ((((filterOptions & SkipImageLayoutUndefined) == 0) ||
-                         (pImageMemoryBarriers[i].oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) ||
+                         ((pImageMemoryBarriers[i].oldLayout != VK_IMAGE_LAYOUT_UNDEFINED) &&
+                          (pImageMemoryBarriers[i].oldLayout != VK_IMAGE_LAYOUT_PREINITIALIZED)) ||
                          (pImageMemoryBarriers[i].newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)) &&
                         (((filterOptions & SkipDuplicateResourceBarriers) == 0) ||
                          (pImageMemoryBarriers[i].oldLayout != pImageMemoryBarriers[i].newLayout) ||

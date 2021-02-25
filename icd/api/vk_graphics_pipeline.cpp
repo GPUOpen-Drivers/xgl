@@ -1410,8 +1410,10 @@ VkResult GraphicsPipeline::Create(
     uint64_t apiPsoHash = BuildApiHash(pCreateInfo, &localPipelineInfo, &binaryCreateInfo.basePipelineHash);
 
     const uint32_t numPalDevices = pDevice->NumPalDevices();
+
     uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
-    for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices); ++i)
+    for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices)
+        ; ++i)
     {
         if (i == DefaultDeviceIndex)
         {

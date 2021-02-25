@@ -72,26 +72,44 @@ public:
 
     VK_FORCEINLINE Pal::IGpuEvent* PalEvent(uint32_t deviceIdx) const
     {
-        VK_ASSERT(deviceIdx < m_numDeviceEvents);
         return m_pPalEvents[deviceIdx];
     }
 
-protected:
-    Event(Device*          pDevice,
-          uint32_t         numDeviceEvents,
-          Pal::IGpuEvent** pPalEvents,
-          InternalMemory*  pInternalGpuMem)
-          :
-          m_numDeviceEvents(numDeviceEvents),
-          m_internalGpuMem (*pInternalGpuMem)
+    VK_FORCEINLINE uint32 GetSyncToken() const
     {
-        memcpy(m_pPalEvents, pPalEvents, sizeof(Pal::IGpuEvent*) * m_numDeviceEvents);
+        return m_syncToken;
     }
 
-    uint32_t               m_numDeviceEvents;
-    Pal::IGpuEvent*        m_pPalEvents[MaxPalDevices];
-    InternalMemory         m_internalGpuMem;
+    VK_FORCEINLINE void SetSyncToken(uint32 syncToken)
+    {
+        m_syncToken = syncToken;
+    }
+
+    VK_FORCEINLINE bool IsUseToken() const
+    {
+        return m_useToken;
+    }
+
+protected:
+    Event(
+        Device*                         pDevice,
+        uint32_t                        numDeviceEvents,
+        Pal::IGpuEvent**                pPalEvents,
+        InternalMemory*                 pInternalGpuMem,
+        bool                            useToken);
+
 private:
+    union
+    {
+        Pal::IGpuEvent*    m_pPalEvents[MaxPalDevices];
+        uint32             m_syncToken;
+    };
+
+    InternalMemory         m_internalGpuMem;
+
+    // This flag is used to decide which path to use when setting and waiting event with CmdRelease/CmdAcquire.
+    // if the flag is true, we will use sync tokens. Well, if the flag is false, we will use iGpuEvents.
+    bool                   m_useToken;
 };
 
 namespace entry

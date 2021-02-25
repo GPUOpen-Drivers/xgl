@@ -264,7 +264,6 @@ option(XGL_BUILD_CACHE_CREATOR "Build cache-creator tools?" OFF)
 #if VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES
 option(VKI_KHR_SHADER_SUBGROUP_EXTENDED_TYPES "Build vulkan with KHR_SHADER_SUBGROUP_EXTENDED_TYPES" OFF)
 #endif
-option(VKI_KHR_FRAGMENT_SHADING_RATE "Build vulkan with VKI_KHR_FRAGMENT_SHADING_RATE" OFF)
 #if VKI_3RD_PARTY_IP_PROPERTY_ID
 option(VKI_3RD_PARTY_IP_PROPERTY_ID "Build vulkan with 3RD_PARTY_IP_PROPERTY_ID" OFF)
 #endif
@@ -578,6 +577,26 @@ set(PERL_CMD ${PERL_EXECUTABLE})
 ### external Vulkan headers ############################################
 if(EXISTS ${PROJECT_SOURCE_DIR}/../Vulkan-Headers)
     set(VULKAN_HEADERS_PATH ${PROJECT_SOURCE_DIR}/../Vulkan-Headers CACHE PATH "The path of Vulkan headers.")
+endif()
+
+### Khronos Interface ###
+add_library(khronos_vulkan_interface INTERFACE)
+
+if(EXISTS ${VULKAN_HEADERS_PATH})
+    target_include_directories(khronos_vulkan_interface
+        INTERFACE
+            ${VULKAN_HEADERS_PATH}/include
+            icd/api/include/khronos
+    )
+    target_compile_definitions(khronos_vulkan_interface
+        INTERFACE
+            EXTERNAL_VULKAN_HEADERS=1
+    )
+else()
+    target_include_directories(khronos_vulkan_interface
+        INTERFACE
+            icd/api/include/khronos
+    )
 endif()
 
 ### Metrohash ##########################################################

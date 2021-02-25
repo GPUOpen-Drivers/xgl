@@ -41,6 +41,28 @@ namespace vk
 {
 
 // =====================================================================================================================
+// This is the implementation of constructor of event.
+Event::Event(
+    Device*          pDevice,
+    uint32_t         numDeviceEvents,
+    Pal::IGpuEvent** pPalEvents,
+    InternalMemory*  pInternalGpuMem,
+    bool             useToken)
+    :
+    m_internalGpuMem (*pInternalGpuMem),
+    m_useToken       (useToken)
+{
+    if (useToken)
+    {
+        m_syncToken = 0;
+    }
+    else
+    {
+        memcpy(m_pPalEvents, pPalEvents, sizeof(Pal::IGpuEvent*) * numDeviceEvents);
+    }
+}
+
+// =====================================================================================================================
 // Create a new event object. This is the implementation of vkCreateEvent.
 VkResult Event::Create(
     Device*                         pDevice,
@@ -48,24 +70,21 @@ VkResult Event::Create(
     const VkAllocationCallbacks*    pAllocator,
     VkEvent*                        pEvent)
 {
-    const uint32_t numDeviceEvents                    = pDevice->NumPalDevices();
+    const uint32_t numDeviceEvents               = pDevice->NumPalDevices();
 
     Pal::IGpuEvent* pPalGpuEvents[MaxPalDevices] = {};
     InternalMemory  internalGpuMem               = {};
     VkResult result                              = VK_SUCCESS;
     Pal::Result palResult                        = Pal::Result::Success;
+    bool useToken                                = false;
 
-    // Technically, we should vet the pCreateInfo structure here, but the only defined
-    // field in it right now is reserved, so we gain nothing except protecting broken
-    // applications from themselves. A debug layer should do that.
-
-    // Allocate enough system memory for the dispatchable event object and the
-    // PAL event object.
-
+    // we need to allocate enough system memory for the api objects
     const size_t apiSize = sizeof(Event);
 
-    const Pal::GpuEventCreateInfo eventCreateInfo = {};
-    const size_t palSize = pDevice->PalDevice(DefaultDeviceIndex)->GetGpuEventSize(eventCreateInfo, nullptr);
+    Pal::GpuEventCreateInfo eventCreateInfo = {};
+
+    const size_t palSize = useToken ?
+        0 : pDevice->PalDevice(DefaultDeviceIndex)->GetGpuEventSize(eventCreateInfo, nullptr);
 
     void* pSystemMem = pDevice->AllocApiObject(
         pAllocator,
@@ -77,67 +96,76 @@ VkResult Event::Create(
         return VK_ERROR_OUT_OF_HOST_MEMORY;
     }
 
-    void* pPalMem = Util::VoidPtrInc(pSystemMem, apiSize);
-
-    for (uint32_t deviceIdx = 0;
-        (deviceIdx < numDeviceEvents) && (palResult == Pal::Result::Success);
-        deviceIdx++)
+    // we need to allocate memory for the pal event objects if we aren't using tokens.
+    if (useToken == false)
     {
-        VK_ASSERT(palSize == pDevice->PalDevice(deviceIdx)->GetGpuEventSize(eventCreateInfo, nullptr));
+        void* pPalMem = Util::VoidPtrInc(pSystemMem, apiSize);
 
-        // Create the PAL object.
-        palResult = pDevice->PalDevice(deviceIdx)->CreateGpuEvent(eventCreateInfo,
-            Util::VoidPtrInc(pPalMem, palSize * deviceIdx),
-            &pPalGpuEvents[deviceIdx]);
-    }
+        for (uint32_t deviceIdx = 0;
+            (deviceIdx < numDeviceEvents) && (palResult == Pal::Result::Success);
+            deviceIdx++)
+        {
+            VK_ASSERT(palSize == pDevice->PalDevice(deviceIdx)->GetGpuEventSize(eventCreateInfo, nullptr));
 
-    result = PalToVkResult(palResult);
+            // Create the PAL object.
+            palResult = pDevice->PalDevice(deviceIdx)->CreateGpuEvent(eventCreateInfo,
+                Util::VoidPtrInc(pPalMem, palSize * deviceIdx),
+                &pPalGpuEvents[deviceIdx]);
+        }
 
-    if (result == VK_SUCCESS)
-    {
-        Pal::GpuMemoryRequirements gpuMemReqs = {};
-        pPalGpuEvents[0]->GetGpuMemoryRequirements(&gpuMemReqs);
-
-        InternalMemCreateInfo allocInfo  = {};
-        allocInfo.pal.size               = gpuMemReqs.size;
-        allocInfo.pal.alignment          = gpuMemReqs.alignment;
-        allocInfo.pal.priority           = Pal::GpuMemPriority::Normal;
-        allocInfo.pal.flags.shareable    = 1;
-
-        pDevice->MemMgr()->GetCommonPool(InternalPoolCpuCacheableGpuUncached, &allocInfo);
-
-        result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &internalGpuMem, 1);
+        result = PalToVkResult(palResult);
 
         if (result == VK_SUCCESS)
         {
-            for (uint32_t deviceIdx = 0;
-                (deviceIdx < numDeviceEvents) && (palResult == Pal::Result::Success);
-                deviceIdx++)
+            Pal::GpuMemoryRequirements gpuMemReqs = {};
+            pPalGpuEvents[0]->GetGpuMemoryRequirements(&gpuMemReqs);
+
+            InternalMemCreateInfo allocInfo  = {};
+            allocInfo.pal.size               = gpuMemReqs.size;
+            allocInfo.pal.alignment          = gpuMemReqs.alignment;
+            allocInfo.pal.priority           = Pal::GpuMemPriority::Normal;
+            allocInfo.pal.flags.shareable    = (numDeviceEvents > 1) ? 1 : 0;
+
+            InternalSubAllocPool pool = InternalPoolCpuCacheableGpuUncached;
+
+            pDevice->MemMgr()->GetCommonPool(pool, &allocInfo);
+
+            result = pDevice->MemMgr()->AllocGpuMem(allocInfo, &internalGpuMem, 1);
+
+            if (result == VK_SUCCESS)
             {
-                palResult = pPalGpuEvents[deviceIdx]->BindGpuMemory(internalGpuMem.PalMemory(deviceIdx),
-                    internalGpuMem.Offset());
+                for (uint32_t deviceIdx = 0;
+                    (deviceIdx < numDeviceEvents) && (palResult == Pal::Result::Success);
+                    deviceIdx++)
+                {
+                    palResult = pPalGpuEvents[deviceIdx]->BindGpuMemory(internalGpuMem.PalMemory(deviceIdx),
+                        internalGpuMem.Offset());
+                }
+                result = PalToVkResult(palResult);
             }
-            result = PalToVkResult(palResult);
         }
     }
 
     if (result == VK_SUCCESS)
     {
-        VK_PLACEMENT_NEW(pSystemMem) Event(pDevice, numDeviceEvents, pPalGpuEvents, &internalGpuMem);
+        VK_PLACEMENT_NEW(pSystemMem) Event(pDevice, numDeviceEvents, pPalGpuEvents, &internalGpuMem, useToken);
 
         *pEvent = Event::HandleFromVoidPointer(pSystemMem);
     }
     else
     {
-        // Something went wrong
-        for (uint32_t deviceIdx = 0; (deviceIdx < numDeviceEvents); deviceIdx++)
+        if (useToken == false)
         {
-            if (pPalGpuEvents[deviceIdx] != nullptr)
+            // Something went wrong
+            for (uint32_t deviceIdx = 0; (deviceIdx < numDeviceEvents); deviceIdx++)
             {
-                pPalGpuEvents[deviceIdx]->Destroy();
+                if (pPalGpuEvents[deviceIdx] != nullptr)
+                {
+                    pPalGpuEvents[deviceIdx]->Destroy();
+                }
             }
+            pDevice->MemMgr()->FreeGpuMem(&internalGpuMem);
         }
-        pDevice->MemMgr()->FreeGpuMem(&internalGpuMem);
 
         // PAL event construction failed. Free system memory and return.
         pDevice->FreeApiObject(pAllocator, pSystemMem);
@@ -179,12 +207,17 @@ VkResult Event::Destroy(
     Device*                         pDevice,
     const VkAllocationCallbacks*    pAllocator)
 {
-    // Destroy the PAL object.
-    for (uint32_t deviceIdx = 0; (deviceIdx < m_numDeviceEvents); deviceIdx++)
+    const uint32_t numDeviceEvents  = pDevice->NumPalDevices();
+
+    // Destroy the PAL object if the event isn't gpu-only.
+    if (m_useToken == false)
     {
-        PalEvent(deviceIdx)->Destroy();
+        for (uint32_t deviceIdx = 0; (deviceIdx < numDeviceEvents); deviceIdx++)
+        {
+            PalEvent(deviceIdx)->Destroy();
+        }
+        pDevice->MemMgr()->FreeGpuMem(&m_internalGpuMem);
     }
-    pDevice->MemMgr()->FreeGpuMem(&m_internalGpuMem);
 
     // Call my own destructor
     Util::Destructor(this);

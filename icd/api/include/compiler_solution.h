@@ -48,6 +48,13 @@ class PhysicalDevice;
 class PipelineCache;
 class ShaderCache;
 
+enum FreeCompilerBinary : uint32_t
+{
+    FreeWithCompiler,
+    FreeWithInstanceAllocator,
+    DoNotFree
+};
+
 // Represents the result of PipelineCompiler::BuildShaderModule
 struct ShaderModuleHandle
 {
@@ -84,7 +91,7 @@ struct GraphicsPipelineCreateInfo
     VkFormat                               dbFormat;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
-    bool                                   freeWithCompiler;
+    FreeCompilerBinary                     freeCompilerBinary;
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback[ShaderStage::ShaderStageGfxCount];
@@ -103,7 +110,7 @@ struct ComputePipelineCreateInfo
     VkPipelineCreateFlags                  flags;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
-    bool                                   freeWithCompiler;
+    FreeCompilerBinary                     freeCompilerBinary;
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback;

@@ -54,7 +54,6 @@ class IQueue;
 namespace vk
 {
 
-struct CmdBufGpuMem;
 class  Device;
 class  DevModeMgr;
 class  DispatchableQueue;

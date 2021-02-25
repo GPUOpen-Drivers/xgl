@@ -85,16 +85,6 @@ class RenderPass;
 class TimestampQueryPool;
 class SqttCmdBufferState;
 
-// =====================================================================================================================
-// Represents an internal GPU allocation owned by a Vulkan command buffer.  Can contain things like internal descriptor
-// set data and other non-PM4 related data.
-struct CmdBufGpuMem
-{
-    InternalMemory           internalMem;  // Internal memory allocation
-    InternalMemCreateInfo    info;         // Information about this allocation
-    CmdBufGpuMem*            pNext;        // Intrusive list pointer to the next command buffer GPU memory object.
-};
-
 constexpr uint8_t DefaultStencilOpValue = 1;
 
 // Internal API pipeline binding points
@@ -1012,7 +1002,8 @@ private:
         PipelineBindPoint      apiBindPoint,
         const UserDataLayout*  pUserDataLayout);
 
-    void RebindPipeline(PipelineBindPoint bindPoint, bool fromBindPipeline);
+    template<PipelineBindPoint bindPoint, bool fromBindPipeline>
+    void RebindPipeline();
 
     void RebindUserData(
         PipelineBindPoint      apiBindPoint,

@@ -71,8 +71,8 @@ RenderStateCache::RenderStateCache(
     m_colorBlendStates(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_colorBlendRefs(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_depthStencilStates(NumStateBuckets, pDevice->VkInstance()->Allocator()),
-    m_depthStencilRefs(NumStateBuckets, pDevice->VkInstance()->Allocator())
-    , m_fragmentShadingRate(NumStateBuckets, pDevice->VkInstance()->Allocator()),
+    m_depthStencilRefs(NumStateBuckets, pDevice->VkInstance()->Allocator()),
+    m_fragmentShadingRate(NumStateBuckets, pDevice->VkInstance()->Allocator()),
     m_fragmentShadingRateNextId(FirstStaticRenderStateToken)
 {
 

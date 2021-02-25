@@ -83,7 +83,6 @@ namespace vk
 // Forward declarations of Vulkan classes used in this file.
 class BarrierFilterLayer;
 class Buffer;
-struct CmdBufGpuMem;
 class Device;
 class DispatchableDevice;
 class DispatchableQueue;

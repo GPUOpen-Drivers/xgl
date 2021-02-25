@@ -119,6 +119,7 @@ VkResult Buffer::Create(
         info.size               = Util::Pow2Align(size, info.alignment);
         info.flags.u32All       = 0;
         info.flags.virtualAlloc = 1;
+        info.heapAccess         = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
 
         // Virtual resource should return 0 on unmapped read if residencyNonResidentStrict is set.
         if (pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetPrtFeatures() & Pal::PrtFeatureStrictNull)

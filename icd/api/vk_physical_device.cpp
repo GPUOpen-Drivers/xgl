@@ -3649,11 +3649,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES2));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MEMORY_OVERALLOCATION_BEHAVIOR));
-
-        if ((pPhysicalDevice == nullptr) || pPhysicalDevice->m_eqaaSupported)
-        {
-            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MIXED_ATTACHMENT_SAMPLES));
-        }
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_MIXED_ATTACHMENT_SAMPLES));
 
         if ((pPhysicalDevice == nullptr) ||
             (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportOutOfOrderPrimitives))
@@ -4168,7 +4164,12 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
                             VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
                             VK_SHADER_STAGE_GEOMETRY_BIT |
                             VK_SHADER_STAGE_FRAGMENT_BIT |
-                            VK_SHADER_STAGE_COMPUTE_BIT;
+                            VK_SHADER_STAGE_COMPUTE_BIT |
+                            VK_SHADER_STAGE_RAYGEN_BIT_KHR |
+                            VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
+                            VK_SHADER_STAGE_MISS_BIT_KHR |
+                            VK_SHADER_STAGE_INTERSECTION_BIT_KHR |
+                            VK_SHADER_STAGE_CALLABLE_BIT_KHR;
 
     *pSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
                             VK_SUBGROUP_FEATURE_VOTE_BIT |
@@ -4356,9 +4357,13 @@ VkResult PhysicalDevice::GetExternalMemoryProperties(
             (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT))
 
         {
-            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT |
-                                                                VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT     |
+            pExternalMemoryProperties->externalMemoryFeatures = VK_EXTERNAL_MEMORY_FEATURE_EXPORTABLE_BIT     |
                                                                 VK_EXTERNAL_MEMORY_FEATURE_IMPORTABLE_BIT;
+
+            if (isImageUsage)
+            {
+                pExternalMemoryProperties->externalMemoryFeatures |= VK_EXTERNAL_MEMORY_FEATURE_DEDICATED_ONLY_BIT;
+            }
         }
 #endif
         else if (handleType == VK_EXTERNAL_MEMORY_HANDLE_TYPE_HOST_ALLOCATION_BIT_EXT)
