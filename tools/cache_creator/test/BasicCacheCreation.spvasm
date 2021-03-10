@@ -49,7 +49,7 @@
 ; CC-VERT-NEXT:  {{^total num entries:}} 1{{$}}
 ; CC-VERT-NEXT:  {{^entry header length:}} [[#entry_header_len:24]]{{$}}
 ; CC-VERT-LABEL: {{^}} *** Entry 0 ***
-; CC-VERT-NEXT:  {{^}} hash ID: [[vert_cache_hash:([0-9a-f]{2} ?){16}]]{{$}}
+; CC-VERT-NEXT:  {{^}} hash ID: [[vert_cache_hash:(0x[0-9a-f]{16} ?){2}]]{{$}}
 ; CC-VERT-NEXT:  {{^}} data size: [[#vert_cache_size - vk_header_len - pbc_header_len - entry_header_len]]{{$}}
 ; CC-VERT-NEXT:  {{^}} calculated MD5 sum: {{[0-9a-f]{32}$}}
 ; CC-VERT-NEXT:  {{^}} matched source file: <none>{{$}}
@@ -59,7 +59,7 @@
 ; Part 1c: Check amdllpc output to see that the entry hash ID from 1b matches the compiler vertex cache hash.
 ; CC-VERT:       SPIR-V disassembly for {{.*}}vert.spvasm{{$}}
 ; CC-VERT-LABEL: {{^// LLPC}} calculated hash results (graphics pipeline)
-; CC-VERT:       {{^Finalized}} Hash for vertex stage cache lookup: [[vert_cache_hash]]{{$}}
+; CC-VERT:       {{^Finalized}} hash for vertex stage cache lookup: [[vert_cache_hash]]{{$}}
 
 
 ; Test 2: Create a cache file with two inputs. Check that both ELFs are present in the cache file.
@@ -91,13 +91,13 @@
 ; CC-TWO-NEXT:  {{^entry header length:}} [[#entry_header_len:24]]{{$}}
 ;
 ; CC-TWO-LABEL: {{^}} *** Entry 0 ***
-; CC-TWO-NEXT:  {{^}} hash ID: [[vert_cache_hash:([0-9a-f]{2} ?){16}]]{{$}}
+; CC-TWO-NEXT:  {{^}} hash ID: [[vert_cache_hash:(0x[0-9a-f]{16} ?){2}]]{{$}}
 ; CC-TWO-NEXT:  {{^}} data size: [[#vert_entry_data_size:]]{{$}}
 ; CC-TWO-NEXT:  {{^}} calculated MD5 sum: {{[0-9a-f]{32}$}}
 ; CC-TWO-NEXT:  {{^}} matched source file: [[vert_elf_path]]{{$}}
 ;
 ; CC-TWO-LABEL: {{^}} *** Entry 1 ***
-; CC-TWO-NEXT:  {{^}} hash ID: [[frag_cache_hash:([0-9a-f]{2} ?){16}]]{{$}}
+; CC-TWO-NEXT:  {{^}} hash ID: [[frag_cache_hash:(0x[0-9a-f]{16} ?){2}]]{{$}}
 ; CC-TWO-NEXT:  {{^}} data size: [[#two_cache_size - vk_header_len - pbc_header_len - entry_header_len - vert_entry_data_size - entry_header_len]]{{$}}
 ; CC-TWO-NEXT:  {{^}} calculated MD5 sum: {{[0-9a-f]{32}$}}
 ; CC-TWO-NEXT:  {{^}} matched source file: [[frag_elf_path]]{{$}}
@@ -105,11 +105,11 @@
 ; Part 2c: Check amdllpc output to see that the entry hash IDs from 2b match the compiler vertex and fragment cache hashes.
 ; CC-TWO:       SPIR-V disassembly for {{.*}}vert.spvasm{{$}}
 ; CC-TWO-LABEL: {{// LLPC}} calculated hash results (graphics pipeline)
-; CC-TWO:       {{^Finalized}} Hash for vertex stage cache lookup: [[vert_cache_hash]]{{$}}
+; CC-TWO:       {{^Finalized}} hash for vertex stage cache lookup: [[vert_cache_hash]]{{$}}
 ;
 ; CC-TWO:       SPIR-V disassembly for {{.*}}frag.spvasm{{$}}
 ; CC-TWO-LABEL: {{^// LLPC}} calculated hash results (graphics pipeline)
-; CC-TWO:       {{^Finalized}} Hash for fragment stage cache lookup: [[frag_cache_hash]]{{$}}
+; CC-TWO:       {{^Finalized}} hash for fragment stage cache lookup: [[frag_cache_hash]]{{$}}
 
 
 ; Test 3: Create a cache file with one input repeated twice.
@@ -132,7 +132,7 @@
 ; CC-DUP-NEXT:  {{^total num entries:}} 2{{$}}
 ;
 ; CC-DUP-LABEL: {{^}} *** Entry 0 ***
-; CC-DUP-NEXT:  {{^}} hash ID: [[vert_cache_hash:([0-9a-f]{2} ?){16}]]{{$}}
+; CC-DUP-NEXT:  {{^}} hash ID: [[vert_cache_hash:(0x[0-9a-f]{16} ?){2}]]{{$}}
 ; CC-DUP-NEXT:  {{^}} data size: [[#vert_entry_data_size:]]{{$}}
 ; CC-DUP-NEXT:  {{^}} calculated MD5 sum: [[vert_md5_sum:[0-9a-f]{32}]]{{$}}
 ; CC-DUP-NEXT:  {{^}} matched source file: [[vert_elf_path]]{{$}}
@@ -146,7 +146,7 @@
 ; Part 3c: Check amdllpc output to see that the entry hash ID from 2b matches the compiler vertex cache hash.
 ; CC-DUP:       SPIR-V disassembly for {{.*}}vert.spvasm{{$}}
 ; CC-DUP-LABEL: {{^// LLPC}} calculated hash results (graphics pipeline)
-; CC-DUP:       {{^Finalized}} Hash for vertex stage cache lookup: [[vert_cache_hash]]{{$}}
+; CC-DUP:       {{^Finalized}} hash for vertex stage cache lookup: [[vert_cache_hash]]{{$}}
 
 
 ;--- vert.spvasm

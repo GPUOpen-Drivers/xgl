@@ -225,7 +225,9 @@ llvm::raw_ostream &operator<<(llvm::raw_ostream &os, const BinaryCacheEntryInfo 
   const vk::BinaryCacheEntry &header = *info.entryHeader;
 
   os << "\t*** Entry " << info.idx << " ***\n"
-     << "\thash ID:\t\t" << llvm::format_bytes(header.hashId.bytes, llvm::None, 16, 1) << "\n"
+     << "\thash ID:\t\t"
+     << "0x" << llvm::format_hex_no_prefix(header.hashId.qwords[0], sizeof(uint64_t) * 2)
+     << " 0x" << llvm::format_hex_no_prefix(header.hashId.qwords[1], sizeof(uint64_t) * 2) << '\n'
      << "\tdata size:\t\t" << header.dataSize << "\n"
      << "\tcalculated MD5 sum:\t" << info.entryMD5Sum << "\n";
   return os;
