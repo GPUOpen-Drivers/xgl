@@ -37,6 +37,7 @@
 #include "llvm/ADT/StringRef.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/MemoryBufferRef.h"
+#include "llvm/Support/VersionTuple.h"
 
 namespace cc {
 
@@ -69,9 +70,11 @@ bool hexStringToUuid(llvm::StringRef hexStr, llvm::MutableArrayRef<uint8_t> outU
 
 struct ElfLlpcCacheInfo {
   Util::MetroHash::Hash cacheHash;
-  uint32_t llpcMajorVersion;
-  uint32_t llpcMinorVersion;
+  llvm::VersionTuple llpcVersion; // Both major and minor version must be provided
 };
+
+// Tries to extract cache hash and LLPC version from a PAL metadata note blob.
+llvm::Expected<ElfLlpcCacheInfo> getCacheInfoFromMetadataBlob(llvm::StringRef noteBlob);
 
 // Tries to extract cache hash and LLPC version from the elf file.
 llvm::Expected<ElfLlpcCacheInfo> getElfLlpcCacheInfo(llvm::MemoryBufferRef elfBuffer);

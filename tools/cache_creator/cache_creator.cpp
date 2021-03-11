@@ -25,6 +25,7 @@
 #include "cache_creator.h"
 #include "palPlatformKey.h"
 #include "llvm/ADT/STLExtras.h"
+#include "llvm/BinaryFormat/MsgPackDocument.h"
 #include "llvm/Object/ELFObjectFile.h"
 #include "llvm/Support/Format.h"
 #include "llvm/Support/MathExtras.h"
@@ -161,6 +162,77 @@ bool hexStringToUuid(llvm::StringRef hexStr, llvm::MutableArrayRef<uint8_t> outU
   return true;
 }
 
+static llvm::Error createBadPalMetadataError() {
+  return llvm::createStringError(llvm::object::object_error::invalid_file_type, "Unexpected PAL metadata format");
+}
+
+static llvm::Expected<llvm::msgpack::MapDocNode> getXglCacheInfoNode(llvm::msgpack::Document &document) {
+  llvm::msgpack::DocNode node = document.getRoot();
+  if (!node.isMap())
+    return createBadPalMetadataError();
+  node = node.getMap(false)["amdpal.pipelines"];
+  if (!node.isArray())
+    return createBadPalMetadataError();
+  node = node.getArray(false)[0];
+  if (!node.isMap())
+    return createBadPalMetadataError();
+  node = node.getMap(false)[".xgl_cache_info"];
+  if (!node.isMap())
+    return createBadPalMetadataError();
+  return node.getMap(false);
+}
+
+static llvm::Expected<Util::MetroHash::Hash> extractCacheHash(llvm::msgpack::MapDocNode &cacheInfoNode) {
+  llvm::msgpack::DocNode node = cacheInfoNode[".128_bit_cache_hash"];
+  if (!node.isArray())
+    return createBadPalMetadataError();
+  llvm::msgpack::ArrayDocNode hashNode = node.getArray(false);
+  if (hashNode[0].getKind() != llvm::msgpack::Type::UInt || hashNode[1].getKind() != llvm::msgpack::Type::UInt)
+    return createBadPalMetadataError();
+  Util::MetroHash::Hash hash = {};
+  hash.qwords[0] = hashNode[0].getUInt();
+  hash.qwords[1] = hashNode[1].getUInt();
+  return hash;
+}
+
+static llvm::Expected<llvm::VersionTuple> extractLlpcVersion(llvm::msgpack::MapDocNode &cacheInfoNode) {
+  llvm::msgpack::DocNode node = cacheInfoNode[".llpc_version"];
+  if (!node.isString())
+    return createBadPalMetadataError();
+  llvm::VersionTuple versionTuple;
+  if (versionTuple.tryParse(node.getString()))
+    return createBadPalMetadataError();
+  if (!versionTuple.getMinor().hasValue())
+    return createBadPalMetadataError();
+  return versionTuple;
+}
+
+// =====================================================================================================================
+// Tries to extract cache hash and LLPC version from a PAL metadata note blob.
+//
+// @param noteBlob : The input metadata blob
+// @returns : The cache info on success, or error on failure
+llvm::Expected<ElfLlpcCacheInfo> getCacheInfoFromMetadataBlob(llvm::StringRef noteBlob) {
+  llvm::msgpack::Document document;
+  if (!document.readFromBlob(noteBlob, false))
+    return createBadPalMetadataError();
+
+  auto cacheInfoNodeOrErr = getXglCacheInfoNode(document);
+  if (auto err = cacheInfoNodeOrErr.takeError())
+    return std::move(err);
+  llvm::msgpack::MapDocNode cacheInfoNode = cacheInfoNodeOrErr.get();
+
+  auto hashOrErr = extractCacheHash(cacheInfoNode);
+  if (auto err = hashOrErr.takeError())
+    return std::move(err);
+
+  auto llpcVersionOrErr = extractLlpcVersion(cacheInfoNode);
+  if (auto err = llpcVersionOrErr.takeError())
+    return std::move(err);
+
+  return ElfLlpcCacheInfo{*hashOrErr, *llpcVersionOrErr};
+}
+
 // =====================================================================================================================
 // Tries to extract cache hash and LLPC version from the elf file.
 //
@@ -195,27 +267,9 @@ llvm::Expected<ElfLlpcCacheInfo> getElfLlpcCacheInfo(llvm::MemoryBufferRef elfBu
     if (notesError)
       return std::move(notesError);
 
-    Util::MetroHash::Hash hash = {};
-    bool foundHash = false;
-    uint32_t llpcVersion[2] = {};
-    bool foundLlpcVersion = false;
-
     for (const ElfFileTy::Elf_Note &note : noteRange) {
-      llvm::StringRef noteName = note.getName();
-      llvm::ArrayRef<uint8_t> noteBlob = note.getDesc();
-
-      if (noteName == "AMD_llpc_cache_hash") {
-        assert(noteBlob.size() == sizeof(Util::MetroHash::Hash) && "Invalid AMD_llpc_cache_hash note");
-        memcpy(hash.bytes, noteBlob.data(), sizeof(hash));
-        foundHash = true;
-      } else if (noteName == "AMD_llpc_version") {
-        assert(noteBlob.size() == sizeof(llpcVersion) && "Invalid AMD_llpc_version note");
-        memcpy(llpcVersion, noteBlob.data(), sizeof(llpcVersion));
-        foundLlpcVersion = true;
-      }
-
-      if (foundHash && foundLlpcVersion)
-        return ElfLlpcCacheInfo{hash, llpcVersion[0], llpcVersion[1]};
+      if (note.getType() == llvm::ELF::NT_AMDGPU_METADATA)
+        return getCacheInfoFromMetadataBlob(note.getDescAsStringRef());
     }
   }
 
@@ -295,15 +349,13 @@ llvm::Error RelocatableCacheCreator::addElf(llvm::MemoryBufferRef elfBuffer) {
   entry.dataSize = elfBuffer.getBufferSize();
   entry.hashId = elfLlpcInfoOrErr->cacheHash;
 
-  if (elfLlpcInfoOrErr->llpcMajorVersion != BuildLlpcMajorVersion ||
-      elfLlpcInfoOrErr->llpcMinorVersion != BuildLlpcMinorVersion) {
+  llvm::VersionTuple llpcBuildVersion(BuildLlpcMajorVersion, BuildLlpcMinorVersion);
+  if (elfLlpcInfoOrErr->llpcVersion != llpcBuildVersion) {
     return llvm::createFileError(
         elfBuffer.getBufferIdentifier(),
-        llvm::createStringError(std::errc::state_not_recoverable,
-                                "Elf LLPC version (%" PRIu32 ".%" PRIu32
-                                ") not compatible with the tool LLPC version (%" PRIu32 ".%" PRIu32 ")",
-                                elfLlpcInfoOrErr->llpcMajorVersion, elfLlpcInfoOrErr->llpcMinorVersion,
-                                BuildLlpcMajorVersion, BuildLlpcMinorVersion));
+        llvm::createStringError(
+            std::errc::state_not_recoverable, "Elf LLPC version (%s) not compatible with the tool LLPC version (%s)",
+            elfLlpcInfoOrErr->llpcVersion.getAsString().c_str(), llpcBuildVersion.getAsString().c_str()));
   }
 
   if (m_serializer->AddPipelineBinary(&entry, elfBuffer.getBufferStart()) != Util::Result::Success)
