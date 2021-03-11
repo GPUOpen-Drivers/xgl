@@ -24,6 +24,7 @@
  **********************************************************************************************************************/
 #include "cache_creator.h"
 #include "units/doctest.h"
+#include "llvm/BinaryFormat/MsgPackDocument.h"
 #include <array>
 
 TEST_CASE("Placeholder test pass") {
@@ -127,4 +128,44 @@ TEST_CASE("Full UUID roundtrip") {
   UuidArray dumped = {};
   CHECK(cc::hexStringToUuid(hexStr, dumped));
   CHECK(dumped == uuid);
+}
+
+TEST_CASE("Get cache info from invalid PAL metadata blob") {
+  char badMetadata[10] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
+
+  llvm::StringRef noteBlob(badMetadata, sizeof(badMetadata));
+  llvm::Expected<cc::ElfLlpcCacheInfo> cacheInfoOrErr = cc::getCacheInfoFromMetadataBlob(noteBlob);
+
+  llvm::Error err = cacheInfoOrErr.takeError();
+  CHECK(err.isA<llvm::StringError>());
+
+  llvm::consumeError(std::move(err));
+}
+
+TEST_CASE("Get cache info from valid PAL metadata blob") {
+  const char *sampleMetadata = R"(---
+amdpal.pipelines:
+  - .xgl_cache_info:
+      .128_bit_cache_hash:
+        - 17226562260713912943
+        - 15513868906143827149
+      .llpc_version:   !str '46.1'
+...
+)";
+
+  llvm::msgpack::Document document;
+  document.fromYAML(sampleMetadata);
+  std::string noteBlob;
+  document.writeToBlob(noteBlob);
+
+  llvm::Expected<cc::ElfLlpcCacheInfo> cacheInfoOrErr = cc::getCacheInfoFromMetadataBlob(noteBlob);
+
+  CHECK((bool)cacheInfoOrErr);
+
+  cc::ElfLlpcCacheInfo elfLlpcInfo = cacheInfoOrErr.get();
+
+  CHECK(elfLlpcInfo.cacheHash.qwords[0] == 17226562260713912943u);
+  CHECK(elfLlpcInfo.cacheHash.qwords[1] == 15513868906143827149u);
+  CHECK(elfLlpcInfo.llpcVersion.getMajor() == 46);
+  CHECK(elfLlpcInfo.llpcVersion.getMinor().getValue() == 1);
 }
