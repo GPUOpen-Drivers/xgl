@@ -638,11 +638,18 @@ VkResult Image::Create(
         palCreateInfo.flags.fullCopyDstOnly = 1;
     }
 
-    // Any depth buffer could potentially be used while VRS is active.
-    if (pDevice->GetEnabledFeatures().attachmentFragmentShadingRate &&
-        ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0))
+    if (pDevice->GetEnabledFeatures().attachmentFragmentShadingRate)
     {
-        palCreateInfo.usageFlags.vrsDepth = 1;
+        // Any depth buffer could potentially be used while VRS is active.
+        if ((pCreateInfo->usage & VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT) != 0)
+        {
+            palCreateInfo.usageFlags.vrsDepth = 1;
+        }
+
+        if ((pCreateInfo->usage & VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR) != 0)
+        {
+            palCreateInfo.usageFlags.vrsRateImage = 1;
+        }
     }
 
     palCreateInfo.metadataMode         = Pal::MetadataMode::Default;
@@ -689,6 +696,15 @@ VkResult Image::Create(
             {
                 palCreateInfo.metadataMode = (bpp < settings.dccBitsPerPixelThreshold) ?
                     Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
+            }
+
+            if ((settings.forceEnableDcc == ForceDccForCaSs2d3dGreaterThanOrEqual32bpp) &&
+                (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
+                (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
+                ((pCreateInfo->imageType & VK_IMAGE_TYPE_2D) || (pCreateInfo->imageType & VK_IMAGE_TYPE_3D)) &&
+                (bpp >= 32))
+            {
+                palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
             }
         }
     }

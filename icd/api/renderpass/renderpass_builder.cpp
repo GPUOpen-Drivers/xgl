@@ -150,7 +150,7 @@ Pal::Result RenderPassBuilder::BuildInitialState()
                     {
                         m_pAttachments[attachment].firstUseSubpass = subpass;
 
-                        m_pSubpasses[subpass].hasFirstUseAttachments = true;
+                        m_pSubpasses[subpass].flags.hasFirstUseAttachments = true;
                     }
 
                     m_pAttachments[attachment].finalUseSubpass = subpass;
@@ -163,7 +163,7 @@ Pal::Result RenderPassBuilder::BuildInitialState()
         {
             if (m_pAttachments[attachment].finalUseSubpass != VK_SUBPASS_EXTERNAL)
             {
-                m_pSubpasses[m_pAttachments[attachment].finalUseSubpass].hasFinalUseAttachments = true;
+                m_pSubpasses[m_pAttachments[attachment].finalUseSubpass].flags.hasFinalUseAttachments = true;
             }
         }
 
@@ -175,12 +175,12 @@ Pal::Result RenderPassBuilder::BuildInitialState()
 
             if ((dep.srcSubpass == VK_SUBPASS_EXTERNAL) && (dep.dstSubpass != VK_SUBPASS_EXTERNAL))
             {
-                m_pSubpasses[dep.dstSubpass].hasExternalIncoming = true;
+                m_pSubpasses[dep.dstSubpass].flags.hasExternalIncoming = true;
             }
 
             if ((dep.dstSubpass == VK_SUBPASS_EXTERNAL) && (dep.srcSubpass != VK_SUBPASS_EXTERNAL))
             {
-                m_pSubpasses[dep.srcSubpass].hasExternalOutgoing = true;
+                m_pSubpasses[dep.srcSubpass].flags.hasExternalOutgoing = true;
             }
         }
     }
@@ -959,8 +959,8 @@ Pal::Result RenderPassBuilder::BuildImplicitDependencies(
         // Set the flag that this syncpoint needs to handle an implicit external incoming dependency as per spec.
         // Because of how we handle our memory dependency visibility, this flag doesn't actually need to do anything
         // at this time, but it's added in case we need it in the future.
-        if (m_pSubpasses[dstSubpass].hasFirstUseAttachments &&
-            (m_pSubpasses[dstSubpass].hasExternalIncoming == false))
+        if (m_pSubpasses[dstSubpass].flags.hasFirstUseAttachments &&
+            (m_pSubpasses[dstSubpass].flags.hasExternalIncoming == false))
         {
             pSync->barrier.flags.implicitExternalIncoming = 1;
         }
@@ -970,8 +970,8 @@ Pal::Result RenderPassBuilder::BuildImplicitDependencies(
         // Similarly, set the flag for requiring an external outgoing dependency.
         for (uint32_t srcSubpass = 0; (srcSubpass < m_subpassCount); ++srcSubpass)
         {
-            if ((m_pSubpasses[srcSubpass].hasExternalOutgoing == false) &&
-                (m_pSubpasses[srcSubpass].hasFinalUseAttachments))
+            if ((m_pSubpasses[srcSubpass].flags.hasExternalOutgoing == false) &&
+                (m_pSubpasses[srcSubpass].flags.hasFinalUseAttachments))
             {
                 pSync->barrier.flags.implicitExternalOutgoing = 1;
             }
@@ -982,10 +982,10 @@ Pal::Result RenderPassBuilder::BuildImplicitDependencies(
 }
 
 // =====================================================================================================================
-// This function handles any synchronization from VkSubpassDependency where dstSubpass matches the given subpass.  Note
-// that this includes dstSubpass == VK_SUBPASS_EXTERNAL to handle the external-outgoing dependency.
+// This function handles any synchronization from VkSubpassDependency.  Note that this includes
+// subpass == VK_SUBPASS_EXTERNAL to handle the external-outgoing dependency.
 Pal::Result RenderPassBuilder::BuildSubpassDependencies(
-    uint32_t        dstSubpass,
+    uint32_t        subpass,
     SyncPointState* pSync)
 {
     Pal::Result result = Pal::Result::Success;
@@ -1007,6 +1007,7 @@ Pal::Result RenderPassBuilder::BuildSubpassDependencies(
             VK_NEVER_CALLED();
         }
 #endif
+
         // If srcSubpass == dstSubpass, Vulkan spec calls this the subpass self-dependency and it has a special meaning.
         // It means that the app may call vkCmdPipelineBarriers inside the render pass (but they don't have to).
         // The driver should only do the barrier when vkCmdPipelineBarriers is called, not when starting the render pass.
@@ -1016,7 +1017,7 @@ Pal::Result RenderPassBuilder::BuildSubpassDependencies(
         }
 
         // Does this dependency terminate at the current subpass?  If so, we need to handle it
-        if (dep.dstSubpass == dstSubpass)
+        if (dep.dstSubpass == subpass)
         {
             pSync->barrier.srcStageMask |= dep.srcStageMask;
             pSync->barrier.dstStageMask |= dep.dstStageMask;
@@ -1261,12 +1262,10 @@ RenderPassBuilder::SubpassState::SubpassState(
     dsClears(pArena),
     syncPreResolve(pArena),
     resolves(pArena),
-    syncBottom(pArena),
-    hasFirstUseAttachments(false),
-    hasFinalUseAttachments(false),
-    hasExternalIncoming(false),
-    hasExternalOutgoing(false)
+    syncBottom(pArena)
 {
+    flags.u32All = 0;
+
     memset(&bindTargets, 0, sizeof(bindTargets));
 }
 

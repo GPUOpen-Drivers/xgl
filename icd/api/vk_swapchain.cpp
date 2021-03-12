@@ -935,15 +935,15 @@ FullscreenMgr::FullscreenMgr(
     Pal::OsWindowHandle             hWindow,
     uint32_t                        vidPnSourceId)
     :
-    m_pDevice(pDevice),
-    m_exclusiveModeFlags(),
-    m_pScreen(pScreen),
-    m_exclusiveAccessFailCount(0),
-    m_fullscreenPresentSuccessCount(0),
-    m_hDisplay(hDisplay),
-    m_hWindow(hWindow),
-    m_vidPnSourceId(vidPnSourceId),
-    m_mode(mode)
+    m_pDevice{pDevice},
+    m_exclusiveModeFlags{},
+    m_pScreen{pScreen},
+    m_exclusiveAccessFailCount{0},
+    m_fullscreenPresentSuccessCount{0},
+    m_hDisplay{hDisplay},
+    m_hWindow{hWindow},
+    m_vidPnSourceId{vidPnSourceId},
+    m_mode{mode}
 {
     VK_ASSERT(m_pScreen != nullptr);
 }
@@ -1001,7 +1001,8 @@ bool FullscreenMgr::TryEnterExclusive(
                     // NOTE: ErrorFullscreenUnavailable means according to PAL, we already have exclusive access.
                     if ((result == Pal::Result::Success) || (result == Pal::Result::ErrorFullscreenUnavailable))
                     {
-                        m_exclusiveModeFlags.acquired = 1;
+                        m_exclusiveModeFlags.acquired              = 1;
+                        m_exclusiveModeFlags.mismatchedDisplayMode = 0;
 
                         pSwapChain->AcquireFullScreenProperties();
                         m_pScreen->SetColorConfiguration(&pSwapChain->GetColorParams());
@@ -1266,7 +1267,8 @@ void FullscreenMgr::PostPresent(
 
     // Report Fullscreen error if we had lost FSE while in Explicit mode.
     // This error will be reported until FSE is reacquired as per spec.
-    if ((m_exclusiveModeFlags.acquired == 0) && (m_mode == Mode::Explicit))
+    if ((m_exclusiveModeFlags.acquired == 0) && (m_exclusiveModeFlags.mismatchedDisplayMode == 0) &&
+        (m_mode == Mode::Explicit))
     {
         *pPresentResult = Pal::Result::ErrorFullscreenUnavailable;
     }

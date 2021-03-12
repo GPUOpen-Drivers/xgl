@@ -615,7 +615,6 @@ void GraphicsPipeline::BuildRasterizationState(
 
     pInfo->pipeline.viewportInfo.depthClipNearEnable            = (pIn->depthClampEnable == VK_FALSE);
     pInfo->pipeline.viewportInfo.depthClipFarEnable             = (pIn->depthClampEnable == VK_FALSE);
-    pInfo->pipeline.viewportInfo.depthRange                     = Pal::DepthRange::ZeroToOne;
 
     pInfo->immedInfo.triangleRasterState.frontFillMode          = VkToPalFillMode(pIn->polygonMode);
     pInfo->immedInfo.triangleRasterState.backFillMode           = VkToPalFillMode(pIn->polygonMode);
@@ -1005,6 +1004,8 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             !dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt)];
 
         const VkPipelineViewportStateCreateInfo* pVp = pGraphicsPipelineCreateInfo->pViewportState;
+
+        pInfo->pipeline.viewportInfo.depthRange = Pal::DepthRange::ZeroToOne;
 
         if ((pIn->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pVp != nullptr))
         {

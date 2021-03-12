@@ -47,6 +47,9 @@ public:
     virtual ~StrangeBrigadeLayer() {}
 
     virtual void OverrideDispatchTable(DispatchTable* pDispatchTable) override;
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(StrangeBrigadeLayer);
 };
 
 }; // namespace vk

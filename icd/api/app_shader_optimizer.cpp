@@ -515,11 +515,7 @@ void ShaderOptimizer::BuildTuningProfile()
 
     action.shaderCreate.apply.allowReZ                = m_settings.overrideAllowReZ;
     action.shaderCreate.apply.enableSelectiveInline   = m_settings.overrideEnableSelectiveInline;
-
-    if (m_settings.overrideDisableLoopUnrolls)
-    {
-        action.shaderCreate.apply.disableLoopUnrolls = true;
-    }
+    action.shaderCreate.apply.disableLoopUnrolls      = m_settings.overrideDisableLoopUnrolls;
 
     if (m_settings.overrideUseSiScheduler)
     {

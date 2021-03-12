@@ -123,8 +123,8 @@ struct VkStructHeaderNonConst
     VkStructHeader*         pNext;
 };
 
-typedef VkPipelineStageFlags     PipelineStageFlags;
-typedef VkAccessFlags            AccessFlags;
+typedef VkPipelineStageFlags2KHR PipelineStageFlags;
+typedef VkAccessFlags2KHR        AccessFlags;
 
 namespace utils
 {
@@ -180,7 +180,7 @@ VK_INLINE void GetExecutableNameAndPath(wchar_t* pExecutableName, wchar_t* pExec
     wchar_t* pExecutablePtr;
     Pal::Result palResult = Util::GetExecutableName(&executableNameAndPathBuffer[0],
                                                     &pExecutablePtr,
-                                                    sizeof(executableNameAndPathBuffer));
+                                                    PATH_MAX);
     VK_ASSERT(palResult == Pal::Result::Success);
 
     // Extract the executable path and add the null terminator

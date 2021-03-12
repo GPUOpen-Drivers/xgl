@@ -71,6 +71,9 @@ protected:
 
     VkShaderModule m_immedModule;        // Shader module handle which is compiled with immedidate mode
     VkShaderModule m_asyncModule;        // Shader module handle which is compiled with async mode
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ShaderModule);
 };
 
 } // namespace async

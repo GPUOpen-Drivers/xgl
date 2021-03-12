@@ -1924,6 +1924,8 @@ VK_INLINE Pal::HwPipePoint VkToPalSrcPipePoint(PipelineStageFlags flags)
         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT                  |
         VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT    |
         VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT |
+        VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT_KHR              |
+        VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR   |
         VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT;
 
     // Flags that only require signaling post-PS.
@@ -1938,6 +1940,10 @@ VK_INLINE Pal::HwPipePoint VkToPalSrcPipePoint(PipelineStageFlags flags)
 
     // fixme correct?
     static const PipelineStageFlags srcPostBltFlags =
+        VK_PIPELINE_STAGE_2_COPY_BIT_KHR                     |
+        VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR                  |
+        VK_PIPELINE_STAGE_2_BLIT_BIT_KHR                     |
+        VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR                    |
         VK_PIPELINE_STAGE_TRANSFER_BIT;
 
     Pal::HwPipePoint srcPipePoint;
@@ -2046,7 +2052,9 @@ static const HwPipePointMappingEntry hwPipePointMappingTable[] =
     // Flags that require flushing index-fetch workload.
     {
         Pal::HwPipePostIndexFetch,
-        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT
+        VK_PIPELINE_STAGE_DRAW_INDIRECT_BIT                |
+        VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT_KHR            |
+        VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR
     },
     // Flags that require flushing pre-rasterization workload.
     {
@@ -2055,7 +2063,8 @@ static const HwPipePointMappingEntry hwPipePointMappingTable[] =
         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT                     |
         VK_PIPELINE_STAGE_TESSELLATION_CONTROL_SHADER_BIT       |
         VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT    |
-        VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT
+        VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT                   |
+        VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR
     },
     // Flags that require flushing PS workload.
     {
@@ -2084,7 +2093,11 @@ static const HwPipePointMappingEntry hwPipePointMappingTable[] =
     // flags that require flush Post-Blt workload.
     {
         Pal::HwPipePostBlt,
-        VK_PIPELINE_STAGE_TRANSFER_BIT
+        VK_PIPELINE_STAGE_TRANSFER_BIT      |
+        VK_PIPELINE_STAGE_2_COPY_BIT_KHR    |
+        VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR |
+        VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR   |
+        VK_PIPELINE_STAGE_2_BLIT_BIT_KHR
     }
 };
 
@@ -2136,6 +2149,11 @@ VK_INLINE Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
         VK_PIPELINE_STAGE_TESSELLATION_EVALUATION_SHADER_BIT    |
         VK_PIPELINE_STAGE_GEOMETRY_SHADER_BIT                   |
         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT                    |
+        VK_PIPELINE_STAGE_2_COPY_BIT_KHR                        |
+        VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR                     |
+        VK_PIPELINE_STAGE_2_BLIT_BIT_KHR                        |
+        VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR                       |
+        VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR   |
         VK_PIPELINE_STAGE_TRANSFER_BIT;
 
     Pal::HwPipePoint dstPipePoint;
@@ -2162,6 +2180,138 @@ VK_INLINE Pal::HwPipePoint VkToPalWaitPipePoint(PipelineStageFlags flags)
     }
 
     return dstPipePoint;
+}
+
+// =====================================================================================================================
+// Converts Vulkan source pipeline stage flags to PAL pipeline stage mask.
+VK_INLINE uint32_t VkToPalPipelineStageFlags(
+    PipelineStageFlags   stageMask)
+{
+    uint32_t palPipelineStageMask = 0;
+
+    if (stageMask & VK_PIPELINE_STAGE_2_TOP_OF_PIPE_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageTopOfPipe;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageFetchIndirectArgs;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_VERTEX_INPUT_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageFetchIndices      |
+                                Pal::PipelineStageVs;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageVs;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_TESSELLATION_CONTROL_SHADER_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageHs;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_TESSELLATION_EVALUATION_SHADER_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageDs;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_GEOMETRY_SHADER_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageGs;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStagePs;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_EARLY_FRAGMENT_TESTS_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageEarlyDsTarget;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_LATE_FRAGMENT_TESTS_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageLateDsTarget;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_COLOR_ATTACHMENT_OUTPUT_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageColorTarget;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageCs;
+    }
+
+    // Equal to VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT_KHR
+    if (stageMask & VK_PIPELINE_STAGE_2_TRANSFER_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageBlt;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_BOTTOM_OF_PIPE_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageBottomOfPipe;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_ALL_GRAPHICS_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageTopOfPipe         |
+                                Pal::PipelineStageFetchIndirectArgs |
+                                Pal::PipelineStageFetchIndices      |
+                                Pal::PipelineStageVs                |
+                                Pal::PipelineStageHs                |
+                                Pal::PipelineStageDs                |
+                                Pal::PipelineStageGs                |
+                                Pal::PipelineStagePs                |
+                                Pal::PipelineStageEarlyDsTarget     |
+                                Pal::PipelineStageLateDsTarget      |
+                                Pal::PipelineStageColorTarget;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_ALL_COMMANDS_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageAllStages;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_COPY_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageBlt;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_RESOLVE_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageBlt;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_BLIT_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageBlt;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_CLEAR_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageBlt;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageFetchIndices;
+    }
+
+    if (stageMask & VK_PIPELINE_STAGE_2_VERTEX_ATTRIBUTE_INPUT_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageVs;
+    }
+
+    return palPipelineStageMask;
 }
 
 // =====================================================================================================================

@@ -133,3 +133,4 @@ VK_EXT_extended_dynamic_state
 VK_EXT_image_robustness
 VK_EXT_4444_formats
 VK_KHR_shader_terminate_invocation
+VK_KHR_synchronization2

@@ -48,6 +48,7 @@
 #include "palDevice.h"
 #include "palInlineFuncs.h"
 #include "palQueue.h"
+#include "palUuid.h"
 
 namespace Pal
 {
@@ -774,7 +775,7 @@ protected:
         Pal::gpusize totalMemorySize[Pal::GpuHeap::GpuHeapCount];     // The total memory (in bytes) per heap
     } m_memoryUsageTracker;
 
-    uint8_t                          m_pipelineCacheUUID[VK_UUID_SIZE];
+    Util::Uuid::Uuid                 m_pipelineCacheUUID;
 
     Util::IPlatformKey*              m_pPlatformKey;             // Platform identifying key
 };

@@ -84,8 +84,11 @@ public:
 
 protected:
     PartialPipeline(const VkAllocationCallbacks* pAllocator);
+
 private:
     const VkAllocationCallbacks*    m_pAllocator;
+
+    PAL_DISALLOW_COPY_AND_ASSIGN(PartialPipeline);
 };
 
 } // namespace async

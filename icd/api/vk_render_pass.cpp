@@ -345,6 +345,20 @@ void SubpassDependency::Init(
     dependencyFlags = subpassDep.dependencyFlags;
     viewOffset      = subpassDep.viewOffset;
 
+    EXTRACT_VK_STRUCTURES_0(
+        barrier,
+        MemoryBarrier2KHR,
+        static_cast<const VkMemoryBarrier2KHR*>(subpassDep.pNext),
+        MEMORY_BARRIER_2_KHR);
+
+    if (pMemoryBarrier2KHR != nullptr)
+    {
+        srcStageMask  = pMemoryBarrier2KHR->srcStageMask;
+        srcAccessMask = pMemoryBarrier2KHR->srcAccessMask;
+        dstStageMask  = pMemoryBarrier2KHR->dstStageMask;
+        dstAccessMask = pMemoryBarrier2KHR->dstAccessMask;
+    }
+
     // The multiview implementation broadcasts 3D primities by
     // issuing multiple draw calls (one per each view),
     // therefore all view-local dependencies are treated as view-global.

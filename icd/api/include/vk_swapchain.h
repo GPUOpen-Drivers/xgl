@@ -210,10 +210,11 @@ public:
         uint32_t u32All;
         struct
         {
-            uint32_t acquired             : 1;  // True if currently in exclusive access (fullscreen) mode
-            uint32_t disabled             : 1;  // Disabled by panel or for other reasons (e.g. too many unexpected
-                                                // failures)
-            uint32_t reserved             : 30; // Reserved for future use
+            uint32_t acquired              : 1;  // True if currently in exclusive access (fullscreen) mode
+            uint32_t disabled              : 1;  // Disabled by panel or for other reasons (e.g. too many unexpected
+                                                 // failures)
+            uint32_t mismatchedDisplayMode : 1;  // D3DKMTDisplayMode is mismatched
+            uint32_t reserved              : 29; // Reserved for future use
         };
     };
 

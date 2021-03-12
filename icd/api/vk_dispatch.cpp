@@ -597,6 +597,14 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkCmdBeginConditionalRenderingEXT               );
     INIT_DISPATCH_ENTRY(vkCmdEndConditionalRenderingEXT                 );
 
+    INIT_DISPATCH_ENTRY(vkCmdSetEvent2KHR                               );
+    INIT_DISPATCH_ENTRY(vkCmdResetEvent2KHR                             );
+    INIT_DISPATCH_ENTRY(vkCmdWaitEvents2KHR                             );
+    INIT_DISPATCH_ENTRY(vkCmdPipelineBarrier2KHR                        );
+    INIT_DISPATCH_ENTRY(vkCmdWriteTimestamp2KHR                         );
+    INIT_DISPATCH_ENTRY(vkCmdWriteBufferMarker2AMD                      );
+    INIT_DISPATCH_ENTRY(vkQueueSubmit2KHR                               );
+
     INIT_DISPATCH_ENTRY(vkCmdSetCullModeEXT                             );
     INIT_DISPATCH_ENTRY(vkCmdSetFrontFaceEXT                            );
     INIT_DISPATCH_ENTRY(vkCmdSetPrimitiveTopologyEXT                    );

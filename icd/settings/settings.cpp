@@ -301,6 +301,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.forceEnableDcc = ForceDccDefault;
             }
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.forceEnableDcc = ForceDccForCaSs2d3dGreaterThanOrEqual32bpp;
+            }
         }
 
         if ((appProfile == AppProfile::WolfensteinII) ||
@@ -613,11 +618,12 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.mallNoAllocCtPolicy    = 0x01;
+                m_settings.mallNoAllocSsrPolicy   = 0x01;
                 m_settings.mallNoAllocCtSsrPolicy = 0x01;
 
-                m_settings.forceEnableDcc = ForceEnableDcc::ForceDccForColorAttachments |
-                                            ForceEnableDcc::ForceDccFor32BppShaderStorage |
-                                            ForceEnableDcc::ForceDccFor64BppShaderStorage;
+                m_settings.enableWgpMode          = 0x00000020;
+
+                m_settings.forceEnableDcc         =  ForceEnableDcc::ForceDccFor64BppShaderStorage;
             }
         }
 
@@ -655,6 +661,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.asyncComputeQueueMaxWavesPerCu = 20;
 
                 m_settings.enableWgpMode = 0x20;
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
 
                 if (Util::IsPowerOfTwo(pInfo->gpuMemoryProperties.performance.vramBusBitWidth) == false)
                 {
@@ -665,7 +673,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
             {
                 m_settings.mallNoAllocCtPolicy = 0x01;
+                m_settings.mallNoAllocCtSsrPolicy = 0x01;
                 m_settings.mallNoAllocSsrPolicy = 0x01;
+                m_settings.enableWgpMode = 0x20;
             }
 
             if (pInfo->gpuType == Pal::GpuType::Discrete)
@@ -715,6 +725,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             // A larger minImageCount can get a huge performance gain for game WarThunder.
             m_settings.forceMinImageCount = 3;
+        }
+
+        if (appProfile == AppProfile::Valheim)
+        {
+            m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);

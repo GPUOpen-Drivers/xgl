@@ -403,6 +403,18 @@ constexpr AppProfilePatternEntry AppEngineAnvilNext =
     "anvilnext"
 };
 
+constexpr AppProfilePatternEntry AppEngineUnity =
+{
+    PatternEngineNameLower,
+    "unity"
+};
+
+constexpr AppProfilePatternEntry AppNameValheim =
+{
+    PatternExeNameLower,
+    "valheim"
+};
+
 constexpr AppProfilePatternEntry PatternEnd = {};
 
 // This is a table of patterns.  The first matching pattern in this table will be returned.
@@ -791,6 +803,23 @@ AppProfilePattern AppPatternTable[] =
         {
             AppNameQuake2RTX,
             AppEngineVKPT,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::Valheim,
+        {
+            AppNameValheim,
+            AppEngineUnity,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::UnityEngine,
+        {
+            AppEngineUnity,
             PatternEnd
         }
     },

@@ -36,6 +36,7 @@
 
 #include "include/khronos/vulkan.h"
 #include "include/khronos/vk_layer.h"
+#include "palHashMap.h"
 
 namespace vk
 {
@@ -44,18 +45,23 @@ struct NextLinkFuncPointers
 {
     PFN_vkGetInstanceProcAddr                   pfnGetInstanceProcAddr;
     PFN_vkCreateInstance                        pfnCreateInstance;
+    PFN_vkDestroyInstance                       pfnDestroyInstance;
     PFN_vkEnumeratePhysicalDevices              pfnEnumeratePhysicalDevices;
     PFN_vkGetPhysicalDeviceProperties           pfnGetPhysicalDeviceProperties;
     PFN_vkEnumeratePhysicalDeviceGroups         pfnEnumeratePhysicalDeviceGroups;
     PFN_vkEnumeratePhysicalDeviceGroupsKHR      pfnEnumeratePhysicalDeviceGroupsKHR;
 };
 
-extern NextLinkFuncPointers g_nextLinkFuncs;
+typedef Util::HashMap<VkInstance, NextLinkFuncPointers, vk::PalAllocator> DispatchTableHashMap;
 
 typedef VkResult (VKAPI_PTR *PFN_vkCreateInstance_SG)(
     const VkInstanceCreateInfo*                 pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkInstance*                                 pInstance);
+
+typedef void (VKAPI_PTR *PFN_vkDestroyInstance_SG)(
+    VkInstance                                  instance,
+    const VkAllocationCallbacks*                pAllocator);
 
 typedef VkResult (VKAPI_PTR *PFN_vkEnumeratePhysicalDevices_SG)(
     VkInstance                                  instance,
@@ -106,6 +112,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance_SG(
     const VkInstanceCreateInfo*                 pCreateInfo,
     const VkAllocationCallbacks*                pAllocator,
     VkInstance*                                 pInstance);
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkDestroyInstance_SG(
+    VkInstance                                  instance,
+    const VkAllocationCallbacks*                pAllocator);
 
 // =====================================================================================================================
 VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(

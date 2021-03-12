@@ -560,6 +560,51 @@
       "Scope": "Driver"
     },
     {
+      "Name": "CacheUuidNamespace",
+      "Description": "Defines the namespace the pipeline cache UUID belongs to.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": "CacheUuidNamespaceDefault"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "CacheUuidNamespaceDefault",
+            "Value": 0,
+            "Description": "Use the default namespace for the platform."
+          },
+          {
+            "Name": "CacheUuidNamespaceGlobal",
+            "Value": 1,
+            "Description": "Force usage of a global (portable) scope."
+          },
+          {
+            "Name": "CacheUuidNamespaceLocal",
+            "Value": 2,
+            "Description": "Force usage of a local (non-portable) scope."
+          }
+        ],
+        "Name": "CacheUuidNamespace"
+      },
+      "Scope": "Driver",
+      "Type": "enum"
+    },
+    {
+      "Name": "MarkPipelineCacheWithBuildTimestamp",
+      "Description": "Controls whether the pipeline cache is tagged with the build timestamp.",
+      "Tags": [
+        "Pipeline Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
       "Description": "Controls which category messages are output to log file (/var/tmp/palLog.txt). e.g. enable PipelineCompileTime(enum LogTagId in icd/api/include/log.h), logTagIdMask |= 1<<PipelineCompileTime",
       "Tags": [
         "Pipeline Options"
@@ -1859,18 +1904,6 @@
       "Type": "uint64"
     },
     {
-      "Name": "MarkPipelineCacheWithBuildTimestamp",
-      "Description": "Controles whether the pipline cache is tagged with the build timestamp. This provides extra stability by forcing a cache rebuild for every new driver released.  May be useful to disable during rapid iteration. (Default: TRUE)",
-      "Tags": [
-        "SPIRV Options"
-      ],
-      "Defaults": {
-        "Default": true
-      },
-      "Scope": "Driver",
-      "Type": "bool"
-    },
-    {
       "Name": "FilterPipelineDumpByType",
       "Description": "Filter which types of pipeline dump are disabled. These options can be used to dump pipelines of a specific type. By default, all the pipelines are logged.",
       "Tags": [
@@ -1973,7 +2006,7 @@
         "Ray Tracing"
       ],
       "Defaults": {
-        "Default": "0xffffffffffffffff"
+        "Default": "0"
       },
       "Flags": {
         "IsHex": true,
@@ -4052,6 +4085,11 @@
             "Name": "ForceDisableDcc",
             "Value": 8,
             "Description": "Force disable DCC for every resource irrespective of PAL heuristics."
+          },
+          {
+            "Name": "ForceDccForCaSs2d3dGreaterThanOrEqual32bpp",
+            "Value": 16,
+            "Description": "Force enable DCC for shader storage resources which are color attachments, are 2D or 3D images with Bpp >= 32"
           }
         ],
         "Name": "ForceEnableDcc"

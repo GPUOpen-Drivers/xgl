@@ -34,11 +34,14 @@
 #include "include/vk_utils.h"
 #include "include/vk_layer_switchable_graphics.h"
 #include "include/query_dlist.h"
+#include "palHashMapImpl.h"
+#include "palMutex.h"
 
 namespace vk
 {
 
-NextLinkFuncPointers g_nextLinkFuncs;
+DispatchTableHashMap* g_pDispatchTables;
+Util::Mutex g_traceMutex;
 
 // =====================================================================================================================
 // Implement vkGetInstanceProcAddr for implicit instance layer VK_LAYER_AMD_switchable_graphics, the layer dispatch
@@ -68,7 +71,9 @@ static PFN_vkVoidFunction GetInstanceProcAddrSG(
     // implementation for the layer interface
     if (pFunc == nullptr)
     {
-        pFunc = reinterpret_cast<void*>(g_nextLinkFuncs.pfnGetInstanceProcAddr(instance, pName));
+        Util::MutexAuto lock(&g_traceMutex);
+        NextLinkFuncPointers nextLinkFuncs = *(g_pDispatchTables->FindKey(instance));
+        pFunc = reinterpret_cast<void*>(nextLinkFuncs.pfnGetInstanceProcAddr(instance, pName));
     }
 
     return reinterpret_cast<PFN_vkVoidFunction>(pFunc);
@@ -108,29 +113,53 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance_SG(
                 PFN_vkGetInstanceProcAddr pfnGetInstanceProcAddr =
                     pLayerInstanceCreateInfo->u.pLayerInfo->pfnNextGetInstanceProcAddr;
 
-                g_nextLinkFuncs.pfnCreateInstance =
+                PFN_vkCreateInstance pfnCreateInstance =
                     reinterpret_cast<PFN_vkCreateInstance>(pfnGetInstanceProcAddr(*pInstance, "vkCreateInstance"));
 
                 // Advance the link info for the next element on the chain
                 pLayerInstanceCreateInfo->u.pLayerInfo = pLayerInstanceCreateInfo->u.pLayerInfo->pNext;
 
-                result = g_nextLinkFuncs.pfnCreateInstance(pCreateInfo, pAllocator, pInstance);
+                result = pfnCreateInstance(pCreateInfo, pAllocator, pInstance);
                 if (result == VK_SUCCESS)
                 {
+                    Util::MutexAuto lock(&g_traceMutex);
+                    const VkAllocationCallbacks* pAllocCb = &allocator::g_DefaultAllocCallback;
+                    static PalAllocator palAllocater(const_cast<VkAllocationCallbacks*>(pAllocCb));
+                    static DispatchTableHashMap dispatchTables(32, &palAllocater);
+                    g_pDispatchTables = &dispatchTables;
+
+                    // Initialize HashMap once
+                    static bool isInitialized = false;
+                    if (!isInitialized)
+                    {
+                        g_pDispatchTables->Init();
+                        isInitialized = true;
+                    }
+
+                    // Temporary store the next link's dispatch table
+                    NextLinkFuncPointers nextLinkFuncs;
+
                     // Store the next link's dispatch table function pointers that we need in the layer
-                    g_nextLinkFuncs.pfnGetInstanceProcAddr = pfnGetInstanceProcAddr;
-                    g_nextLinkFuncs.pfnEnumeratePhysicalDevices =
+                    nextLinkFuncs.pfnGetInstanceProcAddr = pfnGetInstanceProcAddr;
+                    nextLinkFuncs.pfnCreateInstance = pfnCreateInstance;
+                    nextLinkFuncs.pfnDestroyInstance =
+                        reinterpret_cast<PFN_vkDestroyInstance>(
+                            pfnGetInstanceProcAddr(*pInstance, "vkDestroyInstance"));
+                    nextLinkFuncs.pfnEnumeratePhysicalDevices =
                         reinterpret_cast<PFN_vkEnumeratePhysicalDevices>(
                             pfnGetInstanceProcAddr(*pInstance, "vkEnumeratePhysicalDevices"));
-                    g_nextLinkFuncs.pfnGetPhysicalDeviceProperties =
+                    nextLinkFuncs.pfnGetPhysicalDeviceProperties =
                         reinterpret_cast<PFN_vkGetPhysicalDeviceProperties>(
                             pfnGetInstanceProcAddr(*pInstance, "vkGetPhysicalDeviceProperties"));
-                    g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups =
+                    nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups =
                         reinterpret_cast<PFN_vkEnumeratePhysicalDeviceGroups>(
                             pfnGetInstanceProcAddr(*pInstance, "vkEnumeratePhysicalDeviceGroups"));
-                    g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroupsKHR =
+                    nextLinkFuncs.pfnEnumeratePhysicalDeviceGroupsKHR =
                         reinterpret_cast<PFN_vkEnumeratePhysicalDeviceGroupsKHR>(
                             pfnGetInstanceProcAddr(*pInstance, "vkEnumeratePhysicalDeviceGroupsKHR"));
+
+                    // Store the next link's dispatch table to the hashmap
+                    g_pDispatchTables->Insert(*pInstance, nextLinkFuncs);
                 }
             }
             break;
@@ -143,6 +172,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkCreateInstance_SG(
     return result;
 }
 
+VKAPI_ATTR void VKAPI_CALL vkDestroyInstance_SG(
+    VkInstance                                  instance,
+    const VkAllocationCallbacks*                pAllocator)
+{
+    Util::MutexAuto lock(&g_traceMutex);
+    NextLinkFuncPointers nextLinkFuncs = *g_pDispatchTables->FindKey(instance);
+    nextLinkFuncs.pfnDestroyInstance(instance, pAllocator);
+    g_pDispatchTables->Erase(instance);
+}
+
 // =====================================================================================================================
 // Layer's implementation for vkEnumeratePhysicalDevices, call next link's vkEnumeratePhysicalDevices implementation,
 // then adjust the returned physical devices result by checking hybrid graphics platform and querying Dlist interface
@@ -151,6 +190,8 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     uint32_t*                                   pPhysicalDeviceCount,
     VkPhysicalDevice*                           pPhysicalDevices)
 {
+    Util::MutexAuto lock(&g_traceMutex);
+    NextLinkFuncPointers nextLinkFuncs = *g_pDispatchTables->FindKey(instance);
     VkResult result = VK_SUCCESS;
     const VkAllocationCallbacks* pAllocCb = &allocator::g_DefaultAllocCallback;
     VK_ASSERT(pAllocCb != nullptr);
@@ -178,7 +219,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     // Call loader's terminator function into ICDs to get all the physical devices
     if (result == VK_SUCCESS)
     {
-        result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, pLayerPhysicalDevices);
+        result = nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, pLayerPhysicalDevices);
     }
 #if defined(__unix__)
 
@@ -198,7 +239,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
             pLayerPhysicalDevices = static_cast<VkPhysicalDevice*>(pMemory);
         }
 
-        result = g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, pLayerPhysicalDevices);
+        result = nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, pLayerPhysicalDevices);
     }
 
     if (result == VK_SUCCESS)
@@ -221,7 +262,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
             for (uint32_t i = 0; i < physicalDeviceCount; i++)
             {
                 // Determine whether RADV Vulkan driver exists and get all physical device properites
-                g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[i], &pProperties[i]);
+                nextLinkFuncs.pfnGetPhysicalDeviceProperties(pLayerPhysicalDevices[i], &pProperties[i]);
                 if (((pProperties[i].vendorID == VENDOR_ID_AMD) || (pProperties[i].vendorID == VENDOR_ID_ATI)) &&
                    (strstr(pProperties[i].deviceName, "RADV") != nullptr))
                 {
@@ -313,6 +354,8 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties,
     PFN_EnumPhysDeviceGroupsFunc                pEnumPhysDeviceGroupsFunc)
 {
+    Util::MutexAuto lock(&g_traceMutex);
+    NextLinkFuncPointers nextLinkFuncs = *g_pDispatchTables->FindKey(instance);
     VkResult result = VK_SUCCESS;
     const VkAllocationCallbacks* pAllocCb = &allocator::g_DefaultAllocCallback;
     VK_ASSERT(pAllocCb != nullptr);
@@ -361,7 +404,7 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
         if (processDevices)
         {
             uint32_t physicalDeviceCount = 0;
-            g_nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
+            nextLinkFuncs.pfnEnumeratePhysicalDevices(instance, &physicalDeviceCount, nullptr);
             void* pTmpLayerPhysicalDeviceMemory = pAllocCb->pfnAllocation(pAllocCb->pUserData,
                                                         physicalDeviceCount * sizeof(VkPhysicalDevice),
                                                         sizeof(void*),
@@ -386,7 +429,7 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
                 {
                     for (uint32_t i = 0; i < physicalDeviceCount; i++)
                     {
-                       g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(pTmpLayerPhysicalDevice[i], &pProperties[i]);
+                       nextLinkFuncs.pfnGetPhysicalDeviceProperties(pTmpLayerPhysicalDevice[i], &pProperties[i]);
                     }
                 }
             }
@@ -400,7 +443,7 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
                 for (uint32_t i = 0; i < physicalDeviceGroupCount; i++)
                 {
                     VkPhysicalDeviceProperties properties = {};
-                    g_nextLinkFuncs.pfnGetPhysicalDeviceProperties(
+                    nextLinkFuncs.pfnGetPhysicalDeviceProperties(
                             pLayerPhysicalDeviceGroups[i].physicalDevices[0], &properties);
                     for (uint32_t j = 0; j < physicalDeviceCount; j++)
                     {
@@ -461,10 +504,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR_SG(
     uint32_t*                                   pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties)
 {
+    Util::MutexAuto lock(&g_traceMutex);
     return vkEnumeratePhysicalDeviceGroupsComm(instance,
                                                pPhysicalDeviceGroupCount,
                                                pPhysicalDeviceGroupProperties,
-                                               g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroupsKHR);
+                                               (*(g_pDispatchTables->FindKey(instance))).pfnEnumeratePhysicalDeviceGroupsKHR);
 }
 
 // =====================================================================================================================
@@ -475,10 +519,11 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
     uint32_t*                                   pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties)
 {
+    Util::MutexAuto lock(&g_traceMutex);
     return vkEnumeratePhysicalDeviceGroupsComm(instance,
                                                pPhysicalDeviceGroupCount,
                                                pPhysicalDeviceGroupProperties,
-                                               g_nextLinkFuncs.pfnEnumeratePhysicalDeviceGroups);
+                                               (*(g_pDispatchTables->FindKey(instance))).pfnEnumeratePhysicalDeviceGroups);
 }
 
 // Helper macro used to create an entry for the "primary" entry point implementation (i.e. the one that goes straight
@@ -489,6 +534,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
 const LayerDispatchTableEntry g_LayerDispatchTable_SG[] =
 {
     LAYER_DISPATCH_ENTRY(vkCreateInstance_SG),
+    LAYER_DISPATCH_ENTRY(vkDestroyInstance_SG),
     LAYER_DISPATCH_ENTRY(vkEnumeratePhysicalDevices_SG),
     LAYER_DISPATCH_ENTRY(vkEnumeratePhysicalDeviceGroups_SG),
     LAYER_DISPATCH_ENTRY(vkEnumeratePhysicalDeviceGroupsKHR_SG),

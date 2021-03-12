@@ -32,17 +32,27 @@ if(UNIX)
     if(XGL_USE_CLANG)
         set(CMAKE_CXX_COMPILER_ID "Clang")
 
-        foreach(major RANGE 8 20)
+        foreach(major RANGE 6 20)
             find_program(CLANG_VER clang-${major})
             if(CLANG_VER)
                 set(CLANG_VER ${major})
+                # llvm-ar named llvm-ar-6.0 on ubuntu18.04 for version 6
+                if(CLANG_VER EQUAL 6)
+                    set(CLANG_VER "6.0")
+                endif()
                 break()
             endif()
         endforeach()
 
         find_program(CLANG_C_COMPILER clang)
         if (CLANG_C_COMPILER)
-             set(CMAKE_C_COMPILER ${CLANG_C_COMPILER} CACHE FILEPATH "" FORCE)
+            set(CMAKE_C_COMPILER ${CLANG_C_COMPILER} CACHE FILEPATH "" FORCE)
+            EXECUTE_PROCESS(COMMAND ${CLANG_C_COMPILER} --version OUTPUT_VARIABLE clang_full_version_string)
+            string(REGEX REPLACE ".*clang version ([0-9]+).*" "\\1" CLANG_VER ${clang_full_version_string})
+            # llvm-ar named llvm-ar-6.0 on ubuntu18.04 for version 6
+            if(CLANG_VER EQUAL 6)
+                set(CLANG_VER "6.0")
+            endif()
         else()
             find_program(CLANG_C_COMPILER clang-${CLANG_VER})
             if (CLANG_C_COMPILER)
@@ -251,9 +261,7 @@ option(XGL_ENABLE_LTO "Build with LTO enabled?" ON)
 option(XGL_ENABLE_GCOV "Build with gcov source code coverage?" OFF)
 
 option(ICD_BUILD_LLPC "Build LLPC?" ON)
-cmake_dependent_option(ICD_COMPILER_DEFAULT "Default value of compiler" ON "ICD_BUILD_LLPC" OFF)
 option(XGL_BUILD_VEGA20 "Build open source vulkan for Vega20?" ON)
-option(XGL_BUILD_RAVEN2 "Build open source vulkan for Raven2?" ON)
 
 option(XGL_BUILD_LIT "Build with Lit test?" OFF)
 
@@ -381,7 +389,7 @@ set(PAL_ENABLE_LTO ${XGL_ENABLE_LTO} CACHE BOOL "XGL override to build PAL with 
 
 set(PAL_MEMTRACK ${ICD_MEMTRACK} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GPUOPEN ${ICD_GPUOPEN_DEVMODE_BUILD} CACHE BOOL "${PROJECT_NAME} override." FORCE)
-set(PAL_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+set(PAL_BUILD_RAVEN2 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_RENOIR ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 set(PAL_BUILD_GFX10 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -641,7 +649,7 @@ set(LLPC_CLIENT_INTERFACE_MAJOR_VERSION ${ICD_LLPC_CLIENT_MAJOR_VERSION} CACHE S
 set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
 if(ICD_BUILD_LLPC)
-    set(LLPC_BUILD_RAVEN2 ${XGL_BUILD_RAVEN2} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+    set(LLPC_BUILD_RAVEN2 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(LLPC_BUILD_VEGA20 ${XGL_BUILD_VEGA20} CACHE BOOL "${PROJECT_NAME} override." FORCE)
     set(LLPC_ENABLE_WERROR ${ICD_ANALYSIS_WARNINGS_AS_ERRORS} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 endif()

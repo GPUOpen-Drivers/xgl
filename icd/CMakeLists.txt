@@ -22,7 +22,7 @@
  #  SOFTWARE.
  #
  #######################################################################################################################
-add_library(xgl SHARED "")
+add_library(xgl SHARED)
 set(ICD_TARGET amdvlk${TARGET_ARCHITECTURE_BITS})
 set_target_properties(xgl PROPERTIES OUTPUT_NAME ${ICD_TARGET})
 set_target_properties(xgl PROPERTIES PREFIX "")
@@ -41,9 +41,10 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_compile_options(xgl PRIVATE
         -fno-exceptions
         -fno-strict-aliasing
-        -fPIC
         -pthread
     )
+    # Add global compile option to enable position independent code (we get link errors for clang/lld otherwise)
+    add_compile_options(-fPIC)
 
     target_compile_options(xgl PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
         -fno-math-errno
@@ -117,17 +118,11 @@ if(ICD_BUILD_LLPC)
     target_compile_definitions(xgl PRIVATE ICD_BUILD_LLPC)
 endif()
 
-if(XGL_BUILD_RAVEN2)
-    target_compile_definitions(xgl PRIVATE VKI_BUILD_RAVEN2=1)
-    target_compile_definitions(xgl PRIVATE PAL_BUILD_RAVEN2)
-endif()
+target_compile_definitions(xgl PRIVATE PAL_BUILD_RAVEN2)
 
 target_compile_definitions(xgl PRIVATE PAL_BUILD_RENOIR)
 
-if(XGL_BUILD_VEGA20)
-    target_compile_definitions(xgl PRIVATE VKI_BUILD_VEGA20=1)
-    target_compile_definitions(xgl PRIVATE PAL_BUILD_VEGA20)
-endif()
+target_compile_definitions(xgl PRIVATE PAL_BUILD_VEGA20)
 
 if(TARGET_ARCHITECTURE_BITS EQUAL 32)
     target_compile_definitions(xgl PRIVATE ICD_X86_BUILD)

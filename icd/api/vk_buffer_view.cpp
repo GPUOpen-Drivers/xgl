@@ -65,7 +65,9 @@ VkResult BufferView::Create(
 
     Buffer* pBuffer = Buffer::ObjectFromHandle(pCreateInfo->buffer);
 
-    info.swizzledFormat = VkToPalFormat(pCreateInfo->format, pDevice->GetRuntimeSettings());
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
+    info.swizzledFormat = VkToPalFormat(pCreateInfo->format, settings);
     info.stride         = Pal::Formats::BytesPerPixel(info.swizzledFormat.format);
     if (pCreateInfo->range == VK_WHOLE_SIZE)
     {
@@ -80,7 +82,7 @@ VkResult BufferView::Create(
     }
 
     // Bypass Mall read/write if no alloc policy is set for SRDs
-    if (Util::TestAnyFlagSet(pDevice->GetRuntimeSettings().mallNoAllocResourcePolicy, MallNoAllocBufferViewSrds))
+    if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocBufferViewSrds))
     {
         info.flags.bypassMallRead = 1;
         info.flags.bypassMallWrite = 1;

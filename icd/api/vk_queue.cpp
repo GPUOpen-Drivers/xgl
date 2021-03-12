@@ -276,6 +276,8 @@ VkResult Queue::Submit(
 
     VkResult result = VK_SUCCESS;
 
+    const bool isSynchronization2 = std::is_same<SubmitInfoType, VkSubmitInfo2KHR>::value;
+
     // The fence should be only used in the last submission to PAL. The implicit ordering guarantees provided by PAL
     // make sure that the fence is only signaled when all submissions complete.
     if ((submitCount == 0) && (pFence != nullptr))
@@ -326,10 +328,12 @@ VkResult Queue::Submit(
                 switch (static_cast<int32_t>(pHeader->sType))
                 {
                 case VK_STRUCTURE_TYPE_DEVICE_GROUP_SUBMIT_INFO:
+                    VK_ASSERT(isSynchronization2 == false);
                     pDeviceGroupInfo = static_cast<const VkDeviceGroupSubmitInfo*>(pNext);
                     break;
                 case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
                 {
+                    VK_ASSERT(isSynchronization2 == false);
                     const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = static_cast<const VkTimelineSemaphoreSubmitInfo*>(pNext);
                     waitSemaphoreValueCount   = pTimelineSemaphoreInfo->waitSemaphoreValueCount;
                     pWaitSemaphoreValues      = pTimelineSemaphoreInfo->pWaitSemaphoreValues;
@@ -338,6 +342,7 @@ VkResult Queue::Submit(
                     break;
                 }
                 case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO:
+                    VK_ASSERT(isSynchronization2 == false);
                     pProtectedSubmitInfo = static_cast<const VkProtectedSubmitInfo*>(pNext);
                     protectedSubmit = pProtectedSubmitInfo->protectedSubmit;
                     break;
@@ -349,22 +354,78 @@ VkResult Queue::Submit(
                 pNext = pHeader->pNext;
             }
 
-                if ((result == VK_SUCCESS) && (submitInfo.waitSemaphoreCount > 0))
+            // Allocate space to store the PAL command buffer handles
+            VkCommandBuffer* pCmdBuffers = nullptr;
+            uint32_t cmdBufferCount      = 0;
+            uint32_t waitSemaphoreCount  = 0;
+
+            if (isSynchronization2)
+            {
+                const VkSubmitInfo2KHR* pSubmitInfoKhr = reinterpret_cast<const VkSubmitInfo2KHR*>(&pSubmits[submitIdx]);
+
+                if ((pSubmitInfoKhr->flags & VK_SUBMIT_PROTECTED_BIT_KHR) != 0)
+                {
+                    protectedSubmit = true;
+                }
+
+                if ((result == VK_SUCCESS) && (pSubmitInfoKhr->waitSemaphoreInfoCount > 0))
+                {
+                    waitSemaphoreValueCount = pSubmitInfoKhr->waitSemaphoreInfoCount;
+
+                    VkSemaphore* pWaitSemaphores          = virtStackFrame.AllocArray<VkSemaphore>(waitSemaphoreValueCount);
+                    uint64_t* pWaitSemaphoreInfoValues    = virtStackFrame.AllocArray<uint64_t>(waitSemaphoreValueCount);
+                    uint32_t* pWaitSemaphoreDeviceIndices = virtStackFrame.AllocArray<uint32_t>(waitSemaphoreValueCount);
+
+                    for (uint32_t i = 0; i < waitSemaphoreValueCount; i++)
+                    {
+                        pWaitSemaphores[i]             = pSubmitInfoKhr->pWaitSemaphoreInfos[i].semaphore;
+                        pWaitSemaphoreInfoValues[i]    = pSubmitInfoKhr->pWaitSemaphoreInfos[i].value;
+                        pWaitSemaphoreDeviceIndices[i] = pSubmitInfoKhr->pWaitSemaphoreInfos[i].deviceIndex;
+                    }
+
+                    result = PalWaitSemaphores(
+                        waitSemaphoreValueCount,
+                        pWaitSemaphores,
+                        pWaitSemaphoreInfoValues,
+                        waitSemaphoreValueCount,
+                        pWaitSemaphoreDeviceIndices);
+
+                    virtStackFrame.FreeArray(pWaitSemaphores);
+                    virtStackFrame.FreeArray(pWaitSemaphoreInfoValues);
+                    virtStackFrame.FreeArray(pWaitSemaphoreDeviceIndices);
+                }
+
+                pCmdBuffers = pSubmitInfoKhr->commandBufferInfoCount > 0 ?
+                    virtStackFrame.AllocArray<VkCommandBuffer>(pSubmitInfoKhr->commandBufferInfoCount) : nullptr;
+
+                for(uint32_t i = 0; i < pSubmitInfoKhr->commandBufferInfoCount; i++)
+                {
+                    pCmdBuffers[i] = pSubmitInfoKhr->pCommandBufferInfos[i].commandBuffer;
+                }
+
+                cmdBufferCount     = pSubmitInfoKhr->commandBufferInfoCount;
+                waitSemaphoreCount = pSubmitInfoKhr->waitSemaphoreInfoCount;
+            }
+            else
+            {
+                const VkSubmitInfo* pSubmitInfoOld = reinterpret_cast<const VkSubmitInfo*>(&pSubmits[submitIdx]);
+
+                if ((result == VK_SUCCESS) && (pSubmitInfoOld->waitSemaphoreCount > 0))
                 {
                     VK_ASSERT((pWaitSemaphoreValues == nullptr) ||
-                            (submitInfo.waitSemaphoreCount == waitSemaphoreValueCount));
+                            (pSubmitInfoOld->waitSemaphoreCount == waitSemaphoreValueCount));
                     result = PalWaitSemaphores(
-                        submitInfo.waitSemaphoreCount,
-                        submitInfo.pWaitSemaphores,
+                        pSubmitInfoOld->waitSemaphoreCount,
+                        pSubmitInfoOld->pWaitSemaphores,
                         pWaitSemaphoreValues,
                         (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->waitSemaphoreCount          : 0),
                         (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pWaitSemaphoreDeviceIndices : nullptr));
                 }
 
-            // Allocate space to store the PAL command buffer handles
-            const VkCommandBuffer* pCmdBuffers = submitInfo.pCommandBuffers;
-            const uint32_t cmdBufferCount      = submitInfo.commandBufferCount;
-            const uint32_t waitSemaphoreCount  = submitInfo.waitSemaphoreCount;
+                pCmdBuffers         = const_cast<VkCommandBuffer*>(pSubmitInfoOld->pCommandBuffers);
+                cmdBufferCount      = pSubmitInfoOld->commandBufferCount;
+                waitSemaphoreCount  = pSubmitInfoOld->waitSemaphoreCount;
+            }
 
             Pal::ICmdBuffer** pPalCmdBuffers = (cmdBufferCount > 0) ?
                             virtStackFrame.AllocArray<Pal::ICmdBuffer*>(cmdBufferCount) : nullptr;
@@ -459,19 +520,60 @@ VkResult Queue::Submit(
 
             }
 
+            if (isSynchronization2 && (pCmdBuffers != nullptr))
+            {
+                virtStackFrame.FreeArray(pCmdBuffers);
+            }
+
             virtStackFrame.FreeArray(pPalCmdBuffers);
 
-                if ((result == VK_SUCCESS) && (submitInfo.signalSemaphoreCount > 0))
+            if (isSynchronization2)
+            {
+                const VkSubmitInfo2KHR* pSubmitInfoKhr = reinterpret_cast<const VkSubmitInfo2KHR*>(&pSubmits[submitIdx]);
+
+                if ((result == VK_SUCCESS) && (pSubmitInfoKhr->signalSemaphoreInfoCount > 0))
+                {
+                    signalSemaphoreValueCount = pSubmitInfoKhr->signalSemaphoreInfoCount;
+
+                    VkSemaphore* pSignalSemaphores          = virtStackFrame.AllocArray<VkSemaphore>(signalSemaphoreValueCount);
+                    uint64_t* pSignalSemaphoreInfoValues    = virtStackFrame.AllocArray<uint64_t>(signalSemaphoreValueCount);
+                    uint32_t* pSignalSemaphoreDeviceIndices = virtStackFrame.AllocArray<uint32_t>(signalSemaphoreValueCount);
+
+                    for (uint32_t i = 0; i < signalSemaphoreValueCount; i++)
+                    {
+                        pSignalSemaphores[i]             = pSubmitInfoKhr->pSignalSemaphoreInfos[i].semaphore;
+                        pSignalSemaphoreInfoValues[i]    = pSubmitInfoKhr->pSignalSemaphoreInfos[i].value;
+                        pSignalSemaphoreDeviceIndices[i] = pSubmitInfoKhr->pSignalSemaphoreInfos[i].deviceIndex;
+                    }
+
+                    result = PalSignalSemaphores(
+                        signalSemaphoreValueCount,
+                        pSignalSemaphores,
+                        pSignalSemaphoreInfoValues,
+                        signalSemaphoreValueCount,
+                        pSignalSemaphoreDeviceIndices);
+
+                    virtStackFrame.FreeArray(pSignalSemaphores);
+                    virtStackFrame.FreeArray(pSignalSemaphoreInfoValues);
+                    virtStackFrame.FreeArray(pSignalSemaphoreDeviceIndices);
+                }
+            }
+            else
+            {
+                const VkSubmitInfo* pSubmitInfoOld = reinterpret_cast<const VkSubmitInfo*>(&pSubmits[submitIdx]);
+
+                if ((result == VK_SUCCESS) && (pSubmitInfoOld->signalSemaphoreCount > 0))
                 {
                     VK_ASSERT((pSignalSemaphoreValues == nullptr) ||
-                            (submitInfo.signalSemaphoreCount == signalSemaphoreValueCount));
+                            (pSubmitInfoOld->signalSemaphoreCount == signalSemaphoreValueCount));
                     result = PalSignalSemaphores(
-                        submitInfo.signalSemaphoreCount,
-                        submitInfo.pSignalSemaphores,
+                        pSubmitInfoOld->signalSemaphoreCount,
+                        pSubmitInfoOld->pSignalSemaphores,
                         pSignalSemaphoreValues,
                         (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->signalSemaphoreCount          : 0),
                         (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pSignalSemaphoreDeviceIndices : nullptr));
                 }
+            }
 
         }
     }
@@ -1704,25 +1806,26 @@ void Queue::InsertDebugUtilsLabel(
 {
     const RuntimeSettings& settings = m_pDevice->GetRuntimeSettings();
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
     if (strcmp(pLabelInfo->pLabelName, settings.devModeEndFrameDebugUtilsLabel) == 0)
     {
+#if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameEnd(this, DevModeMgr::FrameDelimiterType::QueueLabel);
         }
-    }
 #endif
 
-#if ICD_GPUOPEN_DEVMODE_BUILD
+    }
+
     if (strcmp(pLabelInfo->pLabelName, settings.devModeStartFrameDebugUtilsLabel) == 0)
     {
+#if ICD_GPUOPEN_DEVMODE_BUILD
         if (m_pDevice->VkInstance()->GetDevModeMgr() != nullptr)
         {
             m_pDevice->VkInstance()->GetDevModeMgr()->NotifyFrameBegin(this, DevModeMgr::FrameDelimiterType::QueueLabel);
         }
-    }
 #endif
+}
 }
 
 /**
@@ -1742,6 +1845,19 @@ VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit(
     VkFence                                     fence)
 {
      return ApiQueue::ObjectFromHandle(queue)->Submit<VkSubmitInfo>(
+        submitCount,
+        pSubmits,
+        fence);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR VkResult VKAPI_CALL vkQueueSubmit2KHR(
+    VkQueue                                     queue,
+    uint32_t                                    submitCount,
+    const VkSubmitInfo2KHR*                     pSubmits,
+    VkFence                                     fence)
+{
+    return ApiQueue::ObjectFromHandle(queue)->Submit<VkSubmitInfo2KHR>(
         submitCount,
         pSubmits,
         fence);

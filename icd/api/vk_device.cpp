@@ -275,6 +275,7 @@ Device::Device(
     }
 
     m_enabledFeatures.scalarBlockLayout = false;
+
     m_enabledFeatures.attachmentFragmentShadingRate = false;
 
     m_allocatedCount = 0;
@@ -423,8 +424,7 @@ VkResult Device::Create(
     VkMemoryOverallocationBehaviorAMD overallocationBehavior          = VK_MEMORY_OVERALLOCATION_BEHAVIOR_DEFAULT_AMD;
     bool                              deviceCoherentMemoryEnabled     = false;
     bool                              scalarBlockLayoutEnabled        = false;
-    ExtendedRobustness                extendedRobustnessEnabled     = { false, false, false };
-
+    ExtendedRobustness                extendedRobustnessEnabled       = { false, false, false };
     bool                              attachmentFragmentShadingRate   = false;
 
     uint32                            privateDataSlotRequestCount     = 0;

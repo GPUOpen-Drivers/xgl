@@ -195,27 +195,29 @@ void DescriptorSet<numPalDevices>::PatchedDynamicDataFromHandle(
     bool            useCompactDescriptor)
 {
     // This code expects 4 DW SRDs whose first 48 bits is the base address.
+    DescriptorSet<numPalDevices>* pSet = StateFromHandle(set);
+    const uint64_t* pSrcQwords         = pSet->DynamicDescriptorDataQw(deviceIdx);
+    const uint32_t  dynDataNumQwords   = useCompactDescriptor ? 1 : 2;
 
-    DescriptorSet<numPalDevices>* pSet  = StateFromHandle(set);
-    uint64_t* pDstQwords = reinterpret_cast<uint64_t*>(pUserData);
-    uint64_t* pSrcQwords = pSet->DynamicDescriptorDataQw(deviceIdx);
-    const uint32_t dynDataNumQwords = useCompactDescriptor ? 1 : 2;
     for (uint32_t i = 0; i < numDynamicDescriptors; ++i)
     {
         const uint64_t baseAddressMask = 0x0000FFFFFFFFFFFFull;
 
         // Read default base address
-        uint64_t baseAddress = pSrcQwords[i * dynDataNumQwords] & baseAddressMask;
-        uint64_t hiBits      = pSrcQwords[i * dynDataNumQwords] & ~baseAddressMask;
+        uint64_t baseAddress  = pSrcQwords[i * dynDataNumQwords] & baseAddressMask;
+        const uint64_t hiBits = pSrcQwords[i * dynDataNumQwords] & ~baseAddressMask;
 
         // Add dynamic offset
         baseAddress += pDynamicOffsets[i];
+        baseAddress = hiBits | baseAddress;
 
-        pDstQwords[i * dynDataNumQwords] = hiBits | baseAddress;
+        // We have to use memcpy because we are accessing memory not alignment to 64bit (array uint32_t [1][1]),
+        // what causes segmentation fault on linux when we cast pUserData to unit64_t pointer and use it.
+        memcpy(&pUserData[2 * i * dynDataNumQwords], &baseAddress, sizeof(uint64_t));
 
         if (!useCompactDescriptor)
         {
-            pDstQwords[i * dynDataNumQwords + 1] = pSrcQwords[i * dynDataNumQwords + 1];
+            memcpy(&pUserData[2 * i * dynDataNumQwords + 2], &pSrcQwords[i * dynDataNumQwords + 1], sizeof(uint64_t));
         }
     }
 }

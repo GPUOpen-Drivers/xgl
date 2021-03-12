@@ -158,6 +158,21 @@ union RPSyncPointFlags
     uint32_t u32All;
 };
 
+union SubpassStateFlags
+{
+    struct
+    {
+        uint32_t hasFirstUseAttachments  :  1; // True if this subpass has first-use references
+        uint32_t hasFinalUseAttachments  :  1; // Same as above, but final-use.
+        uint32_t hasExternalIncoming     :  1; // True if an explicit VkSubpassDependency exists with src =
+                                               // VK_SUBPASS_EXTERNAL and dst = this.
+        uint32_t hasExternalOutgoing     :  1; // Same as above, but src and dst reversed.
+        uint32_t reserved1               :  2;
+        uint32_t reserved                : 26;
+    };
+    uint32_t u32All;
+};
+
 // This is a render pass "synchronization point" that mainly translates to a barrier.  Any synchronization across
 // subpasses, or between different parts of the same subpass (e.g. pre/post resolve) happens within a synchronization
 // point.  Also any layout transitions are executed within a synchronization point.

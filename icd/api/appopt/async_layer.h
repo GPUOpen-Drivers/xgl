@@ -110,6 +110,9 @@ protected:
     uint8_t                          m_moduleTaskThreadBuffer[MaxThreads][sizeof(async::TaskThread<ShaderModuleTask>)];
     uint8_t                          m_pipelineTaskThreadBuffer[MaxThreads]
                                                                [sizeof(async::TaskThread<PartialPipelineTask>)];
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(AsyncLayer);
 };
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

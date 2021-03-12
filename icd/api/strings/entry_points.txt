@@ -374,6 +374,14 @@ vkSignalSemaphoreKHR                                @device     @dext(KHR_timeli
 vkCmdBeginConditionalRenderingEXT                   @device     @dext(EXT_conditional_rendering)
 vkCmdEndConditionalRenderingEXT                     @device     @dext(EXT_conditional_rendering)
 
+vkCmdSetEvent2KHR                                   @device     @dext(KHR_synchronization2)
+vkCmdResetEvent2KHR                                 @device     @dext(KHR_synchronization2)
+vkCmdWaitEvents2KHR                                 @device     @dext(KHR_synchronization2)
+vkCmdPipelineBarrier2KHR                            @device     @dext(KHR_synchronization2)
+vkCmdWriteTimestamp2KHR                             @device     @dext(KHR_synchronization2)
+vkQueueSubmit2KHR                                   @device     @dext(KHR_synchronization2)
+vkCmdWriteBufferMarker2AMD                          @device     @dext(KHR_synchronization2)
+
 vkCmdSetCullModeEXT                                 @device     @dext(EXT_extended_dynamic_state)
 vkCmdSetFrontFaceEXT                                @device     @dext(EXT_extended_dynamic_state)
 vkCmdSetPrimitiveTopologyEXT                        @device     @dext(EXT_extended_dynamic_state)

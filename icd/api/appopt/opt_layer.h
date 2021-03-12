@@ -54,6 +54,9 @@ public:
 
 protected:
     DispatchTable m_nextLayer;                               // Dispatch table to the next layer's functions
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(OptLayer);
 };
 
 } // namespace vk

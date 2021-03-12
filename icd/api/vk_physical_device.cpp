@@ -338,6 +338,7 @@ PhysicalDevice::PhysicalDevice(
     m_allowedExtensions(),
     m_compiler(this),
     m_memoryUsageTracker {},
+    m_pipelineCacheUUID {},
     m_pPlatformKey(nullptr)
 {
     memset(&m_limits, 0, sizeof(m_limits));
@@ -356,8 +357,6 @@ PhysicalDevice::PhysicalDevice(
     {
         m_memoryVkIndexToPalHeap[i] = Pal::GpuHeapCount; // invalid index
     }
-
-    memset(&m_pipelineCacheUUID, 0, VK_UUID_SIZE);
 
     for (uint32_t i = 0; i < VkMemoryHeapNum; ++i)
     {
@@ -564,35 +563,90 @@ void PhysicalDevice::InitializePlatformKey(
 {
     static constexpr Util::HashAlgorithm KeyAlgorithm = Util::HashAlgorithm::Sha1;
 
-    struct
+    size_t memSize = Util::GetPlatformKeySize(KeyAlgorithm);
+    void*  pMem    = VkInstance()->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+
+    if (pMem != nullptr)
     {
-        VkPhysicalDeviceProperties properties;
-        char*                      timestamp[sizeof(__TIMESTAMP__)];
-    } initialData;
-
-    memset(&initialData, 0, sizeof(initialData));
-
-    VkResult result = GetDeviceProperties(&initialData.properties);
-
-    if (result == VK_SUCCESS)
-    {
-        size_t memSize = Util::GetPlatformKeySize(KeyAlgorithm);
-        void*  pMem    = VkInstance()->AllocMem(memSize, VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
-
-        if (pMem != nullptr)
+        if (Util::CreatePlatformKey(
+                KeyAlgorithm,
+                m_pipelineCacheUUID.raw, sizeof(m_pipelineCacheUUID.raw),
+                pMem, &m_pPlatformKey) != Util::Result::Success)
         {
-            if (settings.markPipelineCacheWithBuildTimestamp)
-            {
-                memcpy(initialData.timestamp, __TIMESTAMP__, sizeof(__TIMESTAMP__));
-            }
-
-            if (Util::CreatePlatformKey(KeyAlgorithm, &initialData, sizeof(initialData), pMem, &m_pPlatformKey) !=
-                Util::Result::Success)
-            {
-                VkInstance()->FreeMem(pMem);
-            }
+            VkInstance()->FreeMem(pMem);
         }
     }
+}
+
+// =====================================================================================================================
+// Pipeline cache UUID as reported through the Vulkan API should:
+// - Obey the settings about mixing in the timestamp
+// - Obey the settings about lock ing cache to a machine in a reliable way
+// - Be a valid UUID generated using normal means
+//
+// Settings:
+// - markPipelineCacheWithBuildTimestamp: decides whether to mix in __DATE__ __TIME__ from compiler to UUID
+// - useGlobalCacheId                   : decides if UUID should be portable between machines
+//
+static VK_INLINE void GenerateCacheUuid(
+    const RuntimeSettings& settings,
+    const Pal::DeviceProperties& palProps,
+    AppProfile appProfile,
+    Util::Uuid::Uuid* pUuid)
+{
+    VK_ASSERT(pUuid != nullptr);
+
+    constexpr uint32 VulkanIcdVersion =
+        (VULKAN_ICD_MAJOR_VERSION << 22) |
+        (VULKAN_ICD_BUILD_VERSION & ((1 << 22) - 1));
+
+    const uint32_t buildTimeHash = settings.markPipelineCacheWithBuildTimestamp
+        ? Util::HashLiteralString(__DATE__ __TIME__)
+        : 0;
+
+    const struct
+    {
+        uint32               pipelineCacheHash;
+        uint32               vendorId;
+        uint32               deviceId;
+        Pal::GfxIpLevel      gfxLevel;
+        VkPhysicalDeviceType deviceType;
+        AppProfile           appProfile;
+        uint32               vulkanIcdVersion;
+        uint32               palInterfaceVersion;
+        uint32               osHash;
+        uint32               buildTimeHas;
+    } cacheVersionInfo =
+    {
+        Util::HashLiteralString("pipelineCache"),
+        palProps.vendorId,
+        palProps.deviceId,
+        palProps.gfxLevel,
+        PalToVkGpuType(palProps.gpuType),
+        appProfile,
+        VulkanIcdVersion,
+        PAL_CLIENT_INTERFACE_MAJOR_VERSION,
+        Util::HashLiteralString("Linux"),
+        buildTimeHash
+    };
+
+    Util::Uuid::Uuid scope = {};
+
+    switch (settings.cacheUuidNamespace)
+    {
+    case CacheUuidNamespaceGlobal:
+        scope = Util::Uuid::GetGlobalNamespace();
+        break;
+    case CacheUuidNamespaceLocal:
+    case CacheUuidNamespaceDefault:
+        scope = Util::Uuid::GetLocalNamespace();
+        break;
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    *pUuid = Util::Uuid::Uuid5(scope, &cacheVersionInfo, sizeof(cacheVersionInfo));
 }
 
 // =====================================================================================================================
@@ -938,40 +992,11 @@ VkResult PhysicalDevice::Initialize()
         }
     }
 
+    // Generate our cache UUID.
+    // This can be use later as a "namespace" for Uuid3()/Uuid5() calls for individual pipelines
     if (result == Pal::Result::Success)
     {
-        // Get properties from PAL
-        const Pal::DeviceProperties& palProps = PalProperties();
-
-        // This UUID identifies whether a previously created pipeline cache is compatible with the currently installed
-        // device/driver.
-        constexpr uint16_t PalMajorVersion  = PAL_INTERFACE_MAJOR_VERSION;
-        constexpr uint8_t  PalMinorVersion  = PAL_INTERFACE_MINOR_VERSION;
-
-        constexpr char timestamp[]    = __DATE__ __TIME__;
-        const uint32_t timestampHash  = Util::HashLiteralString<sizeof(timestamp)>(timestamp);
-
-        memset(m_pipelineCacheUUID, 0, VK_UUID_SIZE);
-
-        Util::SystemInfo systemInfo = {};
-
-        result = Util::QuerySystemInfo(&systemInfo);
-        if (result == Pal::Result::Success)
-        {
-            Util::MetroHash128 hash = {};
-            hash.Update(timestampHash);
-            hash.Update(palProps.vendorId);
-            hash.Update(palProps.deviceId);
-            hash.Update(PalMajorVersion);
-            hash.Update(PalMinorVersion);
-            hash.Update(systemInfo.cpuType);
-            hash.Update(systemInfo.cpuVendorString[0]);
-            hash.Update(systemInfo.cpuBrandString[0]);
-            hash.Update(systemInfo.cpuLogicalCoreCount);
-            hash.Update(systemInfo.cpuPhysicalCoreCount);
-            hash.Update(systemInfo.totalSysMemSize);
-            hash.Finalize(m_pipelineCacheUUID);
-        }
+        GenerateCacheUuid(settings, PalProperties(), m_appProfile, &m_pipelineCacheUUID);
     }
 
     // Collect properties for perf experiments (this call can fail; we just don't report support for
@@ -2000,7 +2025,8 @@ VkResult PhysicalDevice::GetDeviceProperties(
     pProperties->sparseProperties.residencyNonResidentStrict =
         GetPrtFeatures() & Pal::PrtFeatureStrictNull ? VK_TRUE : VK_FALSE;
 
-    memcpy(pProperties->pipelineCacheUUID, m_pipelineCacheUUID, VK_UUID_SIZE);
+    static_assert(sizeof(m_pipelineCacheUUID.raw) == VK_UUID_SIZE, "sizeof(Util::Uuid::Uuid) must be VK_UUID_SIZE");
+    memcpy(pProperties->pipelineCacheUUID, m_pipelineCacheUUID.raw, VK_UUID_SIZE);
 
     return VK_SUCCESS;
 }
@@ -3403,7 +3429,7 @@ static bool IsConditionalRenderingSupported(
 {
     bool isSupported = true;
 
-    if (isSupported && (pPhysicalDevice != nullptr))
+    if (pPhysicalDevice != nullptr)
     {
         // Conditional rendering must be supported on all exposed graphics and compute queue types.
         for (uint32_t engineType = 0; engineType < Pal::EngineTypeCount; engineType++)
@@ -3618,9 +3644,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_FRAGMENT_SHADING_RATE));
         }
 
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SAMPLER_YCBCR_CONVERSION));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_BUFFER_DEVICE_ADDRESS));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_TERMINATE_INVOCATION));
+
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_4444_FORMATS));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SYNCHRONIZATION2));
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -5119,6 +5149,13 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SYNCHRONIZATION_2_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceSynchronization2FeaturesKHR*>(pHeader);
+                pExtInfo->synchronization2 = VK_TRUE;
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_CUSTOM_BORDER_COLOR_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceCustomBorderColorFeaturesEXT*>(pHeader);
@@ -6365,7 +6402,7 @@ static void VerifyExtensions(
                && dev.IsExtensionSupported(DeviceExtensions::KHR_MAINTENANCE3)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_MULTIVIEW)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_RELAXED_BLOCK_LAYOUT)
-//             && dev.IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION)
+               && dev.IsExtensionSupported(DeviceExtensions::KHR_SAMPLER_YCBCR_CONVERSION)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_SHADER_DRAW_PARAMETERS)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_STORAGE_BUFFER_STORAGE_CLASS)
                && dev.IsExtensionSupported(DeviceExtensions::KHR_VARIABLE_POINTERS));

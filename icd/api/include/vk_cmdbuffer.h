@@ -267,6 +267,13 @@ struct TransformFeedbackState
     bool                enabled;
 };
 
+enum AcquireReleaseMode
+{
+    Release = 0,
+    Acquire,
+    ReleaseThenAcquire
+};
+
 // =====================================================================================================================
 // A Vulkan command buffer.
 class CmdBuffer
@@ -530,6 +537,10 @@ public:
         VkEvent                                     event,
         PipelineStageFlags                          stageMask);
 
+    void SetEvent2(
+        VkEvent                                     event,
+        const VkDependencyInfoKHR*                  pDependencyInfo);
+
     void ResetEvent(
         VkEvent                                     event,
         PipelineStageFlags                          stageMask);
@@ -546,6 +557,26 @@ public:
         uint32_t                                    imageMemoryBarrierCount,
         const VkImageMemoryBarrier*                 pImageMemoryBarriers);
 
+    void WaitEvents2(
+        uint32_t                                    eventCount,
+        const VkEvent*                              pEvents,
+        const VkDependencyInfoKHR*                  pDependencyInfos);
+
+    void WaitEventsSync2ToSync1(
+        uint32_t                                    eventCount,
+        const VkEvent*                              pEvents,
+        uint32_t                                    dependencyCount,
+        const VkDependencyInfoKHR*                  pDependencyInfos);
+
+    void ExecuteAcquireRelease(
+        uint32_t                                    eventCount,
+        const VkEvent*                              pEvents,
+        uint32_t                                    deviceIdx,
+        uint32_t                                    dependencyCount,
+        const VkDependencyInfoKHR*                  pDependencyInfos,
+        AcquireReleaseMode                          acquireReleaseMode,
+        uint32_t                                    rgpBarrierReasonType);
+
     void PipelineBarrier(
         PipelineStageFlags                          srcStageMask,
         PipelineStageFlags                          dstStageMask,
@@ -555,6 +586,12 @@ public:
         const VkBufferMemoryBarrier*                pBufferMemoryBarriers,
         uint32_t                                    imageMemoryBarrierCount,
         const VkImageMemoryBarrier*                 pImageMemoryBarriers);
+
+    void PipelineBarrier2(
+        const VkDependencyInfoKHR*                  pDependencyInfo);
+
+    void PipelineBarrierSync2ToSync1(
+        const VkDependencyInfoKHR*                  pDependencyInfo);
 
     void BeginQueryIndexed(
         VkQueryPool                                 queryPool,
@@ -1090,11 +1127,18 @@ private:
 
         struct
         {
-            uint32_t is2ndLvl                  :  1;
-            uint32_t isRecording               :  1;
-            uint32_t needResetState            :  1;
-            uint32_t hasConditionalRendering   :  1;
-            uint32_t reserved                  : 28;
+            uint32_t is2ndLvl                            :  1;
+            uint32_t isRecording                         :  1;
+            uint32_t wasBegun                            :  1;
+            uint32_t hasConditionalRendering             :  1;
+            uint32_t padVertexBuffers                    :  1;
+            uint32_t prefetchCommands                    :  1;
+            uint32_t prefetchShaders                     :  1;
+            uint32_t disableResetReleaseResources        :  1;
+            uint32_t subpassLoadOpClearsBoundAttachments :  1;
+            uint32_t hasReleaseAcquire                   :  1;
+            uint32_t reserved2                           :  2;
+            uint32_t reserved                            : 20;
         };
     };
 
@@ -1113,6 +1157,9 @@ private:
     AllGpuRenderState             m_allGpuState; // Render state tracked during command buffer building
 
     CmdBufferFlags                m_flags;
+    OptimizeCmdbufMode            m_optimizeCmdbufMode;
+    uint32_t                      m_asyncComputeQueueMaxWavesPerCu;
+
     VkResult                      m_recordingResult; // Tracks the result of recording commands to capture OOM errors
 
     const DeviceBarrierPolicy     m_barrierPolicy;   // Barrier policy to use with this command buffer
@@ -1694,6 +1741,39 @@ VKAPI_ATTR void VKAPI_CALL vkCmdBeginConditionalRenderingEXT(
 
 VKAPI_ATTR void VKAPI_CALL vkCmdEndConditionalRenderingEXT(
     VkCommandBuffer                           commandBuffer);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetEvent2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkEvent                                     event,
+    const VkDependencyInfoKHR*                  pDependencyInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdResetEvent2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkEvent                                     event,
+    VkPipelineStageFlags2KHR                    stageMask);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdWaitEvents2KHR(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    eventCount,
+    const VkEvent*                              pEvents,
+    const VkDependencyInfoKHR*                  pDependencyInfos);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkDependencyInfoKHR*                  pDependencyInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteTimestamp2KHR(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineStageFlags2KHR                    stage,
+    VkQueryPool                                 queryPool,
+    uint32_t                                    query);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdWriteBufferMarker2AMD(
+    VkCommandBuffer                             commandBuffer,
+    VkPipelineStageFlags2KHR                    stage,
+    VkBuffer                                    dstBuffer,
+    VkDeviceSize                                dstOffset,
+    uint32_t                                    marker);
 
 VKAPI_ATTR void VKAPI_CALL vkCmdSetCullModeEXT(
     VkCommandBuffer                             commandBuffer,

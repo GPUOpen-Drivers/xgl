@@ -84,6 +84,7 @@ enum class AppProfile : uint32_t
     XPlane,                // XPlane by Laminar Research
     WarThunder,            // WarThunder by Gaijin Distribution Kft
     Quake2RTX,             // Quake2 RTX
+    Valheim,               // Valheim by Coffee Stain Studios
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)
@@ -96,6 +97,7 @@ enum class AppProfile : uint32_t
     AnvilNextEngine,       // AnvilNext Engine by Ubisoft (Default)
     QuanticDreamEngine,    // Quantic Dream Engine by Quantic Dream
     XSystemEngine,         // XSystem Engine by Laminar Research
+    UnityEngine,           // Unity Engine by Unity Technologies (Default)
     SaschaWillemsExamples, // Vulkan Examples by Sascha Willems
 };
 

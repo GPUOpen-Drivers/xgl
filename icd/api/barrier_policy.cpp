@@ -116,6 +116,55 @@ public:
     {
         uint32_t index = 0;
 
+        switch (static_cast<uint32_t>(layout))
+        {
+        case VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR:
+        {
+            if (Formats::IsDepthStencilFormat(format))
+            {
+                layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+            }
+            else if (Formats::HasStencil(format))
+            {
+                layout = VK_IMAGE_LAYOUT_STENCIL_READ_ONLY_OPTIMAL;
+            }
+            else if (Formats::HasDepth(format))
+            {
+                layout = VK_IMAGE_LAYOUT_DEPTH_READ_ONLY_OPTIMAL_KHR;
+            }
+            else
+            {
+                layout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            }
+
+            break;
+        }
+        case VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR:
+        {
+            if (Formats::IsDepthStencilFormat(format))
+            {
+                layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+            }
+            else if (Formats::HasStencil(format))
+            {
+                layout = VK_IMAGE_LAYOUT_STENCIL_ATTACHMENT_OPTIMAL;
+            }
+            else if (Formats::HasDepth(format))
+            {
+                layout = VK_IMAGE_LAYOUT_DEPTH_ATTACHMENT_OPTIMAL;
+            }
+            else
+            {
+                layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+            }
+
+            break;
+        }
+
+        default:
+            break;
+        }
+
         if (static_cast<uint32_t>(layout) < VK_IMAGE_LAYOUT_RANGE_SIZE)
         {
             index = static_cast<uint32_t>(layout);
@@ -227,6 +276,12 @@ static VK_INLINE uint32_t ImageLayoutToCacheMask(VkImageLayout imageLayout)
     case VK_IMAGE_LAYOUT_SHARED_PRESENT_KHR:
         cacheMask |= Pal::CoherCopy | Pal::CoherResolve | Pal::CoherClear | Pal::CoherShader | Pal::CoherTimestamp;
         break;
+    case VK_IMAGE_LAYOUT_READ_ONLY_OPTIMAL_KHR:
+        cacheMask |= Pal::CoherShader | Pal::CoherColorTarget | Pal::CoherDepthStencilTarget;
+        break;
+    case VK_IMAGE_LAYOUT_ATTACHMENT_OPTIMAL_KHR:
+        cacheMask |= Pal::CoherColorTarget | Pal::CoherDepthStencilTarget;
+        break;
     default:
         break;
     }
@@ -243,6 +298,11 @@ static VK_INLINE uint32_t SrcAccessToCacheMask(AccessFlags accessMask, VkImageLa
     if (accessMask & VK_ACCESS_SHADER_WRITE_BIT)
     {
         cacheMask = Pal::CoherShader;
+    }
+
+    if (accessMask & VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT_KHR)
+    {
+        cacheMask |= Pal::CoherShader;
     }
 
     if (accessMask & VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT)
@@ -312,6 +372,8 @@ static VK_INLINE uint32_t DstAccessToCacheMask(AccessFlags accessMask, VkImageLa
     constexpr AccessFlags shaderReadAccessFlags = VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT
                                                   | VK_ACCESS_UNIFORM_READ_BIT
                                                   | VK_ACCESS_INPUT_ATTACHMENT_READ_BIT
+                                                  | VK_ACCESS_2_SHADER_SAMPLED_READ_BIT_KHR
+                                                  | VK_ACCESS_2_SHADER_STORAGE_READ_BIT_KHR
                                                   | VK_ACCESS_SHADER_READ_BIT;
 
     if (accessMask & shaderReadAccessFlags)
@@ -636,8 +698,7 @@ void DeviceBarrierPolicy::InitQueueFamilyPolicies(
                                              | Pal::LayoutCopyDst
                                              | Pal::LayoutResolveSrc
                                              | Pal::LayoutResolveDst
-                                             | Pal::LayoutSampleRate
-                                             ;
+                                             | Pal::LayoutSampleRate;
 
             // Always prefer executing ownership transfer barriers on the universal queue.
             policy.ownershipTransferPriority = OwnershipTransferPriority::High;
@@ -1151,6 +1212,15 @@ template void ImageBarrierPolicy::ApplyImageMemoryBarrier<VkImageMemoryBarrier>(
     Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask],
     bool                                skipMatchingLayouts) const;
 
+template void ImageBarrierPolicy::ApplyImageMemoryBarrier<VkImageMemoryBarrier2KHR>(
+    uint32_t                            currentQueueFamilyIndex,
+    const VkImageMemoryBarrier2KHR&     barrier,
+    Pal::BarrierTransition*             pPalBarrier,
+    bool*                               pLayoutChanging,
+    Pal::ImageLayout                    oldPalLayouts[MaxPalAspectsPerMask],
+    Pal::ImageLayout                    newPalLayouts[MaxPalAspectsPerMask],
+    bool                                skipMatchingLayouts) const;
+
 // =====================================================================================================================
 // Returns the layout engine mask corresponding to a queue family index.
 uint32_t ImageBarrierPolicy::GetQueueFamilyLayoutEngineMask(
@@ -1311,6 +1381,11 @@ void BufferBarrierPolicy::ApplyBufferMemoryBarrier(
 template void BufferBarrierPolicy::ApplyBufferMemoryBarrier<VkBufferMemoryBarrier>(
     uint32_t                            currentQueueFamilyIndex,
     const VkBufferMemoryBarrier&        barrier,
+    Pal::BarrierTransition*             pPalBarrier) const;
+
+template void BufferBarrierPolicy::ApplyBufferMemoryBarrier<VkBufferMemoryBarrier2KHR>(
+    uint32_t                            currentQueueFamilyIndex,
+    const VkBufferMemoryBarrier2KHR&    barrier,
     Pal::BarrierTransition*             pPalBarrier) const;
 
 } //namespace vk

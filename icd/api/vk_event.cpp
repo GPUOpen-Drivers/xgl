@@ -78,10 +78,29 @@ VkResult Event::Create(
     Pal::Result palResult                        = Pal::Result::Success;
     bool useToken                                = false;
 
+    Pal::DeviceProperties info;
+    pDevice->PalDevice(DefaultDeviceIndex)->GetProperties(&info);
+
+    // If supportReleaseAcquireInterface is true, the ASIC provides new barrier interface CmdReleaseThenAcquire()
+    // designed for Acquire/Release-based driver. This flag is currently enabled for gfx9 and above.
+    // If supportSplitReleaseAcquire is true, the ASIC provides split CmdRelease() and CmdAcquire() to express barrier,
+    // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
+    bool hasReleaseAcquire          = info.gfxipProperties.flags.supportReleaseAcquireInterface;
+    bool hasSplitReleaseAcquire     = info.gfxipProperties.flags.supportSplitReleaseAcquire;
+
+    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
+
+    if (hasReleaseAcquire && hasSplitReleaseAcquire && settings.syncTokenEnabled &&
+        ((pCreateInfo->flags & VK_EVENT_CREATE_DEVICE_ONLY_BIT_KHR) != 0))
+    {
+        useToken = true;
+    }
+
     // we need to allocate enough system memory for the api objects
     const size_t apiSize = sizeof(Event);
 
     Pal::GpuEventCreateInfo eventCreateInfo = {};
+    eventCreateInfo.flags.gpuAccessOnly = ((pCreateInfo->flags & VK_EVENT_CREATE_DEVICE_ONLY_BIT_KHR) != 0) ? 1 : 0;
 
     const size_t palSize = useToken ?
         0 : pDevice->PalDevice(DefaultDeviceIndex)->GetGpuEventSize(eventCreateInfo, nullptr);
@@ -127,6 +146,12 @@ VkResult Event::Create(
             allocInfo.pal.flags.shareable    = (numDeviceEvents > 1) ? 1 : 0;
 
             InternalSubAllocPool pool = InternalPoolCpuCacheableGpuUncached;
+
+            if (((pCreateInfo->flags & VK_EVENT_CREATE_DEVICE_ONLY_BIT_KHR) != 0) &&
+                (numDeviceEvents == 1))
+            {
+                pool = InternalPoolGpuAccess;
+            }
 
             pDevice->MemMgr()->GetCommonPool(pool, &allocInfo);
 

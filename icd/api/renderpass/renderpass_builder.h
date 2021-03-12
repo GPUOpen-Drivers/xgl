@@ -70,8 +70,8 @@ public:
         AttachRefResolveSrc           = 0x00000010, // Color attachment used as a resolve source
         AttachRefResolveDst           = 0x00000020, // Resolve attachment
         AttachRefPreserve             = 0x00000040, // Preserve attachment (not really used)
-        AttachRefExternalPostInstance = 0x00000080  // Dummy flag denoting post-instance reference
-        , AttachRefFragShading        = 0x00000100  // Fragment shading rate attachment
+        AttachRefExternalPostInstance = 0x00000080, // Dummy flag denoting post-instance reference
+        AttachRefFragShading          = 0x00000100  // Fragment shading rate attachment
     };
 
     // State tracked per attachment during building
@@ -128,15 +128,9 @@ public:
         Util::List<RPResolveInfo, utils::TempMemArena>     resolves;
 
         // Build-time state for RPExecuteEndSubpassInfo:
-        SyncPointState                              syncBottom;
+        SyncPointState                                     syncBottom;
 
-        bool                                        hasFirstUseAttachments; // True if this subpass has first-use
-                                                                            // references
-        bool                                        hasFinalUseAttachments; // Same as above, but final-use.
-        bool                                        hasExternalIncoming;    // True if an explicit VkSubpassDependency
-                                                                            // exists with src = VK_SUBPASS_EXTERNAL
-                                                                            // and dst = this.
-        bool                                        hasExternalOutgoing;    // Same as above, but src and dst reversed.
+        SubpassStateFlags                                  flags;
     };
 
     // State tracked for the end-instance state during building (analogous to RPExecuteEndState).
