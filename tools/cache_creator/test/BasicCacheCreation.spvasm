@@ -5,14 +5,14 @@
 ; RUN: split-file %s %t
 
 ; Compile the vertex shader into a relocatable ELF. Save the compilation output to a log so that other test can refer to it.
-; RUN: amdllpc %t/vert.spvasm %gfxip %spvgen %reloc -add-hash-to-elf -v -o %t.vert.elf > %t.vert.amdllpc.log 2>&1 \
+; RUN: amdllpc %t/vert.spvasm %gfxip %spvgen %reloc -v -o %t.vert.elf > %t.vert.amdllpc.log 2>&1 \
 ; RUN:   && cat %t.vert.amdllpc.log | FileCheck --check-prefix=LLPC-VERT %s
 ; LLPC-VERT-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
 ; LLPC-VERT-LABEL: {{^=====}}  AMDLLPC SUCCESS  =====
 
 ; Compile the fragment shader into a relocatable ELF. Save the compilation output to a log so that other test can refer to it.
-; RUN: amdllpc %t/frag.spvasm %gfxip %spvgen %reloc -add-hash-to-elf -v -o %t.frag.elf > %t.frag.amdllpc.log 2>&1 \
-; RUN:   && cat %t.frag.amdllpc.log | FileCheck --check-prefix=LLPC-VERT %s
+; RUN: amdllpc %t/frag.spvasm %gfxip %spvgen %reloc -v -o %t.frag.elf > %t.frag.amdllpc.log 2>&1 \
+; RUN:   && cat %t.frag.amdllpc.log | FileCheck --check-prefix=LLPC-FRAG %s
 ; LLPC-FRAG-LABEL: {{^// LLPC}} SPIRV-to-LLVM translation results
 ; LLPC-FRAG-LABEL: {{^=====}}  AMDLLPC SUCCESS  =====
 
@@ -202,8 +202,8 @@
     %v4float = OpTypeVector %float 4
 %_ptr_Output_v4float = OpTypePointer Output %v4float
   %fragColor = OpVariable %_ptr_Output_v4float Output
-    %float_1 = OpConstant %float 1
-         %11 = OpConstantComposite %v4float %float_1 %float_1 %float_1 %float_1
+    %float_0 = OpConstant %float 0
+         %11 = OpConstantComposite %v4float %float_0 %float_0 %float_0 %float_0
        %main = OpFunction %void None %3
           %5 = OpLabel
                OpStore %fragColor %11
