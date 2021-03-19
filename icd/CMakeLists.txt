@@ -124,6 +124,10 @@ target_compile_definitions(xgl PRIVATE PAL_BUILD_RENOIR)
 
 target_compile_definitions(xgl PRIVATE PAL_BUILD_VEGA20)
 
+if(XGL_BUILD_NAVI22)
+    target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI22=1)
+endif()
+
 if(TARGET_ARCHITECTURE_BITS EQUAL 32)
     target_compile_definitions(xgl PRIVATE ICD_X86_BUILD)
 elseif(TARGET_ARCHITECTURE_BITS EQUAL 64)
