@@ -49,5 +49,5 @@ configure_lit_site_cfg(
 # You can execute test by building the `check-cache-creator` target, e.g., `ninja check-cache-creator`.
 add_lit_testsuite(check-cache-creator "Running the XGL cache creator regression tests"
     ${CMAKE_CURRENT_BINARY_DIR}
-    DEPENDS cache-creator cache-info amdllpc spvgen FileCheck count not split-file
+    DEPENDS cache-creator cache-info amdllpc spvgen FileCheck count not split-file llvm-objdump llvm-readelf
 )
