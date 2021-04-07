@@ -146,6 +146,8 @@ macro(xgl_overrides_pal)
 
     set(PAL_BUILD_GFX10 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
+    set(PAL_BUILD_NAVI12 ${XGL_BUILD_NAVI12} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
     set(PAL_BUILD_NAVI14 ON CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
     set(PAL_BUILD_GFX103 ${XGL_BUILD_GFX103} CACHE BOOL "${PROJECT_NAME} override." FORCE)
@@ -181,6 +183,8 @@ macro(xgl_overrides_vkgc)
     if(ICD_BUILD_LLPC)
 
         set(LLPC_BUILD_LIT ${XGL_BUILD_LIT} CACHE BOOL "${PROJECT_NAME} override." FORCE)
+
+        set(LLPC_BUILD_NAVI12 ${XGL_BUILD_NAVI12} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 
         set(LLPC_BUILD_NAVI22 ${XGL_BUILD_NAVI22} CACHE BOOL "${PROJECT_NAME} override." FORCE)
 

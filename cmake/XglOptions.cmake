@@ -36,6 +36,8 @@ macro(xgl_options)
 
     option(XGL_BUILD_GFX103 "Build open source vulkan for GFX103" ON)
 
+    option(XGL_BUILD_NAVI12 "Build open source vulkan for Navi12" ON)
+
     option(XGL_BUILD_NAVI22 "Build open source vulkan for Navi22" ON)
 
     option(XGL_BUILD_LIT "Build with Lit test?" OFF)
