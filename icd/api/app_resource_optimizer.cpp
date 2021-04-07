@@ -96,6 +96,29 @@ void ResourceOptimizer::ApplyProfileToImageCreateInfo(
 }
 
 // =====================================================================================================================
+void ResourceOptimizer::ApplyProfileToImageViewCreateInfo(
+    const ResourceProfile&           profile,
+    const ResourceOptimizerKey&      resourceKey,
+    Pal::ImageViewInfo*              pViewInfo) const
+{
+    VK_ASSERT(pViewInfo != nullptr);
+    for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
+    {
+        const ResourceProfileEntry& profileEntry = profile.entries[entry];
+
+        if (ResourcePatternMatchesResource(profileEntry.pattern, resourceKey))
+        {
+            const auto& resourceCreate = profileEntry.action.resourceCreate;
+
+            if (resourceCreate.apply.mallNoAlloc)
+            {
+                pViewInfo->flags.bypassMallRead = 1;
+                pViewInfo->flags.bypassMallWrite = 1;
+            }
+        }
+    }
+}
+// =====================================================================================================================
 void ResourceOptimizer::OverrideImageCreateInfo(
     const ResourceOptimizerKey&  resourceKey,
     Pal::ImageCreateInfo*        pCreateInfo)
@@ -109,7 +132,19 @@ void ResourceOptimizer::OverrideImageCreateInfo(
 #endif
 
 }
+// =====================================================================================================================
+void ResourceOptimizer::OverrideImageViewCreateInfo(
+    const ResourceOptimizerKey&  resourceKey,
+    Pal::ImageViewInfo*          pPalViewInfo) const
+{
+    ApplyProfileToImageViewCreateInfo(m_appProfile, resourceKey, pPalViewInfo);
 
+    ApplyProfileToImageViewCreateInfo(m_tuningProfile, resourceKey, pPalViewInfo);
+
+#if ICD_RUNTIME_APP_PROFILE
+    ApplyProfileToImageViewCreateInfo(m_runtimeProfile, resourceKey, pPalViewInfo);
+#endif
+}
 // =====================================================================================================================
 ResourceOptimizer::~ResourceOptimizer()
 {
@@ -118,7 +153,7 @@ ResourceOptimizer::~ResourceOptimizer()
 // =====================================================================================================================
 bool ResourceOptimizer::ResourcePatternMatchesResource(
     const ResourceProfilePattern&   pattern,
-    const ResourceOptimizerKey&     resourceKey)
+    const ResourceOptimizerKey&     resourceKey) const
 {
     if (pattern.match.always)
     {

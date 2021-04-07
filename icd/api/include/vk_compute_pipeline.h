@@ -97,9 +97,6 @@ protected:
         uint32_t                             staticStateMask,
         uint64_t                             apiHash);
 
-    void CreateStaticState();
-    void DestroyStaticState(const VkAllocationCallbacks* pAllocator);
-
     // Converted creation info parameters of the Vulkan compute pipeline
     struct CreateInfo
     {
@@ -113,13 +110,6 @@ protected:
         Device*                            pDevice,
         const VkComputePipelineCreateInfo* pIn,
         CreateInfo*                        pOutInfo);
-
-    static VkResult CreateComputePipelineBinaries(
-        Device*                            pDevice,
-        PipelineCache*                     pPipelineCache,
-        CreateInfo*                        pCreateInfo,
-        size_t                             pipelineBinarySizes[MaxPalDevices],
-        void*                              pPipelineBinaries[MaxPalDevices]);
 
     static uint64_t BuildApiHash(
         const VkComputePipelineCreateInfo* pCreateInfo,

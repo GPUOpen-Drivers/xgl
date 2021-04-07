@@ -158,9 +158,7 @@ VkResult Instance::Create(
     const VkAllocationCallbacks* pAllocCb = pAllocator;
     const VkApplicationInfo* pAppInfo = pCreateInfo->pApplicationInfo;
 
-    // It's temporary for vulkancts-imgtec.
-    if ((pAllocCb == nullptr) ||
-        ((pAllocCb->pfnAllocation == nullptr) && (pAllocCb->pfnFree == nullptr)))
+    if (pAllocCb == nullptr)
     {
         pAllocCb = &allocator::g_DefaultAllocCallback;
     }
@@ -713,6 +711,9 @@ VkResult Instance::Destroy(void)
     // Free memory
     FreeMem(this);
 
+    // __gcov_flush() is used to flush code coverage data to files. It would be called by Android native process when it
+    // exits. But for Android apk process, it should be called explicitly.
+
     // Cannot fail.
     return VK_SUCCESS;
 }
@@ -732,6 +733,9 @@ VkResult Instance::EnumeratePhysicalDevices(
     // Query physical devices from the manager
     return m_pPhysicalDeviceManager->EnumeratePhysicalDevices(pPhysicalDeviceCount, pPhysicalDevices);
 }
+
+// =====================================================================================================================
+// Enumerates the GPUs in the system.
 
 // =====================================================================================================================
 // Returns whether a device extension is available.

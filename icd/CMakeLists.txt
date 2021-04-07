@@ -23,193 +23,40 @@
  #
  #######################################################################################################################
 add_library(xgl SHARED)
+
 set(ICD_TARGET amdvlk${TARGET_ARCHITECTURE_BITS})
 set_target_properties(xgl PROPERTIES OUTPUT_NAME ${ICD_TARGET})
 set_target_properties(xgl PROPERTIES PREFIX "")
+
 install(TARGETS xgl DESTINATION ${CMAKE_SOURCE_DIR}/lib/${CMAKE_BUILD_TYPE})
 
 ### Compiler Options ###################################################################################################
+xgl_compiler_options(xgl)
+
+# Add global compile option to enable position independent code (we get link errors for clang/lld otherwise)
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    if(ICD_ANALYSIS_WARNINGS_AS_ERRORS)
-        target_compile_options(xgl PRIVATE
-            -Werror
-            -Wno-error=comment
-            -Wno-error=pointer-arith
-        )
-    endif()
-
-    target_compile_options(xgl PRIVATE
-        -fno-exceptions
-        -fno-strict-aliasing
-        -pthread
-    )
-    # Add global compile option to enable position independent code (we get link errors for clang/lld otherwise)
     add_compile_options(-fPIC)
-
-    target_compile_options(xgl PRIVATE $<$<COMPILE_LANGUAGE:CXX>:
-        -fno-math-errno
-        -fno-rtti
-        -std=c++14
-        -Wno-missing-field-initializers
-        -Wno-pointer-arith
-        -Wno-switch
-        -Wno-unused
-        -Wno-unused-parameter
-    >)
-
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-        target_compile_options(xgl PRIVATE
-            # Output with color if in terminal: https://github.com/ninja-build/ninja/wiki/FAQ
-            -fdiagnostics-color=always
-            -mpreferred-stack-boundary=6
-            -fno-threadsafe-statics
-            -fmerge-all-constants
-            -fms-extensions
-        )
-    elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-        target_compile_options(xgl PRIVATE
-            # Output with color if in terminal: https://github.com/ninja-build/ninja/wiki/FAQ
-            -fcolor-diagnostics
-        )
-    endif()
-
-    if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU"
-            OR (CMAKE_CXX_COMPILER_ID MATCHES "Clang" AND CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL 7))
-        target_compile_options(xgl PRIVATE
-            -fno-delete-null-pointer-checks
-        )
-    endif()
-
-    if(TARGET_ARCHITECTURE_BITS EQUAL 32)
-        target_compile_options(xgl PRIVATE -msse -msse2)
-    endif()
-
-    if(CMAKE_BUILD_TYPE_RELEASE)
-        target_compile_options(xgl PRIVATE -O3)
-        if(XGL_ENABLE_LTO)
-            if(${CMAKE_CXX_COMPILER_ID} MATCHES "GNU")
-                execute_process(COMMAND ${CMAKE_C_COMPILER} -dumpversion OUTPUT_VARIABLE GCC_VERSION)
-                if(GCC_VERSION VERSION_GREATER 5.3 OR GCC_VERSION VERSION_EQUAL 5.3)
-                    # add global definition to enable LTO here since some components have no option
-                    # to enable it.
-                    add_definitions("-flto -fuse-linker-plugin -Wno-odr")
-                    message(WARNING "LTO enabled for XGL")
-                endif()
-            elseif(${CMAKE_CXX_COMPILER_ID} MATCHES "Clang")
-                # add global definition to enable LTO here since some components have no option
-                # to enable it.
-                add_definitions("-flto=thin")
-                message(WARNING "LTO enabled for XGL")
-            endif()
-        endif()
-    endif()
-else()
-    message(FATAL_ERROR "Using unknown compiler")
 endif()
 
-### Build Definitions ##################################################################################################
-target_compile_definitions(xgl PRIVATE ${TARGET_ARCHITECTURE_ENDIANESS}ENDIAN_CPU)
-target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX9=1)
-target_compile_definitions(xgl PRIVATE PAL_BUILD_GFX10)
+### Build Definitions #################################################################################################
+xgl_set_compile_definitions()
 
-# Internal developer build
-
-if(ICD_BUILD_LLPC)
-    target_compile_definitions(xgl PRIVATE ICD_BUILD_LLPC)
-endif()
-
-target_compile_definitions(xgl PRIVATE PAL_BUILD_RAVEN2)
-
-target_compile_definitions(xgl PRIVATE PAL_BUILD_RENOIR)
-
-target_compile_definitions(xgl PRIVATE PAL_BUILD_VEGA20)
-
-if(XGL_BUILD_NAVI22)
-    target_compile_definitions(xgl PRIVATE VKI_BUILD_NAVI22=1)
-endif()
-
-if(TARGET_ARCHITECTURE_BITS EQUAL 32)
-    target_compile_definitions(xgl PRIVATE ICD_X86_BUILD)
-elseif(TARGET_ARCHITECTURE_BITS EQUAL 64)
-    target_compile_definitions(xgl PRIVATE ICD_X64_BUILD)
-endif()
-
-# Turn on the memory tracker if enabled.
-if(ICD_MEMTRACK)
-    target_compile_definitions(xgl PRIVATE ICD_MEMTRACK)
-endif()
-
-# Enable relevant GPUOpen preprocessor definitions
-if(ICD_GPUOPEN_DEVMODE_BUILD)
-    target_compile_definitions(xgl PRIVATE ICD_GPUOPEN_DEVMODE_BUILD)
-    # The name of the variable below must match the one in the GpuOpen CMakeLists.txt
-endif()
-
-target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
-target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MAJOR_VERSION_SUPPORTS_SHADER_CACHE_EXPECTED_ENTRIES=${PAL_CLIENT_INTERFACE_MAJOR_VERSION})
-target_compile_definitions(xgl PRIVATE PAL_CLIENT_INTERFACE_MINOR_VERSION=${PAL_CLIENT_INTERFACE_MINOR_VERSION})
-
-target_compile_definitions(xgl PRIVATE LLPC_CLIENT_INTERFACE_MAJOR_VERSION=${LLPC_CLIENT_INTERFACE_MAJOR_VERSION})
-
+### Include Directories ################################################################################################
 if (BUILD_WAYLAND_SUPPORT)
-    target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_WAYLAND_KHR)
     target_include_directories(xgl PUBLIC ${WAYLAND_INCLUDE_DIRS})
 endif()
 
-set(XCB_REQUIRED ON)
-if(XCB_REQUIRED)
-    find_package(XCB)
-endif()
-if (${XCB_RANDR_LEASE})
-    target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_XRANDR_EXT=1)
-endif()
-
-if(UNIX AND XCB_REQUIRED)
-    target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XCB_KHR)
-    target_compile_definitions(xgl PRIVATE VK_USE_PLATFORM_XLIB_KHR)
-endif()
-
-#if VKI_KHR_DISPLAY
-if(VKI_KHR_DISPLAY)
-    target_compile_definitions(xgl PRIVATE VKI_KHR_DISPLAY)
-endif()
-#endif
-#if VKI_NORMALIZED_TRIG_FUNCTIONS
-if(VKI_NORMALIZED_TRIG_FUNCTIONS)
-    target_compile_definitions(xgl PRIVATE VKI_NORMALIZED_TRIG_FUNCTIONS)
-endif()
-#endif
-
-### Include Directories ################################################################################################
-
-target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_include_directories(xgl PRIVATE imported)
-
 target_include_directories(xgl PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
     api
     api/include
-    ${XGL_VKGC_PATH}/include
 )
 
-target_include_directories(xgl PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
-
-#if VKI_KHR_DEFERRED_HOST_OPERATIONS
-if(VKI_KHR_DEFERRED_HOST_OPERATIONS)
-    target_compile_definitions(xgl PRIVATE VKI_KHR_DEFERRED_HOST_OPERATIONS)
-endif()
-#endif
-
-#if VKI_EXPOSE_EXT_CONDITIONAL_RENDERING
-if(VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
-    target_compile_definitions(xgl PRIVATE VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
-endif()
-#endif
-
 ### XGL Subprojects ####################################################################################################
-### PAL ########################################################################
+# PAL
 add_subdirectory(${XGL_PAL_PATH} ${PROJECT_BINARY_DIR}/pal)
 
-### XGL cache creator tool ####################################################
+# XGL cache creator tool
 if(XGL_BUILD_CACHE_CREATOR)
     if(NOT ICD_BUILD_LLPC)
         message(FATAL_ERROR "Cannot build cache-creator tools without LLPC")
@@ -219,36 +66,7 @@ endif()
 
 ### XGL Sources ########################################################################################################
 
-### ICD api ####################################################################
-
-### ICD Auto-generated Shader Profiles Files ###########################################################################
-# ICD_GENDIR Path to the code generation tools
-set(ICD_GENDIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate)
-
-# ICD shader profile code generation main script
-set(ICD_GEN_SHADER_PROFILE_SCRIPTS ${ICD_GENDIR}/genShaderProfile.py ${ICD_GENDIR}/shaderProfileTemplate.py)
-
-set(ICD_SHADER_PROFILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/appopt)
-
-set(ICD_SHADER_PROFILE_SOURCE_FILES_DIR
-    ${ICD_SHADER_PROFILE_DIR}/shader_profiles
-    )
-
-add_custom_command(
-    OUTPUT ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.cpp ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.h
-    COMMAND ${PYTHON_CMD} ${ICD_GENDIR}/genShaderProfile.py ${ICD_SHADER_PROFILE_DIR}/shader_profiles
-    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
-    COMMENT "Generating shader profiles code from all profile.json files"
-)
-
-add_custom_target(
-    GenerateShaderProfiles
-    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
-    COMMENT "Checking if re-generation is required for shader profiles"
-)
-
-add_dependencies(xgl GenerateShaderProfiles)
-
+### ICD api ###################################################################
 target_sources(xgl PRIVATE
     api/app_profile.cpp
     api/app_resource_optimizer.cpp
@@ -317,6 +135,12 @@ target_sources(xgl PRIVATE
     api/icd_main.cpp
 )
 
+if(ICD_BUILD_LLPC)
+    target_sources(xgl PRIVATE
+        api/compiler_solution_llpc.cpp
+    )
+endif()
+
 # vk_physical_device.cpp uses the __DATE__ and __TIME__ macros to generate a pipelineCacheUUID.
 # The following rule forces vk_physical_device.cpp to be re-compiled on every build, so that
 # an up-to-date time/date is always used regardless of which files were touched since the last build.
@@ -332,7 +156,35 @@ add_custom_target(
 
 add_dependencies(xgl RebuildVkPhysicalDevice)
 
-### ICD Auto-generated String Files ####################################################################################
+### ICD Auto-generated Shader Profiles Files ##################################
+# ICD_GENDIR Path to the code generation tools
+set(ICD_GENDIR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate)
+
+# ICD shader profile code generation main script
+set(ICD_GEN_SHADER_PROFILE_SCRIPTS ${ICD_GENDIR}/genShaderProfile.py ${ICD_GENDIR}/shaderProfileTemplate.py)
+
+set(ICD_SHADER_PROFILE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/appopt)
+
+set(ICD_SHADER_PROFILE_SOURCE_FILES_DIR
+    ${ICD_SHADER_PROFILE_DIR}/shader_profiles
+    )
+
+add_custom_command(
+    OUTPUT ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.cpp ${ICD_SHADER_PROFILE_DIR}/g_shader_profile.h
+    COMMAND ${PYTHON_CMD} ${ICD_GENDIR}/genShaderProfile.py ${ICD_SHADER_PROFILE_DIR}/shader_profiles
+    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
+    COMMENT "Generating shader profiles code from all profile.json files"
+)
+
+add_custom_target(
+    GenerateShaderProfiles
+    DEPENDS ${ICD_GEN_SHADER_PROFILE_SCRIPTS} ${ICD_SHADER_PROFILE_SOURCE_FILES_DIR}
+    COMMENT "Checking if re-generation is required for shader profiles"
+)
+
+add_dependencies(xgl GenerateShaderProfiles)
+
+### ICD Auto-generated String Files ###########################################
 set(ICD_STRING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/strings)
 # ICD settings code generation main script
 set(ICD_GEN_STRINGS ${ICD_STRING_DIR}/generate_strings.py)
@@ -369,46 +221,7 @@ add_dependencies(xgl RunVKStringsGenerator)
 
     target_sources(xgl PRIVATE api/strings/strings.cpp)
 
-# Or for a separate lib: icdapi
-# add_subdirectory(${XGL_API_PATH} ${PROJECT_BINARY_DIR}/api)
-# target_link_libraries(xgl api)
-
-### ICD api/sqtt ###############################################################
-target_sources(xgl PRIVATE
-    api/sqtt/sqtt_layer.cpp
-    api/sqtt/sqtt_mgr.cpp
-    api/sqtt/sqtt_object_mgr.cpp
-)
-
-# Or for a separate lib: icdapisqtt
-# add_subdirectory(api/sqtt ${PROJECT_BINARY_DIR}/api/sqtt)
-# target_link_libraries(xgl sqtt)
-
-### ICD api/devmode ############################################################
-if(ICD_GPUOPEN_DEVMODE_BUILD)
-    target_sources(xgl PRIVATE api/devmode/devmode_mgr.cpp)
-
-    # Or for a separate lib: icdapidevmode
-    # add_subdirectory(api/devmode ${PROJECT_BINARY_DIR}/api/devmode)
-    # target_link_libraries(xgl devmode)
-endif()
-
-if(ICD_BUILD_LLPC)
-    target_sources(xgl PRIVATE
-        api/compiler_solution_llpc.cpp
-    )
-endif()
-
-### ICD layer ##################################################################
-target_sources(xgl PRIVATE
-    layers/query_dlist.cpp
-    layers/vk_layer_all_null_devices.cpp
-    layers/vk_layer_switchable_graphics.cpp
-)
-
-### ICD Android interface ######################################################
-
-### ICD Auto-generated Files ###########################################################################################
+### ICD Auto-generated Settings Files #########################################
 # ICD settings code generation main script
 set(ICD_GEN_SETTINGS ${ICD_GENDIR}/genSettingsCode.py)
 
@@ -440,8 +253,26 @@ target_sources(xgl PRIVATE
     settings/settings.cpp
 )
 
-### XGL VKGC ####
-target_link_libraries(xgl PRIVATE vkgc)
+### ICD api/sqtt ##############################################################
+target_sources(xgl PRIVATE
+    api/sqtt/sqtt_layer.cpp
+    api/sqtt/sqtt_mgr.cpp
+    api/sqtt/sqtt_object_mgr.cpp
+)
+
+### ICD api/devmode ###########################################################
+if(ICD_GPUOPEN_DEVMODE_BUILD)
+    target_sources(xgl PRIVATE api/devmode/devmode_mgr.cpp)
+endif()
+
+### ICD layer ##################################################################
+target_sources(xgl PRIVATE
+    layers/query_dlist.cpp
+    layers/vk_layer_all_null_devices.cpp
+    layers/vk_layer_switchable_graphics.cpp
+)
+
+### ICD Android interface ######################################################
 
 ### Link Libraries #####################################################################################################
 if (UNIX)
@@ -482,6 +313,7 @@ if (UNIX)
 
 endif()
 
+target_link_libraries(xgl PRIVATE vkgc)
 target_link_libraries(xgl PRIVATE pal)
 target_link_libraries(xgl PRIVATE khronos_vulkan_interface)
 
@@ -504,3 +336,16 @@ target_find_headers(xgl)
 if(MSVC)
     target_source_groups(xgl)
 endif()
+
+### ICD loader configuration ###########################################################################################
+if(UNIX)
+    include(GNUInstallDirs)
+    if(TARGET_ARCHITECTURE_BITS EQUAL 64)
+        set(ISABITS "64")
+    else()
+        set(ISABITS "32")
+    endif()
+    set(AMDVLK_INSTALL_PATH ${CMAKE_INSTALL_FULL_LIBDIR})
+    configure_file(Loader/LunarG/Lnx/amd-icd.json amd_icd${ISABITS}.json @ONLY)
+endif()
+

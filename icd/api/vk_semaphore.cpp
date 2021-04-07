@@ -521,10 +521,16 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetSemaphoreFdKHR(
     const VkSemaphoreGetFdInfoKHR*              pGetFdInfo,
     int*                                        pFd)
 {
-    return Semaphore::ObjectFromHandle(pGetFdInfo->semaphore)->GetShareHandle(
+    Pal::OsExternalHandle handle = 0;
+
+    VkResult result = Semaphore::ObjectFromHandle(pGetFdInfo->semaphore)->GetShareHandle(
         ApiDevice::ObjectFromHandle(device),
         pGetFdInfo->handleType,
-        reinterpret_cast<Pal::OsExternalHandle*>(pFd));
+        &handle);
+
+    *pFd = static_cast<int>(handle);
+
+    return result;
 }
 #endif
 

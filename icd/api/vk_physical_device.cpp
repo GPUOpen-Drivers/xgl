@@ -2837,7 +2837,6 @@ VkResult PhysicalDevice::GetSurfaceCapabilities2KHR(
     VkSurfaceCapabilities2KHR*              pSurfaceCapabilities) const
 {
     VkResult                 result                    = VK_SUCCESS;
-    bool                     fullScreenExplicitEnabled = false;
     Pal::OsDisplayHandle     displayHandle             = 0;
     VkSurfaceKHR             surface                   = VK_NULL_HANDLE;
 
@@ -4194,12 +4193,7 @@ void PhysicalDevice::GetPhysicalDeviceSubgroupProperties(
                             VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT |
                             VK_SHADER_STAGE_GEOMETRY_BIT |
                             VK_SHADER_STAGE_FRAGMENT_BIT |
-                            VK_SHADER_STAGE_COMPUTE_BIT |
-                            VK_SHADER_STAGE_RAYGEN_BIT_KHR |
-                            VK_SHADER_STAGE_CLOSEST_HIT_BIT_KHR |
-                            VK_SHADER_STAGE_MISS_BIT_KHR |
-                            VK_SHADER_STAGE_INTERSECTION_BIT_KHR |
-                            VK_SHADER_STAGE_CALLABLE_BIT_KHR;
+                            VK_SHADER_STAGE_COMPUTE_BIT;
 
     *pSupportedOperations = VK_SUBGROUP_FEATURE_BASIC_BIT |
                             VK_SUBGROUP_FEATURE_VOTE_BIT |
@@ -4638,8 +4632,7 @@ void PhysicalDevice::GetPhysicalDeviceBufferAddressFeatures(
         *pBufferDeviceAddress              = VK_TRUE;
         *pBufferDeviceAddressCaptureReplay =
             PalProperties().gfxipProperties.flags.supportCaptureReplay ? VK_TRUE : VK_FALSE;
-        *pBufferDeviceAddressMultiDevice   =
-            PalProperties().gfxipProperties.flags.supportCaptureReplay ? VK_TRUE : VK_FALSE;
+        *pBufferDeviceAddressMultiDevice   = VK_FALSE;
     }
 }
 

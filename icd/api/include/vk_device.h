@@ -363,6 +363,9 @@ public:
     VK_FORCEINLINE ResourceOptimizer* GetResourceOptimizer()
         { return &m_resourceOptimizer; }
 
+    VK_FORCEINLINE const ResourceOptimizer* GetResourceOptimizer() const
+        { return &m_resourceOptimizer; }
+
     VK_FORCEINLINE bool IsMultiGpu() const
         { return m_palDeviceCount > 1; }
 

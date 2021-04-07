@@ -146,6 +146,8 @@ void ImageView::BuildImageSrds(
                                     (Pal::LayoutShaderRead | Pal::LayoutShaderFmaskBasedRead));
     info.possibleLayouts.engines = Pal::LayoutUniversalEngine | Pal::LayoutComputeEngine;
 
+    pDevice->GetResourceOptimizer()->OverrideImageViewCreateInfo(pImage->GetResourceKey(), &info);
+
     // Bypass Mall cache read/write if no alloc policy is set for SRDs. This global setting applies to every image view SRD
     // and takes precedence over other shader non-storage resource/shader storage resource settings
     if (Util::TestAnyFlagSet(settings.mallNoAllocResourcePolicy, MallNoAllocImageViewSrds))

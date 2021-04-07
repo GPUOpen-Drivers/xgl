@@ -766,7 +766,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vk_icdNegotiateLoaderICDInterfaceVersion(
     // InterfaceVersion 3 - was introduced at 1.0.30, therefore we reject all older versions of the loader.
 
     static constexpr uint32_t MinDriverSupportedInterfaceVersion = 3;
-    static constexpr uint32_t MaxDriverSupportedInterfaceVersion = 5;
+    static constexpr uint32_t MaxDriverSupportedInterfaceVersion = 6;
 
     if (*pVersion < MinDriverSupportedInterfaceVersion)
     {

@@ -405,10 +405,7 @@ VkResult CmdBuffer::Create(
     palCreateInfo.queueType               = pDevice->GetQueueFamilyPalQueueType(queueFamilyIndex);
     palCreateInfo.engineType              = pDevice->GetQueueFamilyPalEngineType(queueFamilyIndex);
     palCreateInfo.flags.nested            = (pAllocateInfo->level > VK_COMMAND_BUFFER_LEVEL_PRIMARY) ? 1 : 0;
-    if (pDevice->GetRuntimeSettings().enableDispatchTunneling)
-    {
-        palCreateInfo.flags.dispatchTunneling = 1;
-    }
+    palCreateInfo.flags.dispatchTunneling = 1;
 
     // Allocate system memory for the command buffer objects
     Pal::Result palResult;
@@ -1313,6 +1310,7 @@ void CmdBuffer::ResetPipelineState()
         pPerGpuState->viewport.horzDiscardRatio = 1.0f;
         pPerGpuState->viewport.vertDiscardRatio = 1.0f;
         pPerGpuState->viewport.depthRange       = Pal::DepthRange::ZeroToOne;
+        pPerGpuState->maxPipelineStackSize      = 0;
 
         deviceIdx++;
     }
@@ -1524,16 +1522,9 @@ void CmdBuffer::BindPipeline(
 {
     DbgBarrierPreCmd(DbgBarrierBindPipeline);
 
-    PipelineBindPoint apiBindPoint;
-    Pal::PipelineBindPoint palBindPoint;
-
-    ConvertPipelineBindPoint(pipelineBindPoint, &palBindPoint, &apiBindPoint);
-
-    const UserDataLayout* pNewUserDataLayout = nullptr;
-
-    switch (apiBindPoint)
+    switch (pipelineBindPoint)
     {
-    case PipelineBindCompute:
+    case VK_PIPELINE_BIND_POINT_COMPUTE:
     {
         const ComputePipeline* pPipeline = ComputePipeline::ObjectFromHandle(pipeline);
 
@@ -1552,7 +1543,7 @@ void CmdBuffer::BindPipeline(
         break;
     }
 
-    case PipelineBindGraphics:
+    case VK_PIPELINE_BIND_POINT_GRAPHICS:
     {
         const GraphicsPipeline* pPipeline = GraphicsPipeline::ObjectFromHandle(pipeline);
 

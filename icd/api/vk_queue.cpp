@@ -458,6 +458,10 @@ VkResult Queue::Submit(
 
                 perSubQueueInfo.cmdBufferCount = 0;
 
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 663
+                palSubmitInfo.stackSizeInDwords = 0;
+#endif
+
                 const uint32_t deviceMask = 1 << deviceIdx;
 
                 for (uint32_t i = 0; i < cmdBufferCount; ++i)
@@ -475,6 +479,13 @@ VkResult Queue::Submit(
                     {
 
                         pPalCmdBuffers[perSubQueueInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
+
+#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 663
+                        const uint32_t stackSizeInDwords =
+                            Util::NumBytesToNumDwords(cmdBuf.PerGpuState(deviceIdx)->maxPipelineStackSize);
+                        palSubmitInfo.stackSizeInDwords =
+                            Util::Max(palSubmitInfo.stackSizeInDwords, stackSizeInDwords);
+#endif
                     }
                     else
                     {
@@ -1272,9 +1283,9 @@ VkResult Queue::BindSparseEntry(
             // Calculate the extents in tiles
             const VkExtent3D extentInTiles =
             {
-                Util::Pow2Align(bind.extent.width,  tileSize.width) / tileSize.width,
-                Util::Pow2Align(bind.extent.height, tileSize.height) / tileSize.height,
-                Util::Pow2Align(bind.extent.depth,  tileSize.depth) / tileSize.depth
+                Util::RoundUpToMultiple(bind.extent.width,  tileSize.width) / tileSize.width,
+                Util::RoundUpToMultiple(bind.extent.height, tileSize.height) / tileSize.height,
+                Util::RoundUpToMultiple(bind.extent.depth,  tileSize.depth) / tileSize.depth
             };
 
             // Calculate byte size to remap per row

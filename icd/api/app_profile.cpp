@@ -862,8 +862,8 @@ AppProfile ScanApplicationProfile(
     // You can uncomment these if you need to add new hashes for specific strings (which is
     // hopefully never).  DON'T LEAVE THIS UNCOMMENTED:
     //
-    // Util::MetroHash::Hash hash = {};
-    // Util::MetroHash128::Hash(reinterpret_cast<const uint8_t*>(pTestPattern), strlen(pTestPattern), hash.bytes);
+    //Util::MetroHash::Hash hash = {};
+    //Util::MetroHash128::Hash(reinterpret_cast<const uint8_t*>(pTestPattern), strlen(pTestPattern), hash.bytes);
 
     AppProfile profile = AppProfile::Default;
 

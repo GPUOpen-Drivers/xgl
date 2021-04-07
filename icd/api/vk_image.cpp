@@ -147,7 +147,8 @@ Image::Image(
     VkSampleCountFlagBits        imageSamples,
     VkImageUsageFlags            usage,
     VkImageUsageFlags            stencilUsage,
-    ImageFlags                   internalFlags)
+    ImageFlags                   internalFlags,
+    const ResourceOptimizerKey&  resourceKey)
     :
     m_mipLevels(mipLevels),
     m_arraySize(arraySize),
@@ -158,7 +159,8 @@ Image::Image(
     m_tileSize(tileSize),
     m_barrierPolicy(barrierPolicy),
     m_pSwapChain(nullptr),
-    m_pImageMemory(nullptr)
+    m_pImageMemory(nullptr),
+    m_ResourceKey(resourceKey)
 {
     m_internalFlags.u32All = internalFlags.u32All;
 
@@ -527,11 +529,6 @@ VkResult Image::Create(
                 {
                     imageFlags.externalPinnedHost = true;
                 }
-
-                if (pExtInfo->handleTypes & VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
-                {
-                    imageFlags.externalAhbHandle = true;
-                }
             }
 
             break;
@@ -661,51 +658,57 @@ VkResult Image::Create(
     const Pal::GfxIpLevel gfxLevel = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties().gfxLevel;
     if (((palCreateInfo.extent.width * palCreateInfo.extent.height) >
          (settings.disableSmallSurfColorCompressionSize * settings.disableSmallSurfColorCompressionSize)) &&
+        (Formats::IsColorFormat(createInfoFormat)) &&
         ((gfxLevel > Pal::GfxIpLevel::GfxIp9) || (palCreateInfo.usageFlags.shaderWrite == false)))
     {
-        // Enable DCC beyond what PAL does by default for color attachments
-        if ((settings.forceEnableDcc == ForceDccForColorAttachments) &&
-            (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT))
+        const uint32_t forceEnableDccMask = settings.forceEnableDcc;
+
+        const uint32_t bpp         = Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format);
+        const bool isShaderStorage = (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT);
+
+        if (isShaderStorage &&
+            ((forceEnableDccMask & ForceDccDefault) == 0) &&
+            ((forceEnableDccMask & ForceDisableDcc) == 0))
         {
-            palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
+            const bool isColorAttachment = (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+
+            const bool is2DShaderStorageImage = (pCreateInfo->imageType & VK_IMAGE_TYPE_2D);
+            const bool is3DShaderStorageImage = (pCreateInfo->imageType & VK_IMAGE_TYPE_3D);
+
+            // Enable DCC beyond what PAL does by default for color attachments
+            const bool shouldForceDccForCA = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccForColorAttachments) && isColorAttachment;
+            const bool shouldForceDccForNonCAShaderStorage =
+                Util::TestAnyFlagSet(forceEnableDccMask, ForceDccForNonColorAttachmentShaderStorage) && (!isColorAttachment);
+
+            const bool shouldForceDccFor2D = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor2DShaderStorage) && is2DShaderStorageImage;
+            const bool shouldForceDccFor3D = Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor3DShaderStorage) && is3DShaderStorageImage;
+
+            const bool shouldForceDccFor32Bpp =
+                Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor32BppShaderStorage) && (bpp >= 32) && (bpp < 64);
+
+            const bool shouldForceDccFor64Bpp =
+                Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor64BppShaderStorage) && (bpp >= 64);
+
+            const bool shouldForceDccForAllBpp =
+            ((Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor32BppShaderStorage) == false) &&
+                (Util::TestAnyFlagSet(forceEnableDccMask, ForceDccFor64BppShaderStorage) == false));
+
+            // To force enable shader storage DCC, at least one of 2D/3D and one of CA/non-CA need to be set
+            if ((shouldForceDccFor2D || shouldForceDccFor3D) &&
+                (shouldForceDccForCA || shouldForceDccForNonCAShaderStorage) &&
+                (shouldForceDccFor32Bpp || shouldForceDccFor64Bpp || shouldForceDccForAllBpp))
+            {
+                palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
+            }
         }
 
-        if (Formats::IsColorFormat(createInfoFormat))
+        // This setting should only really be used for Vega20.
+        // Turn DCC on/off for identified cases where memory bandwidth is not the bottleneck to improve latency.
+        // PAL may do this implicitly, so specify force enabled instead of default.
+        if (settings.dccBitsPerPixelThreshold != UINT_MAX)
         {
-            uint32_t bpp = Pal::Formats::BitsPerPixel(palCreateInfo.swizzledFormat.format);
-
-            // Enable DCC for shader storage resource with 32 <= bpp < 64
-            if ((settings.forceEnableDcc == ForceDccFor32BppShaderStorage) &&
-                (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
-                (bpp >= 32) && (bpp < 64))
-            {
-                palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
-            }
-
-            // Enable DCC for shader storage resource with bpp >= 64
-            if ((settings.forceEnableDcc == ForceDccFor64BppShaderStorage) &&
-                (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
-                (bpp >= 64))
-            {
-                 palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
-            }
-
-            // Turn DCC on/off for identified cases where memory bandwidth is not the bottleneck to improve latency.
-            // PAL may do this implicitly, so specify force enabled instead of default.
-            if (settings.dccBitsPerPixelThreshold != UINT_MAX)
-            {
-                palCreateInfo.metadataMode = (bpp < settings.dccBitsPerPixelThreshold) ?
-                    Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
-            }
-
-            if ((settings.forceEnableDcc == ForceDccForCaSs2d3dGreaterThanOrEqual32bpp) &&
-                (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT) &&
-                (pCreateInfo->usage & VK_IMAGE_USAGE_STORAGE_BIT) &&
-                ((pCreateInfo->imageType & VK_IMAGE_TYPE_2D) || (pCreateInfo->imageType & VK_IMAGE_TYPE_3D)) &&
-                (bpp >= 32))
-            {
-                palCreateInfo.metadataMode = Pal::MetadataMode::ForceEnabled;
-            }
+            palCreateInfo.metadataMode = (bpp < settings.dccBitsPerPixelThreshold) ?
+                Pal::MetadataMode::Disabled : Pal::MetadataMode::ForceEnabled;
         }
     }
 
@@ -737,7 +740,7 @@ VkResult Image::Create(
     // We must not use any metadata if sparse aliasing is enabled or
     // settings.forceEnableDcc is equal to ForceDisableDcc.
     if ((pCreateInfo->flags & VK_IMAGE_CREATE_SPARSE_ALIASED_BIT) ||
-        (settings.forceEnableDcc == ForceDisableDcc))
+        ((settings.forceEnableDcc & ForceDisableDcc) != 0))
     {
         palCreateInfo.metadataMode = Pal::MetadataMode::Disabled;
     }
@@ -786,19 +789,6 @@ VkResult Image::Create(
 
             result = PalToVkResult(palResult);
         }
-
-        return result;
-    }
-
-    if (imageFlags.externalAhbHandle)
-    {
-        result = Image::CreateFromAndroidHwBufferHandle(
-            pDevice,
-            pCreateInfo,
-            palCreateInfo,
-            createInfoFormat,
-            imageFlags,
-            pImage);
 
         return result;
     }
@@ -906,7 +896,8 @@ VkResult Image::Create(
             pCreateInfo->samples,
             pCreateInfo->usage,
             stencilUsage,
-            imageFlags);
+            imageFlags,
+            resourceKey);
 
         imageHandle = Image::HandleFromVoidPointer(pMemory);
     }
@@ -939,111 +930,6 @@ VkResult Image::Create(
             // Failure in creating the PAL image object. Free system memory and return error.
             pDevice->FreeApiObject(pAllocator, pMemory);
         }
-    }
-
-    return result;
-}
-
-// =====================================================================================================================
-// Create a new image object from Android Hardware Buffer handle
-VkResult Image::CreateFromAndroidHwBufferHandle(
-    Device*                                pDevice,
-    const VkImageCreateInfo*               pImageCreateInfo,
-    const Pal::ImageCreateInfo&            palCreateInfo,
-    uint64_t                               externalFormat,
-    ImageFlags                             internalFlags,
-    VkImage*                               pImage)
-{
-    VkResult             result             = VkResult::VK_SUCCESS;
-    const size_t         apiSize            = ObjectSize(pDevice);
-    size_t               palImgSize         = 0;
-    size_t               totalSize          = 0;
-    void*                pMemory            = nullptr;
-    Pal::Result          palResult          = Pal::Result::Success;
-    const VkAllocationCallbacks* pAllocator = pDevice->VkInstance()->GetAllocCallbacks();
-
-    palImgSize = pDevice->PalDevice(DefaultDeviceIndex)->GetImageSize(palCreateInfo, &palResult);
-    VK_ASSERT(palResult == Pal::Result::Success);
-
-    totalSize = apiSize + palImgSize;
-
-    // Allocate system memory for objects
-    pMemory = pDevice->AllocApiObject(pAllocator, totalSize);
-
-    if (pMemory == nullptr)
-    {
-        result = VK_ERROR_OUT_OF_HOST_MEMORY;
-    }
-
-    // Create PAL images
-    Pal::IImage* pPalImages[MaxPalDevices] = {};
-    void*        pPalImgAddr  = Util::VoidPtrInc(pMemory, apiSize);
-    size_t       palImgOffset = 0;
-
-    palResult = pDevice->PalDevice(DefaultDeviceIndex)->CreateImage(
-        palCreateInfo,
-        Util::VoidPtrInc(pPalImgAddr, palImgOffset),
-        &pPalImages[DefaultDeviceIndex]);
-
-    palImgOffset += palImgSize;
-
-    if (palResult != Pal::Result::Success)
-    {
-        result = VK_ERROR_INITIALIZATION_FAILED;
-    }
-
-    VkImage imageHandle = VK_NULL_HANDLE;
-
-    if (result == VK_SUCCESS)
-    {
-        // Create barrier policy for the image.
-        ImageBarrierPolicy barrierPolicy(pDevice,
-                                         pImageCreateInfo->usage,
-                                         pImageCreateInfo->sharingMode,
-                                         pImageCreateInfo->queueFamilyIndexCount,
-                                         pImageCreateInfo->pQueueFamilyIndices,
-                                         pImageCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT,
-                                         pImageCreateInfo->format);
-
-        VkExtent3D dummyTileSize = {};
-
-        // Construct API image object.
-        VK_PLACEMENT_NEW (pMemory) Image(
-            pDevice,
-            pAllocator,
-            pImageCreateInfo->flags,
-            pPalImages,
-            nullptr,
-            barrierPolicy,
-            dummyTileSize,
-            palCreateInfo.mipLevels,
-            palCreateInfo.arraySize,
-            (externalFormat == 0) ? pImageCreateInfo->format : static_cast<VkFormat>(externalFormat),
-            pImageCreateInfo->samples,
-            pImageCreateInfo->usage,
-            pImageCreateInfo->usage,
-            internalFlags);
-
-        imageHandle = Image::HandleFromVoidPointer(pMemory);
-    }
-
-    if (result == VK_SUCCESS)
-    {
-        *pImage = imageHandle;
-    }
-    else
-    {
-        if (imageHandle != VK_NULL_HANDLE)
-        {
-            Image::ObjectFromHandle(imageHandle)->Destroy(pDevice, pAllocator);
-        }
-        else
-        {
-            pPalImages[DefaultDeviceIndex]->Destroy();
-        }
-
-        // Failure in creating the PAL image object. Free system memory and return error.
-        pDevice->FreeApiObject(pAllocator, pMemory);
     }
 
     return result;
@@ -1188,6 +1074,24 @@ VkResult Image::CreatePresentableImage(
         // stencil usage will be treated same as usage if no separate stencil usage is specified.
         VkImageUsageFlags stencilUsageFlags = imageUsageFlags;
 
+        ResourceOptimizerKey resourceKey;
+        VkImageCreateInfo imageCreateInfo = {};
+        imageCreateInfo.flags = 0;
+        imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageCreateInfo.format = imageFormat;
+        imageCreateInfo.extent = { pCreateInfo->extent.width, pCreateInfo->extent.height, 1};
+        imageCreateInfo.mipLevels = 1;
+        imageCreateInfo.arrayLayers = 1;
+        imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageCreateInfo.usage = imageUsageFlags;
+        imageCreateInfo.sharingMode = sharingMode;
+        imageCreateInfo.queueFamilyIndexCount = queueFamilyIndexCount;
+        imageCreateInfo.pQueueFamilyIndices = pQueueFamilyIndices;
+        imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+        BuildResourceKey(&imageCreateInfo, &resourceKey);
+
         // Construct API image object.
         VK_PLACEMENT_NEW (pImgObjMemory) Image(
             pDevice,
@@ -1203,7 +1107,8 @@ VkResult Image::CreatePresentableImage(
             VK_SAMPLE_COUNT_1_BIT,
             imageUsageFlags,
             stencilUsageFlags,
-            imageFlags);
+            imageFlags,
+            resourceKey);
 
         *pImage = Image::HandleFromVoidPointer(pImgObjMemory);
 
