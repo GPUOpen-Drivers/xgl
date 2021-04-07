@@ -1,0 +1,17 @@
+{
+  "entries": [
+    {
+      "pattern": {
+        "cs": {
+          "stageActive": true,
+          "codeHash": "0x151B4F8C25C76937 D3CA0B94C0F09B4E"
+        }
+      },
+      "action": {
+        "cs": {
+          "forceLoopUnrollCount": 2
+        }
+      }
+    }
+  ]
+}

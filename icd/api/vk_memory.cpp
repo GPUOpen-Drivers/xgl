@@ -209,7 +209,7 @@ VkResult Memory::Create(
                     if (pExtInfo->handleTypes &
                         VK_EXTERNAL_MEMORY_HANDLE_TYPE_ANDROID_HARDWARE_BUFFER_BIT_ANDROID)
                     {
-                        sharedViaAndroidHwBuf   = true;
+                        sharedViaAndroidHwBuf = true;
                     }
 #endif
                     createInfo.flags.interprocess = 1;
@@ -768,7 +768,7 @@ VkResult Memory::OpenExternalSharedImage(
 #if defined(__unix__)
     palOpenInfo.resourceInfo.handleType               = Pal::HandleType::DmaBufFd;
 #endif
-
+    palOpenInfo.flags.perSubresInit = pBoundImage->PalImage(DefaultDeviceIndex)->GetImageCreateInfo().flags.perSubresInit;
     Pal::Result palResult = Pal::Result::Success;
     const bool openedViaName = (importInfo.handle == 0);
     if (openedViaName)

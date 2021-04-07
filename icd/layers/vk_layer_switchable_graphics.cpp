@@ -71,8 +71,9 @@ static PFN_vkVoidFunction GetInstanceProcAddrSG(
     // implementation for the layer interface
     if (pFunc == nullptr)
     {
-        Util::MutexAuto lock(&g_traceMutex);
+        g_traceMutex.Lock();
         NextLinkFuncPointers nextLinkFuncs = *(g_pDispatchTables->FindKey(instance));
+        g_traceMutex.Unlock();
         pFunc = reinterpret_cast<void*>(nextLinkFuncs.pfnGetInstanceProcAddr(instance, pName));
     }
 
@@ -190,8 +191,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
     uint32_t*                                   pPhysicalDeviceCount,
     VkPhysicalDevice*                           pPhysicalDevices)
 {
-    Util::MutexAuto lock(&g_traceMutex);
+    g_traceMutex.Lock();
     NextLinkFuncPointers nextLinkFuncs = *g_pDispatchTables->FindKey(instance);
+    g_traceMutex.Unlock();
     VkResult result = VK_SUCCESS;
     const VkAllocationCallbacks* pAllocCb = &allocator::g_DefaultAllocCallback;
     VK_ASSERT(pAllocCb != nullptr);
@@ -354,8 +356,9 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties,
     PFN_EnumPhysDeviceGroupsFunc                pEnumPhysDeviceGroupsFunc)
 {
-    Util::MutexAuto lock(&g_traceMutex);
+    g_traceMutex.Lock();
     NextLinkFuncPointers nextLinkFuncs = *g_pDispatchTables->FindKey(instance);
+    g_traceMutex.Unlock();
     VkResult result = VK_SUCCESS;
     const VkAllocationCallbacks* pAllocCb = &allocator::g_DefaultAllocCallback;
     VK_ASSERT(pAllocCb != nullptr);
@@ -504,11 +507,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroupsKHR_SG(
     uint32_t*                                   pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties)
 {
-    Util::MutexAuto lock(&g_traceMutex);
+    g_traceMutex.Lock();
+    PFN_EnumPhysDeviceGroupsFunc pEnumPhysDeviceGroupsFunc = (*(g_pDispatchTables->FindKey(instance))).pfnEnumeratePhysicalDeviceGroupsKHR;
+    g_traceMutex.Unlock();
     return vkEnumeratePhysicalDeviceGroupsComm(instance,
                                                pPhysicalDeviceGroupCount,
                                                pPhysicalDeviceGroupProperties,
-                                               (*(g_pDispatchTables->FindKey(instance))).pfnEnumeratePhysicalDeviceGroupsKHR);
+                                               pEnumPhysDeviceGroupsFunc);
 }
 
 // =====================================================================================================================
@@ -519,11 +524,13 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDeviceGroups_SG(
     uint32_t*                                   pPhysicalDeviceGroupCount,
     VkPhysicalDeviceGroupProperties*            pPhysicalDeviceGroupProperties)
 {
-    Util::MutexAuto lock(&g_traceMutex);
+    g_traceMutex.Lock();
+    PFN_EnumPhysDeviceGroupsFunc pEnumPhysDeviceGroupsFunc = (*(g_pDispatchTables->FindKey(instance))).pfnEnumeratePhysicalDeviceGroups;
+    g_traceMutex.Unlock();
     return vkEnumeratePhysicalDeviceGroupsComm(instance,
                                                pPhysicalDeviceGroupCount,
                                                pPhysicalDeviceGroupProperties,
-                                               (*(g_pDispatchTables->FindKey(instance))).pfnEnumeratePhysicalDeviceGroups);
+                                               pEnumPhysDeviceGroupsFunc);
 }
 
 // Helper macro used to create an entry for the "primary" entry point implementation (i.e. the one that goes straight

@@ -54,7 +54,6 @@
 namespace vk
 {
     // Default to true
-    bool FullscreenMgr::s_forceFullscreenReacquire = true;
     bool SwapChain::s_forceTurboSyncEnable         = true;
 
 static bool EnableFullScreen(
@@ -954,13 +953,6 @@ FullscreenMgr::FullscreenMgr(
 bool FullscreenMgr::TryEnterExclusive(
     SwapChain* pSwapChain)
 {
-    // If we need to force resync with PAL
-    if (s_forceFullscreenReacquire == true)
-    {
-        m_exclusiveModeFlags.acquired = 0;
-        s_forceFullscreenReacquire = false;
-    }
-
     // If we are not perma-disabled
     if (m_exclusiveModeFlags.disabled == 0)
     {
@@ -1040,7 +1032,6 @@ bool FullscreenMgr::TryExitExclusive(
     {
         Pal::Result palResult = m_pScreen->ReleaseFullscreenOwnership();
 
-        s_forceFullscreenReacquire = true;
         VK_ASSERT((m_exclusiveModeFlags.acquired == 0) || (palResult == Pal::Result::Success));
     }
 

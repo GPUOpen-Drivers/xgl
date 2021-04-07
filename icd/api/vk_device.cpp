@@ -231,6 +231,8 @@ Device::Device(
 {
     memset(m_pBltMsaaState, 0, sizeof(m_pBltMsaaState));
 
+    memset(m_pQueues, 0, sizeof(m_pQueues));
+
     m_maxVrsShadingRate = {0, 0};
 
     for (uint32_t deviceIdx = 0; deviceIdx < palDeviceCount; ++deviceIdx)
@@ -1222,8 +1224,7 @@ VkResult Device::Create(
                 }
             }
 
-            // Free memory
-            (*pDispatchableDevice)->FreeApiObject(pInstance->GetAllocCallbacks(), pMemory);
+            (*pDispatchableDevice)->Destroy(pAllocator);
         }
         else
         {
@@ -1268,7 +1269,7 @@ VkResult Device::Initialize(
     const bool                              deviceCoherentMemoryEnabled,
     const bool                              attachmentFragmentShadingRate,
     bool                                    scalarBlockLayoutEnabled,
-	const ExtendedRobustness&               extendedRobustnessEnabled)
+    const ExtendedRobustness&               extendedRobustnessEnabled)
 {
     // Initialize the internal memory manager
     VkResult result = m_internalMemMgr.Init();

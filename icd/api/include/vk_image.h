@@ -202,6 +202,9 @@ public:
     VK_FORCEINLINE const ImageBarrierPolicy& GetBarrierPolicy() const
         { return m_barrierPolicy; }
 
+    VK_FORCEINLINE const ResourceOptimizerKey& GetResourceKey() const
+        { return m_ResourceKey; }
+
     // Returns true if the image has a color format.
     VK_FORCEINLINE bool IsColorFormat() const
         { return m_internalFlags.isColorFormat == 1; }
@@ -246,7 +249,6 @@ private:
             uint32_t androidPresentable     : 1;  // True if this image is created as Android presentable image.
             uint32_t externalPinnedHost     : 1;  // True if image backing memory is compatible with pinned sysmem.
             uint32_t externalD3DHandle      : 1;  // True if image is backed by a D3D11 image
-            uint32_t externalAhbHandle      : 1;  // Ture if image is backed by Android Hardware Buffer
             uint32_t isColorFormat          : 1;  // True if the image has a color format
             uint32_t isYuvFormat            : 1;  // True if the image has a yuv format
             uint32_t isExternalFormat       : 1;  // True if the image has undefined external format.
@@ -258,7 +260,7 @@ private:
             uint32_t sampleLocsCompatDepth  : 1;  // VK_IMAGE_CREATE_SAMPLE_LOCATIONS_COMPATIBLE_DEPTH_BIT_EXT
             uint32_t linear                 : 1;  // True if the image has VK_IMAGE_TILING_LINEAR
             uint32_t isProtected            : 1;  // VK_IMAGE_CREATE_PROTECTED_BIT
-            uint32_t reserved               : 12;
+            uint32_t reserved               : 13;
         };
         uint32_t     u32All;
     };
@@ -287,7 +289,8 @@ private:
         VkSampleCountFlagBits        imageSamples,
         VkImageUsageFlags            usage,
         VkImageUsageFlags            stencilUsage,
-        ImageFlags                   internalFlags);
+        ImageFlags                   internalFlags,
+        const ResourceOptimizerKey&  resourceKey);
 
     // Compute size required for the object.  One copy of PerGpuInfo is included in the object and we need
     // to add space for any additional GPUs.
@@ -309,14 +312,6 @@ private:
     static void BuildResourceKey(
         const VkImageCreateInfo* pCreateInfo,
         ResourceOptimizerKey*    pResourceKey);
-
-    static VkResult CreateFromAndroidHwBufferHandle(
-        Device*                     pDevice,
-        const VkImageCreateInfo*    pImageCreateInfo,
-        const Pal::ImageCreateInfo& palCreateInfo,
-        uint64_t                    externalFormat,
-        ImageFlags                  internalFlags,
-        VkImage*                    pImage);
 
     uint32_t                m_mipLevels;          // This is the amount of mip levels contained in the image.
                                                   // We need this to support VK_WHOLE_SIZE during
@@ -352,6 +347,8 @@ private:
     Memory*                 m_pImageMemory;       // If this image is Android presentable image this tells the gpuMemory
                                                   // bound. Android swapchain is implemented in loader.Presentable image
                                                   // use this member to track the gpuMemory created from external handle.
+
+    ResourceOptimizerKey    m_ResourceKey;
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.

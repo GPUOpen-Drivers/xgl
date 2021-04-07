@@ -186,11 +186,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
         }
 
-        // In general, DCC is very beneficial for color attachments. If this is completely offset, maybe by increased
-        // shader read latency or partial writes of DCC blocks, it should be debugged on a case by case basis.
+        // In general, DCC is very beneficial for color attachments, 2D, 3D shader storage resources that have BPP>=32.
+        // If this is completely offset, maybe by increased shader read latency or partial writes of DCC blocks, it should
+        // be debugged on a case by case basis.
         if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
         {
-            m_settings.forceEnableDcc = ForceDccForColorAttachments;
+            m_settings.forceEnableDcc = (ForceDccForColorAttachments |
+                                         ForceDccFor2DShaderStorage |
+                                         ForceDccFor3DShaderStorage |
+                                         ForceDccFor32BppShaderStorage |
+                                         ForceDccFor64BppShaderStorage);
         }
 
         if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
@@ -300,11 +305,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
                 m_settings.forceEnableDcc = ForceDccDefault;
-            }
-
-            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
-            {
-                m_settings.forceEnableDcc = ForceDccForCaSs2d3dGreaterThanOrEqual32bpp;
             }
         }
 
@@ -474,10 +474,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabledForMgpu;
 
                 m_settings.overrideWgpMode = WgpMode::WgpModeWgp;
-
-                m_settings.forceEnableDcc = ForceEnableDcc::ForceDccForColorAttachments |
-                                            ForceEnableDcc::ForceDccFor32BppShaderStorage |
-                                            ForceEnableDcc::ForceDccFor64BppShaderStorage;
+                m_settings.csWaveSize = 64;
+                m_settings.fsWaveSize = 64;
+                m_settings.forceEnableDcc = (ForceDccFor3DShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccFor32BppShaderStorage);
             }
         }
 
@@ -623,7 +624,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
                 m_settings.enableWgpMode          = 0x00000020;
 
-                m_settings.forceEnableDcc         =  ForceEnableDcc::ForceDccFor64BppShaderStorage;
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                             ForceDccFor2DShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccFor64BppShaderStorage);
             }
         }
 
@@ -635,7 +640,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Override the PAL default for 3D color attachments and storage images to match GFX9's, SW_R/z-slice order.
             m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
 
-            m_settings.forceEnableDcc = ForceDccFor64BppShaderStorage;
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                                             ForceDccFor3DShaderStorage |
+                                             ForceDccForColorAttachments |
+                                             ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccFor64BppShaderStorage);
+            }
         }
 
         if (appProfile == AppProfile::DoomEternal)

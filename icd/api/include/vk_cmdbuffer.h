@@ -154,6 +154,9 @@ struct PerGpuRenderState
 
     // VB bindings in source non-SRD form
     Pal::BufferViewInfo vbBindings[Pal::MaxVertexBuffers];
+
+    // The max stack size required by the pipelines referenced in this command buffer
+    uint32_t maxPipelineStackSize;
 };
 
 // Members of CmdBufferRenderState that are the same for each GPU
@@ -977,7 +980,16 @@ public:
 
     PerGpuRenderState* PerGpuState(uint32 deviceIdx)
     {
-        PerGpuRenderState* pPerGpuState = static_cast<PerGpuRenderState*>(Util::VoidPtrInc(this, sizeof(*this)));
+        PerGpuRenderState* pPerGpuState =
+            static_cast<PerGpuRenderState*>(Util::VoidPtrInc(this, sizeof(*this)));
+
+        return &pPerGpuState[deviceIdx];
+    }
+
+    const PerGpuRenderState* PerGpuState(uint32 deviceIdx) const
+    {
+        const PerGpuRenderState* pPerGpuState =
+            static_cast<const PerGpuRenderState*>(Util::VoidPtrInc(this, sizeof(*this)));
 
         return &pPerGpuState[deviceIdx];
     }
@@ -1120,6 +1132,12 @@ private:
     void InitializeVertexBuffer();
     void ResetVertexBuffer();
     void UpdateVertexBufferStrides(const GraphicsPipeline* pPipeline);
+
+    VK_INLINE void UpdateLargestPipelineStackSize(const uint32_t deviceIndex, const uint32_t pipelineStackSize)
+    {
+        PerGpuState(deviceIndex)->maxPipelineStackSize =
+            Util::Max(PerGpuState(deviceIndex)->maxPipelineStackSize, pipelineStackSize);
+    }
 
     union CmdBufferFlags
     {

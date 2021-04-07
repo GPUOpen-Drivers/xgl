@@ -85,6 +85,7 @@ enum class AppProfile : uint32_t
     WarThunder,            // WarThunder by Gaijin Distribution Kft
     Quake2RTX,             // Quake2 RTX
     Valheim,               // Valheim by Coffee Stain Studios
+    EvilGenius2,           // Evil Genius 2
 
     IdTechEngine,          // id Tech Engine (Default)
     Feral3DEngine,         // Feral3D Engine (Default)

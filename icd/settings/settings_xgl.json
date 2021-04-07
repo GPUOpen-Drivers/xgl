@@ -1,5 +1,8 @@
 {
   "ComponentName": "Vulkan",
+  "DriverState": [
+    "HaltedOnDeviceInit"
+  ],
   "Tags": [
     "Render Passes",
     "Command Buffer Options",
@@ -1627,6 +1630,18 @@
       "Scope": "Driver",
       "Type": "bool",
       "Name": "EnableSpvValidation"
+    },
+    {
+      "Description": "GFX10 plus-specific tessellation factor optimization.",
+      "Tags": [
+        "SPIRV Options"
+      ],
+      "Defaults": {
+        "Default": true
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "OptimizeTessFactor"
     },
     {
       "Description": "[BIL ONLY] Zero initialize AMD IL registers. ",
@@ -4051,7 +4066,7 @@
     },
     {
       "Name": "ForceEnableDcc",
-      "Description": "If not default, force enables DCC on the basis of resource and/or BPP",
+      "Description": "If not default, force enables DCC on the basis of resource and/or BPP. NOTE: To force enable shader storage DCC, at least one of 2D/3D and one of CA/non-CA need to be set",
       "Tags": [
         "Optimization"
       ],
@@ -4067,29 +4082,39 @@
             "Description": "Let PAL heuristics decide what's best. Don't force anything in xgl."
           },
           {
-            "Name": "ForceDccForColorAttachments",
+            "Name": "ForceDccFor2DShaderStorage",
             "Value": 1,
-            "Description": "Force enable DCC for color attachments irrespective of BPP. This is a hint for PAL to ignore any performance hueristics when determining if images with color attachment usage get DCC"
+            "Description": "Force enable DCC for 2D shader storage resources."
+          },
+          {
+            "Name": "ForceDccFor3DShaderStorage",
+            "Value": 2,
+            "Description": "Force enable DCC for 3D shader storage resources."
+          },
+          {
+            "Name": "ForceDccForColorAttachments",
+            "Value": 4,
+            "Description": "Force enable DCC for color attachments which are also shader storage resources."
+          },
+          {
+            "Name": "ForceDccForNonColorAttachmentShaderStorage",
+            "Value": 8,
+            "Description": "Force enable DCC for shader storage resources that are not color attachments."
           },
           {
             "Name": "ForceDccFor32BppShaderStorage",
-            "Value": 2,
-            "Description": "Force enable DCC for shader storage resources with BPP range from 32 to 64"
+            "Value": 16,
+            "Description": "Force enable DCC for shader storage resources with BPP range from 32 to 64."
           },
           {
             "Name": "ForceDccFor64BppShaderStorage",
-            "Value": 4,
-            "Description": "Force enable DCC for shader storage resources with 64 BPP or deeper"
+            "Value": 32,
+            "Description": "Force enable DCC for shader storage resources with 64 BPP or deeper."
           },
           {
             "Name": "ForceDisableDcc",
-            "Value": 8,
+            "Value": 64,
             "Description": "Force disable DCC for every resource irrespective of PAL heuristics."
-          },
-          {
-            "Name": "ForceDccForCaSs2d3dGreaterThanOrEqual32bpp",
-            "Value": 16,
-            "Description": "Force enable DCC for shader storage resources which are color attachments, are 2D or 3D images with Bpp >= 32"
           }
         ],
         "Name": "ForceEnableDcc"
@@ -4259,18 +4284,6 @@
       "Scope": "Driver",
       "Type": "enum",
       "Name": "ForceRtThreadGroupSwizzleMode"
-    },
-    {
-      "Description": "Enable dispatch tunneling.",
-      "Tags": [
-        "Developer Mode"
-      ],
-      "Defaults": {
-        "Default": false
-      },
-      "Scope": "Driver",
-      "Type": "bool",
-      "Name": "EnableDispatchTunneling"
     },
     {
       "Description": "Determines the string that's used to trigger a start-frame delimiter via vkQueueInsertDebugUtilsLabelEXT. This string is \"AmdFrameBegin\" by default.",

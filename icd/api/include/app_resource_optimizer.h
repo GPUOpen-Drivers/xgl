@@ -34,6 +34,7 @@
 #pragma once
 
 #include "palImage.h"
+#include "palDevice.h"
 
 // Forward declare Util classes used in this file
 namespace Util
@@ -112,7 +113,8 @@ struct ResourceProfileAction
             struct
             {
                 uint32_t dccMode      : 1;  // Only valid for image resources
-                uint32_t reserved     : 31;
+                uint32_t mallNoAlloc  : 1;
+                uint32_t reserved     : 30;
             };
             uint32_t u32All;
         } apply;
@@ -156,15 +158,24 @@ public:
         const ResourceOptimizerKey&  resourceKey,
         Pal::ImageCreateInfo*        pPalCreateInfo);
 
+    void OverrideImageViewCreateInfo(
+        const ResourceOptimizerKey&  resourceKey,
+        Pal::ImageViewInfo*          pPalViewInfo) const;
+
 private:
     void ApplyProfileToImageCreateInfo(
         const ResourceProfile&           profile,
         const ResourceOptimizerKey&      resourceKey,
         Pal::ImageCreateInfo*            pCreateInfo);
 
+    void ApplyProfileToImageViewCreateInfo(
+        const ResourceProfile&           profile,
+        const ResourceOptimizerKey&      resourceKey,
+        Pal::ImageViewInfo*              pViewInfo) const;
+
     bool ResourcePatternMatchesResource(
         const ResourceProfilePattern&   pattern,
-        const ResourceOptimizerKey&     resourceKey);
+        const ResourceOptimizerKey&     resourceKey) const;
 
     void BuildTuningProfile();
     void BuildAppProfile();
