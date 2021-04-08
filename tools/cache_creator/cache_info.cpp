@@ -155,7 +155,7 @@ llvm::Error
 CacheBlobInfo::readBinaryCacheEntriesInfo(llvm::SmallVectorImpl<BinaryCacheEntryInfo> &entriesInfoOut) const {
   auto contentOffsetOrErr = getCacheContentOffset();
   if (auto err = contentOffsetOrErr.takeError())
-    return std::move(err);
+    return err;
 
   constexpr size_t EntrySize = sizeof(vk::BinaryCacheEntry);
   const uint8_t *const blobStart = reinterpret_cast<const uint8_t *>(m_cacheBlob.getBufferStart());
