@@ -222,12 +222,17 @@ function(xgl_compiler_options TARGET)
             target_compile_options(${TARGET} PRIVATE
                 -Werror
                 -Wno-error=comment
-                -Wno-error=delete-non-abstract-non-virtual-dtor
                 -Wno-error=ignored-qualifiers
                 -Wno-error=missing-braces
                 -Wno-error=pointer-arith
                 -Wno-error=unused-parameter
             )
+            if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+                target_compile_options(${TARGET} PRIVATE
+                    -Wno-error=delete-non-abstract-non-virtual-dtor
+                )
+            endif()
+
         endif()
 
         target_compile_options(${TARGET} PRIVATE
@@ -271,7 +276,6 @@ function(xgl_compiler_options TARGET)
             target_compile_options(${TARGET} PRIVATE
                 # Output with color if in terminal: https://github.com/ninja-build/ninja/wiki/FAQ
                 -fcolor-diagnostics
-
                 -Wthread-safety
             )
         endif()
