@@ -396,6 +396,10 @@ void DescriptorUpdate::WriteBufferInfoDescriptors(
                     info.range = pBufferInfo->range;
                 }
 
+                // Align the buffer range in srd to dword. This should be safe since the buffer memory size will be
+                // dword-aligned - we have an at least 4-byte alignment requirement in vkGetBufferMemoryRequirements.
+                info.range = Util::RoundUpToMultiple(info.range, static_cast<Pal::gpusize>(sizeof(uint32_t)));
+
                 pPalDevice->CreateUntypedBufferViewSrds(1, &info, pDestAddr);
             }
         }

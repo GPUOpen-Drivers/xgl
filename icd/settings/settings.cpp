@@ -354,14 +354,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.robustBufferAccess = FeatureForceEnable;
 
-            m_settings.prefetchShaders = true;
-
             if (pInfo->revision != Pal::AsicRevision::Navi21)
             {
                 m_settings.optimizeCmdbufMode = EnableOptimizeCmdbuf;
             }
 
-            m_settings.usePalPipelineCaching = true;
             if (pInfo->revision == Pal::AsicRevision::Vega20)
             {
                 m_settings.dccBitsPerPixelThreshold = 16;
@@ -405,11 +402,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.useAnisoThreshold = true;
             m_settings.anisoThreshold = 1.0f;
 
-            m_settings.prefetchShaders = true;
             m_settings.disableMsaaStencilShaderRead = true;
-
-            // Dota 2 will be the pilot for pal pipeline caching.
-            m_settings.usePalPipelineCaching = true;
 
             // Disable image type checking on Navi10 to avoid 2% loss.
             m_settings.disableImageResourceTypeCheck = true;
@@ -426,7 +419,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.useAnisoThreshold = true;
             m_settings.anisoThreshold = 1.0f;
 
-            m_settings.prefetchShaders = true;
             m_settings.disableMsaaStencilShaderRead = true;
         }
 
@@ -443,8 +435,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.preciseAnisoMode = DisablePreciseAnisoAll;
             m_settings.useAnisoThreshold = true;
             m_settings.anisoThreshold = 1.0f;
-
-            m_settings.prefetchShaders = true;
         }
 
         if (appProfile == AppProfile::SedpEngine)
@@ -498,7 +488,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.enableNgg = 0x3;
                 m_settings.nggEnableFrustumCulling = true;
-                m_settings.nggEnableBackfaceCulling = true;
                 m_settings.enableWgpMode = 0x20;
             }
         }
@@ -513,8 +502,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::F1_2017)
         {
-            m_settings.prefetchShaders = true;
-
             // F1 2017 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
             {
@@ -568,9 +555,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::Rage2 || appProfile == AppProfile::ApexEngine)
         {
-            // Prefetching shaders gives us a 2.5% perf increase
-            m_settings.prefetchShaders = true;
-
             //PM4 optimizations give us another 1.5% perf increase
             m_settings.optimizeCmdbufMode = OptimizeCmdbufMode::EnableOptimizeCmdbuf;
 
@@ -580,6 +564,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             // Disable image type checking to avoid 1% loss.
             m_settings.disableImageResourceTypeCheck = true;
+
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp8)
+            {
+                m_settings.asyncComputeQueueLimit = 0;
+            }
 
             // Vega 20 seems to be do better on Rage 2 when dccBitsPerPixelThreshold is set to 16
             // 3-5% gain when exclusive sharing mode is enabled.
@@ -592,6 +581,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 // Rage 2 performs worse with DCC forced on, so just let the PAL heuristics decide what's best for now.
                 m_settings.forceEnableDcc = ForceDccDefault;
+
             }
 
         }
@@ -607,9 +597,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
             }
-
-            // Game does a lot of material swapping during the draws. Prefetching shaders gives us a gain of 2%.
-            m_settings.prefetchShaders = true;
 
             // Force exclusive sharing mode - 2% gain
             m_settings.barrierFilterOptions = BarrierFilterOptions::ForceImageSharingModeExclusive;
@@ -634,8 +621,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::GhostReconBreakpoint)
         {
-
-            m_settings.prefetchShaders = true;
 
             // Override the PAL default for 3D color attachments and storage images to match GFX9's, SW_R/z-slice order.
             m_settings.imageTilingPreference3dGpuWritable = Pal::ImageTilingPattern::YMajor;
@@ -741,7 +726,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::Valheim)
         {
-            m_settings.disableDisplayDcc = DisplayableDcc::DisplayableDccDisabled;
         }
 
         pAllocCb->pfnFree(pAllocCb->pUserData, pInfo);

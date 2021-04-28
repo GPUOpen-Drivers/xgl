@@ -210,7 +210,8 @@ enum InternalSubAllocPool
     InternalPoolGpuAccess,                  // All GPU-visible pools
     InternalPoolDescriptorTable,            // Persistent mapped pool used for descriptor sets (main table)
     InternalPoolCpuCacheableGpuUncached,    // Cacheable CPU-visible pool with enabled gl2Uncached if requred for the GPU
-    InternalPoolDebugDump,
+    InternalPoolDebugGpuAccess,             // GPU-only memory meant for debugging infrastructure
+    InternalPoolDebugCpuRead,               // CPU-only (GART cacheable) memory meant for debugging infrastructure
     InternalPoolCount
 };
 

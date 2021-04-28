@@ -195,15 +195,33 @@ VkResult InternalMemMgr::Init()
             &m_pCommonPools[InternalPoolCpuCacheableGpuUncached]);
     }
 
+    // Set-up GPU- and CPU-only pools for internal debugging code (e.g. raytracing dumping).  These pools
+    // have the debug flag so that their allocations are never mixed into other internal allocations.
     if (result == VK_SUCCESS)
     {
-        m_commonPoolProps[InternalPoolDebugDump] = m_commonPoolProps[InternalPoolCpuCacheableGpuUncached];
-
-        m_commonPoolProps[InternalPoolDebugDump].flags.debug = 1;
+        m_commonPoolProps[InternalPoolDebugGpuAccess] = {};
+        m_commonPoolProps[InternalPoolDebugGpuAccess].flags.debug = 1;
+        m_commonPoolProps[InternalPoolDebugGpuAccess].heapCount   = 4;
+        m_commonPoolProps[InternalPoolDebugGpuAccess].heaps[0]    = Pal::GpuHeapInvisible;
+        m_commonPoolProps[InternalPoolDebugGpuAccess].heaps[1]    = Pal::GpuHeapLocal;
+        m_commonPoolProps[InternalPoolDebugGpuAccess].heaps[2]    = Pal::GpuHeapGartUswc;
+        m_commonPoolProps[InternalPoolDebugGpuAccess].heaps[3]    = Pal::GpuHeapGartCacheable;
 
         result = CalcSubAllocationPool(
-            m_commonPoolProps[InternalPoolDebugDump],
-            &m_pCommonPools[InternalPoolDebugDump]);
+            m_commonPoolProps[InternalPoolDebugGpuAccess],
+            &m_pCommonPools[InternalPoolDebugGpuAccess]);
+    }
+
+    if (result == VK_SUCCESS)
+    {
+        m_commonPoolProps[InternalPoolDebugCpuRead] = {};
+        m_commonPoolProps[InternalPoolDebugCpuRead].flags.debug = 1;
+        m_commonPoolProps[InternalPoolDebugCpuRead].heapCount   = 1;
+        m_commonPoolProps[InternalPoolDebugCpuRead].heaps[0]    = Pal::GpuHeapGartCacheable;
+
+        result = CalcSubAllocationPool(
+            m_commonPoolProps[InternalPoolDebugCpuRead],
+            &m_pCommonPools[InternalPoolDebugCpuRead]);
     }
 
     return result;
@@ -785,8 +803,9 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
 {
     VK_ASSERT(pGpuMemory != nullptr);
 
-    size_t      palMemSize = 0;
-    Pal::Result palResult  = Pal::Result::ErrorOutOfGpuMemory;
+    size_t      palMemSize   = 0;
+    Pal::Result palResult    = Pal::Result::ErrorOutOfGpuMemory;
+    uint32_t    primaryIndex = DefaultDeviceIndex;
 
     Pal::GpuMemoryCreateInfo     localCreateInfo = createInfo;
     const Pal::DeviceProperties& palProperties   = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
@@ -801,6 +820,10 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
     {
         localCreateInfo.flags.gl2Uncached = 0;
     }
+
+    localCreateInfo.flags.globalGpuVa = m_pDevice->IsGlobalGpuVaEnabled();
+
+    Util::BitMaskScanForward(&primaryIndex, allocMask);
 
     // Query system memory requirement of PAL GPU memory object
     for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
@@ -841,6 +864,15 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                 {
                     if (allocatingMemory)
                     {
+                        // Other GPU memory objects use the same GPU VA reserved by the first GPU memory object.
+                        if ((localCreateInfo.flags.globalGpuVa == 1) &&
+                            (deviceIdx != primaryIndex))
+                        {
+                            localCreateInfo.flags.useReservedGpuVa = 1;
+                            localCreateInfo.pReservedGpuVaOwner    =
+                                pGpuMemory->groupMemory.m_pPalMemory[primaryIndex];
+                        }
+
                         palResult = m_pDevice->PalDevice(deviceIdx)->CreateGpuMemory(
                             localCreateInfo,
                             Util::VoidPtrInc(pSystemMem, palMemOffset),
@@ -868,6 +900,8 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
                             // be a known value to SC thus it's enough to provide a 32-bit descriptor set address with
                             // the lower 32 bits through user data.
                             Pal::GpuMemoryCreateInfo shadowCreateInfo = localCreateInfo;
+                            shadowCreateInfo.flags.globalGpuVa        = 0;
+                            shadowCreateInfo.flags.useReservedGpuVa   = 0;
                             shadowCreateInfo.descrVirtAddr            = gpuVA[deviceIdx];
                             shadowCreateInfo.vaRange                  = Pal::VaRange::ShadowDescriptorTable;
                             shadowCreateInfo.heapCount                = 1;
@@ -895,7 +929,14 @@ VkResult InternalMemMgr::AllocBaseGpuMem(
 
                     if (palResult == Pal::Result::Success)
                     {
-                        palMemOffset += m_pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(localCreateInfo, &palResult);
+                        Pal::GpuMemoryCreateInfo localCreateInfoGetMemSize = localCreateInfo;
+                        localCreateInfoGetMemSize.flags.useReservedGpuVa = 0;
+                        localCreateInfoGetMemSize.pReservedGpuVaOwner    = 0;
+
+                        palMemOffset += m_pDevice->PalDevice(deviceIdx)->GetGpuMemorySize(
+                                            localCreateInfoGetMemSize,
+                                            &palResult);
+
                         VK_ASSERT(palResult == Pal::Result::Success);
 
                         // Add the newly created memory object to the residency list

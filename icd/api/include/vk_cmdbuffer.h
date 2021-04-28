@@ -998,13 +998,14 @@ public:
         { return &m_allGpuState; }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(CmdBuffer);
+
     void ValidateStates();
 
     CmdBuffer(
         Device*                         pDevice,
         CmdPool*                        pCmdPool,
-        uint32_t                        queueFamilyIndex,
-        const DeviceBarrierPolicy&      barrierPolicy);
+        uint32_t                        queueFamilyIndex);
 
     VkResult Initialize(
         void*                           pPalMem,
@@ -1155,8 +1156,9 @@ private:
             uint32_t disableResetReleaseResources        :  1;
             uint32_t subpassLoadOpClearsBoundAttachments :  1;
             uint32_t hasReleaseAcquire                   :  1;
+            uint32_t useSplitReleaseAcquire              :  1;
             uint32_t reserved2                           :  2;
-            uint32_t reserved                            : 20;
+            uint32_t reserved                            : 19;
         };
     };
 
@@ -1179,8 +1181,6 @@ private:
     uint32_t                      m_asyncComputeQueueMaxWavesPerCu;
 
     VkResult                      m_recordingResult; // Tracks the result of recording commands to capture OOM errors
-
-    const DeviceBarrierPolicy     m_barrierPolicy;   // Barrier policy to use with this command buffer
 
     SqttCmdBufferState*           m_pSqttState; // Per-cmdbuf state for handling SQ thread-tracing annotations
 
@@ -1851,6 +1851,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOpEXT(
     VkStencilOp                                 passOp,
     VkStencilOp                                 depthFailOp,
     VkCompareOp                                 compareOp);
+
 } // namespace entry
 
 } // namespace vk

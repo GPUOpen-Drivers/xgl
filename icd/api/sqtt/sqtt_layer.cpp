@@ -2129,7 +2129,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkDebugMarkerSetObjectTagEXT(
 
     if ((pTagInfo != nullptr) &&
         (pTagInfo->objectType == VK_DEBUG_REPORT_OBJECT_TYPE_COMMAND_BUFFER_EXT) &&
-        (pTagInfo->object != VK_NULL_HANDLE))
+        (pTagInfo->object != 0))
     {
         SqttCmdBufferState* pCmdBuf = ApiCmdBuffer::ObjectFromHandle(VkCommandBuffer(pTagInfo->object))->GetSqttState();
 
@@ -2199,7 +2199,7 @@ VKAPI_ATTR VkResult VKAPI_CALL vkSetDebugUtilsObjectTagEXT(
 
     if ((pTagInfo != nullptr) &&
         (pTagInfo->objectType == VK_OBJECT_TYPE_COMMAND_BUFFER) &&
-        (pTagInfo->objectHandle != VK_NULL_HANDLE))
+        (pTagInfo->objectHandle != 0))
     {
         SqttCmdBufferState* pCmdBuf = ApiCmdBuffer::ObjectFromHandle(VkCommandBuffer(pTagInfo->objectHandle))->GetSqttState();
 

@@ -2188,6 +2188,11 @@
             "Description": "Any ray tracing operations"
           },
           {
+            "Name": "DbgBarrierBeginRendering",
+            "Value": 268435456,
+            "Description": "Begin rendering"
+          },
+          {
             "Name": "DbgBarrierOther",
             "Value": 2147483648,
             "Description": "Any other command not listed above"

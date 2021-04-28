@@ -155,6 +155,8 @@ VkResult SwapChain::Create(
     properties.imageCreateInfo.extent   = VkToPalExtent2d(pCreateInfo->imageExtent);
     properties.imageCreateInfo.hDisplay = properties.displayableInfo.displayHandle;
     properties.imageCreateInfo.hWindow  = properties.displayableInfo.windowHandle;
+    properties.pFullscreenSurface       = pSurface;
+    properties.fullscreenSurfaceFormat  = { pCreateInfo->imageFormat, pCreateInfo->imageColorSpace };
 
     // The swapchain image can be used as a blit source for driver post processing on present.
     properties.imageCreateInfo.usage.shaderRead = 1;
@@ -333,14 +335,16 @@ VkResult SwapChain::Create(
                                                                  &palResult);
     VK_ASSERT(palResult == Pal::Result::Success);
 
-    size_t          imageArraySize   = sizeof(VkImage) * swapImageCount;
-    size_t          memoryArraySize  = sizeof(VkDeviceMemory) * swapImageCount;
-    size_t          cmdBufArraySize  = sizeof(Pal::ICmdBuffer*) * swapImageCount;
-    size_t          objSize          = vkSwapChainSize +
-                                       palSwapChainSize +
-                                       imageArraySize +
-                                       memoryArraySize;
-    void*           pMemory          = pDevice->AllocApiObject(pAllocator, objSize);
+    size_t          queueFamilyArraySize = sizeof(uint32_t*) * pCreateInfo->queueFamilyIndexCount;
+    size_t          imageArraySize       = sizeof(VkImage) * swapImageCount;
+    size_t          memoryArraySize      = sizeof(VkDeviceMemory) * swapImageCount;
+    size_t          cmdBufArraySize      = sizeof(Pal::ICmdBuffer*) * swapImageCount;
+    size_t          objSize              = vkSwapChainSize +
+                                           queueFamilyArraySize +
+                                           palSwapChainSize +
+                                           imageArraySize +
+                                           memoryArraySize;
+    void*           pMemory              = pDevice->AllocApiObject(pAllocator, objSize);
 
     if (pMemory == nullptr)
     {
@@ -404,12 +408,19 @@ VkResult SwapChain::Create(
     properties.imageMemory = static_cast<VkDeviceMemory*>(Util::VoidPtrInc(pMemory, offset));
     offset += memoryArraySize;
 
+    properties.pQueueFamilyIndices = static_cast<uint32_t*>(Util::VoidPtrInc(pMemory, offset));
+    offset += queueFamilyArraySize;
+
     VK_ASSERT(offset == objSize);
 
-    // Initialize sharing mode to concurrent and use all available queue's flag for the image layout.
-    VkSharingMode sharingMode     = VK_SHARING_MODE_CONCURRENT;
+    // Store creation info for image barrier policy
+    properties.usage                 = pCreateInfo->imageUsage;
+    properties.queueFamilyIndexCount = pCreateInfo->queueFamilyIndexCount;
+    properties.sharingMode           = pCreateInfo->imageSharingMode;
+    properties.format                = pCreateInfo->imageFormat;
 
-    sharingMode = pCreateInfo->imageSharingMode;
+    // memcpy queue family indices
+    memcpy(properties.pQueueFamilyIndices, pCreateInfo->pQueueFamilyIndices, queueFamilyArraySize);
 
     for (properties.imageCount = 0; properties.imageCount < swapImageCount; ++properties.imageCount)
     {
@@ -420,13 +431,13 @@ VkResult SwapChain::Create(
                 pDevice,
                 &properties.imageCreateInfo,
                 pAllocator,
-                pCreateInfo->imageUsage,
+                properties.usage,
                 properties.imagePresentSupport,
                 &properties.images[properties.imageCount],
-                pCreateInfo->imageFormat,
-                sharingMode,
-                pCreateInfo->queueFamilyIndexCount,
-                pCreateInfo->pQueueFamilyIndices,
+                properties.format,
+                properties.sharingMode,
+                properties.queueFamilyIndexCount,
+                properties.pQueueFamilyIndices,
                 &properties.imageMemory[properties.imageCount]);
         }
 
@@ -706,6 +717,7 @@ bool SwapChain::NeedPacePresent(
 
     return needPacePresent;
 }
+
 // =====================================================================================================================
 // Called after full screen has been acquired so the color params can bet set correctly
 void SwapChain::AcquireFullScreenProperties()

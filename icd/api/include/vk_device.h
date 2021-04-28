@@ -347,7 +347,8 @@ public:
         const bool                                  deviceCoherentMemoryEnabled,
         const bool                                  attachmentFragmentShadingRate,
         bool                                        scalarBlockLayoutEnabled,
-        const ExtendedRobustness&                   extendedRobustnessEnabled);
+        const ExtendedRobustness&                   extendedRobustnessEnabled,
+        bool                                        bufferDeviceAddressMultiDeviceEnabled);
 
     void InitDispatchTable();
 
@@ -468,6 +469,9 @@ public:
 
     VK_INLINE const DeviceFeatures& GetEnabledFeatures() const
         { return m_enabledFeatures; }
+
+    VK_INLINE bool IsGlobalGpuVaEnabled() const
+        { return m_useGlobalGpuVa; }
 
     Pal::PrtFeatureFlags GetPrtFeatures() const;
 
@@ -680,12 +684,29 @@ public:
         const VkSpecializationInfo*    pSpecializationInfo,
         InternalPipeline*              pInternalPipeline);
 
+    static Pal::Result CreatePalQueue(
+        PhysicalDevice**           pPhysicalDevices,
+        Pal::IDevice**             pPalDevices,
+        uint32_t                   deviceIdx,
+        uint32_t                   queueFamilyIndex,
+        uint32_t                   queueIndex,
+        uint32_t                   dedicatedComputeUnit,
+        VkQueueGlobalPriorityEXT   queuePriority,
+        Pal::QueueCreateInfo*      pQueueCreateInfo,
+        void*                      pPalQueueMemory,
+        size_t                     palQueueMemoryOffset,
+        Pal::IQueue**              pPalQueues,
+        wchar_t*                   executableName,
+        wchar_t*                   executablePath,
+        bool                       useComputeAsTransferQueue,
+        bool                       isTmzQueue);
+
 protected:
     Device(
         uint32_t                         deviceCount,
         PhysicalDevice**                 pPhysicalDevices,
         Pal::IDevice**                   pPalDevices,
-        const DeviceBarrierPolicy&       barrierPolicy,
+        const VkDeviceCreateInfo*        pCreateInfo,
         const DeviceExtensions::Enabled& enabledExtensions,
         const VkPhysicalDeviceFeatures*  pFeatures,
         bool                             useComputeAsTransferQueue,
@@ -762,7 +783,11 @@ protected:
     // If set to true, will use a compute queue internally for transfers.
     bool                                m_useComputeAsTransferQueue;
 
+    // The max VRS shading rate supported
     VkExtent2D                          m_maxVrsShadingRate;
+
+    // If use global GpuVa's should be used in MGPU configurations
+    bool                                m_useGlobalGpuVa;
 
     struct PerGpuInfo
     {
@@ -798,6 +823,9 @@ protected:
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.
     PerGpuInfo              m_perGpu[1];
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Device);
 };
 
 // =====================================================================================================================

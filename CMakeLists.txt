@@ -218,6 +218,17 @@ if (BUILD_WAYLAND_SUPPORT)
     pkg_check_modules(WAYLAND REQUIRED wayland-client)
 endif()
 
+# Other Dependencies
+if(UNIX)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBSSL REQUIRED libssl)
+    pkg_check_modules(XCB_DRI2 REQUIRED xcb-dri2)
+    pkg_check_modules(XCB_DRI3 REQUIRED xcb-dri3)
+    pkg_check_modules(XCB_PRESENT REQUIRED xcb-present)
+    pkg_check_modules(XRANDR REQUIRED xrandr)
+    pkg_check_modules(XSHMFENCE REQUIRED xshmfence)
+endif()
+
 ### Khronos Interface #################################################################################################
 add_library(khronos_vulkan_interface INTERFACE)
 

@@ -230,6 +230,8 @@ public:
         { return m_internalFlags.isYuvFormat == 1; }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Image);
+
     // SwapChain object needs to be able to instantiate API image objects for presentable images
     friend class SwapChain;
 
@@ -281,7 +283,13 @@ private:
         VkImageCreateFlags           flags,
         Pal::IImage**                pPalImage,
         Pal::IGpuMemory**            pPalMemory,
-        const ImageBarrierPolicy&    barrierPolicy,
+        VkImageUsageFlags            imageUsage,
+        VkSharingMode                sharingMode,
+        uint32_t                     queueFamilyIndexCount,
+        const uint32_t*              pQueueFamilyIndices,
+        bool                         multisampled,
+        VkFormat                     barrierPolicyFormat,
+        uint32_t                     extraLayoutUsages,
         VkExtent3D                   tileSize,
         uint32_t                     mipLevels,
         uint32_t                     arraySize,
@@ -308,6 +316,8 @@ private:
         VK_ASSERT(m_pSwapChain == nullptr);
         m_pSwapChain = pSwapChain;
     }
+
+    static uint32_t GetPresentLayoutUsage(Pal::PresentMode imagePresentSupport);
 
     static void BuildResourceKey(
         const VkImageCreateInfo* pCreateInfo,

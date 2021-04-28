@@ -47,13 +47,20 @@ Buffer::Buffer(
     VkBufferCreateFlags          flags,
     VkBufferUsageFlags           usage,
     Pal::IGpuMemory**            pGpuMemory,
-    const BufferBarrierPolicy&   barrierPolicy,
+    VkSharingMode                sharingMode,
+    uint32_t                     queueFamilyIndexCount,
+    const uint32_t*              pQueueFamilyIndices,
     VkDeviceSize                 size,
     BufferFlags                  internalFlags)
     :
     m_size(size),
     m_memOffset(0),
-    m_barrierPolicy(barrierPolicy)
+    m_barrierPolicy(
+        pDevice,
+        usage,
+        sharingMode,
+        queueFamilyIndexCount,
+        pQueueFamilyIndices)
 {
     m_internalFlags.u32All                = internalFlags.u32All;
     m_internalFlags.usageUniformBuffer    = (usage & VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT)    ? 1 : 0;
@@ -119,6 +126,7 @@ VkResult Buffer::Create(
         info.size               = Util::Pow2Align(size, info.alignment);
         info.flags.u32All       = 0;
         info.flags.virtualAlloc = 1;
+        info.flags.globalGpuVa  = pDevice->IsGlobalGpuVaEnabled();
         info.heapAccess         = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
 
         // Virtual resource should return 0 on unmapped read if residencyNonResidentStrict is set.
@@ -209,20 +217,15 @@ VkResult Buffer::Create(
     {
         bufferFlags.internalMemBound = isSparse;
 
-        // Create barrier policy for the buffer.
-        BufferBarrierPolicy barrierPolicy(pDevice,
-                                          pCreateInfo->usage,
-                                          pCreateInfo->sharingMode,
-                                          pCreateInfo->queueFamilyIndexCount,
-                                          pCreateInfo->pQueueFamilyIndices);
-
         // Construct API buffer object.
         VK_PLACEMENT_NEW (pMemory) Buffer (pDevice,
                                            pAllocator,
                                            pCreateInfo->flags,
                                            pCreateInfo->usage,
                                            pGpuMemory,
-                                           barrierPolicy,
+                                           pCreateInfo->sharingMode,
+                                           pCreateInfo->queueFamilyIndexCount,
+                                           pCreateInfo->pQueueFamilyIndices,
                                            size,
                                            bufferFlags);
 

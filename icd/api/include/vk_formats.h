@@ -231,7 +231,7 @@ bool Formats::IsEtc2Format(
 }
 
 // =====================================================================================================================
-// Returns true if the given format is a yuv format.
+// Returns true if the given format is a valid RT Vertex Buffer format.
 bool Formats::IsRTVertexFormat(VkFormat format)
 {
     return (VK_FORMAT_R32G32_SFLOAT       == format) ||
@@ -239,7 +239,8 @@ bool Formats::IsRTVertexFormat(VkFormat format)
            (VK_FORMAT_R16G16_SFLOAT       == format) ||
            (VK_FORMAT_R16G16B16A16_SFLOAT == format) ||
            (VK_FORMAT_R16G16_SNORM        == format) ||
-           (VK_FORMAT_R16G16B16A16_SNORM  == format);
+           (VK_FORMAT_R16G16B16A16_SNORM  == format) ||
+           (VK_FORMAT_R16G16B16A16_UNORM  == format);
 }
 
 // =====================================================================================================================

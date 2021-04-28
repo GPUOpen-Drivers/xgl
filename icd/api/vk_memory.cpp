@@ -177,6 +177,8 @@ VkResult Memory::Create(
         createInfo.flags.tmzProtected = 1;
     }
 
+    createInfo.flags.globalGpuVa = pDevice->IsGlobalGpuVaEnabled();
+
     const void* pNext = pAllocInfo->pNext;
 
     while (pNext != nullptr)
@@ -478,6 +480,10 @@ VkResult Memory::CreateGpuMemory(
     uint32_t primaryIndex = 0;
     bool multiInstance    = false;
 
+    Pal::GpuMemoryCreateInfo localCreateInfo = createInfo;
+
+    localCreateInfo.flags.globalGpuVa = pDevice->IsGlobalGpuVaEnabled();
+
     GetPrimaryDeviceIndex(pDevice->NumPalDevices(), allocationMask, &primaryIndex, &multiInstance);
 
     Pal::Result palResult;
@@ -485,9 +491,9 @@ VkResult Memory::CreateGpuMemory(
 
     VK_ASSERT(ppMemory != nullptr);
 
-    if (createInfo.size != 0)
+    if (localCreateInfo.size != 0)
     {
-        gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetGpuMemorySize(createInfo, &palResult);
+        gpuMemorySize = pDevice->PalDevice(DefaultDeviceIndex)->GetGpuMemorySize(localCreateInfo, &palResult);
         VK_ASSERT(palResult == Pal::Result::Success);
 
         const size_t apiSize = sizeof(Memory);
@@ -511,11 +517,19 @@ VkResult Memory::CreateGpuMemory(
                 {
                     Pal::IDevice* pPalDevice = pDevice->PalDevice(deviceIdx);
 
-                    VK_ASSERT(createInfo.heapAccess == Pal::GpuHeapAccess::GpuHeapAccessExplicit);
+                    VK_ASSERT(localCreateInfo.heapAccess == Pal::GpuHeapAccess::GpuHeapAccessExplicit);
+
+                    // Other GPU memory objects use the same GPU VA reserved by the first GPU memory object.
+                    if ((localCreateInfo.flags.globalGpuVa == 1) &&
+                        (deviceIdx != primaryIndex))
+                    {
+                        localCreateInfo.flags.useReservedGpuVa = 1;
+                        localCreateInfo.pReservedGpuVaOwner    = pGpuMemory[primaryIndex];
+                    }
 
                     // Allocate the PAL memory object
                     palResult = pPalDevice->CreateGpuMemory(
-                        createInfo, Util::VoidPtrInc(pSystemMem, palMemOffset), &pGpuMemory[deviceIdx]);
+                        localCreateInfo, Util::VoidPtrInc(pSystemMem, palMemOffset), &pGpuMemory[deviceIdx]);
 
                     if (palResult == Pal::Result::Success)
                     {
@@ -540,7 +554,7 @@ VkResult Memory::CreateGpuMemory(
                 *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(pDevice,
                                                                 pGpuMemory,
                                                                 handle,
-                                                                createInfo,
+                                                                localCreateInfo,
                                                                 multiInstance,
                                                                 primaryIndex);
             }
@@ -590,7 +604,7 @@ VkResult Memory::CreateGpuMemory(
             *ppMemory = VK_PLACEMENT_NEW(pSystemMem) Memory(pDevice,
                                                             pDummyPalGpuMemory,
                                                             0,
-                                                            createInfo,
+                                                            localCreateInfo,
                                                             false,
                                                             DefaultDeviceIndex);
         }
@@ -749,7 +763,8 @@ VkResult Memory::OpenExternalSharedImage(
     Pal::ImageCreateInfo palImgCreateInfo = {};
     Pal::GpuMemoryCreateInfo palMemCreateInfo = {};
 
-    palMemCreateInfo.heapAccess = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
+    palMemCreateInfo.heapAccess        = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
+    palMemCreateInfo.flags.globalGpuVa = pDevice->IsGlobalGpuVaEnabled();
 
     Pal::ExternalImageOpenInfo palOpenInfo = {};
 
@@ -1001,7 +1016,8 @@ VkResult Memory::OpenExternalMemory(
     size_t gpuMemorySize;
     uint8_t *pSystemMem;
 
-    createInfo.heapAccess = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
+    createInfo.flags.globalGpuVa = pDevice->IsGlobalGpuVaEnabled();
+    createInfo.heapAccess        = Pal::GpuHeapAccess::GpuHeapAccessExplicit;
 
     VK_ASSERT(pDevice  != nullptr);
     VK_ASSERT(ppMemory != nullptr);

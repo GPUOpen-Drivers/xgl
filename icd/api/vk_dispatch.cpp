@@ -624,6 +624,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkDestroyPrivateDataSlotEXT                     );
     INIT_DISPATCH_ENTRY(vkSetPrivateDataEXT                             );
     INIT_DISPATCH_ENTRY(vkGetPrivateDataEXT                             );
+
 }
 
 // =====================================================================================================================

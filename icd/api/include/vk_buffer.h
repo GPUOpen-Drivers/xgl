@@ -99,6 +99,7 @@ public:
         { return m_barrierPolicy; }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Buffer);
 
     union BufferFlags
     {
@@ -132,7 +133,9 @@ private:
            VkBufferCreateFlags          flags,
            VkBufferUsageFlags           usage,
            Pal::IGpuMemory**            pGpuMemory,
-           const BufferBarrierPolicy&   barrierPolicy,
+           VkSharingMode                sharingMode,
+           uint32_t                     queueFamilyIndexCount,
+           const uint32_t*              pQueueFamilyIndices,
            VkDeviceSize                 size,
            BufferFlags                  internalFlags);
 
@@ -153,8 +156,8 @@ private:
 
     const VkDeviceSize      m_size;
     VkDeviceSize            m_memOffset;
-    BufferBarrierPolicy     m_barrierPolicy;    // Barrier policy to use for this buffer
-    BufferFlags             m_internalFlags;    // Flags describing the properties of this buffer
+    BufferBarrierPolicy     m_barrierPolicy;     // Barrier policy to use for this buffer
+    BufferFlags             m_internalFlags;     // Flags describing the properties of this buffer
 
     // This goes last.  The memory for the rest of the array is calculated dynamically based on the number of GPUs in
     // use.
