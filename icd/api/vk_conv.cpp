@@ -923,6 +923,7 @@ VkResult PalToVkError(
         vkResult = VK_ERROR_DEVICE_LOST;
         break;
 
+    case Pal::Result::ErrorIncompatibleDevice:
     case Pal::Result::ErrorIncompatibleLibrary:
         vkResult = VK_ERROR_INCOMPATIBLE_DRIVER;
         break;
@@ -955,7 +956,6 @@ VkResult PalToVkError(
     case Pal::Result::ErrorBadShaderCode:
     case Pal::Result::ErrorBadPipelineData:
     case Pal::Result::ErrorGpuMemoryUnmapFailed:
-    case Pal::Result::ErrorIncompatibleDevice:
     case Pal::Result::ErrorBuildingCommandBuffer:
     case Pal::Result::ErrorGpuMemoryNotBound:
     case Pal::Result::ErrorImageNotShaderAccessible:

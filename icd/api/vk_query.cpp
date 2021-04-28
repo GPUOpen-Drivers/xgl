@@ -135,33 +135,21 @@ VkResult PalQueryPool::Create(
         result = PalToVkResult(palResult);
     }
 
-    InternalMemory internalMem;
+    PalQueryPool* pObject = nullptr;
 
     if (result == VK_SUCCESS)
     {
-        // Allocate and bind GPU memory for the object
-        const bool removeInvisibleHeap = true;
-        const bool persistentMapped = true;
+        pObject = VK_PLACEMENT_NEW(pSystemMem) PalQueryPool(
+            pDevice,
+            pCreateInfo->queryType,
+            queryType,
+            pPalQueryPools);
 
-        result = pDevice->MemMgr()->AllocAndBindGpuMem(
-           pDevice->NumPalDevices(),
-           reinterpret_cast<Pal::IGpuMemoryBindable**>(pPalQueryPools),
-           false,
-           &internalMem,
-           pDevice->GetPalDeviceMask(),
-           removeInvisibleHeap,
-           persistentMapped);
+        result = pObject->Initialize();
     }
 
     if (result == VK_SUCCESS)
     {
-        PalQueryPool* pObject = VK_PLACEMENT_NEW(pSystemMem) PalQueryPool(
-            pDevice,
-            pCreateInfo->queryType,
-            queryType,
-            pPalQueryPools,
-            &internalMem);
-
         *ppQueryPool = pObject;
     }
     else
@@ -175,9 +163,34 @@ VkResult PalQueryPool::Create(
             }
         }
 
+        // Call destructor
+        Util::Destructor(pObject);
+
         // Failure in creating the PAL query pool object. Free system memory and return error.
         pDevice->FreeApiObject(pAllocator, pSystemMem);
     }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Initialize query pool object (PAL query pools)
+VkResult PalQueryPool::Initialize()
+{
+    VkResult result = VK_SUCCESS;
+
+    // Allocate and bind GPU memory for the object
+    const bool removeInvisibleHeap = true;
+    const bool persistentMapped = true;
+
+    result = m_pDevice->MemMgr()->AllocAndBindGpuMem(
+        m_pDevice->NumPalDevices(),
+        reinterpret_cast<Pal::IGpuMemoryBindable**>(m_pPalQueryPool),
+        false,
+        &m_internalMem,
+        m_pDevice->GetPalDeviceMask(),
+        removeInvisibleHeap,
+        persistentMapped);
 
     return result;
 }
@@ -331,23 +344,6 @@ void PalQueryPool::Reset(
 }
 
 // =====================================================================================================================
-/// Constructor of TimestampQueryPool
-TimestampQueryPool::TimestampQueryPool(
-    Device*               pDevice,
-    VkQueryType           queryType,
-    uint32_t              entryCount,
-    const InternalMemory& internalMem,
-    void**                ppStorageView)
-    :
-    QueryPool(pDevice, queryType),
-    m_entryCount(entryCount),
-    m_slotSize(pDevice->GetProperties().timestampQueryPoolSlotSize),
-    m_internalMem(internalMem)
-{
-    memcpy(m_pStorageView, ppStorageView, sizeof(m_pStorageView));
-}
-
-// =====================================================================================================================
 // Creates a new query pool object (Timestamp query pool).
 VkResult TimestampQueryPool::Create(
     Device*                      pDevice,
@@ -383,67 +379,104 @@ VkResult TimestampQueryPool::Create(
         }
     }
 
-    // Allocate GPU memory for the timestamp counters
-    InternalMemory internalMemory;
+    TimestampQueryPool* pObject = nullptr;
 
     if ((result == VK_SUCCESS) && (entryCount > 0))
     {
-        const VkDeviceSize poolSize = entryCount * slotSize;
+        // Construct the final pool object
+        pObject = VK_PLACEMENT_NEW(pMemory) TimestampQueryPool(
+            pDevice,
+            pCreateInfo->queryType,
+            entryCount);
 
-        InternalMemCreateInfo info = {};
-
-        info.pal.size               = poolSize;
-        info.pal.alignment          = slotSize;
-        info.pal.priority           = Pal::GpuMemPriority::Normal;
-        info.flags.persistentMapped = true;
-
-        uint32_t allocMask = pDevice->GetPalDeviceMask();
-
-        const bool sharedAllocation = (pDevice->NumPalDevices() > 1);
-        if (sharedAllocation == false)
-        {
-            info.pal.heapCount = 3;
-            info.pal.heaps[0]  = Pal::GpuHeapLocal;
-            info.pal.heaps[1]  = Pal::GpuHeapGartCacheable;
-            info.pal.heaps[2]  = Pal::GpuHeapGartUswc;
-        }
-        else
-        {
-            info.pal.heapCount = 1;
-            info.pal.heaps[0] = Pal::GpuHeapGartCacheable;
-
-            info.pal.flags.shareable = 1;
-            allocMask = 1 << DefaultMemoryInstanceIdx;
-        }
-
-        result = pDevice->MemMgr()->AllocGpuMem(info, &internalMemory, allocMask);
+        result = pObject->Initialize(
+            pMemory,
+            apiSize,
+            viewSize,
+            entryCount,
+            slotSize);
     }
+
+    if (result == VK_SUCCESS)
+    {
+        *ppQueryPool = pObject;
+    }
+    else
+    {
+        // Call destructor
+        Util::Destructor(pObject);
+
+        pDevice->FreeApiObject(pAllocator, pMemory);
+    }
+
+    return result;
+}
+
+// =====================================================================================================================
+// Initialize query pool object (Timestamp query pools)
+VkResult TimestampQueryPool::Initialize(
+    void*          pMemory,
+    size_t         apiSize,
+    size_t         viewSize,
+    uint32_t       entryCount,
+    const uint32_t slotSize)
+{
+    VkResult result = VK_SUCCESS;
+
+    const VkDeviceSize poolSize = entryCount * slotSize;
+
+    InternalMemCreateInfo createInfo = {};
+
+    createInfo.pal.size               = poolSize;
+    createInfo.pal.alignment          = slotSize;
+    createInfo.pal.priority           = Pal::GpuMemPriority::Normal;
+    createInfo.flags.persistentMapped = true;
+
+    uint32_t allocMask = m_pDevice->GetPalDeviceMask();
+
+    const bool sharedAllocation = (m_pDevice->NumPalDevices() > 1);
+    if (sharedAllocation == false)
+    {
+        createInfo.pal.heapCount = 3;
+        createInfo.pal.heaps[0]  = Pal::GpuHeapLocal;
+        createInfo.pal.heaps[1]  = Pal::GpuHeapGartCacheable;
+        createInfo.pal.heaps[2]  = Pal::GpuHeapGartUswc;
+    }
+    else
+    {
+        createInfo.pal.heapCount = 1;
+        createInfo.pal.heaps[0] = Pal::GpuHeapGartCacheable;
+
+        createInfo.pal.flags.shareable = 1;
+        allocMask = 1 << DefaultMemoryInstanceIdx;
+    }
+
+    result = m_pDevice->MemMgr()->AllocGpuMem(createInfo, &m_internalMem, allocMask);
 
     if (result == VK_SUCCESS)
     {
         // Construct an untyped bufferView or SSBO (UAV) typed RG32 buffer view into the timestamp memory.  This
         // will be used by compute shaders performing vkCmdCopyQueryPoolResults.
         void* pViewMem = Util::VoidPtrInc(pMemory, apiSize);
-        void* pStorageViews[MaxPalDevices] = {};
 
         if (entryCount > 0)
         {
-            Pal::BufferViewInfo info = {};
+            Pal::BufferViewInfo bufferViewInfo = {};
 
-            info.range = internalMemory.Size();
+            bufferViewInfo.range = m_internalMem.Size();
 
-            if (pDevice->UseStridedCopyQueryResults())
+            if (m_pDevice->UseStridedCopyQueryResults())
             {
-                info.swizzledFormat = Pal::UndefinedSwizzledFormat;
-                info.stride         = 0;
+                bufferViewInfo.swizzledFormat = Pal::UndefinedSwizzledFormat;
+                bufferViewInfo.stride = 0;
 
-                for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+                for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
                 {
-                    info.gpuAddr = internalMemory.GpuVirtAddr(deviceIdx);
+                    bufferViewInfo.gpuAddr = m_internalMem.GpuVirtAddr(deviceIdx);
 
-                    pStorageViews[deviceIdx] = Util::VoidPtrInc(pMemory, apiSize + (viewSize * deviceIdx));
+                    m_pStorageView[deviceIdx] = Util::VoidPtrInc(pMemory, apiSize + (viewSize * deviceIdx));
 
-                    pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &info, pStorageViews[deviceIdx]);
+                    m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &bufferViewInfo, m_pStorageView[deviceIdx]);
                 }
             }
             else
@@ -460,39 +493,23 @@ VkResult TimestampQueryPool::Create(
                     },
                 };
 
-                info.stride = slotSize;
-                info.swizzledFormat = QueryCopyFormat;
+                bufferViewInfo.stride = slotSize;
+                bufferViewInfo.swizzledFormat = QueryCopyFormat;
 
-                for (uint32_t deviceIdx = 0; deviceIdx < pDevice->NumPalDevices(); deviceIdx++)
+                for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)
                 {
-                    info.gpuAddr = internalMemory.GpuVirtAddr(deviceIdx);
+                    bufferViewInfo.gpuAddr = m_internalMem.GpuVirtAddr(deviceIdx);
 
-                    pStorageViews[deviceIdx] = Util::VoidPtrInc(pMemory, apiSize + (viewSize * deviceIdx));
+                    m_pStorageView[deviceIdx] = Util::VoidPtrInc(pMemory, apiSize + (viewSize * deviceIdx));
 
-                    pDevice->PalDevice(deviceIdx)->CreateTypedBufferViewSrds(1, &info, pStorageViews[deviceIdx]);
+                    m_pDevice->PalDevice(deviceIdx)->CreateTypedBufferViewSrds(1, &bufferViewInfo, m_pStorageView[deviceIdx]);
                 }
             }
         }
         else
         {
-            memset(pViewMem, 0, pDevice->GetProperties().descriptorSizes.bufferView);
+            memset(pViewMem, 0, m_pDevice->GetProperties().descriptorSizes.bufferView);
         }
-
-        // Construct the final pool object
-        TimestampQueryPool* pObject = VK_PLACEMENT_NEW(pMemory) TimestampQueryPool(
-            pDevice,
-            pCreateInfo->queryType,
-            entryCount,
-            internalMemory,
-            pStorageViews);
-
-        *ppQueryPool = pObject;
-    }
-    else
-    {
-        pDevice->MemMgr()->FreeGpuMem(&internalMemory);
-
-        pDevice->FreeApiObject(pAllocator, pMemory);
     }
 
     return result;

@@ -180,20 +180,31 @@ VkResult Framebuffer::Destroy(
 // =====================================================================================================================
 // Set ImageViews for a Framebuffer attachment
 void Framebuffer::SetImageViews(
+    const VkImageView& imageView,
+    Attachment*        pAttachments)
+{
+    pAttachments->pView  = ImageView::ObjectFromHandle(imageView);
+    pAttachments->zRange = pAttachments->pView->GetZRange();
+
+    const Image* pImage      = pAttachments->pView->GetImage();
+    pAttachments->pImage     = pImage;
+    pAttachments->viewFormat = VkToPalFormat(pImage->GetFormat(), m_settings);
+
+    SetSubresRanges(pImage, pAttachments);
+}
+
+// =====================================================================================================================
+// Set ImageViews for a Framebuffer attachment
+void Framebuffer::SetImageViews(
     const VkRenderPassAttachmentBeginInfo* pRenderPassAttachmentBeginInfo)
 {
     Attachment* pAttachments = static_cast<Attachment*>(Util::VoidPtrInc(this, GetAttachmentsOffset()));
 
     for (uint32_t i = 0; i < pRenderPassAttachmentBeginInfo->attachmentCount; i++)
     {
-        pAttachments[i].pView  = ImageView::ObjectFromHandle(pRenderPassAttachmentBeginInfo->pAttachments[i]);
-        pAttachments[i].zRange = pAttachments[i].pView->GetZRange();
-
-        const Image* pImage        = pAttachments[i].pView->GetImage();
-        pAttachments[i].pImage     = pImage;
-        pAttachments[i].viewFormat = VkToPalFormat(pImage->GetFormat(), m_settings);
-
-        SetSubresRanges(pImage, &pAttachments[i]);
+        SetImageViews(
+            pRenderPassAttachmentBeginInfo->pAttachments[i],
+            &(pAttachments[i]));
     }
 }
 

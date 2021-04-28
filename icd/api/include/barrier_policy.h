@@ -75,6 +75,8 @@ protected:
         uint32_t                            supportedInputCacheMask);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(BarrierPolicy);
+
     uint32_t    m_supportedOutputCacheMask;         // Mask including all output caches that are supported in the
                                                     // barrier policy's scope.
     uint32_t    m_supportedInputCacheMask;          // Mask including all input caches that are supported in the
@@ -202,6 +204,9 @@ protected:
                                                     // outside of the current queue (other queues or host).
     QueueFamilyBarrierPolicy m_queueFamilyPolicy[Queue::MaxQueueFamilies];  // Per queue family policy info.
     QueueFamilyBarrierPolicy m_externalQueueFamilyPolicy;   // Policy for external/foreign queue families.
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DeviceBarrierPolicy);
 };
 
 // =====================================================================================================================
@@ -212,14 +217,14 @@ class ResourceBarrierPolicy : public BarrierPolicy
 {
 public:
     ResourceBarrierPolicy(
-        Device*                             pDevice,
+        const Device*                       pDevice,
         VkSharingMode                       sharingMode,
         uint32_t                            queueFamilyIndexCount,
         const uint32_t*                     pQueueFamilyIndices);
 
 protected:
     void InitConcurrentCachePolicy(
-        Device*                             pDevice,
+        const Device*                       pDevice,
         VkSharingMode                       sharingMode,
         uint32_t                            queueFamilyIndexCount,
         const uint32_t*                     pQueueFamilyIndices);
@@ -234,6 +239,9 @@ protected:
 
     uint32_t    m_concurrentCacheMask;              // Mask including all caches supported by any queue family in the
                                                     // concurrent sharing scope.
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ResourceBarrierPolicy);
 };
 
 // =====================================================================================================================
@@ -244,7 +252,7 @@ class ImageBarrierPolicy : public ResourceBarrierPolicy
 {
 public:
     ImageBarrierPolicy(
-        Device*                             pDevice,
+        const Device*                       pDevice,
         VkImageUsageFlags                   usage,
         VkSharingMode                       sharingMode,
         uint32_t                            queueFamilyIndexCount,
@@ -289,26 +297,26 @@ public:
 
 protected:
     void InitImageLayoutUsagePolicy(
-        Device*                             pDevice,
+        const Device*                       pDevice,
         VkImageUsageFlags                   usage,
         bool                                multisampled,
         VkFormat                            format,
         uint32_t                            extraLayoutUsages);
 
     void InitConcurrentLayoutUsagePolicy(
-        Device*                             pDevice,
+        const Device*                       pDevice,
         VkSharingMode                       sharingMode,
         uint32_t                            queueFamilyIndexCount,
         const uint32_t*                     pQueueFamilyIndices);
 
     void InitImageLayoutEnginePolicy(
-        Device*                             pDevice,
+        const Device*                       pDevice,
         VkSharingMode                       sharingMode,
         uint32_t                            queueFamilyIndexCount,
         const uint32_t*                     pQueueFamilyIndices);
 
     void InitImageCachePolicy(
-        Device*                             pDevice,
+        const Device*                       pDevice,
         VkImageUsageFlags                   usage);
 
     void GetLayouts(
@@ -327,6 +335,9 @@ protected:
                                                     // mode to allow concurrent well-defined access to the image.
     uint32_t    m_concurrentLayoutUsageMask;        // Mask including all layout usage flags supported by any queue
                                                     // family in the concurrent sharing scope.
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ImageBarrierPolicy);
 };
 
 // =====================================================================================================================
@@ -356,6 +367,9 @@ protected:
         VkSharingMode                       sharingMode,
         uint32_t                            queueFamilyIndexCount,
         const uint32_t*                     pQueueFamilyIndices);
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(BufferBarrierPolicy);
 };
 
 } //namespace vk

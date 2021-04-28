@@ -86,6 +86,12 @@ public:
         Surface*                        pFullscreenSurface;
         VkSurfaceFormatKHR              fullscreenSurfaceFormat;
 
+        VkImageUsageFlags               usage;
+        VkSharingMode                   sharingMode;
+        uint32_t                        queueFamilyIndexCount;
+        uint32_t*                       pQueueFamilyIndices;
+        VkFormat                        format;
+
     };
 
     static VkResult Create(
@@ -266,6 +272,8 @@ public:
     bool TryExitExclusive(SwapChain* pSwapChain);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(FullscreenMgr);
+
     void DisableFullscreenPresents();
     void FullscreenPresentEvent(bool success);
 

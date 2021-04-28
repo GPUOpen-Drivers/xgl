@@ -83,6 +83,8 @@ public:
         uint32_t                queueIndex,
         uint32_t                queueFlags,
         Pal::IQueue**           pPalQueues,
+        Pal::IQueue**           pPalTmzQueues,
+        Pal::IQueueSemaphore**  pPalTmzSemaphores,
         VirtualStackAllocator*  pStackAllocator);
 
     ~Queue();
@@ -135,6 +137,18 @@ public:
     {
         VK_ASSERT((idx >= 0) && (idx < static_cast<int32_t>(MaxPalDevices)));
         return m_pPalQueues[idx];
+    }
+
+    VK_FORCEINLINE Pal::IQueue* PalTmzQueue(uint32_t idx) const
+    {
+        VK_ASSERT(idx < MaxPalDevices);
+        return m_pPalTmzQueues[idx];
+    }
+
+    VK_FORCEINLINE Pal::IQueueSemaphore* PalTmzSemaphore(uint32_t idx) const
+    {
+        VK_ASSERT(idx < MaxPalDevices);
+        return m_pPalTmzSemaphore[idx];
     }
 
     VK_FORCEINLINE Device* VkDevice() const
@@ -267,6 +281,10 @@ protected:
         const Pal::PresentSwapChainInfo* pPresentInfo);
 
     Pal::IQueue*                       m_pPalQueues[MaxPalDevices];
+    Pal::IQueue*                       m_pPalTmzQueues[MaxPalDevices];
+    Pal::IQueueSemaphore*              m_pPalTmzSemaphore[MaxPalDevices];
+    bool                               m_tmzPerQueue;
+    bool                               m_lastSubmissionProtected;
     Device* const                      m_pDevice;
     uint32_t                           m_queueFamilyIndex;   // This queue's family index
     uint32_t                           m_queueIndex;         // This queue's index within the node group

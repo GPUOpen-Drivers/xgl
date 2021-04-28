@@ -139,7 +139,13 @@ Image::Image(
     VkImageCreateFlags           flags,
     Pal::IImage**                pPalImages,
     Pal::IGpuMemory**            pPalMemory,
-    const ImageBarrierPolicy&    barrierPolicy,
+    VkImageUsageFlags            imageUsage,
+    VkSharingMode                sharingMode,
+    uint32_t                     queueFamilyIndexCount,
+    const uint32_t*              pQueueFamilyIndices,
+    bool                         multisampled,
+    VkFormat                     barrierPolicyFormat,
+    uint32_t                     extraLayoutUsages,
     VkExtent3D                   tileSize,
     uint32_t                     mipLevels,
     uint32_t                     arraySize,
@@ -157,7 +163,15 @@ Image::Image(
     m_imageUsage(usage),
     m_imageStencilUsage(stencilUsage),
     m_tileSize(tileSize),
-    m_barrierPolicy(barrierPolicy),
+    m_barrierPolicy(
+        pDevice,
+        imageUsage,
+        sharingMode,
+        queueFamilyIndexCount,
+        pQueueFamilyIndices,
+        multisampled,
+        barrierPolicyFormat,
+        extraLayoutUsages),
     m_pSwapChain(nullptr),
     m_pImageMemory(nullptr),
     m_ResourceKey(resourceKey)
@@ -307,6 +321,7 @@ static VkResult InitSparseVirtualMemory(
 
     memset(pSparseMemCreateInfo, 0, sizeof(*pSparseMemCreateInfo));
 
+    pSparseMemCreateInfo->flags.globalGpuVa  = pDevice->IsGlobalGpuVaEnabled();
     pSparseMemCreateInfo->flags.virtualAlloc = 1;
     pSparseMemCreateInfo->alignment          = Util::RoundUpToMultiple(sparseAllocGranularity, palReqs.alignment);
     pSparseMemCreateInfo->size               = Util::RoundUpToMultiple(palReqs.size, pSparseMemCreateInfo->alignment);
@@ -872,15 +887,6 @@ VkResult Image::Create(
         imageFlags.internalMemBound = isSparse;
         imageFlags.linear           = (pCreateInfo->tiling == VK_IMAGE_TILING_LINEAR);
 
-        // Create barrier policy for the image.
-        ImageBarrierPolicy barrierPolicy(pDevice,
-                                         pCreateInfo->usage | stencilUsage,
-                                         pCreateInfo->sharingMode,
-                                         pCreateInfo->queueFamilyIndexCount,
-                                         pCreateInfo->pQueueFamilyIndices,
-                                         pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT,
-                                         createInfoFormat);
-
         // Construct API image object.
         VK_PLACEMENT_NEW (pMemory) Image(
             pDevice,
@@ -888,7 +894,13 @@ VkResult Image::Create(
             pCreateInfo->flags,
             pPalImages,
             pSparseMemory,
-            barrierPolicy,
+            pCreateInfo->usage | stencilUsage,
+            pCreateInfo->sharingMode,
+            pCreateInfo->queueFamilyIndexCount,
+            pCreateInfo->pQueueFamilyIndices,
+            pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT,
+            createInfoFormat,
+            0,
             sparseTileSize,
             palCreateInfo.mipLevels,
             palCreateInfo.arraySize,
@@ -1042,34 +1054,7 @@ VkResult Image::CreatePresentableImage(
         imageFlags.internalMemBound  = false;
         imageFlags.dedicatedRequired = true;
 
-        uint32_t presentLayoutUsage = 0;
-
-        switch (presentMode)
-        {
-        case Pal::PresentMode::Fullscreen:
-            // In case of fullscreen presentation mode we may need to temporarily switch to windowed presents
-            // so include both flags here.
-            presentLayoutUsage = Pal::LayoutPresentWindowed | Pal::LayoutPresentFullscreen;
-            break;
-
-        case Pal::PresentMode::Windowed:
-            presentLayoutUsage = Pal::LayoutPresentWindowed;
-            break;
-
-        default:
-            VK_NEVER_CALLED();
-            break;
-        }
-
-        // Create barrier policy for the image.
-        ImageBarrierPolicy barrierPolicy(pDevice,
-                                         imageUsageFlags,
-                                         sharingMode,
-                                         queueFamilyIndexCount,
-                                         pQueueFamilyIndices,
-                                         false, // presentable images are never multisampled
-                                         imageFormat,
-                                         presentLayoutUsage);
+        uint32_t presentLayoutUsage = GetPresentLayoutUsage(presentMode);
 
         // stencil usage will be treated same as usage if no separate stencil usage is specified.
         VkImageUsageFlags stencilUsageFlags = imageUsageFlags;
@@ -1099,7 +1084,13 @@ VkResult Image::CreatePresentableImage(
             0,
             pPalImage,
             nullptr,
-            barrierPolicy,
+            imageUsageFlags,
+            sharingMode,
+            queueFamilyIndexCount,
+            pQueueFamilyIndices,
+            false, // presentable images are never multisampled
+            imageFormat,
+            presentLayoutUsage,
             dummyTileSize,
             miplevels,
             arraySize,
@@ -1375,8 +1366,20 @@ VkResult Image::BindSwapchainMemory(
     Image*  pSwapchainImage    = Image::ObjectFromHandle(properties.images[swapChainImageIndex]);
     Memory* pSwapchainImageMem = Memory::ObjectFromHandle(properties.imageMemory[swapChainImageIndex]);
 
-    // Inherit the barrier policy from the swapchain image.
-    m_barrierPolicy = pSwapchainImage->GetBarrierPolicy();
+    Util::Destructor(&m_barrierPolicy);
+
+    uint32_t presentLayoutUsage = GetPresentLayoutUsage(properties.imagePresentSupport);
+
+    // Create new barrier policy from the swapchain image.
+    VK_PLACEMENT_NEW (&m_barrierPolicy) ImageBarrierPolicy(
+        pDevice,
+        properties.usage,
+        properties.sharingMode,
+        properties.queueFamilyIndexCount,
+        properties.pQueueFamilyIndices,
+        false, // presentable images are never multisampled
+        properties.format,
+        presentLayoutUsage);
 
     uint8_t bindIndices[MaxPalDevices];
     GenerateBindIndices(numDevices,
@@ -1713,6 +1716,33 @@ VkResult Image::GetMemoryRequirements(
     }
 
     return VK_SUCCESS;
+}
+
+// =====================================================================================================================
+// This is a function used to convert PAL PresentMode to Vk equivalents.
+uint32_t Image::GetPresentLayoutUsage(
+    Pal::PresentMode imagePresentSupport)
+{
+    uint32_t presentLayoutUsage = 0;
+
+    switch (imagePresentSupport)
+    {
+    case Pal::PresentMode::Fullscreen:
+        // In case of fullscreen presentation mode we may need to temporarily switch to windowed presents
+        // so include both flags here.
+        presentLayoutUsage = Pal::LayoutPresentWindowed | Pal::LayoutPresentFullscreen;
+        break;
+
+    case Pal::PresentMode::Windowed:
+        presentLayoutUsage = Pal::LayoutPresentWindowed;
+        break;
+
+    default:
+        VK_NEVER_CALLED();
+        break;
+    }
+
+    return presentLayoutUsage;
 }
 
 // =====================================================================================================================

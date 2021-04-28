@@ -743,7 +743,7 @@ void DeviceBarrierPolicy::InitQueueFamilyPolicies(
 // =====================================================================================================================
 // Constructor for resource barrier policies.
 ResourceBarrierPolicy::ResourceBarrierPolicy(
-    Device*                             pDevice,
+    const Device*                       pDevice,
     VkSharingMode                       sharingMode,
     uint32_t                            queueFamilyIndexCount,
     const uint32_t*                     pQueueFamilyIndices)
@@ -755,7 +755,7 @@ ResourceBarrierPolicy::ResourceBarrierPolicy(
 // =====================================================================================================================
 // Initialize the concurrent sharing cache policy of the resource if necessary.
 void ResourceBarrierPolicy::InitConcurrentCachePolicy(
-    Device*                             pDevice,
+    const Device*                       pDevice,
     VkSharingMode                       sharingMode,
     uint32_t                            queueFamilyIndexCount,
     const uint32_t*                     pQueueFamilyIndices)
@@ -779,7 +779,7 @@ void ResourceBarrierPolicy::InitConcurrentCachePolicy(
 // =====================================================================================================================
 // Constructor for image barrier policies.
 ImageBarrierPolicy::ImageBarrierPolicy(
-    Device*                             pDevice,
+    const Device*                       pDevice,
     VkImageUsageFlags                   usage,
     VkSharingMode                       sharingMode,
     uint32_t                            queueFamilyIndexCount,
@@ -798,7 +798,7 @@ ImageBarrierPolicy::ImageBarrierPolicy(
 // =====================================================================================================================
 // Initialize the layout usage policy of the image according to the input parameters.
 void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
-    Device*                             pDevice,
+    const Device*                       pDevice,
     VkImageUsageFlags                   usage,
     bool                                multisampled,
     VkFormat                            format,
@@ -908,7 +908,7 @@ void ImageBarrierPolicy::InitImageLayoutUsagePolicy(
 // =====================================================================================================================
 // Initialize the concurrent layout usage policy of the image if necessary.
 void ImageBarrierPolicy::InitConcurrentLayoutUsagePolicy(
-    Device*                             pDevice,
+    const Device*                       pDevice,
     VkSharingMode                       sharingMode,
     uint32_t                            queueFamilyIndexCount,
     const uint32_t*                     pQueueFamilyIndices)
@@ -933,7 +933,7 @@ void ImageBarrierPolicy::InitConcurrentLayoutUsagePolicy(
 // =====================================================================================================================
 // Initialize the layout engine policy of the image according to the input parameters.
 void ImageBarrierPolicy::InitImageLayoutEnginePolicy(
-    Device*                             pDevice,
+    const Device*                       pDevice,
     VkSharingMode                       sharingMode,
     uint32_t                            queueFamilyIndexCount,
     const uint32_t*                     pQueueFamilyIndices)
@@ -977,7 +977,7 @@ void ImageBarrierPolicy::InitImageLayoutEnginePolicy(
 // =====================================================================================================================
 // Initialize the cache policy of the image according to the input parameters.
 void ImageBarrierPolicy::InitImageCachePolicy(
-    Device*                             pDevice,
+    const Device*                       pDevice,
     VkImageUsageFlags                   usage)
 {
     // Initialize supported cache masks based on the usage flags provided.

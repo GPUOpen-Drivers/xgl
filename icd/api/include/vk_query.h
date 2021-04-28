@@ -103,6 +103,9 @@ protected:
 
     Device* const     m_pDevice;
     const VkQueryType m_queryType;
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(QueryPool);
 };
 
 // =====================================================================================================================
@@ -145,23 +148,26 @@ public:
         uint32_t    queryCount) override;
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(PalQueryPool);
+
     PalQueryPool(
         Device*           pDevice,
         VkQueryType       queryType,
         Pal::QueryType    palQueryType,
-        Pal::IQueryPool** ppPalQueryPools,
-        InternalMemory*   pInternalMem)
+        Pal::IQueryPool** ppPalQueryPools)
         :
         QueryPool(pDevice, queryType),
         m_palQueryType(palQueryType),
-        m_internalMem(*pInternalMem)
+        m_internalMem()
     {
         memcpy(m_pPalQueryPool, ppPalQueryPools, sizeof(m_pPalQueryPool));
     }
 
+    VkResult Initialize();
+
     const Pal::QueryType    m_palQueryType;
     Pal::IQueryPool*        m_pPalQueryPool[MaxPalDevices];
-    const InternalMemory    m_internalMem;
+    InternalMemory          m_internalMem;
 };
 
 // =====================================================================================================================
@@ -212,7 +218,7 @@ public:
     }
 
     VK_INLINE uint32_t GetSlotSize() const
-        { return m_slotSize;}
+        { return m_slotSize; }
 
     VK_INLINE const Pal::IGpuMemory& PalMemory(uint32_t deviceIdx) const
         { return *m_internalMem.PalMemory(deviceIdx); }
@@ -221,17 +227,31 @@ public:
         { return m_pStorageView[deviceIdx]; }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(TimestampQueryPool);
+
     TimestampQueryPool(
-        Device*               pDevice,
+        Device* pDevice,
         VkQueryType           queryType,
-        uint32_t              entryCount,
-        const InternalMemory& internalMem,
-        void**                ppStorageView);
+        uint32_t              entryCount)
+        :
+        QueryPool(pDevice, queryType),
+        m_entryCount(entryCount),
+        m_slotSize(pDevice->GetProperties().timestampQueryPoolSlotSize),
+        m_internalMem()
+    {
+    }
+
+    VkResult Initialize(
+        void*          pMemory,
+        size_t         apiSize,
+        size_t         viewSize,
+        uint32_t       entryCount,
+        const uint32_t slotSize);
 
     const uint32_t    m_entryCount;
     const uint32_t    m_slotSize;
     InternalMemory    m_internalMem;
-    const void*       m_pStorageView[MaxPalDevices];
+    void*             m_pStorageView[MaxPalDevices];
 };
 
 // =====================================================================================================================

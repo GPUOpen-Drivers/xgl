@@ -304,9 +304,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkEnumeratePhysicalDevices_SG(
                     // In this case, apps want to use AMD Vulkan driver instead of RADV
                     for (uint32_t i = 0; i < physicalDeviceCount; i++)
                     {
-                        // Don't report RADV driver returned physical devices
-                        if (((pProperties[i].vendorID != VENDOR_ID_AMD) && (pProperties[i].vendorID != VENDOR_ID_ATI)) ||
-                            (strstr(pProperties[i].deviceName, "RADV") == nullptr))
+                        // Don't report RADV&llvmpipe driver returned physical devices
+                        if ((strstr(pProperties[i].deviceName, "RADV") == nullptr) &&
+                            (strstr(pProperties[i].deviceName, "llvmpipe") == nullptr))
                         {
                             if (pPhysicalDevices != nullptr)
                             {
@@ -389,6 +389,12 @@ static VkResult vkEnumeratePhysicalDeviceGroupsComm(
     // Call loader's terminator function into ICDs to get all the physical device groups
     if (result == VK_SUCCESS)
     {
+        for (uint32_t i = 0; i < physicalDeviceGroupCount; i++)
+        {
+            pLayerPhysicalDeviceGroups[i].sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_GROUP_PROPERTIES;
+            pLayerPhysicalDeviceGroups[i].pNext = nullptr;
+        }
+
         result = pEnumPhysDeviceGroupsFunc(instance, &physicalDeviceGroupCount, pLayerPhysicalDeviceGroups);
     }
 

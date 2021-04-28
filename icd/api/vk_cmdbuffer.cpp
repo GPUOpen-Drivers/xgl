@@ -338,8 +338,7 @@ Pal::Result CreateClearRects(
 CmdBuffer::CmdBuffer(
     Device*                         pDevice,
     CmdPool*                        pCmdPool,
-    uint32_t                        queueFamilyIndex,
-    const DeviceBarrierPolicy&      barrierPolicy)
+    uint32_t                        queueFamilyIndex)
     :
     m_pDevice(pDevice),
     m_pCmdPool(pCmdPool),
@@ -353,7 +352,6 @@ CmdBuffer::CmdBuffer(
     m_pStackAllocator(nullptr),
     m_flags(),
     m_recordingResult(VK_SUCCESS),
-    m_barrierPolicy(barrierPolicy),
     m_pSqttState(nullptr),
     m_renderPassInstance(pDevice->VkInstance()->Allocator()),
     m_pTransformFeedbackState(nullptr),
@@ -382,8 +380,11 @@ CmdBuffer::CmdBuffer(
 
     // If supportReleaseAcquireInterface is true, the ASIC provides new barrier interface CmdReleaseThenAcquire()
     // designed for Acquire/Release-based driver. This flag is currently enabled for gfx9 and above.
-    m_flags.hasReleaseAcquire = info.gfxipProperties.flags.supportReleaseAcquireInterface;
-
+    // If supportSplitReleaseAcquire is true, the ASIC provides split CmdRelease() and CmdAcquire() to express barrier,
+    // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
+    m_flags.hasReleaseAcquire       = info.gfxipProperties.flags.supportReleaseAcquireInterface;
+    m_flags.useSplitReleaseAcquire  = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
+                                      info.gfxipProperties.flags.supportSplitReleaseAcquire;
 }
 
 // =====================================================================================================================
@@ -424,9 +425,6 @@ VkResult CmdBuffer::Create(
 
     uint32 allocCount = 0;
 
-    // Use device's barrier policy to create command buffer.
-    const DeviceBarrierPolicy& barrierPolicy = pDevice->GetBarrierPolicy();
-
     while ((result == VK_SUCCESS) && (allocCount < commandBufferCount))
     {
         // Allocate memory for the command buffer
@@ -438,8 +436,7 @@ VkResult CmdBuffer::Create(
 
             VK_INIT_API_OBJECT(CmdBuffer, pMemory, (pDevice,
                                                     pCmdPool,
-                                                    queueFamilyIndex,
-                                                    barrierPolicy));
+                                                    queueFamilyIndex));
 
             pCommandBuffers[allocCount] = reinterpret_cast<VkCommandBuffer>(pMemory);
 
@@ -1261,16 +1258,16 @@ VkResult CmdBuffer::End(void)
 }
 
 // =====================================================================================================================
-// Resets all state PipelineState.  This function is called both during vkBeginCommandBuffer (inside CmdBuffer::ResetState())
-// and during vkResetCommandBuffer  (inside CmdBuffer::ResetState()) and during vkExecuteCommands
+// Resets all state PipelineState.  This function is called both during vkBeginCommandBuffer (inside
+// CmdBuffer::ResetState()) and during vkResetCommandBuffer (inside CmdBuffer::ResetState()) and during
+// vkExecuteCommands.
 void CmdBuffer::ResetPipelineState()
 {
     ResetVertexBuffer();
 
     memset(&m_allGpuState.staticTokens, 0u, sizeof(m_allGpuState.staticTokens));
-    memset(&(m_allGpuState.depthStencilCreateInfo),
-           0u,
-           sizeof(m_allGpuState.depthStencilCreateInfo));
+
+    memset(&m_allGpuState.depthStencilCreateInfo, 0u, sizeof(m_allGpuState.depthStencilCreateInfo));
 
     uint32_t bindIdx = 0;
 
@@ -1324,6 +1321,7 @@ void CmdBuffer::ResetState()
 {
     // Memset the first section of m_allGpuState.  The second section begins with pipelineState.
     const size_t memsetBytes = offsetof(AllGpuRenderState, pipelineState);
+
     memset(&m_allGpuState, 0, memsetBytes);
 
     // Reset initial static values to "dynamic" values.  This will skip initial redundancy checking because the
@@ -1341,6 +1339,7 @@ void CmdBuffer::ResetState()
     m_recordingResult = VK_SUCCESS;
 
     m_flags.hasConditionalRendering = false;
+
 }
 
 // =====================================================================================================================
@@ -1352,6 +1351,7 @@ VkResult CmdBuffer::Reset(VkCommandBufferResetFlags flags)
     if (m_flags.wasBegun)
     {
         bool releaseResources = ((flags & VK_COMMAND_BUFFER_RESET_RELEASE_RESOURCES_BIT) != 0);
+
         if (m_flags.disableResetReleaseResources)
         {
             releaseResources = false;
@@ -1717,6 +1717,7 @@ VkResult CmdBuffer::Destroy(void)
     Util::Destructor(this);
 
     m_pDevice->FreeApiObject(m_pCmdPool->GetCmdPoolAllocator(), ApiCmdBuffer::FromObject(this));
+
     return VK_SUCCESS;
 }
 
@@ -1756,6 +1757,7 @@ void CmdBuffer::ReleaseResources()
     if (m_pStackAllocator != nullptr)
     {
         pInstance->StackMgr()->ReleaseAllocator(m_pStackAllocator);
+
         m_pStackAllocator = nullptr;
     }
 }
@@ -3398,7 +3400,7 @@ void CmdBuffer::SetEvent2(
 {
     DbgBarrierPreCmd(DbgBarrierSetResetEvent);
 
-    if (Event::ObjectFromHandle(event)->IsUseToken())
+    if (m_flags.useSplitReleaseAcquire)
     {
         utils::IterateMask deviceGroup(m_curDeviceMask);
         do
@@ -3527,7 +3529,7 @@ void CmdBuffer::ExecuteBarriers(
 
     for (uint32_t i = 0; i < memBarrierCount; ++i)
     {
-        m_barrierPolicy.ApplyBarrierCacheFlags(
+        m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(
             pMemoryBarriers[i].srcAccessMask,
             pMemoryBarriers[i].dstAccessMask,
             VK_IMAGE_LAYOUT_GENERAL,
@@ -3818,26 +3820,45 @@ void CmdBuffer::WaitEvents2(
 {
     DbgBarrierPreCmd(DbgBarrierPipelineBarrierWaitEvents);
 
-    // Finding range of gpu-only events and gpu events with cpu-accesss, we are assuming the cases won't be to have
+    // If the ASIC provides split CmdRelease()/CmdReleaseEvent() and CmdAcquire()/CmdAcquireEvent() to express barrier,
+    // we will find range of gpu-only events and gpu events with cpu-access, we are assuming the case won't be to have
     // a mixture, it means we can find ranges in the event list that are sync token or not sync token, and then call
-    // ExecuteAcquireRelease() or WaitEventsSync2ToSync1() for each range.
-    uint32_t eventRangeCount = 0;
-
-    for (uint32_t i = 0; i < eventCount; i += eventRangeCount)
+    // CmdAcquire() or CmdAcquireEvent() for each range. If the ASIC doesn't support it, we call
+    // WaitEventsSync2ToSync1() for all events.
+    if (m_flags.useSplitReleaseAcquire)
     {
-        eventRangeCount = 1;
+        uint32_t eventRangeCount = 0;
 
-        if (Event::ObjectFromHandle(pEvents[i])->IsUseToken())
+        for (uint32_t i = 0; i < eventCount; i += eventRangeCount)
         {
-            for (uint32_t j = i + 1; j < eventCount; j++)
+            eventRangeCount = 1;
+
+            if (Event::ObjectFromHandle(pEvents[i])->IsUseToken())
             {
-                if (Event::ObjectFromHandle(pEvents[j])->IsUseToken())
+                for (uint32_t j = i + 1; j < eventCount; j++)
                 {
-                    eventRangeCount++;
+                    if (Event::ObjectFromHandle(pEvents[j])->IsUseToken())
+                    {
+                        eventRangeCount++;
+                    }
+                    else
+                    {
+                        break;
+                    }
                 }
-                else
+            }
+            else
+            {
+                for (uint32_t j = i + 1; j < eventCount; j++)
                 {
-                    break;
+                    if (Event::ObjectFromHandle(pEvents[j])->IsUseToken())
+                    {
+                        break;
+                    }
+                    else
+                    {
+                        eventRangeCount++;
+                    }
                 }
             }
 
@@ -3854,25 +3875,13 @@ void CmdBuffer::WaitEvents2(
             }
             while (deviceGroup.IterateNext());
         }
-        else
-        {
-            for (uint32_t j = i + 1; j < eventCount; j++)
-            {
-                if (Event::ObjectFromHandle(pEvents[j])->IsUseToken())
-                {
-                    break;
-                }
-                else
-                {
-                    eventRangeCount++;
-                }
-            }
-
-            WaitEventsSync2ToSync1(eventRangeCount,
-                                   pEvents + i,
-                                   eventRangeCount,
-                                   pDependencyInfos + i);
-        }
+    }
+    else
+    {
+        WaitEventsSync2ToSync1(eventCount,
+                               pEvents,
+                               eventCount,
+                               pDependencyInfos);
     }
 
     DbgBarrierPostCmd(DbgBarrierPipelineBarrierWaitEvents);
@@ -4078,7 +4087,7 @@ void CmdBuffer::ExecuteAcquireRelease(
             acquireReleaseInfo.dstStageMask |= VkToPalPipelineStageFlags(
                 pThisDependencyInfo->pMemoryBarriers[i].dstStageMask);
 
-            m_barrierPolicy.ApplyBarrierCacheFlags(srcAccessMask, dstAccessMask, VK_IMAGE_LAYOUT_GENERAL,
+            m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(srcAccessMask, dstAccessMask, VK_IMAGE_LAYOUT_GENERAL,
                 VK_IMAGE_LAYOUT_GENERAL, &tempTransition);
 
             acquireReleaseInfo.srcGlobalAccessMask |= tempTransition.srcCacheMask;
@@ -4251,7 +4260,6 @@ void CmdBuffer::ExecuteAcquireRelease(
     if (acquireReleaseMode == Release)
     {
         VK_ASSERT(eventCount == 1);
-        VK_ASSERT(Event::ObjectFromHandle(*pEvents)->IsUseToken());
 
         acquireReleaseInfo.dstStageMask        = 0;
         acquireReleaseInfo.dstGlobalAccessMask = 0;
@@ -4272,9 +4280,16 @@ void CmdBuffer::ExecuteAcquireRelease(
             pImageBarriers[i].dstAccessMask = 0;
         }
 
-        uint32 syncToken = PalCmdBuffer(deviceIdx)->CmdRelease(acquireReleaseInfo);
+        Event* pEvent = Event::ObjectFromHandle(*pEvents);
 
-        Event::ObjectFromHandle(*pEvents)->SetSyncToken(syncToken);
+        if (pEvent->IsUseToken())
+        {
+            pEvent->SetSyncToken(PalCmdBuffer(deviceIdx)->CmdRelease(acquireReleaseInfo));
+        }
+        else
+        {
+            PalCmdBuffer(deviceIdx)->CmdReleaseEvent(acquireReleaseInfo, pEvent->PalEvent(deviceIdx));
+        }
     }
     else if (acquireReleaseMode == Acquire)
     {
@@ -4291,24 +4306,49 @@ void CmdBuffer::ExecuteAcquireRelease(
             pImageBarriers[i].srcAccessMask = 0;
         }
 
-        // Allocate space to store signaled event pointers (automatically rewound on unscope)
-        uint32* pSyncTokens = eventCount > 0 ?
-            virtStackFrame.AllocArray<uint32>(eventCount) : nullptr;
-
-        if (pSyncTokens != nullptr)
+        if (Event::ObjectFromHandle(pEvents[0])->IsUseToken())
         {
-            for (uint32_t i = 0; i < eventCount; ++i)
+            // Allocate space to store sync token values (automatically rewound on unscope)
+            uint32* pSyncTokens = eventCount > 0 ?
+                virtStackFrame.AllocArray<uint32>(eventCount) : nullptr;
+
+            if (pSyncTokens != nullptr)
             {
-                pSyncTokens[i] = Event::ObjectFromHandle(pEvents[i])->GetSyncToken();
+                for (uint32_t i = 0; i < eventCount; ++i)
+                {
+                    pSyncTokens[i] = Event::ObjectFromHandle(pEvents[i])->GetSyncToken();
+                }
+
+                PalCmdBuffer(deviceIdx)->CmdAcquire(acquireReleaseInfo, eventCount, pSyncTokens);
+
+                virtStackFrame.FreeArray(pSyncTokens);
             }
-
-            PalCmdBuffer(deviceIdx)->CmdAcquire(acquireReleaseInfo, eventCount, pSyncTokens);
-
-            virtStackFrame.FreeArray(pSyncTokens);
+            else
+            {
+                m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
         }
         else
         {
-            m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+            // Allocate space to store signaled event pointers (automatically rewound on unscope)
+            const Pal::IGpuEvent** ppGpuEvents = eventCount > 0 ?
+                virtStackFrame.AllocArray<const Pal::IGpuEvent*>(eventCount) : nullptr;
+
+            if (ppGpuEvents != nullptr)
+            {
+                for (uint32_t i = 0; i < eventCount; ++i)
+                {
+                    ppGpuEvents[i] = Event::ObjectFromHandle(pEvents[i])->PalEvent(deviceIdx);
+                }
+
+                PalCmdBuffer(deviceIdx)->CmdAcquireEvent(acquireReleaseInfo, eventCount, ppGpuEvents);
+
+                virtStackFrame.FreeArray(ppGpuEvents);
+            }
+            else
+            {
+                m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
+            }
         }
     }
     else
@@ -5635,7 +5675,7 @@ void CmdBuffer::RPSyncPoint(
     {
         Pal::BarrierTransition globalTransition = { };
 
-        m_barrierPolicy.ApplyBarrierCacheFlags(
+        m_pDevice->GetBarrierPolicy().ApplyBarrierCacheFlags(
             rpBarrier.srcAccessMask,
             rpBarrier.dstAccessMask,
             VK_IMAGE_LAYOUT_GENERAL,
@@ -8440,6 +8480,7 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOpEXT(
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetStencilOpEXT(faceMask, failOp, passOp, depthFailOp, compareOp);
 }
+
 } // namespace entry
 
 } // namespace vk

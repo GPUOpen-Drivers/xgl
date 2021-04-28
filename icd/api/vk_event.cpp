@@ -85,12 +85,12 @@ VkResult Event::Create(
     // designed for Acquire/Release-based driver. This flag is currently enabled for gfx9 and above.
     // If supportSplitReleaseAcquire is true, the ASIC provides split CmdRelease() and CmdAcquire() to express barrier,
     // and CmdReleaseThenAcquire() is still valid. This flag is currently enabled for gfx10 and above.
-    bool hasReleaseAcquire          = info.gfxipProperties.flags.supportReleaseAcquireInterface;
-    bool hasSplitReleaseAcquire     = info.gfxipProperties.flags.supportSplitReleaseAcquire;
+    bool useSplitReleaseAcquire = info.gfxipProperties.flags.supportReleaseAcquireInterface &&
+                                  info.gfxipProperties.flags.supportSplitReleaseAcquire;
 
     const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
 
-    if (hasReleaseAcquire && hasSplitReleaseAcquire && settings.syncTokenEnabled &&
+    if (useSplitReleaseAcquire && settings.syncTokenEnabled &&
         ((pCreateInfo->flags & VK_EVENT_CREATE_DEVICE_ONLY_BIT_KHR) != 0))
     {
         useToken = true;

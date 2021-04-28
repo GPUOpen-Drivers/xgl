@@ -1407,7 +1407,21 @@ VkResult GraphicsPipeline::Create(
 
     VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
         pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo, &pPipelineCreationFeadbackCreateInfo);
+
     ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &vbInfo, &localPipelineInfo);
+
+    // PAL internally disables dual-source blending when the blend func is min or max. In cases when it will be disabled, we should
+    // overwrite dual source blending option so the pipeline is compiled with the correct value. This avoids a mismatch in how data
+    // comes out of shaders and how the CB expects to see the data.
+    // This can be done for all ASICs, but is required for GFX10+
+    const bool canEnableDualSourceBlend = pDevice->PalDevice(DefaultDeviceIndex)->CanEnableDualSourceBlend(localPipelineInfo.blend);
+
+    if (canEnableDualSourceBlend == false)
+    {
+        localPipelineInfo.pipeline.cbState.dualSourceBlendEnable = false;
+        binaryCreateInfo.pipelineInfo.cbState.dualSourceBlendEnable = false;
+    }
+
     uint64_t apiPsoHash = BuildApiHash(pCreateInfo, &localPipelineInfo, &binaryCreateInfo.basePipelineHash);
 
     const uint32_t numPalDevices = pDevice->NumPalDevices();

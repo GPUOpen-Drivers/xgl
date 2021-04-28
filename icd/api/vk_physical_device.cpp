@@ -3672,7 +3672,13 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         {
             availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_FRAGMENT_MASK));
         }
-        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_TEXTURE_GATHER_BIAS_LOD));
+#if VK_IS_PAL_VERSION_AT_LEAST(664, 1)
+        if ((pPhysicalDevice == nullptr) ||
+            (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportTextureGatherBiasLod))
+#endif
+        {
+            availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_TEXTURE_GATHER_BIAS_LOD));
+        }
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_GPA_INTERFACE));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_BUFFER_MARKER));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(AMD_SHADER_CORE_PROPERTIES));
@@ -3853,9 +3859,7 @@ void PhysicalDevice::PopulateQueueFamilies()
         }
 
         // Vulkan requires a protected capable queue to support both protected and unprotected submissions.
-        if (protectedMemorySupported                                        &&
-           ((engineProps.tmzSupportLevel == Pal::TmzSupportLevel::PerQueue) ||
-            (engineProps.tmzSupportLevel == Pal::TmzSupportLevel::None)))
+        if (protectedMemorySupported && (engineProps.tmzSupportLevel == Pal::TmzSupportLevel::None))
         {
             supportedQueueFlags &= ~VK_QUEUE_PROTECTED_BIT;
         }
@@ -4632,7 +4636,8 @@ void PhysicalDevice::GetPhysicalDeviceBufferAddressFeatures(
         *pBufferDeviceAddress              = VK_TRUE;
         *pBufferDeviceAddressCaptureReplay =
             PalProperties().gfxipProperties.flags.supportCaptureReplay ? VK_TRUE : VK_FALSE;
-        *pBufferDeviceAddressMultiDevice   = VK_FALSE;
+        *pBufferDeviceAddressMultiDevice   =
+            PalProperties().gpuMemoryProperties.flags.globalGpuVaSupport;
     }
 }
 

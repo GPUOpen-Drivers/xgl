@@ -61,8 +61,11 @@ Queue::Queue(
     uint32_t                queueIndex,
     uint32_t                queueFlags,
     Pal::IQueue**           pPalQueues,
+    Pal::IQueue**           pPalTmzQueues,
+    Pal::IQueueSemaphore**  pPalTmzSemaphores,
     VirtualStackAllocator*  pStackAllocator)
     :
+    m_lastSubmissionProtected(false),
     m_pDevice(pDevice),
     m_queueFamilyIndex(queueFamilyIndex),
     m_queueIndex(queueIndex),
@@ -70,7 +73,26 @@ Queue::Queue(
     m_pDevModeMgr(pDevice->VkInstance()->GetDevModeMgr()),
     m_pStackAllocator(pStackAllocator)
 {
-    memcpy(m_pPalQueues, pPalQueues, sizeof(pPalQueues[0]) * pDevice->NumPalDevices());
+    if (pPalQueues != nullptr)
+    {
+        memcpy(m_pPalQueues, pPalQueues, sizeof(pPalQueues[0]) * pDevice->NumPalDevices());
+    }
+    else
+    {
+        memset(&m_pPalQueues, 0, sizeof(pPalQueues[0]) * pDevice->NumPalDevices());
+    }
+
+    if ((pPalTmzQueues != nullptr) && (pPalTmzSemaphores != nullptr))
+    {
+        memcpy(m_pPalTmzQueues, pPalTmzQueues, sizeof(pPalTmzQueues[0]) * pDevice->NumPalDevices());
+        memcpy(m_pPalTmzSemaphore, pPalTmzSemaphores, sizeof(pPalTmzSemaphores[0]) * pDevice->NumPalDevices());
+    }
+    else
+    {
+        memset(&m_pPalTmzQueues, 0, sizeof(pPalTmzQueues[0]) * pDevice->NumPalDevices());
+        memset(&m_pPalTmzSemaphore, 0, sizeof(pPalTmzSemaphores[0]) * pDevice->NumPalDevices());
+    }
+
     memset(&m_palFrameMetadataControl, 0, sizeof(Pal::PerSourceFrameMetadataControl));
 
     for (uint32_t deviceIdx = 0; deviceIdx < MaxPalDevices; deviceIdx++)
@@ -78,6 +100,9 @@ Queue::Queue(
         m_pDummyCmdBuffer[deviceIdx] = nullptr;
         m_pCmdBufRing[deviceIdx]     = nullptr;
     }
+
+    const Pal::DeviceProperties& deviceProps = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->PalProperties();
+    m_tmzPerQueue = (deviceProps.engineProperties->tmzSupportLevel == Pal::TmzSupportLevel::PerQueue) ? 1 : 0;
 
 }
 
@@ -103,7 +128,20 @@ Queue::~Queue()
 
     for (uint32_t i = 0; i < m_pDevice->NumPalDevices(); i++)
     {
-        PalQueue(i)->Destroy();
+        if (m_pPalQueues[i] != nullptr)
+        {
+            m_pPalQueues[i]->Destroy();
+        }
+
+        if (m_pPalTmzQueues[i] != nullptr)
+        {
+            m_pPalTmzQueues[i]->Destroy();
+        }
+
+        if (m_pPalTmzSemaphore[i] != nullptr)
+        {
+            m_pPalTmzSemaphore[i]->Destroy();
+        }
     }
 
 }
@@ -314,9 +352,9 @@ VkResult Queue::Submit(
             const VkProtectedSubmitInfo* pProtectedSubmitInfo = nullptr;
             bool  protectedSubmit = false;
 
-            uint32_t        waitSemaphoreValueCount = 0;
-            const uint64_t* pWaitSemaphoreValues = nullptr;
-            uint32_t        signalSemaphoreValueCount = 0;
+            uint32_t        waitValueCount         = 0;
+            const uint64_t* pWaitSemaphoreValues   = nullptr;
+            uint32_t        signalValueCount       = 0;
             const uint64_t* pSignalSemaphoreValues = nullptr;
 
             const void* pNext = submitInfo.pNext;
@@ -331,21 +369,27 @@ VkResult Queue::Submit(
                     VK_ASSERT(isSynchronization2 == false);
                     pDeviceGroupInfo = static_cast<const VkDeviceGroupSubmitInfo*>(pNext);
                     break;
+
                 case VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO:
                 {
+                    const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo =
+                        static_cast<const VkTimelineSemaphoreSubmitInfo*>(pNext);
+
                     VK_ASSERT(isSynchronization2 == false);
-                    const VkTimelineSemaphoreSubmitInfo* pTimelineSemaphoreInfo = static_cast<const VkTimelineSemaphoreSubmitInfo*>(pNext);
-                    waitSemaphoreValueCount   = pTimelineSemaphoreInfo->waitSemaphoreValueCount;
-                    pWaitSemaphoreValues      = pTimelineSemaphoreInfo->pWaitSemaphoreValues;
-                    signalSemaphoreValueCount = pTimelineSemaphoreInfo->signalSemaphoreValueCount;
-                    pSignalSemaphoreValues    = pTimelineSemaphoreInfo->pSignalSemaphoreValues;
+
+                    waitValueCount         = pTimelineSemaphoreInfo->waitSemaphoreValueCount;
+                    pWaitSemaphoreValues   = pTimelineSemaphoreInfo->pWaitSemaphoreValues;
+                    signalValueCount       = pTimelineSemaphoreInfo->signalSemaphoreValueCount;
+                    pSignalSemaphoreValues = pTimelineSemaphoreInfo->pSignalSemaphoreValues;
                     break;
                 }
                 case VK_STRUCTURE_TYPE_PROTECTED_SUBMIT_INFO:
                     VK_ASSERT(isSynchronization2 == false);
+
                     pProtectedSubmitInfo = static_cast<const VkProtectedSubmitInfo*>(pNext);
-                    protectedSubmit = pProtectedSubmitInfo->protectedSubmit;
+                    protectedSubmit      = pProtectedSubmitInfo->protectedSubmit;
                     break;
+
                 default:
                     // Skip any unknown extension structures
                     break;
@@ -370,13 +414,13 @@ VkResult Queue::Submit(
 
                 if ((result == VK_SUCCESS) && (pSubmitInfoKhr->waitSemaphoreInfoCount > 0))
                 {
-                    waitSemaphoreValueCount = pSubmitInfoKhr->waitSemaphoreInfoCount;
+                    waitValueCount = pSubmitInfoKhr->waitSemaphoreInfoCount;
 
-                    VkSemaphore* pWaitSemaphores          = virtStackFrame.AllocArray<VkSemaphore>(waitSemaphoreValueCount);
-                    uint64_t* pWaitSemaphoreInfoValues    = virtStackFrame.AllocArray<uint64_t>(waitSemaphoreValueCount);
-                    uint32_t* pWaitSemaphoreDeviceIndices = virtStackFrame.AllocArray<uint32_t>(waitSemaphoreValueCount);
+                    VkSemaphore* pWaitSemaphores          = virtStackFrame.AllocArray<VkSemaphore>(waitValueCount);
+                    uint64_t* pWaitSemaphoreInfoValues    = virtStackFrame.AllocArray<uint64_t>(waitValueCount);
+                    uint32_t* pWaitSemaphoreDeviceIndices = virtStackFrame.AllocArray<uint32_t>(waitValueCount);
 
-                    for (uint32_t i = 0; i < waitSemaphoreValueCount; i++)
+                    for (uint32_t i = 0; i < waitValueCount; i++)
                     {
                         pWaitSemaphores[i]             = pSubmitInfoKhr->pWaitSemaphoreInfos[i].semaphore;
                         pWaitSemaphoreInfoValues[i]    = pSubmitInfoKhr->pWaitSemaphoreInfos[i].value;
@@ -384,10 +428,10 @@ VkResult Queue::Submit(
                     }
 
                     result = PalWaitSemaphores(
-                        waitSemaphoreValueCount,
+                        waitValueCount,
                         pWaitSemaphores,
                         pWaitSemaphoreInfoValues,
-                        waitSemaphoreValueCount,
+                        waitValueCount,
                         pWaitSemaphoreDeviceIndices);
 
                     virtStackFrame.FreeArray(pWaitSemaphores);
@@ -398,7 +442,7 @@ VkResult Queue::Submit(
                 pCmdBuffers = pSubmitInfoKhr->commandBufferInfoCount > 0 ?
                     virtStackFrame.AllocArray<VkCommandBuffer>(pSubmitInfoKhr->commandBufferInfoCount) : nullptr;
 
-                for(uint32_t i = 0; i < pSubmitInfoKhr->commandBufferInfoCount; i++)
+                for (uint32_t i = 0; i < pSubmitInfoKhr->commandBufferInfoCount; i++)
                 {
                     pCmdBuffers[i] = pSubmitInfoKhr->pCommandBufferInfos[i].commandBuffer;
                 }
@@ -413,35 +457,38 @@ VkResult Queue::Submit(
                 if ((result == VK_SUCCESS) && (pSubmitInfoOld->waitSemaphoreCount > 0))
                 {
                     VK_ASSERT((pWaitSemaphoreValues == nullptr) ||
-                            (pSubmitInfoOld->waitSemaphoreCount == waitSemaphoreValueCount));
+                        (pSubmitInfoOld->waitSemaphoreCount == waitValueCount));
+
                     result = PalWaitSemaphores(
                         pSubmitInfoOld->waitSemaphoreCount,
                         pSubmitInfoOld->pWaitSemaphores,
                         pWaitSemaphoreValues,
-                        (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->waitSemaphoreCount          : 0),
+                        (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->waitSemaphoreCount : 0),
                         (pDeviceGroupInfo != nullptr ? pDeviceGroupInfo->pWaitSemaphoreDeviceIndices : nullptr));
                 }
 
-                pCmdBuffers         = const_cast<VkCommandBuffer*>(pSubmitInfoOld->pCommandBuffers);
-                cmdBufferCount      = pSubmitInfoOld->commandBufferCount;
-                waitSemaphoreCount  = pSubmitInfoOld->waitSemaphoreCount;
+                pCmdBuffers        = const_cast<VkCommandBuffer*>(pSubmitInfoOld->pCommandBuffers);
+                cmdBufferCount     = pSubmitInfoOld->commandBufferCount;
+                waitSemaphoreCount = pSubmitInfoOld->waitSemaphoreCount;
             }
 
             Pal::ICmdBuffer** pPalCmdBuffers = (cmdBufferCount > 0) ?
-                            virtStackFrame.AllocArray<Pal::ICmdBuffer*>(cmdBufferCount) : nullptr;
+                                                virtStackFrame.AllocArray<Pal::ICmdBuffer*>(cmdBufferCount) :
+                                                nullptr;
 
             result = ((pPalCmdBuffers != nullptr) || (cmdBufferCount == 0)) ? result : VK_ERROR_OUT_OF_HOST_MEMORY;
 
             bool lastBatch = (submitIdx == submitCount - 1);
 
-            Pal::IFence*    pPalFence     = nullptr;
-
+            Pal::IFence* pPalFence = nullptr;
             Pal::PerSubQueueSubmitInfo perSubQueueInfo = {};
+
             perSubQueueInfo.cmdBufferCount  = 0;
             perSubQueueInfo.ppCmdBuffers    = pPalCmdBuffers;
             perSubQueueInfo.pCmdBufInfoList = nullptr;
 
             Pal::SubmitInfo palSubmitInfo = {};
+
             palSubmitInfo.pPerSubQueueInfo     = &perSubQueueInfo;
             palSubmitInfo.perSubQueueInfoCount = 1;
             palSubmitInfo.gpuMemRefCount       = 0;
@@ -458,9 +505,7 @@ VkResult Queue::Submit(
 
                 perSubQueueInfo.cmdBufferCount = 0;
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 663
                 palSubmitInfo.stackSizeInDwords = 0;
-#endif
 
                 const uint32_t deviceMask = 1 << deviceIdx;
 
@@ -480,12 +525,11 @@ VkResult Queue::Submit(
 
                         pPalCmdBuffers[perSubQueueInfo.cmdBufferCount++] = cmdBuf.PalCmdBuffer(deviceIdx);
 
-#if PAL_CLIENT_INTERFACE_MAJOR_VERSION >= 663
                         const uint32_t stackSizeInDwords =
                             Util::NumBytesToNumDwords(cmdBuf.PerGpuState(deviceIdx)->maxPipelineStackSize);
+
                         palSubmitInfo.stackSizeInDwords =
                             Util::Max(palSubmitInfo.stackSizeInDwords, stackSizeInDwords);
-#endif
                     }
                     else
                     {
@@ -510,11 +554,71 @@ VkResult Queue::Submit(
 
                     if (timedQueueEvents == false)
                     {
-                        palResult = PalQueue(deviceIdx)->Submit(palSubmitInfo);
+                        const Pal::DeviceProperties& deviceProps = m_pDevice->VkPhysicalDevice(deviceIdx)->PalProperties();
+
+                        // PerQueue level tmz submission supported. Prepare this path for compute engine.
+                        if (m_tmzPerQueue)
+                        {
+                            const CmdBuffer& cmdBuf = *(*pCommandBuffers[0]);
+
+                            if (cmdBuf.IsProtected())
+                            {
+                                // If the previous submit is non-tmz, but the current submit is tmz, trigger queue switch.
+                                // Add semaphore between tmz and none-tmz queue, tmz queue wait non-tmz queue done.
+                                if (m_lastSubmissionProtected == false)
+                                {
+                                    palResult = PalQueue(deviceIdx)->SignalQueueSemaphore(m_pPalTmzSemaphore[deviceIdx], 0);
+
+                                    if (palResult == Pal::Result::Success)
+                                    {
+                                        palResult = PalTmzQueue(deviceIdx)->WaitQueueSemaphore(m_pPalTmzSemaphore[deviceIdx], 0);
+                                    }
+                                }
+
+                                if (palResult == Pal::Result::Success)
+                                {
+                                    palResult = PalTmzQueue(deviceIdx)->Submit(palSubmitInfo);
+                                }
+
+                                VK_ASSERT(palResult == Pal::Result::Success);
+                                // After submiting TMZ commands, set previous submission state to TMZ
+                                m_lastSubmissionProtected = true;
+                            }
+                            else
+                            {
+                                // If the previous submit is tmz, but the current submit is non-tmz, trigger queue switch.
+                                // Add semaphore between tmz and none-tmz queue, non-tmz queue wait tmz queue done.
+                                if (m_lastSubmissionProtected)
+                                {
+                                    palResult = PalTmzQueue(deviceIdx)->SignalQueueSemaphore(m_pPalTmzSemaphore[deviceIdx], 0);
+
+                                    if (palResult == Pal::Result::Success)
+                                    {
+                                        palResult = PalQueue(deviceIdx)->WaitQueueSemaphore(m_pPalTmzSemaphore[deviceIdx], 0);
+                                    }
+                                }
+
+                                if (palResult == Pal::Result::Success)
+                                {
+                                    palResult = PalQueue(deviceIdx)->Submit(palSubmitInfo);
+                                }
+
+                                VK_ASSERT(palResult == Pal::Result::Success);
+                                // After submiting non-TMZ commands, set previous submission state to non-TMZ
+                                m_lastSubmissionProtected = false;
+                            }
+                        }
+                        else
+                        {
+                            palResult = PalQueue(deviceIdx)->Submit(palSubmitInfo);
+                        }
                     }
                     else
                     {
 #if ICD_GPUOPEN_DEVMODE_BUILD
+                        // TMZ is NOT supported for GPUOPEN path.
+                        VK_ASSERT((*pCommandBuffers[0])->IsProtected() == false);
+
                         palResult = m_pDevModeMgr->TimedQueueSubmit(
                             deviceIdx,
                             this,
@@ -526,6 +630,7 @@ VkResult Queue::Submit(
                         VK_NEVER_CALLED();
 #endif
                     }
+
                     result = PalToVkResult(palResult);
                 }
 
@@ -544,13 +649,13 @@ VkResult Queue::Submit(
 
                 if ((result == VK_SUCCESS) && (pSubmitInfoKhr->signalSemaphoreInfoCount > 0))
                 {
-                    signalSemaphoreValueCount = pSubmitInfoKhr->signalSemaphoreInfoCount;
+                    signalValueCount = pSubmitInfoKhr->signalSemaphoreInfoCount;
 
-                    VkSemaphore* pSignalSemaphores          = virtStackFrame.AllocArray<VkSemaphore>(signalSemaphoreValueCount);
-                    uint64_t* pSignalSemaphoreInfoValues    = virtStackFrame.AllocArray<uint64_t>(signalSemaphoreValueCount);
-                    uint32_t* pSignalSemaphoreDeviceIndices = virtStackFrame.AllocArray<uint32_t>(signalSemaphoreValueCount);
+                    VkSemaphore* pSignalSemaphores          = virtStackFrame.AllocArray<VkSemaphore>(signalValueCount);
+                    uint64_t* pSignalSemaphoreInfoValues    = virtStackFrame.AllocArray<uint64_t>(signalValueCount);
+                    uint32_t* pSignalSemaphoreDeviceIndices = virtStackFrame.AllocArray<uint32_t>(signalValueCount);
 
-                    for (uint32_t i = 0; i < signalSemaphoreValueCount; i++)
+                    for (uint32_t i = 0; i < signalValueCount; i++)
                     {
                         pSignalSemaphores[i]             = pSubmitInfoKhr->pSignalSemaphoreInfos[i].semaphore;
                         pSignalSemaphoreInfoValues[i]    = pSubmitInfoKhr->pSignalSemaphoreInfos[i].value;
@@ -558,10 +663,10 @@ VkResult Queue::Submit(
                     }
 
                     result = PalSignalSemaphores(
-                        signalSemaphoreValueCount,
+                        signalValueCount,
                         pSignalSemaphores,
                         pSignalSemaphoreInfoValues,
-                        signalSemaphoreValueCount,
+                        signalValueCount,
                         pSignalSemaphoreDeviceIndices);
 
                     virtStackFrame.FreeArray(pSignalSemaphores);
@@ -576,7 +681,8 @@ VkResult Queue::Submit(
                 if ((result == VK_SUCCESS) && (pSubmitInfoOld->signalSemaphoreCount > 0))
                 {
                     VK_ASSERT((pSignalSemaphoreValues == nullptr) ||
-                            (pSubmitInfoOld->signalSemaphoreCount == signalSemaphoreValueCount));
+                              (pSubmitInfoOld->signalSemaphoreCount == signalValueCount));
+
                     result = PalSignalSemaphores(
                         pSubmitInfoOld->signalSemaphoreCount,
                         pSubmitInfoOld->pSignalSemaphores,
@@ -588,6 +694,7 @@ VkResult Queue::Submit(
 
         }
     }
+
     return result;
 }
 
@@ -722,7 +829,6 @@ VkResult Queue::PalWaitSemaphores(
             }
             else
             {
-                VK_ASSERT(pSemaphoreValues[i] != 0);
                 pointValue = pSemaphoreValues[i];
             }
         }
