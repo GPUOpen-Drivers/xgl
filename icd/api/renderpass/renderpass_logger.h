@@ -65,6 +65,8 @@ public:
     void End();
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(RenderPassLogger);
+
     bool OpenLogFile(uint64_t hash);
     void Log(const char* pFormat, ...);
     void LogRenderPassCreateInfo(const RenderPassCreateInfo& apiInfo);

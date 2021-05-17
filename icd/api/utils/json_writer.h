@@ -60,6 +60,8 @@ public:
     virtual void WriteCharacter(char character) override;
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(JsonOutputStream);
+
     Util::Result OpenFile(const char* pFilePath);
 
     bool IsFileOpen() const { return m_file.IsOpen(); }

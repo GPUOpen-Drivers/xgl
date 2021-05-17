@@ -177,6 +177,8 @@ public:
     Pal::Result Unmap(uint32_t idx);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(InternalMemory);
+
     friend class InternalMemMgr;
 
     InternalMemoryPool  m_memoryPool;                   // Memory pool the suballocation comes from (its pBuddyAllocator is
@@ -253,6 +255,8 @@ private:
     typedef Util::List<InternalMemoryPool, PalAllocator>                                               MemoryPoolList;
     typedef Util::HashMap<MemoryPoolProperties, MemoryPoolList*, PalAllocator, Util::JenkinsHashFunc>  MemoryPoolListMap;
 
+    PAL_DISALLOW_COPY_AND_ASSIGN(InternalMemMgr);
+
     VkResult CalcSubAllocationPoolInternal(
         const MemoryPoolProperties& poolProps,
         MemoryPoolList**            ppPoolInfo);
@@ -310,12 +314,6 @@ public:
         }
     }
 
-    // Copy and Move semantics are Disabled.
-    MappedInternalMemoryAddr(const MappedInternalMemoryAddr&) = delete;
-    MappedInternalMemoryAddr(MappedInternalMemoryAddr&&) = delete;
-    MappedInternalMemoryAddr& operator=(const MappedInternalMemoryAddr&) = delete;
-    MappedInternalMemoryAddr& operator=(MappedInternalMemoryAddr&&) = delete;
-
     // Attempts to map video memory. On failure the object remains safely descrutable
     void Init(InternalMemory* pMappableMem, uint32_t deviceIdx) noexcept
     {
@@ -338,6 +336,8 @@ public:
     uint64_t Size()     const noexcept { return this->IsMapped() ? m_pVidMem->Size() : 0; }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(MappedInternalMemoryAddr);
+
     void*           m_pCpuAddr  = nullptr;
     InternalMemory* m_pVidMem   = nullptr;
     uint32_t        m_deviceIdx = 0;

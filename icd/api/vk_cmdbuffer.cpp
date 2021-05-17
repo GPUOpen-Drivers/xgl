@@ -4601,10 +4601,10 @@ void CmdBuffer::BeginQueryIndexed(
         {
             const auto remainingQueryIndex = query + remainingQuery;
 
-            deviceGroup = utils::IterateMask(m_curDeviceMask);
+            utils::IterateMask multiviewDeviceGroup(m_curDeviceMask);
             do
             {
-                const uint32_t deviceIdx = deviceGroup.Index();
+                const uint32_t deviceIdx = multiviewDeviceGroup.Index();
 
                 PalCmdBuffer(deviceIdx)->CmdBeginQuery(
                     *pQueryPool->PalPool(deviceIdx),
@@ -4616,7 +4616,7 @@ void CmdBuffer::BeginQueryIndexed(
                     pQueryPool->PalQueryType(),
                     remainingQueryIndex);
             }
-            while (deviceGroup.IterateNext());
+            while (multiviewDeviceGroup.IterateNext());
         }
     }
 
@@ -5487,6 +5487,7 @@ void CmdBuffer::BeginRenderPass(
         while (deviceGroup.IterateNext());
 
         RPBeginSubpass();
+
     }
     else
     {
@@ -5508,16 +5509,16 @@ void CmdBuffer::NextSubPass(
 
     if (m_renderPassInstance.subpass != VK_SUBPASS_EXTERNAL)
     {
+
         // End the previous subpass
         RPEndSubpass();
 
-        {
-            // Advance the current subpass index
-            m_renderPassInstance.subpass++;
-        }
+        // Advance the current subpass index
+        m_renderPassInstance.subpass++;
 
         // Begin the next subpass
         RPBeginSubpass();
+
     }
 
     DbgBarrierPostCmd(DbgBarrierNextSubpass);
@@ -5551,7 +5552,6 @@ void CmdBuffer::RPEndSubpass()
     {
         RPSyncPoint(subpass.end.syncBottom, &virtStack);
     }
-
 }
 
 // =====================================================================================================================
@@ -5642,6 +5642,7 @@ void CmdBuffer::RPBeginSubpass()
 
     // Set view instance mask, on devices in render pass instance's device mask
     SetViewInstanceMask(GetRpDeviceMask());
+
 }
 
 // =====================================================================================================================

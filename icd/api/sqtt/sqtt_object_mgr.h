@@ -103,6 +103,8 @@ public:
         HandleType handle);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(SqttObjectMgr);
+
     template<typename ObjectType>
     void SetMetaState(
         ObjectType     objectType,

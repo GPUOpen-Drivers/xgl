@@ -31,6 +31,7 @@
 #pragma once
 
 #include "vkgcDefs.h"
+#include "include/vk_utils.h"
 
 namespace vk
 {
@@ -69,6 +70,8 @@ public:
                             size_t* pDataLen) override;
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(CacheAdapter);
+
     explicit CacheAdapter(PipelineBinaryCache* pPipelineBinaryCache);
 
     PipelineBinaryCache* m_pPipelineBinaryCache;

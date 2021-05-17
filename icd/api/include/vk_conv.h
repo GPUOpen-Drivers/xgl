@@ -2311,6 +2311,14 @@ VK_INLINE uint32_t VkToPalPipelineStageFlags(
         palPipelineStageMask |= Pal::PipelineStageVs;
     }
 
+    if (stageMask & VK_PIPELINE_STAGE_2_PRE_RASTERIZATION_SHADERS_BIT_KHR)
+    {
+        palPipelineStageMask |= Pal::PipelineStageVs |
+                                Pal::PipelineStageHs |
+                                Pal::PipelineStageDs |
+                                Pal::PipelineStageGs;
+    }
+
     return palPipelineStageMask;
 }
 

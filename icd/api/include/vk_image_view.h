@@ -164,6 +164,9 @@ protected:
 
     Pal::IColorTargetView*  m_pColorTargetViews[MaxPalDevices];
     Pal::IDepthStencilView* m_pDepthStencilViews[MaxPalDevices];
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ImageView);
 };
 
 // =====================================================================================================================

@@ -99,6 +99,8 @@ protected:
     Framebuffer(const VkFramebufferCreateInfo& info, Attachment* pAttachments, const RuntimeSettings& runTimeSettings);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Framebuffer);
+
     VK_INLINE void SetImageViews(
         const VkImageView& imageView,
         Attachment*        pAttachments);

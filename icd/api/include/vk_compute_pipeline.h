@@ -116,6 +116,8 @@ protected:
         Util::MetroHash::Hash*             pBaseHash);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ComputePipeline);
+
     ImmedInfo m_info; // Immediate state that will go in CmdSet* functions
 };
 

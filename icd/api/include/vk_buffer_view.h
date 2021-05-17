@@ -64,6 +64,9 @@ protected:
     const Device* const     m_pDevice;
     uint32_t                m_SrdSize;   // size of the Srd in bytes
     const void*             m_pSrds;     // Pointer to the SRD of the buffer views
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(BufferView);
 };
 
 namespace entry

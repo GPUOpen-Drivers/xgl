@@ -163,6 +163,8 @@ public:
         Pal::ImageViewInfo*          pPalViewInfo) const;
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ResourceOptimizer);
+
     void ApplyProfileToImageCreateInfo(
         const ResourceProfile&           profile,
         const ResourceOptimizerKey&      resourceKey,

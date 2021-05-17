@@ -72,6 +72,7 @@ public:
     void  Free(const Util::FreeInfo& freeInfo);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(PalAllocator);
 
 #if PAL_MEMTRACK
     // NOTE: Memory leak tracking requires an allocator in order to perform the actual allocations. We can't provide
@@ -90,6 +91,7 @@ private:
         void* Alloc(const Util::AllocInfo& allocInfo);
 
     private:
+        PAL_DISALLOW_COPY_AND_ASSIGN(MemTrackerAllocator);
 
         VkAllocationCallbacks* m_pCallbacks;
     };

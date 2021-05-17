@@ -95,6 +95,8 @@ public:
     }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Fence);
+
     Fence(uint32_t      numGroupedFences,
           Pal::IFence** pPalFences,
           bool          canBeInherited)

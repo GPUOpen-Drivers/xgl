@@ -211,6 +211,9 @@ protected:
     const PipelineInfo      m_pipelineInfo;
     const Device* const     m_pDevice;
     const uint64_t          m_apiHash;
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(PipelineLayout);
 };
 
 static_assert(alignof(PipelineLayout::SetUserDataLayout) <= alignof(PipelineLayout),

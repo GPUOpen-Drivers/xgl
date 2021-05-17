@@ -232,7 +232,6 @@ function(xgl_compiler_options TARGET)
                     -Wno-error=delete-non-abstract-non-virtual-dtor
                 )
             endif()
-
         endif()
 
         target_compile_options(${TARGET} PRIVATE
@@ -276,6 +275,7 @@ function(xgl_compiler_options TARGET)
             target_compile_options(${TARGET} PRIVATE
                 # Output with color if in terminal: https://github.com/ninja-build/ninja/wiki/FAQ
                 -fcolor-diagnostics
+
                 -Wthread-safety
             )
         endif()

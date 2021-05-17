@@ -69,6 +69,8 @@ protected:
     SamplerYcbcrConversion(const VkSamplerYcbcrConversionCreateInfo* pCreateInfo, const RuntimeSettings& settings);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(SamplerYcbcrConversion);
+
     BitDepth GetYuvBitDepth(VkFormat format);
 
     static uint32_t MapSwizzle(

@@ -167,7 +167,6 @@ public:
     CacheAdapter* GetCacheAdapter() { return m_pCacheAdapter; }
 
 private:
-
     PAL_DISALLOW_DEFAULT_CTOR(PipelineBinaryCache);
     PAL_DISALLOW_COPY_AND_ASSIGN(PipelineBinaryCache);
 

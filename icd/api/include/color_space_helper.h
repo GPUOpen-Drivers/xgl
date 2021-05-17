@@ -94,6 +94,7 @@ public:
     }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ColorSpaceHelper);
 
     static FmtSupport GetBitFormat(Pal::ChNumFormat palFormat);
 };

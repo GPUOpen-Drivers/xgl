@@ -105,6 +105,7 @@ endif()
 
 # Find Headers Helper ##############################################################################
 macro(target_find_headers _target)
+    message(AUTHOR_WARNING "This function has been deprecated because it is so slow. Use source_group TREE functionality added in cmake 3.8")
     get_target_property(${_target}_INCLUDES_DIRS ${_target} INCLUDE_DIRECTORIES)
 
     if(${_target}_INCLUDES_DIRS)
@@ -129,6 +130,7 @@ endmacro()
 # Note: this only adds files that have been added to the target's SOURCES property. To add headers
 # to this list, be sure that you call target_find_headers before you call target_source_groups.
 macro(target_source_groups _target)
+    message(AUTHOR_WARNING "This function has been deprecated because it is so slow. Use source_group TREE functionality added in cmake 3.8")
     get_target_property(${_target}_SOURCES ${_target} SOURCES)
     foreach(_source IN ITEMS ${${_target}_SOURCES})
         set(_source ${_source})
@@ -142,7 +144,7 @@ endmacro()
 
 # Deprecated Visual Studio Filter Helper ###########################################################
 macro(target_vs_filters _target)
-    message(DEPRECATION "target_vs_filters is deprecated. use 'target_find_headers' and 'target_source_groups' instead.")
+    message(AUTHOR_WARNING "This function has been deprecated because it is so slow. Use source_group TREE functionality added in cmake 3.8")
     target_find_headers(${_target})
     if(MSVC)
         target_source_groups(${_target})
@@ -154,4 +156,3 @@ if(CMAKE_GENERATOR MATCHES "Visual Studio")
     set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
 endif()
-

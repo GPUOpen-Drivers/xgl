@@ -149,6 +149,8 @@ public:
     void Destroy();
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(RenderStateCache);
+
     static const uint32_t NumStateBuckets = 32;
 
     // State mapping for Pal::*Params -> uint32_t token mapping (for redundancy checking CmdSet* functions)

@@ -2021,7 +2021,7 @@
         "Ray Tracing"
       ],
       "Defaults": {
-        "Default": "0"
+        "Default": "0xffffffffffffffff"
       },
       "Flags": {
         "IsHex": true,
@@ -3922,6 +3922,18 @@
       "Type": "bool",
       "VariableName": "optColorTargetUsageDoesNotContainResolveLayout",
       "Name": "ColorTargetUsageDoesNotContainResolveLayout",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "If set, a depth stencil image with transfer usage bit is implicitly allowed to be in resolve_src or resolve_dst layout.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "ForceResolveLayoutForDepthStencilTransferUsage",
       "Scope": "Driver"
     },
     {

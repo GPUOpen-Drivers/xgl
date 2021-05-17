@@ -100,6 +100,8 @@ protected:
     void     DestroyLockedPhysicalDeviceList(void);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(PhysicalDeviceManager);
+
     Instance*                   m_pInstance;
     DisplayManager*             m_pDisplayManager;
 

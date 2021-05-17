@@ -1157,8 +1157,8 @@ private:
             uint32_t subpassLoadOpClearsBoundAttachments :  1;
             uint32_t hasReleaseAcquire                   :  1;
             uint32_t useSplitReleaseAcquire              :  1;
-            uint32_t reserved2                           :  2;
-            uint32_t reserved                            : 19;
+            uint32_t reserved2                           :  3;
+            uint32_t reserved                            : 18;
         };
     };
 

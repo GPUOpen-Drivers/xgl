@@ -86,6 +86,8 @@ public:
                         uint64* const                           pData);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(PrivateDataSlotEXT);
+
     PrivateDataSlotEXT(
                         Device*                                 pDevice,
                         const bool                              isReserved,

@@ -86,6 +86,9 @@ protected:
     const void*                m_pCode;
     ShaderModuleHandle         m_handle;
     Pal::ShaderHash            m_codeHash;
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ShaderModule);
 };
 
 namespace entry

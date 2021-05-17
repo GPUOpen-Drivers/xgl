@@ -180,6 +180,7 @@ public:
     void DestroyPipelineBinaryCache();
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCompiler);
 
     void ApplyProfileOptions(
         Device*                      pDevice,

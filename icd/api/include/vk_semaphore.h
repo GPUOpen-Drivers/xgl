@@ -133,6 +133,8 @@ public:
     }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Semaphore);
+
     Semaphore(
         Pal::IQueueSemaphore*                pPalSemaphore[],
         uint32_t                             semaphoreCount,

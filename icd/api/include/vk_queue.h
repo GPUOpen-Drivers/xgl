@@ -297,6 +297,9 @@ protected:
     SqttQueueState*                    m_pSqttState; // Per-queue state for handling SQ thread-tracing annotations
     typedef Util::Deque<CmdBufState*, PalAllocator> CmdBufRing;
     CmdBufRing*                        m_pCmdBufRing[MaxPalDevices];
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Queue);
 };
 
 VK_DEFINE_DISPATCHABLE(Queue);

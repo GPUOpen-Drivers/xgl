@@ -144,6 +144,9 @@ protected:
 
     friend class DescriptorPool;
     friend class DescriptorSetHeap;
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DescriptorSet);
 };
 
 // =====================================================================================================================
@@ -299,6 +302,7 @@ public:
     static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DescriptorUpdate);
 
     template <uint32_t numPalDevices>
     static PFN_vkUpdateDescriptorSets GetUpdateDescriptorSetsFunc(const Device* pDevice);

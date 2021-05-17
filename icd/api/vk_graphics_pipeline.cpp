@@ -453,7 +453,7 @@ uint64_t GraphicsPipeline::BuildApiHash(
     }
 
     if ((pInfo->activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
-		&& (pCreateInfo->pTessellationState != nullptr))
+        && (pCreateInfo->pTessellationState != nullptr))
     {
         GenerateHashFromTessellationStateCreateInfo(&baseHasher, *pCreateInfo->pTessellationState);
     }
@@ -1770,7 +1770,7 @@ GraphicsPipeline::GraphicsPipeline(
     m_flags.bindTriangleRasterState  = bindTriangleRasterState;
     m_flags.bindStencilRefMasks      = bindStencilRefMasks;
     m_flags.bindInputAssemblyState   = bindInputAssemblyState;
-	m_flags.customSampleLocations    = customSampleLocations;
+    m_flags.customSampleLocations    = customSampleLocations;
     m_flags.force1x1ShaderRate       = force1x1ShaderRate;
     CreateStaticState();
 

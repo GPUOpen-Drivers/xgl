@@ -61,6 +61,7 @@ struct TempMemArena
     size_t GetTotalAllocated() const { return m_totalMemSize; }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(TempMemArena);
 
 #if DEBUG
     struct Sentinel

@@ -91,6 +91,9 @@ protected:
     const bool              m_isYCbCrSampler;
     const uint32_t          m_multiPlaneCount;
     const uint32_t          m_borderColorPaletteIndex;
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Sampler);
 };
 
 namespace entry

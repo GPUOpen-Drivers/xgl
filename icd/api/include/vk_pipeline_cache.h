@@ -60,7 +60,7 @@ public:
 
     VkResult GetData(void* pData, size_t* pSize);
 
-    ShaderCache GetShaderCache(uint32_t deviceIdx) const
+    ShaderCache const& GetShaderCache(uint32_t deviceIdx) const
     {
         VK_ASSERT(deviceIdx < MaxPalDevices);
         return m_shaderCaches[deviceIdx];
@@ -86,6 +86,9 @@ protected:
     ShaderCache         m_shaderCaches[MaxPalDevices];
 
     PipelineBinaryCache* m_pBinaryCache;       // Pipeline binary cache object
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(PipelineCache);
 };
 
 namespace entry

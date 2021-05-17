@@ -778,6 +778,9 @@ protected:
     Util::Uuid::Uuid                 m_pipelineCacheUUID;
 
     Util::IPlatformKey*              m_pPlatformKey;             // Platform identifying key
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(PhysicalDevice);
 };
 
 VK_DEFINE_DISPATCHABLE(PhysicalDevice);

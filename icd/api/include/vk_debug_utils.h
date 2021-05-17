@@ -61,6 +61,8 @@ protected:
     };
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DebugUtilsMessenger);
+
     VkDebugUtilsMessengerCreateInfoEXT m_createInfo;
 
 };

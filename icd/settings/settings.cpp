@@ -186,6 +186,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
         }
 
+        if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp9)
+        {
+            m_settings.forceResolveLayoutForDepthStencilTransferUsage = true;
+        }
+
         // In general, DCC is very beneficial for color attachments, 2D, 3D shader storage resources that have BPP>=32.
         // If this is completely offset, maybe by increased shader read latency or partial writes of DCC blocks, it should
         // be debugged on a case by case basis.
@@ -498,6 +503,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.useAnisoThreshold = true;
             m_settings.anisoThreshold = 1.0f;
             m_settings.disableResetReleaseResources = true;
+
+            m_settings.forceResolveLayoutForDepthStencilTransferUsage = false;
         }
 
         if (appProfile == AppProfile::F1_2017)
@@ -513,6 +520,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             m_settings.disableHtileBasedMsaaRead = true;
             m_settings.enableFullCopyDstOnly = true;
+
+            m_settings.forceResolveLayoutForDepthStencilTransferUsage = false;
         }
 
         if (appProfile == AppProfile::DiRT4)
@@ -564,6 +573,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             // Disable image type checking to avoid 1% loss.
             m_settings.disableImageResourceTypeCheck = true;
+
+            m_settings.forceResolveLayoutForDepthStencilTransferUsage = false;
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp8)
             {

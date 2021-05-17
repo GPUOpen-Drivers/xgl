@@ -233,6 +233,9 @@ protected:
     const CreateInfo          m_info;    // Create-time information
     const Device* const       m_pDevice; // Device pointer
     const uint64_t            m_apiHash;
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DescriptorSetLayout);
 };
 
 namespace entry

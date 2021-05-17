@@ -194,6 +194,9 @@ protected:
     Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgc
     Pal::GfxIpLevel    m_gfxIpLevel;           // Graphics IP level
     static const char* GetShaderStageName(ShaderStage shaderStage);
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(CompilerSolution);
 };
 
 }

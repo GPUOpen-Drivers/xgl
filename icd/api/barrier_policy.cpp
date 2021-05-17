@@ -1155,20 +1155,17 @@ void ImageBarrierPolicy::ApplyImageMemoryBarrier(
                                       GetQueueFamilyPolicy(srcQueueFamilyIndex).ownershipTransferPriority);
     applyLayoutChanges = (applyLayoutChanges != isDstQueueFamilyPreferred);
 
-    if (applyLayoutChanges)
+    const VkFormat format = Image::ObjectFromHandle(barrier.image)->GetFormat();
+
+    // Determine PAL layouts.
+    GetLayouts(barrier.oldLayout, srcQueueFamilyIndex, oldPalLayouts, format);
+    GetLayouts(barrier.newLayout, dstQueueFamilyIndex, newPalLayouts, format);
+
+    // If old and new PAL layouts match then no need to apply layout changes.
+    if (skipMatchingLayouts && applyLayoutChanges &&
+        (memcmp(oldPalLayouts, newPalLayouts, sizeof(Pal::ImageLayout) * MaxPalAspectsPerMask) == 0))
     {
-        const VkFormat format = Image::ObjectFromHandle(barrier.image)->GetFormat();
-
-        // Determine PAL layouts.
-        GetLayouts(barrier.oldLayout, srcQueueFamilyIndex, oldPalLayouts, format);
-        GetLayouts(barrier.newLayout, dstQueueFamilyIndex, newPalLayouts, format);
-
-        // If old and new PAL layouts match then no need to apply layout changes.
-        if (skipMatchingLayouts &&
-            (memcmp(oldPalLayouts, newPalLayouts, sizeof(Pal::ImageLayout) * MaxPalAspectsPerMask) == 0))
-        {
-            applyLayoutChanges = false;
-        }
+        applyLayoutChanges = false;
     }
 
     // Apply barrier cache flags to the PAL barrier transition.

@@ -215,6 +215,9 @@ public:
         EXT_SWAPCHAIN_COLORSPACE,
         Count
     };
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(InstanceExtensions);
 };
 
 // =====================================================================================================================
@@ -353,6 +356,9 @@ public:
         GOOGLE_USER_TYPE,
         Count
     };
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DeviceExtensions);
 };
 
 } /* namespace vk */

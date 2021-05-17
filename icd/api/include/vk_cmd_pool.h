@@ -84,6 +84,8 @@ public:
     bool IsProtected() const { return m_flags.isProtected ? true : false; }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(CmdPool);
+
     CmdPool(
         Device*                      pDevice,
         Pal::ICmdAllocator**         pPalCmdAllocators,

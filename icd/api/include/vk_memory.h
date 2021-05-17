@@ -147,6 +147,8 @@ public:
     }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Memory);
+
     Memory(vk::Device*                      pDevice,
            Pal::IGpuMemory**                pPalMemory,
            Pal::OsExternalHandle            externalHandle,

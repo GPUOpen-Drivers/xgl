@@ -107,6 +107,8 @@ public:
         Pal::DynamicComputeShaderInfo*   pDynamicCompueShaderInfo);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ShaderOptimizer);
+
     void ApplyProfileToShaderCreateInfo(
         const PipelineProfile&           profile,
         const PipelineOptimizerKey&      pipelineKey,

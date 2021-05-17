@@ -503,7 +503,7 @@ void DescriptorGpuMemHeap::Destroy(
     {
         if (m_pCpuAddr[deviceIdx] != nullptr)
         {
-            m_internalMem.Unmap(deviceIdx);
+            m_pInternalMem->Unmap(deviceIdx);
         }
     }
 
@@ -761,26 +761,26 @@ VkResult DescriptorGpuMemHeap::BindMemory(
     {
         if (m_pCpuAddr[deviceIdx] != nullptr)
         {
-            m_internalMem.Unmap(deviceIdx);
+            m_pInternalMem->Unmap(deviceIdx);
 
             m_pCpuAddr[deviceIdx]       = nullptr;
             m_pCpuShadowAddr[deviceIdx] = nullptr;
         }
     }
 
-    m_internalMem       = *pInternalMem;
+    m_pInternalMem           = pInternalMem;
 
     m_gpuMemOffsetRangeStart = 0;
     m_gpuMemOffsetRangeEnd   = m_gpuMemOffsetRangeStart + m_gpuMemSize;
 
     for (uint32_t deviceIdx = 0; deviceIdx < m_numPalDevices; deviceIdx++)
     {
-        if ((m_gpuMemSize > 0) && (m_internalMem.PalMemory(deviceIdx) != nullptr))
+        if ((m_gpuMemSize > 0) && (m_pInternalMem->PalMemory(deviceIdx) != nullptr))
         {
-            Pal::Result mapResult = m_internalMem.Map(deviceIdx, &m_pCpuAddr[deviceIdx]);
+            Pal::Result mapResult = m_pInternalMem->Map(deviceIdx, &m_pCpuAddr[deviceIdx]);
             VK_ASSERT(mapResult == Pal::Result::Success);
 
-            mapResult = m_internalMem.ShadowMap(deviceIdx, &m_pCpuShadowAddr[deviceIdx]);
+            mapResult = m_pInternalMem->ShadowMap(deviceIdx, &m_pCpuShadowAddr[deviceIdx]);
             VK_ASSERT(mapResult == Pal::Result::Success);
         }
         else

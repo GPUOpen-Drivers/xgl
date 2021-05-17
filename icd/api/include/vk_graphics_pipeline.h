@@ -351,6 +351,8 @@ protected:
         Util::MetroHash::Hash*              pBaseHash);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(GraphicsPipeline);
+
     ImmedInfo                 m_info;                             // Immediate state that will go in CmdSet* functions
     Pal::IMsaaState*          m_pPalMsaa[MaxPalDevices];          // PAL MSAA state object
     Pal::IColorBlendState*    m_pPalColorBlend[MaxPalDevices];    // PAL color blend state object

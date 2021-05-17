@@ -219,6 +219,8 @@ protected:
     VkPipelineBindPoint                m_type;
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Pipeline);
+
     PipelineBinaryInfo*                m_pBinary;
 };
 

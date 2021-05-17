@@ -201,6 +201,9 @@ protected:
     uint32_t                m_queueFamilyIndex;                    // Queue family index of the last present
 
     static bool             s_forceTurboSyncEnable; // Force turbosync enable when synchronizing across swapchains
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(SwapChain);
 };
 
 // =====================================================================================================================
@@ -333,6 +336,9 @@ protected:
     Pal::IImage**     m_ppBltImages[MaxPalDevices];     // Array of intermediate images (master) or peer images (slave)
     Pal::IGpuMemory** m_ppBltMemory[MaxPalDevices];     // Array of intermediate memory (master) or peer memory (slave)
     Pal::ICmdBuffer** m_ppBltCmdBuffers[MaxPalDevices]; // Array of copy to peer image command buffers (slave-only)
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(SwCompositor);
 };
 
 namespace entry

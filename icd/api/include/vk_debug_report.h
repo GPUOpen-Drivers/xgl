@@ -60,6 +60,8 @@ protected:
     };
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DebugReportCallback)
+
     VkDebugReportCallbackCreateInfoEXT m_createInfo;
 };
 

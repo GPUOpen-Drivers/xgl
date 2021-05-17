@@ -32,6 +32,7 @@
 #define __SHADER_CACHE_H__
 
 #include "include/compiler_solution.h"
+#include "include/vk_utils.h"
 
 #include "llpc.h"
 
@@ -61,9 +62,11 @@ public:
 
     PipelineCompilerType GetCacheType() const { return m_cacheType; }
 
-    ShaderCachePtr GetCachePtr() { return m_cache; }
+    ShaderCachePtr GetCachePtr() const { return m_cache; }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(ShaderCache);
+
     PipelineCompilerType  m_cacheType;
     ShaderCachePtr        m_cache;
 };

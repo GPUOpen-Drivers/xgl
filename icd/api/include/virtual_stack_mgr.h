@@ -72,6 +72,9 @@ public:
     {
         PAL_DELETE_ARRAY(pArray, this);
     }
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(VirtualStackFrame);
 };
 
 // =====================================================================================================================
@@ -90,6 +93,8 @@ public:
     void ReleaseAllocator(VirtualStackAllocator* pAllocator);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(VirtualStackMgr);
+
     VirtualStackMgr(Instance* pInstance);
 
     typedef Util::IntrusiveList<VirtualStackAllocator> VirtualStackList;

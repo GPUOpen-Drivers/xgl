@@ -244,16 +244,16 @@ public:
     const AttachmentReference& GetSubpassColorReference(uint32_t subpass, uint32_t index) const;
     const AttachmentReference& GetSubpassDepthStencilReference(uint32_t subpass) const;
 
-    VK_INLINE const uint32_t GetSubpassMaxSampleCount(uint32_t subpass) const
+    VK_INLINE uint32_t GetSubpassMaxSampleCount(uint32_t subpass) const
     {
         return Util::Max(m_createInfo.pSubpasses[subpass].subpassSampleCount.colorCount,
                          m_createInfo.pSubpasses[subpass].subpassSampleCount.depthCount);
     }
 
-    VK_INLINE const uint32_t GetSubpassColorSampleCount(uint32_t subpass) const
+    VK_INLINE uint32_t GetSubpassColorSampleCount(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].subpassSampleCount.colorCount; }
 
-    VK_INLINE const uint32_t GetSubpassDepthSampleCount(uint32_t subpass) const
+    VK_INLINE uint32_t GetSubpassDepthSampleCount(uint32_t subpass) const
         { return m_createInfo.pSubpasses[subpass].subpassSampleCount.depthCount; }
 
     VK_INLINE const RenderPassExecuteInfo* GetExecuteInfo() const
@@ -294,9 +294,11 @@ public:
     }
 
 protected:
-
     const RenderPassCreateInfo     m_createInfo;
     const RenderPassExecuteInfo*   m_pExecuteInfo;
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(RenderPass);
 };
 
 namespace entry

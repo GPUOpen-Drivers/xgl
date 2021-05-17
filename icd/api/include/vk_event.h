@@ -95,10 +95,16 @@ protected:
         Device*                         pDevice,
         uint32_t                        numDeviceEvents,
         Pal::IGpuEvent**                pPalEvents,
-        InternalMemory*                 pInternalGpuMem,
         bool                            useToken);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(Event);
+
+    VkResult Initialize(
+        Device* const      m_pDevice,
+        uint32_t           numDeviceEvents,
+        VkEventCreateFlags flags);
+
     union
     {
         Pal::IGpuEvent*    m_pPalEvents[MaxPalDevices];

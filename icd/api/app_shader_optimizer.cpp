@@ -82,7 +82,7 @@ void ShaderOptimizer::ApplyProfileToShaderCreateInfo(
 {
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
-        const PipelineProfileEntry& profileEntry = profile.entries[entry];
+        const PipelineProfileEntry& profileEntry = profile.pEntries[entry];
 
         if (ProfilePatternMatchesPipeline(profileEntry.pattern, pipelineKey))
         {
@@ -268,7 +268,22 @@ void ShaderOptimizer::OverrideComputePipelineCreateInfo(
 // =====================================================================================================================
 ShaderOptimizer::~ShaderOptimizer()
 {
+    const VkAllocationCallbacks* pAllocCB = m_pDevice->VkInstance()->GetAllocCallbacks();
 
+    if (m_appProfile.pEntries != nullptr)
+    {
+        pAllocCB->pfnFree(pAllocCB->pUserData, m_appProfile.pEntries);
+    }
+    if (m_tuningProfile.pEntries != nullptr)
+    {
+        pAllocCB->pfnFree(pAllocCB->pUserData, m_tuningProfile.pEntries);
+    }
+#if ICD_RUNTIME_APP_PROFILE
+    if (m_runtimeProfile.pEntries != nullptr)
+    {
+        pAllocCB->pfnFree(pAllocCB->pUserData, m_runtimeProfile.pEntries);
+    }
+#endif
 }
 
 // =====================================================================================================================
@@ -300,7 +315,7 @@ void ShaderOptimizer::ApplyProfileToGraphicsPipelineCreateInfo(
 {
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
-        const PipelineProfileEntry& profileEntry = profile.entries[entry];
+        const PipelineProfileEntry& profileEntry = profile.pEntries[entry];
 
         if (ProfilePatternMatchesPipeline(profileEntry.pattern, pipelineKey))
         {
@@ -364,7 +379,7 @@ void ShaderOptimizer::ApplyProfileToComputePipelineCreateInfo(
 {
     for (uint32_t entry = 0; entry < profile.entryCount; ++entry)
     {
-        const PipelineProfileEntry& profileEntry = profile.entries[entry];
+        const PipelineProfileEntry& profileEntry = profile.pEntries[entry];
 
         if (ProfilePatternMatchesPipeline(profileEntry.pattern, pipelineKey))
         {
@@ -462,16 +477,27 @@ bool ShaderOptimizer::ProfilePatternMatchesPipeline(
 // =====================================================================================================================
 void ShaderOptimizer::BuildTuningProfile()
 {
-    memset(&m_tuningProfile, 0, sizeof(m_tuningProfile));
+    m_tuningProfile.entryCount = 0;
+    m_tuningProfile.entryCapacity = InitialPipelineProfileEntries;
 
-    if (m_settings.overrideShaderParams == false)
+    const VkAllocationCallbacks* pAllocCB = m_pDevice->VkInstance()->GetAllocCallbacks();
+    size_t newSize = m_tuningProfile.entryCapacity * sizeof(PipelineProfileEntry);
+    void* pMemory = pAllocCB->pfnAllocation(pAllocCB->pUserData,
+                                            newSize,
+                                            VK_DEFAULT_MEM_ALIGN,
+                                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    m_tuningProfile.pEntries = static_cast<PipelineProfileEntry*>(pMemory);
+
+    if ((m_settings.overrideShaderParams == false) || (pMemory == nullptr))
     {
         return;
     }
 
+    memset(pMemory, 0, newSize);
+
     // Only a single entry is currently supported
     m_tuningProfile.entryCount = 1;
-    PipelineProfileEntry& entry = m_tuningProfile.entries[0];
+    PipelineProfileEntry& entry = m_tuningProfile.pEntries[0];
 
     bool matchHash = false;
     if ((m_settings.overrideShaderHashLower != 0) ||
@@ -607,11 +633,21 @@ void ShaderOptimizer::BuildTuningProfile()
 // =====================================================================================================================
 void ShaderOptimizer::BuildAppProfile()
 {
-    memset(&m_appProfile, 0, sizeof(m_appProfile));
+    m_appProfile.entryCount = 0;
+    m_appProfile.entryCapacity = InitialPipelineProfileEntries;
+
+    const VkAllocationCallbacks* pAllocCB = m_pDevice->VkInstance()->GetAllocCallbacks();
+    size_t newSize = m_appProfile.entryCapacity * sizeof(PipelineProfileEntry);
+    void* pMemory = pAllocCB->pfnAllocation(pAllocCB->pUserData,
+                                            newSize,
+                                            VK_DEFAULT_MEM_ALIGN,
+                                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    m_appProfile.pEntries = static_cast<PipelineProfileEntry*>(pMemory);
 
     // Early-out if the panel has dictated that we should ignore any active pipeline optimizations due to app profile
-    if (m_settings.pipelineProfileIgnoresAppProfile == false)
+    if ((m_settings.pipelineProfileIgnoresAppProfile == false) && (pMemory != nullptr))
     {
+        memset(pMemory, 0, newSize);
         {
             BuildAppProfileLlpc();
         }
@@ -634,60 +670,60 @@ void ShaderOptimizer::BuildAppProfileLlpc()
         if ((asicRevision >= Pal::AsicRevision::Polaris10) && (asicRevision <= Pal::AsicRevision::Polaris12))
         {
             i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0xdd6c573c46e6adf8;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x751207727c904749;
-            m_appProfile.entries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0xdd6c573c46e6adf8;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x751207727c904749;
+            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x71093bf7c6e98da8;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0xfbc956d87a6d6631;
-            m_appProfile.entries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x71093bf7c6e98da8;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0xfbc956d87a6d6631;
+            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0xedd89880de2091f9;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x506d0ac3995d2f1b;
-            m_appProfile.entries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0xedd89880de2091f9;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x506d0ac3995d2f1b;
+            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0xbc583b30527e9f1d;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x1ef8276d42a14220;
-            m_appProfile.entries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0xbc583b30527e9f1d;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x1ef8276d42a14220;
+            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x012ddab000f80610;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x3a65a6325756203d;
-            m_appProfile.entries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x012ddab000f80610;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x3a65a6325756203d;
+            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x78095b5acf62f4d5;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x2c1afc1c6f669e33;
-            m_appProfile.entries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x78095b5acf62f4d5;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x2c1afc1c6f669e33;
+            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x22803b077988ec36;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x7ba50586c34e1662;
-            m_appProfile.entries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x22803b077988ec36;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0x7ba50586c34e1662;
+            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
 
             i = m_appProfile.entryCount++;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x313dab8ff9408da0;
-            m_appProfile.entries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0xbb11905194a55485;
-            m_appProfile.entries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.stageActive = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].match.codeHash = true;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.lower = 0x313dab8ff9408da0;
+            m_appProfile.pEntries[i].pattern.shaders[ShaderStage::ShaderStageFragment].codeHash.upper = 0xbb11905194a55485;
+            m_appProfile.pEntries[i].action.shaders[ShaderStage::ShaderStageFragment].shaderCreate.apply.allowReZ = true;
         }
     }
 }
@@ -777,7 +813,23 @@ void ShaderOptimizer::RuntimeProfileParseError()
 // =====================================================================================================================
 void ShaderOptimizer::BuildRuntimeProfile()
 {
-    memset(&m_runtimeProfile, 0, sizeof(m_runtimeProfile));
+    m_runtimeProfile.entryCount = 0;
+    m_runtimeProfile.entryCapacity = InitialPipelineProfileEntries;
+
+    const VkAllocationCallbacks* pAllocCB = m_pDevice->VkInstance()->GetAllocCallbacks();
+    size_t newSize = m_runtimeProfile.entryCapacity * sizeof(PipelineProfileEntry);
+    void* pMemory = pAllocCB->pfnAllocation(pAllocCB->pUserData,
+                                            newSize,
+                                            VK_DEFAULT_MEM_ALIGN,
+                                            VK_SYSTEM_ALLOCATION_SCOPE_OBJECT);
+    m_runtimeProfile.pEntries = static_cast<PipelineProfileEntry*>(pMemory);
+
+    if (pMemory == nullptr)
+    {
+        return;
+    }
+
+    memset(pMemory, 0, newSize);
 
     utils::JsonSettings jsonSettings = utils::JsonMakeInstanceSettings(m_pDevice->VkInstance());
     utils::Json* pJson               = nullptr;
@@ -804,7 +856,10 @@ void ShaderOptimizer::BuildRuntimeProfile()
 
                     if (pJson != nullptr)
                     {
-                        bool success = m_appShaderProfile.ParseJsonProfile(pJson, &m_runtimeProfile);
+                        bool success = m_appShaderProfile.ParseJsonProfile(
+                            pJson,
+                            &m_runtimeProfile,
+                            m_pDevice->VkInstance()->GetAllocCallbacks());
 
                         if (success == false)
                         {

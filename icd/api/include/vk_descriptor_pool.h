@@ -128,7 +128,7 @@ protected:
     uint32_t*                 m_pDynamicAllocBlockIndexStack;       // Stack of indices of available block structures
     uint32_t                  m_dynamicAllocBlockIndexStackCount;   // Number of available block structures
 
-    InternalMemory            m_internalMem;
+    InternalMemory*           m_pInternalMem;
     Pal::gpusize              m_gpuMemSize;                         // Required GPU memory size
     uint32_t                  m_gpuMemAddrAlignment;                // Required GPU memory address alignment of descriptor sets
 
@@ -138,6 +138,9 @@ protected:
 
     void*                     m_pCpuAddr[MaxPalDevices];            // The mapped Cpu addresses
     void*                     m_pCpuShadowAddr[MaxPalDevices];      // The mapped Shadow Cpu addresses
+
+private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DescriptorGpuMemHeap);
 };
 
 // =====================================================================================================================
@@ -172,6 +175,7 @@ public:
     }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DescriptorSetHeap);
 
     template <uint32_t numPalDevices>
     VkDescriptorSet DescriptorSetHandleFromIndex(uint32_t idx) const;
@@ -227,6 +231,8 @@ public:
     static PFN_vkAllocateDescriptorSets GetAllocateDescriptorSetsFunc(Device* pDevice);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DescriptorPool);
+
     template <uint32_t numPalDevices>
     VkResult Init(
         Device*                               pDevice,

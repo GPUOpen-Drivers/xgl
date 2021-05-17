@@ -65,6 +65,7 @@ public:
         const void*     pData);
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(DescriptorUpdateTemplate);
 
     DescriptorUpdateTemplate(
         uint32_t                    numEntries);

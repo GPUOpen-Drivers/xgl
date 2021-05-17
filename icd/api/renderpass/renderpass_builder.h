@@ -165,6 +165,8 @@ public:
         { return &m_pSubpasses[s]; }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(RenderPassBuilder);
+
     Pal::Result BuildInitialState();
     Pal::Result BuildSubpass(uint32_t subpass);
     Pal::Result BuildSubpassDependencies(uint32_t subpass, SyncPointState* pSync);

@@ -109,7 +109,10 @@ public:
         const void*                 pPipelineBinary,
         size_t                      binarySize) override;
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(CompilerSolutionLlpc);
+
     VkResult CreateLlpcCompiler(Vkgc::ICache* pCache);
+
     void UpdateStageCreationFeedback(
         PipelineCreationFeedback*       pStageFeedback,
         const Vkgc::PipelineShaderInfo& shader,

@@ -286,6 +286,8 @@ public:
     }
 
 private:
+    PAL_DISALLOW_COPY_AND_ASSIGN(IterateMask);
+
     uint32_t    m_index;
     uint32_t    m_mask;
 };
