@@ -33,24 +33,29 @@ if(UNIX AND XGL_USE_CLANG)
     xgl_use_clang_compiler()
 endif()
 
-project(XGL VERSION 1 LANGUAGES C CXX)
-
 ### CMake Includes ####################################################################################################
-set(CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake)
-list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/Modules)
+set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/Modules)
 
-if(EXISTS ${PROJECT_SOURCE_DIR}/../cmake)
-    list(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/../cmake)
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
+    list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/../cmake)
 endif()
+
+include(XglCompilerOptions)
+
+### Project ###########################################################################################################
+project(XGL VERSION 1 LANGUAGES C CXX)
 
 include(AmdCmakeHelper)
 include(CMakeDependentOption)
 include(XglSetupAmdGlobalRoots)
 include(XglOptions)
 include(XglOverrides)
-include(XglCompilerOptions)
 include(XglCompileDefinitions)
 include(XglHelper)
+if(UNIX)
+  include(XglPackaging)
+endif()
 
 ### Project Options ###################################################################################################
 xgl_options()
@@ -126,6 +131,14 @@ if(XGL_USE_SANITIZER)
             xgl_append_common_sanitizer_flags()
             string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=address")
             string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize=address")
+        elseif (XGL_USE_SANITIZER MATCHES "Memory(WithOrigins)?")
+            xgl_append_common_sanitizer_flags()
+            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=memory")
+            string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize=memory")
+            if(XGL_USE_SANITIZER STREQUAL "MemoryWithOrigins")
+                string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize-memory-track-origins")
+                string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize-memory-track-origins")
+            endif()
         elseif(XGL_USE_SANITIZER STREQUAL "Undefined")
             xgl_append_common_sanitizer_flags()
             string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=undefined -fno-sanitize=vptr,function \
@@ -141,6 +154,10 @@ if(XGL_USE_SANITIZER)
             string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=address,undefined -fno-sanitize=vptr,function \
                                                         -fno-sanitize-recover=all")
             string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize=address,undefined")
+        elseif(XGL_USE_SANITIZER STREQUAL "Leaks")
+            xgl_append_common_sanitizer_flags()
+            string(APPEND ICD_SANITIZER_COMPILE_FLAGS " -fsanitize=leak")
+            string(APPEND ICD_SANITIZER_LINK_FLAGS " -fsanitize=leak")
         else()
             message(FATAL_ERROR "Unsupported value of XGL_USE_SANITIZER: ${XGL_USE_SANITIZER}")
         endif()
@@ -165,6 +182,18 @@ string(APPEND CMAKE_EXE_LINKER_FLAGS "${ICD_SANITIZER_LINK_FLAGS}")
 string(APPEND CMAKE_SHARED_LINKER_FLAGS "${ICD_SANITIZER_LINK_FLAGS}")
 string(APPEND CMAKE_C_FLAGS "${ICD_SANITIZER_COMPILE_FLAGS}")
 string(APPEND CMAKE_CXX_FLAGS "${ICD_SANITIZER_COMPILE_FLAGS}")
+
+# LLVM libc++
+if(XGL_ENABLE_LIBCXX)
+    if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+        string(APPEND CMAKE_EXE_LINKER_FLAGS " -stdlib=libc++")
+        string(APPEND CMAKE_SHARED_LINKER_FLAGS " -stdlib=libc++")
+        string(APPEND CMAKE_MODULE_LINKER_FLAGS " -stdlib=libc++")
+        string(APPEND CMAKE_CXX_FLAGS " -stdlib=libc++")
+    else()
+        message(WARNING "Not sure how to specify libc++ for this compiler")
+    endif()
+endif()
 
 ### GCOV source code coverage #########################################################################################
 # Temporary variables
@@ -249,6 +278,11 @@ else()
     )
 endif()
 
+### Identify Packge Type ##########################################################################################
+if(UNIX)
+  identifyPackageType()
+endif()
+
 ### Add Subdirectories ################################################################################################
 # Metrohash
 if(EXISTS ${XGL_METROHASH_PATH})
@@ -272,3 +306,8 @@ if(NOT ICD_BUILD_LLPCONLY)
 add_subdirectory(icd)
 endif()
 
+### Generate Packages #################################################################################################
+if(UNIX)
+  generateInstallTargets()
+  generatePackageTarget()
+endif()

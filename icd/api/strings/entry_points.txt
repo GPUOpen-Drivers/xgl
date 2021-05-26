@@ -395,3 +395,4 @@ vkCmdSetDepthBoundsTestEnableEXT                    @device     @dext(EXT_extend
 vkCmdSetStencilTestEnableEXT                        @device     @dext(EXT_extended_dynamic_state)
 vkCmdSetStencilOpEXT                                @device     @dext(EXT_extended_dynamic_state)
 
+vkCmdSetColorWriteEnableEXT                         @device     @dext(EXT_color_write_enable)

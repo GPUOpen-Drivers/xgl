@@ -743,46 +743,49 @@ VkResult Queue::PalSignalSemaphores(
 
     for (uint32_t i = 0; (i < semaphoreCount) && (palResult == Pal::Result::Success); ++i)
     {
-        if (i < semaphoreDeviceIndicesCount)
+        if (pSemaphores[i] != VK_NULL_HANDLE)
         {
-            VK_ASSERT(pSemaphoreDeviceIndices != nullptr);
-            deviceIdx = pSemaphoreDeviceIndices[i];
-        }
-
-        VK_ASSERT(deviceIdx < m_pDevice->NumPalDevices());
-
-        Semaphore* pVkSemaphore = Semaphore::ObjectFromHandle(pSemaphores[i]);
-        Pal::IQueueSemaphore* pPalSemaphore = pVkSemaphore->PalSemaphore(deviceIdx);
-        uint64_t              pointValue    = 0;
-
-        if (pVkSemaphore->IsTimelineSemaphore())
-        {
-            if (pSemaphoreValues == nullptr)
+            if (i < semaphoreDeviceIndicesCount)
             {
-                palResult = Pal::Result::ErrorInvalidPointer;
-                break;
+                VK_ASSERT(pSemaphoreDeviceIndices != nullptr);
+                deviceIdx = pSemaphoreDeviceIndices[i];
+            }
+
+            VK_ASSERT(deviceIdx < m_pDevice->NumPalDevices());
+
+            Semaphore* pVkSemaphore = Semaphore::ObjectFromHandle(pSemaphores[i]);
+            Pal::IQueueSemaphore* pPalSemaphore = pVkSemaphore->PalSemaphore(deviceIdx);
+            uint64_t              pointValue    = 0;
+
+            if (pVkSemaphore->IsTimelineSemaphore())
+            {
+                if (pSemaphoreValues == nullptr)
+                {
+                    palResult = Pal::Result::ErrorInvalidPointer;
+                    break;
+                }
+                else
+                {
+                    VK_ASSERT(pSemaphoreValues[i] != 0);
+                    pointValue = pSemaphoreValues[i];
+                }
+            }
+
+            if (timedQueueEvents == false)
+            {
+                palResult = PalQueue(deviceIdx)->SignalQueueSemaphore(pPalSemaphore, pointValue);
             }
             else
             {
-                VK_ASSERT(pSemaphoreValues[i] != 0);
-                pointValue = pSemaphoreValues[i];
-            }
-        }
-
-        if (timedQueueEvents == false)
-        {
-            palResult = PalQueue(deviceIdx)->SignalQueueSemaphore(pPalSemaphore, pointValue);
-        }
-        else
-        {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-            palResult = pDevModeMgr->TimedSignalQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
-                                                               pPalSemaphore);
+                palResult = pDevModeMgr->TimedSignalQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
+                                                                   pPalSemaphore);
 #else
-            VK_NEVER_CALLED();
+                VK_NEVER_CALLED();
 
-            palResult = Pal::Result::ErrorUnknown;
+                palResult = Pal::Result::ErrorUnknown;
 #endif
+            }
         }
     }
 
@@ -816,51 +819,54 @@ VkResult Queue::PalWaitSemaphores(
 
     for (uint32_t i = 0; (i < semaphoreCount) && (palResult == Pal::Result::Success); ++i)
     {
-        Semaphore*  pSemaphore              = Semaphore::ObjectFromHandle(pSemaphores[i]);
-        Pal::IQueueSemaphore* pPalSemaphore = nullptr;
-        uint64_t              pointValue    = 0;
-
-        if (pSemaphore->IsTimelineSemaphore())
+        if (pSemaphores[i] != VK_NULL_HANDLE)
         {
-            if (pSemaphoreValues == nullptr)
+            Semaphore*  pSemaphore              = Semaphore::ObjectFromHandle(pSemaphores[i]);
+            Pal::IQueueSemaphore* pPalSemaphore = nullptr;
+            uint64_t              pointValue    = 0;
+
+            if (pSemaphore->IsTimelineSemaphore())
             {
-                palResult = Pal::Result::ErrorInvalidPointer;
-                break;
+                if (pSemaphoreValues == nullptr)
+                {
+                    palResult = Pal::Result::ErrorInvalidPointer;
+                    break;
+                }
+                else
+                {
+                    pointValue = pSemaphoreValues[i];
+                }
             }
-            else
+
+            if (i < semaphoreDeviceIndicesCount)
             {
-                pointValue = pSemaphoreValues[i];
+                VK_ASSERT(pSemaphoreDeviceIndices != nullptr);
+                deviceIdx = pSemaphoreDeviceIndices[i];
             }
-        }
 
-        if (i < semaphoreDeviceIndicesCount)
-        {
-            VK_ASSERT(pSemaphoreDeviceIndices != nullptr);
-            deviceIdx = pSemaphoreDeviceIndices[i];
-        }
+            VK_ASSERT(deviceIdx < m_pDevice->NumPalDevices());
 
-        VK_ASSERT(deviceIdx < m_pDevice->NumPalDevices());
+            // Wait for the semaphore.
+            pPalSemaphore = pSemaphore->PalSemaphore(deviceIdx);
+            pSemaphore->RestoreSemaphore();
 
-        // Wait for the semaphore.
-        pPalSemaphore = pSemaphore->PalSemaphore(deviceIdx);
-        pSemaphore->RestoreSemaphore();
-
-        if (pPalSemaphore != nullptr)
-        {
-            if (timedQueueEvents == false)
+            if (pPalSemaphore != nullptr)
             {
-                palResult = PalQueue(deviceIdx)->WaitQueueSemaphore(pPalSemaphore, pointValue);
-            }
-            else
-            {
+                if (timedQueueEvents == false)
+                {
+                    palResult = PalQueue(deviceIdx)->WaitQueueSemaphore(pPalSemaphore, pointValue);
+                }
+                else
+                {
 #if ICD_GPUOPEN_DEVMODE_BUILD
-                palResult = pDevModeMgr->TimedWaitQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
-                                                                 pPalSemaphore);
+                    palResult = pDevModeMgr->TimedWaitQueueSemaphore(deviceIdx, this, pSemaphores[i], pointValue,
+                                                                     pPalSemaphore);
 #else
-                VK_NEVER_CALLED();
+                    VK_NEVER_CALLED();
 
-                palResult = Pal::Result::ErrorUnknown;
+                    palResult = Pal::Result::ErrorUnknown;
 #endif
+                }
             }
         }
     }

@@ -413,9 +413,8 @@ VkResult TimestampQueryPool::Create(
 }
 
 // =====================================================================================================================
-// Initialize query pool object (Timestamp query pools)
-VkResult TimestampQueryPool::Initialize(
-    void*          pMemory,
+VkResult QueryPoolWithStorageView::Initialize(
+    void* pMemory,
     size_t         apiSize,
     size_t         viewSize,
     uint32_t       entryCount,
@@ -445,7 +444,7 @@ VkResult TimestampQueryPool::Initialize(
     else
     {
         createInfo.pal.heapCount = 1;
-        createInfo.pal.heaps[0] = Pal::GpuHeapGartCacheable;
+        createInfo.pal.heaps[0]  = Pal::GpuHeapGartCacheable;
 
         createInfo.pal.flags.shareable = 1;
         allocMask = 1 << DefaultMemoryInstanceIdx;
@@ -455,7 +454,7 @@ VkResult TimestampQueryPool::Initialize(
 
     if (result == VK_SUCCESS)
     {
-        // Construct an untyped bufferView or SSBO (UAV) typed RG32 buffer view into the timestamp memory.  This
+        // Construct an untyped bufferView or SSBO (UAV) typed RG32 buffer view into the memory. This
         // will be used by compute shaders performing vkCmdCopyQueryPoolResults.
         void* pViewMem = Util::VoidPtrInc(pMemory, apiSize);
 
@@ -481,9 +480,7 @@ VkResult TimestampQueryPool::Initialize(
             }
             else
             {
-                VK_ASSERT(slotSize == 8);
-                constexpr Pal::SwizzledFormat QueryCopyFormat =
-                {
+                Pal::SwizzledFormat QueryCopyFormat = {
                     Pal::ChNumFormat::X32Y32_Uint,
                     {
                         Pal::ChannelSwizzle::X,
@@ -493,7 +490,17 @@ VkResult TimestampQueryPool::Initialize(
                     },
                 };
 
-                bufferViewInfo.stride = slotSize;
+                if ((GetQueryType() == VK_QUERY_TYPE_TIMESTAMP)
+                    )
+                {
+                    VK_ASSERT(slotSize == 8);
+                }
+
+                // Stride should be 8 if query type is VK_QUERY_TYPE_TIMESTAMP
+                // BufferView is used just to query first 32 or 64 bits of the corresponding structure
+                // Compute shader expects rg32ui if not strided copy.
+                const uint32_t queryStride = 8;
+                bufferViewInfo.stride = queryStride;
                 bufferViewInfo.swizzledFormat = QueryCopyFormat;
 
                 for (uint32_t deviceIdx = 0; deviceIdx < m_pDevice->NumPalDevices(); deviceIdx++)

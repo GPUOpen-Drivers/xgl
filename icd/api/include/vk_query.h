@@ -47,6 +47,7 @@ class CmdBuffer;
 class Device;
 class DispatchableQueryPool;
 class PalQueryPool;
+class QueryPoolWithStorageView;
 class TimestampQueryPool;
 
 // =====================================================================================================================
@@ -86,7 +87,7 @@ public:
     }
 
     VK_INLINE const PalQueryPool* AsPalQueryPool() const;
-
+    VK_INLINE const QueryPoolWithStorageView* AsQueryPoolWithStorageView() const;
     VK_INLINE const TimestampQueryPool* AsTimestampQueryPool() const;
 
 protected:
@@ -170,9 +171,46 @@ private:
     InternalMemory          m_internalMem;
 };
 
+class QueryPoolWithStorageView : public QueryPool
+{
+public:
+    VK_INLINE const void* GetStorageView(uint32_t deviceIdx) const
+        { return m_pStorageView[deviceIdx]; }
+
+protected:
+        PAL_DISALLOW_COPY_AND_ASSIGN(QueryPoolWithStorageView);
+
+        VkResult Initialize(
+            void*           pMemory,
+            size_t          apiSize,
+            size_t          viewSize,
+            uint32_t        entryCount,
+            const uint32_t  slotSize);
+
+        const uint32_t m_entryCount;
+        const uint32_t m_slotSize;
+        InternalMemory m_internalMem;
+
+        QueryPoolWithStorageView(
+            Device*           pDevice,
+            VkQueryType       queryType,
+            uint32_t          entryCount,
+            uint32_t          slotSize)
+            :
+            QueryPool(pDevice, queryType),
+            m_entryCount(entryCount),
+            m_slotSize(slotSize),
+            m_internalMem()
+        {
+        }
+
+private:
+        void* m_pStorageView[MaxPalDevices];
+};
+
 // =====================================================================================================================
 // Query pool class for VK_QUERY_TYPE_TIMESTAMP query pools
-class TimestampQueryPool : public QueryPool
+class TimestampQueryPool : public QueryPoolWithStorageView
 {
 public:
     static constexpr uint32_t TimestampNotReadyChunk = UINT32_MAX;
@@ -223,9 +261,6 @@ public:
     VK_INLINE const Pal::IGpuMemory& PalMemory(uint32_t deviceIdx) const
         { return *m_internalMem.PalMemory(deviceIdx); }
 
-    VK_INLINE const void* GetStorageView(uint32_t deviceIdx) const
-        { return m_pStorageView[deviceIdx]; }
-
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(TimestampQueryPool);
 
@@ -234,24 +269,9 @@ private:
         VkQueryType           queryType,
         uint32_t              entryCount)
         :
-        QueryPool(pDevice, queryType),
-        m_entryCount(entryCount),
-        m_slotSize(pDevice->GetProperties().timestampQueryPoolSlotSize),
-        m_internalMem()
+        QueryPoolWithStorageView(pDevice, queryType, entryCount, pDevice->GetProperties().timestampQueryPoolSlotSize)
     {
     }
-
-    VkResult Initialize(
-        void*          pMemory,
-        size_t         apiSize,
-        size_t         viewSize,
-        uint32_t       entryCount,
-        const uint32_t slotSize);
-
-    const uint32_t    m_entryCount;
-    const uint32_t    m_slotSize;
-    InternalMemory    m_internalMem;
-    void*             m_pStorageView[MaxPalDevices];
 };
 
 // =====================================================================================================================
@@ -268,6 +288,17 @@ VK_INLINE const TimestampQueryPool* QueryPool::AsTimestampQueryPool() const
     VK_ASSERT(m_queryType == VK_QUERY_TYPE_TIMESTAMP);
 
     return static_cast<const TimestampQueryPool*>(this);
+}
+
+VK_INLINE const QueryPoolWithStorageView* QueryPool::AsQueryPoolWithStorageView() const
+{
+    if ((m_queryType != VK_QUERY_TYPE_TIMESTAMP)
+       )
+        {
+            VK_ASSERT(false);
+        }
+
+    return static_cast<const QueryPoolWithStorageView*>(this);
 }
 
 namespace entry

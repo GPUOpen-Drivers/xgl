@@ -2305,15 +2305,11 @@ void PhysicalDevice::PopulateLimits()
     // OGL: pGpCaps->maxGeometryVaryingComponents = SI_MAX_GP_VARYING_COMPONENTS; (NOTE: Not a separate cap)
 
     // Maximum number of vertices which may be emitted by any geometry shader.
-    m_limits.maxGeometryOutputVertices = 1024;
-
-    // OGL: pGpCaps->maxGeometryOutputVertices = SI_MAX_GP_OUTPUT_VERTICES;
+    m_limits.maxGeometryOutputVertices = palProps.gfxipProperties.maxGsOutputVert;
 
     // Maximum total number of components of output, across all emitted vertices, which may be output from the geometry
     // shader stage.
-    m_limits.maxGeometryTotalOutputComponents = 4 * 4096;
-
-    // OGL: pGpCaps->maxGeometryTotalOutputComponents = SI_MAX_GP_TOTAL_OUTPUT_COMPONENTS;
+    m_limits.maxGeometryTotalOutputComponents = palProps.gfxipProperties.maxGsTotalOutputComponents;
 
     // Maximum number of components of input variables which may be provided as inputs to the fragment shader stage.
     m_limits.maxFragmentInputComponents = 128;
@@ -3650,6 +3646,8 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
 
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_4444_FORMATS));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SYNCHRONIZATION2));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CUSTOM_BORDER_COLOR));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_COLOR_WRITE_ENABLE));
 
     bool disableAMDVendorExtensions = false;
     if (pPhysicalDevice != nullptr)
@@ -5159,6 +5157,13 @@ void PhysicalDevice::GetFeatures2(
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceCustomBorderColorFeaturesEXT*>(pHeader);
                 pExtInfo->customBorderColors = VK_TRUE;
                 pExtInfo->customBorderColorWithoutFormat = VK_TRUE;
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceColorWriteEnableFeaturesEXT*>(pHeader);
+                pExtInfo->colorWriteEnable = VK_TRUE;
                 break;
             }
 

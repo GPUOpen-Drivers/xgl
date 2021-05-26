@@ -929,20 +929,18 @@ def main():
             print("Parsing " + gfxipDir)
             gameTitles = os.listdir(os.path.join(gfxipDir))
             for title in gameTitles:
-                if title not in gameTitlesList:
-                    gameTitlesList.append(title)
-
-                if title not in ifGfxipGroupDict:
-                    ifGfxipGroupDict[title] = ""
-
-                if title not in ifGenericDict:
-                    ifGenericDict[title] = ""
-
                 gameTitleDir = os.path.join(gfxipDir, title)
                 fileToRead = os.path.join(gfxip, gameTitleDir, configFileName)
                 content, readSuccess = readFromFile(fileToRead)
 
                 if readSuccess:
+                    if title not in gameTitlesList:
+                        gameTitlesList.append(title)
+                    if title not in ifGfxipGroupDict:
+                        ifGfxipGroupDict[title] = ""
+                    if title not in ifGenericDict:
+                        ifGenericDict[title] = ""
+
                     # for header file: g_shader_profile.h********************************************************
                     funcName = compiler.title() + title + gfxip[0].upper() + gfxip[1:]
                     funcCompGameGfx = FuncDecSetAppProfile.replace("%FuncName%", funcName)

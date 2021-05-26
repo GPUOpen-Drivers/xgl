@@ -1294,8 +1294,9 @@ Pal::IGpuMemory* Memory::PalMemory(
 
         // Call OpenSharedGpuMemory to construct Pal::GpuMemory for memory in remote heap.
         // Call OpenPeerGpuMemory to construct Pal::GpuMemory for memory in peer device's local heap.
-        const bool openSharedMemory = (pBaseMemory->Desc().preferredHeap == Pal::GpuHeap::GpuHeapGartUswc) ||
-                                      (pBaseMemory->Desc().preferredHeap == Pal::GpuHeap::GpuHeapGartCacheable);
+        const bool openSharedMemory = (pBaseMemory->Desc().heapCount > 0) &&
+                                      ((pBaseMemory->Desc().heaps[0] == Pal::GpuHeap::GpuHeapGartUswc) ||
+                                       (pBaseMemory->Desc().heaps[0] == Pal::GpuHeap::GpuHeapGartCacheable));
 
         size_t gpuMemorySize = 0;
         if (openSharedMemory)
@@ -1450,7 +1451,25 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetMemoryFdPropertiesKHR(
     int                                     fd,
     VkMemoryFdPropertiesKHR*                pMemoryFdProperties)
 {
-    return VK_SUCCESS;
+    VkResult result = VK_SUCCESS;
+
+    Device* pDevice = ApiDevice::ObjectFromHandle(device);
+
+    switch (handleType)
+    {
+        case VK_EXTERNAL_MEMORY_HANDLE_TYPE_DMA_BUF_BIT_EXT:
+        {
+            pMemoryFdProperties->memoryTypeBits = pDevice->GetMemoryTypeMaskForExternalSharing();
+            break;
+        }
+        default:
+        {
+            pMemoryFdProperties->memoryTypeBits = 0;
+            result = VK_ERROR_INVALID_EXTERNAL_HANDLE;
+        }
+    }
+
+    return result;
 }
 #endif
 

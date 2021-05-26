@@ -1475,15 +1475,46 @@
       "Scope": "Driver"
     },
     {
-      "Description": "Enable culling only if there is more than one render target.",
+      "Description": "Bitmask of cases to selectively disable NGG culling.",
       "Tags": [
         "SPIRV Options"
       ],
-      "Defaults": {
-        "Default": false
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
       },
-      "Type": "bool",
-      "Name": "RequireMrtForNggCulling",
+      "Defaults": {
+        "Default": "DisableNggCullingNever"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "DisableNggCullingNever",
+            "Description": "Leave NGG culling unchanged (default)",
+            "Value": 0
+          },
+          {
+            "Name": "DisableNggCullingSingleColorAttachment",
+            "Value": 1
+          },
+          {
+            "Name": "DisableNggCullingMultipleColorAttachments",
+            "Value": 2
+          },
+          {
+            "Name": "DisableNggCullingDepthOnly",
+            "Value": 4
+          },
+          {
+            "Name": "DisableNggCullingAlways",
+            "Value": 8
+          }
+        ],
+        "Name": "DisableNggCullingFlags"
+      },
+      "Type": "uint32",
+      "Name": "DisableNggCulling",
       "Scope": "Driver"
     },
     {
@@ -2021,7 +2052,7 @@
         "Ray Tracing"
       ],
       "Defaults": {
-        "Default": "0xffffffffffffffff"
+        "Default": "0x0"
       },
       "Flags": {
         "IsHex": true,

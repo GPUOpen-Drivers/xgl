@@ -1033,8 +1033,9 @@ VkResult Image::CreatePresentableImage(
 
         // We assert that preferredHeap crossing device group shall be same, actually, shall be LocalInvisible.
         VK_ASSERT((pPalMemory[DefaultDeviceIndex] == nullptr) ||
-                  (pPalMemory[deviceIdx]->Desc().preferredHeap ==
-                   pPalMemory[DefaultDeviceIndex]->Desc().preferredHeap));
+                  (((pPalMemory[deviceIdx]->Desc().heapCount > 0) &&
+                    (pPalMemory[DefaultDeviceIndex]->Desc().heapCount > 0)) &&
+                   (pPalMemory[deviceIdx]->Desc().heaps[0] == pPalMemory[DefaultDeviceIndex]->Desc().heaps[0])));
     }
 
     // from PAL, toomanyflippableAllocation is a warning, instead of a failure. the allocate should be success.

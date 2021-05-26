@@ -214,7 +214,11 @@ macro(xgl_overrides)
     set(XGL_USE_SANITIZER "" CACHE STRING "Build with sanitizers, e.g. Address;Undefined")
 
     if(XGL_USE_SANITIZER)
-        set(LLVM_USE_SANITIZER "${XGL_USE_SANITIZER}" CACHE BOOL "LLVM_USE_SANITIZER is overridden." FORCE)
+        set(LLVM_USE_SANITIZER "${XGL_USE_SANITIZER}" CACHE STRING "LLVM_USE_SANITIZER is overridden." FORCE)
+    endif()
+
+    if(XGL_ENABLE_LIBCXX)
+        set(LLVM_ENABLE_LIBCXX "${XGL_ENABLE_LIBCXX}" CACHE BOOL "LLVM_ENABLE_LIBCXX is overridden." FORCE)
     endif()
 
     if(XGL_ENABLE_ASSERTIONS)

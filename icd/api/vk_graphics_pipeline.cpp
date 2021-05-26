@@ -404,6 +404,24 @@ void GraphicsPipeline::GenerateHashFromColorBlendStateCreateInfo(
 
                 break;
             }
+            case VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT:
+            {
+                const auto pExtInfo = static_cast<const VkPipelineColorWriteCreateInfoEXT*>(pNext);
+                pApiHasher->Update(pExtInfo->sType);
+                pApiHasher->Update(pExtInfo->attachmentCount);
+
+                if (pExtInfo->pColorWriteEnables != nullptr)
+                {
+                    uint32 count = Util::Min(pExtInfo->attachmentCount, Pal::MaxColorTargets);
+
+                    for (uint32 i = 0; i < count; ++i)
+                    {
+                        pApiHasher->Update(pExtInfo->pColorWriteEnables[i]);
+                    }
+                }
+
+                break;
+            }
             default:
                 break;
             }
@@ -489,7 +507,12 @@ uint64_t GraphicsPipeline::BuildApiHash(
     }
 
     baseHasher.Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
-    baseHasher.Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
+
+    if (pCreateInfo->renderPass != VK_NULL_HANDLE)
+    {
+        baseHasher.Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
+    }
+
     baseHasher.Update(pCreateInfo->subpass);
 
     if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
@@ -920,6 +943,9 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                     case  VK_DYNAMIC_STATE_STENCIL_OP_EXT:
                         dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt)] = true;
                         break;
+                    case  VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
+                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt)] = true;
+                        break;
 
                     default:
                         // skip unknown dynamic state
@@ -981,6 +1007,11 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
         if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt)] == false)
         {
             pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt);
+        }
+
+        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt)] == false)
+        {
+            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt);
         }
 
         pInfo->bindDepthStencilObject =
@@ -1139,10 +1170,9 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             pInfo->customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
                                             (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
 
-            if ((pInfo->bresenhamEnable == false) || pInfo->customSampleLocations)
+            if ((pRenderPass != nullptr) &&
+               ((pInfo->bresenhamEnable == false) || pInfo->customSampleLocations))
             {
-                VK_ASSERT(pRenderPass != nullptr);
-
                 uint32_t rasterizationSampleCount   = pMs->rasterizationSamples;
                 uint32_t subpassCoverageSampleCount = pRenderPass->GetSubpassMaxSampleCount(pGraphicsPipelineCreateInfo->subpass);
                 uint32_t subpassColorSampleCount    = pRenderPass->GetSubpassColorSampleCount(pGraphicsPipelineCreateInfo->subpass);
@@ -1242,6 +1272,34 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
             const uint32_t numColorTargets = Min(pCb->attachmentCount, Pal::MaxColorTargets);
 
+            const VkPipelineColorWriteCreateInfoEXT* pColorWriteCreateInfo = nullptr;
+
+            const void* pNext = static_cast<const VkStructHeader*>(pCb->pNext);
+
+            while (pNext != nullptr)
+            {
+                const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
+
+                switch (static_cast<uint32>(pHeader->sType))
+                {
+                    case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
+                    {
+                        break;
+                    }
+                    case VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT:
+                    {
+                        pColorWriteCreateInfo = reinterpret_cast<const VkPipelineColorWriteCreateInfoEXT*>(pHeader);
+                        break;
+                    }
+
+                    default:
+                        // Skip any unknown extension structures
+                        break;
+                }
+
+                pNext = pHeader->pNext;
+            }
+
             for (uint32_t i = 0; i < numColorTargets; ++i)
             {
                 const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
@@ -1260,7 +1318,23 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
                 // disable shader writes through that target.
                 if (pCbDst->swizzledFormat.format != Pal::ChNumFormat::Undefined)
                 {
-                    pCbDst->channelWriteMask         = src.colorWriteMask;
+                    if ((pColorWriteCreateInfo != nullptr) && (pColorWriteCreateInfo->pColorWriteEnables != nullptr) &&
+                        (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt)] == false))
+                    {
+                        if (pColorWriteCreateInfo->pColorWriteEnables[i])
+                        {
+                            pCbDst->channelWriteMask = src.colorWriteMask;
+                        }
+                        else
+                        {
+                            pCbDst->channelWriteMask = 0;
+                        }
+                    }
+                    else
+                    {
+                        pCbDst->channelWriteMask = src.colorWriteMask;
+                    }
+
                     blendingEnabled |= (src.blendEnable == VK_TRUE);
                 }
 
@@ -1368,7 +1442,9 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
 
         pInfo->pipeline.viewInstancingDesc = Pal::ViewInstancingDescriptor { };
 
-        if (pRenderPass->IsMultiviewEnabled())
+        if (((pRenderPass != nullptr) &&
+             pRenderPass->IsMultiviewEnabled())
+            )
         {
             pInfo->pipeline.viewInstancingDesc.viewInstanceCount = Pal::MaxViewInstanceCount;
             pInfo->pipeline.viewInstancingDesc.enableMasking     = true;
@@ -1390,7 +1466,8 @@ VkResult GraphicsPipeline::Create(
     const VkAllocationCallbacks*            pAllocator,
     VkPipeline*                             pPipeline)
 {
-    int64_t                     startTime                           = Util::GetPerfCpuTime();
+    uint64 startTime = vk::utils::GetTimeNano();
+
     // Parse the create info and build patched AMDIL shaders
     CreateInfo                  localPipelineInfo                  = {};
     VbBindingInfo               vbInfo                             = {};
@@ -1714,7 +1791,7 @@ VkResult GraphicsPipeline::Create(
     }
     if (result == VK_SUCCESS)
     {
-        uint64_t duration = Util::GetPerfCpuTime() - startTime;
+        uint64_t duration = vk::utils::GetTimeNano() - startTime;
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
         binaryCreateInfo.pipelineFeedback.duration = duration;
         pDefaultCompiler->SetPipelineCreationFeedbackInfo(
@@ -2148,6 +2225,15 @@ void GraphicsPipeline::BindToCmdBuffer(
 
                 pPalCmdBuf->CmdBindPipeline(params);
             }
+            else if (ContainsStaticState(DynamicStatesInternal::ColorWriteEnableExt) &&
+                     pRenderState->lastColorWriteEnableDynamic)
+            {
+                // Color write enable requires an explicit write to CB_TARGET_MASK in cases where the Pal pipeline bind
+                // is skipped due to matching Pal pipeline hash values and CB_TARGET_MASK has been altered by the
+                // previous pipeline via color write enable.  Passing in a count of 0 resets the mask.
+                pRenderState->colorWriteMaskParams.count = 0;
+                pRenderState->dirty.colorWriteEnable = 1;
+            }
         }
         else
         {
@@ -2235,6 +2321,19 @@ void GraphicsPipeline::BindToCmdBuffer(
                 m_info.samplePattern.sampleCount, m_info.samplePattern.locations);
             pRenderState->staticTokens.samplePattern = newTokens.samplePattern;
         }
+
+        if (ContainsStaticState(DynamicStatesInternal::ColorWriteEnableExt))
+        {
+            if (pRenderState->lastColorWriteEnableDynamic)
+            {
+                 pRenderState->lastColorWriteEnableDynamic = false;
+            }
+            else
+            {
+                pRenderState->dirty.colorWriteEnable = 0;
+            }
+        }
+
         // Only set the Fragment Shading Rate if the dynamic state is not set.
         if (ContainsStaticState(DynamicStatesInternal::FragmentShadingRateStateKhr) &&
             CmdBuffer::IsStaticStateDifferent(oldTokens.fragmentShadingRate, newTokens.fragmentShadingRate))

@@ -121,14 +121,15 @@ union DirtyState
 {
     struct
     {
-        uint32 viewport      :  1;
-        uint32 scissor       :  1;
-        uint32 depthStencil  :  1;
-        uint32 rasterState   :  1;
-        uint32 inputAssembly :  1;
-        uint32 stencilRef    :  1;
-        uint32 vrs           :  1;
-        uint32 reserved      : 25;
+        uint32 viewport         :  1;
+        uint32 scissor          :  1;
+        uint32 depthStencil     :  1;
+        uint32 rasterState      :  1;
+        uint32 inputAssembly    :  1;
+        uint32 stencilRef       :  1;
+        uint32 vrs              :  1;
+        uint32 colorWriteEnable :  1;
+        uint32 reserved         : 24;
     };
 
     uint32 u32All;
@@ -200,6 +201,10 @@ struct AllGpuRenderState
     // defined by the last bound GraphicsPipeline, which was not nullptr.
     bool viewIndexFromDeviceIndex;
 
+    // Tracks if color write enable modified the value of CB_TARGET_MASK with the currently bound pipeline.  This value
+    // is used at pipeline bind time to determine if CB_TARGET_MASK needs to be updated as part of the bind operation.
+    bool lastColorWriteEnableDynamic;
+
 // =====================================================================================================================
 // The first part of the structure will be cleared with a memset in CmdBuffer::ResetState().
 // The second part of the structure contains the larger members that are selectively reset in CmdBuffer::ResetState().
@@ -219,6 +224,7 @@ struct AllGpuRenderState
     Pal::InputAssemblyStateParams    inputAssemblyState;
     Pal::DepthStencilStateCreateInfo depthStencilCreateInfo;
     Pal::VrsRateParams               vrsRate;
+    Pal::ColorWriteMaskParams        colorWriteMaskParams;
 };
 
 // State tracked during a render pass instance when building a command buffer.
@@ -505,6 +511,10 @@ public:
     void SetLineStippleEXT(
         const Pal::LineStippleStateParams&          params,
         uint32_t                                    staticToken);
+
+    void SetColorWriteEnableEXT(
+        uint32_t                                    attachmentCount,
+        const VkBool32*                             pColorWriteEnables);
 
     void SetLineWidth(
         float                                       lineWidth);
@@ -1851,6 +1861,11 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOpEXT(
     VkStencilOp                                 passOp,
     VkStencilOp                                 depthFailOp,
     VkCompareOp                                 compareOp);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    attachmentCount,
+    const VkBool32*                             pColorWriteEnables);
 
 } // namespace entry
 

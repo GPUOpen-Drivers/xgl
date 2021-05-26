@@ -126,7 +126,7 @@ VkResult ComputePipeline::Create(
     const VkAllocationCallbacks*            pAllocator,
     VkPipeline*                             pPipeline)
 {
-    int64_t startTime = Util::GetPerfCpuTime();
+    uint64 startTime = vk::utils::GetTimeNano();
 
     // Setup PAL create info from Vulkan inputs
     size_t                    pipelineBinarySizes[MaxPalDevices] = {};
@@ -325,7 +325,7 @@ VkResult ComputePipeline::Create(
 
     if (result == VK_SUCCESS)
     {
-        uint64_t duration = Util::GetPerfCpuTime() - startTime;
+        uint64_t duration = vk::utils::GetTimeNano() - startTime;
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
         binaryCreateInfo.pipelineFeedback.duration = duration;
         pDefaultCompiler->SetPipelineCreationFeedbackInfo(

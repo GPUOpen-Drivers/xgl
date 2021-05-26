@@ -121,6 +121,7 @@ enum class DynamicStatesInternal : uint32_t
     DepthBoundsTestEnableExt,
     StencilTestEnableExt,
     StencilOpExt,
+    ColorWriteEnableExt,
     DynamicStatesInternalCount
 };
 

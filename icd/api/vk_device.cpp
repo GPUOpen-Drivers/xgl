@@ -927,6 +927,18 @@ VkResult Device::Create(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_COLOR_WRITE_ENABLE_FEATURES_EXT:
+        {
+            const auto pColorWriteEnableFeatures =
+                reinterpret_cast<const VkPhysicalDeviceColorWriteEnableFeaturesEXT*>(pHeader);
+
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceColorWriteEnableFeaturesEXT>(
+                pPhysicalDevice,
+                pColorWriteEnableFeatures);
+
+            break;
+        }
+
         default:
             break;
         }

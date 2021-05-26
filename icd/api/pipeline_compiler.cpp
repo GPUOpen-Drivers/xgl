@@ -1129,6 +1129,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     VbBindingInfo*                                  pVbInfo,
     const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo)
 {
+    VK_ASSERT(pIn != nullptr);
+
     VkResult               result    = VK_SUCCESS;
     const RuntimeSettings& settings  = m_pPhysicalDevice->GetRuntimeSettings();
     auto                   pInstance = m_pPhysicalDevice->Manager()->VkInstance();
@@ -1184,7 +1186,10 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         // According to the spec this should never be null
         VK_ASSERT(pIa != nullptr);
 
-        pCreateInfo->pipelineInfo.iaState.enableMultiView = pRenderPass->IsMultiviewEnabled();
+        pCreateInfo->pipelineInfo.iaState.enableMultiView    = (pRenderPass != nullptr) ?
+                                                                pRenderPass->IsMultiviewEnabled() :
+                                                                0;
+
         pCreateInfo->pipelineInfo.iaState.topology           = pIa->topology;
         pCreateInfo->pipelineInfo.iaState.disableVertexReuse = false;
 
@@ -1376,15 +1381,30 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
         pCreateInfo->pipelineInfo.nggState.enableSmallPrimFilter      = settings.nggEnableSmallPrimFilter;
         pCreateInfo->pipelineInfo.nggState.enableCullDistanceCulling  = settings.nggEnableCullDistanceCulling;
 
-        if (settings.requireMrtForNggCulling)
+        if (settings.disableNggCulling)
         {
-            uint32_t numTargets = 0;
+            uint32_t disableNggCullingMask = (settings.disableNggCulling & DisableNggCullingAlways);
+            uint32_t numTargets            = 0;
+
             for (uint32_t i = 0; i < Pal::MaxColorTargets; ++i)
             {
                 numTargets += pCreateInfo->pipelineInfo.cbState.target[i].channelWriteMask ? 1 : 0;
             }
 
-            if (numTargets < 2)
+            switch (numTargets)
+            {
+            case 0:
+                disableNggCullingMask |= (settings.disableNggCulling & DisableNggCullingDepthOnly);
+                break;
+            case 1:
+                disableNggCullingMask |= (settings.disableNggCulling & DisableNggCullingSingleColorAttachment);
+                break;
+            default:
+                disableNggCullingMask |= (settings.disableNggCulling & DisableNggCullingMultipleColorAttachments);
+                break;
+            }
+
+            if (disableNggCullingMask != 0)
             {
                 pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling     = false;
                 pCreateInfo->pipelineInfo.nggState.enableFrustumCulling      = false;

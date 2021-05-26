@@ -94,6 +94,41 @@ Pal::Box BuildClearBox(
 }
 
 // =====================================================================================================================
+// Creates a compatible PAL "clear box" structure from attachment + render area for a renderpass clear.
+Pal::Box BuildClearBox(
+    const Pal::Rect& renderArea,
+    const ImageView& imageView)
+{
+    Pal::Box box{ };
+
+    // 2D area
+    box.offset.x      = renderArea.offset.x;
+    box.offset.y      = renderArea.offset.y;
+    box.extent.width  = renderArea.extent.width;
+    box.extent.height = renderArea.extent.height;
+
+    // Get the attachment image
+    const Image* pImage = imageView.GetImage();
+
+    if (pImage->Is2dArrayCompatible())
+    {
+        box.offset.z     = imageView.GetZRange().offset;
+        box.extent.depth = imageView.GetZRange().extent;
+    }
+    else
+    {
+        Pal::SubresRange subresRange;
+        imageView.GetFrameBufferAttachmentSubresRange(&subresRange);
+
+        // Whole slice range (these are offset relative to subresrange)
+        box.offset.z     = subresRange.startSubres.arraySlice;
+        box.extent.depth = subresRange.numSlices;
+    }
+
+    return box;
+}
+
+// =====================================================================================================================
 // Returns ranges of consecutive bits set to 1 from a bit mask.
 //
 // uint32 { 0xE47F01D6 } -> [(1, 2) (4, 1) (6, 3) (16, 7) (26, 1) (29, 3)]
@@ -2476,17 +2511,53 @@ void CmdBuffer::BlitImage(
         {
             palCopyInfo.regionCount = 0;
 
-            while ((regionIdx < regionCount) &&
-                   (palCopyInfo.regionCount <= (regionBatch - MaxPalAspectsPerMask)))
+            // Attempt a lightweight copy image instead of the requested scaled blit.
+            const VkImageBlit& region    = pRegions[regionIdx];
+            const VkExtent3D   srcExtent =
             {
-                VkToPalImageScaledCopyRegion(pRegions[regionIdx], srcFormat.format, dstFormat.format,
-                    pPalRegions, &palCopyInfo.regionCount);
+                static_cast<uint32_t>(region.srcOffsets[1].x - region.srcOffsets[0].x),
+                static_cast<uint32_t>(region.srcOffsets[1].y - region.srcOffsets[0].y),
+                static_cast<uint32_t>(region.srcOffsets[1].z - region.srcOffsets[0].z)
+            };
+
+            if ((pSrcImage->GetFormat() == pDstImage->GetFormat()) &&
+                (srcExtent.width  == static_cast<uint32_t>(region.dstOffsets[1].x - region.dstOffsets[0].x)) &&
+                (srcExtent.height == static_cast<uint32_t>(region.dstOffsets[1].y - region.dstOffsets[0].y)) &&
+                (srcExtent.depth  == static_cast<uint32_t>(region.dstOffsets[1].z - region.dstOffsets[0].z)))
+            {
+                const VkImageCopy imageCopy =
+                {
+                    region.srcSubresource,
+                    region.srcOffsets[0],
+                    region.dstSubresource,
+                    region.dstOffsets[0],
+                    srcExtent
+                };
+
+                Pal::ImageCopyRegion palRegions[MaxPalAspectsPerMask];
+                uint32_t             palRegionCount = 0;
+
+                VkToPalImageCopyRegion(imageCopy, srcFormat.format, dstFormat.format, palRegions, &palRegionCount);
+
+                PalCmdCopyImage(pSrcImage, palCopyInfo.srcImageLayout, pDstImage, palCopyInfo.dstImageLayout,
+                    palRegionCount, palRegions);
 
                 ++regionIdx;
             }
+            else
+            {
+                while ((regionIdx < regionCount) &&
+                       (palCopyInfo.regionCount <= (regionBatch - MaxPalAspectsPerMask)))
+                {
+                    VkToPalImageScaledCopyRegion(pRegions[regionIdx], srcFormat.format, dstFormat.format,
+                        pPalRegions, &palCopyInfo.regionCount);
 
-            // This will do a scaled blit
-            PalCmdScaledCopyImage(pSrcImage, pDstImage, palCopyInfo);
+                    ++regionIdx;
+                }
+
+                // This will do a scaled blit
+                PalCmdScaledCopyImage(pSrcImage, pDstImage, palCopyInfo);
+            }
         }
 
         virtStackFrame.FreeArray(pPalRegions);
@@ -4940,7 +5011,8 @@ void CmdBuffer::CopyQueryPoolResults(
     const QueryPool* pBasePool = QueryPool::ObjectFromHandle(queryPool);
     const Buffer* pDestBuffer = Buffer::ObjectFromHandle(destBuffer);
 
-    if (pBasePool->GetQueryType() != VK_QUERY_TYPE_TIMESTAMP)
+    if ((pBasePool->GetQueryType() != VK_QUERY_TYPE_TIMESTAMP)
+       )
     {
         const PalQueryPool* pPool = pBasePool->AsPalQueryPool();
 
@@ -4963,7 +5035,7 @@ void CmdBuffer::CopyQueryPoolResults(
     }
     else
     {
-        const TimestampQueryPool* pPool = pBasePool->AsTimestampQueryPool();
+        const QueryPoolWithStorageView* pPool = pBasePool->AsQueryPoolWithStorageView();
 
         const Device::InternalPipeline& pipeline = m_pDevice->GetTimestampQueryCopyPipeline();
 
@@ -4974,14 +5046,14 @@ void CmdBuffer::CopyQueryPoolResults(
         {
             static const Pal::BarrierTransition transition =
             {
-                Pal::CoherTimestamp,
+                pBasePool->GetQueryType() == VK_QUERY_TYPE_TIMESTAMP ? Pal::CoherTimestamp : Pal::CoherMemory,
                 Pal::CoherShader
             };
 
             static const Pal::HwPipePoint pipePoint = Pal::HwPipeBottom;
             static const Pal::BarrierFlags PalBarrierFlags = {0};
 
-            static const Pal::BarrierInfo TimestampWriteWaitIdle =
+            static const Pal::BarrierInfo WriteWaitIdle =
             {
                 PalBarrierFlags,                                // flags
                 Pal::HwPipePreCs,                               // waitPoint
@@ -4999,7 +5071,7 @@ void CmdBuffer::CopyQueryPoolResults(
                 RgpBarrierInternalPreCopyQueryPoolResultsSync   // reason
             };
 
-            PalCmdBarrier(TimestampWriteWaitIdle, m_curDeviceMask);
+            PalCmdBarrier(WriteWaitIdle, m_curDeviceMask);
         }
 
         uint32_t userData[16];
@@ -5007,7 +5079,7 @@ void CmdBuffer::CopyQueryPoolResults(
         // Figure out which user data registers should contain what compute constants
         const uint32_t storageViewSize     = m_pDevice->GetProperties().descriptorSizes.bufferView;
         const uint32_t storageViewDwSize   = storageViewSize / sizeof(uint32_t);
-        const uint32_t timestampViewOffset = 0;
+        const uint32_t viewOffset = 0;
         const uint32_t bufferViewOffset    = storageViewDwSize;
         const uint32_t queryCountOffset    = bufferViewOffset + storageViewDwSize;
         const uint32_t copyFlagsOffset     = queryCountOffset + 1;
@@ -5016,9 +5088,9 @@ void CmdBuffer::CopyQueryPoolResults(
         const uint32_t userDataCount       = firstQueryOffset + 1;
 
         // Make sure they agree with pipeline mapping
-        VK_ASSERT(timestampViewOffset == pipeline.userDataNodeOffsets[0]);
-        VK_ASSERT(bufferViewOffset    == pipeline.userDataNodeOffsets[1]);
-        VK_ASSERT(queryCountOffset    == pipeline.userDataNodeOffsets[2]);
+        VK_ASSERT(viewOffset        == pipeline.userDataNodeOffsets[0]);
+        VK_ASSERT(bufferViewOffset  == pipeline.userDataNodeOffsets[1]);
+        VK_ASSERT(queryCountOffset  == pipeline.userDataNodeOffsets[2]);
         VK_ASSERT(userDataCount <= VK_ARRAY_SIZE(userData));
 
         // Create and set a raw storage view into the destination buffer (shader will choose to either write 32-bit or
@@ -5065,8 +5137,8 @@ void CmdBuffer::CopyQueryPoolResults(
             // Bind the copy compute pipeline
             PalCmdBuffer(deviceIdx)->CmdBindPipeline(bindParams);
 
-            // Set the timestamp buffer SRD (copy source) as typed 64-bit storage view
-            memcpy(&userData[timestampViewOffset], pPool->GetStorageView(deviceIdx), storageViewSize);
+            // Set the query buffer SRD (copy source) as typed 64-bit storage view
+            memcpy(&userData[viewOffset], pPool->GetStorageView(deviceIdx), storageViewSize);
 
             bufferViewInfo.gpuAddr = pDestBuffer->GpuVirtAddr(deviceIdx) + destOffset;
             m_pDevice->PalDevice(deviceIdx)->CreateUntypedBufferViewSrds(1, &bufferViewInfo, &userData[bufferViewOffset]);
@@ -7211,6 +7283,16 @@ void CmdBuffer::ValidateStates()
                         deviceIdx,
                         pPalDepthStencil[deviceIdx]);
             }
+
+            if (m_allGpuState.dirty.colorWriteEnable)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                m_allGpuState.lastColorWriteEnableDynamic = true;
+                PalCmdBuffer(deviceGroup.Index())->CmdSetColorWriteMask(m_allGpuState.colorWriteMaskParams);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
         }
         while (deviceGroup.IterateNext());
 
@@ -7366,6 +7448,31 @@ void CmdBuffer::SetStencilOpEXT(
 
             m_allGpuState.dirty.depthStencil = 1;
         }
+    }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetColorWriteEnableEXT(
+    uint32_t                                    attachmentCount,
+    const VkBool32*                             pColorWriteEnables)
+{
+    if (pColorWriteEnables != nullptr)
+    {
+        m_allGpuState.colorWriteMaskParams.count = Util::Min(attachmentCount, Pal::MaxColorTargets);
+
+        for (uint32 i = 0; i < attachmentCount; ++i)
+        {
+            if (pColorWriteEnables[i])
+            {
+                m_allGpuState.colorWriteMaskParams.colorWriteMask[i] = 0xff;
+            }
+            else
+            {
+                m_allGpuState.colorWriteMaskParams.colorWriteMask[i] = 0x0;
+            }
+        }
+
+        m_allGpuState.dirty.colorWriteEnable = 1;
     }
 }
 
@@ -8480,6 +8587,15 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetStencilOpEXT(
     VkCompareOp                                 compareOp)
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetStencilOpEXT(faceMask, failOp, passOp, depthFailOp, compareOp);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    attachmentCount,
+    const VkBool32*                             pColorWriteEnables)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetColorWriteEnableEXT(attachmentCount, pColorWriteEnables);
 }
 
 } // namespace entry

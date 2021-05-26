@@ -103,6 +103,8 @@
     ((PAL_CLIENT_INTERFACE_MAJOR_VERSION == major && PAL_CLIENT_INTERFACE_MINOR_VERSION >= minor) || \
      (PAL_CLIENT_INTERFACE_MAJOR_VERSION > major))
 
+#define NANOSECONDS_IN_A_SECOND      1000000000ull
+
 namespace vk
 {
 
@@ -128,6 +130,14 @@ typedef VkAccessFlags2KHR        AccessFlags;
 
 namespace utils
 {
+
+// =====================================================================================================================
+// Get time in nano seconds
+VK_INLINE uint64_t GetTimeNano()
+{
+    return (static_cast<Pal::uint64>(Util::GetPerfCpuTime()) * NANOSECONDS_IN_A_SECOND) /
+        static_cast<Pal::uint64>(Util::GetPerfFrequency());
+}
 
 // =====================================================================================================================
 // This function can be used to get the right externsion structure of specific type in case there are more than one

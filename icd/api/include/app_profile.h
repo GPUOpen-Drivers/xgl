@@ -77,6 +77,7 @@ enum class AppProfile : uint32_t
     WolfensteinYoungblood, // Wolfenstein Youngblood by Machine Games
     RedDeadRedemption2,    // Red Dead Redemption 2 by Rockstar
     DoomEternal,           // Doom Eternal by id Software
+    IdTechLauncher,        // id Software Launcher Application
     ZombieArmy4,           // Zombie Army 4: Dead War by Rebellion Developments
     GhostReconBreakpoint,  // Ghost Recon Breakpoint
     DetroitBecomeHuman,    // Detroit Become Human by Quantic Dream

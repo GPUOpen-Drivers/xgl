@@ -319,6 +319,12 @@ constexpr AppProfilePatternEntry AppEngineSaschaWillemsExamples =
     "vulkanexample"
 };
 
+constexpr AppProfilePatternEntry AppNameIdTechLauncher =
+{
+    PatternAppNameLower,
+    "idtechlauncher"
+};
+
 constexpr AppProfilePatternEntry AppNameWolfensteinYoungblood =
 {
     PatternAppNameLower,
@@ -460,6 +466,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::WolfensteinYoungblood,
         {
             AppNameWolfensteinYoungblood,
+            AppEngineIdTech,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::IdTechLauncher,
+        {
+            AppNameIdTechLauncher,
             AppEngineIdTech,
             PatternEnd
         }

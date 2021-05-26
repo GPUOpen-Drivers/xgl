@@ -706,6 +706,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.backgroundFullscreenIgnorePresentErrors = true;
         }
 
+        if (appProfile == AppProfile::IdTechLauncher)
+        {
+            m_settings.enableOnDiskInternalPipelineCaches = false;
+        }
+
         if (appProfile == AppProfile::SaschaWillemsExamples)
         {
             m_settings.forceDepthClampBasedOnZExport = true;

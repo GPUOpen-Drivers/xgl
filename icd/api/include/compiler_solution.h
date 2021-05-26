@@ -47,6 +47,7 @@ namespace vk
 class PhysicalDevice;
 class PipelineCache;
 class ShaderCache;
+class DeferredHostOperation;
 
 enum FreeCompilerBinary : uint32_t
 {

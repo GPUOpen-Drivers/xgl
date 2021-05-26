@@ -68,6 +68,8 @@ macro(xgl_options)
 
     option(XGL_ENABLE_ASSERTIONS "Enable assertions in release builds" OFF)
 
+    option(XGL_ENABLE_LIBCXX "Use libc++. This is intended for MemorySanitizer support only." OFF)
+
     option(ICD_GPUOPEN_DEVMODE_BUILD "Build ${PROJECT_NAME} with GPU Open Developer Mode driver support?" ON)
 
     option(ICD_MEMTRACK "Turn on memory tracking?" ${CMAKE_BUILD_TYPE_DEBUG})
