@@ -331,6 +331,12 @@ constexpr AppProfilePatternEntry AppNameWolfensteinYoungblood =
     "wolfenstein: youngblood"
 };
 
+constexpr AppProfilePatternEntry AppNameWolfensteinCyberpilot =
+{
+    PatternAppNameLower,
+    "wolfenstein: cyberpilot"
+};
+
 constexpr AppProfilePatternEntry AppNameRainbowSixSiege =
 {
     PatternAppNameLower,
@@ -466,6 +472,15 @@ AppProfilePattern AppPatternTable[] =
         AppProfile::WolfensteinYoungblood,
         {
             AppNameWolfensteinYoungblood,
+            AppEngineIdTech,
+            PatternEnd
+        }
+    },
+
+    {
+        AppProfile::WolfensteinCyberpilot,
+        {
+            AppNameWolfensteinCyberpilot,
             AppEngineIdTech,
             PatternEnd
         }

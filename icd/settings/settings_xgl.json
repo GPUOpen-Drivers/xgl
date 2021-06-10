@@ -2680,23 +2680,18 @@
             "Description": "Ignores resource barriers that have the same source and destination parameters in case a full cross-bar sync isn't required."
           },
           {
-            "Name": "ForceImageSharingModeExclusive",
-            "Value": 8,
-            "Description": "Exclusive queue family access reduces some memory dependency operations and removes the restriction that the image layout must be supported for multiple queue families. VK_SHARING_MODE_CONCURRENT is only acceptable to ignore when the application unnecessarily specified extra queue families without accessing the resource using them. Setting this option illegally might avoid all the pitfalls in a given application, but they are too numerous to list (e.g. requiring a decompress on an async compute queue)."
-          },
-          {
             "Name": "SkipWithAppProfile",
-            "Value": 16,
+            "Value": 8,
             "Description": "Filter all requested pipeline barriers in an application profile specified by the setting BarrierFilterProfileFile."
           },
           {
             "Name": "SkipWithAppProfileRegen",
-            "Value": 32,
+            "Value": 16,
             "Description": "Same as SkipWithAppProfile but the pipeline hashes are not considered in order to regenerate strong barrier hashes after any application updates to its shaders."
           },
           {
             "Name": "SkipWithIntDevOverlay",
-            "Value": 64,
+            "Value": 32,
             "Description": "Manually remove barriers using keyboard shortcuts to visualize their effects. Use in conjunction with the developer overlay. See the setting VulkanOverlayEnable OverlayBarrierFiltering option for details. SkipWithAppProfile and SkipWithAppProfileRegen may be used simultaneously to refine or regenerate an existing profile."
           }
         ],
@@ -2705,6 +2700,39 @@
       "Flags": {
         "IsHex": true,
         "IsBitmask": true
+      },
+      "Scope": "Driver",
+      "Type": "uint32"
+    },
+    {
+      "Name": "ForceImageSharingMode",
+      "Description": "Options for forcing image sharing mode",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": 0
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Values": [
+          {
+            "Name": "ForceImageSharingModeDefault",
+            "Value": 0,
+            "Description": "Don't force anything"
+          },
+          {
+            "Name": "ForceImageSharingModeExclusive",
+            "Value": 1,
+            "Description": "Exclusive queue family access reduces some memory dependency operations and removes the restriction that the image layout must be supported for multiple queue families. VK_SHARING_MODE_CONCURRENT is only acceptable to ignore when the application unnecessarily specified extra queue families without accessing the resource using them. Setting this option illegally might avoid all the pitfalls in a given application, but they are too numerous to list (e.g. requiring a decompress on an async compute queue)."
+          },
+          {
+            "Name": "ForceImageSharingModeExclusiveForNonColorAttachments",
+            "Value": 2,
+            "Description": "Force exclusive image sharing mode for all images except those marked as color attachments. Exclusive queue family access reduces some memory dependency operations and removes the restriction that the image layout must be supported for multiple queue families."
+          }
+        ],
+        "Name": "ForceImageSharingMode"
       },
       "Scope": "Driver",
       "Type": "uint32"
@@ -5235,6 +5263,18 @@
     {
       "Name": "AlwaysAllocDynamicDescriptorData",
       "Description": "Always allocates dynamic descriptor data instead of based on VkDescriptorPoolCreateInfo.pPoolSizes",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ImplicitExternalSynchronization",
+      "Description": "Allow for modified barrier for Implicit External Synchronization",
       "Tags": [
         "General"
       ],

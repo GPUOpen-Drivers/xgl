@@ -355,6 +355,7 @@ public:
         GOOGLE_DECORATE_STRING,
         GOOGLE_HLSL_FUNCTIONALITY1,
         GOOGLE_USER_TYPE,
+
         Count
     };
 

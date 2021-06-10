@@ -1170,13 +1170,20 @@ void GraphicsPipeline::ConvertGraphicsPipelineInfo(
             pInfo->customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
                                             (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
 
-            if ((pRenderPass != nullptr) &&
-               ((pInfo->bresenhamEnable == false) || pInfo->customSampleLocations))
+            if ((pInfo->bresenhamEnable == false) || (pInfo->customSampleLocations))
             {
                 uint32_t rasterizationSampleCount   = pMs->rasterizationSamples;
-                uint32_t subpassCoverageSampleCount = pRenderPass->GetSubpassMaxSampleCount(pGraphicsPipelineCreateInfo->subpass);
-                uint32_t subpassColorSampleCount    = pRenderPass->GetSubpassColorSampleCount(pGraphicsPipelineCreateInfo->subpass);
-                uint32_t subpassDepthSampleCount    = pRenderPass->GetSubpassDepthSampleCount(pGraphicsPipelineCreateInfo->subpass);
+
+                uint32_t subpassCoverageSampleCount = rasterizationSampleCount;
+                uint32_t subpassColorSampleCount    = rasterizationSampleCount;
+                uint32_t subpassDepthSampleCount    = rasterizationSampleCount;
+
+                if (pRenderPass != VK_NULL_HANDLE)
+                {
+                    subpassCoverageSampleCount = pRenderPass->GetSubpassMaxSampleCount(pGraphicsPipelineCreateInfo->subpass);
+                    subpassColorSampleCount    = pRenderPass->GetSubpassColorSampleCount(pGraphicsPipelineCreateInfo->subpass);
+                    subpassDepthSampleCount    = pRenderPass->GetSubpassDepthSampleCount(pGraphicsPipelineCreateInfo->subpass);
+                }
 
                 // subpassCoverageSampleCount would be equal to zero if there are zero attachments.
                 subpassCoverageSampleCount = subpassCoverageSampleCount == 0 ? rasterizationSampleCount : subpassCoverageSampleCount;

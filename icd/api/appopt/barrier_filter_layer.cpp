@@ -184,25 +184,6 @@ VKAPI_ATTR void VKAPI_CALL vkCmdPipelineBarrier(
     }
 }
 
-// =====================================================================================================================
-VKAPI_ATTR VkResult VKAPI_CALL vkCreateImage(
-    VkDevice                                    device,
-    const VkImageCreateInfo*                    pCreateInfo,
-    const VkAllocationCallbacks*                pAllocator,
-    VkImage*                                    pImage)
-{
-    VkImageCreateInfo createInfo = *pCreateInfo;
-
-    createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    Device* pDevice = ApiDevice::ObjectFromHandle(device);
-
-    return pDevice->GetBarrierFilterLayer()->GetNextLayer()->GetEntryPoints().vkCreateImage(device,
-                                                                                            &createInfo,
-                                                                                            pAllocator,
-                                                                                            pImage);
-}
-
 } // namespace barrier_filter_layer
 
 } // entry
@@ -235,11 +216,6 @@ void BarrierFilterLayer::OverrideDispatchTable(
                                          SkipWithIntDevOverlay))
     {
         BARRIER_FILTER_LAYER_OVERRIDE_ENTRY(vkCmdPipelineBarrier);
-    }
-
-    if (settings.barrierFilterOptions & ForceImageSharingModeExclusive)
-    {
-        BARRIER_FILTER_LAYER_OVERRIDE_ENTRY(vkCreateImage);
     }
 
 }

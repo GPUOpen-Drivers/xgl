@@ -48,37 +48,18 @@ namespace vk
 {
 
 // =====================================================================================================================
-// Generates a ResourceOptimizerKey object using the contents of the VkImageCreateInfo struct
-void Image::BuildResourceKey(
-    const VkImageCreateInfo* pCreateInfo,
-    ResourceOptimizerKey*    pResourceKey)
+// This funtion updates the image sharing mode if suitable forceImageSharingMode setting is applied.
+static void UpdateImageSharingMode(
+    uint32_t       sharingModeSetting,
+    const bool     isColorAttachment,
+    VkSharingMode* pImageSharingMode)
 {
-    Util::MetroHash64 hasher;
-
-    hasher.Update(pCreateInfo->flags);
-    hasher.Update(pCreateInfo->imageType);
-    hasher.Update(pCreateInfo->format);
-    hasher.Update(pCreateInfo->extent.depth);
-    hasher.Update(pCreateInfo->mipLevels);
-    hasher.Update(pCreateInfo->arrayLayers);
-    hasher.Update(pCreateInfo->samples);
-    hasher.Update(pCreateInfo->tiling);
-    hasher.Update(pCreateInfo->usage);
-    hasher.Update(pCreateInfo->sharingMode);
-    hasher.Update(pCreateInfo->queueFamilyIndexCount);
-    hasher.Update(pCreateInfo->initialLayout);
-
-    if (pCreateInfo->pQueueFamilyIndices != nullptr)
+    if ((sharingModeSetting == ForceImageSharingModeExclusive) ||
+        ((sharingModeSetting == ForceImageSharingModeExclusiveForNonColorAttachments) &&
+         (isColorAttachment == false)))
     {
-        hasher.Update(
-            reinterpret_cast<const uint8_t*>(pCreateInfo->pQueueFamilyIndices),
-            pCreateInfo->queueFamilyIndexCount * sizeof(uint32_t));
+        *pImageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     }
-
-    hasher.Finalize(reinterpret_cast<uint8_t* const>(&pResourceKey->apiHash));
-
-    pResourceKey->width = pCreateInfo->extent.width;
-    pResourceKey->height = pCreateInfo->extent.height;
 }
 
 // =====================================================================================================================
@@ -94,6 +75,46 @@ static void UpgradeToHigherPriority(
     {
         *pPriority = newPriority;
     }
+}
+
+// =====================================================================================================================
+// Generates a ResourceOptimizerKey object using the contents of the VkImageCreateInfo struct
+void Image::BuildResourceKey(
+    const VkImageCreateInfo* pCreateInfo,
+    ResourceOptimizerKey*    pResourceKey,
+    const RuntimeSettings&   settings)
+{
+    Util::MetroHash64 hasher;
+    VkSharingMode     imageSharingMode  = pCreateInfo->sharingMode;
+    const bool        isColorAttachment = (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT);
+
+    hasher.Update(pCreateInfo->flags);
+    hasher.Update(pCreateInfo->imageType);
+    hasher.Update(pCreateInfo->format);
+    hasher.Update(pCreateInfo->extent.depth);
+    hasher.Update(pCreateInfo->mipLevels);
+    hasher.Update(pCreateInfo->arrayLayers);
+    hasher.Update(pCreateInfo->samples);
+    hasher.Update(pCreateInfo->tiling);
+    hasher.Update(pCreateInfo->usage);
+
+    UpdateImageSharingMode(settings.forceImageSharingMode, isColorAttachment, &imageSharingMode);
+    hasher.Update(imageSharingMode);
+
+    hasher.Update(pCreateInfo->queueFamilyIndexCount);
+    hasher.Update(pCreateInfo->initialLayout);
+
+    if (pCreateInfo->pQueueFamilyIndices != nullptr)
+    {
+        hasher.Update(
+            reinterpret_cast<const uint8_t*>(pCreateInfo->pQueueFamilyIndices),
+            pCreateInfo->queueFamilyIndexCount * sizeof(uint32_t));
+    }
+
+    hasher.Finalize(reinterpret_cast<uint8_t* const>(&pResourceKey->apiHash));
+
+    pResourceKey->width = pCreateInfo->extent.width;
+    pResourceKey->height = pCreateInfo->extent.height;
 }
 
 // =====================================================================================================================
@@ -475,6 +496,7 @@ VkResult Image::Create(
     uint32_t               viewFormatCount   = 0;
     const VkFormat*        pViewFormats      = nullptr;
     VkFormat               createInfoFormat  = pCreateInfo->format;
+    VkSharingMode          imageSharingMode  = pCreateInfo->sharingMode;
     ImageFlags             imageFlags;
 
     imageFlags.u32All = 0;
@@ -761,7 +783,7 @@ VkResult Image::Create(
     }
 
     ResourceOptimizerKey resourceKey;
-    BuildResourceKey(pCreateInfo, &resourceKey);
+    BuildResourceKey(pCreateInfo, &resourceKey, settings);
 
     // Apply per application (or run-time) options
     pDevice->GetResourceOptimizer()->OverrideImageCreateInfo(resourceKey, &palCreateInfo);
@@ -776,6 +798,12 @@ VkResult Image::Create(
         result = VK_ERROR_UNKNOWN;
     }
 
+    // Override image sharing mode if suitable settings are applied
+    UpdateImageSharingMode(
+        settings.forceImageSharingMode,
+        (pCreateInfo->usage & VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT),
+        &imageSharingMode);
+
     if ((result == VK_SUCCESS) && (imageFlags.androidPresentable))
     {
         VkDeviceMemory    pDeviceMemory = {};
@@ -787,7 +815,7 @@ VkResult Image::Create(
             Pal::PresentMode::Windowed,
             pImage,
             createInfoFormat,
-            pCreateInfo->sharingMode,
+            imageSharingMode,
             pCreateInfo->queueFamilyIndexCount,
             pCreateInfo->pQueueFamilyIndices,
             &pDeviceMemory);
@@ -895,7 +923,7 @@ VkResult Image::Create(
             pPalImages,
             pSparseMemory,
             pCreateInfo->usage | stencilUsage,
-            pCreateInfo->sharingMode,
+            imageSharingMode,
             pCreateInfo->queueFamilyIndexCount,
             pCreateInfo->pQueueFamilyIndices,
             pCreateInfo->samples > VK_SAMPLE_COUNT_1_BIT,
@@ -1076,7 +1104,7 @@ VkResult Image::CreatePresentableImage(
         imageCreateInfo.pQueueFamilyIndices = pQueueFamilyIndices;
         imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-        BuildResourceKey(&imageCreateInfo, &resourceKey);
+        BuildResourceKey(&imageCreateInfo, &resourceKey, pDevice->GetRuntimeSettings());
 
         // Construct API image object.
         VK_PLACEMENT_NEW (pImgObjMemory) Image(

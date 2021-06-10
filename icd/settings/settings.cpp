@@ -186,6 +186,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
         }
 
+        if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp8)
+        {
+            m_settings.implicitExternalSynchronization = true;
+        }
+
         if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp9)
         {
             m_settings.forceResolveLayoutForDepthStencilTransferUsage = true;
@@ -243,8 +248,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             {
                 m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
                     SkipImageLayoutUndefined |
-                    SkipDuplicateResourceBarriers |
-                    ForceImageSharingModeExclusive;
+                    SkipDuplicateResourceBarriers;
+
+                m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
             }
 
             // Vega 20 has better performance on DOOM when DCC is disabled except for the 32 BPP surfaces
@@ -324,8 +330,9 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp9)
             {
                 m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
-                    SkipImageLayoutUndefined |
-                    ForceImageSharingModeExclusive;
+                    SkipImageLayoutUndefined;
+
+                m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
             }
 
             if (pInfo->gfxLevel >= Pal::GfxIpLevel::GfxIp10_1)
@@ -381,6 +388,14 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.mallNoAllocSsrPolicy = 0x01;
             }
 
+        }
+
+        if (appProfile == AppProfile::WolfensteinCyberpilot)
+        {
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                m_settings.barrierFilterOptions = SkipImageLayoutUndefined;
+            }
         }
 
         if (appProfile == AppProfile::IdTechEngine)
@@ -569,7 +584,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             // Rage 2 currently has all it's images set to VK_SHARING_MODE_CONCURRENT.
             // Forcing these images to use VK_SHARING_MODE_EXCLUSIVE gives us around 5% perf increase.
-            m_settings.barrierFilterOptions = BarrierFilterOptions::ForceImageSharingModeExclusive;
+            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusiveForNonColorAttachments;
 
             // Disable image type checking to avoid 1% loss.
             m_settings.disableImageResourceTypeCheck = true;
@@ -595,6 +610,16 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             }
 
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_3)
+            {
+                // Forcing these DCC settings prevents extreme corruption due to DCC for color attachments and provides an additional
+                // gain of 2-4% over what is achieved from the above force image sharing mode optimization.
+                m_settings.forceEnableDcc = (ForceDccForNonColorAttachmentShaderStorage |
+                                             ForceDccFor2DShaderStorage |
+                                             ForceDccFor3DShaderStorage |
+                                             ForceDccFor32BppShaderStorage |
+                                             ForceDccFor64BppShaderStorage);
+            }
         }
 
         if (appProfile == AppProfile::RedDeadRedemption2)
@@ -610,7 +635,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
 
             // Force exclusive sharing mode - 2% gain
-            m_settings.barrierFilterOptions = BarrierFilterOptions::ForceImageSharingModeExclusive;
+            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
 
             m_settings.delayFullScreenAcquireToFirstPresent = true;
 
@@ -648,7 +673,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::DoomEternal)
         {
-            m_settings.barrierFilterOptions = SkipStrayExecutionDependencies | ForceImageSharingModeExclusive;
+            m_settings.barrierFilterOptions  = SkipStrayExecutionDependencies;
+            m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)
             {

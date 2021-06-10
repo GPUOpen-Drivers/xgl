@@ -626,6 +626,7 @@ void DispatchTable::Init()
     INIT_DISPATCH_ENTRY(vkGetPrivateDataEXT                             );
 
     INIT_DISPATCH_ENTRY(vkCmdSetColorWriteEnableEXT                     );
+
 }
 
 // =====================================================================================================================
