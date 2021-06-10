@@ -320,6 +320,7 @@ DevModeMgr::DevModeMgr(Instance* pInstance)
     m_pEtwClient(nullptr),
 #endif
     m_finalized(false),
+    m_triggerMode(TriggerMode::Present),
     m_numPrepFrames(0),
     m_traceGpuMemLimit(0),
     m_enableInstTracing(false),
@@ -526,7 +527,7 @@ void DevModeMgr::AdvanceActiveTraceStep(
 
     // Only advance the trace step if we're processing the right type of trigger.ac
     if ((delimiterToValidTriggers[static_cast<uint32_t>(delimiterType)] &
-            (1 << static_cast<uint32_t>(m_trace.triggerMode))) != 0)
+            (1 << static_cast<uint32_t>(m_triggerMode))) != 0)
     {
         if (m_trace.status == TraceStatus::Pending)
         {
@@ -861,15 +862,11 @@ void DevModeMgr::TraceIdleToPendingStep(
             // Override some parameters via panel prior to updating trace parameters
             const RuntimeSettings& settings = pState->pDevice->GetRuntimeSettings();
 
-            if (settings.devModeSqttPrepareFrameCount != UINT_MAX)
-            {
-                m_numPrepFrames = settings.devModeSqttPrepareFrameCount;
-            }
-
             // Update our trace parameters based on the new trace
             const auto traceParameters = m_pRGPServer->QueryTraceParameters();
 
-            m_numPrepFrames        = traceParameters.numPreparationFrames;
+            m_numPrepFrames        = settings.devModeSqttPrepareFrameCount != UINT_MAX ?
+                settings.devModeSqttPrepareFrameCount : traceParameters.numPreparationFrames;
             m_traceGpuMemLimit     = traceParameters.gpuMemoryLimitInMb * 1024 * 1024;
             m_enableInstTracing    = traceParameters.flags.enableInstructionTokens;
             m_allowComputePresents = traceParameters.flags.allowComputePresents;
@@ -930,11 +927,9 @@ void DevModeMgr::TraceIdleToPendingStep(
             // Store the targtet API PSO hash to be passed to GpaSession::SetSampleTraceApiInfo
             m_targetApiPsoHash = traceParameters.pipelineHash;
 
-            TriggerMode triggerMode = TriggerMode::Present;
-
             if (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Index)
             {
-                triggerMode = TriggerMode::Index;
+                m_triggerMode = TriggerMode::Index;
 
                 m_traceFrameBeginIndex = traceParameters.captureStartIndex;
                 m_traceFrameEndIndex   = traceParameters.captureStopIndex;
@@ -950,7 +945,7 @@ void DevModeMgr::TraceIdleToPendingStep(
             }
             else if (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Markers)
             {
-                triggerMode = TriggerMode::Tag;
+                m_triggerMode = TriggerMode::Tag;
 
                 m_traceFrameBeginTag = traceParameters.beginTag;
                 m_traceFrameEndTag   = traceParameters.endTag;
@@ -959,11 +954,15 @@ void DevModeMgr::TraceIdleToPendingStep(
             }
             else if (traceParameters.captureMode == DevDriver::RGPProtocol::CaptureTriggerMode::Present)
             {
+                m_triggerMode = TriggerMode::Present;
+
                 m_traceFrameBeginTag = 0;
                 m_traceFrameEndTag = 0;
             }
             else
             {
+                m_triggerMode = TriggerMode::Present;
+
                 VK_NOT_IMPLEMENTED;
             }
 
@@ -978,7 +977,6 @@ void DevModeMgr::TraceIdleToPendingStep(
             pState->preparedFrameCount = 0;
             pState->sqttFrameCount     = 0;
             pState->status             = TraceStatus::Pending;
-            pState->triggerMode        = triggerMode;
         }
     }
 }
@@ -998,7 +996,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
     VK_ASSERT(pState->status  == TraceStatus::Pending);
 
     // We need to hold off untill we reach the desired frame when in Index mode
-    if ((pState->triggerMode == TriggerMode::Index) &&
+    if ((m_triggerMode == TriggerMode::Index) &&
         (m_globalFrameIndex < (m_traceFrameBeginIndex - m_numPrepFrames)))
     {
         return Pal::Result::Success;
@@ -1121,7 +1119,7 @@ Pal::Result DevModeMgr::TracePendingToPreparingStep(
     {
         GpuUtil::SampleTraceApiInfo sampleTraceApiInfo = {};
 
-        switch (pState->triggerMode)
+        switch (m_triggerMode)
         {
         case TriggerMode::Present:
             sampleTraceApiInfo.profilingMode = GpuUtil::TraceProfilingMode::Present;
@@ -1431,7 +1429,7 @@ Pal::Result DevModeMgr::TraceRunningToWaitingForSqttStep(
     // through Index mode
     uint32_t requestedFrames =
         m_trace.pDevice->GetRuntimeSettings().devModeSqttFrameCount;
-    if (pState->triggerMode == TriggerMode::Index)
+    if (m_triggerMode == TriggerMode::Index)
     {
         requestedFrames = (m_traceFrameBeginIndex < m_traceFrameEndIndex) ?
             m_traceFrameEndIndex - m_traceFrameBeginIndex : 0u;
@@ -1677,7 +1675,6 @@ void DevModeMgr::FinishOrAbortTrace(
     pState->sqttFrameCount     = 0;
     pState->gpaSampleId        = 0;
     pState->status             = TraceStatus::Idle;
-    pState->triggerMode        = TriggerMode::Present;
     pState->pTracePrepareQueue = nullptr;
     pState->pTraceBeginQueue   = nullptr;
     pState->pTraceEndQueue     = nullptr;

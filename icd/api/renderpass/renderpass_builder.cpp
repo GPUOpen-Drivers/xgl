@@ -925,6 +925,17 @@ void RenderPassBuilder::PostProcessSyncPoint(
     // Include implicit waiting and cache access
     ConvertImplicitSyncs(&pSyncPoint->barrier);
 
+    if (pSyncPoint->barrier.flags.implicitExternalOutgoing           &&
+        (pSyncPoint->barrier.pipePointCount < (MaxHwPipePoints - 1)) &&
+        m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetRuntimeSettings().implicitExternalSynchronization)
+    {
+        pSyncPoint->barrier.pipePoints[pSyncPoint->barrier.pipePointCount] = Pal::HwPipeBottom;
+        pSyncPoint->barrier.pipePointCount++;
+
+        pSyncPoint->barrier.srcAccessMask |= VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
+                                             VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+    }
+
     // Need a global cache transition if any of the sync flags are set or if there's an app
     // subpass dependency that requires cache synchronization.
     if (pSyncPoint->barrier.srcAccessMask != 0 ||

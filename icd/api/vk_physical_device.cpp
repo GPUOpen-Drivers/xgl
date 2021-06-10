@@ -6821,10 +6821,15 @@ VkResult PhysicalDevice::GetFragmentShadingRates(
     }
     else
     {
-        uint32 outputCount = 0;
+        static_assert((Pal::VrsShadingRate::_2x2 > Pal::VrsShadingRate::_2x1) &&
+                      (Pal::VrsShadingRate::_2x1 > Pal::VrsShadingRate::_1x2) &&
+                      (Pal::VrsShadingRate::_1x2 > Pal::VrsShadingRate::_1x1),
+                      "The returned array of fragment shading rates must be ordered from largest fragmentSize.width"
+                      "value to smallest, so the VrsShadingRate should be also in a correct order.");
 
-        uint32 i = 0;
-        while ((Util::BitMaskScanForward(&i, supportedVrsRates)) &&
+        uint32 outputCount = 0;
+        uint32 i           = 0;
+        while ((Util::BitMaskScanReverse(&i, supportedVrsRates)) &&
             (outputCount < *pFragmentShadingRateCount))
         {
             VkExtent2D fragmentSize = PalToVkShadingSize(static_cast<Pal::VrsShadingRate>(i));

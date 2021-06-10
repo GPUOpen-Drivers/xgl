@@ -321,7 +321,8 @@ private:
 
     static void BuildResourceKey(
         const VkImageCreateInfo* pCreateInfo,
-        ResourceOptimizerKey*    pResourceKey);
+        ResourceOptimizerKey*    pResourceKey,
+        const RuntimeSettings&   settings);
 
     uint32_t                m_mipLevels;          // This is the amount of mip levels contained in the image.
                                                   // We need this to support VK_WHOLE_SIZE during

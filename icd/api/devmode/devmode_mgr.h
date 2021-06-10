@@ -254,7 +254,6 @@ private:
     struct TraceState
     {
         TraceStatus           status;             // Current trace status (idle, running, etc.)
-        TriggerMode           triggerMode;        // Current trigger mode for RGP frame trace
         bool                  labelDelimsPresent; // True is a label delimiter is recieved
 
         Device*               pDevice;            // The device currently doing the tracing
@@ -329,6 +328,7 @@ private:
     Util::Mutex                         m_traceMutex;
     TraceState                          m_trace;
     bool                                m_finalized;
+    TriggerMode                         m_triggerMode;              // Current trigger mode for RGP frame trace
     uint32_t                            m_numPrepFrames;
     uint32_t                            m_traceGpuMemLimit;
     bool                                m_enableInstTracing;        // Enable instruction-level SQTT tokens
