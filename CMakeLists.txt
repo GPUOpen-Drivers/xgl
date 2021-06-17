@@ -23,7 +23,7 @@
  #
  #######################################################################################################################
 cmake_minimum_required(VERSION 3.13.4)
-
+#test
 # This part set before "project(XGL VERSION 1 LANGUAGES C CXX)".
 # In a system has both gcc and clang compiler.
 option(XGL_USE_CLANG "Build with clang?" OFF)
