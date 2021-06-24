@@ -464,17 +464,17 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
         result = PalToVkResult(palResult);
     }
 
-    // If we succeeded, return the new sub-allocation information; otherwise, clean up
-
     InternalMemoryPool* pInternalMemory = nullptr;
-
     if (result == VK_SUCCESS)
     {
         Pal::Result palResult = pOwnerList->PushFront(newPool);
         result = PalToVkResult(palResult);
-        VK_ASSERT(result == VK_SUCCESS);
+    }
 
+    if (result == VK_SUCCESS)
+    {
         pInternalMemory = pOwnerList->Begin().Get();
+        VK_ASSERT(pInternalMemory != nullptr);
 
         // Allocate the base GPU memory object for this pool
         result = AllocBaseGpuMem(poolInfo.pal,
@@ -496,30 +496,29 @@ VkResult InternalMemMgr::CreateMemoryPoolAndSubAllocate(
         *pNewPool        = *pInternalMemory;
         *pSubAllocOffset = subAllocOffset;
     }
-    else
+    else if (newPool.pBuddyAllocator != nullptr)
     {
-        auto it = pOwnerList->Begin();
-        bool needEraseFromOwnerList = pOwnerList->NumElements() > 0 ?
-            (it.Get()->groupMemory.PalMemory(DefaultDeviceIndex) ==
-             pInternalMemory->groupMemory.PalMemory(DefaultDeviceIndex)) : false;
-
-        // Unmap any persistently mapped memory
-        pInternalMemory->groupMemory.Unmap();
-
-        // Destroy the buddy allocator
-        if (pInternalMemory->pBuddyAllocator != nullptr)
+        // If `pInternalMemory != nullptr`, `newPool` was inserted by
+        // `pOwnerList->PushFront`. The GPU memory allocation may or may not be
+        // valid, but `Unmap` and `FreeBaseGpuMem` don't care.
+        if (pInternalMemory != nullptr)
         {
-            PAL_DELETE(pInternalMemory->pBuddyAllocator, m_pSysMemAllocator);
-        }
+            VK_ASSERT(newPool.pBuddyAllocator == pInternalMemory->pBuddyAllocator);
 
-        // Release this pool's base allocation
-        FreeBaseGpuMem(pInternalMemory);
+            // Unmap any persistently mapped memory
+            pInternalMemory->groupMemory.Unmap();
 
-        // Remove this memory pool from the list if we added it
-        if (needEraseFromOwnerList)
-        {
+            // Release this pool's base GPU memory allocation
+            FreeBaseGpuMem(pInternalMemory);
+
+            // Remove `pInternalMemory` from `pOwnerList`.
+            auto it = pOwnerList->Begin();
+            VK_ASSERT(pInternalMemory == it.Get());
             pOwnerList->Erase(&it);
+            pInternalMemory = nullptr;
         }
+
+        PAL_DELETE(newPool.pBuddyAllocator, m_pSysMemAllocator);
     }
 
     return result;
