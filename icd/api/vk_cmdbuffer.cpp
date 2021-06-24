@@ -3400,6 +3400,14 @@ void CmdBuffer::ResolveImage(
     Pal::ImageResolveRegion* pPalRegions =
         virtStackFrame.AllocArray<Pal::ImageResolveRegion>(rectBatch);
 
+    if (m_pDevice->GetRuntimeSettings().overrideUndefinedLayoutToTransferSrcOptimal)
+    {
+        if (srcImageLayout == VK_IMAGE_LAYOUT_UNDEFINED)
+        {
+            srcImageLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+        }
+    }
+
     if (pPalRegions != nullptr)
     {
         const Image* const pSrcImage              = Image::ObjectFromHandle(srcImage);

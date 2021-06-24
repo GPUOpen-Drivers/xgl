@@ -1814,18 +1814,15 @@
       "Name": "DropPipelineBinaryInstMask"
     },
     {
-      "Name": "AllowVkPipelineCachingToDisk",
+      "Name": "UsePalPipelineCaching",
       "Description": "Controls whether the pipeline compiler enables internal pipeline caching. This also allows the Vulkan application to get a Vulkan Pipeline Cache object based on internal caches, without creating an application-managed Vulkan Pipeline Cache. (Default: TRUE) Related environment variables AMD_ARCHIVE_DISK_CACHE_PATH: Path to where archive file is to be stored (optional) AMD_ARCHIVE_APP_PREFIX     : Fixed prefix string for generated archive file name (optional)",
       "Tags": [
         "SPIRV Options"
       ],
       "Defaults": {
-        "Default": true,
-        "WinDefault": true,
-        "LnxDefault": true
+        "Default": true
       },
       "Type": "bool",
-      "VariableName": "usePalPipelineCaching",
       "Scope": "Driver"
     },
     {
@@ -2216,11 +2213,16 @@
           {
             "Name": "DbgBuildAccelerationStructure",
             "Value": 134217728,
-            "Description": "Any ray tracing operations"
+            "Description": "Build ray tracing operations"
+          },
+          {
+            "Name": "DbgTraceRays",
+            "Value": 268435456,
+            "Description": "Trace ray tracing operations"
           },
           {
             "Name": "DbgBarrierBeginRendering",
-            "Value": 268435456,
+            "Value": 536870912,
             "Description": "Begin rendering"
           },
           {
@@ -3548,6 +3550,18 @@
       "Scope": "Driver",
       "Type": "uint32",
       "Name": "ForceAppProfileValue"
+    },
+    {
+      "Description": "Setting this to true for an app allows the driver to update image layout from VK_IMAGE_LAYOUT_UNDEFINED to VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL. Currently, only used for AshesofTheSingularity",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool",
+      "Name": "OverrideUndefinedLayoutToTransferSrcOptimal"
     },
     {
       "ValidValues": {

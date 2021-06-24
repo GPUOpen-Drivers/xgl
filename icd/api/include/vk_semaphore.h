@@ -46,7 +46,7 @@ namespace vk
 
 class Device;
 
-class Semaphore : public NonDispatchable<VkSemaphore, Semaphore>
+class Semaphore final : public NonDispatchable<VkSemaphore, Semaphore>
 {
 public:
     static VkResult Create(

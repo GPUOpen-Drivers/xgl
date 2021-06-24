@@ -39,7 +39,7 @@ namespace vk
 
 // =====================================================================================================================
 // Compiler solution for LLPC
-class CompilerSolutionLlpc : public CompilerSolution
+class CompilerSolutionLlpc final : public CompilerSolution
 {
 public:
     CompilerSolutionLlpc(PhysicalDevice* pPhysicalDevice);

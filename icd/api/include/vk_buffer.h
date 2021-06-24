@@ -50,7 +50,7 @@ namespace vk
 class Device;
 class Memory;
 
-class Buffer : public NonDispatchable<VkBuffer, Buffer>
+class Buffer final : public NonDispatchable<VkBuffer, Buffer>
 {
 public:
     static VkResult Create(

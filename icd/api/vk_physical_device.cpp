@@ -5167,6 +5167,16 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+	    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT:
+	    {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT*>(pHeader);
+
+                pExtInfo->extendedDynamicState2                   = VK_FALSE;
+		pExtInfo->extendedDynamicState2LogicOp            = VK_FALSE;
+		pExtInfo->extendedDynamicState2PatchControlPoints = VK_FALSE;
+                break;
+	    }
+
             default:
             {
                 // skip any unsupported extension structures

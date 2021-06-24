@@ -40,7 +40,7 @@ namespace vk
 // Forward declare Vulkan classes used in this file
 class Device;
 
-class ImageView : public NonDispatchable<VkImageView, ImageView>
+class ImageView final : public NonDispatchable<VkImageView, ImageView>
 {
 public:
     typedef VkImageView ApiType;
@@ -57,7 +57,6 @@ public:
         Device*                      pDevice,
         const VkImageViewCreateInfo* pCreateInfo,
         const VkAllocationCallbacks* pAllocator,
-        uint32_t                     viewFlags,
         VkImageView*                 pImageView);
 
     VkResult Destroy(
@@ -135,7 +134,6 @@ protected:
         const Pal::SwizzledFormat viewFormat,
         const Pal::SubresRange&   subresRange,
         const Pal::Range&         zRange,
-        uint32_t                  flags,
         void*                     pPalViewMemory,
         Pal::IDepthStencilView**  pDepthStencilView,
         const RuntimeSettings&    settings);

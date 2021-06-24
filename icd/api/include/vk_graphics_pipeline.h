@@ -167,7 +167,7 @@ bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pC
 
 // =====================================================================================================================
 // Vulkan implementation of graphics pipelines created by vkCreateGraphicsPipeline
-class GraphicsPipeline : public Pipeline, public NonDispatchable<VkPipeline, GraphicsPipeline>
+class GraphicsPipeline final : public Pipeline, public NonDispatchable<VkPipeline, GraphicsPipeline>
 {
 public:
     static VkResult Create(

@@ -323,7 +323,6 @@ Pal::Result ImageView::BuildDepthStencilView(
     const Pal::SwizzledFormat viewFormat,
     const Pal::SubresRange&   subresRange,
     const Pal::Range&         zRange,
-    uint32_t                  viewFlags,
     void*                     pPalViewMemory,
     Pal::IDepthStencilView**  pDepthStencilView,
     const RuntimeSettings&    settings)
@@ -380,7 +379,6 @@ VkResult ImageView::Create(
     Device*                      pDevice,
     const VkImageViewCreateInfo* pCreateInfo,
     const VkAllocationCallbacks* pAllocator,
-    uint32_t                     viewFlags,
     VkImageView*                 pImageView)
 {
     // Determine the amount of memory needed by all of the different kinds of views based on the image's declared
@@ -643,7 +641,6 @@ VkResult ImageView::Create(
                                            viewFormat,
                                            palRanges[0],
                                            zRange,
-                                           viewFlags,
                                            pPalMem,
                                            &pDsView[deviceIdx],
                                            pDevice->GetRuntimeSettings());

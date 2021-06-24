@@ -51,7 +51,7 @@ namespace async
 // =====================================================================================================================
 // Represents the general thread for async shader/pipeline compiler.
 template<class Task>
-class TaskThread : public Util::Thread
+class TaskThread final : public Util::Thread
 {
 public:
     TaskThread(AsyncLayer* pAsyncLayer, PalAllocator* pAllocator)

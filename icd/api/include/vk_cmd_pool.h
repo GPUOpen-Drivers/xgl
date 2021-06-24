@@ -50,7 +50,7 @@ class CmdBuffer;
 
 // =====================================================================================================================
 // A Vulkan command buffer pool
-class CmdPool : public NonDispatchable<VkCommandPool, CmdPool>
+class CmdPool final : public NonDispatchable<VkCommandPool, CmdPool>
 {
 public:
     static VkResult Create(

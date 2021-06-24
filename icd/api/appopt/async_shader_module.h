@@ -44,7 +44,7 @@ namespace async
 
 // =====================================================================================================================
 // Implementation of a async shader module
-class ShaderModule : public vk::NonDispatchable<VkShaderModule, ShaderModule>
+class ShaderModule final : public vk::NonDispatchable<VkShaderModule, ShaderModule>
 {
 public:
     static VkResult Create(

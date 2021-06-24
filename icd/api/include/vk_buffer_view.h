@@ -40,7 +40,7 @@ namespace vk
 class Device;
 class DispatchableBufferView;
 
-class BufferView : public NonDispatchable<VkBufferView, BufferView>
+class BufferView final : public NonDispatchable<VkBufferView, BufferView>
 {
 public:
     static VkResult Create(

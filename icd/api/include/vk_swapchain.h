@@ -55,7 +55,7 @@ class SwCompositor;
 
 // =====================================================================================================================
 // Implementation of the Vulkan swap chain object (VkSwapChainKHR).
-class SwapChain : public NonDispatchable<VkSwapchainKHR, SwapChain>
+class SwapChain final : public NonDispatchable<VkSwapchainKHR, SwapChain>
 {
 public:
     struct Properties

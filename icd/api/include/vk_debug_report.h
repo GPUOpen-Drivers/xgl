@@ -35,7 +35,7 @@ namespace vk
 
 // =====================================================================================================================
 // Vulkan implementation of VK_EXT_debug_report extension
-class DebugReportCallback : public NonDispatchable<VkDebugReportCallbackEXT, DebugReportCallback>
+class DebugReportCallback final : public NonDispatchable<VkDebugReportCallbackEXT, DebugReportCallback>
 {
 public:
     static VkResult Create(

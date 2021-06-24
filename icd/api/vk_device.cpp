@@ -2633,7 +2633,7 @@ VkResult Device::CreateImageView(
     const VkAllocationCallbacks*      pAllocator,
     VkImageView*                      pView)
 {
-    return ImageView::Create(this, pCreateInfo, pAllocator, 0, pView);
+    return ImageView::Create(this, pCreateInfo, pAllocator, pView);
 }
 
 // =====================================================================================================================

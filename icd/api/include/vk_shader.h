@@ -50,7 +50,7 @@ extern void* VKAPI_CALL AllocateShaderOutput(void* pInstance, void* pUserData, s
 
 // =====================================================================================================================
 // Implementation of a Vulkan shader module
-class ShaderModule : public NonDispatchable<VkShaderModule, ShaderModule>
+class ShaderModule final : public NonDispatchable<VkShaderModule, ShaderModule>
 {
 public:
     static VkResult Create(

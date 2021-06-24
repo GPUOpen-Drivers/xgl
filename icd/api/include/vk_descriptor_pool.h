@@ -195,7 +195,7 @@ private:
 // =====================================================================================================================
 // API implementation of Vulkan descriptor pools (VkDescriptorPool).  These pools manage GPU memory and driver state
 // memory for instances of VkDescriptorSet objects.
-class DescriptorPool : public NonDispatchable<VkDescriptorPool, DescriptorPool>
+class DescriptorPool final : public NonDispatchable<VkDescriptorPool, DescriptorPool>
 {
 public:
     template <uint32_t numPalDevices>

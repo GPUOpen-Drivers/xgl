@@ -57,7 +57,7 @@ class ShaderModule;
 //
 // They are used during pipeline object construction to build layout data for the shader compiler, and during
 // CmdBindDescriptorSets to determine how to bind a particular descriptor set to a location within the layout.
-class PipelineLayout : public NonDispatchable<VkPipelineLayout, PipelineLayout>
+class PipelineLayout final : public NonDispatchable<VkPipelineLayout, PipelineLayout>
 {
 public:
     // Number of user data registers consumed per descriptor set address (we use 32-bit addresses)

@@ -50,7 +50,7 @@ namespace vk
 
 class Device;
 
-class Fence : public NonDispatchable<VkFence, Fence>
+class Fence final : public NonDispatchable<VkFence, Fence>
 {
 public:
     static VkResult Create(

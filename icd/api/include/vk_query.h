@@ -111,7 +111,7 @@ private:
 
 // =====================================================================================================================
 // Vulkan query pools that are not VK_QUERY_TYPE_TIMESTAMP pools
-class PalQueryPool : public QueryPool
+class PalQueryPool final : public QueryPool
 {
 public:
     VK_FORCEINLINE Pal::QueryType PalQueryType() const
@@ -210,7 +210,7 @@ private:
 
 // =====================================================================================================================
 // Query pool class for VK_QUERY_TYPE_TIMESTAMP query pools
-class TimestampQueryPool : public QueryPoolWithStorageView
+class TimestampQueryPool final : public QueryPoolWithStorageView
 {
 public:
     static constexpr uint32_t TimestampNotReadyChunk = UINT32_MAX;

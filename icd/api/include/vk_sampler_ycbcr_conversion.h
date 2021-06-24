@@ -50,7 +50,7 @@ typedef struct
   uint32 wBitCount;
 } BitDepth;
 
-class SamplerYcbcrConversion : public NonDispatchable<VkSamplerYcbcrConversion, SamplerYcbcrConversion>
+class SamplerYcbcrConversion final : public NonDispatchable<VkSamplerYcbcrConversion, SamplerYcbcrConversion>
 {
 public:
     static VkResult Create(

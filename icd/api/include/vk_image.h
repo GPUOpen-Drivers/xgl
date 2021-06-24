@@ -67,7 +67,7 @@ struct RPImageLayout;
 class SwapChain;
 struct ResourceOptimizerKey;
 
-class Image : public NonDispatchable<VkImage, Image>
+class Image final : public NonDispatchable<VkImage, Image>
 {
 public:
     typedef VkImage ApiType;

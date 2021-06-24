@@ -45,7 +45,7 @@ struct PipelineCachePrivateHeaderData
 
 // =====================================================================================================================
 // Implementation of Vulkan pipeline cache object
-class PipelineCache : public NonDispatchable<VkPipelineCache, PipelineCache>
+class PipelineCache final : public NonDispatchable<VkPipelineCache, PipelineCache>
 {
 public:
     static VkResult Create(

@@ -48,7 +48,7 @@ class ImageView;
 // Although a RenderPass must be specified as input to create a Framebuffer, that Framebuffer will be compatible with
 // other RenderPass objects so long as the attachment count, formats and sample counts are identical between the
 // Framebuffer and the other RenderPass.
-class Framebuffer : public NonDispatchable<VkFramebuffer, Framebuffer>
+class Framebuffer final : public NonDispatchable<VkFramebuffer, Framebuffer>
 {
 public:
     struct Attachment

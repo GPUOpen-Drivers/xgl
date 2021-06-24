@@ -52,7 +52,7 @@ typedef Util::VirtualLinearAllocatorWithNode VirtualStackAllocator;
 
 // =====================================================================================================================
 // Virtual stack frame helper class
-class VirtualStackFrame : public Util::LinearAllocatorAuto<VirtualStackAllocator>
+class VirtualStackFrame final : public Util::LinearAllocatorAuto<VirtualStackAllocator>
 {
 public:
     VirtualStackFrame(VirtualStackAllocator* pAllocator)

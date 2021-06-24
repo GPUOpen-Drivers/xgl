@@ -70,7 +70,7 @@ enum TaskType : uint32_t
 
 // =====================================================================================================================
 // Class that specifies dispatch table override behavior for async compiler layers
-class AsyncLayer : public OptLayer
+class AsyncLayer final : public OptLayer
 {
 public:
     AsyncLayer(Device* pDevice);

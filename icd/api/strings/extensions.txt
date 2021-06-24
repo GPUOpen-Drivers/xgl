@@ -135,3 +135,4 @@ VK_EXT_4444_formats
 VK_EXT_color_write_enable
 VK_KHR_shader_terminate_invocation
 VK_KHR_synchronization2
+VK_EXT_extended_dynamic_state2

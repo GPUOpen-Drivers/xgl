@@ -46,7 +46,7 @@ class Device;
 // =====================================================================================================================
 // A Vulkan descriptor update template provides a way to update a descriptor set using with a pointer to user defined
 // data, which describes the descriptor writes.
-class DescriptorUpdateTemplate : public NonDispatchable<VkDescriptorUpdateTemplate, DescriptorUpdateTemplate>
+class DescriptorUpdateTemplate final : public NonDispatchable<VkDescriptorUpdateTemplate, DescriptorUpdateTemplate>
 {
 public:
     static VkResult Create(
