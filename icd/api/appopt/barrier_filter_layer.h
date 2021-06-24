@@ -41,7 +41,7 @@ namespace vk
 
 // =====================================================================================================================
 // Contains any state used by the barrier filter layer
-class BarrierFilterLayer : public OptLayer
+class BarrierFilterLayer final : public OptLayer
 {
 public:
     BarrierFilterLayer();

@@ -52,7 +52,7 @@ class Device;
 // Implements the VkGpaSessionAMD object that is part of the VK_AMD_gpa_interface extension.  This is a thin wrapper
 // around a GpuUtil::GpaSession object which is a utility class for performing performance counting operations
 // through Vulkan.  The primary client of these kinds of objects is AMD's GPUPerfAPI.
-class GpaSession : public NonDispatchable<VkGpaSessionAMD, GpaSession>
+class GpaSession final : public NonDispatchable<VkGpaSessionAMD, GpaSession>
 {
 public:
     static VkResult Create(

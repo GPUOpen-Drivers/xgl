@@ -69,7 +69,7 @@ class Device;
 //
 // Descriptor set layouts define the memory layout of a set of descriptors, as well as how their location in memory
 // relates to declared shader resources.
-class DescriptorSetLayout : public NonDispatchable<VkDescriptorSetLayout, DescriptorSetLayout>
+class DescriptorSetLayout final : public NonDispatchable<VkDescriptorSetLayout, DescriptorSetLayout>
 {
 public:
     // Information about a specific section of a descriptor binding

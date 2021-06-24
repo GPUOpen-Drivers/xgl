@@ -203,7 +203,7 @@ struct RenderPassCreateInfo
 
 // =====================================================================================================================
 // Implementation of a Vulkan render pass (VkRenderPass)
-class RenderPass : public NonDispatchable<VkRenderPass, RenderPass>
+class RenderPass final : public NonDispatchable<VkRenderPass, RenderPass>
 {
 public:
 

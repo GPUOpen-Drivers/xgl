@@ -54,7 +54,7 @@ class PipelineCache;
 
 // =====================================================================================================================
 // Vulkan implementation of compute pipelines created by vkCreateComputePipeline
-class ComputePipeline : public Pipeline, public NonDispatchable<VkPipeline, ComputePipeline>
+class ComputePipeline final : public Pipeline, public NonDispatchable<VkPipeline, ComputePipeline>
 {
 public:
     static VkResult Create(

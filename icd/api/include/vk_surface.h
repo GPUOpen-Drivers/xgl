@@ -38,7 +38,7 @@
 namespace vk
 {
 
-class Surface : public NonDispatchable<VkSurfaceKHR, Surface>
+class Surface final : public NonDispatchable<VkSurfaceKHR, Surface>
 {
 public:
     static VkResult Create(

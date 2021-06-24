@@ -82,6 +82,12 @@ macro(xgl_set_compile_definitions)
         target_compile_definitions(xgl PRIVATE ICD_ENABLE_GCOV)
     endif()
 
+#if VKI_EXT_EXTENDED_DYNAMIC_STATE2
+    if(VKI_EXT_EXTENDED_DYNAMIC_STATE2)
+        target_compile_definitions(xgl PRIVATE VKI_EXT_EXTENDED_DYNAMIC_STATE2)
+    endif()
+#endif
+
 #if VKI_EXPOSE_EXT_CONDITIONAL_RENDERING
     if(VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)
         target_compile_definitions(xgl PRIVATE VKI_EXPOSE_EXT_CONDITIONAL_RENDERING)

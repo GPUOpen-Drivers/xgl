@@ -159,7 +159,7 @@ struct QueueFamilyBarrierPolicy
 // Device barrier policy class.
 // Limits the scope of barriers to those applicable to this device.
 // Used to control the policy for global memory barriers.
-class DeviceBarrierPolicy : public BarrierPolicy
+class DeviceBarrierPolicy final : public BarrierPolicy
 {
 public:
     DeviceBarrierPolicy(
@@ -248,7 +248,7 @@ private:
 // Image barrier policy class.
 // Limits the scope of barriers to those applicable to this particular image.
 // Used to control the policy for image memory barriers.
-class ImageBarrierPolicy : public ResourceBarrierPolicy
+class ImageBarrierPolicy final : public ResourceBarrierPolicy
 {
 public:
     ImageBarrierPolicy(
@@ -344,7 +344,7 @@ private:
 // Buffer barrier policy class.
 // Limits the scope of barriers to those applicable to this particular buffer.
 // Used to control the policy for buffer memory barriers.
-class BufferBarrierPolicy : public ResourceBarrierPolicy
+class BufferBarrierPolicy final : public ResourceBarrierPolicy
 {
 public:
     BufferBarrierPolicy(

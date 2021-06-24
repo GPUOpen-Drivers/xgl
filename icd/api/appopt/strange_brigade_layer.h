@@ -40,7 +40,7 @@ namespace vk
 {
 // =====================================================================================================================
 // Class for the Strange Brigade Layer to simplify calls to the overriden dispatch table from the layer's entrypoints
-class StrangeBrigadeLayer : public OptLayer
+class StrangeBrigadeLayer final : public OptLayer
 {
 public:
     StrangeBrigadeLayer() {}

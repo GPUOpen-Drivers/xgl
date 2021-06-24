@@ -58,7 +58,7 @@ struct PrivateDataStorage
     uint64                  reserved[1];
 };
 
-class PrivateDataSlotEXT : public NonDispatchable<VkPrivateDataSlotEXT, PrivateDataSlotEXT>
+class PrivateDataSlotEXT final : public NonDispatchable<VkPrivateDataSlotEXT, PrivateDataSlotEXT>
 {
 public:
     static VkResult Create(

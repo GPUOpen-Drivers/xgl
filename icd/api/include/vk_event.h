@@ -51,7 +51,7 @@ namespace vk
 class Device;
 class DispatchableEvent;
 
-class Event : public NonDispatchable<VkEvent, Event>
+class Event final : public NonDispatchable<VkEvent, Event>
 {
 public:
     static VkResult Create(

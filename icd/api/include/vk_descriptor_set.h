@@ -62,7 +62,7 @@ struct DescriptorAddr
 // A descriptor set is a chunk of GPU memory containing one or more descriptors organized in a manner described by a
 // DescriptorSetLayout associated with it.  They are allocated and freed by DescriptorPools.
 template <uint32_t numPalDevices>
-class DescriptorSet : public NonDispatchable<VkDescriptorSet, DescriptorSet<numPalDevices>>
+class DescriptorSet final : public NonDispatchable<VkDescriptorSet, DescriptorSet<numPalDevices>>
 {
 public:
     const DescriptorSetLayout* Layout() const

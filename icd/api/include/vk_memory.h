@@ -94,7 +94,7 @@ struct ImportMemoryInfo
 
 // =====================================================================================================================
 // Implementation of a VkMemory object.
-class Memory : public NonDispatchable<VkDeviceMemory, Memory>
+class Memory final : public NonDispatchable<VkDeviceMemory, Memory>
 {
 public:
     static VkResult Create(

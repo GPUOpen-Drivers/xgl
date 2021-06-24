@@ -41,7 +41,7 @@ namespace vk
 class Device;
 class DispatchableSampler;
 
-class Sampler : public NonDispatchable<VkSampler, Sampler>
+class Sampler final : public NonDispatchable<VkSampler, Sampler>
 {
 public:
     static VkResult Create(

@@ -746,6 +746,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         {
             // Disable image type checking on Navi10 to avoid 2.5% loss in Ashes
             m_settings.disableImageResourceTypeCheck = true;
+            m_settings.overrideUndefinedLayoutToTransferSrcOptimal = true;
         }
 
         if (appProfile == AppProfile::DetroitBecomeHuman)

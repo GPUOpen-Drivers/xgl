@@ -180,7 +180,7 @@ public:
 
 // =====================================================================================================================
 // Helper class to handle instance extensions.
-class InstanceExtensions : public Extensions<InstanceExtensions>
+class InstanceExtensions final : public Extensions<InstanceExtensions>
 {
 public:
     enum ExtensionId
@@ -222,7 +222,7 @@ private:
 
 // =====================================================================================================================
 // Helper class to handle device extensions.
-class DeviceExtensions : public Extensions<DeviceExtensions>
+class DeviceExtensions final : public Extensions<DeviceExtensions>
 {
 public:
     enum ExtensionId
@@ -295,6 +295,7 @@ public:
         EXT_DEPTH_RANGE_UNRESTRICTED,
         EXT_DESCRIPTOR_INDEXING,
         EXT_EXTENDED_DYNAMIC_STATE,
+        EXT_EXTENDED_DYNAMIC_STATE2,
         EXT_EXTERNAL_MEMORY_DMA_BUF,
         EXT_EXTERNAL_MEMORY_HOST,
         EXT_GLOBAL_PRIORITY,
