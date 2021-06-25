@@ -446,8 +446,9 @@ VKAPI_ATTR VkResult VKAPI_CALL vkGetPipelineCacheData(
             {
                 void* pPrivateData = Util::VoidPtrInc(pData, headerBytesWritten);
                 result = pCache->GetData(pPrivateData, &privateDataSize);
-                *pDataSize = privateDataSize + headerBytesWritten;
             }
+            // set pDataSize, privateDataSize can be 0.
+            *pDataSize = privateDataSize + headerBytesWritten;
         }
     }
 
