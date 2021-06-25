@@ -135,8 +135,8 @@ namespace utils
 // Get time in nano seconds
 VK_INLINE uint64_t GetTimeNano()
 {
-    return (static_cast<Pal::uint64>(Util::GetPerfCpuTime()) * NANOSECONDS_IN_A_SECOND) /
-        static_cast<Pal::uint64>(Util::GetPerfFrequency());
+    return static_cast<Pal::uint64>(Util::GetPerfCpuTime()) *
+        (NANOSECONDS_IN_A_SECOND / static_cast<Pal::uint64>(Util::GetPerfFrequency()));
 }
 
 // =====================================================================================================================
