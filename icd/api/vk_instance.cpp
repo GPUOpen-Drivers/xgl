@@ -347,11 +347,15 @@ VkResult Instance::Init(
 
     createInfo.pLogInfo = &callbackInfo;
 
+    createInfo.pSettingsPath = getenv("AMDVLK_SETTINGS_PATH");
+
+    if (createInfo.pSettingsPath == nullptr) {
 #if defined(__unix__)
-    createInfo.pSettingsPath = "/etc/amd";
+        createInfo.pSettingsPath = "/etc/amd";
 #else
-    createInfo.pSettingsPath = "Vulkan";
+        createInfo.pSettingsPath = "Vulkan";
 #endif
+    }
 
     // We use shadow descriptors to support FMASK based MSAA reads so we need to request support from PAL.
     createInfo.flags.requestShadowDescriptorVaRange = 1;
