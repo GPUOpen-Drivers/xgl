@@ -292,17 +292,17 @@ VkResult CompilerSolutionLlpc::CreatePartialPipelineBinary(
 // =====================================================================================================================
 // Creates graphics pipeline binary.
 VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
-    Device*                     pDevice,
-    uint32_t                    deviceIdx,
-    PipelineCache*              pPipelineCache,
-    GraphicsPipelineCreateInfo* pCreateInfo,
-    size_t*                     pPipelineBinarySize,
-    const void**                ppPipelineBinary,
-    uint32_t                    rasterizationStream,
-    Vkgc::PipelineShaderInfo**  ppShadersInfo,
-    void*                       pPipelineDumpHandle,
-    uint64_t                    pipelineHash,
-    int64_t*                    pCompileTime)
+    Device*                           pDevice,
+    uint32_t                          deviceIdx,
+    PipelineCache*                    pPipelineCache,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    size_t*                           pPipelineBinarySize,
+    const void**                      ppPipelineBinary,
+    uint32_t                          rasterizationStream,
+    Vkgc::PipelineShaderInfo**        ppShadersInfo,
+    void*                             pPipelineDumpHandle,
+    uint64_t                          pipelineHash,
+    int64_t*                          pCompileTime)
 {
     VK_IGNORE(pDevice);
     VK_IGNORE(rasterizationStream);
@@ -418,15 +418,15 @@ VkResult CompilerSolutionLlpc::CreateGraphicsPipelineBinary(
 // =====================================================================================================================
 // Creates compute pipeline binary.
 VkResult CompilerSolutionLlpc::CreateComputePipelineBinary(
-    Device*                     pDevice,
-    uint32_t                    deviceIdx,
-    PipelineCache*              pPipelineCache,
-    ComputePipelineCreateInfo*  pCreateInfo,
-    size_t*                     pPipelineBinarySize,
-    const void**                ppPipelineBinary,
-    void*                       pPipelineDumpHandle,
-    uint64_t                    pipelineHash,
-    int64_t*                    pCompileTime)
+    Device*                          pDevice,
+    uint32_t                         deviceIdx,
+    PipelineCache*                   pPipelineCache,
+    ComputePipelineBinaryCreateInfo* pCreateInfo,
+    size_t*                          pPipelineBinarySize,
+    const void**                     ppPipelineBinary,
+    void*                            pPipelineDumpHandle,
+    uint64_t                         pipelineHash,
+    int64_t*                         pCompileTime)
 {
     VK_IGNORE(pDevice);
     VK_IGNORE(pipelineHash);

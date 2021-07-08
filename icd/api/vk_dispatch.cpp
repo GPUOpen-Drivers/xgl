@@ -627,6 +627,18 @@ void DispatchTable::Init()
 
     INIT_DISPATCH_ENTRY(vkCmdSetColorWriteEnableEXT                     );
 
+    INIT_DISPATCH_ENTRY(vkCmdSetRasterizerDiscardEnableEXT              );
+    INIT_DISPATCH_ENTRY(vkCmdSetPrimitiveRestartEnableEXT               );
+    INIT_DISPATCH_ENTRY(vkCmdSetDepthBiasEnableEXT                      );
+    INIT_DISPATCH_ENTRY(vkCmdSetLogicOpEXT                              );
+    INIT_DISPATCH_ENTRY(vkCmdSetPatchControlPointsEXT                   );
+
+    INIT_DISPATCH_ENTRY(vkCmdBlitImage2KHR                              );
+    INIT_DISPATCH_ENTRY(vkCmdCopyBuffer2KHR                             );
+    INIT_DISPATCH_ENTRY(vkCmdCopyBufferToImage2KHR                      );
+    INIT_DISPATCH_ENTRY(vkCmdCopyImage2KHR                              );
+    INIT_DISPATCH_ENTRY(vkCmdCopyImageToBuffer2KHR                      );
+    INIT_DISPATCH_ENTRY(vkCmdResolveImage2KHR                           );
 }
 
 // =====================================================================================================================

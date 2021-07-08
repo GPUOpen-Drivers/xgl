@@ -53,7 +53,7 @@ uint64_t ComputePipeline::BuildApiHash(
 
     baseHasher.Update(pCreateInfo->flags);
 
-    GenerateHashFromShaderStageCreateInfo(&baseHasher, pCreateInfo->stage);
+    GenerateHashFromShaderStageCreateInfo(pCreateInfo->stage, &baseHasher);
 
     baseHasher.Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
 
@@ -129,12 +129,14 @@ VkResult ComputePipeline::Create(
     uint64 startTime = vk::utils::GetTimeNano();
 
     // Setup PAL create info from Vulkan inputs
-    size_t                    pipelineBinarySizes[MaxPalDevices] = {};
-    const void*               pPipelineBinaries[MaxPalDevices]   = {};
-    Util::MetroHash::Hash     cacheId[MaxPalDevices]             = {};
-    PipelineCompiler*         pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
-    ComputePipelineCreateInfo binaryCreateInfo                   = {};
-    uint64_t                  apiPsoHash                         = BuildApiHash(pCreateInfo, &binaryCreateInfo.basePipelineHash);
+    size_t                          pipelineBinarySizes[MaxPalDevices] = {};
+    const void*                     pPipelineBinaries[MaxPalDevices]   = {};
+    Util::MetroHash::Hash           cacheId[MaxPalDevices]             = {};
+    PipelineCompiler*               pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
+    ComputePipelineBinaryCreateInfo binaryCreateInfo                   = {};
+    uint64_t                        apiPsoHash                         = BuildApiHash(
+                                                                            pCreateInfo,
+                                                                            &binaryCreateInfo.basePipelineHash);
 
     const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo = nullptr;
     VkResult result = pDefaultCompiler->ConvertComputePipelineInfo(

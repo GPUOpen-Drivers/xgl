@@ -250,6 +250,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                     SkipImageLayoutUndefined |
                     SkipDuplicateResourceBarriers;
 
+                m_settings.modifyResourceKeyForAppProfile = true;
                 m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
             }
 
@@ -332,6 +333,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.barrierFilterOptions = SkipStrayExecutionDependencies |
                     SkipImageLayoutUndefined;
 
+                m_settings.modifyResourceKeyForAppProfile = true;
                 m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
             }
 
@@ -409,7 +411,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::Dota2)
         {
-            pPalSettings->useGraphicsFastDepthStencilClear = true;
+            pPalSettings->fastDepthStencilClearMode = Pal::FastDepthStencilClearMode::Graphics;
 
             //Vega 20 has better performance on Dota 2 when DCC is disabled.
             if (pInfo->revision == Pal::AsicRevision::Vega20)
@@ -431,7 +433,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
         if (appProfile == AppProfile::Source2Engine)
         {
-            pPalSettings->useGraphicsFastDepthStencilClear = true;
+            pPalSettings->fastDepthStencilClearMode = Pal::FastDepthStencilClearMode::Graphics;
 
             m_settings.disableSmallSurfColorCompressionSize = 511;
 
@@ -473,7 +475,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
-                m_settings.dccBitsPerPixelThreshold = 64;
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                    ForceDccFor3DShaderStorage |
+                    ForceDccForColorAttachments |
+                    ForceDccFor64BppShaderStorage);
+
                 m_settings.enableNgg = 0x0;
 
             }
@@ -500,7 +506,10 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             }
             else if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
-                m_settings.dccBitsPerPixelThreshold = 64;
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                    ForceDccForColorAttachments |
+                    ForceDccFor64BppShaderStorage);
+
                 m_settings.enableNgg = 0x0;
                 m_settings.enableWgpMode = 0x20;
             }
@@ -569,10 +578,11 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             // Ignore suboptimal swapchain size to fix crash on task switch
             m_settings.ignoreSuboptimalSwapchainSize = true;
 
-            // Navi10 has better performance on Rainbow 6 Siege when dccBitsPerPixelThreshold is set to 64
-            if (pInfo->revision == Pal::AsicRevision::Navi10)
+            if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp10_1)
             {
-                m_settings.dccBitsPerPixelThreshold = 64;
+                m_settings.forceEnableDcc = (ForceDccFor2DShaderStorage |
+                    ForceDccForColorAttachments |
+                    ForceDccForNonColorAttachmentShaderStorage);
             }
 
         }
@@ -674,6 +684,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
         if (appProfile == AppProfile::DoomEternal)
         {
             m_settings.barrierFilterOptions  = SkipStrayExecutionDependencies;
+
+            m_settings.modifyResourceKeyForAppProfile = true;
             m_settings.forceImageSharingMode = ForceImageSharingMode::ForceImageSharingModeExclusive;
 
             if (pInfo->gfxLevel == Pal::GfxIpLevel::GfxIp9)

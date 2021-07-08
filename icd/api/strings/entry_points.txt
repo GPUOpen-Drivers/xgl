@@ -397,3 +397,15 @@ vkCmdSetStencilOpEXT                                @device     @dext(EXT_extend
 
 vkCmdSetColorWriteEnableEXT                         @device     @dext(EXT_color_write_enable)
 
+vkCmdSetRasterizerDiscardEnableEXT                  @device     @dext(EXT_extended_dynamic_state2)
+vkCmdSetPrimitiveRestartEnableEXT                   @device     @dext(EXT_extended_dynamic_state2)
+vkCmdSetDepthBiasEnableEXT                          @device     @dext(EXT_extended_dynamic_state2)
+vkCmdSetLogicOpEXT                                  @device     @dext(EXT_extended_dynamic_state2)
+vkCmdSetPatchControlPointsEXT                       @device     @dext(EXT_extended_dynamic_state2)
+
+vkCmdBlitImage2KHR                                  @device     @dext(KHR_copy_commands2)
+vkCmdCopyBuffer2KHR                                 @device     @dext(KHR_copy_commands2)
+vkCmdCopyBufferToImage2KHR                          @device     @dext(KHR_copy_commands2)
+vkCmdCopyImage2KHR                                  @device     @dext(KHR_copy_commands2)
+vkCmdCopyImageToBuffer2KHR                          @device     @dext(KHR_copy_commands2)
+vkCmdResolveImage2KHR                               @device     @dext(KHR_copy_commands2)

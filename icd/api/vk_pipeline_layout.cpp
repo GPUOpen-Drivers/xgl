@@ -282,7 +282,7 @@ VkResult PipelineLayout::Create(
     const size_t descriptorSetLayoutSize =
         Util::Pow2Align((pCreateInfo->setLayoutCount * sizeof(DescriptorSetLayout*)), ExtraDataAlignment());
 
-    const size_t objSize = apiSize + setUserDataLayoutSize + descriptorSetLayoutSize + setLayoutsArraySize;
+    size_t objSize = apiSize + setUserDataLayoutSize + descriptorSetLayoutSize + setLayoutsArraySize;
 
     void* pSysMem = pDevice->AllocApiObject(pAllocator, objSize);
 
@@ -363,8 +363,8 @@ Vkgc::ResourceMappingNodeType PipelineLayout::MapLlpcResourceNodeType(
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorTexelBuffer;
         break;
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
-    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
     case VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC:
+    case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER:
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC:
         nodeType = Vkgc::ResourceMappingNodeType::DescriptorBuffer;
         break;
@@ -409,11 +409,12 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
         {
             auto pNode = &pStaNodes[*pStaNodeCount];
 
-            pNode->type                = MapLlpcResourceNodeType(binding.info.descriptorType);
-            pNode->offsetInDwords      = binding.sta.dwOffset;
-            pNode->sizeInDwords        = binding.sta.dwSize;
-            pNode->srdRange.binding    = binding.info.binding;
-            pNode->srdRange.set        = setIndex;
+            pNode->type                 = MapLlpcResourceNodeType(binding.info.descriptorType);
+            pNode->offsetInDwords       = binding.sta.dwOffset;
+            pNode->sizeInDwords         = binding.sta.dwSize;
+            pNode->srdRange.binding     = binding.info.binding;
+            pNode->srdRange.set         =
+                setIndex;
             (*pStaNodeCount)++;
 
             if (binding.imm.dwSize > 0)
@@ -449,8 +450,8 @@ VkResult PipelineLayout::BuildLlpcSetMapping(
                       (binding.info.descriptorType == VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC));
             auto pNode = &pDynNodes[*pDynNodeCount];
             pNode->node.type                = (binding.dyn.dwArrayStride == 2) ?
-                                         Vkgc::ResourceMappingNodeType::DescriptorBufferCompact :
-                                         Vkgc::ResourceMappingNodeType::DescriptorBuffer;
+                                        Vkgc::ResourceMappingNodeType::DescriptorBufferCompact :
+                                        Vkgc::ResourceMappingNodeType::DescriptorBuffer;
             pNode->node.offsetInDwords      = userDataRegBase + binding.dyn.dwOffset;
             pNode->node.sizeInDwords        = binding.dyn.dwSize;
             pNode->node.srdRange.binding    = binding.info.binding;
@@ -566,18 +567,17 @@ VkResult PipelineLayout::BuildLlpcPipelineMapping(
     }
 
     // TODO: Build the internal push constant resource mapping
-    if (m_info.userDataLayout.pushConstRegCount > 0)
-    {
-        auto pPushConstNode = &pUserDataNodes[userDataNodeCount];
-        pPushConstNode->node.type             = Vkgc::ResourceMappingNodeType::PushConst;
-        pPushConstNode->node.offsetInDwords   = m_info.userDataLayout.pushConstRegBase;
-        pPushConstNode->node.sizeInDwords     = m_info.userDataLayout.pushConstRegCount;
-        pPushConstNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
-        pPushConstNode->visibility            = stageMask;
+        if (m_info.userDataLayout.pushConstRegCount > 0)
+        {
+            auto pPushConstNode = &pUserDataNodes[userDataNodeCount];
+            pPushConstNode->node.type             = Vkgc::ResourceMappingNodeType::PushConst;
+            pPushConstNode->node.offsetInDwords   = m_info.userDataLayout.pushConstRegBase;
+            pPushConstNode->node.sizeInDwords     = m_info.userDataLayout.pushConstRegCount;
+            pPushConstNode->node.srdRange.set     = Vkgc::InternalDescriptorSetId;
+            pPushConstNode->visibility            = stageMask;
 
-        userDataNodeCount += 1;
-    }
-
+            userDataNodeCount += 1;
+        }
     // Build descriptor for each set
     for (uint32_t setIndex = 0; (setIndex < m_info.setCount) && (result == VK_SUCCESS); ++setIndex)
     {

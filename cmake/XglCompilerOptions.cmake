@@ -266,7 +266,6 @@ function(xgl_compiler_options TARGET)
             target_compile_options(${TARGET} PRIVATE
                 # Output with color if in terminal: https://github.com/ninja-build/ninja/wiki/FAQ
                 -fdiagnostics-color=always
-                -mpreferred-stack-boundary=6
                 -fno-threadsafe-statics
                 -fmerge-all-constants
                 -fms-extensions

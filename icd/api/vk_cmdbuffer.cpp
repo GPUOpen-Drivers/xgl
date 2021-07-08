@@ -409,6 +409,7 @@ CmdBuffer::CmdBuffer(
     m_flags.prefetchShaders                     = settings.prefetchShaders;
     m_flags.disableResetReleaseResources        = settings.disableResetReleaseResources;
     m_flags.subpassLoadOpClearsBoundAttachments = settings.subpassLoadOpClearsBoundAttachments;
+    m_flags.preBindDefaultState                 = settings.preBindDefaultState;
 
     Pal::DeviceProperties info;
     m_pDevice->PalDevice(DefaultDeviceIndex)->GetProperties(&info);
@@ -1030,6 +1031,9 @@ VkResult CmdBuffer::Begin(
     // Beginning a command buffer implicitly resets its state
     ResetState();
 
+    const PhysicalDevice*        pPhysicalDevice = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
+    const Pal::DeviceProperties& deviceProps     = pPhysicalDevice->PalProperties();
+
     Pal::CmdBufferBuildInfo   cmdInfo = { 0 };
 
     RenderPass*  pRenderPass  = nullptr;
@@ -1209,9 +1213,9 @@ VkResult CmdBuffer::Begin(
         SetViewInstanceMask(GetDeviceMask());
     }
 
-    if (Pal::QueueTypeUniversal == m_palQueueType)
+    if (m_palQueueType == Pal::QueueTypeUniversal)
     {
-        const VkPhysicalDeviceLimits& limits = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetLimits();
+        const VkPhysicalDeviceLimits& limits = pPhysicalDevice->GetLimits();
         Pal::GlobalScissorParams scissorParams = { };
         scissorParams.scissorRegion.extent.width  = limits.maxFramebufferWidth;
         scissorParams.scissorRegion.extent.height = limits.maxFramebufferHeight;
@@ -1223,8 +1227,7 @@ VkResult CmdBuffer::Begin(
         }
         while (deviceGroup.IterateNext());
 
-        const PhysicalDevice* pPhysicalDevice   = m_pDevice->VkPhysicalDevice(DefaultDeviceIndex);
-        const uint32_t        supportedVrsRates = pPhysicalDevice->PalProperties().gfxipProperties.supportedVrsRates;
+        const uint32_t supportedVrsRates = deviceProps.gfxipProperties.supportedVrsRates;
 
         // Turn variable rate shading off if it is supported.
         if (supportedVrsRates & (1 << static_cast<uint32_t>(Pal::VrsShadingRate::_1x1)))
@@ -1262,6 +1265,27 @@ VkResult CmdBuffer::Begin(
     // Dirty all the dynamic states, the bit should be cleared with 0 when the corresponding state is
     // static.
     m_allGpuState.dirty.u32All = 0xFFFFFFFF;
+
+    if ((m_palQueueType == Pal::QueueTypeUniversal) && m_flags.preBindDefaultState)
+    {
+        // Set VRS state now to avoid at bind time
+        const uint32_t supportedVrsRates = deviceProps.gfxipProperties.supportedVrsRates;
+
+        if (supportedVrsRates & (1 << static_cast<uint32_t>(m_allGpuState.vrsRate.shadingRate)))
+        {
+            utils::IterateMask deviceGroupVrs(GetDeviceMask());
+
+            do
+            {
+                const uint32_t deviceIdx = deviceGroupVrs.Index();
+
+                PalCmdBuffer(deviceIdx)->CmdSetPerDrawVrsRate(m_allGpuState.vrsRate);
+            }
+            while (deviceGroupVrs.IterateNext());
+        }
+
+        m_allGpuState.dirty.vrs = 0;
+    }
 
     DbgBarrierPostCmd(DbgBarrierCmdBufStart);
 
@@ -2352,11 +2376,12 @@ void CmdBuffer::DispatchIndirect(
 }
 
 // =====================================================================================================================
+template<typename BufferCopyType>
 void CmdBuffer::CopyBuffer(
     VkBuffer                                    srcBuffer,
     VkBuffer                                    destBuffer,
     uint32_t                                    regionCount,
-    const VkBufferCopy*                         pRegions)
+    const BufferCopyType*                       pRegions)
 {
     DbgBarrierPreCmd(DbgBarrierCopyBuffer);
 
@@ -2402,13 +2427,14 @@ void CmdBuffer::CopyBuffer(
 }
 
 // =====================================================================================================================
+template<typename ImageCopyType>
 void CmdBuffer::CopyImage(
-    VkImage            srcImage,
-    VkImageLayout      srcImageLayout,
-    VkImage            destImage,
-    VkImageLayout      destImageLayout,
-    uint32_t           regionCount,
-    const VkImageCopy* pRegions)
+    VkImage              srcImage,
+    VkImageLayout        srcImageLayout,
+    VkImage              destImage,
+    VkImageLayout        destImageLayout,
+    uint32_t             regionCount,
+    const ImageCopyType* pRegions)
 {
     DbgBarrierPreCmd(DbgBarrierCopyImage);
 
@@ -2464,14 +2490,15 @@ void CmdBuffer::CopyImage(
 }
 
 // =====================================================================================================================
+template<typename ImageBlitType>
 void CmdBuffer::BlitImage(
-    VkImage            srcImage,
-    VkImageLayout      srcImageLayout,
-    VkImage            destImage,
-    VkImageLayout      destImageLayout,
-    uint32_t           regionCount,
-    const VkImageBlit* pRegions,
-    VkFilter           filter)
+    VkImage              srcImage,
+    VkImageLayout        srcImageLayout,
+    VkImage              destImage,
+    VkImageLayout        destImageLayout,
+    uint32_t             regionCount,
+    const ImageBlitType* pRegions,
+    VkFilter             filter)
 {
     DbgBarrierPreCmd(DbgBarrierCopyImage);
 
@@ -2512,8 +2539,8 @@ void CmdBuffer::BlitImage(
             palCopyInfo.regionCount = 0;
 
             // Attempt a lightweight copy image instead of the requested scaled blit.
-            const VkImageBlit& region    = pRegions[regionIdx];
-            const VkExtent3D   srcExtent =
+            const ImageBlitType& region    = pRegions[regionIdx];
+            const VkExtent3D     srcExtent =
             {
                 static_cast<uint32_t>(region.srcOffsets[1].x - region.srcOffsets[0].x),
                 static_cast<uint32_t>(region.srcOffsets[1].y - region.srcOffsets[0].y),
@@ -2574,12 +2601,13 @@ void CmdBuffer::BlitImage(
 
 // =====================================================================================================================
 // Copies from a buffer of linear data to a region of an image (vkCopyBufferToImage)
+template<typename BufferImageCopyType>
 void CmdBuffer::CopyBufferToImage(
-    VkBuffer                  srcBuffer,
-    VkImage                   destImage,
-    VkImageLayout             destImageLayout,
-    uint32_t                  regionCount,
-    const VkBufferImageCopy*  pRegions)
+    VkBuffer                   srcBuffer,
+    VkImage                    destImage,
+    VkImageLayout              destImageLayout,
+    uint32_t                   regionCount,
+    const BufferImageCopyType* pRegions)
 {
     DbgBarrierPreCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
 
@@ -2638,12 +2666,13 @@ void CmdBuffer::CopyBufferToImage(
 
 // =====================================================================================================================
 // Copies and detiles a region of an image to a buffer (vkCopyImageToBuffer)
+template<typename BufferImageCopyType>
 void CmdBuffer::CopyImageToBuffer(
-    VkImage                  srcImage,
-    VkImageLayout            srcImageLayout,
-    VkBuffer                 destBuffer,
-    uint32_t                 regionCount,
-    const VkBufferImageCopy* pRegions)
+    VkImage                    srcImage,
+    VkImageLayout              srcImageLayout,
+    VkBuffer                   destBuffer,
+    uint32_t                   regionCount,
+    const BufferImageCopyType* pRegions)
 {
     DbgBarrierPreCmd(DbgBarrierCopyBuffer | DbgBarrierCopyImage);
 
@@ -3381,13 +3410,14 @@ void CmdBuffer::ClearImageAttachments(
 }
 
 // =====================================================================================================================
+template<typename ImageResolveType>
 void CmdBuffer::ResolveImage(
-    VkImage               srcImage,
-    VkImageLayout         srcImageLayout,
-    VkImage               destImage,
-    VkImageLayout         destImageLayout,
-    uint32_t              rectCount,
-    const VkImageResolve* pRects)
+    VkImage                 srcImage,
+    VkImageLayout           srcImageLayout,
+    VkImage                 destImage,
+    VkImageLayout           destImageLayout,
+    uint32_t                rectCount,
+    const ImageResolveType* pRects)
 {
     PalCmdSuspendPredication(true);
 
@@ -7301,6 +7331,15 @@ void CmdBuffer::ValidateStates()
 
                 DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
             }
+
+            if (m_allGpuState.dirty.rasterizerDiscardEnable)
+            {
+                DbgBarrierPreCmd(DbgBarrierSetDynamicPipelineState);
+
+                PalCmdBuffer(deviceGroup.Index())->CmdSetRasterizerDiscardEnable(m_allGpuState.rasterizerDiscardEnable);
+
+                DbgBarrierPostCmd(DbgBarrierSetDynamicPipelineState);
+            }
         }
         while (deviceGroup.IterateNext());
 
@@ -7482,6 +7521,40 @@ void CmdBuffer::SetColorWriteEnableEXT(
 
         m_allGpuState.dirty.colorWriteEnable = 1;
     }
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetRasterizerDiscardEnableEXT(
+    VkBool32                                   rasterizerDiscardEnable)
+{
+    m_allGpuState.rasterizerDiscardEnable       = rasterizerDiscardEnable;
+    m_allGpuState.dirty.rasterizerDiscardEnable = 1;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetPrimitiveRestartEnableEXT(
+    VkBool32                                   primitiveRestartEnable)
+{
+    if (m_allGpuState.inputAssemblyState.primitiveRestartEnable != static_cast<bool>(primitiveRestartEnable))
+    {
+        m_allGpuState.inputAssemblyState.primitiveRestartEnable = primitiveRestartEnable;
+        m_allGpuState.dirty.inputAssembly                       = 1;
+    }
+
+    m_allGpuState.staticTokens.inputAssemblyState = DynamicRenderStateToken;
+}
+
+// =====================================================================================================================
+void CmdBuffer::SetDepthBiasEnableEXT(
+    VkBool32                                   depthBiasEnable)
+{
+    if (m_allGpuState.triangleRasterState.flags.depthBiasEnable != depthBiasEnable)
+    {
+        m_allGpuState.triangleRasterState.flags.depthBiasEnable = depthBiasEnable;
+        m_allGpuState.dirty.rasterState                         = 1;
+    }
+
+    m_allGpuState.staticTokens.triangleRasterState = DynamicRenderStateToken;
 }
 
 // =====================================================================================================================
@@ -8604,6 +8677,127 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteEnableEXT(
     const VkBool32*                             pColorWriteEnables)
 {
     ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetColorWriteEnableEXT(attachmentCount, pColorWriteEnables);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizerDiscardEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    rasterizerDiscardEnable)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetRasterizerDiscardEnableEXT(rasterizerDiscardEnable);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveRestartEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    primitiveRestartEnable)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetPrimitiveRestartEnableEXT(primitiveRestartEnable);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBiasEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthBiasEnable)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->SetDepthBiasEnableEXT(depthBiasEnable);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLogicOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkLogicOp                                   logicOp)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPatchControlPointsEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    patchControlPoints)
+{
+    VK_NOT_IMPLEMENTED;
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkBlitImageInfo2KHR*                  pBlitImageInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->BlitImage(
+        pBlitImageInfo->srcImage,
+        pBlitImageInfo->srcImageLayout,
+        pBlitImageInfo->dstImage,
+        pBlitImageInfo->dstImageLayout,
+        pBlitImageInfo->regionCount,
+        pBlitImageInfo->pRegions,
+        pBlitImageInfo->filter);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferInfo2KHR*                 pCopyBufferInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyBuffer(
+        pCopyBufferInfo->srcBuffer,
+        pCopyBufferInfo->dstBuffer,
+        pCopyBufferInfo->regionCount,
+        pCopyBufferInfo->pRegions);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferToImageInfo2KHR*          pCopyBufferToImageInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyBufferToImage(
+        pCopyBufferToImageInfo->srcBuffer,
+        pCopyBufferToImageInfo->dstImage,
+        pCopyBufferToImageInfo->dstImageLayout,
+        pCopyBufferToImageInfo->regionCount,
+        pCopyBufferToImageInfo->pRegions);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageInfo2KHR*                  pCopyImageInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyImage(
+        pCopyImageInfo->srcImage,
+        pCopyImageInfo->srcImageLayout,
+        pCopyImageInfo->dstImage,
+        pCopyImageInfo->dstImageLayout,
+        pCopyImageInfo->regionCount,
+        pCopyImageInfo->pRegions);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageToBufferInfo2KHR*          pCopyImageToBufferInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->CopyImageToBuffer(
+        pCopyImageToBufferInfo->srcImage,
+        pCopyImageToBufferInfo->srcImageLayout,
+        pCopyImageToBufferInfo->dstBuffer,
+        pCopyImageToBufferInfo->regionCount,
+        pCopyImageToBufferInfo->pRegions);
+}
+
+// =====================================================================================================================
+VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkResolveImageInfo2KHR*               pResolveImageInfo)
+{
+    ApiCmdBuffer::ObjectFromHandle(commandBuffer)->ResolveImage(
+        pResolveImageInfo->srcImage,
+        pResolveImageInfo->srcImageLayout,
+        pResolveImageInfo->dstImage,
+        pResolveImageInfo->dstImageLayout,
+        pResolveImageInfo->regionCount,
+        pResolveImageInfo->pRegions);
 }
 
 } // namespace entry

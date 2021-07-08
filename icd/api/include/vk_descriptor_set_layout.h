@@ -83,11 +83,11 @@ public:
     // Information about an individual binding within this layout
     struct BindingInfo
     {
-        VkDescriptorSetLayoutBinding info;   // Vulkan binding information
-        DescriptorBindingFlags bindingFlags; // Binding flags for descriptor binding
-        BindingSectionInfo  sta;             // Information specific to the static section of the descriptor binding
-        BindingSectionInfo  dyn;             // Information specific to the dynamic section of the descriptor binding
-        BindingSectionInfo  imm;             // Information specific to the immutable section of the descriptor binding
+        VkDescriptorSetLayoutBinding   info;         // Vulkan binding information
+        DescriptorBindingFlags         bindingFlags; // Binding flags for descriptor binding
+        BindingSectionInfo             sta;          // Information specific to the static section of the descriptor binding
+        BindingSectionInfo             dyn;          // Information specific to the dynamic section of the descriptor binding
+        BindingSectionInfo             imm;          // Information specific to the immutable section of the descriptor binding
     };
 
     // Information about a specific section of a descriptor set layout

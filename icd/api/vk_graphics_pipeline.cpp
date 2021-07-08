@@ -51,1420 +51,6 @@ namespace vk
 {
 
 // =====================================================================================================================
-// Generates a hash using the contents of a VkPipelineVertexInputStateCreateInfo struct
-// Pipeline compilation affected by:
-//     - desc.pVertexBindingDescriptions
-//     - desc.pVertexAttributeDescriptions
-//     - pDivisorStateCreateInfo->pVertexBindingDivisors
-void GraphicsPipeline::GenerateHashFromVertexInputStateCreateInfo(
-    Util::MetroHash128*                         pHasher,
-    const VkPipelineVertexInputStateCreateInfo& desc)
-{
-    pHasher->Update(desc.flags);
-    pHasher->Update(desc.vertexBindingDescriptionCount);
-
-    for (uint32_t i = 0; i < desc.vertexBindingDescriptionCount; i++)
-    {
-        pHasher->Update(desc.pVertexBindingDescriptions[i]);
-    }
-
-    pHasher->Update(desc.vertexAttributeDescriptionCount);
-
-    for (uint32_t i = 0; i < desc.vertexAttributeDescriptionCount; i++)
-    {
-        pHasher->Update(desc.pVertexAttributeDescriptions[i]);
-    }
-
-    if (desc.pNext != nullptr)
-    {
-        const void* pNext = desc.pNext;
-
-        while (pNext != nullptr)
-        {
-            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-            switch (static_cast<uint32>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_DIVISOR_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineVertexInputDivisorStateCreateInfoEXT*>(pNext);
-                pHasher->Update(pExtInfo->sType);
-                pHasher->Update(pExtInfo->vertexBindingDivisorCount);
-
-                for (uint32 i = 0; i < pExtInfo->vertexBindingDivisorCount; i++)
-                {
-                    pHasher->Update(pExtInfo->pVertexBindingDivisors[i]);
-                }
-
-                break;
-            }
-            default:
-                break;
-            }
-
-            pNext = pHeader->pNext;
-        }
-    }
-}
-
-// =====================================================================================================================
-// Generates a hash using the contents of a VkPipelineInputAssemblyStateCreateInfo struct
-// Pipeline compilation affected by:
-//     - desc.topology
-void GraphicsPipeline::GenerateHashFromInputAssemblyStateCreateInfo(
-    Util::MetroHash128*                           pBaseHasher,
-    Util::MetroHash128*                           pApiHasher,
-    const VkPipelineInputAssemblyStateCreateInfo& desc)
-{
-    pBaseHasher->Update(desc.flags);
-    pBaseHasher->Update(desc.topology);
-    pApiHasher->Update(desc.primitiveRestartEnable);
-}
-
-// =====================================================================================================================
-// Generates a hash using the contents of a VkPipelineTessellationStateCreateInfo struct
-// Pipeline compilation affected by:
-//     - desc.patchControlPoints
-//     - pDomainOriginStateCreateInfo->domainOrigin
-void GraphicsPipeline::GenerateHashFromTessellationStateCreateInfo(
-    Util::MetroHash128*                          pHasher,
-    const VkPipelineTessellationStateCreateInfo& desc)
-{
-    pHasher->Update(desc.flags);
-    pHasher->Update(desc.patchControlPoints);
-
-    if (desc.pNext != nullptr)
-    {
-        const void* pNext = desc.pNext;
-
-        while (pNext != nullptr)
-        {
-            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-            switch (static_cast<uint32>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_PIPELINE_TESSELLATION_DOMAIN_ORIGIN_STATE_CREATE_INFO:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineTessellationDomainOriginStateCreateInfo*>(pNext);
-                pHasher->Update(pExtInfo->sType);
-                pHasher->Update(pExtInfo->domainOrigin);
-
-                break;
-            }
-            default:
-                break;
-            }
-
-            pNext = pHeader->pNext;
-        }
-    }
-}
-
-// =====================================================================================================================
-// Generates a hash using the contents of a VkPipelineViewportStateCreateInfo struct
-// Pipeline compilation affected by: none
-void GraphicsPipeline::GenerateHashFromViewportStateCreateInfo(
-    Util::MetroHash128*                      pHasher,
-    const VkPipelineViewportStateCreateInfo& desc,
-    const uint32_t                           staticStateMask)
-{
-    pHasher->Update(desc.flags);
-    pHasher->Update(desc.viewportCount);
-
-    if ((staticStateMask & 1 << VK_DYNAMIC_STATE_VIEWPORT) && (desc.pViewports != nullptr))
-    {
-        for (uint32_t i = 0; i < desc.viewportCount; i++)
-        {
-            pHasher->Update(desc.pViewports[i]);
-        }
-    }
-
-    pHasher->Update(desc.scissorCount);
-
-    if ((staticStateMask & 1 << VK_DYNAMIC_STATE_SCISSOR) && (desc.pScissors != nullptr))
-    {
-        for (uint32_t i = 0; i < desc.scissorCount; i++)
-        {
-            pHasher->Update(desc.pScissors[i]);
-        }
-    }
-}
-
-// =====================================================================================================================
-// Generates a hash using the contents of a VkPipelineRasterizationStateCreateInfo struct
-// Pipeline compilation affected by:
-//     - desc.depthClampEnable
-//     - desc.rasterizerDiscardEnable
-//     - desc.polygonMode
-//     - desc.cullMode
-//     - desc.frontFace
-//     - desc.depthBiasEnable
-//     - pStreamCreateInfo->rasterizationStream
-void GraphicsPipeline::GenerateHashFromRasterizationStateCreateInfo(
-    Util::MetroHash128*                           pBaseHasher,
-    Util::MetroHash128*                           pApiHasher,
-    const VkPipelineRasterizationStateCreateInfo& desc)
-{
-    pBaseHasher->Update(desc.flags);
-    pBaseHasher->Update(desc.depthClampEnable);
-    pBaseHasher->Update(desc.rasterizerDiscardEnable);
-    pBaseHasher->Update(desc.polygonMode);
-    pBaseHasher->Update(desc.cullMode);
-    pBaseHasher->Update(desc.frontFace);
-    pBaseHasher->Update(desc.depthBiasEnable);
-    pApiHasher->Update(desc.depthBiasConstantFactor);
-    pApiHasher->Update(desc.depthBiasClamp);
-    pApiHasher->Update(desc.depthBiasSlopeFactor);
-    pApiHasher->Update(desc.lineWidth);
-
-    if (desc.pNext != nullptr)
-    {
-        const void* pNext = desc.pNext;
-
-        while (pNext != nullptr)
-        {
-            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-            switch (static_cast<uint32>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineRasterizationConservativeStateCreateInfoEXT*>(pNext);
-                pApiHasher->Update(pExtInfo->sType);
-                pApiHasher->Update(pExtInfo->flags);
-                pApiHasher->Update(pExtInfo->conservativeRasterizationMode);
-                pApiHasher->Update(pExtInfo->extraPrimitiveOverestimationSize);
-
-                break;
-            }
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineRasterizationStateRasterizationOrderAMD*>(pNext);
-                pApiHasher->Update(pExtInfo->sType);
-                pApiHasher->Update(pExtInfo->rasterizationOrder);
-
-                break;
-            }
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineRasterizationStateStreamCreateInfoEXT*>(pNext);
-                pBaseHasher->Update(pExtInfo->sType);
-                pBaseHasher->Update(pExtInfo->flags);
-                pBaseHasher->Update(pExtInfo->rasterizationStream);
-
-                break;
-            }
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(pNext);
-                pBaseHasher->Update(pExtInfo->depthClipEnable);
-
-                break;
-            }
-            case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineRasterizationLineStateCreateInfoEXT*>(pNext);
-                pBaseHasher->Update(pExtInfo->lineRasterizationMode);
-                pBaseHasher->Update(pExtInfo->stippledLineEnable);
-                pBaseHasher->Update(pExtInfo->lineStippleFactor);
-                pBaseHasher->Update(pExtInfo->lineStipplePattern);
-
-                break;
-            }
-            default:
-                break;
-            }
-
-            pNext = pHeader->pNext;
-        }
-    }
-}
-
-// =====================================================================================================================
-// Generates a hash using the contents of a VkPipelineMultisampleStateCreateInfo struct
-// Pipeline compilation affected by:
-//     - desc.rasterizationSamples
-//     - desc.sampleShadingEnable
-//     - desc.minSampleShading
-//     - desc.alphaToCoverageEnable
-void GraphicsPipeline::GenerateHashFromMultisampleStateCreateInfo(
-    Util::MetroHash128*                         pBaseHasher,
-    Util::MetroHash128*                         pApiHasher,
-    const VkPipelineMultisampleStateCreateInfo& desc)
-{
-    pBaseHasher->Update(desc.flags);
-    pBaseHasher->Update(desc.rasterizationSamples);
-    pBaseHasher->Update(desc.sampleShadingEnable);
-    pBaseHasher->Update(desc.minSampleShading);
-
-    if (desc.pSampleMask != nullptr)
-    {
-        for (uint32_t i = 0; i < ceil(((float)desc.rasterizationSamples) / 32.0f); i++)
-        {
-            pApiHasher->Update(desc.pSampleMask[i]);
-        }
-    }
-
-    pBaseHasher->Update(desc.alphaToCoverageEnable);
-    pApiHasher->Update(desc.alphaToOneEnable);
-
-    if (desc.pNext != nullptr)
-    {
-        const void* pNext = desc.pNext;
-
-        while (pNext != nullptr)
-        {
-            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-            switch (static_cast<uint32>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineSampleLocationsStateCreateInfoEXT*>(pNext);
-                pApiHasher->Update(pExtInfo->sType);
-                pApiHasher->Update(pExtInfo->sampleLocationsEnable);
-                pApiHasher->Update(pExtInfo->sampleLocationsInfo.sType);
-                pApiHasher->Update(pExtInfo->sampleLocationsInfo.sampleLocationsPerPixel);
-                pApiHasher->Update(pExtInfo->sampleLocationsInfo.sampleLocationGridSize);
-                pApiHasher->Update(pExtInfo->sampleLocationsInfo.sampleLocationsCount);
-
-                for (uint32 i = 0; i < pExtInfo->sampleLocationsInfo.sampleLocationsCount; i++)
-                {
-                    pApiHasher->Update(pExtInfo->sampleLocationsInfo.pSampleLocations[i]);
-                }
-
-                break;
-            }
-            default:
-                break;
-            }
-
-            pNext = pHeader->pNext;
-        }
-    }
-}
-
-// =====================================================================================================================
-// Generates a hash using the contents of a VkPipelineDepthStencilStateCreateInfo struct
-// Pipeline compilation affected by: none
-void GraphicsPipeline::GenerateHashFromDepthStencilStateCreateInfo(
-    Util::MetroHash128*                          pHasher,
-    const VkPipelineDepthStencilStateCreateInfo& desc)
-{
-    pHasher->Update(desc.flags);
-    pHasher->Update(desc.depthTestEnable);
-    pHasher->Update(desc.depthWriteEnable);
-    pHasher->Update(desc.depthCompareOp);
-    pHasher->Update(desc.depthBoundsTestEnable);
-    pHasher->Update(desc.stencilTestEnable);
-    pHasher->Update(desc.front);
-    pHasher->Update(desc.back);
-    pHasher->Update(desc.minDepthBounds);
-    pHasher->Update(desc.maxDepthBounds);
-}
-
-// =====================================================================================================================
-// Generates a hash using the contents of a VkPipelineColorBlendStateCreateInfo struct
-// Pipeline compilation affected by:
-//     - desc.pAttachments
-void GraphicsPipeline::GenerateHashFromColorBlendStateCreateInfo(
-    Util::MetroHash128*                        pBaseHasher,
-    Util::MetroHash128*                        pApiHasher,
-    const VkPipelineColorBlendStateCreateInfo& desc)
-{
-    pBaseHasher->Update(desc.flags);
-    pApiHasher->Update(desc.logicOpEnable);
-    pApiHasher->Update(desc.logicOp);
-    pBaseHasher->Update(desc.attachmentCount);
-
-    for (uint32 i = 0; i < desc.attachmentCount; i++)
-    {
-        pBaseHasher->Update(desc.pAttachments[i]);
-    }
-
-    pApiHasher->Update(desc.blendConstants);
-
-    if (desc.pNext != nullptr)
-    {
-        const void* pNext = desc.pNext;
-
-        while (pNext != nullptr)
-        {
-            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-            switch (static_cast<uint32>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineColorBlendAdvancedStateCreateInfoEXT*>(pNext);
-                pApiHasher->Update(pExtInfo->sType);
-                pApiHasher->Update(pExtInfo->srcPremultiplied);
-                pApiHasher->Update(pExtInfo->dstPremultiplied);
-                pApiHasher->Update(pExtInfo->blendOverlap);
-
-                break;
-            }
-            case VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT:
-            {
-                const auto pExtInfo = static_cast<const VkPipelineColorWriteCreateInfoEXT*>(pNext);
-                pApiHasher->Update(pExtInfo->sType);
-                pApiHasher->Update(pExtInfo->attachmentCount);
-
-                if (pExtInfo->pColorWriteEnables != nullptr)
-                {
-                    uint32 count = Util::Min(pExtInfo->attachmentCount, Pal::MaxColorTargets);
-
-                    for (uint32 i = 0; i < count; ++i)
-                    {
-                        pApiHasher->Update(pExtInfo->pColorWriteEnables[i]);
-                    }
-                }
-
-                break;
-            }
-            default:
-                break;
-            }
-
-            pNext = pHeader->pNext;
-        }
-    }
-}
-
-// =====================================================================================================================
-// Generates the API PSO hash using the contents of the VkGraphicsPipelineCreateInfo struct
-// Pipeline compilation affected by:
-//     - pCreateInfo->pStages
-//     - pCreateInfo->pVertexInputState
-//     - pCreateInfo->pInputAssemblyState
-//     - pCreateInfo->pTessellationState
-//     - pCreateInfo->pRasterizationState
-//     - pCreateInfo->pMultisampleState
-//     - pCreateInfo->pColorBlendState
-//     - pCreateInfo->layout
-//     - pCreateInfo->renderPass
-//     - pCreateInfo->subpass
-uint64_t GraphicsPipeline::BuildApiHash(
-    const VkGraphicsPipelineCreateInfo* pCreateInfo,
-    const CreateInfo*                   pInfo,
-    Util::MetroHash::Hash*              pBaseHash)
-{
-    Util::MetroHash128 baseHasher;
-    Util::MetroHash128 apiHasher;
-
-    baseHasher.Update(pCreateInfo->flags);
-    baseHasher.Update(pCreateInfo->stageCount);
-
-    for (uint32_t i = 0; i < pCreateInfo->stageCount; i++)
-    {
-        GenerateHashFromShaderStageCreateInfo(&baseHasher, pCreateInfo->pStages[i]);
-    }
-
-    if (pCreateInfo->pVertexInputState != nullptr)
-    {
-        GenerateHashFromVertexInputStateCreateInfo(&baseHasher, *pCreateInfo->pVertexInputState);
-    }
-
-    if (pCreateInfo->pInputAssemblyState != nullptr)
-    {
-        GenerateHashFromInputAssemblyStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pInputAssemblyState);
-    }
-
-    if ((pInfo->activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
-        && (pCreateInfo->pTessellationState != nullptr))
-    {
-        GenerateHashFromTessellationStateCreateInfo(&baseHasher, *pCreateInfo->pTessellationState);
-    }
-
-    if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pViewportState != nullptr))
-    {
-        GenerateHashFromViewportStateCreateInfo(&apiHasher, *pCreateInfo->pViewportState, pInfo->staticStateMask);
-    }
-
-    if (pCreateInfo->pRasterizationState != nullptr)
-    {
-        GenerateHashFromRasterizationStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pRasterizationState);
-    }
-
-    if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pMultisampleState != nullptr))
-    {
-        GenerateHashFromMultisampleStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pMultisampleState);
-    }
-
-    if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pDepthStencilState != nullptr))
-    {
-        GenerateHashFromDepthStencilStateCreateInfo(&apiHasher, *pCreateInfo->pDepthStencilState);
-    }
-
-    if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pColorBlendState != nullptr))
-    {
-        GenerateHashFromColorBlendStateCreateInfo(&baseHasher, &apiHasher, *pCreateInfo->pColorBlendState);
-    }
-
-    if (pCreateInfo->pDynamicState != nullptr)
-    {
-        GenerateHashFromDynamicStateCreateInfo(&apiHasher, *pCreateInfo->pDynamicState);
-    }
-
-    baseHasher.Update(PipelineLayout::ObjectFromHandle(pCreateInfo->layout)->GetApiHash());
-
-    if (pCreateInfo->renderPass != VK_NULL_HANDLE)
-    {
-        baseHasher.Update(RenderPass::ObjectFromHandle(pCreateInfo->renderPass)->GetHash());
-    }
-
-    baseHasher.Update(pCreateInfo->subpass);
-
-    if ((pCreateInfo->flags & VK_PIPELINE_CREATE_DERIVATIVE_BIT) && (pCreateInfo->basePipelineHandle != VK_NULL_HANDLE))
-    {
-        apiHasher.Update(GraphicsPipeline::ObjectFromHandle(pCreateInfo->basePipelineHandle)->GetApiHash());
-    }
-
-    apiHasher.Update(pCreateInfo->basePipelineIndex);
-
-    if (pCreateInfo->pNext != nullptr)
-    {
-        const void* pNext = pCreateInfo->pNext;
-
-        while (pNext != nullptr)
-        {
-            const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-            switch (static_cast<uint32>(pHeader->sType))
-            {
-            case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pExtInfo = static_cast<const VkPipelineDiscardRectangleStateCreateInfoEXT*>(pNext);
-                apiHasher.Update(pExtInfo->sType);
-                apiHasher.Update(pExtInfo->flags);
-                apiHasher.Update(pExtInfo->discardRectangleMode);
-                apiHasher.Update(pExtInfo->discardRectangleCount);
-
-                if (pExtInfo->pDiscardRectangles != nullptr)
-                {
-                    for (uint32 i = 0; i < pExtInfo->discardRectangleCount; i++)
-                    {
-                        apiHasher.Update(pExtInfo->pDiscardRectangles[i]);
-                    }
-                }
-
-                break;
-            }
-            default:
-                break;
-            }
-
-            pNext = pHeader->pNext;
-        }
-    }
-
-    baseHasher.Finalize(reinterpret_cast<uint8_t* const>(pBaseHash));
-
-    uint64_t              apiHash;
-    Util::MetroHash::Hash apiHashFull;
-    apiHasher.Update(*pBaseHash);
-    apiHasher.Finalize(reinterpret_cast<uint8_t* const>(&apiHashFull));
-    apiHash = Util::MetroHash::Compact64(&apiHashFull);
-
-    return apiHash;
-}
-
-// =====================================================================================================================
-// Returns true if the given VkBlendFactor factor is a dual source blend factor
-bool IsDualSourceBlend(VkBlendFactor blend)
-{
-    switch (blend)
-    {
-    case VK_BLEND_FACTOR_SRC1_COLOR:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_COLOR:
-    case VK_BLEND_FACTOR_SRC1_ALPHA:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
-        return true;
-    default:
-        return false;
-    }
-}
-
-// =====================================================================================================================
-// Returns true if src alpha is used in blending
-bool IsSrcAlphaUsedInBlend(
-    VkBlendFactor blend)
-{
-    switch (blend)
-    {
-    case VK_BLEND_FACTOR_SRC_ALPHA:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA:
-    case VK_BLEND_FACTOR_SRC_ALPHA_SATURATE:
-    case VK_BLEND_FACTOR_SRC1_ALPHA:
-    case VK_BLEND_FACTOR_ONE_MINUS_SRC1_ALPHA:
-        return true;
-    default:
-        return false;
-    }
-}
-
-// =====================================================================================================================
-// Returns true if Dual Source Blending is to be enabled based on the given ColorBlendAttachmentState
-bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pColorBlendAttachmentState)
-{
-    bool dualSourceBlend = false;
-
-    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.srcAlphaBlendFactor);
-    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.dstAlphaBlendFactor);
-    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.srcColorBlendFactor);
-    dualSourceBlend |= IsDualSourceBlend(pColorBlendAttachmentState.dstColorBlendFactor);
-    dualSourceBlend &= (pColorBlendAttachmentState.blendEnable == VK_TRUE);
-
-    return dualSourceBlend;
-}
-
-// =====================================================================================================================
-// Parses input pipeline rasterization create info state.
-void GraphicsPipeline::BuildRasterizationState(
-    Device*                                       pDevice,
-    const VkPipelineRasterizationStateCreateInfo* pIn,
-    CreateInfo*                                   pInfo,
-    const bool                                    dynamicStateFlags[])
-{
-    VK_ASSERT(pIn->sType == VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO);
-
-    // By default rasterization is disabled, unless rasterization creation info is present
-
-    const PhysicalDevice*         pPhysicalDevice = pDevice->VkPhysicalDevice(DefaultDeviceIndex);
-    const VkPhysicalDeviceLimits& limits          = pPhysicalDevice->GetLimits();
-
-    // Enable perpendicular end caps if we report strictLines semantics
-    pInfo->pipeline.rsState.perpLineEndCapsEnable = (limits.strictLines == VK_TRUE);
-
-    pInfo->pipeline.viewportInfo.depthClipNearEnable            = (pIn->depthClampEnable == VK_FALSE);
-    pInfo->pipeline.viewportInfo.depthClipFarEnable             = (pIn->depthClampEnable == VK_FALSE);
-
-    pInfo->immedInfo.triangleRasterState.frontFillMode          = VkToPalFillMode(pIn->polygonMode);
-    pInfo->immedInfo.triangleRasterState.backFillMode           = VkToPalFillMode(pIn->polygonMode);
-    pInfo->immedInfo.triangleRasterState.cullMode               = VkToPalCullMode(pIn->cullMode);
-    pInfo->immedInfo.triangleRasterState.frontFace              = VkToPalFaceOrientation(pIn->frontFace);
-
-    pInfo->immedInfo.triangleRasterState.flags.depthBiasEnable  = pIn->depthBiasEnable;
-    pInfo->immedInfo.depthBiasParams.depthBias                  = pIn->depthBiasConstantFactor;
-    pInfo->immedInfo.depthBiasParams.depthBiasClamp             = pIn->depthBiasClamp;
-    pInfo->immedInfo.depthBiasParams.slopeScaledDepthBias       = pIn->depthBiasSlopeFactor;
-
-    if (pIn->depthBiasEnable && (dynamicStateFlags[VK_DYNAMIC_STATE_DEPTH_BIAS] == false))
-    {
-        pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BIAS;
-    }
-
-    // point size must be set via gl_PointSize, otherwise it must be 1.0f.
-    constexpr float DefaultPointSize = 1.0f;
-
-    pInfo->immedInfo.pointLineRasterParams.lineWidth    = pIn->lineWidth;
-    pInfo->immedInfo.pointLineRasterParams.pointSize    = DefaultPointSize;
-    pInfo->immedInfo.pointLineRasterParams.pointSizeMin = limits.pointSizeRange[0];
-    pInfo->immedInfo.pointLineRasterParams.pointSizeMax = limits.pointSizeRange[1];
-
-    if (dynamicStateFlags[VK_DYNAMIC_STATE_LINE_WIDTH] == false)
-    {
-        pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_LINE_WIDTH;
-    }
-
-    const void* pNext = pIn->pNext;
-
-    while (pNext != nullptr)
-    {
-        const VkStructHeader* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-        switch (static_cast<int32>(pHeader->sType))
-        {
-        // Handle  extension specific structures
-        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_RASTERIZATION_ORDER_AMD:
-            {
-                const auto* pRsOrder = static_cast<const VkPipelineRasterizationStateRasterizationOrderAMD*>(pNext);
-
-                if (pPhysicalDevice->PalProperties().gfxipProperties.flags.supportOutOfOrderPrimitives)
-                {
-                    pInfo->pipeline.rsState.outOfOrderPrimsEnable = VkToPalRasterizationOrder(pRsOrder->rasterizationOrder);
-                }
-                break;
-            }
-        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_CONSERVATIVE_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pRsConservative =
-                    static_cast<const VkPipelineRasterizationConservativeStateCreateInfoEXT*>(pNext);
-
-                // VK_EXT_conservative_rasterization must be enabled
-                VK_ASSERT(pDevice->IsExtensionEnabled(DeviceExtensions::EXT_CONSERVATIVE_RASTERIZATION));
-                VK_ASSERT(pRsConservative->flags == 0);
-                VK_ASSERT(pRsConservative->conservativeRasterizationMode >= VK_CONSERVATIVE_RASTERIZATION_MODE_BEGIN_RANGE_EXT);
-                VK_ASSERT(pRsConservative->conservativeRasterizationMode <= VK_CONSERVATIVE_RASTERIZATION_MODE_END_RANGE_EXT);
-                VK_IGNORE(pRsConservative->extraPrimitiveOverestimationSize);
-
-                switch (pRsConservative->conservativeRasterizationMode)
-                {
-                case VK_CONSERVATIVE_RASTERIZATION_MODE_DISABLED_EXT:
-                    {
-                        pInfo->msaa.flags.enableConservativeRasterization = false;
-                    }
-                    break;
-                case VK_CONSERVATIVE_RASTERIZATION_MODE_OVERESTIMATE_EXT:
-                    {
-                        pInfo->msaa.flags.enableConservativeRasterization = true;
-                        pInfo->msaa.conservativeRasterizationMode = Pal::ConservativeRasterizationMode::Overestimate;
-                    }
-                    break;
-                case VK_CONSERVATIVE_RASTERIZATION_MODE_UNDERESTIMATE_EXT:
-                    {
-                        pInfo->msaa.flags.enableConservativeRasterization = true;
-                        pInfo->msaa.conservativeRasterizationMode = Pal::ConservativeRasterizationMode::Underestimate;
-                    }
-                    break;
-
-                default:
-                    break;
-                }
-
-            }
-            break;
-        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_STREAM_CREATE_INFO_EXT:
-            {
-                const auto* pRsStream = static_cast<const VkPipelineRasterizationStateStreamCreateInfoEXT*>(pNext);
-
-                pInfo->rasterizationStream = pRsStream->rasterizationStream;
-            }
-            break;
-        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_LINE_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pRsRasterizationLine =
-                    static_cast<const VkPipelineRasterizationLineStateCreateInfoEXT*>(pNext);
-
-                pInfo->bresenhamEnable =
-                    (pRsRasterizationLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_BRESENHAM_EXT);
-
-                // Bresenham Lines need axis aligned end caps
-                if (pInfo->bresenhamEnable)
-                {
-                    pInfo->pipeline.rsState.perpLineEndCapsEnable = false;
-                }
-                else if (pRsRasterizationLine->lineRasterizationMode == VK_LINE_RASTERIZATION_MODE_RECTANGULAR_EXT)
-                {
-                    pInfo->pipeline.rsState.perpLineEndCapsEnable = true;
-                }
-
-                pInfo->msaa.flags.enableLineStipple                   = pRsRasterizationLine->stippledLineEnable;
-
-                pInfo->immedInfo.lineStippleParams.lineStippleScale   = (pRsRasterizationLine->lineStippleFactor - 1);
-                pInfo->immedInfo.lineStippleParams.lineStippleValue   = pRsRasterizationLine->lineStipplePattern;
-
-                if (pRsRasterizationLine->stippledLineEnable &&
-                    (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt)] == false))
-                {
-                    pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt);
-                }
-            }
-            break;
-        case VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_DEPTH_CLIP_STATE_CREATE_INFO_EXT:
-            {
-                const auto* pRsRasterizationDepthClipState =
-                    static_cast<const VkPipelineRasterizationDepthClipStateCreateInfoEXT*>(pNext);
-
-                pInfo->pipeline.viewportInfo.depthClipNearEnable = (pRsRasterizationDepthClipState->depthClipEnable == VK_TRUE);
-                pInfo->pipeline.viewportInfo.depthClipFarEnable = (pRsRasterizationDepthClipState->depthClipEnable == VK_TRUE);
-            }
-            break;
-
-        default:
-            // Skip any unknown extension structures
-            break;
-        }
-
-        pNext = pHeader->pNext;
-    }
-
-    // For optimal performance, depth clamping should be enabled by default. Only disable it if dealing
-    // with depth values outside of [0.0, 1.0] range.
-    // Note that this is the opposite of the default Vulkan setting which is depthClampEnable = false.
-    if ((pIn->depthClampEnable == VK_FALSE) &&
-        (pDevice->IsExtensionEnabled(DeviceExtensions::EXT_DEPTH_RANGE_UNRESTRICTED) ||
-         ((pInfo->pipeline.viewportInfo.depthClipNearEnable == false) &&
-          (pInfo->pipeline.viewportInfo.depthClipFarEnable == false))))
-    {
-        pInfo->pipeline.rsState.depthClampDisable = true;
-    }
-    else
-    {
-        // When depth clamping is enabled, depth clipping should be disabled, and vice versa.
-        // Clipping is updated in pipeline compiler.
-        pInfo->pipeline.rsState.depthClampDisable = false;
-    }
-}
-
-// =====================================================================================================================
-// Converts Vulkan graphics pipeline parameters to an internal structure
-void GraphicsPipeline::ConvertGraphicsPipelineInfo(
-    Device*                             pDevice,
-    const VkGraphicsPipelineCreateInfo* pIn,
-    const VbBindingInfo*                pVbInfo,
-    CreateInfo*                         pInfo)
-{
-    const RuntimeSettings& settings = pDevice->GetRuntimeSettings();
-    VkFormat cbFormat[Pal::MaxColorTargets] = {};
-
-    // Fill in necessary non-zero defaults in case some information is missing
-    pInfo->msaa.coverageSamples                 = 1;
-    pInfo->msaa.pixelShaderSamples              = 1;
-    pInfo->msaa.depthStencilSamples             = 1;
-    pInfo->msaa.shaderExportMaskSamples         = 1;
-    pInfo->msaa.sampleClusters                  = 1;
-    pInfo->msaa.alphaToCoverageSamples          = 1;
-    pInfo->msaa.occlusionQuerySamples           = 1;
-    pInfo->msaa.sampleMask                      = 1;
-    pInfo->sampleCoverage                       = 1;
-    pInfo->rasterizationStream                  = 0;
-
-    EXTRACT_VK_STRUCTURES_0(
-        gfxPipeline,
-        GraphicsPipelineCreateInfo,
-        pIn,
-        GRAPHICS_PIPELINE_CREATE_INFO)
-
-    const RenderPass* pRenderPass = nullptr;
-
-    // Set the states which are allowed to call CmdSetxxx outside of the PSO
-    bool dynamicStateFlags[uint32_t(DynamicStatesInternal::DynamicStatesInternalCount)];
-
-    memset(dynamicStateFlags, 0, sizeof(dynamicStateFlags));
-
-    if (pGraphicsPipelineCreateInfo != nullptr)
-    {
-        for (uint32_t i = 0; i < pGraphicsPipelineCreateInfo->stageCount; ++i)
-        {
-            pInfo->activeStages = static_cast<VkShaderStageFlagBits>(
-                pInfo->activeStages | pGraphicsPipelineCreateInfo->pStages[i].stage);
-        }
-        VK_IGNORE(pGraphicsPipelineCreateInfo->flags & VK_PIPELINE_CREATE_ALLOW_DERIVATIVES_BIT);
-
-        pRenderPass = RenderPass::ObjectFromHandle(pGraphicsPipelineCreateInfo->renderPass);
-
-        if (pGraphicsPipelineCreateInfo->layout != VK_NULL_HANDLE)
-        {
-            pInfo->pLayout = PipelineLayout::ObjectFromHandle(pGraphicsPipelineCreateInfo->layout);
-        }
-
-        const VkPipelineInputAssemblyStateCreateInfo* pIa = pGraphicsPipelineCreateInfo->pInputAssemblyState;
-
-        // According to the spec this should never be null
-        VK_ASSERT(pIa != nullptr);
-
-        pInfo->immedInfo.inputAssemblyState.primitiveRestartEnable = (pIa->primitiveRestartEnable != VK_FALSE);
-        pInfo->immedInfo.inputAssemblyState.primitiveRestartIndex  = (pIa->primitiveRestartEnable != VK_FALSE)
-                                                                     ? 0xFFFFFFFF : 0;
-        pInfo->immedInfo.inputAssemblyState.topology               = VkToPalPrimitiveTopology(pIa->topology);
-
-        pInfo->pipeline.iaState.vertexBufferCount                  = pVbInfo->bindingTableSize;
-
-        pInfo->pipeline.iaState.topologyInfo.primitiveType         = VkToPalPrimitiveType(pIa->topology);
-
-        if (pInfo->activeStages & (VK_SHADER_STAGE_TESSELLATION_CONTROL_BIT | VK_SHADER_STAGE_TESSELLATION_EVALUATION_BIT))
-        {
-            EXTRACT_VK_STRUCTURES_0(
-                Tess,
-                PipelineTessellationStateCreateInfo,
-                pGraphicsPipelineCreateInfo->pTessellationState,
-                PIPELINE_TESSELLATION_STATE_CREATE_INFO)
-
-                if (pPipelineTessellationStateCreateInfo != nullptr)
-                {
-                    pInfo->pipeline.iaState.topologyInfo.patchControlPoints = pPipelineTessellationStateCreateInfo->patchControlPoints;
-                }
-        }
-        pInfo->staticStateMask = 0;
-
-        const VkPipelineDynamicStateCreateInfo* pDy = pGraphicsPipelineCreateInfo->pDynamicState;
-
-        if (pDy != nullptr)
-        {
-            for (uint32_t i = 0; i < pDy->dynamicStateCount; ++i)
-            {
-                if (pDy->pDynamicStates[i] < VK_DYNAMIC_STATE_RANGE_SIZE)
-                {
-                    dynamicStateFlags[pDy->pDynamicStates[i]] = true;
-                }
-                else
-                {
-                    switch (static_cast<uint32_t>(pDy->pDynamicStates[i]))
-                    {
-                    case VK_DYNAMIC_STATE_SAMPLE_LOCATIONS_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt)] = true;
-                        break;
-
-                    case VK_DYNAMIC_STATE_LINE_STIPPLE_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::LineStippleExt)] = true;
-                        break;
-
-                    case  VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr)] = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_CULL_MODE_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::CullModeExt)] = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_FRONT_FACE_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FrontFaceExt)] = true;
-                        break;
-                    case VK_DYNAMIC_STATE_VIEWPORT_WITH_COUNT_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ViewportCount)] = true;
-                        dynamicStateFlags[VK_DYNAMIC_STATE_VIEWPORT]                                    = true;
-                        break;
-                    case VK_DYNAMIC_STATE_SCISSOR_WITH_COUNT_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ScissorCount)] = true;
-                        dynamicStateFlags[VK_DYNAMIC_STATE_SCISSOR]                                    = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_PRIMITIVE_TOPOLOGY_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt)] = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_VERTEX_INPUT_BINDING_STRIDE_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::VertexInputBindingStrideExt)]
-                            = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_DEPTH_TEST_ENABLE_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt)] = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_DEPTH_WRITE_ENABLE_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt)] = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_DEPTH_COMPARE_OP_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOpExt)] = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_DEPTH_BOUNDS_TEST_ENABLE_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnableExt)]
-                            = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_STENCIL_TEST_ENABLE_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnableExt)] = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_STENCIL_OP_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt)] = true;
-                        break;
-                    case  VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
-                        dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt)] = true;
-                        break;
-
-                    default:
-                        // skip unknown dynamic state
-                        break;
-                    }
-                }
-            }
-        }
-
-        pInfo->bindDepthStencilObject  = true;
-        pInfo->bindTriangleRasterState = true;
-        pInfo->bindStencilRefMasks     = true;
-        pInfo->bindInputAssemblyState  = true;
-
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::CullModeExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::CullModeExt);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FrontFaceExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::FrontFaceExt);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ViewportCount)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::ViewportCount);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ScissorCount)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::ScissorCount);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::VertexInputBindingStrideExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::VertexInputBindingStrideExt);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOpExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOpExt);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnableExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnableExt);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnableExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnableExt);
-        }
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt);
-        }
-
-        if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt)] == false)
-        {
-            pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt);
-        }
-
-        pInfo->bindDepthStencilObject =
-            !(dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilOpExt)] ||
-              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilTestEnableExt)] ||
-              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnableExt)] ||
-              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthCompareOpExt)] ||
-              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthWriteEnableExt)] ||
-              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthTestEnableExt)]);
-
-        pInfo->bindTriangleRasterState =
-            !(dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::CullModeExt)] ||
-              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FrontFaceExt)]);
-
-        pInfo->bindStencilRefMasks =
-            !(dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilCompareMask)] ||
-              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilWriteMask)] ||
-              dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::StencilReference)]);
-
-        pInfo->bindInputAssemblyState =
-            !dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::PrimitiveTopologyExt)];
-
-        const VkPipelineViewportStateCreateInfo* pVp = pGraphicsPipelineCreateInfo->pViewportState;
-
-        pInfo->pipeline.viewportInfo.depthRange = Pal::DepthRange::ZeroToOne;
-
-        if ((pIn->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pVp != nullptr))
-        {
-            const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;
-
-            // Override the shader rate to 1x1 if sample shading is used or the sample count is 8
-            pInfo->force1x1ShaderRate = ((pMs != nullptr) &&
-                (pMs->sampleShadingEnable ||
-                (pMs->rasterizationSamples == VK_SAMPLE_COUNT_8_BIT)));
-
-            if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr)]
-                    == false)
-            {
-                EXTRACT_VK_STRUCTURES_0(
-                    variableRateShading,
-                    PipelineFragmentShadingRateStateCreateInfoKHR,
-                    static_cast<const VkPipelineFragmentShadingRateStateCreateInfoKHR*>(pIn->pNext),
-                    PIPELINE_FRAGMENT_SHADING_RATE_STATE_CREATE_INFO_KHR)
-
-                if (pPipelineFragmentShadingRateStateCreateInfoKHR != nullptr)
-                {
-                    pInfo->immedInfo.vrsRateParams.flags.exposeVrsPixelsMask = 1;
-
-                    pInfo->immedInfo.vrsRateParams.shadingRate =
-                        VkToPalShadingSize(VkClampShadingRate(
-                                pPipelineFragmentShadingRateStateCreateInfoKHR->fragmentSize,
-                                pDevice->GetMaxVrsShadingRate()));
-
-                    pInfo->immedInfo.vrsRateParams.combinerState[
-                        static_cast<uint32_t>(Pal::VrsCombinerStage::ProvokingVertex)] =
-                        VkToPalShadingRateCombinerOp(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[0]);
-
-                    pInfo->immedInfo.vrsRateParams.combinerState[
-                        static_cast<uint32_t>(Pal::VrsCombinerStage::Primitive)]= Pal::VrsCombiner::Passthrough;
-
-                    pInfo->immedInfo.vrsRateParams.combinerState[
-                        static_cast<uint32_t>(Pal::VrsCombinerStage::Image)] =
-                        VkToPalShadingRateCombinerOp(pPipelineFragmentShadingRateStateCreateInfoKHR->combinerOps[1]);
-
-                    pInfo->immedInfo.vrsRateParams.combinerState[
-                        static_cast<uint32_t>(Pal::VrsCombinerStage::PsIterSamples)] = Pal::VrsCombiner::Passthrough;
-
-                    if (pInfo->force1x1ShaderRate)
-                    {
-                        Force1x1ShaderRate(&pInfo->immedInfo.vrsRateParams);
-                    }
-
-                    pInfo->staticStateMask |=
-                        1 << static_cast<uint32_t>(DynamicStatesInternal::FragmentShadingRateStateKhr);
-                }
-            }
-            // From the spec, "scissorCount is the number of scissors and must match the number of viewports."
-            VK_ASSERT(pVp->viewportCount <= Pal::MaxViewports);
-            VK_ASSERT(pVp->scissorCount <= Pal::MaxViewports);
-            VK_ASSERT(pVp->scissorCount == pVp->viewportCount);
-
-            pInfo->immedInfo.viewportParams.count    = pVp->viewportCount;
-            pInfo->immedInfo.scissorRectParams.count = pVp->scissorCount;
-
-            if (dynamicStateFlags[VK_DYNAMIC_STATE_VIEWPORT] == false)
-            {
-                VK_ASSERT(pVp->pViewports != nullptr);
-
-                const bool maintenanceEnabled = pDevice->IsExtensionEnabled(DeviceExtensions::KHR_MAINTENANCE1);
-                uint32_t   enabledApiVersion  = pDevice->VkPhysicalDevice(DefaultDeviceIndex)->GetEnabledAPIVersion();
-                const bool khrMaintenance1    = (enabledApiVersion >= VK_MAKE_VERSION(1, 1, 0)) || maintenanceEnabled;
-
-                for (uint32_t i = 0; i < pVp->viewportCount; ++i)
-                {
-                    VkToPalViewport(pVp->pViewports[i],
-                            i,
-                            khrMaintenance1,
-                            &pInfo->immedInfo.viewportParams);
-                }
-
-                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_VIEWPORT;
-            }
-
-            if (dynamicStateFlags[VK_DYNAMIC_STATE_SCISSOR] == false)
-            {
-                VK_ASSERT(pVp->pScissors != nullptr);
-
-                for (uint32_t i = 0; i < pVp->scissorCount; ++i)
-                {
-                    VkToPalScissorRect(pVp->pScissors[i], i, &pInfo->immedInfo.scissorRectParams);
-                }
-                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_SCISSOR;
-            }
-
-        }
-
-        BuildRasterizationState(pDevice,
-                                pGraphicsPipelineCreateInfo->pRasterizationState,
-                                pInfo,
-                                dynamicStateFlags);
-
-        pInfo->pipeline.rsState.pointCoordOrigin       = Pal::PointOrigin::UpperLeft;
-        pInfo->pipeline.rsState.shadeMode              = Pal::ShadeMode::Flat;
-        pInfo->pipeline.rsState.rasterizeLastLinePixel = 0;
-
-        // Pipeline Binning Override
-        switch (settings.pipelineBinningMode)
-        {
-        case PipelineBinningModeEnable:
-            pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Enable;
-            break;
-
-        case PipelineBinningModeDisable:
-            pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Disable;
-            break;
-
-        case PipelineBinningModeDefault:
-        default:
-            pInfo->pipeline.rsState.binningOverride = Pal::BinningOverride::Default;
-            break;
-        }
-
-        const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;
-
-        if ((pIn->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pMs != nullptr))
-        {
-            // Sample Locations
-            EXTRACT_VK_STRUCTURES_1(
-                SampleLocations,
-                PipelineMultisampleStateCreateInfo,
-                PipelineSampleLocationsStateCreateInfoEXT,
-                pMs,
-                PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
-
-            pInfo->customSampleLocations = ((pPipelineSampleLocationsStateCreateInfoEXT != nullptr) &&
-                                            (pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsEnable));
-
-            if ((pInfo->bresenhamEnable == false) || (pInfo->customSampleLocations))
-            {
-                uint32_t rasterizationSampleCount   = pMs->rasterizationSamples;
-
-                uint32_t subpassCoverageSampleCount = rasterizationSampleCount;
-                uint32_t subpassColorSampleCount    = rasterizationSampleCount;
-                uint32_t subpassDepthSampleCount    = rasterizationSampleCount;
-
-                if (pRenderPass != VK_NULL_HANDLE)
-                {
-                    subpassCoverageSampleCount = pRenderPass->GetSubpassMaxSampleCount(pGraphicsPipelineCreateInfo->subpass);
-                    subpassColorSampleCount    = pRenderPass->GetSubpassColorSampleCount(pGraphicsPipelineCreateInfo->subpass);
-                    subpassDepthSampleCount    = pRenderPass->GetSubpassDepthSampleCount(pGraphicsPipelineCreateInfo->subpass);
-                }
-
-                // subpassCoverageSampleCount would be equal to zero if there are zero attachments.
-                subpassCoverageSampleCount = subpassCoverageSampleCount == 0 ? rasterizationSampleCount : subpassCoverageSampleCount;
-
-                // In case we are rendering to color only, we make sure to set the DepthSampleCount to CoverageSampleCount.
-                // CoverageSampleCount is really the ColorSampleCount in this case. This makes sure we have a consistent
-                // sample count and that we get correct MSAA behavior.
-                // Similar thing for when we are rendering to depth only. The expectation in that case is that all
-                // sample counts should match.
-                // This shouldn't interfere with EQAA. For EQAA, if ColorSampleCount is not equal to DepthSampleCount
-                // and they are both greater than one, then we do not force them to match.
-                subpassColorSampleCount = subpassColorSampleCount == 0 ? subpassCoverageSampleCount : subpassColorSampleCount;
-                subpassDepthSampleCount = subpassDepthSampleCount == 0 ? subpassCoverageSampleCount : subpassDepthSampleCount;
-
-                VK_ASSERT(rasterizationSampleCount == subpassCoverageSampleCount);
-
-                pInfo->msaa.coverageSamples = subpassCoverageSampleCount;
-                pInfo->msaa.exposedSamples  = subpassCoverageSampleCount;
-
-                if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
-                {
-                    pInfo->msaa.pixelShaderSamples =
-                        Pow2Pad(static_cast<uint32_t>(ceil(subpassColorSampleCount * pMs->minSampleShading)));
-                }
-                else
-                {
-                    pInfo->msaa.pixelShaderSamples = 1;
-                }
-
-                pInfo->msaa.depthStencilSamples = subpassDepthSampleCount;
-                pInfo->msaa.shaderExportMaskSamples = subpassCoverageSampleCount;
-                pInfo->msaa.sampleMask = (pMs->pSampleMask != nullptr)
-                                         ? pMs->pSampleMask[0]
-                                         : 0xffffffff;
-                pInfo->msaa.sampleClusters         = subpassCoverageSampleCount;
-                pInfo->msaa.alphaToCoverageSamples = subpassCoverageSampleCount;
-                pInfo->msaa.occlusionQuerySamples  = subpassDepthSampleCount;
-                pInfo->sampleCoverage              = subpassCoverageSampleCount;
-
-                if (pInfo->customSampleLocations)
-                {
-                    // Enable single-sampled custom sample locations if necessary
-                    pInfo->msaa.flags.enable1xMsaaSampleLocations = (pInfo->msaa.coverageSamples == 1);
-
-                    if (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt)] == false)
-                    {
-                        // We store the custom sample locations if custom sample locations are enabled and the
-                        // sample locations state is static.
-                        pInfo->immedInfo.samplePattern.sampleCount =
-                            (uint32_t)pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationsPerPixel;
-
-                        ConvertToPalMsaaQuadSamplePattern(
-                            &pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo,
-                            &pInfo->immedInfo.samplePattern.locations);
-
-                        VK_ASSERT(pInfo->immedInfo.samplePattern.sampleCount == rasterizationSampleCount);
-
-                        pInfo->staticStateMask |=
-                            (1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt));
-                    }
-                }
-                else
-                {
-                    // We store the standard sample locations if custom sample locations are not enabled.
-                    pInfo->immedInfo.samplePattern.sampleCount = rasterizationSampleCount;
-                    pInfo->immedInfo.samplePattern.locations =
-                        *Device::GetDefaultQuadSamplePattern(rasterizationSampleCount);
-
-                    pInfo->staticStateMask |=
-                        1 << static_cast<uint32_t>(DynamicStatesInternal::SampleLocationsExt);
-                }
-            }
-
-            // The alpha component of the fragment's first color output is replaced with one if alphaToOneEnable is set.
-            pInfo->pipeline.cbState.target[0].forceAlphaToOne = (pMs->alphaToOneEnable == VK_TRUE);
-            pInfo->pipeline.cbState.alphaToCoverageEnable     = (pMs->alphaToCoverageEnable == VK_TRUE);
-        }
-
-        const VkPipelineColorBlendStateCreateInfo* pCb = pGraphicsPipelineCreateInfo->pColorBlendState;
-
-        bool blendingEnabled = false;
-        bool dualSourceBlend = false;
-
-        if ((pIn->pRasterizationState->rasterizerDiscardEnable == VK_TRUE) || (pCb == nullptr))
-        {
-            pInfo->pipeline.cbState.logicOp = Pal::LogicOp::Copy;
-        }
-        else
-        {
-            pInfo->pipeline.cbState.logicOp = (pCb->logicOpEnable) ?
-                                              VkToPalLogicOp(pCb->logicOp) :
-                                              Pal::LogicOp::Copy;
-
-            const uint32_t numColorTargets = Min(pCb->attachmentCount, Pal::MaxColorTargets);
-
-            const VkPipelineColorWriteCreateInfoEXT* pColorWriteCreateInfo = nullptr;
-
-            const void* pNext = static_cast<const VkStructHeader*>(pCb->pNext);
-
-            while (pNext != nullptr)
-            {
-                const auto* pHeader = static_cast<const VkStructHeader*>(pNext);
-
-                switch (static_cast<uint32>(pHeader->sType))
-                {
-                    case VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_ADVANCED_STATE_CREATE_INFO_EXT:
-                    {
-                        break;
-                    }
-                    case VK_STRUCTURE_TYPE_PIPELINE_COLOR_WRITE_CREATE_INFO_EXT:
-                    {
-                        pColorWriteCreateInfo = reinterpret_cast<const VkPipelineColorWriteCreateInfoEXT*>(pHeader);
-                        break;
-                    }
-
-                    default:
-                        // Skip any unknown extension structures
-                        break;
-                }
-
-                pNext = pHeader->pNext;
-            }
-
-            for (uint32_t i = 0; i < numColorTargets; ++i)
-            {
-                const VkPipelineColorBlendAttachmentState& src = pCb->pAttachments[i];
-
-                auto pCbDst     = &pInfo->pipeline.cbState.target[i];
-                auto pBlendDst  = &pInfo->blend.targets[i];
-
-                if (pRenderPass)
-                {
-                    cbFormat[i] = pRenderPass->GetColorAttachmentFormat(pGraphicsPipelineCreateInfo->subpass, i);
-                    pCbDst->swizzledFormat = VkToPalFormat(cbFormat[i], pDevice->GetRuntimeSettings());
-                }
-
-                // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
-                // want to write to any attachment for that output (VK_ATTACHMENT_UNUSED).  Under such cases,
-                // disable shader writes through that target.
-                if (pCbDst->swizzledFormat.format != Pal::ChNumFormat::Undefined)
-                {
-                    if ((pColorWriteCreateInfo != nullptr) && (pColorWriteCreateInfo->pColorWriteEnables != nullptr) &&
-                        (dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt)] == false))
-                    {
-                        if (pColorWriteCreateInfo->pColorWriteEnables[i])
-                        {
-                            pCbDst->channelWriteMask = src.colorWriteMask;
-                        }
-                        else
-                        {
-                            pCbDst->channelWriteMask = 0;
-                        }
-                    }
-                    else
-                    {
-                        pCbDst->channelWriteMask = src.colorWriteMask;
-                    }
-
-                    blendingEnabled |= (src.blendEnable == VK_TRUE);
-                }
-
-                pBlendDst->blendEnable    = (src.blendEnable == VK_TRUE);
-                pBlendDst->srcBlendColor  = VkToPalBlend(src.srcColorBlendFactor);
-                pBlendDst->dstBlendColor  = VkToPalBlend(src.dstColorBlendFactor);
-                pBlendDst->blendFuncColor = VkToPalBlendFunc(src.colorBlendOp);
-                pBlendDst->srcBlendAlpha  = VkToPalBlend(src.srcAlphaBlendFactor);
-                pBlendDst->dstBlendAlpha  = VkToPalBlend(src.dstAlphaBlendFactor);
-                pBlendDst->blendFuncAlpha = VkToPalBlendFunc(src.alphaBlendOp);
-
-                dualSourceBlend |= GetDualSourceBlendEnableState(src);
-            }
-        }
-
-        pInfo->pipeline.cbState.dualSourceBlendEnable     = dualSourceBlend;
-
-        if (blendingEnabled == true && dynamicStateFlags[VK_DYNAMIC_STATE_BLEND_CONSTANTS] == false)
-        {
-            static_assert(sizeof(pInfo->immedInfo.blendConstParams) == sizeof(pCb->blendConstants),
-                "Blend constant structure size mismatch!");
-
-            memcpy(&pInfo->immedInfo.blendConstParams, pCb->blendConstants, sizeof(pCb->blendConstants));
-
-            pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_BLEND_CONSTANTS;
-        }
-
-        VkFormat dbFormat = { };
-        if (pRenderPass != nullptr)
-        {
-            dbFormat = pRenderPass->GetDepthStencilAttachmentFormat(pGraphicsPipelineCreateInfo->subpass);
-        }
-
-        // If the sub pass attachment format is UNDEFINED, then it means that that subpass does not
-        // want to write any depth-stencil data (VK_ATTACHMENT_UNUSED).  Under such cases, I think we have to
-        // disable depth testing as well as depth writes.
-        const VkPipelineDepthStencilStateCreateInfo* pDs = pGraphicsPipelineCreateInfo->pDepthStencilState;
-
-        if ((dbFormat != VK_FORMAT_UNDEFINED) && (pDs != nullptr))
-        {
-            pInfo->immedInfo.depthStencilCreateInfo.stencilEnable     = (pDs->stencilTestEnable == VK_TRUE);
-            pInfo->immedInfo.depthStencilCreateInfo.depthEnable       = (pDs->depthTestEnable == VK_TRUE);
-            pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable  = (pDs->depthWriteEnable == VK_TRUE);
-            pInfo->immedInfo.depthStencilCreateInfo.depthFunc         = VkToPalCompareFunc(pDs->depthCompareOp);
-            pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable = (pDs->depthBoundsTestEnable == VK_TRUE);
-
-            if ((pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable ||
-                 dynamicStateFlags[static_cast<uint32_t>(DynamicStatesInternal::DepthBoundsTestEnableExt)]) &&
-                (dynamicStateFlags[VK_DYNAMIC_STATE_DEPTH_BOUNDS] == false))
-            {
-                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_DEPTH_BOUNDS;
-            }
-
-            // According to Graham, we should program the stencil state at PSO bind time,
-            // regardless of whether this PSO enables\disables Stencil. This allows a second PSO
-            // to inherit the first PSO's settings
-            if (dynamicStateFlags[VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK] == false)
-            {
-                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_STENCIL_COMPARE_MASK;
-            }
-
-            if (dynamicStateFlags[VK_DYNAMIC_STATE_STENCIL_WRITE_MASK] == false)
-            {
-                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_STENCIL_WRITE_MASK;
-            }
-
-            if (dynamicStateFlags[VK_DYNAMIC_STATE_STENCIL_REFERENCE] == false)
-            {
-                pInfo->staticStateMask |= 1 << VK_DYNAMIC_STATE_STENCIL_REFERENCE;
-            }
-        }
-        else
-        {
-            pInfo->immedInfo.depthStencilCreateInfo.depthEnable       = false;
-            pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable  = false;
-            pInfo->immedInfo.depthStencilCreateInfo.depthFunc         = Pal::CompareFunc::Always;
-            pInfo->immedInfo.depthStencilCreateInfo.depthBoundsEnable = false;
-            pInfo->immedInfo.depthStencilCreateInfo.stencilEnable     = false;
-        }
-
-        if ((pIn->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pDs != nullptr))
-        {
-            pInfo->immedInfo.depthStencilCreateInfo.front.stencilFailOp      = VkToPalStencilOp(pDs->front.failOp);
-            pInfo->immedInfo.depthStencilCreateInfo.front.stencilPassOp      = VkToPalStencilOp(pDs->front.passOp);
-            pInfo->immedInfo.depthStencilCreateInfo.front.stencilDepthFailOp = VkToPalStencilOp(pDs->front.depthFailOp);
-            pInfo->immedInfo.depthStencilCreateInfo.front.stencilFunc        = VkToPalCompareFunc(pDs->front.compareOp);
-            pInfo->immedInfo.depthStencilCreateInfo.back.stencilFailOp       = VkToPalStencilOp(pDs->back.failOp);
-            pInfo->immedInfo.depthStencilCreateInfo.back.stencilPassOp       = VkToPalStencilOp(pDs->back.passOp);
-            pInfo->immedInfo.depthStencilCreateInfo.back.stencilDepthFailOp  = VkToPalStencilOp(pDs->back.depthFailOp);
-            pInfo->immedInfo.depthStencilCreateInfo.back.stencilFunc         = VkToPalCompareFunc(pDs->back.compareOp);
-
-            pInfo->immedInfo.stencilRefMasks.frontRef       = static_cast<uint8_t>(pDs->front.reference);
-            pInfo->immedInfo.stencilRefMasks.frontReadMask  = static_cast<uint8_t>(pDs->front.compareMask);
-            pInfo->immedInfo.stencilRefMasks.frontWriteMask = static_cast<uint8_t>(pDs->front.writeMask);
-            pInfo->immedInfo.stencilRefMasks.backRef        = static_cast<uint8_t>(pDs->back.reference);
-            pInfo->immedInfo.stencilRefMasks.backReadMask   = static_cast<uint8_t>(pDs->back.compareMask);
-            pInfo->immedInfo.stencilRefMasks.backWriteMask  = static_cast<uint8_t>(pDs->back.writeMask);
-
-            pInfo->immedInfo.depthBoundParams.min = pDs->minDepthBounds;
-            pInfo->immedInfo.depthBoundParams.max = pDs->maxDepthBounds;
-        }
-
-        pInfo->immedInfo.stencilRefMasks.frontOpValue   = DefaultStencilOpValue;
-        pInfo->immedInfo.stencilRefMasks.backOpValue    = DefaultStencilOpValue;
-
-        pInfo->pipeline.viewInstancingDesc = Pal::ViewInstancingDescriptor { };
-
-        if (((pRenderPass != nullptr) &&
-             pRenderPass->IsMultiviewEnabled())
-            )
-        {
-            pInfo->pipeline.viewInstancingDesc.viewInstanceCount = Pal::MaxViewInstanceCount;
-            pInfo->pipeline.viewInstancingDesc.enableMasking     = true;
-
-            for (uint32 viewIndex = 0; viewIndex < Pal::MaxViewInstanceCount; ++viewIndex)
-            {
-                pInfo->pipeline.viewInstancingDesc.viewId[viewIndex] = viewIndex;
-            }
-        }
-    }
-}
-
-// =====================================================================================================================
 // Create a graphics pipeline object.
 VkResult GraphicsPipeline::Create(
     Device*                                 pDevice,
@@ -1476,41 +62,42 @@ VkResult GraphicsPipeline::Create(
     uint64 startTime = vk::utils::GetTimeNano();
 
     // Parse the create info and build patched AMDIL shaders
-    CreateInfo                  localPipelineInfo                  = {};
-    VbBindingInfo               vbInfo                             = {};
-    GraphicsPipelineCreateInfo  binaryCreateInfo                   = {};
-    size_t                      pipelineBinarySizes[MaxPalDevices] = {};
-    const void*                 pPipelineBinaries[MaxPalDevices]   = {};
-    Util::MetroHash::Hash       cacheId[MaxPalDevices]             = {};
-    Pal::Result                 palResult                          = Pal::Result::Success;
-    PipelineCompiler*           pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
-    const RuntimeSettings&      settings                           = pDevice->GetRuntimeSettings();
-    Util::MetroHash64           palPipelineHasher;
+    GraphicsPipelineObjectCreateInfo objectCreateInfo                   = {};
+    VbBindingInfo                    vbInfo                             = {};
+    GraphicsPipelineBinaryCreateInfo binaryCreateInfo                   = {};
+    size_t                           pipelineBinarySizes[MaxPalDevices] = {};
+    const void*                      pPipelineBinaries[MaxPalDevices]   = {};
+    Util::MetroHash::Hash            cacheId[MaxPalDevices]             = {};
+    Pal::Result                      palResult                          = Pal::Result::Success;
+    PipelineCompiler*                pDefaultCompiler                   = pDevice->GetCompiler(DefaultDeviceIndex);
+    const RuntimeSettings&           settings                           = pDevice->GetRuntimeSettings();
+    Util::MetroHash64                palPipelineHasher;
 
     const VkPipelineCreationFeedbackCreateInfoEXT* pPipelineCreationFeadbackCreateInfo = nullptr;
 
     VkResult result = pDefaultCompiler->ConvertGraphicsPipelineInfo(
         pDevice, pCreateInfo, &binaryCreateInfo, &vbInfo, &pPipelineCreationFeadbackCreateInfo);
 
-    ConvertGraphicsPipelineInfo(pDevice, pCreateInfo, &vbInfo, &localPipelineInfo);
+    BuildPipelineObjectCreateInfo(pDevice, pCreateInfo, &vbInfo, &objectCreateInfo);
 
     // PAL internally disables dual-source blending when the blend func is min or max. In cases when it will be disabled, we should
     // overwrite dual source blending option so the pipeline is compiled with the correct value. This avoids a mismatch in how data
     // comes out of shaders and how the CB expects to see the data.
     // This can be done for all ASICs, but is required for GFX10+
-    const bool canEnableDualSourceBlend = pDevice->PalDevice(DefaultDeviceIndex)->CanEnableDualSourceBlend(localPipelineInfo.blend);
+    const bool canEnableDualSourceBlend = pDevice->PalDevice(DefaultDeviceIndex)->CanEnableDualSourceBlend(objectCreateInfo.blend);
 
     if (canEnableDualSourceBlend == false)
     {
-        localPipelineInfo.pipeline.cbState.dualSourceBlendEnable = false;
+        objectCreateInfo.pipeline.cbState.dualSourceBlendEnable = false;
         binaryCreateInfo.pipelineInfo.cbState.dualSourceBlendEnable = false;
     }
 
-    uint64_t apiPsoHash = BuildApiHash(pCreateInfo, &localPipelineInfo, &binaryCreateInfo.basePipelineHash);
+    uint64_t apiPsoHash = BuildApiHash(pCreateInfo, &objectCreateInfo, &binaryCreateInfo.basePipelineHash);
 
     const uint32_t numPalDevices = pDevice->NumPalDevices();
 
     uint64_t pipelineHash = Vkgc::IPipelineDumper::GetPipelineHash(&binaryCreateInfo.pipelineInfo);
+
     for (uint32_t i = 0; (result == VK_SUCCESS) && (i < numPalDevices)
         ; ++i)
     {
@@ -1523,12 +110,12 @@ VkResult GraphicsPipeline::Create(
                 &binaryCreateInfo,
                 &pipelineBinarySizes[i],
                 &pPipelineBinaries[i],
-                localPipelineInfo.rasterizationStream,
+                objectCreateInfo.rasterizationStream,
                 &cacheId[i]);
         }
         else
         {
-            GraphicsPipelineCreateInfo binaryCreateInfoMGPU = {};
+            GraphicsPipelineBinaryCreateInfo binaryCreateInfoMGPU = {};
             VbBindingInfo vbInfoMGPU = {};
             pDefaultCompiler->ConvertGraphicsPipelineInfo(
                     pDevice, pCreateInfo, &binaryCreateInfoMGPU, &vbInfoMGPU, nullptr);
@@ -1540,7 +127,7 @@ VkResult GraphicsPipeline::Create(
                 &binaryCreateInfoMGPU,
                 &pipelineBinarySizes[i],
                 &pPipelineBinaries[i],
-                localPipelineInfo.rasterizationStream,
+                objectCreateInfo.rasterizationStream,
                 &cacheId[i]);
 
             if (result == VK_SUCCESS)
@@ -1561,11 +148,11 @@ VkResult GraphicsPipeline::Create(
     {
         pDevice->GetShaderOptimizer()->OverrideGraphicsPipelineCreateInfo(
             binaryCreateInfo.pipelineProfileKey,
-            localPipelineInfo.activeStages,
-            &localPipelineInfo.pipeline,
-            &localPipelineInfo.immedInfo.graphicsShaderInfos);
+            objectCreateInfo.activeStages,
+            &objectCreateInfo.pipeline,
+            &objectCreateInfo.immedInfo.graphicsShaderInfos);
 
-        palPipelineHasher.Update(localPipelineInfo.pipeline);
+        palPipelineHasher.Update(objectCreateInfo.pipeline);
     }
 
     RenderStateCache* pRSCache = pDevice->GetRenderStateCache();
@@ -1576,11 +163,11 @@ VkResult GraphicsPipeline::Create(
 
     if (result == VK_SUCCESS)
     {
-        localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[DefaultDeviceIndex];
-        localPipelineInfo.pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex];
+        objectCreateInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[DefaultDeviceIndex];
+        objectCreateInfo.pipeline.pPipelineBinary    = pPipelineBinaries[DefaultDeviceIndex];
 
         palSize =
-            pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(localPipelineInfo.pipeline, &palResult);
+            pDevice->PalDevice(DefaultDeviceIndex)->GetGraphicsPipelineSize(objectCreateInfo.pipeline, &palResult);
         VK_ASSERT(palResult == Pal::Result::Success);
 
         pSystemMem = pDevice->AllocApiObject(
@@ -1613,12 +200,12 @@ VkResult GraphicsPipeline::Create(
                 // won't be created.  Otherwise, like if gl_DeviceIndex is used, they will be.
                 if (pPipelineBinaries[deviceIdx] != nullptr)
                 {
-                    localPipelineInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[deviceIdx];
-                    localPipelineInfo.pipeline.pPipelineBinary    = pPipelineBinaries[deviceIdx];
+                    objectCreateInfo.pipeline.pipelineBinarySize = pipelineBinarySizes[deviceIdx];
+                    objectCreateInfo.pipeline.pPipelineBinary    = pPipelineBinaries[deviceIdx];
                 }
 
                 palResult = pPalDevice->CreateGraphicsPipeline(
-                    localPipelineInfo.pipeline,
+                    objectCreateInfo.pipeline,
                     Util::VoidPtrInc(pSystemMem, palOffset),
                     &pPalPipeline[deviceIdx]);
 
@@ -1634,8 +221,8 @@ VkResult GraphicsPipeline::Create(
                     palResult = pDevice->GetCompiler(deviceIdx)->RegisterAndLoadReinjectionBinary(
                         &info.internalPipelineHash,
                         &cacheId[deviceIdx],
-                        &localPipelineInfo.pipeline.pipelineBinarySize,
-                        &localPipelineInfo.pipeline.pPipelineBinary,
+                        &objectCreateInfo.pipeline.pipelineBinarySize,
+                        &objectCreateInfo.pipeline.pPipelineBinary,
                         pPipelineCache);
 
                     if (palResult == Util::Result::Success)
@@ -1643,7 +230,7 @@ VkResult GraphicsPipeline::Create(
                         pPalPipeline[deviceIdx]->Destroy();
 
                         palResult = pPalDevice->CreateGraphicsPipeline(
-                            localPipelineInfo.pipeline,
+                            objectCreateInfo.pipeline,
                             Util::VoidPtrInc(pSystemMem, palOffset),
                             &pPalPipeline[deviceIdx]);
                     }
@@ -1655,7 +242,7 @@ VkResult GraphicsPipeline::Create(
                 }
 #endif
 
-                VK_ASSERT(palSize == pPalDevice->GetGraphicsPipelineSize(localPipelineInfo.pipeline, nullptr));
+                VK_ASSERT(palSize == pPalDevice->GetGraphicsPipelineSize(objectCreateInfo.pipeline, nullptr));
                 palOffset += palSize;
             }
 
@@ -1666,7 +253,7 @@ VkResult GraphicsPipeline::Create(
 
                 // Force full sample shading if the app didn't enable it, but the shader wants
                 // per-sample shading by the use of SampleId or similar features.
-                if ((pCreateInfo->pRasterizationState->rasterizerDiscardEnable != VK_TRUE) && (pMs != nullptr) &&
+                if ((objectCreateInfo.immedInfo.rasterizerDiscardEnable != VK_TRUE) && (pMs != nullptr) &&
                     (pMs->sampleShadingEnable == false))
                 {
                     const auto& info = pPalPipeline[deviceIdx]->GetInfo();
@@ -1674,14 +261,14 @@ VkResult GraphicsPipeline::Create(
                     if (info.ps.flags.perSampleShading == 1)
                     {
                         // Override the shader rate to 1x1 if SampleId used in shader
-                        Force1x1ShaderRate(&localPipelineInfo.immedInfo.vrsRateParams);
-                        localPipelineInfo.force1x1ShaderRate     |= true;
-                        localPipelineInfo.msaa.pixelShaderSamples = localPipelineInfo.msaa.coverageSamples;
+                        Force1x1ShaderRate(&objectCreateInfo.immedInfo.vrsRateParams);
+                        objectCreateInfo.flags.force1x1ShaderRate     |= true;
+                        objectCreateInfo.msaa.pixelShaderSamples = objectCreateInfo.msaa.coverageSamples;
                     }
                 }
 
                 palResult = pRSCache->CreateMsaaState(
-                    localPipelineInfo.msaa,
+                    objectCreateInfo.msaa,
                     pAllocator,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                     pPalMsaa);
@@ -1691,24 +278,24 @@ VkResult GraphicsPipeline::Create(
             if (palResult == Pal::Result::Success)
             {
                 palResult = pRSCache->CreateColorBlendState(
-                    localPipelineInfo.blend,
+                    objectCreateInfo.blend,
                     pAllocator,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                     pPalColorBlend);
             }
 
             // Create the PAL depth stencil state object
-            if ((palResult == Pal::Result::Success) && localPipelineInfo.bindDepthStencilObject)
+            if ((palResult == Pal::Result::Success) && objectCreateInfo.flags.bindDepthStencilObject)
             {
                 palResult = pRSCache->CreateDepthStencilState(
-                    localPipelineInfo.immedInfo.depthStencilCreateInfo,
+                    objectCreateInfo.immedInfo.depthStencilCreateInfo,
                     pAllocator,
                     VK_SYSTEM_ALLOCATION_SCOPE_OBJECT,
                     pPalDepthStencil);
             }
 
             // Reset the PAL stencil maskupdate flags
-            localPipelineInfo.immedInfo.stencilRefMasks.flags.u8All = 0xff;
+            objectCreateInfo.immedInfo.stencilRefMasks.flags.u8All = 0xff;
         }
 
         result = PalToVkResult(palResult);
@@ -1737,20 +324,20 @@ VkResult GraphicsPipeline::Create(
         VK_PLACEMENT_NEW(pSystemMem) GraphicsPipeline(
             pDevice,
             pPalPipeline,
-            localPipelineInfo.pLayout,
-            localPipelineInfo.immedInfo,
-            localPipelineInfo.staticStateMask,
-            localPipelineInfo.bindDepthStencilObject,
-            localPipelineInfo.bindTriangleRasterState,
-            localPipelineInfo.bindStencilRefMasks,
-            localPipelineInfo.bindInputAssemblyState,
-            localPipelineInfo.force1x1ShaderRate,
-            localPipelineInfo.customSampleLocations,
+            objectCreateInfo.pLayout,
+            objectCreateInfo.immedInfo,
+            objectCreateInfo.staticStateMask,
+            objectCreateInfo.flags.bindDepthStencilObject,
+            objectCreateInfo.flags.bindTriangleRasterState,
+            objectCreateInfo.flags.bindStencilRefMasks,
+            objectCreateInfo.flags.bindInputAssemblyState,
+            objectCreateInfo.flags.force1x1ShaderRate,
+            objectCreateInfo.flags.customSampleLocations,
             vbInfo,
             pPalMsaa,
             pPalColorBlend,
             pPalDepthStencil,
-            localPipelineInfo.sampleCoverage,
+            objectCreateInfo.sampleCoverage,
             viewIndexFromDeviceIndex,
             pBinaryInfo,
             apiPsoHash,
@@ -1820,7 +407,7 @@ GraphicsPipeline::GraphicsPipeline(
     Device* const                          pDevice,
     Pal::IPipeline**                       pPalPipeline,
     const PipelineLayout*                  pLayout,
-    const ImmedInfo&                       immedInfo,
+    const GraphicsPipelineObjectImmedInfo& immedInfo,
     uint32_t                               staticStateMask,
     bool                                   bindDepthStencilObject,
     bool                                   bindTriangleRasterState,
@@ -1838,7 +425,7 @@ GraphicsPipeline::GraphicsPipeline(
     uint64_t                               apiHash,
     Util::MetroHash64*                     pPalPipelineHasher)
     :
-    Pipeline(pDevice, VK_PIPELINE_BIND_POINT_GRAPHICS),
+    GraphicsPipelineCommon(pDevice),
     m_info(immedInfo),
     m_vbInfo(vbInfo),
     m_flags()
@@ -1988,6 +575,12 @@ void GraphicsPipeline::DestroyStaticState(
 
     pCache->DestroySamplePattern(m_info.samplePattern,
                                  m_info.staticTokens.samplePattern);
+
+    pCache->DestroyLineStipple(m_info.lineStippleParams,
+                               m_info.staticTokens.lineStippleState);
+
+    pCache->DestroyFragmentShadingRate(m_info.vrsRateParams,
+                                       m_info.staticTokens.fragmentShadingRate);
 }
 
 // =====================================================================================================================
@@ -2039,11 +632,15 @@ void GraphicsPipeline::BindToCmdBuffer(
         utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
         do
         {
-            pCmdBuffer->PerGpuState(deviceGroup.Index())->viewport.count = m_info.viewportParams.count;
+            uint32* pViewportCount = &(pCmdBuffer->PerGpuState(deviceGroup.Index())->viewport.count);
+
+            if (*pViewportCount != m_info.viewportParams.count)
+            {
+                *pViewportCount = m_info.viewportParams.count;
+                pRenderState->dirty.viewport = 1;
+            }
         }
         while (deviceGroup.IterateNext());
-
-        pRenderState->dirty.viewport = 1;
     }
 
     if (ContainsStaticState(DynamicStatesInternal::Scissor))
@@ -2058,11 +655,15 @@ void GraphicsPipeline::BindToCmdBuffer(
         utils::IterateMask deviceGroup(pCmdBuffer->GetDeviceMask());
         do
         {
-            pCmdBuffer->PerGpuState(deviceGroup.Index())->scissor.count = m_info.scissorRectParams.count;
+            uint32* pScissorCount = &(pCmdBuffer->PerGpuState(deviceGroup.Index())->scissor.count);
+
+            if (*pScissorCount != m_info.scissorRectParams.count)
+            {
+                *pScissorCount = m_info.scissorRectParams.count;
+                pRenderState->dirty.scissor = 1;
+            }
         }
         while (deviceGroup.IterateNext());
-
-        pRenderState->dirty.scissor = 1;
     }
 
     if (m_flags.bindDepthStencilObject == false)
@@ -2135,7 +736,6 @@ void GraphicsPipeline::BindToCmdBuffer(
         pRenderState->triangleRasterState.frontFillMode   = m_info.triangleRasterState.frontFillMode;
         pRenderState->triangleRasterState.backFillMode    = m_info.triangleRasterState.backFillMode;
         pRenderState->triangleRasterState.provokingVertex = m_info.triangleRasterState.provokingVertex;
-        pRenderState->triangleRasterState.flags.u32All    = m_info.triangleRasterState.flags.u32All;
 
         if (ContainsStaticState(DynamicStatesInternal::FrontFaceExt))
         {
@@ -2145,6 +745,11 @@ void GraphicsPipeline::BindToCmdBuffer(
         if (ContainsStaticState(DynamicStatesInternal::CullModeExt))
         {
             pRenderState->triangleRasterState.cullMode = m_info.triangleRasterState.cullMode;
+        }
+
+        if (ContainsStaticState(DynamicStatesInternal::DepthBiasEnableExt))
+        {
+            pRenderState->triangleRasterState.flags.depthBiasEnable = m_info.triangleRasterState.flags.depthBiasEnable;
         }
 
         pRenderState->dirty.rasterState = 1;
@@ -2195,11 +800,17 @@ void GraphicsPipeline::BindToCmdBuffer(
     if (m_flags.bindInputAssemblyState == false)
     {
         // Update the static states to renderState
-        pRenderState->inputAssemblyState.primitiveRestartIndex =
-            m_info.inputAssemblyState.primitiveRestartIndex;
+        if (ContainsStaticState(DynamicStatesInternal::PrimitiveRestartEnableExt))
+        {
+            pRenderState->inputAssemblyState.primitiveRestartEnable = m_info.inputAssemblyState.primitiveRestartEnable;
+        }
 
-        pRenderState->inputAssemblyState.primitiveRestartEnable =
-            m_info.inputAssemblyState.primitiveRestartEnable;
+        pRenderState->inputAssemblyState.primitiveRestartIndex = m_info.inputAssemblyState.primitiveRestartIndex;
+
+        if (ContainsStaticState(DynamicStatesInternal::PrimitiveTopologyExt))
+        {
+            pRenderState->inputAssemblyState.topology = m_info.inputAssemblyState.topology;
+        }
 
         pRenderState->dirty.inputAssembly = 1;
     }
@@ -2220,6 +831,7 @@ void GraphicsPipeline::BindToCmdBuffer(
 
         if (pRenderState->pGraphicsPipeline != nullptr)
         {
+            bool palPipelineBound = false;
             if ((oldHash != newHash)
                 )
             {
@@ -2228,18 +840,33 @@ void GraphicsPipeline::BindToCmdBuffer(
                 params.pipelineBindPoint = Pal::PipelineBindPoint::Graphics;
                 params.pPipeline         = m_pPalPipeline[deviceIdx];
                 params.graphics          = graphicsShaderInfos;
-                params.apiPsoHash = m_apiHash;
+                params.apiPsoHash        = m_apiHash;
 
                 pPalCmdBuf->CmdBindPipeline(params);
+                palPipelineBound         = true;
             }
-            else if (ContainsStaticState(DynamicStatesInternal::ColorWriteEnableExt) &&
-                     pRenderState->lastColorWriteEnableDynamic)
+
+            if ((palPipelineBound == false) &&
+                ContainsStaticState(DynamicStatesInternal::ColorWriteEnableExt) &&
+                pRenderState->lastColorWriteEnableDynamic)
             {
                 // Color write enable requires an explicit write to CB_TARGET_MASK in cases where the Pal pipeline bind
                 // is skipped due to matching Pal pipeline hash values and CB_TARGET_MASK has been altered by the
                 // previous pipeline via color write enable.  Passing in a count of 0 resets the mask.
                 pRenderState->colorWriteMaskParams.count = 0;
-                pRenderState->dirty.colorWriteEnable = 1;
+                pRenderState->dirty.colorWriteEnable     = 1;
+            }
+
+            if ((palPipelineBound == false) && ContainsStaticState(DynamicStatesInternal::RasterizerDiscardEnableExt))
+            {
+                // Need to update static rasterizerDiscardEnable setting if the Pal pipeline bind is skipped
+                pRenderState->rasterizerDiscardEnable       = m_info.rasterizerDiscardEnable;
+                pRenderState->dirty.rasterizerDiscardEnable = 1;
+            }
+            else if (ContainsDynamicState(DynamicStatesInternal::RasterizerDiscardEnableExt))
+            {
+                // Binding a pipeline overwrites the dynamic rasterizerDiscardEnable setting so need to force validation
+                pRenderState->dirty.rasterizerDiscardEnable = 1;
             }
         }
         else

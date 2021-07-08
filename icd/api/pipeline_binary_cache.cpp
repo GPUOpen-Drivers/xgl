@@ -1017,7 +1017,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
     if (result == VK_SUCCESS)
     {
         // Assume that the first layer we open should be the "primary" source and optimize its memory access
-        constexpr size_t PrimayrLayerBufferSize   = 64 * 1024 * 1024;
+        constexpr size_t PrimaryLayerBufferSize   = 64 * 1024 * 1024;
         constexpr size_t SecondaryLayerBufferSize = 8 * 1024 * 1024;
 
         // Open the optional read only cache file. This may fail gracefully
@@ -1026,7 +1026,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
 
         if (pThirdPartyFileName != nullptr)
         {
-            Util::IArchiveFile* pFile = OpenReadOnlyArchive(pCachePath, pThirdPartyFileName, PrimayrLayerBufferSize);
+            Util::IArchiveFile* pFile = OpenReadOnlyArchive(pCachePath, pThirdPartyFileName, PrimaryLayerBufferSize);
 
             if (pFile != nullptr)
             {
@@ -1086,7 +1086,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
         constexpr int MaxAttempts = 10;
         for (int attemptCt = 0; attemptCt < MaxAttempts; ++attemptCt)
         {
-            size_t bufferSize = (m_pArchiveLayer == nullptr) ? PrimayrLayerBufferSize : SecondaryLayerBufferSize;
+            size_t bufferSize = (m_pArchiveLayer == nullptr) ? PrimaryLayerBufferSize : SecondaryLayerBufferSize;
 
             // Create the final name based off the attempt
             *nameEnd = '\0';
@@ -1099,8 +1099,13 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                 Util::Snprintf(nameEnd, charsRemaining, "_%d.parc", attemptCt);
             }
 
-            Util::IArchiveFile* pFile    = OpenWritableArchive(pCachePath, nameBuffer, bufferSize);
+            Util::IArchiveFile* pFile = nullptr;
             bool                readOnly = false;
+
+            if (pWriteLayer == nullptr)
+            {
+                pFile = OpenWritableArchive(pCachePath, nameBuffer, bufferSize);
+            }
 
             // Attempt to open the file as a read only instead if we failed
             if (pFile == nullptr)
@@ -1121,9 +1126,13 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
 
                     if (pLastReadLayer != nullptr)
                     {
-                        pLastReadLayer->SetLoadPolicy(Util::ICacheLayer::LinkPolicy::PassCalls);
-                        pLastReadLayer->SetStorePolicy(Util::ICacheLayer::LinkPolicy::Skip | Util::ICacheLayer::LinkPolicy::PassData);
-                        // Connect to previous read layer as read-through / write-through + skip
+                        if (pLastReadLayer != pWriteLayer)
+                        {
+                            // Connect to previous read layer as read-through / write-through + skip
+                            pLastReadLayer->SetLoadPolicy(Util::ICacheLayer::LinkPolicy::PassCalls);
+                            pLastReadLayer->SetStorePolicy(Util::ICacheLayer::LinkPolicy::Skip | Util::ICacheLayer::LinkPolicy::PassData);
+                        }
+
                         pLastReadLayer->Link(pLayer);
                     }
 
@@ -1140,7 +1149,7 @@ VkResult PipelineBinaryCache::InitArchiveLayers(
                     else
                     {
                         pWriteLayer = pLayer;
-                        break;
+                        pLastReadLayer = pLayer;
                     }
                 }
                 else

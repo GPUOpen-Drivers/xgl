@@ -1935,8 +1935,9 @@ Pal::Result DevModeMgr::InitTraceQueueResourcesForDevice(
             {
                 VkQueue queueHandle;
 
-                if ((pState->pDevice->GetQueue(familyIdx, queueIdx, &queueHandle) == VK_SUCCESS) &&
-                    (queueHandle != VK_NULL_HANDLE))
+                pState->pDevice->GetQueue(familyIdx, queueIdx, &queueHandle);
+
+                if (queueHandle != VK_NULL_HANDLE)
                 {
                     Queue* pQueue = ApiQueue::ObjectFromHandle(queueHandle);
 

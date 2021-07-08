@@ -85,4 +85,17 @@ const char* CompilerSolution::GetShaderStageName(
     return pName;
 }
 
+// =====================================================================================================================
+// Helper to disable all NGG culling options
+void CompilerSolution::DisableNggCulling(
+    Vkgc::NggState* pNggState)
+{
+    pNggState->enableBackfaceCulling     = false;
+    pNggState->enableFrustumCulling      = false;
+    pNggState->enableBoxFilterCulling    = false;
+    pNggState->enableSphereCulling       = false;
+    pNggState->enableSmallPrimFilter     = false;
+    pNggState->enableCullDistanceCulling = false;
+}
+
 }

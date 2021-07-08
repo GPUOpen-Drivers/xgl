@@ -82,7 +82,7 @@ struct PipelineMetadata
 };
 
 // =====================================================================================================================
-struct GraphicsPipelineCreateInfo
+struct GraphicsPipelineBinaryCreateInfo
 {
     Vkgc::GraphicsPipelineBuildInfo        pipelineInfo;
     void*                                  pTempBuffer;
@@ -90,6 +90,7 @@ struct GraphicsPipelineCreateInfo
     size_t                                 mappingBufferSize;
     VkPipelineCreateFlags                  flags;
     VkFormat                               dbFormat;
+    VkExtent2D                             sampleLocationGridSize;
     PipelineOptimizerKey                   pipelineProfileKey;
     PipelineCompilerType                   compilerType;
     FreeCompilerBinary                     freeCompilerBinary;
@@ -102,7 +103,7 @@ struct GraphicsPipelineCreateInfo
 };
 
 // =====================================================================================================================
-struct ComputePipelineCreateInfo
+struct ComputePipelineBinaryCreateInfo
 {
     Vkgc::ComputePipelineBuildInfo         pipelineInfo;
     void*                                  pTempBuffer;
@@ -159,23 +160,23 @@ public:
         Vkgc::ColorTarget*                   pColorTarget) = 0;
 
     virtual VkResult CreateGraphicsPipelineBinary(
-        Device*                     pDevice,
-        uint32_t                    deviceIdx,
-        PipelineCache*              pPipelineCache,
-        GraphicsPipelineCreateInfo* pCreateInfo,
-        size_t*                     pPipelineBinarySize,
-        const void**                ppPipelineBinary,
-        uint32_t                    rasterizationStream,
-        Vkgc::PipelineShaderInfo**  ppShadersInfo,
-        void*                       pPipelineDumpHandle,
-        uint64_t                    pipelineHash,
-        int64_t*                    pCompileTime) = 0;
+        Device*                           pDevice,
+        uint32_t                          deviceIdx,
+        PipelineCache*                    pPipelineCache,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        size_t*                           pPipelineBinarySize,
+        const void**                      ppPipelineBinary,
+        uint32_t                          rasterizationStream,
+        Vkgc::PipelineShaderInfo**        ppShadersInfo,
+        void*                             pPipelineDumpHandle,
+        uint64_t                          pipelineHash,
+        int64_t*                          pCompileTime) = 0;
 
     virtual VkResult CreateComputePipelineBinary(
         Device*                     pDevice,
         uint32_t                    deviceIdx,
         PipelineCache*              pPipelineCache,
-        ComputePipelineCreateInfo*  pCreateInfo,
+        ComputePipelineBinaryCreateInfo*  pCreateInfo,
         size_t*                     pPipelineBinarySize,
         const void**                ppPipelineBinary,
         void*                       pPipelineDumpHandle,
@@ -190,7 +191,10 @@ public:
         const void*                 pPipelineBinary,
         size_t                      binarySize) = 0;
 
+    static void DisableNggCulling(Vkgc::NggState* pNggState);
+
 protected:
+
     PhysicalDevice*    m_pPhysicalDevice;      // Vulkan physical device object
     Vkgc::GfxIpVersion m_gfxIp;                // Graphics IP version info, used by Vkgc
     Pal::GfxIpLevel    m_gfxIpLevel;           // Graphics IP level

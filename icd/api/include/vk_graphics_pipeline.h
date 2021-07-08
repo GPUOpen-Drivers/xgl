@@ -33,11 +33,10 @@
 #include "include/vk_pipeline.h"
 #include "include/vk_device.h"
 #include "include/vk_shader_code.h"
+#include "include/graphics_pipeline_common.h"
 #include "include/internal_mem_mgr.h"
 
 #include "palCmdBuffer.h"
-#include "palColorBlendState.h"
-#include "palDepthStencilState.h"
 #include "palMsaaState.h"
 #include "palPipeline.h"
 
@@ -47,28 +46,8 @@ namespace vk
 class Device;
 class PipelineCache;
 class CmdBuffer;
+class RenderPass;
 struct CmdBufferRenderState;
-
-// Sample pattern structure containing pal format sample locations and sample counts
-// ToDo: Move this struct to different header once render_graph implementation is removed.
-struct SamplePattern
-{
-    Pal::MsaaQuadSamplePattern locations;
-    uint32_t                   sampleCount;
-};
-
-// Information required by the VB table manager that is defined by the graphics pipeline
-struct VbBindingInfo
-{
-    uint32_t bindingTableSize;
-    uint32_t bindingCount;
-
-    struct
-    {
-        uint32_t slot;
-        uint32_t byteStride;
-    } bindings[Pal::MaxVertexBuffers];
-};
 
 // =====================================================================================================================
 // Convert sample location coordinates from [0,1] space (sent by the application) to [-8, 7] space (accepted by PAL)
@@ -163,11 +142,8 @@ static void Force1x1ShaderRate(
 }
 
 // =====================================================================================================================
-bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pColorBlendAttachmentState);
-
-// =====================================================================================================================
 // Vulkan implementation of graphics pipelines created by vkCreateGraphicsPipeline
-class GraphicsPipeline final : public Pipeline, public NonDispatchable<VkPipeline, GraphicsPipeline>
+class GraphicsPipeline final : public GraphicsPipelineCommon, public NonDispatchable<VkPipeline, GraphicsPipeline>
 {
 public:
     static VkResult Create(
@@ -206,53 +182,14 @@ public:
     // Returns value of VK_PIPELINE_CREATE_VIEW_INDEX_FROM_DEVICE_INDEX_BIT
     // defined by flags member of VkGraphicsPipelineCreateInfo.
     bool ViewIndexFromDeviceIndex() const
-    {
-        return m_flags.viewIndexFromDeviceIndex;
-    }
+        { return m_flags.viewIndexFromDeviceIndex; }
 
 protected:
-    // Immediate state info that will be written during Bind() but is not
-    // encapsulated within a state object.
-    struct ImmedInfo
-    {
-        Pal::InputAssemblyStateParams         inputAssemblyState;
-        Pal::TriangleRasterStateParams        triangleRasterState;
-        Pal::BlendConstParams                 blendConstParams;
-        Pal::DepthBiasParams                  depthBiasParams;
-        Pal::DepthBoundsParams                depthBoundParams;
-        Pal::PointLineRasterStateParams       pointLineRasterParams;
-        Pal::LineStippleStateParams           lineStippleParams;
-        Pal::ViewportParams                   viewportParams;
-        Pal::ScissorRectParams                scissorRectParams;
-        Pal::StencilRefMaskParams             stencilRefMasks;
-        SamplePattern                         samplePattern;
-        Pal::DynamicGraphicsShaderInfos       graphicsShaderInfos;
-        Pal::VrsRateParams                    vrsRateParams;
-        Pal::DepthStencilStateCreateInfo      depthStencilCreateInfo;
-
-        // Static pipeline parameter token values.  These can be used to efficiently redundancy check static pipeline
-        // state programming during pipeline binds.
-        struct
-        {
-            uint32_t inputAssemblyState;
-            uint32_t triangleRasterState;
-            uint32_t pointLineRasterState;
-            uint32_t lineStippleState;
-            uint32_t depthBias;
-            uint32_t blendConst;
-            uint32_t depthBounds;
-            uint32_t viewport;
-            uint32_t scissorRect;
-            uint32_t samplePattern;
-            uint32_t fragmentShadingRate;
-        } staticTokens;
-    };
-
     GraphicsPipeline(
         Device* const                          pDevice,
         Pal::IPipeline**                       pPalPipeline,
         const PipelineLayout*                  pLayout,
-        const ImmedInfo&                       immedInfo,
+        const GraphicsPipelineObjectImmedInfo& immedInfo,
         uint32_t                               staticStateMask,
         bool                                   bindDepthStencilObject,
         bool                                   bindTriangleRasterState,
@@ -275,89 +212,14 @@ protected:
 
     ~GraphicsPipeline();
 
-    struct CreateInfo
-    {
-        Pal::GraphicsPipelineCreateInfo             pipeline;
-        Pal::MsaaStateCreateInfo                    msaa;
-        Pal::ColorBlendStateCreateInfo              blend;
-        Pal::DepthStencilStateCreateInfo            ds;
-        ImmedInfo                                   immedInfo;
-        uint32_t                                    staticStateMask;
-        const PipelineLayout*                       pLayout;
-        uint32_t                                    sampleCoverage;
-        VkShaderStageFlagBits                       activeStages;
-        uint32_t                                    rasterizationStream;
-        bool                                        bresenhamEnable;
-        bool                                        bindDepthStencilObject;
-        bool                                        bindTriangleRasterState;
-        bool                                        bindStencilRefMasks;
-        bool                                        bindInputAssemblyState;
-        bool                                        customSampleLocations;
-        bool                                        force1x1ShaderRate;
-    };
-
-    static void ConvertGraphicsPipelineInfo(
-        Device*                             pDevice,
-        const VkGraphicsPipelineCreateInfo* pIn,
-        const VbBindingInfo*                pVbInfo,
-        CreateInfo*                         pInfo);
-
-    static void BuildRasterizationState(
-        Device*                                       pDevice,
-        const VkPipelineRasterizationStateCreateInfo* pIn,
-        CreateInfo*                                   pInfo,
-        const bool                                    dynamicStateFlags[]);
-
-    static void GenerateHashFromVertexInputStateCreateInfo(
-        Util::MetroHash128*                         pHasher,
-        const VkPipelineVertexInputStateCreateInfo& desc);
-
-    static void GenerateHashFromInputAssemblyStateCreateInfo(
-        Util::MetroHash128*                           pBaseHasher,
-        Util::MetroHash128*                           pApiHasher,
-        const VkPipelineInputAssemblyStateCreateInfo& desc);
-
-    static void GenerateHashFromTessellationStateCreateInfo(
-        Util::MetroHash128*                          pHasher,
-        const VkPipelineTessellationStateCreateInfo& desc);
-
-    static void GenerateHashFromViewportStateCreateInfo(
-        Util::MetroHash128*                      pHasher,
-        const VkPipelineViewportStateCreateInfo& desc,
-        const uint32_t                           staticStateMask);
-
-    static void GenerateHashFromRasterizationStateCreateInfo(
-        Util::MetroHash128*                           pBaseHasher,
-        Util::MetroHash128*                           pApiHasher,
-        const VkPipelineRasterizationStateCreateInfo& desc);
-
-    static void GenerateHashFromMultisampleStateCreateInfo(
-        Util::MetroHash128*                         pBaseHasher,
-        Util::MetroHash128*                         pApiHasher,
-        const VkPipelineMultisampleStateCreateInfo& desc);
-
-    static void GenerateHashFromDepthStencilStateCreateInfo(
-        Util::MetroHash128*                          pHasher,
-        const VkPipelineDepthStencilStateCreateInfo& desc);
-
-    static void GenerateHashFromColorBlendStateCreateInfo(
-        Util::MetroHash128*                        pBaseHasher,
-        Util::MetroHash128*                        pApiHasher,
-        const VkPipelineColorBlendStateCreateInfo& desc);
-
-    static uint64_t BuildApiHash(
-        const VkGraphicsPipelineCreateInfo* pCreateInfo,
-        const CreateInfo*                   pInfo,
-        Util::MetroHash::Hash*              pBaseHash);
-
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(GraphicsPipeline);
 
-    ImmedInfo                 m_info;                             // Immediate state that will go in CmdSet* functions
-    Pal::IMsaaState*          m_pPalMsaa[MaxPalDevices];          // PAL MSAA state object
-    Pal::IColorBlendState*    m_pPalColorBlend[MaxPalDevices];    // PAL color blend state object
-    Pal::IDepthStencilState*  m_pPalDepthStencil[MaxPalDevices];  // PAL depth stencil state object
-    VbBindingInfo             m_vbInfo;                           // Information about vertex buffer bindings
+    GraphicsPipelineObjectImmedInfo m_info;                            // Immediate state that will go in CmdSet* functions
+    Pal::IMsaaState*                m_pPalMsaa[MaxPalDevices];         // PAL MSAA state object
+    Pal::IColorBlendState*          m_pPalColorBlend[MaxPalDevices];   // PAL color blend state object
+    Pal::IDepthStencilState*        m_pPalDepthStencil[MaxPalDevices]; // PAL depth stencil state object
+    VbBindingInfo                   m_vbInfo;                          // Information about vertex buffer bindings
 
     union
     {
