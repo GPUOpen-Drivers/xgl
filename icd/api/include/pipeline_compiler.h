@@ -96,23 +96,23 @@ public:
         Vkgc::ColorTarget*                   pColorTarget);
 
     VkResult CreateGraphicsPipelineBinary(
-        Device*                             pDevice,
-        uint32_t                            deviceIndex,
-        PipelineCache*                      pPipelineCache,
-        GraphicsPipelineCreateInfo*         pCreateInfo,
-        size_t*                             pPipelineBinarySize,
-        const void**                        ppPipelineBinary,
-        uint32_t                            rasterizationStream,
-        Util::MetroHash::Hash*              pCacheId);
+        Device*                           pDevice,
+        uint32_t                          deviceIndex,
+        PipelineCache*                    pPipelineCache,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        size_t*                           pPipelineBinarySize,
+        const void**                      ppPipelineBinary,
+        uint32_t                          rasterizationStream,
+        Util::MetroHash::Hash*            pCacheId);
 
     VkResult CreateComputePipelineBinary(
-        Device*                             pDevice,
-        uint32_t                            deviceIndex,
-        PipelineCache*                      pPipelineCache,
-        ComputePipelineCreateInfo*          pInfo,
-        size_t*                             pPipelineBinarySize,
-        const void**                        ppPipelineBinary,
-        Util::MetroHash::Hash*              pCacheId);
+        Device*                           pDevice,
+        uint32_t                          deviceIndex,
+        PipelineCache*                    pPipelineCache,
+        ComputePipelineBinaryCreateInfo*  pInfo,
+        size_t*                           pPipelineBinarySize,
+        const void**                      ppPipelineBinary,
+        Util::MetroHash::Hash*            pCacheId);
 
     void UpdatePipelineCreationFeedback(
         VkPipelineCreationFeedbackEXT*  pPipelineCreationFeedback,
@@ -128,31 +128,31 @@ public:
     VkResult ConvertGraphicsPipelineInfo(
         Device*                                         pDevice,
         const VkGraphicsPipelineCreateInfo*             pIn,
-        GraphicsPipelineCreateInfo*                     pInfo,
+        GraphicsPipelineBinaryCreateInfo*               pInfo,
         VbBindingInfo*                                  pVbInfo,
         const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo);
 
     VkResult ConvertComputePipelineInfo(
         Device*                                         pDevice,
         const VkComputePipelineCreateInfo*              pIn,
-        ComputePipelineCreateInfo*                      pInfo,
+        ComputePipelineBinaryCreateInfo*                pInfo,
         const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo);
 
     void FreeShaderModule(ShaderModuleHandle* pShaderModule);
 
     void FreeComputePipelineBinary(
-        ComputePipelineCreateInfo* pCreateInfo,
-        const void*                pPipelineBinary,
-        size_t                     binarySize);
+        ComputePipelineBinaryCreateInfo* pCreateInfo,
+        const void*                      pPipelineBinary,
+        size_t                           binarySize);
 
     void FreeGraphicsPipelineBinary(
-        GraphicsPipelineCreateInfo* pCreateInfo,
-        const void*                pPipelineBinary,
-        size_t                     binarySize);
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        const void*                       pPipelineBinary,
+        size_t                            binarySize);
 
-    void FreeComputePipelineCreateInfo(ComputePipelineCreateInfo* pCreateInfo);
+    void FreeComputePipelineCreateInfo(ComputePipelineBinaryCreateInfo* pCreateInfo);
 
-    void FreeGraphicsPipelineCreateInfo(GraphicsPipelineCreateInfo* pCreateInfo);
+    void FreeGraphicsPipelineCreateInfo(GraphicsPipelineBinaryCreateInfo* pCreateInfo);
 
 #if ICD_GPUOPEN_DEVMODE_BUILD
     Util::Result RegisterAndLoadReinjectionBinary(

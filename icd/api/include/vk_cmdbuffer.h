@@ -121,15 +121,16 @@ union DirtyState
 {
     struct
     {
-        uint32 viewport         :  1;
-        uint32 scissor          :  1;
-        uint32 depthStencil     :  1;
-        uint32 rasterState      :  1;
-        uint32 inputAssembly    :  1;
-        uint32 stencilRef       :  1;
-        uint32 vrs              :  1;
-        uint32 colorWriteEnable :  1;
-        uint32 reserved         : 24;
+        uint32 viewport                :  1;
+        uint32 scissor                 :  1;
+        uint32 depthStencil            :  1;
+        uint32 rasterState             :  1;
+        uint32 inputAssembly           :  1;
+        uint32 stencilRef              :  1;
+        uint32 vrs                     :  1;
+        uint32 colorWriteEnable        :  1;
+        uint32 rasterizerDiscardEnable :  1;
+        uint32 reserved                : 23;
     };
 
     uint32 u32All;
@@ -204,6 +205,8 @@ struct AllGpuRenderState
     // Tracks if color write enable modified the value of CB_TARGET_MASK with the currently bound pipeline.  This value
     // is used at pipeline bind time to determine if CB_TARGET_MASK needs to be updated as part of the bind operation.
     bool lastColorWriteEnableDynamic;
+
+    bool rasterizerDiscardEnable;
 
 // =====================================================================================================================
 // The first part of the structure will be cleared with a memset in CmdBuffer::ResetState().
@@ -361,42 +364,47 @@ public:
         VkBuffer                                    buffer,
         VkDeviceSize                                offset);
 
+    template<typename BufferCopyType>
     void CopyBuffer(
         VkBuffer                                    srcBuffer,
         VkBuffer                                    destBuffer,
         uint32_t                                    regionCount,
-        const VkBufferCopy*                         pRegions);
+        const BufferCopyType*                       pRegions);
 
+    template<typename ImageCopyType>
     void CopyImage(
         VkImage                                     srcImage,
         VkImageLayout                               srcImageLayout,
         VkImage                                     destImage,
         VkImageLayout                               destImageLayout,
         uint32_t                                    regionCount,
-        const VkImageCopy*                          pRegions);
+        const ImageCopyType*                        pRegions);
 
+    template<typename ImageBlitType>
     void BlitImage(
         VkImage                                     srcImage,
         VkImageLayout                               srcImageLayout,
         VkImage                                     destImage,
         VkImageLayout                               destImageLayout,
         uint32_t                                    regionCount,
-        const VkImageBlit*                          pRegions,
+        const ImageBlitType*                        pRegions,
         VkFilter                                    filter);
 
+    template<typename BufferImageCopyType>
     void CopyBufferToImage(
         VkBuffer                                    srcBuffer,
         VkImage                                     destImage,
         VkImageLayout                               destImageLayout,
         uint32_t                                    regionCount,
-        const VkBufferImageCopy*                    pRegions);
+        const BufferImageCopyType*                  pRegions);
 
+    template<typename BufferImageCopyType>
     void CopyImageToBuffer(
         VkImage                                     srcImage,
         VkImageLayout                               srcImageLayout,
         VkBuffer                                    destBuffer,
         uint32_t                                    regionCount,
-        const VkBufferImageCopy*                    pRegions);
+        const BufferImageCopyType*                  pRegions);
 
     void UpdateBuffer(
         VkBuffer                                    destBuffer,
@@ -443,13 +451,14 @@ public:
         uint32_t                                    rectCount,
         const VkClearRect*                          pRects);
 
+    template<typename ImageResolveType>
     void ResolveImage(
         VkImage                                     srcImage,
         VkImageLayout                               srcImageLayout,
         VkImage                                     destImage,
         VkImageLayout                               destImageLayout,
         uint32_t                                    rectCount,
-        const VkImageResolve*                       pRects);
+        const ImageResolveType*                     pRects);
 
     void SetViewport(
         uint32_t                                    firstViewport,
@@ -515,6 +524,15 @@ public:
     void SetColorWriteEnableEXT(
         uint32_t                                    attachmentCount,
         const VkBool32*                             pColorWriteEnables);
+
+    void SetRasterizerDiscardEnableEXT(
+        VkBool32                                   rasterizerDiscardEnable);
+
+    void SetPrimitiveRestartEnableEXT(
+        VkBool32                                   primitiveRestartEnable);
+
+    void SetDepthBiasEnableEXT(
+        VkBool32                                   depthBiasEnable);
 
     void SetLineWidth(
         float                                       lineWidth);
@@ -1165,10 +1183,12 @@ private:
             uint32_t prefetchShaders                     :  1;
             uint32_t disableResetReleaseResources        :  1;
             uint32_t subpassLoadOpClearsBoundAttachments :  1;
+            uint32_t preBindDefaultState                 :  1;
             uint32_t hasReleaseAcquire                   :  1;
             uint32_t useSplitReleaseAcquire              :  1;
             uint32_t reserved2                           :  3;
-            uint32_t reserved                            : 18;
+            uint32_t reserved3                           :  1;
+            uint32_t reserved                            : 16;
         };
     };
 
@@ -1866,6 +1886,50 @@ VKAPI_ATTR void VKAPI_CALL vkCmdSetColorWriteEnableEXT(
     VkCommandBuffer                             commandBuffer,
     uint32_t                                    attachmentCount,
     const VkBool32*                             pColorWriteEnables);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetRasterizerDiscardEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    rasterizerDiscardEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPrimitiveRestartEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    primitiveRestartEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetDepthBiasEnableEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkBool32                                    depthBiasEnable);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetLogicOpEXT(
+    VkCommandBuffer                             commandBuffer,
+    VkLogicOp                                   logicOp);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdSetPatchControlPointsEXT(
+    VkCommandBuffer                             commandBuffer,
+    uint32_t                                    patchControlPoints);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdBlitImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkBlitImageInfo2KHR*                  pBlitImageInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferInfo2KHR*                 pCopyBufferInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyBufferToImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyBufferToImageInfo2KHR*          pCopyBufferToImageInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageInfo2KHR*                  pCopyImageInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdCopyImageToBuffer2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkCopyImageToBufferInfo2KHR*          pCopyImageToBufferInfo);
+
+VKAPI_ATTR void VKAPI_CALL vkCmdResolveImage2KHR(
+    VkCommandBuffer                             commandBuffer,
+    const VkResolveImageInfo2KHR*               pResolveImageInfo);
 
 } // namespace entry
 

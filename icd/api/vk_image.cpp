@@ -98,9 +98,14 @@ void Image::BuildResourceKey(
     hasher.Update(pCreateInfo->tiling);
     hasher.Update(pCreateInfo->usage);
 
-    UpdateImageSharingMode(settings.forceImageSharingMode, isColorAttachment, &imageSharingMode);
-    hasher.Update(imageSharingMode);
+    // We don't want resource keys based on runtime settings (here, forceImageSharingMode), in general
+    // for app profiles. Temporarily, modify the hash only for apps Which have DCC optimizations added.
+    if (settings.modifyResourceKeyForAppProfile)
+    {
+        UpdateImageSharingMode(settings.forceImageSharingMode, isColorAttachment, &imageSharingMode);
+    }
 
+    hasher.Update(imageSharingMode);
     hasher.Update(pCreateInfo->queueFamilyIndexCount);
     hasher.Update(pCreateInfo->initialLayout);
 
@@ -1725,6 +1730,13 @@ VkResult Image::GetMemoryRequirements(
     {
         // If the image isn't protected remove the protected types
         pReqs->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
+    }
+
+    if (pDevice->GetEnabledFeatures().deviceCoherentMemory == false)
+    {
+        // If the state of the device coherent memory feature (defined by the extension VK_AMD_device_coherent_memory) is disabled,
+        // remove the device coherent memory type
+        pReqs->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD);
     }
 
     // Add an extra memory padding. This can be enabled while capturing GFXR traces and disabled later. Capturing with this setting

@@ -95,11 +95,11 @@ macro(xgl_get_path)
     endif()
 
     # VKGC path
-    if (EXISTS ${XGL_ICD_PATH}/api/compiler/CMakeLists.txt)
-        set(XGL_VKGC_PATH ${XGL_ICD_PATH}/api/compiler CACHE PATH "Specify the path to the compiler." FORCE)
-    else()
+    if (EXISTS ${PROJECT_SOURCE_DIR}/../llpc/CMakeLists.txt)
         # On github, the default repo name is llpc instead of compiler
-        set(XGL_VKGC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the llpc repository." FORCE)
+        set(XGL_VKGC_PATH ${PROJECT_SOURCE_DIR}/../llpc CACHE PATH "Specify the path to the llpc repository.")
+    else()
+        set(XGL_VKGC_PATH ${XGL_ICD_PATH}/api/compiler CACHE PATH "Specify the path to the compiler.")
     endif()
 
     # external Vulkan headers path

@@ -96,6 +96,7 @@ public:
         uint32_t                   setCount;
         // Total number of user data registers used in this pipeline layout
         uint32_t                   userDataRegCount;
+
     };
 
     // This information is specific for pipeline construction:

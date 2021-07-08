@@ -1091,6 +1091,7 @@ void PhysicalDevice::PopulateFormatProperties()
     // Collect format properties
     Pal::MergedFormatPropertiesTable fmtProperties = {};
     m_pPalDevice->GetFormatProperties(&fmtProperties);
+    const RuntimeSettings& settings = GetRuntimeSettings();
 
     for (uint32_t i = 0; i < VK_SUPPORTED_FORMAT_COUNT; i++)
     {
@@ -1100,16 +1101,16 @@ void PhysicalDevice::PopulateFormatProperties()
         VkFormatFeatureFlags optimalFlags = 0;
         VkFormatFeatureFlags bufferFlags  = 0;
 
-        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_LINEAR, &linearFlags, GetRuntimeSettings());
-        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_OPTIMAL, &optimalFlags, GetRuntimeSettings());
+        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_LINEAR, &linearFlags, settings);
+        GetFormatFeatureFlags(fmtProperties, format, VK_IMAGE_TILING_OPTIMAL, &optimalFlags, settings);
 
         bufferFlags = linearFlags;
 
         // Add support for USCALED/SSCALED formats for ISV customer.
         // The BLT tests are incorrect in the conformance test
         // TODO: This should be removed when the CTS errors are fixed
-        const Pal::SwizzledFormat palFormat = VkToPalFormat(format, GetRuntimeSettings());
-        const auto numFmt = Formats::GetNumberFormat(format, GetRuntimeSettings());
+        const Pal::SwizzledFormat palFormat = VkToPalFormat(format, settings);
+        const auto numFmt = Formats::GetNumberFormat(format, settings);
 
          if (numFmt == Pal::Formats::NumericSupportFlags::Uscaled ||
              numFmt == Pal::Formats::NumericSupportFlags::Sscaled)
@@ -1128,7 +1129,10 @@ void PhysicalDevice::PopulateFormatProperties()
         {
             if (IsExtensionSupported(DeviceExtensions::KHR_FRAGMENT_SHADING_RATE))
             {
-                linearFlags  |= VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+                if (settings.exposeLinearShadingRateImage)
+                {
+                    linearFlags  |= VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
+                }
                 optimalFlags |= VK_FORMAT_FEATURE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR;
             }
         }
@@ -1197,7 +1201,7 @@ void PhysicalDevice::PopulateFormatProperties()
 
         // Vulkan doesn't have a corresponding flag for multisampling support.  If there ends up being more cases
         // like this, just store the entire PAL format table in the physical device instead of using a bitfield.
-        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(format, GetRuntimeSettings());
+        const Pal::SwizzledFormat swizzledFormat = VkToPalFormat(format, settings);
         const size_t              formatIdx      = static_cast<size_t>(swizzledFormat.format);
 
         if (fmtProperties.features[formatIdx][Pal::IsNonLinear] & Pal::FormatFeatureMsaaTarget)
@@ -1339,6 +1343,8 @@ VkResult PhysicalDevice::GetFeatures(
     VkPhysicalDeviceFeatures* pFeatures
     ) const
 {
+    const RuntimeSettings& settings = GetRuntimeSettings();
+
     pFeatures->robustBufferAccess                       = VK_TRUE;
     pFeatures->fullDrawIndexUint32                      = VK_TRUE;
     pFeatures->imageCubeArray                           = VK_TRUE;
@@ -1389,7 +1395,7 @@ VkResult PhysicalDevice::GetFeatures(
         (PalProperties().gfxipProperties.flags.support64BitInstructions ? VK_TRUE : VK_FALSE);
 
     if ((PalProperties().gfxipProperties.flags.support16BitInstructions) &&
-        ((GetRuntimeSettings().optOnlyEnableFP16ForGfx9Plus == false)      ||
+        ((settings.optOnlyEnableFP16ForGfx9Plus == false)      ||
          (PalProperties().gfxLevel >= Pal::GfxIpLevel::GfxIp9)))
     {
         pFeatures->shaderInt16 = VK_TRUE;
@@ -1399,7 +1405,7 @@ VkResult PhysicalDevice::GetFeatures(
         pFeatures->shaderInt16 = VK_FALSE;
     }
 
-    if (GetRuntimeSettings().optEnablePrt)
+    if (settings.optEnablePrt)
     {
         pFeatures->shaderResourceResidency =
             GetPrtFeatures() & Pal::PrtFeatureShaderStatus ? VK_TRUE : VK_FALSE;
@@ -1465,9 +1471,9 @@ VkResult PhysicalDevice::GetImageFormatProperties(
     memset(pImageFormatProperties, 0, sizeof(VkImageFormatProperties));
 
     const auto& imageProps = PalProperties().imageProperties;
-    const RuntimeSettings& settings = m_pSettingsLoader->GetSettings();
+    const RuntimeSettings& settings = GetRuntimeSettings();
 
-    Pal::SwizzledFormat palFormat = VkToPalFormat(format, GetRuntimeSettings());
+    Pal::SwizzledFormat palFormat = VkToPalFormat(format, settings);
 
     // NOTE: BytesPerPixel obtained from PAL is per block not per pixel for compressed formats.  Therefore,
     //       maxResourceSize/maxExtent are also in terms of blocks for compressed formats.  I.e. we don't
@@ -1495,7 +1501,7 @@ VkResult PhysicalDevice::GetImageFormatProperties(
 
     if (flags & VK_IMAGE_CREATE_SPARSE_BINDING_BIT)
     {
-        if (GetRuntimeSettings().optEnablePrt == false)
+        if (settings.optEnablePrt == false)
         {
             return VK_ERROR_FORMAT_NOT_SUPPORTED;
         }
@@ -1718,8 +1724,10 @@ void PhysicalDevice::GetSparseImageFormatProperties(
     };
     const uint32_t nAspects = sizeof(aspects) / sizeof(aspects[0]);
 
+    const RuntimeSettings& settings = GetRuntimeSettings();
+
     uint32_t bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(
-        VkToPalFormat(format, GetRuntimeSettings()).format));
+        VkToPalFormat(format, settings).format));
 
     bool supported =
         // Multisampled sparse images depend on HW capability
@@ -1775,7 +1783,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                 const VkFormat aspectFormat = Formats::GetAspectFormat(format, pAspect->aspectVk);
                 bytesPerPixel = Util::Pow2Pad(Pal::Formats::BytesPerPixel(
-                    VkToPalFormat(aspectFormat, GetRuntimeSettings()).format));
+                    VkToPalFormat(aspectFormat, settings).format));
 
                 // Determine pixel size index (log2 of the pixel byte size, used to index into the tables below)
                 // Note that we only support standard block shapes currently
@@ -1797,7 +1805,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                     pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
                                                                               Std2DBlockShapes[pixelSizeIndex],
-                                                                              GetRuntimeSettings());
+                                                                              settings);
                 }
                 else if (type == VK_IMAGE_TYPE_3D)
                 {
@@ -1817,7 +1825,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                         pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
                                                                                   Std3DBlockShapes[pixelSizeIndex],
-                                                                                  GetRuntimeSettings());
+                                                                                  settings);
                     }
                     else
                     {
@@ -1839,7 +1847,7 @@ void PhysicalDevice::GetSparseImageFormatProperties(
 
                         pProperties->imageGranularity = Formats::ElementsToTexels(aspectFormat,
                                                                                   NonStd3DBlockShapes[pixelSizeIndex],
-                                                                                   GetRuntimeSettings());
+                                                                                  settings);
                     }
                 }
                 else if ((type == VK_IMAGE_TYPE_2D) && (samples != VK_SAMPLE_COUNT_1_BIT))
@@ -2601,7 +2609,7 @@ void PhysicalDevice::PopulateLimits()
 
             if (maxSamples > 1)
             {
-                const Pal::SwizzledFormat palFormat = VkToPalFormat(format, GetRuntimeSettings());
+                const Pal::SwizzledFormat palFormat = VkToPalFormat(format, settings);
 
                 // Depth format
                 if (Formats::HasDepth(format))
@@ -3644,6 +3652,7 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_TERMINATE_INVOCATION));
 
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_4444_FORMATS));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SYNCHRONIZATION2));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_CUSTOM_BORDER_COLOR));
@@ -5130,6 +5139,14 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW_FEATURES_KHR:
+            {
+                auto* pExtInfo =
+                    reinterpret_cast<VkPhysicalDeviceShaderSubgroupUniformControlFlowFeaturesKHR*>(pHeader);
+                pExtInfo->shaderSubgroupUniformControlFlow = VK_TRUE;
+                break;
+            }
+
             case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_IMAGE_ROBUSTNESS_FEATURES_EXT:
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceImageRobustnessFeaturesEXT*>(pHeader);
@@ -5167,15 +5184,31 @@ void PhysicalDevice::GetFeatures2(
                 break;
             }
 
-	    case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT:
-	    {
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_EXTENDED_DYNAMIC_STATE_2_FEATURES_EXT:
+            {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT*>(pHeader);
 
                 pExtInfo->extendedDynamicState2                   = VK_FALSE;
-		pExtInfo->extendedDynamicState2LogicOp            = VK_FALSE;
-		pExtInfo->extendedDynamicState2PatchControlPoints = VK_FALSE;
+                pExtInfo->extendedDynamicState2LogicOp            = VK_FALSE;
+                pExtInfo->extendedDynamicState2PatchControlPoints = VK_FALSE;
                 break;
-	    }
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT*>(pHeader);
+
+                pExtInfo->ycbcrImageArrays = VK_FALSE;
+
+                break;
+            }
+
+            case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES_KHR:
+            {
+                auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR*>(pHeader);
+                pExtInfo->shaderZeroInitializeWorkgroupMemory = VK_TRUE;
+                break;
+            }
 
             default:
             {

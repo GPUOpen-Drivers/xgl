@@ -77,6 +77,7 @@ target_sources(xgl PRIVATE
     api/internal_mem_mgr.cpp
     api/pipeline_compiler.cpp
     api/pipeline_binary_cache.cpp
+    api/graphics_pipeline_common.cpp
     api/cache_adapter.cpp
     api/shader_cache.cpp
     api/virtual_stack_mgr.cpp

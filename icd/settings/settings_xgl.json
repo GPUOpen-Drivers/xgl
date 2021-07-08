@@ -2049,7 +2049,7 @@
         "Ray Tracing"
       ],
       "Defaults": {
-        "Default": "0x0"
+        "Default": "0xffffffffffffffff"
       },
       "Flags": {
         "IsHex": true,
@@ -2058,6 +2058,66 @@
       "Scope": "Driver",
       "Type": "uint64",
       "Name": "RtInternalPipelineSpvPassMask"
+    },
+    {
+      "Description": "Box sorting heuristic",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "Defaults": {
+        "Default": "BoxSortingClosest"
+      },
+      "ValidValues": {
+        "IsEnum": true,
+        "Name": "BoxSortingMode",
+        "Values": [
+          {
+            "Name": "BoxSortingClosest",
+            "Value": 0,
+            "Description": "Traversal is ordered to enter the children that intersect the ray closer to the ray origin first."
+          },
+          {
+            "Name": "BoxSortingLargest",
+            "Value": 1,
+            "Description": "Traversal is ordered to enter the children that have the largest interval where the box intersects the ray first."
+          },
+          {
+            "Name": "BoxSortingMidPoint",
+            "Value": 2,
+            "Description": "Traversal is ordered to enter the children that have a midpoint in the interval where the box intersects that has the lowest intersection time before clamping."
+          },
+          {
+            "Name": "BoxSortingDisabled",
+            "Value": 3,
+            "Description": "Disable box sorting heuristic."
+          },
+          {
+            "Name": "BoxSortingLargestFirstAndClosest",
+            "Value": 4,
+            "Description": "Auto select box sort mode. If rayFlag indicates RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, choose BoxSortLargest. Otherwise choose BoxSortClosest."
+          },
+          {
+            "Name": "BoxSortingLargestFirstAndClosestMidpoint",
+            "Value": 5,
+            "Description": "Auto select box sort mode. If rayFlag indicates RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH, choose BoxSortLargest. Otherwise choose BoxSortMidPoint."
+          }
+        ]
+      },
+      "Type": "enum",
+      "Name": "BoxSortingHeuristic",
+      "Scope": "Driver"
+    },
+    {
+      "Description": "Enable Variable Bits Morton Codes - Selects the largest axis per bit rather than rotating xyzxyz",
+      "Tags": [
+        "Ray Tracing"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "EnableVariableBitsMortonCodes",
+      "Scope": "Driver"
     },
     {
       "Name": "DbgBarrierPostCmdEnable",
@@ -2211,18 +2271,23 @@
             "Description": "Any video operations"
           },
           {
-            "Name": "DbgBuildAccelerationStructure",
+            "Name": "DbgBuildAccelerationStructureTLAS",
             "Value": 134217728,
             "Description": "Build ray tracing operations"
           },
           {
-            "Name": "DbgTraceRays",
+            "Name": "DbgBuildAccelerationStructureBLAS",
             "Value": 268435456,
+            "Description": "Build ray tracing operations"
+          },
+          {
+            "Name": "DbgTraceRays",
+            "Value": 536870912,
             "Description": "Trace ray tracing operations"
           },
           {
             "Name": "DbgBarrierBeginRendering",
-            "Value": 536870912,
+            "Value": 1073741824,
             "Description": "Begin rendering"
           },
           {
@@ -2579,6 +2644,78 @@
       "Name": "DbgBarrierPreCacheDstMask"
     },
     {
+      "Description": "Forced non-uniform resource index on all descriptor array indexing.",
+      "Tags": [
+        "Debugging"
+      ],
+      "Flags": {
+        "IsHex": true,
+        "IsBitmask": true
+      },
+      "Defaults": {
+        "Default": "0x0"
+      },
+      "ValidValues": {
+        "Values": [
+          {
+            "Description": "Disable for all shaders",
+            "Value": 0
+          },
+          {
+            "Description": "Enable for vertex shaders",
+            "Value": 1
+          },
+          {
+            "Description": "Enable for tessellation control shaders",
+            "Value": 2
+          },
+          {
+            "Description": "Enable for tessellation evaluation shaders",
+            "Value": 4
+          },
+          {
+            "Description": "Enable for geometry shaders",
+            "Value": 8
+          },
+          {
+            "Description": "Enable for fragment shaders",
+            "Value": 16
+          },
+          {
+            "Description": "Enable for compute shaders",
+            "Value": 32
+          },
+          {
+            "Description": "Enable for Ray generation shaders",
+            "Value": 64
+          },
+          {
+            "Description": "Enable for Intersection shaders",
+            "Value": 128
+          },
+          {
+            "Description": "Enable for Any-Hit shaders",
+            "Value": 256
+          },
+          {
+            "Description": "Enable for Closest Hit shaders",
+            "Value": 512
+          },
+          {
+            "Description": "Enable for Miss shaders",
+            "Value": 1024
+          },
+          {
+            "Description": "Enable for Callable shaders",
+            "Value": 2048
+          }
+        ]
+      },
+      "Type": "uint32",
+      "Name": "ForceNonUniformDescriptorIndex",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Instanced vertex buffer table ring size.",
       "Tags": [
         "General"
@@ -2932,6 +3069,18 @@
     {
       "Name": "UseOldDeviceUUIDCalculation",
       "Description": "Old calculation only use pci bdf (busNumber, deviceNumber, functionNumber) to compose the UUID.",
+      "Tags": [
+        "General"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Scope": "Driver",
+      "Type": "bool"
+    },
+    {
+      "Name": "ExposeLinearShadingRateImage",
+      "Description": "Specify whether shading rate image can be created as a linear image. For Navi2x+ IPs, the HW requires that shading rate source images must be tiled.",
       "Tags": [
         "General"
       ],
@@ -4346,6 +4495,18 @@
       "Name": "SubpassLoadOpClearsBoundAttachments"
     },
     {
+      "Description": "Set default AllGpuRenderState before pipeline bind.",
+      "Tags": [
+        "Optimization"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Name": "PreBindDefaultState",
+      "Scope": "Driver"
+    },
+    {
       "Description": "Force all compute shaders to have swizzled thread groups.",
       "Tags": [
         "Optimization"
@@ -5121,6 +5282,18 @@
       "Description": "Override use of NGG on a per shader basis. Default behavior to enable NGG use",
       "Tags": [
         "Shader Tuning"
+      ],
+      "Defaults": {
+        "Default": false
+      },
+      "Type": "bool",
+      "Scope": "Driver"
+    },
+    {
+      "Name": "ModifyResourceKeyForAppProfile",
+      "Description": "If this is true, resource key will include any modifications based on runtime settings. BEWARE: Modifying this setting can invalidate resource optimizations if enabled for an app profile.",
+      "Tags": [
+        "Resource Tuning"
       ],
       "Defaults": {
         "Default": false

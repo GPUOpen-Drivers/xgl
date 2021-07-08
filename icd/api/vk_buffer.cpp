@@ -503,6 +503,13 @@ VkResult Buffer::GetMemoryRequirements(
         pMemoryRequirements->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_PROTECTED_BIT);
     }
 
+    if (pDevice->GetEnabledFeatures().deviceCoherentMemory == false)
+    {
+        // If the state of the device coherent memory feature (defined by the extension VK_AMD_device_coherent_memory) is disabled,
+        // remove the device coherent memory type
+        pMemoryRequirements->memoryTypeBits &= ~pDevice->GetMemoryTypeMaskMatching(VK_MEMORY_PROPERTY_DEVICE_COHERENT_BIT_AMD);
+    }
+
     return VK_SUCCESS;
 }
 

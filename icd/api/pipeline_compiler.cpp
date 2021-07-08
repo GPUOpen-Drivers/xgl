@@ -54,8 +54,6 @@
 namespace vk
 {
 
-extern bool IsSrcAlphaUsedInBlend(VkBlendFactor blend);
-
 // =====================================================================================================================
 PipelineCompiler::PipelineCompiler(
     PhysicalDevice* pPhysicalDevice)
@@ -616,14 +614,14 @@ VkResult PipelineCompiler::CreatePartialPipelineBinary(
 // =====================================================================================================================
 // Creates graphics pipeline binary.
 VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
-    Device*                             pDevice,
-    uint32_t                            deviceIdx,
-    PipelineCache*                      pPipelineCache,
-    GraphicsPipelineCreateInfo*         pCreateInfo,
-    size_t*                             pPipelineBinarySize,
-    const void**                        ppPipelineBinary,
-    uint32_t                            rasterizationStream,
-    Util::MetroHash::Hash*              pCacheId)
+    Device*                           pDevice,
+    uint32_t                          deviceIdx,
+    PipelineCache*                    pPipelineCache,
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    size_t*                           pPipelineBinarySize,
+    const void**                      ppPipelineBinary,
+    uint32_t                          rasterizationStream,
+    Util::MetroHash::Hash*            pCacheId)
 {
     VkResult               result        = VK_SUCCESS;
     bool                   shouldCompile = true;
@@ -725,6 +723,7 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
         {
             hash.Update(reinterpret_cast<const uint8_t*>(settings.llpcOptions), sizeof(settings.llpcOptions));
         }
+
         hash.Finalize(pCacheId->bytes);
 
         cacheResult = GetCachedPipelineBinary(pCacheId, pPipelineBinaryCache, pPipelineBinarySize, ppPipelineBinary,
@@ -830,13 +829,13 @@ VkResult PipelineCompiler::CreateGraphicsPipelineBinary(
 // =====================================================================================================================
 // Creates compute pipeline binary.
 VkResult PipelineCompiler::CreateComputePipelineBinary(
-    Device*                             pDevice,
-    uint32_t                            deviceIdx,
-    PipelineCache*                      pPipelineCache,
-    ComputePipelineCreateInfo*          pCreateInfo,
-    size_t*                             pPipelineBinarySize,
-    const void**                        ppPipelineBinary,
-    Util::MetroHash::Hash*              pCacheId)
+    Device*                          pDevice,
+    uint32_t                         deviceIdx,
+    PipelineCache*                   pPipelineCache,
+    ComputePipelineBinaryCreateInfo* pCreateInfo,
+    size_t*                          pPipelineBinarySize,
+    const void**                     ppPipelineBinary,
+    Util::MetroHash::Hash*           pCacheId)
 {
     VkResult               result        = VK_SUCCESS;
     const RuntimeSettings& settings      = m_pPhysicalDevice->GetRuntimeSettings();
@@ -1125,7 +1124,7 @@ VkResult PipelineCompiler::SetPipelineCreationFeedbackInfo(
 VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     Device*                                         pDevice,
     const VkGraphicsPipelineCreateInfo*             pIn,
-    GraphicsPipelineCreateInfo*                     pCreateInfo,
+    GraphicsPipelineBinaryCreateInfo*               pCreateInfo,
     VbBindingInfo*                                  pVbInfo,
     const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo)
 {
@@ -1257,6 +1256,23 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
                 pInfo = pInfo->pNext;
             }
+
+            const VkPipelineDynamicStateCreateInfo* pDy = pGraphicsPipelineCreateInfo->pDynamicState;
+
+            if (pDy != nullptr)
+            {
+                for (uint32_t i = 0; i < pDy->dynamicStateCount; ++i)
+                {
+                    switch (static_cast<uint32_t>(pDy->pDynamicStates[i]))
+                    {
+                    case VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT:
+                        pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable = false;
+                        break;
+                    default:
+                        break;
+                    }
+                }
+            }
         }
 
         const VkPipelineMultisampleStateCreateInfo* pMs = pGraphicsPipelineCreateInfo->pMultisampleState;
@@ -1265,6 +1281,14 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
         if ((pCreateInfo->pipelineInfo.rsState.rasterizerDiscardEnable != VK_TRUE) && (pMs != nullptr))
         {
+            EXTRACT_VK_STRUCTURES_1(
+                SampleLocations,
+                PipelineMultisampleStateCreateInfo,
+                PipelineSampleLocationsStateCreateInfoEXT,
+                pMs,
+                PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
+                PIPELINE_SAMPLE_LOCATIONS_STATE_CREATE_INFO_EXT)
+
             bool multisampleEnable = (pMs->rasterizationSamples != 1);
 
             if (multisampleEnable)
@@ -1299,6 +1323,18 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             }
 
             pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE);
+            if (pPipelineSampleLocationsStateCreateInfoEXT != nullptr)
+            {
+                pCreateInfo->sampleLocationGridSize = pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationGridSize;
+            }
+
+            if (pCreateInfo->pipelineInfo.rsState.perSampleShading)
+            {
+                if (!(pCreateInfo->sampleLocationGridSize.width > 1 || pCreateInfo->sampleLocationGridSize.height > 1))
+                {
+                    pCreateInfo->pipelineInfo.options.enableInterpModePatch = true;
+                }
+            }
         }
 
         const VkPipelineColorBlendStateCreateInfo* pCb = pGraphicsPipelineCreateInfo->pColorBlendState;
@@ -1410,12 +1446,7 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
             if (disableNggCullingMask != 0)
             {
-                pCreateInfo->pipelineInfo.nggState.enableBackfaceCulling     = false;
-                pCreateInfo->pipelineInfo.nggState.enableFrustumCulling      = false;
-                pCreateInfo->pipelineInfo.nggState.enableBoxFilterCulling    = false;
-                pCreateInfo->pipelineInfo.nggState.enableSphereCulling       = false;
-                pCreateInfo->pipelineInfo.nggState.enableSmallPrimFilter     = false;
-                pCreateInfo->pipelineInfo.nggState.enableCullDistanceCulling = false;
+                CompilerSolution::DisableNggCulling(&pCreateInfo->pipelineInfo.nggState);
             }
         }
 
@@ -1674,7 +1705,9 @@ void PipelineCompiler::ApplyPipelineOptions(
 
     // Setup shadow descriptor table pointer
     const auto& info = m_pPhysicalDevice->PalProperties();
-    pOptions->shadowDescriptorTableUsage = Vkgc::ShadowDescriptorTableUsage::Enable;
+    pOptions->shadowDescriptorTableUsage = (info.gpuMemoryProperties.flags.shadowDescVaSupport ?
+                                            Vkgc::ShadowDescriptorTableUsage::Enable :
+                                            Vkgc::ShadowDescriptorTableUsage::Disable);
     pOptions->shadowDescriptorTablePtrHigh =
           static_cast<uint32_t>(info.gpuMemoryProperties.shadowDescTableVaStart >> 32);
 
@@ -1702,7 +1735,7 @@ void PipelineCompiler::ApplyPipelineOptions(
 VkResult PipelineCompiler::ConvertComputePipelineInfo(
     Device*                                         pDevice,
     const VkComputePipelineCreateInfo*              pIn,
-    ComputePipelineCreateInfo*                      pCreateInfo,
+    ComputePipelineBinaryCreateInfo*                pCreateInfo,
     const VkPipelineCreationFeedbackCreateInfoEXT** ppPipelineCreationFeadbackCreateInfo)
 {
     VkResult result    = VK_SUCCESS;
@@ -1914,9 +1947,9 @@ void PipelineCompiler::ApplyProfileOptions(
 // =====================================================================================================================
 // Free compute pipeline binary
 void PipelineCompiler::FreeComputePipelineBinary(
-    ComputePipelineCreateInfo* pCreateInfo,
-    const void*                pPipelineBinary,
-    size_t                     binarySize)
+    ComputePipelineBinaryCreateInfo* pCreateInfo,
+    const void*                      pPipelineBinary,
+    size_t                           binarySize)
 {
     if (pCreateInfo->freeCompilerBinary == FreeWithCompiler)
     {
@@ -1935,9 +1968,9 @@ void PipelineCompiler::FreeComputePipelineBinary(
 // =====================================================================================================================
 // Free graphics pipeline binary
 void PipelineCompiler::FreeGraphicsPipelineBinary(
-    GraphicsPipelineCreateInfo* pCreateInfo,
-    const void*                 pPipelineBinary,
-    size_t                      binarySize)
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+    const void*                       pPipelineBinary,
+    size_t                            binarySize)
 {
     if (pCreateInfo->freeCompilerBinary == FreeWithCompiler)
     {
@@ -1956,7 +1989,7 @@ void PipelineCompiler::FreeGraphicsPipelineBinary(
 // =====================================================================================================================
 // Free the temp memories in compute pipeline create info
 void PipelineCompiler::FreeComputePipelineCreateInfo(
-    ComputePipelineCreateInfo* pCreateInfo)
+    ComputePipelineBinaryCreateInfo* pCreateInfo)
 {
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 
@@ -1970,7 +2003,7 @@ void PipelineCompiler::FreeComputePipelineCreateInfo(
 // =====================================================================================================================
 // Free the temp memories in graphics pipeline create info
 void PipelineCompiler::FreeGraphicsPipelineCreateInfo(
-    GraphicsPipelineCreateInfo* pCreateInfo)
+    GraphicsPipelineBinaryCreateInfo* pCreateInfo)
 {
     auto pInstance = m_pPhysicalDevice->Manager()->VkInstance();
 

@@ -96,8 +96,8 @@ static constexpr uint32_t ExecutableStatisticsCount = 5;
 // =====================================================================================================================
 // Generates a hash using the contents of a VkSpecializationInfo struct
 void Pipeline::GenerateHashFromSpecializationInfo(
-    Util::MetroHash128*         pHasher,
-    const VkSpecializationInfo& desc)
+    const VkSpecializationInfo& desc,
+    Util::MetroHash128*         pHasher)
 {
     pHasher->Update(desc.mapEntryCount);
 
@@ -117,8 +117,8 @@ void Pipeline::GenerateHashFromSpecializationInfo(
 // =====================================================================================================================
 // Generates a hash using the contents of a VkPipelineShaderStageCreateInfo struct
 void Pipeline::GenerateHashFromShaderStageCreateInfo(
-    Util::MetroHash128*                    pHasher,
-    const VkPipelineShaderStageCreateInfo& desc)
+    const VkPipelineShaderStageCreateInfo& desc,
+    Util::MetroHash128*                    pHasher)
 {
     pHasher->Update(desc.flags);
     pHasher->Update(desc.stage);
@@ -126,7 +126,7 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
 
     if (desc.pSpecializationInfo != nullptr)
     {
-        GenerateHashFromSpecializationInfo(pHasher, *desc.pSpecializationInfo);
+        GenerateHashFromSpecializationInfo(*desc.pSpecializationInfo, pHasher);
     }
 
 }
@@ -135,8 +135,8 @@ void Pipeline::GenerateHashFromShaderStageCreateInfo(
 // Generates a hash using the contents of a VkPipelineDynamicStateCreateInfo struct
 // Pipeline compilation affected by: none
 void Pipeline::GenerateHashFromDynamicStateCreateInfo(
-    Util::MetroHash128* pHasher,
-    const VkPipelineDynamicStateCreateInfo& desc)
+    const VkPipelineDynamicStateCreateInfo& desc,
+    Util::MetroHash128*                     pHasher)
 {
     pHasher->Update(desc.flags);
     pHasher->Update(desc.dynamicStateCount);

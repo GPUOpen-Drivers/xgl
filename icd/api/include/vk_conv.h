@@ -1459,8 +1459,9 @@ VK_INLINE Pal::uint32 BytesPerPixel(Pal::ChNumFormat format, uint32 plane)
 
 // =====================================================================================================================
 // Converts a Vulkan image-copy structure to one or more PAL image-copy-region structures.
+template<typename ImageCopyType>
 VK_INLINE void VkToPalImageCopyRegion(
-    const VkImageCopy&      imageCopy,
+    const ImageCopyType&    imageCopy,
     Pal::ChNumFormat        srcFormat,
     Pal::ChNumFormat        dstFormat,
     Pal::ImageCopyRegion*   pPalRegions,
@@ -1517,8 +1518,9 @@ VK_INLINE void VkToPalImageCopyRegion(
 
 // =====================================================================================================================
 // Converts a Vulkan image-blit structure to one or more PAL image-scaled-copy-region structures.
+template<typename ImageBlitType>
 VK_INLINE void VkToPalImageScaledCopyRegion(
-    const VkImageBlit&          imageBlit,
+    const ImageBlitType&        imageBlit,
     Pal::ChNumFormat            srcFormat,
     Pal::ChNumFormat            dstFormat,
     Pal::ImageScaledCopyRegion* pPalRegions,
@@ -1542,23 +1544,6 @@ VK_INLINE void VkToPalImageScaledCopyRegion(
     VK_ASSERT(region.srcExtent.depth == region.srcExtent.depth);
 
     region.numSlices = imageBlit.srcSubresource.layerCount;
-
-    // PAL expects all dimensions to be in blocks for compressed formats so let's handle that here
-    if (Pal::Formats::IsBlockCompressed(srcFormat))
-    {
-        Pal::Extent3d blockDim  = Pal::Formats::CompressedBlockDim(srcFormat);
-
-        region.srcOffset        = TexelsToBlocks(region.srcOffset, blockDim);
-        region.srcExtent        = TexelsToBlocks(region.srcExtent, blockDim);
-    }
-
-    if (Pal::Formats::IsBlockCompressed(dstFormat))
-    {
-        Pal::Extent3d blockDim  = Pal::Formats::CompressedBlockDim(dstFormat);
-
-        region.dstOffset        = TexelsToBlocks(region.dstOffset, blockDim);
-        region.dstExtent        = TexelsToBlocks(region.dstExtent, blockDim);
-    }
 
     // Source and destination aspect masks must match
     VK_ASSERT(imageBlit.srcSubresource.aspectMask == imageBlit.dstSubresource.aspectMask);
@@ -1616,23 +1601,6 @@ VK_INLINE Pal::ColorSpaceConversionRegion VkToPalImageColorSpaceConversionRegion
 
     region.sliceCount = Util::Max<uint32_t>(srcExtent.depth, imageBlit.srcSubresource.layerCount);
 
-    // PAL expects all dimensions to be in blocks for compressed formats so let's handle that here
-    if (Pal::Formats::IsBlockCompressed(srcFormat.format))
-    {
-        Pal::Extent3d blockDim = Pal::Formats::CompressedBlockDim(srcFormat.format);
-
-        srcOffset = TexelsToBlocks(srcOffset, blockDim);
-        srcExtent = TexelsToBlocks(srcExtent, blockDim);
-    }
-
-    if (Pal::Formats::IsBlockCompressed(dstFormat.format))
-    {
-        Pal::Extent3d blockDim = Pal::Formats::CompressedBlockDim(dstFormat.format);
-
-        dstOffset = TexelsToBlocks(dstOffset, blockDim);
-        dstExtent = TexelsToBlocks(dstExtent, blockDim);
-    }
-
     // Write the 2D coordinates and ignore the 3rd dimension for now
     region.srcOffset.x = srcOffset.x;
     region.srcOffset.y = srcOffset.y;
@@ -1659,8 +1627,9 @@ VK_INLINE Pal::ColorSpaceConversionRegion VkToPalImageColorSpaceConversionRegion
 
 // =====================================================================================================================
 // Converts a Vulkan image-resolve structure to one or more PAL image-resolve-region structures.
+template<typename ImageResolveType>
 VK_INLINE void VkToPalImageResolveRegion(
-    const VkImageResolve&       imageResolve,
+    const ImageResolveType&     imageResolve,
     Pal::ChNumFormat            srcFormat,
     Pal::ChNumFormat            dstFormat,
     Pal::ImageResolveRegion*    pPalRegions,
@@ -1703,8 +1672,9 @@ VK_INLINE void VkToPalImageResolveRegion(
 
 // =====================================================================================================================
 // Converts a Vulkan buffer-image-copy structure to a PAL memory-image-copy-region structure.
+template<typename BufferImageCopyType>
 VK_INLINE Pal::MemoryImageCopyRegion VkToPalMemoryImageCopyRegion(
-    const VkBufferImageCopy&    bufferImageCopy,
+    const BufferImageCopyType&  bufferImageCopy,
     Pal::ChNumFormat            format,
     uint32                      plane,
     Pal::gpusize                baseMemOffset)

@@ -186,12 +186,12 @@ public:
         const VkAllocationCallbacks*                pAllocator,
         VkDeviceMemory*                             pMem);
 
-    VkResult GetQueue(
+    void GetQueue(
         uint32_t                                    queueFamilyIndex,
         uint32_t                                    queueIndex,
         VkQueue*                                    pQueue);
 
-    VkResult GetQueue2(
+    void GetQueue2(
         const VkDeviceQueueInfo2*                   pQueueInfo,
         VkQueue*                                    pQueue);
 

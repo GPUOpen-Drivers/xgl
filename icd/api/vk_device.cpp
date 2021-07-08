@@ -939,6 +939,29 @@ VkResult Device::Create(
             break;
         }
 
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_YCBCR_IMAGE_ARRAYS_FEATURES_EXT:
+        {
+            const auto pYcbcrImageArraysFeatures =
+                reinterpret_cast<const VkPhysicalDeviceYcbcrImageArraysFeaturesEXT*>(pHeader);
+
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceYcbcrImageArraysFeaturesEXT>(
+                pPhysicalDevice,
+                pYcbcrImageArraysFeatures);
+
+            break;
+        }
+
+        case VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_ZERO_INITIALIZE_WORKGROUP_MEMORY_FEATURES_KHR:
+        {
+            const auto* pFeatures = reinterpret_cast<const VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR*>(pHeader);
+
+            vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceZeroInitializeWorkgroupMemoryFeaturesKHR>(
+                pPhysicalDevice,
+                pFeatures);
+
+            break;
+        }
+
         default:
             break;
         }
@@ -950,6 +973,16 @@ VkResult Device::Create(
         vkResult = VerifyRequestedPhysicalDeviceFeatures<VkPhysicalDeviceFeatures>(
             pPhysicalDevice,
             pCreateInfo->pEnabledFeatures);
+    }
+
+    for (uint32 i = 0; ((i < pCreateInfo->queueCreateInfoCount) && (vkResult == VK_SUCCESS)); ++i)
+    {
+        const VkDeviceQueueCreateInfo* pQueueInfo = &pCreateInfo->pQueueCreateInfos[i];
+
+        if (pQueueInfo->queueCount > pPhysicalDevice->GetQueueFamilyProperties(pQueueInfo->queueFamilyIndex).queueCount)
+        {
+            vkResult = VK_ERROR_INITIALIZATION_FAILED;
+        }
     }
 
     if (vkResult != VK_SUCCESS)
@@ -2092,7 +2125,7 @@ VkResult Device::CreateInternalComputePipeline(
 
     void*                pPipelineMem        = nullptr;
 
-    ComputePipelineCreateInfo pipelineBuildInfo = {};
+    ComputePipelineBinaryCreateInfo pipelineBuildInfo = {};
 
     // Build shader module
     result = pCompiler->BuildShaderModule(
@@ -2359,23 +2392,28 @@ VkResult Device::CreateFence(
 }
 
 // =====================================================================================================================
-VkResult Device::GetQueue(
+void Device::GetQueue(
     uint32_t queueFamilyIndex,
     uint32_t queueIndex,
     VkQueue* pQueue)
 {
-    *pQueue = reinterpret_cast<VkQueue>(m_pQueues[queueFamilyIndex][queueIndex]);
+    PhysicalDevice* pPhysicalDevice = VkPhysicalDevice(DefaultDeviceIndex);
 
-    return VK_SUCCESS;
+    if (queueIndex < pPhysicalDevice->GetQueueFamilyProperties(queueFamilyIndex).queueCount)
+    {
+        *pQueue = reinterpret_cast<VkQueue>(m_pQueues[queueFamilyIndex][queueIndex]);
+    }
+    else
+    {
+        *pQueue = VK_NULL_HANDLE;
+    }
 }
 // =====================================================================================================================
-VkResult Device::GetQueue2(
+void Device::GetQueue2(
     const VkDeviceQueueInfo2* pQueueInfo,
     VkQueue*                  pQueue)
 {
     VK_ASSERT(pQueueInfo->sType == VK_STRUCTURE_TYPE_DEVICE_QUEUE_INFO_2);
-
-    VkResult result = VK_SUCCESS;
 
     VkDeviceQueueCreateFlags  flags             = pQueueInfo->flags;;
     uint32                    queueFamilyIndex  = pQueueInfo->queueFamilyIndex;
@@ -2396,12 +2434,19 @@ VkResult Device::GetQueue2(
         pNext = pHeader->pNext;
     }
 
-    {
-        DispatchableQueue* pFoundQueue = m_pQueues[queueFamilyIndex][queueIndex];
-        *pQueue = ((*pFoundQueue)->GetFlags() == flags) ? reinterpret_cast<VkQueue>(pFoundQueue) : nullptr;
-    }
+    PhysicalDevice* pPhysicalDevice = VkPhysicalDevice(DefaultDeviceIndex);
 
-    return result;
+    if (queueIndex < pPhysicalDevice->GetQueueFamilyProperties(queueFamilyIndex).queueCount)
+    {
+        {
+            DispatchableQueue* pFoundQueue = m_pQueues[queueFamilyIndex][queueIndex];
+            *pQueue = ((*pFoundQueue)->GetFlags() == flags) ? reinterpret_cast<VkQueue>(pFoundQueue) : VK_NULL_HANDLE;
+        }
+    }
+    else
+    {
+        *pQueue = VK_NULL_HANDLE;
+    }
 }
 
 // =====================================================================================================================
@@ -3176,6 +3221,11 @@ uint32_t Device::GetPinnedSystemMemoryTypes() const
     uint32_t gartIndexBits;
 
     if (GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeapGartCacheable, &gartIndexBits))
+    {
+        memoryTypes |= gartIndexBits;
+    }
+
+    if (GetVkTypeIndexBitsFromPalHeap(Pal::GpuHeapGartUswc, &gartIndexBits))
     {
         memoryTypes |= gartIndexBits;
     }

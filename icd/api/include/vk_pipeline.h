@@ -122,6 +122,9 @@ enum class DynamicStatesInternal : uint32_t
     StencilTestEnableExt,
     StencilOpExt,
     ColorWriteEnableExt,
+    RasterizerDiscardEnableExt,
+    PrimitiveRestartEnableExt,
+    DepthBiasEnableExt,
     DynamicStatesInternalCount
 };
 
@@ -199,16 +202,16 @@ protected:
         uint64_t              apiHash);
 
     static void GenerateHashFromSpecializationInfo(
-        Util::MetroHash128*         pHasher,
-        const VkSpecializationInfo& desc);
+        const VkSpecializationInfo& desc,
+        Util::MetroHash128*         pHasher);
 
     static void GenerateHashFromShaderStageCreateInfo(
-        Util::MetroHash128*                    pHasher,
-        const VkPipelineShaderStageCreateInfo& desc);
+        const VkPipelineShaderStageCreateInfo& desc,
+        Util::MetroHash128*                    pHasher);
 
     static void GenerateHashFromDynamicStateCreateInfo(
-        Util::MetroHash128*                     pHasher,
-        const VkPipelineDynamicStateCreateInfo& desc);
+        const VkPipelineDynamicStateCreateInfo& desc,
+        Util::MetroHash128*                     pHasher);
 
     Device* const                      m_pDevice;
     UserDataLayout                     m_userDataLayout;

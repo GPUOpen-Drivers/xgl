@@ -78,28 +78,28 @@ public:
         Vkgc::ColorTarget*                   pColorTarget) override;
 
     virtual VkResult CreateGraphicsPipelineBinary(
-        Device*                     pDevice,
-        uint32_t                    deviceIdx,
-        PipelineCache*              pPipelineCache,
-        GraphicsPipelineCreateInfo* pCreateInfo,
-        size_t*                     pPipelineBinarySize,
-        const void**                ppPipelineBinary,
-        uint32_t                    rasterizationStream,
-        Vkgc::PipelineShaderInfo**  ppShadersInfo,
-        void*                       pPipelineDumpHandle,
-        uint64_t                    pipelineHash,
-        int64_t*                    pCompileTime) override;
+        Device*                           pDevice,
+        uint32_t                          deviceIdx,
+        PipelineCache*                    pPipelineCache,
+        GraphicsPipelineBinaryCreateInfo* pCreateInfo,
+        size_t*                           pPipelineBinarySize,
+        const void**                      ppPipelineBinary,
+        uint32_t                          rasterizationStream,
+        Vkgc::PipelineShaderInfo**        ppShadersInfo,
+        void*                             pPipelineDumpHandle,
+        uint64_t                          pipelineHash,
+        int64_t*                          pCompileTime) override;
 
     virtual VkResult CreateComputePipelineBinary(
-        Device*                     pDevice,
-        uint32_t                    deviceIdx,
-        PipelineCache*              pPipelineCache,
-        ComputePipelineCreateInfo*  pCreateInfo,
-        size_t*                     pPipelineBinarySize,
-        const void**                ppPipelineBinary,
-        void*                       pPipelineDumpHandle,
-        uint64_t                    pipelineHash,
-        int64_t*                    pCompileTime) override;
+        Device*                          pDevice,
+        uint32_t                         deviceIdx,
+        PipelineCache*                   pPipelineCache,
+        ComputePipelineBinaryCreateInfo* pCreateInfo,
+        size_t*                          pPipelineBinarySize,
+        const void**                     ppPipelineBinary,
+        void*                            pPipelineDumpHandle,
+        uint64_t                         pipelineHash,
+        int64_t*                         pCompileTime) override;
 
     virtual void FreeGraphicsPipelineBinary(
         const void*                 pPipelineBinary,
