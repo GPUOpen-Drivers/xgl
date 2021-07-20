@@ -59,7 +59,7 @@ VkResult GraphicsPipeline::Create(
     const VkAllocationCallbacks*            pAllocator,
     VkPipeline*                             pPipeline)
 {
-    uint64 startTime = vk::utils::GetTimeNano();
+    uint64 startTimeTicks = Util::GetPerfCpuTime();
 
     // Parse the create info and build patched AMDIL shaders
     GraphicsPipelineObjectCreateInfo objectCreateInfo                   = {};
@@ -385,7 +385,8 @@ VkResult GraphicsPipeline::Create(
     }
     if (result == VK_SUCCESS)
     {
-        uint64_t duration = vk::utils::GetTimeNano() - startTime;
+        uint64_t durationTicks = Util::GetPerfCpuTime() - startTimeTicks;
+        uint64_t duration = vk::utils::TicksToNano(durationTicks);
         binaryCreateInfo.pipelineFeedback.feedbackValid = true;
         binaryCreateInfo.pipelineFeedback.duration = duration;
         pDefaultCompiler->SetPipelineCreationFeedbackInfo(

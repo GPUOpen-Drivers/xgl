@@ -132,12 +132,9 @@ typedef VkAccessFlags2KHR        AccessFlags;
 namespace utils
 {
 
-// =====================================================================================================================
-// Get time in nano seconds
-VK_INLINE uint64_t GetTimeNano()
+VK_INLINE uint64_t TicksToNano(uint64_t ticks)
 {
-    return static_cast<Pal::uint64>(Util::GetPerfCpuTime()) *
-        (NANOSECONDS_IN_A_SECOND / static_cast<Pal::uint64>(Util::GetPerfFrequency()));
+    return (ticks * NANOSECONDS_IN_A_SECOND) / static_cast<Pal::uint64>(Util::GetPerfFrequency());
 }
 
 // =====================================================================================================================
