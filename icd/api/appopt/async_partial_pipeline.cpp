@@ -28,10 +28,6 @@
 * @brief Implementation of class async::PartialPipeline
 ***********************************************************************************************************************
 */
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 39
-#define Vkgc Llpc
-#endif
-
 #include "async_layer.h"
 #include "async_partial_pipeline.h"
 

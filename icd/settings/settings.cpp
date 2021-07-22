@@ -186,11 +186,6 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.usePalPipelineCaching = (atoi(pPipelineCacheEnvVar) >= 0);
         }
 
-        if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp8)
-        {
-            m_settings.implicitExternalSynchronization = true;
-        }
-
         if (pInfo->gfxLevel <= Pal::GfxIpLevel::GfxIp9)
         {
             m_settings.forceResolveLayoutForDepthStencilTransferUsage = true;
@@ -390,6 +385,7 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                 m_settings.mallNoAllocSsrPolicy = 0x01;
             }
 
+            m_settings.implicitExternalSynchronization = false;
         }
 
         if (appProfile == AppProfile::WolfensteinCyberpilot)
@@ -529,6 +525,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.disableResetReleaseResources = true;
 
             m_settings.forceResolveLayoutForDepthStencilTransferUsage = false;
+
+            m_settings.implicitExternalSynchronization = false;
         }
 
         if (appProfile == AppProfile::F1_2017)
@@ -630,6 +628,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
                                              ForceDccFor32BppShaderStorage |
                                              ForceDccFor64BppShaderStorage);
             }
+
+            m_settings.implicitExternalSynchronization = false;
         }
 
         if (appProfile == AppProfile::RedDeadRedemption2)
@@ -742,6 +742,8 @@ VkResult VulkanSettingsLoader::OverrideProfiledSettings(
             m_settings.alwaysReportHdrFormats = true;
 
             m_settings.backgroundFullscreenIgnorePresentErrors = true;
+
+            m_settings.implicitExternalSynchronization = false;
         }
 
         if (appProfile == AppProfile::IdTechLauncher)

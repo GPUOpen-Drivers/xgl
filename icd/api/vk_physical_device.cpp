@@ -601,7 +601,7 @@ static VK_INLINE void GenerateCacheUuid(
         (VULKAN_ICD_BUILD_VERSION & ((1 << 22) - 1));
 
     const uint32_t buildTimeHash = settings.markPipelineCacheWithBuildTimestamp
-        ? Util::HashLiteralString(__DATE__ __TIME__)
+        ? vk::utils::GetBuildTimeHash()
         : 0;
 
     const struct
@@ -3651,7 +3651,9 @@ DeviceExtensions::Supported PhysicalDevice::GetAvailableExtensions(
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_BUFFER_DEVICE_ADDRESS));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_ROBUSTNESS2));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_TERMINATE_INVOCATION));
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_EXTENDED_DYNAMIC_STATE2));
 
+        availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_COPY_COMMANDS2));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SHADER_SUBGROUP_UNIFORM_CONTROL_FLOW));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(EXT_4444_FORMATS));
         availableExtensions.AddExtension(VK_DEVICE_EXTENSION(KHR_SYNCHRONIZATION2));
@@ -5188,7 +5190,7 @@ void PhysicalDevice::GetFeatures2(
             {
                 auto* pExtInfo = reinterpret_cast<VkPhysicalDeviceExtendedDynamicState2FeaturesEXT*>(pHeader);
 
-                pExtInfo->extendedDynamicState2                   = VK_FALSE;
+                pExtInfo->extendedDynamicState2                   = VK_TRUE;
                 pExtInfo->extendedDynamicState2LogicOp            = VK_FALSE;
                 pExtInfo->extendedDynamicState2PatchControlPoints = VK_FALSE;
                 break;

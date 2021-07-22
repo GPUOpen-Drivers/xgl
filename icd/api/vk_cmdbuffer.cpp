@@ -187,8 +187,7 @@ template <typename PalClearRegionVect>
 Pal::Result CreateClearRegions (
     const uint32_t              rectCount,
     const VkClearRect* const    pRects,
-    const RenderPass&           renderPass,
-    const uint32_t              subpass,
+    const uint32_t              viewMask,
     const uint32_t              zOffset,
     PalClearRegionVect* const   pOutClearRegions)
 {
@@ -202,9 +201,8 @@ Pal::Result CreateClearRegions (
 
     pOutClearRegions->Clear();
 
-    if (renderPass.IsMultiviewEnabled())
+    if (viewMask > 0)
     {
-        const auto viewMask    = renderPass.GetViewMask(subpass);
         const auto layerRanges = RangesOfOnesInBitMask(viewMask);
 
         palResult = pOutClearRegions->Reserve(rectCount * layerRanges.NumElements());
@@ -232,6 +230,63 @@ Pal::Result CreateClearRegions (
                 pOutClearRegions->PushBack(VkToPalClearRegion<ClearRegionType>(pRects[rectIndex], zOffset));
             }
         }
+    }
+
+    return palResult;
+}
+
+// =====================================================================================================================
+// Populate a vector with attachment's PAL subresource ranges defined by clearInfo with modified layer ranges
+// according to Vulkan clear rects (multiview disabled) or viewMask (multiview is enabled).
+// Returns Pal::Result::Success if completed successfully.
+template<typename PalSubresRangeVector>
+Pal::Result CreateClearSubresRanges(
+    const vk::ImageView*            pColorImageView,
+    const VkClearAttachment&        clearInfo,
+    const uint32_t                  rectCount,
+    const VkClearRect* const        pRects,
+    const uint32_t                  viewMask,
+    PalSubresRangeVector* const     pOutClearSubresRanges)
+{
+    static_assert(std::is_same<decltype(pOutClearSubresRanges->Data()), Pal::SubresRange*>::value, "Wrong element type");
+    VK_ASSERT(pOutClearSubresRanges != nullptr);
+
+    Pal::Result palResult = Pal::Result::Success;
+
+    Pal::SubresRange subresRange = {};
+    pColorImageView->GetFrameBufferAttachmentSubresRange(&subresRange);
+
+    pOutClearSubresRanges->Clear();
+
+    if (viewMask > 0)
+    {
+        const auto layerRanges = RangesOfOnesInBitMask(viewMask);
+
+        palResult = pOutClearSubresRanges->Reserve(layerRanges.NumElements());
+
+        if (palResult == Pal::Result::Success)
+        {
+            for (auto layerRangeIt = layerRanges.Begin(); layerRangeIt.IsValid(); layerRangeIt.Next())
+            {
+                pOutClearSubresRanges->PushBack(subresRange);
+                pOutClearSubresRanges->Back().startSubres.arraySlice += layerRangeIt.Get().offset;
+                pOutClearSubresRanges->Back().numSlices = layerRangeIt.Get().extent;
+            }
+        }
+    }
+    else
+    {
+         palResult = pOutClearSubresRanges->Reserve(rectCount);
+
+         if (palResult == Pal::Result::Success)
+         {
+            for (uint32_t rectIndex = 0; rectIndex < rectCount; ++rectIndex)
+            {
+                pOutClearSubresRanges->PushBack(subresRange);
+                pOutClearSubresRanges->Back().startSubres.arraySlice += pRects[rectIndex].baseArrayLayer;
+                pOutClearSubresRanges->Back().numSlices = pRects[rectIndex].layerCount;
+            }
+         }
     }
 
     return palResult;
@@ -1135,7 +1190,7 @@ VkResult CmdBuffer::Begin(
 
     m_curDeviceMask = m_cbBeginDeviceMask;
 
-    if (pRenderPass) // secondary VkCommandBuffer will be used inside VkRenderPass
+    if (pRenderPass != nullptr) // secondary VkCommandBuffer will be used inside VkRenderPass
     {
         VK_ASSERT(m_flags.is2ndLvl);
 
@@ -1191,7 +1246,8 @@ VkResult CmdBuffer::Begin(
 
     m_flags.isRecording = true;
 
-    if (pRenderPass) // secondary VkCommandBuffer will be used inside VkRenderPass
+    if (pRenderPass
+        ) // secondary VkCommandBuffer will be used inside VkRenderPass
     {
         VK_ASSERT(m_flags.is2ndLvl);
 
@@ -2969,6 +3025,7 @@ void CmdBuffer::ClearAttachments(
     {
         ClearBoundAttachments(attachmentCount, pAttachments, rectCount, pRects);
     }
+
 }
 
 // =====================================================================================================================
@@ -2995,105 +3052,111 @@ void CmdBuffer::ClearBoundAttachments(
     const auto palResult1 = clearRegions.Reserve(rectBatch);
     const auto palResult2 = colorTargets.Reserve(attachmentCount);
 
-    if ((palResult1 != Pal::Result::Success) ||
-        (palResult2 != Pal::Result::Success))
+    m_recordingResult = ((palResult1 == Pal::Result::Success) &&
+                         (palResult2 == Pal::Result::Success)) ? VK_SUCCESS : VK_ERROR_OUT_OF_HOST_MEMORY;
+
+    if (m_recordingResult == VK_SUCCESS)
     {
-        m_recordingResult = VK_ERROR_OUT_OF_HOST_MEMORY;
-
-        return;
-    }
-
-    for (uint32_t idx = 0; idx < attachmentCount; ++idx)
-    {
-        const VkClearAttachment& clearInfo = pAttachments[idx];
-
-        // Detect if color clear or depth clear
-        if ((clearInfo.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
+        for (uint32_t idx = 0; idx < attachmentCount; ++idx)
         {
-            // Get the corresponding color reference in the current subpass
-            const AttachmentReference& colorRef = pRenderPass->GetSubpassColorReference(
-                subpass, clearInfo.colorAttachment);
+            const VkClearAttachment& clearInfo = pAttachments[idx];
 
-            // Clear only if the attachment reference is active
-            if (colorRef.attachment != VK_ATTACHMENT_UNUSED)
+            // Detect if color clear or depth clear
+            if ((clearInfo.aspectMask & VK_IMAGE_ASPECT_COLOR_BIT) != 0)
             {
-                // Fill in bound target information for this target, but don't clear yet
-                const uint32_t tgtIdx = clearInfo.colorAttachment;
+                // Get the corresponding color reference in the current subpass
+                const AttachmentReference& colorRef = pRenderPass->GetSubpassColorReference(
+                    subpass, clearInfo.colorAttachment);
 
-                Pal::BoundColorTarget target = {};
-                target.targetIndex    = tgtIdx;
-                target.swizzledFormat = VkToPalFormat(pRenderPass->GetColorAttachmentFormat(subpass, tgtIdx),
-                                                      m_pDevice->GetRuntimeSettings());
-                target.samples        = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
-                target.fragments      = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
-                target.clearValue     = VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat);
-
-                colorTargets.PushBack(target);
-            }
-        }
-        else // Depth-stencil clear
-        {
-            // Get the corresponding color reference in the current subpass
-            const AttachmentReference& depthStencilRef = pRenderPass->GetSubpassDepthStencilReference(subpass);
-
-            // Clear only if the attachment reference is active
-            if (depthStencilRef.attachment != VK_ATTACHMENT_UNUSED)
-            {
-                Pal::DepthStencilSelectFlags selectFlags = {};
-
-                selectFlags.depth   = ((clearInfo.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0);
-                selectFlags.stencil = ((clearInfo.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) != 0);
-
-                DbgBarrierPreCmd(DbgBarrierClearDepth);
-
-                for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+                // Clear only if the attachment reference is active
+                if (colorRef.attachment != VK_ATTACHMENT_UNUSED)
                 {
-                    rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+                    // Fill in bound target information for this target, but don't clear yet
+                    const uint32_t tgtIdx = clearInfo.colorAttachment;
 
-                    CreateClearRegions(
-                        rectBatch, pRects + rectIdx,
-                        *pRenderPass, subpass, 0u,
-                        &clearRegions);
+                    Pal::BoundColorTarget target = {};
+                    target.targetIndex    = tgtIdx;
+                    target.swizzledFormat = VkToPalFormat(pRenderPass->GetColorAttachmentFormat(subpass, tgtIdx),
+                                                          m_pDevice->GetRuntimeSettings());
+                    target.samples        = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
+                    target.fragments      = pRenderPass->GetColorAttachmentSamples(subpass, tgtIdx);
+                    target.clearValue     = VkToPalClearColor(&clearInfo.clearValue.color, target.swizzledFormat);
 
-                    // Clear the bound depth stencil target immediately
-                    PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundDepthStencilTargets(
-                        VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
-                        clearInfo.clearValue.depthStencil.stencil,
-                        StencilWriteMaskFull,
-                        pRenderPass->GetDepthStencilAttachmentSamples(subpass),
-                        pRenderPass->GetDepthStencilAttachmentSamples(subpass),
-                        selectFlags,
-                        clearRegions.NumElements(),
-                        clearRegions.Data());
+                    colorTargets.PushBack(target);
                 }
+            }
+            else // Depth-stencil clear
+            {
+                // Get the corresponding color reference in the current subpass
+                const AttachmentReference& depthStencilRef = pRenderPass->GetSubpassDepthStencilReference(subpass);
 
-                DbgBarrierPostCmd(DbgBarrierClearDepth);
+                // Clear only if the attachment reference is active
+                if (depthStencilRef.attachment != VK_ATTACHMENT_UNUSED)
+                {
+                    Pal::DepthStencilSelectFlags selectFlags = {};
+
+                    selectFlags.depth   = ((clearInfo.aspectMask & VK_IMAGE_ASPECT_DEPTH_BIT) != 0);
+                    selectFlags.stencil = ((clearInfo.aspectMask & VK_IMAGE_ASPECT_STENCIL_BIT) != 0);
+
+                    DbgBarrierPreCmd(DbgBarrierClearDepth);
+
+                    for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+                    {
+                        rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+
+                        uint32_t viewMask = pRenderPass->GetViewMask(subpass);
+
+                        CreateClearRegions(
+                            rectBatch,
+                            pRects + rectIdx,
+                            viewMask,
+                            0u,
+                            &clearRegions);
+
+                        // Clear the bound depth stencil target immediately
+                        PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundDepthStencilTargets(
+                            VkToPalClearDepth(clearInfo.clearValue.depthStencil.depth),
+                            clearInfo.clearValue.depthStencil.stencil,
+                            StencilWriteMaskFull,
+                            pRenderPass->GetDepthStencilAttachmentSamples(subpass),
+                            pRenderPass->GetDepthStencilAttachmentSamples(subpass),
+                            selectFlags,
+                            clearRegions.NumElements(),
+                            clearRegions.Data());
+                    }
+
+                    DbgBarrierPostCmd(DbgBarrierClearDepth);
+                }
             }
         }
-    }
 
-    if (colorTargets.NumElements() > 0)
-    {
-        DbgBarrierPreCmd(DbgBarrierClearColor);
-
-        for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+        if (colorTargets.NumElements() > 0)
         {
-            rectBatch = Util::Min(rectCount - rectIdx, maxRects);
+            DbgBarrierPreCmd(DbgBarrierClearColor);
 
-            CreateClearRegions(
-                rectBatch, pRects + rectIdx,
-                *pRenderPass, subpass, 0u,
-                &clearRegions);
+            for (uint32_t rectIdx = 0; rectIdx < rectCount; rectIdx += rectBatch)
+            {
+                rectBatch = Util::Min(rectCount - rectIdx, maxRects);
 
-            // Clear the bound color targets
-            PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundColorTargets(
-                colorTargets.NumElements(),
-                colorTargets.Data(),
-                clearRegions.NumElements(),
-                clearRegions.Data());
+                uint32_t viewMask = pRenderPass->GetViewMask(subpass);
+
+                CreateClearRegions(
+                    rectBatch,
+                    pRects + rectIdx,
+                    viewMask,
+                    0u,
+                    &clearRegions);
+
+                // Clear the bound color targets
+                PalCmdBuffer(DefaultDeviceIndex)->CmdClearBoundColorTargets(
+                    colorTargets.NumElements(),
+                    colorTargets.Data(),
+                    clearRegions.NumElements(),
+                    clearRegions.Data());
+            }
+
+            DbgBarrierPostCmd(DbgBarrierClearColor);
         }
-
-        DbgBarrierPostCmd(DbgBarrierClearColor);
     }
 }
 
@@ -3317,9 +3380,13 @@ void CmdBuffer::ClearImageAttachments(
 
                         rectBatch = Util::Min(rectCount - rectIdx, maxRects);
 
+                        uint32_t viewMask = pRenderPass->GetViewMask(subpass);
+
                         CreateClearRegions(
-                            rectCount, pRects + rectIdx,
-                            *pRenderPass, subpass, zOffset,
+                            rectCount,
+                            pRects + rectIdx,
+                            viewMask,
+                            zOffset,
                             &clearBoxes);
 
                         CreateClearSubresRanges(
@@ -4699,9 +4766,12 @@ void CmdBuffer::BeginQueryIndexed(
     //
     // Implementations may write the total result to the first query and
     // write zero to the other queries.
-    if (pRenderPass && pRenderPass->IsMultiviewEnabled())
+    if (((pRenderPass != nullptr) && pRenderPass->IsMultiviewEnabled())
+       )
     {
-        const auto viewMask  = pRenderPass->GetViewMask(m_renderPassInstance.subpass);
+        const auto viewMask  = (pRenderPass != nullptr) ? pRenderPass->GetViewMask(m_renderPassInstance.subpass) :
+            0;
+
         const auto viewCount = Util::CountSetBits(viewMask);
 
         // Call Begin() and immediately call End() for all remaining queries,
@@ -5237,9 +5307,11 @@ void CmdBuffer::WriteTimestamp(
         //
         // The first query is a timestamp value and (if more than one bit is set in the view mask)
         // zero is written to the remaining queries.
-        if (pRenderPass && pRenderPass->IsMultiviewEnabled())
+        if (((pRenderPass != nullptr) && pRenderPass->IsMultiviewEnabled())
+            )
         {
-            const auto viewMask  = pRenderPass->GetViewMask(m_renderPassInstance.subpass);
+            const auto viewMask = (pRenderPass != nullptr) ? pRenderPass->GetViewMask(m_renderPassInstance.subpass) :
+                0;
             const auto viewCount = Util::CountSetBits(viewMask);
 
             VK_ASSERT(viewCount > 0);
@@ -5975,7 +6047,8 @@ void CmdBuffer::RPLoadOpClearColor(
             else
             {
                 const RenderPass* pRenderPass = m_allGpuState.pRenderPass;
-                const uint32_t subpass = m_renderPassInstance.subpass;
+                const uint32_t    subpass     = m_renderPassInstance.subpass;
+                uint32_t          viewMask     = pRenderPass->GetViewMask(subpass);
 
                 const VkRect2D rect =
                 {
@@ -5991,8 +6064,10 @@ void CmdBuffer::RPLoadOpClearColor(
                 };
 
                 CreateClearRegions(
-                    1, &clearRect,
-                    *pRenderPass, subpass, 0u,
+                    1,
+                    &clearRect,
+                    viewMask,
+                    0u,
                     &clearRegions);
 
                // Clear the bound color targets
@@ -6082,7 +6157,9 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
                 VK_ASSERT(palResult == Pal::Result::Success);
 
                 const RenderPass* pRenderPass = m_allGpuState.pRenderPass;
-                const uint32_t subpass = m_renderPassInstance.subpass;
+                const uint32_t    subpass     = m_renderPassInstance.subpass;
+                uint32_t          viewMask    = pRenderPass->GetViewMask(subpass);
+
                 // Get the corresponding color reference in the current subpass
                 const AttachmentReference& depthStencilRef = pRenderPass->GetSubpassDepthStencilReference(subpass);
 
@@ -6107,8 +6184,10 @@ void CmdBuffer::RPLoadOpClearDepthStencil(
                 };
 
                 CreateClearRegions(
-                    1, &clearRect,
-                    *pRenderPass, subpass, 0u,
+                    1,
+                    &clearRect,
+                    viewMask,
+                    0u,
                     &clearRegions);
 
                 // Clear the bound depth stencil target immediately
@@ -6332,7 +6411,12 @@ void CmdBuffer::RPBindTargets(
 void CmdBuffer::SetViewInstanceMask(
     uint32_t deviceMask)
 {
-    const uint32_t subpassViewMask = m_allGpuState.pRenderPass->GetViewMask(m_renderPassInstance.subpass);
+    uint32_t subpassViewMask = 0;
+
+    if (m_allGpuState.pRenderPass != nullptr)
+    {
+        subpassViewMask = m_allGpuState.pRenderPass->GetViewMask(m_renderPassInstance.subpass);
+    }
 
     utils::IterateMask deviceGroup(deviceMask);
 
@@ -6772,14 +6856,6 @@ void CmdBuffer::SetStencilReference(
     }
 
     m_allGpuState.dirty.stencilRef = 1;
-}
-
-// =====================================================================================================================
-// Get a safe number of objects that can be allocated by the virtual stack frame allocator without risking OOM error.
-uint32_t CmdBuffer::EstimateMaxObjectsOnVirtualStack(size_t objectSize) const
-{
-    // Return at least 1 and use only 50% of the remaining space.
-    return 1 + static_cast<uint32_t>((m_pStackAllocator->Remaining() / objectSize) >> 1);
 }
 
 #if VK_ENABLE_DEBUG_BARRIERS

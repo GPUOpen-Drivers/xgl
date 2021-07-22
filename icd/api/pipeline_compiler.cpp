@@ -1293,20 +1293,29 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
 
             if (multisampleEnable)
             {
-                VK_ASSERT(pRenderPass != nullptr);
+                uint32_t rasterizationSampleCount = pMs->rasterizationSamples;
 
-                uint32_t rasterizationSampleCount   = pMs->rasterizationSamples;
-                uint32_t subpassCoverageSampleCount = pRenderPass->GetSubpassMaxSampleCount(pGraphicsPipelineCreateInfo->subpass);
-                uint32_t subpassColorSampleCount    = pRenderPass->GetSubpassColorSampleCount(pGraphicsPipelineCreateInfo->subpass);
+                uint32_t subpassCoverageSampleCount = (pRenderPass != nullptr) ?
+                    pRenderPass->GetSubpassMaxSampleCount(pGraphicsPipelineCreateInfo->subpass) :
+                    rasterizationSampleCount;
+
+                uint32_t subpassColorSampleCount = (pRenderPass != nullptr) ?
+                    pRenderPass->GetSubpassColorSampleCount(pGraphicsPipelineCreateInfo->subpass) :
+                    rasterizationSampleCount;
 
                 // subpassCoverageSampleCount would be equal to zero if there are zero attachments.
-                subpassCoverageSampleCount = subpassCoverageSampleCount == 0 ? rasterizationSampleCount : subpassCoverageSampleCount;
+                subpassCoverageSampleCount = (subpassCoverageSampleCount == 0) ?
+                    rasterizationSampleCount :
+                    subpassCoverageSampleCount;
 
-                subpassColorSampleCount = subpassColorSampleCount == 0 ? subpassCoverageSampleCount : subpassColorSampleCount;
+                subpassColorSampleCount = (subpassColorSampleCount == 0) ?
+                    subpassCoverageSampleCount :
+                    subpassColorSampleCount;
 
                 if (pMs->sampleShadingEnable && (pMs->minSampleShading > 0.0f))
                 {
-                    pCreateInfo->pipelineInfo.rsState.perSampleShading = ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
+                    pCreateInfo->pipelineInfo.rsState.perSampleShading =
+                        ((subpassColorSampleCount * pMs->minSampleShading) > 1.0f);
                 }
                 else
                 {
@@ -1325,15 +1334,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable = (pMs->alphaToCoverageEnable == VK_TRUE);
             if (pPipelineSampleLocationsStateCreateInfoEXT != nullptr)
             {
-                pCreateInfo->sampleLocationGridSize = pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationGridSize;
-            }
-
-            if (pCreateInfo->pipelineInfo.rsState.perSampleShading)
-            {
-                if (!(pCreateInfo->sampleLocationGridSize.width > 1 || pCreateInfo->sampleLocationGridSize.height > 1))
-                {
-                    pCreateInfo->pipelineInfo.options.enableInterpModePatch = true;
-                }
+                pCreateInfo->sampleLocationGridSize =
+                    pPipelineSampleLocationsStateCreateInfoEXT->sampleLocationsInfo.sampleLocationGridSize;
             }
         }
 
@@ -1363,7 +1365,8 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
                 if ((cbFormat != VK_FORMAT_UNDEFINED) ||
                     (pCreateInfo->pipelineInfo.cbState.alphaToCoverageEnable && (i == 0u)))
                 {
-                    pLlpcCbDst->format               = cbFormat != VK_FORMAT_UNDEFINED ? cbFormat  : pRenderPass->GetAttachmentDesc(i).format;
+                    pLlpcCbDst->format               = (cbFormat != VK_FORMAT_UNDEFINED) ?
+                                                        cbFormat  : pRenderPass->GetAttachmentDesc(i).format;
                     pLlpcCbDst->blendEnable          = (src.blendEnable == VK_TRUE);
                     pLlpcCbDst->blendSrcAlphaToColor = IsSrcAlphaUsedInBlend(src.srcAlphaBlendFactor) ||
                                                         IsSrcAlphaUsedInBlend(src.dstAlphaBlendFactor) ||
@@ -1518,9 +1521,6 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
     {
 
         size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
-        genericMappingBufferSize += (pGraphicsPipelineCreateInfo->stageCount) * pLayout->GetPipelineInfo()->mappingBufferSize;
-#endif
 
         size_t tempBufferSize    = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
         pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
@@ -1545,68 +1545,9 @@ VkResult PipelineCompiler::ConvertGraphicsPipelineInfo(
             // LLPC can understand.
             result = pLayout->BuildLlpcPipelineMapping(stageMask,
                                                        pCreateInfo->pTempBuffer,
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
-                                                       &pCreateInfo->resourceMapping,
-#else
                                                        &pCreateInfo->pipelineInfo.resourceMapping,
-#endif
                                                        pCreateInfo->pipelineInfo.pVertexInput,
                                                        pVbInfo);
-
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
-            if (result == VK_SUCCESS)
-            {
-                uint32_t stageCount = 0;
-
-                for (uint32_t stage = 0; stage < ShaderStage::ShaderStageGfxCount; ++stage)
-                {
-                    auto pStage      = pStageInfos[stage];
-                    auto pShaderInfo = shaderInfos[stage];
-
-                    if (pStage == nullptr)
-                        continue;
-
-                    auto pUserDataNodes = static_cast<Vkgc::ResourceMappingNode*>(
-                        Util::VoidPtrInc(pCreateInfo->pTempBuffer,
-                                         (stageCount + 1) * pLayout->GetPipelineInfo()->mappingBufferSize));
-
-                    pShaderInfo->pUserDataNodes = pUserDataNodes;
-                    pShaderInfo->pDescriptorRangeValues =
-                        reinterpret_cast<Vkgc::DescriptorRangeValue*>(pUserDataNodes +
-                            pLayout->GetPipelineInfo()->numUserDataNodes);
-
-                    for (uint32_t i = 0; i < pCreateInfo->resourceMapping.userDataNodeCount; ++i)
-                    {
-                        if ((pCreateInfo->resourceMapping.pUserDataNodes[i].visibility & (1 << stage)) != 0)
-                        {
-                            memcpy(&pUserDataNodes[pShaderInfo->userDataNodeCount],
-                                   &pCreateInfo->resourceMapping.pUserDataNodes[i],
-                                   sizeof(Vkgc::ResourceMappingNode));
-
-                            ++pShaderInfo->userDataNodeCount;
-                            VK_ASSERT(pShaderInfo->userDataNodeCount <= pCreateInfo->resourceMapping.userDataNodeCount);
-                        }
-                    }
-
-                    for (uint32_t i = 0; i < pCreateInfo->resourceMapping.staticDescriptorValueCount; ++i)
-                    {
-                        if ((pCreateInfo->resourceMapping.pStaticDescriptorValues[i].visibility & (1 << stage)) != 0)
-                        {
-                            memcpy(&pShaderInfo->pDescriptorRangeValues[pShaderInfo->descriptorRangeValueCount],
-                                   &pCreateInfo->resourceMapping.pStaticDescriptorValues[i],
-                                   sizeof(Vkgc::DescriptorRangeValue));
-
-                            ++pShaderInfo->descriptorRangeValueCount;
-                            VK_ASSERT(pShaderInfo->descriptorRangeValueCount <= pCreateInfo->resourceMapping.staticDescriptorValueCount);
-                        }
-                    }
-
-                    ++stageCount;
-
-                    VK_ASSERT(stageCount <= pGraphicsPipelineCreateInfo->stageCount);
-                }
-            }
-#endif
         }
     }
 
@@ -1776,10 +1717,6 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
 
         size_t genericMappingBufferSize = pLayout->GetPipelineInfo()->mappingBufferSize;
 
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
-        genericMappingBufferSize += pLayout->GetPipelineInfo()->mappingBufferSize;
-#endif
-
         size_t tempBufferSize    = genericMappingBufferSize + pCreateInfo->mappingBufferSize;
         pCreateInfo->pTempBuffer = pInstance->AllocMem(tempBufferSize,
                                                        VK_DEFAULT_MEM_ALIGN,
@@ -1803,48 +1740,9 @@ VkResult PipelineCompiler::ConvertComputePipelineInfo(
             // LLPC can understand.
             result = pLayout->BuildLlpcPipelineMapping(Vkgc::ShaderStageComputeBit,
                                                        pCreateInfo->pTempBuffer,
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
-                                                       &pCreateInfo->resourceMapping,
-#else
                                                        &pCreateInfo->pipelineInfo.resourceMapping,
-#endif
                                                        nullptr,
                                                        nullptr);
-
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
-            if (result == VK_SUCCESS)
-            {
-                auto pShaderInfo = &pCreateInfo->pipelineInfo.cs;
-
-                auto pUserDataNodes = static_cast<Vkgc::ResourceMappingNode*>(
-                    Util::VoidPtrInc(pCreateInfo->pTempBuffer, pLayout->GetPipelineInfo()->mappingBufferSize));
-
-                pShaderInfo->pUserDataNodes = pUserDataNodes;
-                pShaderInfo->pDescriptorRangeValues =
-                    reinterpret_cast<Vkgc::DescriptorRangeValue*>(pUserDataNodes +
-                        pLayout->GetPipelineInfo()->numUserDataNodes);
-
-                for (uint32_t i = 0; i < pCreateInfo->resourceMapping.userDataNodeCount; ++i)
-                {
-                    memcpy(&pUserDataNodes[pShaderInfo->userDataNodeCount],
-                           &pCreateInfo->resourceMapping.pUserDataNodes[i],
-                           sizeof(Vkgc::ResourceMappingNode));
-
-                    ++pShaderInfo->userDataNodeCount;
-                    VK_ASSERT(pShaderInfo->userDataNodeCount <= pCreateInfo->resourceMapping.userDataNodeCount);
-                }
-
-                for (uint32_t i = 0; i < pCreateInfo->resourceMapping.staticDescriptorValueCount; ++i)
-                {
-                    memcpy(&pShaderInfo->pDescriptorRangeValues[pShaderInfo->descriptorRangeValueCount],
-                           &pCreateInfo->resourceMapping.pStaticDescriptorValues[i],
-                           sizeof(Vkgc::DescriptorRangeValue));
-
-                    ++pShaderInfo->descriptorRangeValueCount;
-                    VK_ASSERT(pShaderInfo->descriptorRangeValueCount <= pCreateInfo->resourceMapping.staticDescriptorValueCount);
-                }
-            }
-#endif
         }
     }
 

@@ -80,6 +80,7 @@ class DispatchableCmdBuffer;
 class Framebuffer;
 class GraphicsPipeline;
 class Image;
+class ImageView;
 class Queue;
 class RenderPass;
 class TimestampQueryPool;
@@ -1025,6 +1026,13 @@ public:
     AllGpuRenderState* RenderState()
         { return &m_allGpuState; }
 
+    // Get a safe number of objects that can be allocated by the virtual stack frame allocator without risking OOM error.
+    uint32_t EstimateMaxObjectsOnVirtualStack(size_t objectSize) const
+    {
+        // Return at least 1 and use only 50% of the remaining space.
+        return 1 + static_cast<uint32_t>((m_pStackAllocator->Remaining() / objectSize) >> 1);
+    }
+
 private:
     PAL_DISALLOW_COPY_AND_ASSIGN(CmdBuffer);
 
@@ -1107,8 +1115,6 @@ private:
         const uint32_t            firstQuery,
         const uint32_t            queryCount,
         const uint32_t            timestampChunk);
-
-    VK_INLINE uint32_t EstimateMaxObjectsOnVirtualStack(size_t objectSize) const;
 
     void ReleaseResources();
 

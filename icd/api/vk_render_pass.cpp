@@ -583,8 +583,12 @@ void SubpassDescription::Init(
         case VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR:
         {
             const auto* pExtInfo = static_cast<const VkFragmentShadingRateAttachmentInfoKHR*>(pNext);
-            fragmentShadingRateAttachment.Init(
-                *pExtInfo->pFragmentShadingRateAttachment);
+
+            if (pExtInfo->pFragmentShadingRateAttachment != nullptr)
+            {
+                fragmentShadingRateAttachment.Init(
+                    *pExtInfo->pFragmentShadingRateAttachment);
+            }
 
             break;
         }

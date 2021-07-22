@@ -1261,9 +1261,10 @@ VkResult Device::Create(
                         Pal::QueueSemaphoreCreateInfo tmzSemaphoreCreateInfo = {};
                         tmzSemaphoreCreateInfo.maxCount = 1;
 
-                        palResult = pPalDevices[deviceIdx]->CreateQueueSemaphore(tmzSemaphoreCreateInfo,
-                                                                                 pPalQueueMemory,
-                                                                                 &pPalTmzSemaphores[deviceIdx]);
+                        palResult = pPalDevices[deviceIdx]->CreateQueueSemaphore(
+                            tmzSemaphoreCreateInfo,
+                            Util::VoidPtrInc(pPalQueueMemory, palQueueMemoryOffset),
+                            &pPalTmzSemaphores[deviceIdx]);
 
                         palQueueMemoryOffset += pPalDevices[deviceIdx]->GetQueueSemaphoreSize(tmzSemaphoreCreateInfo, &palResult);
 
@@ -2147,34 +2148,8 @@ VkResult Device::CreateInternalComputePipeline(
         pShaderInfo->pEntryTarget        = Vkgc::IUtil::GetEntryPointNameFromSpirvBinary(&spvBin);
         pShaderInfo->entryStage          = Vkgc::ShaderStageCompute;
 
-#if   (LLPC_CLIENT_INTERFACE_MAJOR_VERSION< 41)
-        static const size_t MappingBufferSize =
-            MaxInternalPipelineUserNodeCount *
-                    sizeof(Vkgc::ResourceMappingRootNode)
-            ;
-        uint8_t tempBuffs[MappingBufferSize];
-#endif
-
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
-        pipelineBuildInfo.resourceMapping.pUserDataNodes = pUserDataNodes;
-        pipelineBuildInfo.resourceMapping.userDataNodeCount = numUserDataNodes;
-
-        Vkgc::ResourceMappingNode* pUserDataLegacyNodes = reinterpret_cast<Vkgc::ResourceMappingNode*>(tempBuffs);
-        pShaderInfo->pUserDataNodes = pUserDataLegacyNodes;
-
-        for (uint32_t i = 0; i < pipelineBuildInfo.resourceMapping.userDataNodeCount; ++i)
-        {
-            memcpy(&pUserDataLegacyNodes[pShaderInfo->userDataNodeCount],
-                   &pipelineBuildInfo.resourceMapping.pUserDataNodes[i],
-                   sizeof(Vkgc::ResourceMappingNode));
-
-            ++pShaderInfo->userDataNodeCount;
-            VK_ASSERT(pShaderInfo->userDataNodeCount <= pipelineBuildInfo.resourceMapping.userDataNodeCount);
-        }
-#else
         pipelineBuildInfo.pipelineInfo.resourceMapping.pUserDataNodes = pUserDataNodes;
         pipelineBuildInfo.pipelineInfo.resourceMapping.userDataNodeCount = numUserDataNodes;
-#endif
 
         pCompiler->ApplyDefaultShaderOptions(ShaderStage::ShaderStageCompute,
                                              &pShaderInfo->options
