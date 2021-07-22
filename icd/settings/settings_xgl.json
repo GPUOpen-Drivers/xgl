@@ -5466,7 +5466,7 @@
         "General"
       ],
       "Defaults": {
-        "Default": false
+        "Default": true
       },
       "Type": "bool",
       "Scope": "Driver"

@@ -248,6 +248,9 @@ static uint32_t GetDynamicStateFlags(
             case VK_DYNAMIC_STATE_COLOR_WRITE_ENABLE_EXT:
                 dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::ColorWriteEnableExt));
                 break;
+            case VK_DYNAMIC_STATE_RASTERIZER_DISCARD_ENABLE_EXT:
+                dynamicState |= foiMask & (1 << static_cast<uint32_t>(DynamicStatesInternal::RasterizerDiscardEnableExt));
+                break;
             default:
                 // skip unknown dynamic state
                 break;
@@ -760,6 +763,27 @@ static VK_INLINE bool IsDualSourceBlend(VkBlendFactor blend)
 }
 
 // =====================================================================================================================
+static VK_INLINE VkFormat GetDepthFormat(
+    const RenderPass*                       pRenderPass,
+    const uint32_t                          subpassIndex
+    )
+{
+    return (pRenderPass != nullptr) ?
+        pRenderPass->GetDepthStencilAttachmentFormat(subpassIndex) :
+        VK_FORMAT_UNDEFINED;
+}
+
+// =====================================================================================================================
+static VK_INLINE uint32_t GetColorAttachmentCount(
+    const RenderPass*                       pRenderPass,
+    const uint32_t                          subpassIndex
+)
+{
+    return (pRenderPass != nullptr) ? pRenderPass->GetSubpassColorReferenceCount(subpassIndex) :
+           0u;
+}
+
+// =====================================================================================================================
 bool GetDualSourceBlendEnableState(const VkPipelineColorBlendAttachmentState& pColorBlendAttachmentState)
 {
     bool dualSourceBlend = false;
@@ -898,9 +922,6 @@ static void BuildColorBlendState(
 
         pInfo->staticStateMask |= 1 << static_cast<uint32_t>(DynamicStatesInternal::BlendConstants);
     }
-
-    pInfo->dbFormat = (pRenderPass != nullptr) ?
-        pRenderPass->GetDepthStencilAttachmentFormat(subpass) : VK_FORMAT_UNDEFINED;
 }
 
 // =====================================================================================================================
@@ -1021,11 +1042,18 @@ static void BuildFragmentShaderState(
 
     pInfo->pLayout = PipelineLayout::ObjectFromHandle(pIn->layout);
 
-    // Build states via VkPipelineMultisampleStateCreateInfo
-    BuildMultisampleState(pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
+    if ((pIn->pRasterizationState->rasterizerDiscardEnable == VK_FALSE) ||
+        IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::RasterizerDiscardEnableExt))
+    {
+        // Build states via VkPipelineMultisampleStateCreateInfo
+        BuildMultisampleState(pIn->pMultisampleState, pRenderPass, subpass, dynamicStateFlags, pInfo);
 
-    // Build states via VkPipelineDepthStencilStateCreateInfo
-    BuildDepthStencilState(pIn->pDepthStencilState, dynamicStateFlags, pInfo);
+        if (GetDepthFormat(pRenderPass, subpass) != VK_FORMAT_UNDEFINED)
+        {
+            // Build states via VkPipelineDepthStencilStateCreateInfo
+            BuildDepthStencilState(pIn->pDepthStencilState, dynamicStateFlags, pInfo);
+        }
+    }
 
     if (IsDynamicStateEnabled(dynamicStateFlags, DynamicStatesInternal::DepthTestEnableExt) == false)
     {
@@ -1056,30 +1084,41 @@ static void BuildFragmentOutputInterfaceState(
     const uint32_t                      dynamicStateFlags,
     GraphicsPipelineObjectCreateInfo*   pInfo)
 {
-    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pIn->renderPass);
-    const uint32_t    subpass     = pIn->subpass;
+    const RenderPass* pRenderPass      = RenderPass::ObjectFromHandle(pIn->renderPass);
+    const uint32_t    subpass          = pIn->subpass;
+    const bool        rasterizerEnable = ((pIn->pRasterizationState->rasterizerDiscardEnable == VK_FALSE) ||
+                                         IsDynamicStateEnabled(dynamicStateFlags,
+                                                               DynamicStatesInternal::RasterizerDiscardEnableExt));
 
-    // Build states via VkPipelineColorBlendStateCreateInfo
-    BuildColorBlendState(
-        pDevice,
-        pIn->pColorBlendState,
-        pRenderPass,
-        subpass,
-        dynamicStateFlags,
-        pInfo);
+    if (rasterizerEnable &&
+        (GetColorAttachmentCount(pRenderPass, subpass) != 0))
+    {
+        // Build states via VkPipelineColorBlendStateCreateInfo
+        BuildColorBlendState(
+            pDevice,
+            pIn->pColorBlendState,
+            pRenderPass,
+            subpass,
+            dynamicStateFlags,
+            pInfo);
+    }
 
     // According to the spec, VkPipelineMultisampleStateCreateInfo::alphaToCoverageEnable and alphaToOneEnable
     // belongs to fragment output interface section
     // The alpha component of the fragment's first color output is replaced with one if alphaToOneEnable is set.
-    if (pIn->pMultisampleState != nullptr)
+    if (rasterizerEnable && (pIn->pMultisampleState != nullptr))
     {
         pInfo->pipeline.cbState.target[0].forceAlphaToOne = (pIn->pMultisampleState->alphaToOneEnable == VK_TRUE);
         pInfo->pipeline.cbState.alphaToCoverageEnable = (pIn->pMultisampleState->alphaToCoverageEnable == VK_TRUE);
     }
 
+    pInfo->dbFormat = GetDepthFormat(pRenderPass, subpass);
+
     // According to the spec, VkPipelineDepthStencilStateCreateInfo::depthWriteEnable belongs to fragment output
     // interface section
-    if (pIn->pDepthStencilState != nullptr)
+    if ((pInfo->dbFormat != VK_FORMAT_UNDEFINED) &&
+        rasterizerEnable                         &&
+        (pIn->pDepthStencilState != nullptr))
     {
         pInfo->immedInfo.depthStencilCreateInfo.depthWriteEnable = (pIn->pDepthStencilState->depthWriteEnable == VK_TRUE);
     }
@@ -1655,6 +1694,8 @@ uint64_t GraphicsPipelineCommon::BuildApiHash(
     baseHasher.Update(pCreateInfo->flags);
     baseHasher.Update(pCreateInfo->stageCount);
 
+    const RenderPass* pRenderPass = RenderPass::ObjectFromHandle(pCreateInfo->renderPass);
+
     for (uint32_t i = 0; i < pCreateInfo->stageCount; i++)
     {
         GenerateHashFromShaderStageCreateInfo(pCreateInfo->pStages[i], &baseHasher);
@@ -1697,12 +1738,17 @@ uint64_t GraphicsPipelineCommon::BuildApiHash(
         GenerateHashFromMultisampleStateCreateInfo(*pCreateInfo->pMultisampleState, &baseHasher, &apiHasher);
     }
 
-    if ((pInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pDepthStencilState != nullptr))
+    if ((pInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) &&
+        (pCreateInfo->pDepthStencilState != nullptr)          &&
+        (GetDepthFormat(pRenderPass, pCreateInfo->subpass) != VK_FORMAT_UNDEFINED))
     {
         GenerateHashFromDepthStencilStateCreateInfo(*pCreateInfo->pDepthStencilState, &apiHasher);
     }
 
-    if ((pInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) && (pCreateInfo->pColorBlendState != nullptr))
+    if ((pInfo->immedInfo.rasterizerDiscardEnable != VK_TRUE) &&
+        (pCreateInfo->pColorBlendState != nullptr)            &&
+        (GetColorAttachmentCount(pRenderPass, pCreateInfo->subpass) != 0))
+
     {
         GenerateHashFromColorBlendStateCreateInfo(*pCreateInfo->pColorBlendState, &baseHasher, &apiHasher);
     }

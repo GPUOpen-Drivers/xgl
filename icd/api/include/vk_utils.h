@@ -42,6 +42,7 @@
 #include "palSysMemory.h"
 #include "palFormatInfo.h"
 #include "palCmdBuffer.h"
+#include "palHashLiteralString.h"
 
 #include <cwchar>
 #include <cctype>
@@ -137,6 +138,13 @@ VK_INLINE uint64_t GetTimeNano()
 {
     return (static_cast<Pal::uint64>(Util::GetPerfCpuTime()) * NANOSECONDS_IN_A_SECOND) /
         static_cast<Pal::uint64>(Util::GetPerfFrequency());
+}
+
+// =====================================================================================================================
+// Get driver build time hash
+VK_INLINE const uint32_t GetBuildTimeHash()
+{
+    return Util::HashLiteralString(__DATE__ __TIME__);
 }
 
 // =====================================================================================================================

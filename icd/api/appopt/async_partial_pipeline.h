@@ -35,11 +35,7 @@
 #pragma once
 
 #include "include/vk_dispatch.h"
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
 #include "vkgcDefs.h"
-#else
-#include "llpc.h"
-#endif
 
 namespace vk
 {
@@ -60,23 +56,13 @@ public:
 
     void CreatePipelineLayoutFromModuleData(
         AsyncLayer*                           pAsyncLayer,
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
         Vkgc::ShaderModuleEntryData*          pShaderModuleEntryData,
         const Vkgc::ResourceMappingRootNode** ppResourceMappingNode,
-#else
-        Llpc::ShaderModuleEntryData*          pShaderModuleEntryData,
-        const Llpc::ResourceMappingRootNode** ppResourceMappingNode,
-#endif
         uint32_t*                             pMappingNodeCount);
 
     void CreateColorTargetFromModuleData(
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION >= 39
         Vkgc::ShaderModuleDataEx* pShaderModuleDataEx,
         Vkgc::ColorTarget* pTarget);
-#else
-        Llpc::ShaderModuleDataEx* pShaderModuleDataEx,
-        Llpc::ColorTarget* pTarget);
-#endif
 
     void Execute(AsyncLayer* pAsyncLayer, PartialPipelineTask* pTask);
 

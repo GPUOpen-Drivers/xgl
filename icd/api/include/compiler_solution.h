@@ -97,9 +97,6 @@ struct GraphicsPipelineBinaryCreateInfo
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback[ShaderStage::ShaderStageGfxCount];
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
-    Vkgc::ResourceMappingData              resourceMapping;
-#endif
 };
 
 // =====================================================================================================================
@@ -116,9 +113,6 @@ struct ComputePipelineBinaryCreateInfo
     Util::MetroHash::Hash                  basePipelineHash;
     PipelineCreationFeedback               pipelineFeedback;
     PipelineCreationFeedback               stageFeedback;
-#if LLPC_CLIENT_INTERFACE_MAJOR_VERSION < 41
-    Vkgc::ResourceMappingData              resourceMapping;
-#endif
 };
 
 // =====================================================================================================================

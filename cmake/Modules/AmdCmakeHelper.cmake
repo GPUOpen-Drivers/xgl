@@ -49,25 +49,6 @@ else()
     endif()
 endif()
 
-# Options Helpers ##################################################################################
-macro(dropdown_option _option _options)
-    set_property(CACHE ${_option} PROPERTY STRINGS ${${_options}})
-
-    list(FIND ${_options} ${${_option}} ${_option}_INDEX)
-    if(${${_option}_INDEX} EQUAL -1)
-        message(FATAL_ERROR "Option ${${_option}} not supported, valid entries are ${${_options}}")
-    endif()
-endmacro()
-
-macro(mark_grouped_as_advanced _group)
-    get_cmake_property(_groupVariables CACHE_VARIABLES)
-    foreach(_groupVariable ${_groupVariables})
-        if(_groupVariable MATCHES "^${_group}_.*")
-            mark_as_advanced(FORCE ${_groupVariable})
-        endif()
-    endforeach()
-endmacro()
-
 # System Architecture Helpers ######################################################################
 include(TestBigEndian)
 
@@ -88,71 +69,13 @@ endfunction()
 # Architecture Endianness ##########################################################################
 if(NOT DEFINED TARGET_ARCHITECTURE_ENDIANESS)
     get_system_architecture_endianess(TARGET_ARCHITECTURE_ENDIANESS)
-    set(TARGET_ARCHITECTURE_ENDIANESS ${TARGET_ARCHITECTURE_ENDIANESS} CACHE STRING "Specify the target architecture endianess.")
-    set(TARGET_ARCHITECTURE_ENDIANESS_OPTIONS "BIG" "LITTLE")
-    dropdown_option(TARGET_ARCHITECTURE_ENDIANESS TARGET_ARCHITECTURE_ENDIANESS_OPTIONS)
-    mark_as_advanced(TARGET_ARCHITECTURE_ENDIANESS)
+    # INTERNAL since this value should never be changed by the user
+    set(TARGET_ARCHITECTURE_ENDIANESS ${TARGET_ARCHITECTURE_ENDIANESS} CACHE INTERNAL "")
 endif()
 
 # Architecture Bits ################################################################################
 if(NOT DEFINED TARGET_ARCHITECTURE_BITS)
     get_system_architecture_bits(TARGET_ARCHITECTURE_BITS)
-    set(TARGET_ARCHITECTURE_BITS ${TARGET_ARCHITECTURE_BITS} CACHE STRING "Specify the target architecture bits.")
-    set(TARGET_ARCHITECTURE_BITS_OPTIONS "32" "64")
-    dropdown_option(TARGET_ARCHITECTURE_BITS TARGET_ARCHITECTURE_BITS_OPTIONS)
-    mark_as_advanced(TARGET_ARCHITECTURE_BITS)
-endif()
-
-# Find Headers Helper ##############################################################################
-macro(target_find_headers _target)
-    message(AUTHOR_WARNING "This function has been deprecated because it is so slow. Use source_group TREE functionality added in cmake 3.8")
-    get_target_property(${_target}_INCLUDES_DIRS ${_target} INCLUDE_DIRECTORIES)
-
-    if(${_target}_INCLUDES_DIRS)
-        foreach(_include_dir IN ITEMS ${${_target}_INCLUDES_DIRS})
-            file(GLOB_RECURSE _include_files
-                LIST_DIRECTORIES false
-                "${_include_dir}/*.h"
-                "${_include_dir}/*.hpp"
-            )
-
-            list(APPEND ${_target}_INCLUDES ${_include_files})
-        endforeach()
-
-        target_sources(${_target} PRIVATE ${${_target}_INCLUDES})
-    endif()
-endmacro()
-
-# Source Groups Helper #############################################################################
-# This helper creates source groups for generators that support them. This is primarily MSVC and
-# XCode, but there are other generators that support IDE project files.
-#
-# Note: this only adds files that have been added to the target's SOURCES property. To add headers
-# to this list, be sure that you call target_find_headers before you call target_source_groups.
-macro(target_source_groups _target)
-    message(AUTHOR_WARNING "This function has been deprecated because it is so slow. Use source_group TREE functionality added in cmake 3.8")
-    get_target_property(${_target}_SOURCES ${_target} SOURCES)
-    foreach(_source IN ITEMS ${${_target}_SOURCES})
-        set(_source ${_source})
-        get_filename_component(_source_path "${_source}" ABSOLUTE)
-        file(RELATIVE_PATH _source_path_rel "${PROJECT_SOURCE_DIR}" "${_source_path}")
-        get_filename_component(_source_path_rel "${_source_path_rel}" DIRECTORY)
-        string(REPLACE "/" "\\" _group_path "${_source_path_rel}")
-        source_group("${_group_path}" FILES "${_source}")
-    endforeach()
-endmacro()
-
-# Deprecated Visual Studio Filter Helper ###########################################################
-macro(target_vs_filters _target)
-    message(AUTHOR_WARNING "This function has been deprecated because it is so slow. Use source_group TREE functionality added in cmake 3.8")
-    target_find_headers(${_target})
-    if(MSVC)
-        target_source_groups(${_target})
-    endif()
-endmacro()
-
-# Visual Studio Specific Options ###################################################################
-if(CMAKE_GENERATOR MATCHES "Visual Studio")
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /MP")
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP")
+    # INTERNAL since this value should never be changed by the user
+    set(TARGET_ARCHITECTURE_BITS ${TARGET_ARCHITECTURE_BITS} CACHE INTERNAL "")
 endif()
