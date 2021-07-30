@@ -23,9 +23,9 @@
  *
  **********************************************************************************************************************/
 #include "cache_info.h"
-#include "units/doctest.h"
 #include "llvm/Support/MD5.h"
 #include "llvm/Support/MemoryBuffer.h"
+#include "gmock/gmock.h"
 #include <cassert>
 
 static bool consumeErrorToBool(llvm::Error err) {
@@ -42,30 +42,30 @@ template <typename T> static bool consumeErrorToBool(llvm::Expected<T> &valueOrE
   return consumeErrorToBool(valueOrErr.takeError());
 }
 
-TEST_CASE("Empty cache blob") {
+TEST(CacheInfoTest, EmptyCacheBlob) {
   auto blobPtr = llvm::MemoryBuffer::getMemBuffer(llvm::StringRef{}, "empty", false);
   assert(blobPtr);
   auto blobInfoOrErr = cc::CacheBlobInfo::create(*blobPtr);
-  CHECK(consumeErrorToBool(blobInfoOrErr));
+  EXPECT_TRUE(consumeErrorToBool(blobInfoOrErr));
 }
 
-TEST_CASE("Large zero blob") {
+TEST(CacheInfoTest, LargeZeroBlob) {
   llvm::SmallVector<uint8_t> zeros(512u);
   auto blobPtr = llvm::MemoryBuffer::getMemBuffer(llvm::toStringRef(zeros), "zeros", false);
   assert(blobPtr);
   auto blobInfoOrErr = cc::CacheBlobInfo::create(*blobPtr);
-  CHECK(!consumeErrorToBool(blobInfoOrErr));
+  EXPECT_FALSE(consumeErrorToBool(blobInfoOrErr));
 
   // This should fail as the self-declared header length is 0.
   auto publicHeaderInfoOrErr = blobInfoOrErr->readPublicVkHeaderInfo();
-  CHECK(consumeErrorToBool(publicHeaderInfoOrErr));
+  EXPECT_TRUE(consumeErrorToBool(publicHeaderInfoOrErr));
 
   // This should fail as the self-declared header length is 0.
   auto privateHeaderOffsetOrErr = blobInfoOrErr->getPrivateHeaderOffset();
-  CHECK(consumeErrorToBool(privateHeaderOffsetOrErr));
+  EXPECT_TRUE(consumeErrorToBool(privateHeaderOffsetOrErr));
 }
 
-TEST_CASE("Public header only") {
+TEST(CacheInfoTest, PublicHeaderOnly) {
   vk::PipelineCacheHeaderData publicHeader = {};
   publicHeader.headerLength = sizeof(publicHeader);
   auto blobPtr = llvm::MemoryBuffer::getMemBuffer(
@@ -74,10 +74,10 @@ TEST_CASE("Public header only") {
 
   // These should fail as the blob is not big enough to contain both a public and a private header.
   auto blobInfoOrErr = cc::CacheBlobInfo::create(*blobPtr);
-  CHECK(consumeErrorToBool(blobInfoOrErr));
+  EXPECT_TRUE(consumeErrorToBool(blobInfoOrErr));
 }
 
-TEST_CASE("Public header length too long") {
+TEST(CacheInfoTest, PublicHeaderLengthTooLong) {
   llvm::SmallVector<uint8_t> buffer(vk::VkPipelineCacheHeaderDataSize + sizeof(vk::PipelineBinaryCachePrivateHeader));
   auto *publicHeader = new (buffer.data()) vk::PipelineCacheHeaderData();
   publicHeader->headerLength = vk::VkPipelineCacheHeaderDataSize + 1;
@@ -87,24 +87,24 @@ TEST_CASE("Public header length too long") {
 
   // This should succeed because we don't parse the public header at this point and don't know the public header length.
   auto blobInfoOrErr = cc::CacheBlobInfo::create(*blobPtr);
-  CHECK(!consumeErrorToBool(blobInfoOrErr));
+  EXPECT_FALSE(consumeErrorToBool(blobInfoOrErr));
 
   // This should succeed as the public header can be fully parsed.
   auto publicHeaderInfoOrErr = blobInfoOrErr->readPublicVkHeaderInfo();
-  CHECK(!consumeErrorToBool(publicHeaderInfoOrErr));
-  CHECK(publicHeaderInfoOrErr->publicHeader == publicHeader);
-  CHECK(publicHeaderInfoOrErr->trailingSpaceBeforePrivateBlob == 1);
+  EXPECT_FALSE(consumeErrorToBool(publicHeaderInfoOrErr));
+  EXPECT_EQ(publicHeaderInfoOrErr->publicHeader, publicHeader);
+  EXPECT_EQ(publicHeaderInfoOrErr->trailingSpaceBeforePrivateBlob, 1);
 
   // This should fail as the self-declared header length is too long to fit the private header.
   auto privateHeaderOffsetOrErr = blobInfoOrErr->getPrivateHeaderOffset();
-  CHECK(consumeErrorToBool(privateHeaderOffsetOrErr));
+  EXPECT_TRUE(consumeErrorToBool(privateHeaderOffsetOrErr));
 
   // This should fail as the self-declared header length is too long to fit the private header.
   auto privateHeaderInfoOrErr = blobInfoOrErr->readBinaryCachePrivateHeaderInfo();
-  CHECK(consumeErrorToBool(privateHeaderInfoOrErr));
+  EXPECT_TRUE(consumeErrorToBool(privateHeaderInfoOrErr));
 }
 
-TEST_CASE("Valid blob w/o entries") {
+TEST(CacheInfoTest, ValidBlobNoEntries) {
   llvm::SmallVector<uint8_t> buffer(vk::VkPipelineCacheHeaderDataSize + sizeof(vk::PipelineBinaryCachePrivateHeader));
   auto *publicHeader = new (buffer.data()) vk::PipelineCacheHeaderData();
   auto *privateHeader = new (buffer.data() + vk::VkPipelineCacheHeaderDataSize) vk::PipelineBinaryCachePrivateHeader();
@@ -114,32 +114,32 @@ TEST_CASE("Valid blob w/o entries") {
   assert(blobPtr);
 
   auto blobInfoOrErr = cc::CacheBlobInfo::create(*blobPtr);
-  CHECK(!consumeErrorToBool(blobInfoOrErr));
+  EXPECT_FALSE(consumeErrorToBool(blobInfoOrErr));
 
   // These should succeed as both headers can be fully parsed.
   auto publicHeaderInfoOrErr = blobInfoOrErr->readPublicVkHeaderInfo();
-  CHECK(!consumeErrorToBool(publicHeaderInfoOrErr));
-  CHECK(publicHeaderInfoOrErr->publicHeader == publicHeader);
-  CHECK(publicHeaderInfoOrErr->trailingSpaceBeforePrivateBlob == 0);
+  EXPECT_FALSE(consumeErrorToBool(publicHeaderInfoOrErr));
+  EXPECT_EQ(publicHeaderInfoOrErr->publicHeader, publicHeader);
+  EXPECT_EQ(publicHeaderInfoOrErr->trailingSpaceBeforePrivateBlob, 0);
 
   auto privateHeaderOffsetOrErr = blobInfoOrErr->getPrivateHeaderOffset();
-  CHECK(!consumeErrorToBool(privateHeaderOffsetOrErr));
-  CHECK(*privateHeaderOffsetOrErr == vk::VkPipelineCacheHeaderDataSize);
+  EXPECT_FALSE(consumeErrorToBool(privateHeaderOffsetOrErr));
+  EXPECT_EQ(*privateHeaderOffsetOrErr, vk::VkPipelineCacheHeaderDataSize);
 
   auto privateHeaderInfoOrErr = blobInfoOrErr->readBinaryCachePrivateHeaderInfo();
-  CHECK(!consumeErrorToBool(privateHeaderInfoOrErr));
-  CHECK(privateHeaderInfoOrErr->privateHeader == privateHeader);
-  CHECK(privateHeaderInfoOrErr->contentBlobSize == 0);
+  EXPECT_FALSE(consumeErrorToBool(privateHeaderInfoOrErr));
+  EXPECT_EQ(privateHeaderInfoOrErr->privateHeader, privateHeader);
+  EXPECT_EQ(privateHeaderInfoOrErr->contentBlobSize, 0);
 
   auto contentOffsetOrErr = blobInfoOrErr->getCacheContentOffset();
-  CHECK(!consumeErrorToBool(contentOffsetOrErr));
-  CHECK(*contentOffsetOrErr == buffer.size());
+  EXPECT_FALSE(consumeErrorToBool(contentOffsetOrErr));
+  EXPECT_EQ(*contentOffsetOrErr, buffer.size());
 
   // This should succeed as it is valid to have an empty cache content, i.e., zero entries.
   llvm::SmallVector<cc::BinaryCacheEntryInfo, 0> entries;
   auto err = blobInfoOrErr->readBinaryCacheEntriesInfo(entries);
-  CHECK(!consumeErrorToBool(std::move(err)));
-  CHECK(entries.empty());
+  EXPECT_FALSE(consumeErrorToBool(std::move(err)));
+  EXPECT_TRUE(entries.empty());
 }
 
 static cc::MD5DigestStr calculateMD5Sum(llvm::ArrayRef<uint8_t> data) {
@@ -150,7 +150,7 @@ static cc::MD5DigestStr calculateMD5Sum(llvm::ArrayRef<uint8_t> data) {
   return result.digest();
 }
 
-TEST_CASE("Valid blob w/ one entry") {
+TEST(CacheInfoTest, ValidBlobOneEntry) {
   const size_t trailingSpace = 16;
   const size_t entrySize = sizeof(uint32_t);
   const size_t bufferSize = vk::VkPipelineCacheHeaderDataSize + trailingSpace +
@@ -176,28 +176,28 @@ TEST_CASE("Valid blob w/ one entry") {
   assert(blobPtr);
 
   auto blobInfoOrErr = cc::CacheBlobInfo::create(*blobPtr);
-  CHECK(!consumeErrorToBool(blobInfoOrErr));
+  EXPECT_FALSE(consumeErrorToBool(blobInfoOrErr));
 
   // These should all succeed as both headers can be fully parsed and there's one valid entry.
   auto publicHeaderInfoOrErr = blobInfoOrErr->readPublicVkHeaderInfo();
-  CHECK(!consumeErrorToBool(publicHeaderInfoOrErr));
-  CHECK(publicHeaderInfoOrErr->publicHeader == publicHeader);
-  CHECK(publicHeaderInfoOrErr->trailingSpaceBeforePrivateBlob == trailingSpace);
+  EXPECT_FALSE(consumeErrorToBool(publicHeaderInfoOrErr));
+  EXPECT_EQ(publicHeaderInfoOrErr->publicHeader, publicHeader);
+  EXPECT_EQ(publicHeaderInfoOrErr->trailingSpaceBeforePrivateBlob, trailingSpace);
 
   auto privateHeaderInfoOrErr = blobInfoOrErr->readBinaryCachePrivateHeaderInfo();
-  CHECK(!consumeErrorToBool(privateHeaderInfoOrErr));
-  CHECK(privateHeaderInfoOrErr->privateHeader == privateHeader);
-  CHECK(privateHeaderInfoOrErr->contentBlobSize == (sizeof(vk::BinaryCacheEntry) + entrySize));
+  EXPECT_FALSE(consumeErrorToBool(privateHeaderInfoOrErr));
+  EXPECT_EQ(privateHeaderInfoOrErr->privateHeader, privateHeader);
+  EXPECT_EQ(privateHeaderInfoOrErr->contentBlobSize, sizeof(vk::BinaryCacheEntry) + entrySize);
 
   llvm::SmallVector<cc::BinaryCacheEntryInfo, 1> entries;
   auto err = blobInfoOrErr->readBinaryCacheEntriesInfo(entries);
-  CHECK(!consumeErrorToBool(std::move(err)));
-  CHECK(entries.size() == 1);
+  EXPECT_FALSE(consumeErrorToBool(std::move(err)));
+  EXPECT_EQ(entries.size(), 1);
 
   cc::BinaryCacheEntryInfo &entry = entries.front();
-  CHECK(entry.entryHeader == entryHeader);
-  CHECK(entry.idx == 0);
-  CHECK(entry.entryBlob.data() == entryBlob.data());
-  CHECK(entry.entryBlob.size() == entryBlob.size());
-  CHECK(entry.entryMD5Sum == calculateMD5Sum(entryBlob));
+  EXPECT_EQ(entry.entryHeader, entryHeader);
+  EXPECT_EQ(entry.idx, 0);
+  EXPECT_EQ(entry.entryBlob.data(), entryBlob.data());
+  EXPECT_EQ(entry.entryBlob.size(), entryBlob.size());
+  EXPECT_EQ(entry.entryMD5Sum, calculateMD5Sum(entryBlob));
 }
