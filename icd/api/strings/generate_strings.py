@@ -54,11 +54,13 @@ open_copyright = '''/*
  **********************************************************************************************************************/
 '''
 
-workDir = "./";
+workDir = os.getcwd()
+outputDir = os.getcwd()
 openSource = True;
 
 def GetOpt():
     global workDir;
+    global outputDir
     global openSource;
 
     parser = OptionParser()
@@ -67,6 +69,10 @@ def GetOpt():
                   type="string",
                   dest="workdir",
                   help="the work directory")
+    parser.add_option("-d", "--output_dir", action="store",
+                  type="string",
+                  dest="output_dir",
+                  help="the output directory")
 
     (options, args) = parser.parse_args()
 
@@ -76,12 +82,19 @@ def GetOpt():
     else:
         print("The work directroy is not specified, using default: " + workDir);
 
-    if (workDir[-1] != '/'):
-        workDir = workDir + '/';
+    workDir = os.path.abspath(os.path.realpath(workDir))
+    print("The work directory is %s" % (workDir))
 
-    if (os.path.exists(workDir) == False) or (os.path.exists(workDir + "extensions.txt") == False):
+    if (os.path.exists(workDir) == False) or (os.path.exists(os.path.join(workDir, "extensions.txt")) == False):
         print("Work directory is not correct: " + workDir);
         exit();
+
+    if options.output_dir:
+        outputDir = options.output_dir
+    else:
+        print("The output directory is not specified; using current directory")
+    outputDir = os.path.abspath(os.path.realpath(outputDir))
+    print("The output directory is {}".format(outputDir))
 
 def generate_string(f, name, suffix, value, gentype):
     global openSource;
@@ -143,12 +156,12 @@ def make_version(version):
     return "VK_MAKE_VERSION(%s, %s, 0)" % (tokens[0], tokens[1])
 
 def generate_string_file_pass(string_file_prefix, header_file_prefix, gentype):
-    global PREFIX;
+    global outputDir
 
     string_file = "%s.txt" % (string_file_prefix);
-    header_file = "%sg_%s_%s.h" % (PREFIX, header_file_prefix, gentype);
+    header_file = os.path.join(outputDir, "g_{}_{}.h".format(header_file_prefix, gentype))
 
-    print("Generating %s from %s ..." % (header_file, string_file))
+    print("Generating %s from %s ..." % (os.path.basename(header_file), string_file))
 
     f = open(string_file)
     lines = f.readlines()
@@ -201,7 +214,7 @@ def generate_func_table(entry_file, header_file):
 
     global open_copyright
     global openSource;
-    global PREFIX
+    global outputDir
 
     print("Generating %s from %s ..." % (header_file, entry_file))
 
@@ -209,7 +222,8 @@ def generate_func_table(entry_file, header_file):
     lines = f.readlines()
     f.close()
 
-    header = open(PREFIX + header_file, 'w')
+    header_path = os.path.join(outputDir, header_file)
+    header = open(header_path, 'w')
 
     entry_point_members = ''
     prev_ext = ''
@@ -269,8 +283,7 @@ def generate_func_table(entry_file, header_file):
 
 GetOpt()
 os.chdir(workDir)
-
-PREFIX = "./"
+os.makedirs(outputDir, exist_ok=True)
 
 generate_string_file("extensions")
 generate_string_file("entry_points")
