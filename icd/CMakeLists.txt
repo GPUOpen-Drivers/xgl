@@ -190,7 +190,7 @@ set(ICD_STRING_DIR ${CMAKE_CURRENT_SOURCE_DIR}/api/strings)
 # ICD settings code generation main script
 set(ICD_GEN_STRINGS ${ICD_STRING_DIR}/generate_strings.py)
 
-set(ICD_GEN_STRINGS_OPT -w ${ICD_STRING_DIR})
+set(ICD_GEN_STRINGS_OPT -w ${ICD_STRING_DIR} -d ${ICD_STRING_DIR})
 
 set(ICD_GEN_STRINGS_FILES ${ICD_GEN_STRINGS} ${ICD_STRING_DIR}/func_table_template.py)
 
